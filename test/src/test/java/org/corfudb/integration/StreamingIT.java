@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 
 import com.google.common.reflect.TypeToken;
+import com.google.protobuf.Message;
 import lombok.Getter;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
@@ -9,6 +10,7 @@ import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.CorfuTable;
@@ -438,6 +440,130 @@ public class StreamingIT extends AbstractIT {
         assertThrows(StreamingException.class, () -> store.subscribeListener(listenerCommon, "test_namespace", "sample_streamer_4",
                 Collections.singletonList("tableB"), ts1));
 
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    /**
+     * Example to show how to retrieve the previous value from a streamed entry
+     * @param <K>
+     * @param <V>
+     * @param <M>
+     */
+    class PrevValueStreamer<K extends Message, V extends Message, M extends Message> implements StreamListener {
+        @Getter
+        private int recordCount;
+        private CorfuStore corfuStore;
+        private final String namespace;
+        private final String tableName;
+        public PrevValueStreamer(CorfuStore corfuStore, String namespace, String tableName) {
+            recordCount = 0;
+            this.corfuStore = corfuStore;
+            this.namespace = namespace;
+            this.tableName = tableName;
+        }
+
+        public String toString() {
+            return namespace+tableName;
+        }
+        /**
+         * A corfu update can/may have multiple updates belonging to different streams.
+         * This callback will return those updates as a list grouped by their Stream UUIDs.
+         *
+         * @param results is a map of stream UUID -> list of entries of this stream.
+         */
+        @Override
+        public void onNext(CorfuStreamEntries results) {
+            results.getEntries().forEach((k, v) -> {
+                v.forEach(entry -> {
+                    final CorfuStoreEntry<K, V, M> previousRecord =
+                            getPreviousRecord(namespace, tableName, entry, entry.getEpoch(), entry.getAddress());
+                    SampleTableAMsg prevMsg = (SampleTableAMsg) previousRecord.getPayload();
+                    if (recordCount > 0) {
+                        assertThat(prevMsg.getPayload()).isEqualTo("val"+(recordCount - 1));
+                    } else {
+                        assertThat(previousRecord.getPayload()).isNull();
+                    }
+                });
+            });
+            recordCount++;
+        }
+
+        /**
+         *  Fetch the previous value of a record from the table using the sequence - 1 snapshot
+         * @param namespace
+         * @param tableName
+         * @param entry
+         * @param epoch
+         * @param sequence
+         * @return
+         */
+        public CorfuStoreEntry<K, V, M> getPreviousRecord(String namespace, String tableName,
+                                                          CorfuStreamEntry entry,
+                                                          long epoch,
+                                                          long sequence) {
+            Timestamp prevTimestamp = Timestamp.newBuilder()
+                    .setEpoch(epoch)
+                    .setSequence(sequence - 1)
+                    .build();
+            CorfuStoreEntry<K,V,M> prevRecord = null;
+            try (TxnContext tx = this.corfuStore.txn(namespace, IsolationLevel.snapshot(prevTimestamp))) {
+                prevRecord = tx.getRecord(tableName, entry.getKey());
+                tx.commit();
+            }
+            return prevRecord;
+        }
+
+        /**
+         * Callback to indicate that an error or exception has occurred while streaming or that the stream is
+         * shutting down. Some exceptions can be handled by restarting the stream (TrimmedException) while
+         * some errors (SystemUnavailableError) are unrecoverable.
+         *
+         * @param throwable
+         */
+        @Override
+        public void onError(Throwable throwable) {
+            assertThat(throwable).isNull();
+        }
+    }
+
+    /** Verify the same listener cannot be used across different subscribers
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testStreamingPrevValue() throws Exception {
+        // Run a corfu server and start runtime
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStore store = new CorfuStore(runtime);
+        String ns = "test_namespace";
+        String tn = "tableA";
+
+        // Create two tables.
+        Table<Uuid, SampleTableAMsg, Uuid> table = store.openTable(ns, tn,
+                Uuid.class, SampleTableAMsg.class, Uuid.class,
+                TableOptions.builder().build());
+
+        // Record the initial timestamp.
+        Timestamp ts1 = store.getTimestamp();
+        // Subscribe to streaming updates from tableA using listenerCommon
+        PrevValueStreamer listenerCommon = new PrevValueStreamer<Uuid, SampleTableAMsg, Uuid>(store, ns, tn);
+        store.subscribeListener(listenerCommon, ns, "sample_streamer_1",
+                Collections.singletonList(tn), ts1);
+        final int numRecords = PARAMETERS.NUM_ITERATIONS_LOW;
+        for (int i = 0; i < numRecords; i++) {
+            try (TxnContext tx = store.txn(namespace)) {
+                Uuid key = Uuid.newBuilder().setLsb(0).setMsb(0).build();
+                SampleTableAMsg val = SampleTableAMsg.newBuilder()
+                        .setPayload("val"+i).build();
+                tx.putRecord(table, key, val, key);
+                tx.commit();
+            }
+        }
+
+        // After a brief wait verify that the listener gets all the updates.
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
+        assertThat(listenerCommon.getRecordCount()).isEqualTo(numRecords);
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 
