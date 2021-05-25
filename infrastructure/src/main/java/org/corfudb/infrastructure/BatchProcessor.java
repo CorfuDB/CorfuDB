@@ -17,7 +17,7 @@ import javax.annotation.Nonnull;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.BatchWriterOperation.Type;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -40,22 +40,12 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 @Slf4j
 public class BatchProcessor implements AutoCloseable {
 
-    final private int BATCH_SIZE = 50;
+    private final int BATCH_SIZE;
+    private final boolean sync;
+    private final StreamLog streamLog;
+    private final BlockingQueue<BatchWriterOperation> operationsQueue;
+    private final ExecutorService processorService;
 
-    final private boolean sync;
-
-    final private StreamLog streamLog;
-
-    final private BlockingQueue<BatchWriterOperation> operationsQueue;
-
-    private ExecutorService processorService = Executors
-            .newSingleThreadExecutor(new ThreadFactoryBuilder()
-                    .setDaemon(false)
-                    .setNameFormat("LogUnit-BatchProcessor-%d")
-                    .build());
-    private final Optional<Timer> writeRecordTimer;
-    private final Optional<Timer> writeRecordsTimer;
-    private final Optional<DistributionSummary> queueSizeDist;
     /**
      * The sealEpoch is the epoch up to which all operations have been sealed. Any
      * BatchWriterOperation arriving after the sealEpoch with an epoch less than the sealEpoch
@@ -77,26 +67,18 @@ public class BatchProcessor implements AutoCloseable {
         this.sealEpoch = sealEpoch;
         this.sync = sync;
         this.streamLog = streamLog;
+
+        BATCH_SIZE = 50;
         operationsQueue = new LinkedBlockingQueue<>();
-        writeRecordTimer = MeterRegistryProvider.getInstance().map(registry ->
-                Timer.builder("logunit.write.timer")
-                        .publishPercentiles(0.50, 0.99)
-                        .publishPercentileHistogram()
-                        .tags("type", "single").register(registry));
-        writeRecordsTimer = MeterRegistryProvider.getInstance().map(registry ->
-                Timer.builder("logunit.write.timer")
-                        .publishPercentiles(0.50, 0.99)
-                        .publishPercentileHistogram()
-                        .tags("type", "multiple").register(registry));
-        queueSizeDist = MeterRegistryProvider.getInstance().map(registry ->
-                DistributionSummary
-                        .builder("logunit.queue.size")
-                        .publishPercentiles(0.50, 0.99)
-                        .publishPercentileHistogram()
-                        .baseUnit("op")
-                        .register(registry));
+        processorService = Executors
+                .newSingleThreadExecutor(new ThreadFactoryBuilder()
+                        .setDaemon(false)
+                        .setNameFormat("LogUnit-BatchProcessor-%d")
+                        .build());
+
         processorService.submit(this::processor);
     }
+
 
     /**
      * Add a task to the processor.
@@ -110,13 +92,6 @@ public class BatchProcessor implements AutoCloseable {
         return operation.getFutureResult();
     }
 
-    private void recordRunnable(Runnable fsyncRunnable, Optional<Timer> fsyncTimer) {
-        if (fsyncTimer.isPresent()) {
-            fsyncTimer.get().record(fsyncRunnable);
-        } else {
-            fsyncRunnable.run();
-        }
-    }
 
     private void processor() {
 
@@ -130,8 +105,8 @@ public class BatchProcessor implements AutoCloseable {
             List<BatchWriterOperation> res = new LinkedList<>();
 
             while (true) {
+                MicroMeterUtils.measure(operationsQueue.size(), "logunit.queue.size");
                 BatchWriterOperation currOp;
-                queueSizeDist.ifPresent(dist -> dist.record(operationsQueue.size()));
                 if (lastOp == null) {
                     currOp = operationsQueue.take();
                 } else {
@@ -190,12 +165,13 @@ public class BatchProcessor implements AutoCloseable {
                                 WriteRequest write = (WriteRequest) currOp.getMsg().getPayload();
                                 Runnable append =
                                         () -> streamLog.append(write.getGlobalAddress(), (LogData) write.getData());
-                                recordRunnable(append, writeRecordTimer);
+                                MicroMeterUtils.time(append, "logunit.write.timer", "type", "single");
                                 break;
                             case RANGE_WRITE:
                                 RangeWriteMsg writeRange = (RangeWriteMsg) currOp.getMsg().getPayload();
                                 Runnable appendMultiple = () -> streamLog.append(writeRange.getEntries());
-                                recordRunnable(appendMultiple, writeRecordsTimer);
+                                MicroMeterUtils.time(appendMultiple,
+                                        "logunit.write.timer", "type", "range");
                                 break;
                             case RESET:
                                 streamLog.reset();
