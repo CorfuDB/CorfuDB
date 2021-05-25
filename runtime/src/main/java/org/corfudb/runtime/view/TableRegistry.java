@@ -230,39 +230,46 @@ public class TableRegistry {
         while (numRetries-- > 0) {
             // Schema validation to ensure that there is either proper modification of the schema across open calls.
             // Or no modification to the protobuf files.
+            /**
+             * Caller is opening a new table with a map of protobufFilename -> protobufFileDescriptor pairs
+             * Here are the cases that can happen:
+             * 1. No entry in TableRegistry -> New table
+             *  1.1: When inserting new protobufs into descriptor table, we find existing entries and they all match
+             *  1.2: When inserting new protobufs into descriptor table, we find mismatching [Schema Change!]
+             *
+             * 2. Entry exists in TableRegistry -> Existing table re-opened:
+             *    2.1: Existing protobuf file list matches, newly inserted protobuf list
+             *    2.1.1: Each of Existing protobuf file descriptors match that in new file descriptor list
+             *    2.1.2: Existing protobuf file descriptor does not match that in new file descriptor![ SchemaChange!]
+             *
+             *    2.2: Existing protobuf file list does not match, newly opened protobuf list [big Schema Change]
+             *    2.2.1: Existing protobuf file list matches existing proto files
+             *    2.2.3: Existing protobuf file's descriptor mismatches with the incoming descriptor
+             */
+            if (TransactionalContext.isInTransaction()) {
+                throw new IllegalThreadStateException("openTable: Called on an existing transaction");
+            }
             try {
                 this.runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
                 CorfuRecord<TableDescriptors, TableMetadata> oldRecord = this.registryTable.get(tableNameKey);
-                if (oldRecord != null) {
-                    for (Map.Entry<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> entry :
-                            allDescriptors.entrySet()) {
-                        CorfuRecord<ProtobufFileDescriptor, TableMetadata> prevDescriptor = protobufDescriptorTable.get(entry.getKey());
-                        if (prevDescriptor != null) {
-                            // Do not attempt to compare default protobuf files which are huge & don't affect schemas.
-                            if (!entry.getKey().getFileName().startsWith("google/protobuf") &&
-                                    !prevDescriptor.getPayload().getFileDescriptor().equals(entry.getValue().getPayload().getFileDescriptor())) {
-                                log.warn("registerTable: Schema update detected for table {}${}", namespace, tableName);
-
-                                for (StackTraceElement st : Thread.currentThread().getStackTrace()) {
-                                    log.warn("{}", st);
-                                }
-                                log.debug("registerTable: old schema: {}", oldRecord.getPayload().getFileDescriptorsMap());
-                                log.debug("registerTable: new schema: {}", tableDescriptors.getFileDescriptorsMap());
-                                this.protobufDescriptorTable.put(entry.getKey(), entry.getValue());
-                                this.registryTable.put(tableNameKey,
-                                        new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
-                            }
-                        } else { // this is the first time we are seeing this new protobuf file descriptor
-                            this.protobufDescriptorTable.put(entry.getKey(), entry.getValue());
-                            this.registryTable.put(tableNameKey,
-                                    new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
-                        }
-                    }
-                } else {
+                if (oldRecord == null) { // Case 1 above, new unseen table
                     this.registryTable.put(tableNameKey,
                             new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
-                    allDescriptors.forEach(protobufDescriptorTable::put);
+                } else { // Case 2 above, re-open of existing table
+                    if (!oldRecord.getPayload().getFileDescriptorsMap().keySet()
+                            .equals(tableDescriptors.getFileDescriptorsMap().keySet())) {
+                        log.warn("Protobuf file list changed for {} table {}. Prev list {}, new list {}",
+                                namespace, tableName, oldRecord.getPayload().getFileDescriptorsMap().keySet(),
+                                tableDescriptors.getFileDescriptorsMap().keySet());
+                        for (StackTraceElement st : Thread.currentThread().getStackTrace()) {
+                            log.debug("{}", st);
+                        }
+                        this.registryTable.put(tableNameKey,
+                                new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
+                    } // else no need to re-add the exact same entry into the table
                 }
+                allDescriptors.forEach((protoName, protoDescriptor) ->
+                        recordNewSchema(protoName, protoDescriptor, namespace, tableName));
                 this.runtime.getObjectsView().TXEnd();
                 break;
             } catch (TransactionAbortedException txAbort) {
@@ -270,13 +277,53 @@ public class TableRegistry {
                     throw txAbort;
                 }
                 log.info("registerTable: commit failed. Will retry {} times. Cause {}", numRetries, txAbort);
-                continue;
             } finally {
                 if (TransactionalContext.isInTransaction()) { // Transaction failed or an exception occurred.
                     this.runtime.getObjectsView().TXAbort(); // clear Txn context so thread can be reused.
                 }
             }
         }
+    }
+
+    /**
+     * For each protobuf filename -> descriptor map, validate if the previous descriptor matches
+     * If there is a new schema or an update, record the new update in the table.
+     * (Note that oldProto means existing schema previously opened)
+     * WARNING: This method MUST be invoked within a transaction.
+     *
+     * @param protoName - name of the protobuf file
+     * @param newProtoFd - descriptor of the protobuf file that is being inserted.
+     * @param namespace - namespace of the table
+     * @param tableName - tablename without the namespace
+     */
+    private void recordNewSchema(ProtobufFileName protoName,
+                                    CorfuRecord<ProtobufFileDescriptor, TableMetadata> newProtoFd,
+                                    String namespace,
+                                    String tableName) {
+        final CorfuRecord<ProtobufFileDescriptor, TableMetadata> oldProto = this.protobufDescriptorTable.get(protoName);
+        if (oldProto == null) {
+            this.protobufDescriptorTable.put(protoName, newProtoFd);
+            return;
+        }
+        if (!oldProto.getPayload().getFileDescriptor().equals(newProtoFd.getPayload().getFileDescriptor())) {
+            // protobuf files that start with google/protobuf are standard library files.
+            // Even if there is a change in these library files (say due to a new protobuf version update)
+            // it should not be flagged as a schema change since that file is not user created.
+            if (!protoName.getFileName().startsWith("google/protobuf")) {
+                log.warn("registerTable: Schema update detected for table {}${} in schema file {}",
+                        namespace, tableName, protoName);
+
+                StringBuilder stackTraceStr = new StringBuilder();
+                for (StackTraceElement st : Thread.currentThread().getStackTrace()) {
+                    stackTraceStr.append(st);
+                    stackTraceStr.append("\n");
+                }
+                log.debug("{}", stackTraceStr);
+                log.debug("registerTable: old schema: {}", oldProto.getPayload().getFileDescriptor());
+                log.debug("registerTable: new schema: {}", newProtoFd.getPayload().getFileDescriptor());
+            }
+            this.protobufDescriptorTable.put(protoName, newProtoFd);
+        } // else old file descriptors match no need to re-add the file descriptors
     }
 
     /**

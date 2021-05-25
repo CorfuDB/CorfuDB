@@ -524,7 +524,7 @@ public class CorfuStoreIT extends AbstractIT {
         final String tableName2 = "Work-EventInfo";
         final String tableName3 = "Empty-EventInfo";
         final int numUpdates = 2;
-        final long OFFSET = 4L;
+        final long OFFSET = 5L;
 
         // Create & Register the table.
         Table<Uuid, SampleSchema.EventInfo, ManagedResources> table1 = corfuStore.openTable(
@@ -551,7 +551,8 @@ public class CorfuStoreIT extends AbstractIT {
                 ManagedResources.class,
                 TableOptions.builder().build());
 
-        long offsetLog = OFFSET; // addresses 0, 1, 2, 3 are taken by updates to the Registry Table
+        // addresses 0, 1, 2, 3, 4 are taken by updates to the Registry Table & Descriptors
+        long offsetLog = OFFSET;
         long partialSnapshot = offsetLog + (numUpdates*2) - 1;
 
         long maxGlobalAddress = generateUpdates(namespace, table1, table2, table3, offsetLog, numUpdates);

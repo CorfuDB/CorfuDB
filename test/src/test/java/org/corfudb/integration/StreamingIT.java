@@ -1102,10 +1102,14 @@ public class StreamingIT extends AbstractIT {
         TimeUnit.MILLISECONDS.sleep(sleepTime);
         assertThat(listener.getUpdates().size()).isEqualTo(totalUpdates);
 
+        long seqNumBeforeTrim = -1L; // Default value expected for empty streams on getHighestSequence()
+
         // Run X number of checkpoint/trim (on each run, trigger runtimeGC)
         for (int i = 0; i < numCheckpointTrimCycles; i++) {
             checkpointAndTrim(namespace, Arrays.asList(defaultTableName, randomTableName), false);
             runtime.getGarbageCollector().runRuntimeGC();
+            long seqNumberAfterTrim = store.getHighestSequence(namespace, defaultTableName);
+            assertThat(seqNumberAfterTrim).isEqualTo(seqNumBeforeTrim);
         }
 
         // Confirm first untrimmed address is higher than the last received update (confirm pointer is below global trim mark)

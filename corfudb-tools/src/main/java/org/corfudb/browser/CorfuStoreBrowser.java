@@ -222,7 +222,7 @@ public class CorfuStoreBrowser {
      */
     public int printAllProtoDescriptors() {
         int numProtoFiles = -1;
-        log.info("=========KEYS===========");
+        log.info("=========PROTOBUF FILE NAMES===========");
         for (ProtobufFileName protoFileName : runtime.getTableRegistry().getProtobufDescriptorTable().keySet()) {
             try {
                 log.info("{}", JsonFormat.printer().print(protoFileName));
@@ -231,7 +231,7 @@ public class CorfuStoreBrowser {
             }
             numProtoFiles++;
         }
-        log.info("=========VALUES===========");
+        log.info("=========PROTOBUF FILE DESCRIPTORS ===========");
         for (ProtobufFileName protoFileName : runtime.getTableRegistry().getProtobufDescriptorTable().keySet()) {
             try {
                 log.info("{}", JsonFormat.printer().print(protoFileName));

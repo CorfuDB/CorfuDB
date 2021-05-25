@@ -16,6 +16,8 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileName;
+import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileDescriptor;
 import org.corfudb.runtime.CorfuStoreMetadata.Record;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
@@ -36,7 +38,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-import static org.corfudb.runtime.CorfuStoreMetadata.*;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.corfudb.runtime.view.TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
@@ -104,8 +105,8 @@ public class DynamicProtobufSerializer implements ISerializer {
         // Cache the FileDescriptorProtos from the protobuf descriptor table.
         descriptorTable.forEach((fdName, fileDescriptorProto) -> {
             String protoFileName = fileDescriptorProto.getPayload().getFileDescriptor().getName();
-            // Looks like protobuf file descriptors are randomly truncating the path.
-            // This causes dynamicProtobufSerializer to fail since the full path is needed.
+            // Since corfu_options is something within repo, the path gets truncated on insert.
+            // However dynamicProtobufSerializer fails since the full path is needed.
             if (protoFileName.equals("corfu_options.proto")) {
                 fdProtoMap.putIfAbsent(protoFileName, fileDescriptorProto.getPayload().getFileDescriptor());
                 // Until the truncating issue can be addressed, manually add both paths.

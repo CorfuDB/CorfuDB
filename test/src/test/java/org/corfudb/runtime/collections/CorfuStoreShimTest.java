@@ -1011,4 +1011,48 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         FileDescriptor[] fileDescriptors = list.toArray(new FileDescriptor[list.size()]);
         return FileDescriptor.buildFrom(map.get(name), fileDescriptors);
     }
+
+    /**
+     * ProtobufDescriptorTable should de-duplicate common protobuf file descriptors.
+     * This test creates a large number of tables that share protobuf files and validates
+     * that de-duplication occurs.
+     * Also exercises schema change validation logic.
+     * @throws Exception exception
+     */
+    @Test
+    public void checkProtoDeduplication() throws Exception {
+        CorfuRuntime corfuRuntime = getTestRuntime();
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+        final String someNamespace = "some-namespace";
+        final String tableNamePrefix = "prefixTable";
+        final int numTables = PARAMETERS.NUM_ITERATIONS_VERY_LOW;
+
+        Map<String, FileDescriptorProto> referenceMap = new HashMap<>();
+
+        for (int i = 0; i < numTables; i++) {
+            shimStore.openTable(
+                    someNamespace,
+                    tableNamePrefix+i,
+                    UuidMsg.class,
+                    ManagedMetadata.class,
+                    ManagedMetadata.class,
+                    // TableOptions includes option to choose - Memory/Disk based corfu table.
+                    TableOptions.builder().build());
+        }
+        // Now update the schemas with different protobuf files
+        final int numProtoFiles = corfuRuntime.getTableRegistry().getProtobufDescriptorTable().size();
+        assertThat(numProtoFiles).isLessThan(numTables);
+        for (int i = 0; i < numTables; i++) {
+            shimStore.openTable(
+                    someNamespace,
+                    tableNamePrefix+i,
+                    UuidMsg.class,
+                    org.corfudb.runtime.proto.LogData.LogDataMsg.class, // this brings in 1 new protobuf file
+                    ManagedMetadata.class,
+                    // TableOptions includes option to choose - Memory/Disk based corfu table.
+                    TableOptions.builder().build());
+        }
+        final int numProtoFiles2 = corfuRuntime.getTableRegistry().getProtobufDescriptorTable().size();
+        assertThat(numProtoFiles2).isEqualTo(numProtoFiles + 1);
+    }
 }

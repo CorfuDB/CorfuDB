@@ -833,7 +833,7 @@ public class TxnContext implements AutoCloseable {
                 tablesInTxn.values().forEach(t -> t.getMetrics().recordReadWriteTxnTime(startTxSample));
                 break;
             default:
-                log.error("UNKNOWN TxnType!!");
+                log.warn("UNKNOWN TxnType! Started a transaction but no operations done?!");
                 break;
         }
 
