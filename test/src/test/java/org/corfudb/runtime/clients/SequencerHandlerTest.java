@@ -29,7 +29,6 @@ public class SequencerHandlerTest extends AbstractClientTest {
 
     @Override
     Set<AbstractServer> getServersForTest() {
-        MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
 
         ServerContext sc = new ServerContextBuilder()
                 .setMemory(true)

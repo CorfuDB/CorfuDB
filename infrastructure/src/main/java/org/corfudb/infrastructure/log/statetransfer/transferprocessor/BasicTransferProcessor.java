@@ -36,7 +36,7 @@ public class BasicTransferProcessor {
                 MeterRegistryProvider.getInstance().ifPresent(registry ->
                         registry.counter("state-transfer.read.throughput", "type", "protocol")
                                 .increment(request.getAddresses().size()));
-                Optional<Timer.Sample> sample = MeterRegistryProvider.getInstance().map(Timer::start);
+                Optional<Timer.Sample> sample = MicroMeterUtils.startTimer();
                 CompletableFuture<TransferBatchResponse> transferFuture =
                         MicroMeterUtils.timeWhenCompletes(batchProcessor.transfer(request), sample,
                         "state-transfer.timer", "type", "protocol");

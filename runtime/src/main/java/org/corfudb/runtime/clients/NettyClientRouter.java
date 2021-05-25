@@ -425,11 +425,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         }
 
         // Set up the timer and context to measure request
-        final Timer roundTripMsgTimer = CorfuRuntime.getDefaultMetrics()
-                .timer(timerNameCache.get(message.getMsgType()));
 
-        final Timer.Context roundTripMsgContext = MetricsUtils
-                .getConditionalContext(roundTripMsgTimer);
+
+
 
         // Get the next request ID.
         final long thisRequest = requestID.getAndIncrement();
@@ -449,7 +447,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
 
         // Generate a benchmarked future to measure the underlying request
         final CompletableFuture<T> cfBenchmarked = cf.thenApply(x -> {
-            MetricsUtils.stopConditionalContext(roundTripMsgContext);
             return x;
         });
 

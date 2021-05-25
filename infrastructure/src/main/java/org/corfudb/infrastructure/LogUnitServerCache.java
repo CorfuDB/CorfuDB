@@ -7,16 +7,17 @@ import com.google.common.annotations.VisibleForTesting;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.Tags;
-import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 
 import java.util.Optional;
+
 import java.util.function.Supplier;
 
 import static org.corfudb.util.MetricsUtils.sizeOf;
@@ -41,13 +42,10 @@ public class LogUnitServerCache {
     //Empirical threshold of number of streams in a logdata beyond which server performance may be slow
     private final int MAX_STREAM_THRESHOLD = 20;
 
-    private final Optional<Timer> readTimer;
-    private final Optional<Gauge> loadTime;
-    String loadTimeName = "logunit.cache.load_time";
-    private final Optional<Gauge> hitRatio;
-    String hitRatioName = "logunit.cache.hit_ratio";
-    private final Optional<Gauge> weight;
-    String weightName = "logunit.cache.weight";
+
+    private final String loadTimeName = "logunit.cache.load_time";
+    private final String hitRatioName = "logunit.cache.hit_ratio";
+    private final String weightName = "logunit.cache.weight";
 
     public LogUnitServerCache(LogUnitServerConfig config, StreamLog streamLog) {
         this.streamLog = streamLog;
@@ -60,20 +58,17 @@ public class LogUnitServerCache {
 
         MeterRegistryProvider.getInstance().ifPresent(registry ->
                 CaffeineCacheMetrics.monitor(registry, dataCache, "logunit.read_cache"));
-        hitRatio = MeterRegistryProvider.getInstance().map(registry ->
+        MeterRegistryProvider.getInstance().map(registry ->
                 Gauge.builder(hitRatioName,
                 dataCache, cache -> cache.stats().hitRate()).register(registry));
-        loadTime = MeterRegistryProvider.getInstance().map(registry ->
+        MeterRegistryProvider.getInstance().map(registry ->
                 Gauge.builder(loadTimeName,
                         dataCache, cache -> cache.stats().totalLoadTime())
                         .register(registry));
-        weight = MeterRegistryProvider.getInstance().map(registry ->
+        MeterRegistryProvider.getInstance().map(registry ->
                 Gauge.builder(weightName,
                         dataCache, cache -> cache.stats().evictionWeight())
                         .register(registry));
-
-        readTimer = MeterRegistryProvider.getInstance().map(registry ->
-                Timer.builder("logunit.read.timer").register(registry));
     }
 
     private int getLogDataTotalSize(ILogData logData) {
@@ -97,9 +92,7 @@ public class LogUnitServerCache {
      * as un-written (null).
      */
     private ILogData handleRetrieval(long address) {
-        Supplier<LogData> readSupplier = () -> streamLog.read(address);
-        LogData entry = readTimer.map(timer -> timer.record(readSupplier))
-                .orElseGet(() -> readSupplier.get());
+        LogData entry = MicroMeterUtils.time(() -> streamLog.read(address), "logunit.read.timer");
         log.trace("handleRetrieval: Retrieved[{} : {}]", address, entry);
         return entry;
     }

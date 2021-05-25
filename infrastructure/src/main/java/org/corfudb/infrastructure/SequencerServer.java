@@ -4,7 +4,6 @@ import com.google.common.collect.ImmutableMap;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.Tags;
-import io.micrometer.core.instrument.Timer;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Builder;
 import lombok.Builder.Default;
@@ -13,6 +12,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;
@@ -41,7 +41,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -140,9 +139,6 @@ public class SequencerServer extends AbstractServer {
 
     private final ExecutorService executor;
 
-    private final Optional<Timer> txResolutionTimer;
-
-    private final Optional<DistributionSummary> streamsPerTx;
     /**
      * Returns a new SequencerServer.
      *
@@ -158,11 +154,6 @@ public class SequencerServer extends AbstractServer {
 
         globalLogTail = Address.getMinAddress();
         this.cache = new SequencerServerCache(config.getCacheSize(), globalLogTail - 1);
-        this.txResolutionTimer = MeterRegistryProvider.getInstance().map(registry ->
-                registry.timer("sequencer.tx-resolution.timer"));
-        this.streamsPerTx = MeterRegistryProvider.getInstance().map(registry ->
-                DistributionSummary.builder("sequencer.tx-resolution.num_streams")
-                        .baseUnit("stream").publishPercentiles(0.50, 0.99).register(registry));
     }
 
     @Override
@@ -235,7 +226,7 @@ public class SequencerServer extends AbstractServer {
             log.debug("ABORT[{}] snapshot-ts[{}] trimMark-ts[{}]", txInfo, txSnapshotTimestamp, trimMark);
             return new TxResolutionResponse(TokenType.TX_ABORT_SEQ_TRIM);
         }
-        streamsPerTx.ifPresent(dist -> dist.record(txInfo.getConflictSet().size()));
+        MicroMeterUtils.measure(txInfo.getConflictSet().size(), "sequencer.tx-resolution.num_streams");
         for (Map.Entry<UUID, Set<byte[]>> conflictStream : txInfo.getConflictSet().entrySet()) {
 
             // if conflict-parameters are present, check for conflict based on conflict-parameter
@@ -530,8 +521,9 @@ public class SequencerServer extends AbstractServer {
         // Token allocation is conditioned on commit.
         // First, we check if the transaction can commit.
         Supplier<TxResolutionResponse> txResponseSupplier = () -> txnCanCommit(req.getTxnResolution());
-        TxResolutionResponse txResolutionResponse = txResolutionTimer.map(timer -> timer.record(txResponseSupplier))
-                .orElseGet(() -> txResponseSupplier.get());
+        TxResolutionResponse txResolutionResponse =
+                MicroMeterUtils.time(txResponseSupplier, "sequencer.tx-resolution.timer");
+
         if (txResolutionResponse.getTokenType() != TokenType.NORMAL) {
             // If the txn aborts, then DO NOT hand out a token.
             Token newToken = new Token(sequencerEpoch, txResolutionResponse.getAddress());

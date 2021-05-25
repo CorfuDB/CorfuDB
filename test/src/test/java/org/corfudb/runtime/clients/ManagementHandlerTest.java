@@ -46,7 +46,6 @@ public class ManagementHandlerTest extends AbstractClientTest {
                 .build();
         server = new ManagementServer(serverContext);
         serverRouter.setServerContext(serverContext);
-        MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
         return new ImmutableSet.Builder<AbstractServer>()
                 .add(server)
                 // Required for management server to fetch the latest layout and connect runtime.

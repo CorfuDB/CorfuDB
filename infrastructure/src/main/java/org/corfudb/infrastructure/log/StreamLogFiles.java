@@ -1,5 +1,8 @@
 package org.corfudb.infrastructure.log;
 
+import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
+
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
@@ -20,6 +23,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.log.LogFormat.CheckpointEntryType;
@@ -163,16 +167,16 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         String baseUnits = "bytes";
         logUnitSizeBytes = MeterRegistryProvider.getInstance().map(registry ->
                 registry.gauge(logUnitSizeMetricName,
-                ImmutableList.of(Tag.of("unit", baseUnits)), new AtomicDouble(0)));
+                        ImmutableList.of(Tag.of("unit", baseUnits)), new AtomicDouble(0)));
         logUnitSizeEntries = MeterRegistryProvider.getInstance().map(registry ->
                 registry.gauge(logUnitSizeMetricName,
-                ImmutableList.of(Tag.of("unit", "entries")), new AtomicLong(0L)));
+                        ImmutableList.of(Tag.of("unit", "entries")), new AtomicLong(0L)));
         openSegments = MeterRegistryProvider.getInstance().map(registry ->
                 registry.gauge(logUnitSizeMetricName,
-                ImmutableList.of(Tag.of("unit", "segments")), new AtomicLong(0L)));
+                        ImmutableList.of(Tag.of("unit", "segments")), new AtomicLong(0L)));
         currentTrimMark = MeterRegistryProvider.getInstance().map(registry ->
                 registry.gauge(logUnitTrimMarkMetricName,
-                new AtomicLong(getTrimMark())));
+                        new AtomicLong(getTrimMark())));
         writeDistributionSummary = MeterRegistryProvider.getInstance()
                 .map(registry -> DistributionSummary.builder("logunit.write.throughput")
                         .baseUnit(baseUnits).register(registry));
@@ -210,6 +214,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     /**
      * Create stream log directory if not exists
+     *
      * @return total capacity of the file system that owns the log files.
      */
     private long initStreamLogDirectory() {
@@ -246,7 +251,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * This method will scan the log (i.e. read all log segment files)
      * on this LU and create a map of stream offsets and the global
      * addresses seen.
-     *
+     * <p>
      * consecutive segments from [startSegment, endSegment]
      */
     private void initializeLogMetadata() {
@@ -447,9 +452,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         if (force) {
             for (FileChannel ch : channelsToSync) {
                 Optional<Timer.Sample> sample =
-                        MeterRegistryProvider.getInstance().map(Timer::start);
+                        MicroMeterUtils.startTimer();
                 ch.force(true);
-                fsyncTimer.ifPresent(timer -> sample.ifPresent(s -> s.stop(timer)));
+                MicroMeterUtils.time(sample, "logunit.fsync.timer");
             }
         }
         log.trace("Sync'd {} channels", channelsToSync.size());
