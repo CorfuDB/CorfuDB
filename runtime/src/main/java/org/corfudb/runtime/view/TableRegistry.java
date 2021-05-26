@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.reflect.TypeToken;
+import com.google.protobuf.Any;
 import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.FileDescriptor;
@@ -133,18 +134,18 @@ public class TableRegistry {
         }
         this.protobufSerializer = protoSerializer;
         this.registryTable = this.runtime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>>() {
-                })
-                .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, REGISTRY_TABLE_NAME))
-                .setSerializer(this.protobufSerializer)
-                .open();
+            .setTypeToken(new TypeToken<CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>>() {
+            })
+            .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, REGISTRY_TABLE_NAME))
+            .setSerializer(this.protobufSerializer)
+            .open();
 
         this.protobufDescriptorTable = this.runtime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>>() {
-                })
-                .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, PROTOBUF_DESCRIPTOR_TABLE_NAME))
-                .setSerializer(this.protobufSerializer)
-                .open();
+            .setTypeToken(new TypeToken<CorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>>() {
+            })
+            .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, PROTOBUF_DESCRIPTOR_TABLE_NAME))
+            .setSerializer(this.protobufSerializer)
+            .open();
 
         // Register the table schemas to schema table.
         addTypeToClassMap(TableName.getDefaultInstance());
@@ -156,18 +157,18 @@ public class TableRegistry {
         // Register the registry table itself.
         try {
             registerTable(CORFU_SYSTEM_NAMESPACE,
-                    REGISTRY_TABLE_NAME,
-                    TableName.class,
-                    TableDescriptors.class,
-                    TableMetadata.class,
-                    TableOptions.<TableName, TableDescriptors>builder().build());
+                REGISTRY_TABLE_NAME,
+                TableName.class,
+                TableDescriptors.class,
+                TableMetadata.class,
+                TableOptions.<TableName, TableDescriptors>builder().build());
 
             registerTable(CORFU_SYSTEM_NAMESPACE,
-                    PROTOBUF_DESCRIPTOR_TABLE_NAME,
-                    ProtobufFileName.class,
-                    ProtobufFileDescriptor.class,
-                    TableMetadata.class,
-                    TableOptions.<ProtobufFileName, ProtobufFileDescriptor>builder().build());
+                PROTOBUF_DESCRIPTOR_TABLE_NAME,
+                ProtobufFileName.class,
+                ProtobufFileDescriptor.class,
+                TableMetadata.class,
+                TableOptions.<ProtobufFileName, ProtobufFileDescriptor>builder().build());
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
@@ -207,9 +208,9 @@ public class TableRegistry {
 
         Map<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> allDescriptors = new HashMap<>();
         TableDescriptors.Builder tableDescriptorsBuilder = TableDescriptors.newBuilder();
-
         FileDescriptor keyFileDescriptor = defaultKeyMessage.getDescriptorForType().getFile();
         insertAllDependingFileDescriptorProtos(tableDescriptorsBuilder, keyFileDescriptor, allDescriptors);
+
         FileDescriptor valueFileDescriptor = defaultValueMessage.getDescriptorForType().getFile();
         insertAllDependingFileDescriptorProtos(tableDescriptorsBuilder, valueFileDescriptor, allDescriptors);
 
@@ -217,7 +218,13 @@ public class TableRegistry {
             M defaultMetadataMessage = (M) metadataClass.getMethod("getDefaultInstance").invoke(null);
             FileDescriptor metaFileDescriptor = defaultMetadataMessage.getDescriptorForType().getFile();
             insertAllDependingFileDescriptorProtos(tableDescriptorsBuilder, metaFileDescriptor, allDescriptors);
+            // Add Any for the metadata
+            tableDescriptorsBuilder.setMetadata(Any.pack(defaultMetadataMessage));
         }
+
+        // Add the Any for the key and value
+        tableDescriptorsBuilder.setKey(Any.pack(defaultKeyMessage))
+            .setValue(Any.pack(defaultValueMessage));
         TableDescriptors tableDescriptors = tableDescriptorsBuilder.build();
 
         TableMetadata.Builder metadataBuilder = TableMetadata.newBuilder();
@@ -254,22 +261,38 @@ public class TableRegistry {
                 CorfuRecord<TableDescriptors, TableMetadata> oldRecord = this.registryTable.get(tableNameKey);
                 if (oldRecord == null) { // Case 1 above, new unseen table
                     this.registryTable.put(tableNameKey,
-                            new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
-                } else { // Case 2 above, re-open of existing table
+                        new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
+                } else {
+                    // Case 2 above, re-open of existing table
+                    // If the schema has changed and/or there is an upgrade
+                    // from a previous version which did not contain the Any
+                    // fields for key/value/metadata, we need to update the
+                    // existing record in registry table.
+                    boolean schemaChanged = false;
+                    boolean upgradeCase = false;
+
                     if (!oldRecord.getPayload().getFileDescriptorsMap().keySet()
-                            .equals(tableDescriptors.getFileDescriptorsMap().keySet())) {
+                        .equals(tableDescriptors.getFileDescriptorsMap().keySet())) {
                         log.warn("Protobuf file list changed for {} table {}. Prev list {}, new list {}",
-                                namespace, tableName, oldRecord.getPayload().getFileDescriptorsMap().keySet(),
-                                tableDescriptors.getFileDescriptorsMap().keySet());
+                            namespace, tableName, oldRecord.getPayload().getFileDescriptorsMap().keySet(),
+                            tableDescriptors.getFileDescriptorsMap().keySet());
                         for (StackTraceElement st : Thread.currentThread().getStackTrace()) {
                             log.debug("{}", st);
                         }
+                        schemaChanged = true;
+                    }
+
+                    if (!oldRecord.getPayload().hasKey()) {
+                        upgradeCase = true;
+                    }
+
+                    if (schemaChanged || upgradeCase) {
                         this.registryTable.put(tableNameKey,
-                                new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
+                            new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
                     } // else no need to re-add the exact same entry into the table
                 }
                 allDescriptors.forEach((protoName, protoDescriptor) ->
-                        recordNewSchema(protoName, protoDescriptor, namespace, tableName));
+                    recordNewSchema(protoName, protoDescriptor, namespace, tableName));
                 this.runtime.getObjectsView().TXEnd();
                 break;
             } catch (TransactionAbortedException txAbort) {
@@ -472,6 +495,7 @@ public class TableRegistry {
         }
 
         String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
+
         ICorfuVersionPolicy.VersionPolicy versionPolicy = ICorfuVersionPolicy.DEFAULT;
         Supplier<StreamingMap<K, V>> mapSupplier = () -> new StreamingMapDecorator();
         if (tableOptions.getPersistentDataPath().isPresent()) {
