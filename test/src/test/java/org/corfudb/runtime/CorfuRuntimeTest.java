@@ -129,7 +129,7 @@ public class CorfuRuntimeTest extends AbstractViewTest {
      * Ensures that we will not accept a Layout that is obsolete.
      *
      * Test storyline:
-     * 1. Seal the 3 servers
+     * 1. Seal the cluster with min server set
      * 2. Install a new Layout only on 2 of them
      * 3. Force the client to receive the Layout only from the staled Layout server.
      * 4. Ensure that we will never accept it.
@@ -144,12 +144,12 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         // Seal
         Layout currentLayout = new Layout(rt.getLayoutView().getCurrentLayout());
         currentLayout.setEpoch(currentLayout.getEpoch() + 1);
-        rt.getLayoutView().getRuntimeLayout(currentLayout).sealMinServerSet();
 
-        // Server2 is sealed but will not be able to commit the layout.
+        // Server2 will not be able to commit the layout.
         addClientRule(rt, SERVERS.ENDPOINT_2,
                 new TestRule().always().drop());
 
+        rt.getLayoutView().getRuntimeLayout(currentLayout).sealMinServerSet();
 
         rt.getLayoutView().updateLayout(currentLayout, 0);
 
