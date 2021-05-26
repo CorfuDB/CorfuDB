@@ -19,6 +19,7 @@ import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+import org.corfudb.util.GitRepositoryState;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
@@ -95,6 +96,13 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         }
 
         ResponseMsg response = ((ResponseMsg) m);
+        long corfuServerVersion = response.getHeader().getVersion().getCorfuSourceCodeVersion();
+        long corfuClientVersion = GitRepositoryState.getCorfuSourceCodeVersion();
+
+        if (corfuServerVersion != corfuClientVersion) {
+            log.warn("channelRead: Version mismatch. Corfu client version: {}, Corfu server version: {}",
+                    Long.toHexString(corfuClientVersion), Long.toHexString(corfuServerVersion));
+        }
 
         if (!response.getPayload().hasHandshakeResponse()) {
             log.warn("channelRead: Non-Handshake Response received. Message - {}", TextFormat.shortDebugString(response));
@@ -112,7 +120,6 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         // the handler so that it does not disconnect the channel.
         ctx.pipeline().remove(READ_TIMEOUT_HANDLER).handlerRemoved(ctx);
         HandshakeResponseMsg handshakeResponse = response.getPayload().getHandshakeResponse();
-        String corfuVersion = handshakeResponse.getCorfuVersion();
         UUID serverId = getUUID(handshakeResponse.getServerId());
 
         // Validate handshake, but first verify if node identifier is set to default (all 0's)
@@ -129,7 +136,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
             return;
         }
 
-        log.info("channelRead: Handshake succeeded. Server Corfu Version: [{}]", corfuVersion);
+        log.info("channelRead: Handshake succeeded. Corfu Server Version: [{}]", Long.toHexString(corfuServerVersion));
 
         requestMessages.forEach(ctx::writeAndFlush);
         requestMessages.clear();

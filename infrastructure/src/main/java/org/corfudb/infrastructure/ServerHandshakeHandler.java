@@ -20,6 +20,7 @@ import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.service.CorfuProtocolBase.getHandshakeResponseMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 
 /**
@@ -32,9 +33,9 @@ import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 public class ServerHandshakeHandler extends ChannelDuplexHandler {
 
     private final UUID nodeId;
-    private final String corfuVersion;
     private final HandshakeState handshakeState;
     private final int timeoutInSeconds;
+    private final long corfuServerVersion;
     private final Set<ResponseMsg> responseMessages = ConcurrentHashMap.newKeySet();
     private static final  AttributeKey<UUID> clientIdAttrKey = AttributeKey.valueOf("ClientID");
     private static final String READ_TIMEOUT_HANDLER = "readTimeoutHandler";
@@ -44,11 +45,10 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
      * on the server side.
      *
      * @param nodeId Current Server Node Identifier.
-     * @param corfuVersion Version of Corfu in Server Node.
      */
-    public ServerHandshakeHandler(UUID nodeId, String corfuVersion, String timeoutInSeconds) {
+    public ServerHandshakeHandler(UUID nodeId, long corfuServerVersion, String timeoutInSeconds) {
         this.nodeId = nodeId;
-        this.corfuVersion = corfuVersion;
+        this.corfuServerVersion = corfuServerVersion;
         this.timeoutInSeconds = Integer.parseInt(timeoutInSeconds);
         this.handshakeState = new HandshakeState();
     }
@@ -67,16 +67,29 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
             return;
         }
 
-        if (!(m instanceof RequestMsg) || !((RequestMsg) m).getPayload().hasHandshakeRequest()) {
-            log.warn("channelRead: Non-handshake message received by handshake handler. Message - {}", m);
+        if (!(m instanceof RequestMsg)) {
+            log.warn("channelRead: Dropping the message as the received msg is not an instance" +
+                    " of RequestMsg. Message - {}", m);
+            return;
+        }
+
+        RequestMsg requestMsg = (RequestMsg) m;
+        long corfuClientVersion = requestMsg.getHeader().getVersion().getCorfuSourceCodeVersion();
+        if (corfuClientVersion != corfuServerVersion) {
+            log.warn("channelRead: Version mismatch. Corfu client version: {}, Corfu server version: {}",
+                    Long.toHexString(corfuClientVersion), Long.toHexString(corfuServerVersion));
+        }
+
+        if (!requestMsg.getPayload().hasHandshakeRequest()) {
+            log.warn("channelRead: Non-handshake message received by handshake handler. Message - {}", requestMsg);
 
             if (this.handshakeState.completed()) {
                 // If handshake completed successfully, but still a message came through this handler,
                 // send on to the next handler in order to avoid message loss.
-                log.warn("channelRead: Sending the message to upstream as the handshake was completed. Message - {}", m);
+                log.warn("channelRead: Sending the message to upstream as the handshake was completed. Message - {}", requestMsg);
                 super.channelRead(ctx, m);
             } else {
-                log.warn("channelRead: Dropping the message as the handshake was not completed. Message - {}", m);
+                log.warn("channelRead: Dropping the message as the handshake was not completed. Message - {}", requestMsg);
             }
 
             return;
@@ -88,7 +101,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
         // the handler so that it does not disconnect the channel.
         ctx.pipeline().remove(READ_TIMEOUT_HANDLER).handlerRemoved(ctx);
 
-        HandshakeRequestMsg handshakeRequest = ((RequestMsg) m).getPayload().getHandshakeRequest();
+        HandshakeRequestMsg handshakeRequest = requestMsg.getPayload().getHandshakeRequest();
         UUID clientId = getUUID(handshakeRequest.getClientId());
         UUID serverId = getUUID(handshakeRequest.getServerId());
 
@@ -106,14 +119,15 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
         // Store clientID as a channel attribute.
         ctx.channel().attr(clientIdAttrKey).set(clientId);
         log.info("channelRead: Handshake validated by Server.");
-        log.debug("channelRead: Sending handshake response: Node Id: {} Corfu Version: {}",
-                this.nodeId, this.corfuVersion);
+        log.debug("channelRead: Sending handshake response: Node Id: {}, Corfu client version:" +
+                " {}, Corfu server version: {}", this.nodeId, Long.toHexString(corfuClientVersion),
+                Long.toHexString(corfuServerVersion));
 
 
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
-        ResponseMsg response = getResponseMsg(((RequestMsg) m).getHeader(),
-                getHandshakeResponseMsg(this.nodeId, this.corfuVersion));
+        ResponseMsg response = getResponseMsg(getHeaderMsg(requestMsg.getHeader()),
+                getHandshakeResponseMsg(this.nodeId));
 
         ctx.writeAndFlush(response);
 

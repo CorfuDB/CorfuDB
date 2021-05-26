@@ -2,13 +2,10 @@ package org.corfudb.infrastructure;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import io.netty.channel.ChannelHandlerContext;
-import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
-import org.corfudb.protocols.wireprotocol.VersionInfo;
-import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
@@ -29,8 +26,6 @@ import static org.corfudb.protocols.service.CorfuProtocolBase.getPingRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolBase.getResetRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolBase.getRestartRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolBase.getSealRequestMsg;
-import static org.corfudb.protocols.service.CorfuProtocolBase.getVersionRequestMsg;
-import static org.corfudb.protocols.service.CorfuProtocolBase.getVersionInfo;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 import static org.junit.Assert.assertEquals;
@@ -180,37 +175,6 @@ public class BaseServerTest {
         assertTrue(response.getPayload().hasServerError());
         assertTrue(response.getPayload().getServerError().hasWrongEpochError());
         assertEquals(2L, response.getPayload().getServerError().getWrongEpochError().getCorrectEpoch());
-    }
-
-    /**
-     * Test that the BaseServer correctly handles a VERSION_REQUEST.
-     */
-    @Test
-    public void testVersionRequest() throws SerializerException {
-        RequestMsg request = getRequestMsg(
-                getBasicHeader(ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
-                getVersionRequestMsg()
-        );
-
-        ArgumentCaptor<ResponseMsg> responseCaptor = ArgumentCaptor.forClass(ResponseMsg.class);
-        when(mockServerContext.getServerConfig()).thenReturn(Collections.singletonMap("--address", "localhost"));
-        when(mockServerContext.getNodeIdBase64()).thenReturn("localhost");
-
-        baseServer.handleMessage(request, mockChannelHandlerContext, mockServerRouter);
-
-        verify(mockServerRouter).sendResponse(responseCaptor.capture(), any(ChannelHandlerContext.class));
-        ResponseMsg response = responseCaptor.getValue();
-
-        // Assert that the payload has a VERSION_RESPONSE and that the base
-        // header fields have remained the same
-        assertTrue(compareBaseHeaderFields(request.getHeader(), response.getHeader()));
-        assertTrue(response.getPayload().hasVersionResponse());
-
-        // Assert that the contents of the versionInfo are what we expect
-        VersionInfo versionInfo = getVersionInfo(response.getPayload().getVersionResponse());
-        assertEquals("localhost", versionInfo.getNodeId());
-        assertEquals(1, versionInfo.getOptionsMap().size());
-        assertEquals("localhost", versionInfo.getOptionsMap().get("--address"));
     }
 
     /**
