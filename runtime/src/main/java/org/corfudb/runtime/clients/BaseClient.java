@@ -5,13 +5,11 @@ import java.util.concurrent.CompletableFuture;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
-import org.corfudb.protocols.wireprotocol.VersionInfo;
 
 import static org.corfudb.protocols.service.CorfuProtocolBase.getPingRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolBase.getResetRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolBase.getRestartRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolBase.getSealRequestMsg;
-import static org.corfudb.protocols.service.CorfuProtocolBase.getVersionRequestMsg;
 
 /**
  * This is a base client which sends basic messages.
@@ -81,14 +79,5 @@ public class BaseClient extends AbstractClient {
      */
     public CompletableFuture<Boolean> sealRemoteServer(long newEpoch) {
         return sendRequestWithFuture(getSealRequestMsg(newEpoch), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
-    }
-
-    /**
-     * Get the version info from the target layout server.
-     *
-     * @return Completable future which returns {@link VersionInfo} object.
-     */
-    public CompletableFuture<VersionInfo> getVersionInfo() {
-        return sendRequestWithFuture(getVersionRequestMsg(), ClusterIdCheck.IGNORE, EpochCheck.IGNORE);
     }
 }

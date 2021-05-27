@@ -10,7 +10,6 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.CorfuProtocolCommon;
-import org.corfudb.protocols.service.CorfuProtocolBase;
 import org.corfudb.runtime.exceptions.DeserializationFailedException;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
@@ -19,7 +18,6 @@ import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg.ErrorCase;
 import org.corfudb.runtime.proto.ServerErrors.WrongClusterErrorMsg;
-import org.corfudb.runtime.proto.service.Base.VersionResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
 
@@ -114,21 +112,6 @@ public class BaseHandler implements IClient {
     @ServerErrorsHandler(type = ErrorCase.NOT_READY_ERROR)
     private static Object handleNotReadyError(ResponseMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
         throw new ServerNotReadyException();
-    }
-
-
-    /**
-     * Handle a version response from the server.
-     *
-     * @param msg The version response message.
-     * @param ctx The context the message was sent under.
-     * @param r   A reference to the router
-     * @return The VersionInfo object fetched from response msg.
-     */
-    @ResponseHandler(type = PayloadCase.VERSION_RESPONSE)
-    private static Object handleVersionResponse(ResponseMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
-        VersionResponseMsg versionResponseMsg = msg.getPayload().getVersionResponse();
-        return CorfuProtocolBase.getVersionInfo(versionResponseMsg);
     }
 
     /**

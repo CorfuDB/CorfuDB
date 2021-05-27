@@ -26,7 +26,6 @@ message HandshakeRequestMsg {
 // Response sent by server in the handshake stage.
 message HandshakeResponseMsg {
   UuidMsg server_id = 1;
-  string corfu_version = 2;
 }
 
 message RestartRequestMsg {
@@ -46,12 +45,4 @@ message SealRequestMsg {
 }
 
 message SealResponseMsg {
-}
-
-message VersionRequestMsg {
-}
-
-// Corfu version information, represented as a JSON string.
-message VersionResponseMsg {
-  string json_payload_msg = 1;
 }

@@ -21,7 +21,6 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
 import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.util.GitRepositoryState;
-import org.corfudb.util.Version;
 
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLEngine;
@@ -324,8 +323,7 @@ public class CorfuServerNode implements AutoCloseable {
                 ch.pipeline().addLast(new NettyCorfuMessageDecoder());
                 ch.pipeline().addLast(new NettyCorfuMessageEncoder());
                 ch.pipeline().addLast(new ServerHandshakeHandler(context.getNodeId(),
-                        Version.getVersionString() + "("
-                                + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")",
+                        GitRepositoryState.getCorfuSourceCodeVersion(),
                         context.getServerConfig(String.class, "--HandshakeTimeout")));
                 // Route the message to the server class.
                 ch.pipeline().addLast(router);

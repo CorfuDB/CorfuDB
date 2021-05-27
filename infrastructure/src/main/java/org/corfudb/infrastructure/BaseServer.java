@@ -9,7 +9,6 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
-import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
@@ -21,7 +20,6 @@ import static org.corfudb.protocols.service.CorfuProtocolBase.getPingResponseMsg
 import static org.corfudb.protocols.service.CorfuProtocolBase.getResetResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolBase.getRestartResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolBase.getSealResponseMsg;
-import static org.corfudb.protocols.service.CorfuProtocolBase.getVersionResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 
@@ -72,21 +70,6 @@ public class BaseServer extends AbstractServer {
 
         HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         ResponseMsg response = getResponseMsg(responseHeader, getPingResponseMsg());
-        r.sendResponse(response, ctx);
-    }
-
-    /**
-     * Respond to a version request message.
-     *
-     * @param req   The incoming message
-     * @param ctx   The channel context
-     * @param r     The server router.
-     */
-    @RequestHandler(type = RequestPayloadMsg.PayloadCase.VERSION_REQUEST)
-    private void getVersion(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
-        VersionInfo versionInfo = new VersionInfo(serverContext.getServerConfig(), serverContext.getNodeIdBase64());
-        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
-        ResponseMsg response = getResponseMsg(responseHeader, getVersionResponseMsg(versionInfo));
         r.sendResponse(response, ctx);
     }
 

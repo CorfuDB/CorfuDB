@@ -11,6 +11,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
@@ -23,6 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeadershipLoss;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeadershipResponse;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 
 /**
@@ -122,7 +124,8 @@ public class LogReplicationServer extends AbstractServer {
                 ResponsePayloadMsg payload = ResponsePayloadMsg.newBuilder()
                         .setLrEntryAck(ack)
                         .build();
-                ResponseMsg response = getResponseMsg(request.getHeader(), payload);
+                HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
+                ResponseMsg response = getResponseMsg(responseHeader, payload);
                 router.sendResponse(response, ctx);
             }
         } else {
@@ -147,7 +150,7 @@ public class LogReplicationServer extends AbstractServer {
 
         if (isLeader(request, ctx, router)) {
             LogReplicationMetadataManager metadataMgr = sinkManager.getLogReplicationMetadataManager();
-            ResponseMsg response = metadataMgr.getMetadataResponse(request.getHeader());
+            ResponseMsg response = metadataMgr.getMetadataResponse(getHeaderMsg(request.getHeader()));
             log.info("Send Metadata response :: {}", TextFormat.shortDebugString(response.getPayload()));
             router.sendResponse(response, ctx);
 
@@ -174,8 +177,8 @@ public class LogReplicationServer extends AbstractServer {
                                                      @Nonnull ChannelHandlerContext ctx,
                                                      @Nonnull IServerRouter router) {
         log.debug("Log Replication Query Leadership Request received by Server.");
-        ResponseMsg response = getLeadershipResponse(request.getHeader(),
-                isLeader.get(), localNodeId);
+        HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
+        ResponseMsg response = getLeadershipResponse(responseHeader, isLeader.get(), localNodeId);
         router.sendResponse(response, ctx);
     }
 
@@ -203,7 +206,8 @@ public class LogReplicationServer extends AbstractServer {
         if (lostLeadership) {
             log.warn("This node has changed, active={}, leader={}. Dropping message type={}, id={}", isActive.get(),
                     isLeader.get(), request.getPayload().getPayloadCase(), request.getHeader().getRequestId());
-            ResponseMsg response = getLeadershipLoss(request.getHeader(), localNodeId);
+            HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
+            ResponseMsg response = getLeadershipLoss(responseHeader, localNodeId);
             router.sendResponse(response, ctx);
         }
 
