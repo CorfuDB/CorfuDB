@@ -9,4 +9,7 @@ public class CompactionManager {
     public static final String COMPACTION_STREAM_TAG = "compaction_stream_tag";
     public static final String COMPACTION_REDESIGN = "COMPACTION_REDESIGN";
 
+    public CompactionManager() {
+
+    }
 }

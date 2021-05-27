@@ -3,11 +3,8 @@ package org.corfudb.infrastructure.compaction;
 import lombok.Builder;
 import lombok.Data;
 
-import java.util.Optional;
-
 /**
- * A request to checkpoint a stream from a particular destination node
- * (if {@link #destinationNode} is present) or via a replication protocol otherwise.
+ * A request to checkpoint a stream with options
  */
 @Data
 @Builder(toBuilder = true)

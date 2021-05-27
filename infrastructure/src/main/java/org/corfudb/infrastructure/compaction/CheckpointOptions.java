@@ -3,8 +3,6 @@ package org.corfudb.infrastructure.compaction;
 
 import lombok.Builder;
 import lombok.Data;
-import lombok.Getter;
-import org.corfudb.runtime.collections.CorfuDynamicKey;
 
 
 @Data

@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.compaction;
 import com.google.protobuf.Timestamp;
 import lombok.Builder;
 import lombok.Data;
-import lombok.ToString;
 import org.corfudb.infrastructure.compaction.proto.LogCompaction.SafeSnapshotMsg;
 
 import java.time.Instant;

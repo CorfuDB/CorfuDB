@@ -3,9 +3,6 @@ package org.corfudb.infrastructure.compaction;
 
 import lombok.Builder;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.ToString;
 import org.corfudb.infrastructure.compaction.exceptions.CompactionException;
 
 import java.util.Optional;
