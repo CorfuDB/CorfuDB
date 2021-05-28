@@ -2,6 +2,7 @@ package org.corfudb.protocols.service;
 
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.util.CompatibilityVectorUtils;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
@@ -51,6 +52,7 @@ public final class CorfuProtocolMessage {
     public static ProtocolVersionMsg getDefaultProtocolVersionMsg() {
         return ProtocolVersionMsg.newBuilder()
                 .setCorfuSourceCodeVersion(GitRepositoryState.getCorfuSourceCodeVersion())
+                .setCapabilityVector(CompatibilityVectorUtils.getCompatibilityVectors())
                 .build();
     }
 
