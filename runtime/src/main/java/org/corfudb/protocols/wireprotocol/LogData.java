@@ -1,7 +1,6 @@
 package org.corfudb.protocols.wireprotocol;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Supplier;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.Getter;
@@ -20,6 +19,7 @@ import org.corfudb.util.serializer.Serializers;
 import java.nio.ByteBuffer;
 import java.util.EnumMap;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 /**
  * Created by mwei on 8/15/16.
