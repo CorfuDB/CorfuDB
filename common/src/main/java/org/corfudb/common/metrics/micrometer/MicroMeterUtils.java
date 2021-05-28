@@ -18,6 +18,8 @@ public class MicroMeterUtils {
 
     }
 
+    public static final String STREAM_ID = "streamId";
+
     public static Optional<Timer> createOrGetTimer(String name, String... tags) {
         return MeterRegistryProvider.getInstance().map(registry ->
                 Timer.builder(name)

@@ -3,7 +3,10 @@ package org.corfudb.infrastructure.compaction;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.compaction.proto.LogCompaction.CheckpointTaskMsg;
 import org.corfudb.infrastructure.compaction.proto.LogCompaction.CheckpointTaskStatus;
 import org.corfudb.infrastructure.compaction.proto.LogCompaction.PollingTaskTriggerKeyMsg;
@@ -25,6 +28,7 @@ import org.corfudb.util.retry.RetryNeededException;
 
 import java.time.Duration;
 import java.util.Collections;
+import java.util.Optional;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -110,7 +114,11 @@ public class PollingTask implements Runnable, StreamListener {
             reportTaskAssigned(request);
 
             // Process and report.
-            handleResponse(taskProcessor.executeCheckpointTask(request));
+            CheckpointTaskResponse response = MicroMeterUtils.time(() ->
+                    taskProcessor.executeCheckpointTask(request),
+                    "compaction.checkpoint.task.timer", "type", "all_stream");
+
+            handleResponse(response);
         } catch (InvalidProtocolBufferException ie) {
             log.error("Parse checkpoint task failed!", ie);
         } catch (RetryExhaustedException re) {

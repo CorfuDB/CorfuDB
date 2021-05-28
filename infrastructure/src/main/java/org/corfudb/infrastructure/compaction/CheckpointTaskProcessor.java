@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.compaction;
 
 import com.google.common.reflect.TypeToken;
+import io.micrometer.core.instrument.DistributionSummary;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.compaction.exceptions.CompactionException;
 import org.corfudb.runtime.CorfuRuntime;
@@ -34,22 +35,22 @@ public class CheckpointTaskProcessor {
     private final String diskModePath;
     private final CorfuRuntime runtime;
     private final ISerializer dynamicProtobufSerializer;
-
+    private final MultiCheckpointWriter<CorfuTable<CorfuDynamicKey,
+            CorfuDynamicRecord>> multiCheckpointWriter;
 
     public CheckpointTaskProcessor(String diskModePath, CorfuRuntime runtime) {
         this.diskModePath = diskModePath;
         this.runtime = runtime;
         this.dynamicProtobufSerializer = new DynamicProtobufSerializer(runtime);
+        this.multiCheckpointWriter = new MultiCheckpointWriter<>();
     }
 
     public CheckpointTaskResponse executeCheckpointTask(
             CheckpointTaskRequest taskRequest) {
-
-        //TODO Add timer and logging
+        log.trace("Start to execute a checkpoint task with request {}", taskRequest);
         try {
             CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table = openTable(taskRequest);
-            MultiCheckpointWriter<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>
-                    multiCheckpointWriter = new MultiCheckpointWriter<>();
+            multiCheckpointWriter.clearAllMaps();
             multiCheckpointWriter.addMap(table);
             multiCheckpointWriter.appendCheckpoints(runtime, CompactionManager.COMPACTION_REDESIGN);
         } catch (Exception e) {
@@ -73,7 +74,7 @@ public class CheckpointTaskProcessor {
         String namespace = taskRequest.getNamespace();
         String streamName = getFullyQualifiedTableName(namespace, tableName);
 
-        log.debug("Opening table {} in namespace {}. Options: {}", tableName, namespace, taskRequest.getOptions());
+        log.trace("Opening table {} in namespace {}. Options: {}", tableName, namespace, taskRequest.getOptions());
 
         SMRObject.Builder<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> builder =
                 runtime.getObjectsView().build()

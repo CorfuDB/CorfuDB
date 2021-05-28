@@ -7,17 +7,20 @@ import io.netty.buffer.Unpooled;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.CacheOption;
 import org.corfudb.runtime.view.StreamsView;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -30,6 +33,8 @@ import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.stream.Stream;
+
+import static org.corfudb.common.metrics.micrometer.MicroMeterUtils.STREAM_ID;
 
 
 /** Checkpoint writer for CorfuTables: take a snapshot of the
@@ -49,6 +54,7 @@ public class CheckpointWriter<T extends StreamingMap> {
     @Getter
     private long numEntries = 0;
     private long numBytes = 0;
+    private long totalWriteTime = 0;
 
     /** Creates a batch that is 95% of the the max write size to accommodate for metadata overhead
      *  metadata overhead is the size of an empty CheckpointEntry. This parameter also helps to
@@ -142,6 +148,22 @@ public class CheckpointWriter<T extends StreamingMap> {
     public Token appendCheckpoint(Token snapshotTimestamp) {
         long start = System.currentTimeMillis();
 
+        // measure how many log data the stream has before the checkpoint
+        long numLogData = 0;
+        TokenResponse response = rt.getSequencerView().query(streamId, checkpointStreamID);
+        long cpTail = response.getStreamTail(checkpointStreamID);
+        long streamTail = response.getStreamTail(streamId);
+
+        if (streamTail > cpTail) {
+            StreamAddressSpace streamAddressSpace = rt.getSequencerView()
+                    .getStreamAddressSpace(new StreamAddressRange(streamId, streamTail, cpTail));
+            numLogData = streamAddressSpace.size();
+        }
+        MicroMeterUtils.measure(numLogData, "compaction.stream.log.num",
+                STREAM_ID, streamId.toString());
+
+
+
         rt.getObjectsView().TXBuild()
                 .type(TransactionType.SNAPSHOT)
                 .snapshot(snapshotTimestamp)
@@ -164,6 +186,8 @@ public class CheckpointWriter<T extends StreamingMap> {
             log.info("appendCheckpoint: completed checkpoint for {}, entries({}), " +
                             "cpSize({}) bytes at snapshot {} in {} ms",
                     streamId, entryCount, numBytes, snapshotTimestamp, cpDuration);
+            MicroMeterUtils.measure(entryCount, "compaction.stream.entry.num",
+                    STREAM_ID, streamId.toString());
         } finally {
             rt.getObjectsView().TXEnd();
         }
@@ -218,7 +242,10 @@ public class CheckpointWriter<T extends StreamingMap> {
         CheckpointEntry cp = new CheckpointEntry(CheckpointEntry
                 .CheckpointEntryType.CONTINUATION,
                 author, checkpointId, streamId, kvCopy, smrEntries);
+
+        long startTime = System.currentTimeMillis();
         long pos = nonCachedAppend(cp, checkpointStreamID);
+        totalWriteTime += (System.currentTimeMillis() - startTime);
 
         postAppendFunc.accept(cp, pos);
         numEntries++;
@@ -251,7 +278,7 @@ public class CheckpointWriter<T extends StreamingMap> {
      *  at the end of this function.  Any Corfu data
      *  modifying ops will be undone by the TXAbort().</p>
      *
-     * @return Stream of global log addresses of the CONTINUATION records written.
+     * @return entryCount The number of all entries of the stream.
      */
     public int appendObjectState(Stream<Map.Entry> entryStream) {
         int maxWriteSizeLimit = (int) (batchThresholdPercentage * getMaxWriteSize());
@@ -276,6 +303,11 @@ public class CheckpointWriter<T extends StreamingMap> {
                inputBuffer are the same buffer.
              */
             smrPutEntry.serialize(inputBuffer);
+
+            // measure serialized size of each entry of the stream
+            MicroMeterUtils.measure(smrPutEntry.getSerializedSize(),
+                    "compaction.stream.entry.serialized.size", STREAM_ID, streamId.toString());
+
             ByteBuffer compressedBuffer =
                     rt.getParameters()
                             .getCodecType()
@@ -309,6 +341,12 @@ public class CheckpointWriter<T extends StreamingMap> {
             log.trace("Final checkpoint log entry consists {} smr entries",
                     smrEntries.getUpdates().size());
         }
+
+        // measure the total time of writing all cp entries of this stream
+        MicroMeterUtils.measure(totalWriteTime, "compaction.checkpoint.task.write.mills",
+                "type", "all_stream");
+        MicroMeterUtils.measure(totalWriteTime, "compaction.checkpoint.stream.write.mills",
+                STREAM_ID, streamId.toString());
         return totalEntryCount;
     }
 

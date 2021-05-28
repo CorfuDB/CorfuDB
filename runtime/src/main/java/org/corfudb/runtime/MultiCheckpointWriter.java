@@ -29,11 +29,15 @@ public class MultiCheckpointWriter<T extends StreamingMap> {
     }
 
     /** Add map(s) to the list of maps to be checkpointed by this class. */
-
     public void addAllMaps(Collection<T> maps) {
         for (T map : maps) {
             addMap(map);
         }
+    }
+
+    /** Clear the list of maps to be checkpointed by this class. */
+    public void clearAllMaps() {
+        maps.clear();
     }
 
     /** Checkpoint multiple CorfuTables. Since this method is Map specific
