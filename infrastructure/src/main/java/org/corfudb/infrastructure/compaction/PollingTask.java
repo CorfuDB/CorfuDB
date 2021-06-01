@@ -3,9 +3,7 @@ package org.corfudb.infrastructure.compaction;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
-import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.compaction.proto.LogCompaction.CheckpointTaskMsg;
 import org.corfudb.infrastructure.compaction.proto.LogCompaction.CheckpointTaskStatus;
@@ -24,13 +22,14 @@ import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
 
 import java.time.Duration;
 import java.util.Collections;
-import java.util.Optional;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.corfudb.infrastructure.compaction.CompactionManager.COMPACTION_NAMESPACE;
 import static org.corfudb.infrastructure.compaction.CompactionManager.COMPACTION_STREAM_TAG;
@@ -41,6 +40,8 @@ public class PollingTask implements Runnable, StreamListener {
     public static final int STATUS_RETRY_NUM = 5;
     public static final Duration STATUS_RETRY_MAX_DURATION = Duration.ofSeconds(3);
     public static final String EXCEPTION_MESSAGE = "Task Status failed to report";
+
+    private final CorfuRuntime corfuRuntime;
 
     private final CorfuStore corfuStore;
 
@@ -61,6 +62,7 @@ public class PollingTask implements Runnable, StreamListener {
                        CorfuQueue checkpointTaskQueue,
                        Table<StatusKeyMsg, StatusMsg, Message> statusTable,
                        ScheduledExecutorService pollingExecutor) {
+        this.corfuRuntime = runtime;
         this.corfuStore = corfuStore;
         this.checkpointTaskQueue = checkpointTaskQueue;
         this.statusTable = statusTable;
@@ -75,20 +77,38 @@ public class PollingTask implements Runnable, StreamListener {
     @Override
     public void run() {
         try {
-            pollTaskQueue();
+            pollQueueAndExecuteTask();
         } catch (Exception e) {
             log.error("Polling task stopped! It will restart if the next trigger msg arrives!", e);
         }
     }
 
-    private void pollTaskQueue() {
+    private ByteString pollTaskQueue() {
+        corfuRuntime.getObjectsView().TXBegin();
         ByteString taskEntryByteString = checkpointTaskQueue.poll();
-        if (taskEntryByteString == null) {
+        corfuRuntime.getObjectsView().TXEnd();
+        return taskEntryByteString;
+    }
+
+    private void pollQueueAndExecuteTask() throws InterruptedException {
+        AtomicReference<ByteString> taskEntryByteString = new AtomicReference<>(null);
+
+        IRetry.build(IntervalRetry.class, () -> {
+            try {
+                taskEntryByteString.set(pollTaskQueue());
+            } catch (TransactionAbortedException e) {
+                log.error("Exception while attempting to poll the checkpoint task queue.", e);
+                throw new RetryNeededException();
+            }
+            return null;
+        }).run();
+
+        if (taskEntryByteString.get() == null) {
             log.warn("CheckpointTaskQueue is empty! Will wait for the next compaction cycle!");
         }
 
         try {
-            CheckpointTaskMsg checkpointTaskMsg = CheckpointTaskMsg.parseFrom(taskEntryByteString);
+            CheckpointTaskMsg checkpointTaskMsg = CheckpointTaskMsg.parseFrom(taskEntryByteString.get());
 
             // Verify compaction task id.
             if (!checkpointTaskMsg.getCompactionTaskId().equals(compactionTaskId)) {
@@ -115,7 +135,7 @@ public class PollingTask implements Runnable, StreamListener {
 
             // Process and report.
             CheckpointTaskResponse response = MicroMeterUtils.time(() ->
-                    taskProcessor.executeCheckpointTask(request),
+                            taskProcessor.executeCheckpointTask(request),
                     "compaction.checkpoint.task.timer", "type", "all_stream");
 
             handleResponse(response);
