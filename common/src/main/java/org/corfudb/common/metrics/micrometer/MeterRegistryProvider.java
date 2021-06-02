@@ -1,6 +1,5 @@
 package org.corfudb.common.metrics.micrometer;
 
-import com.codahale.metrics.MetricRegistry;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
@@ -9,9 +8,8 @@ import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import io.micrometer.core.instrument.logging.LoggingRegistryConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.registries.LoggingMeterRegistryWithHistogramSupport;
-import org.corfudb.common.metrics.micrometer.registries.dropwizard.DropwizardRegistryLoader;
-import org.corfudb.common.metrics.micrometer.registries.dropwizard.DropwizardRegistryProvider;
-import org.corfudb.common.metrics.micrometer.registries.dropwizard.DropwizardRegistryWrapper;
+import org.corfudb.common.metrics.micrometer.registries.RegistryLoader;
+import org.corfudb.common.metrics.micrometer.registries.RegistryProvider;
 import org.slf4j.Logger;
 
 import java.time.Duration;
@@ -61,22 +59,20 @@ public class MeterRegistryProvider {
         }
 
         /**
-         * Looks up the implementations of DropwizardRegistryProvider on the classpath, initializes
-         * Dropwizard registries, wraps each registry into micrometer registry and registers
-         * them with a global composite registry.
+         * Looks up the implementations of RegistryProvider on the classpath, initializes registries,
+         * and registers them with a global composite registry.
          */
-        public static synchronized void registerProvidedDropwizardRegistries() {
-            DropwizardRegistryLoader loader = new DropwizardRegistryLoader();
-            Iterator<DropwizardRegistryProvider> registries = loader.getRegistries();
+        public static synchronized void registerProvidedRegistries() {
+            RegistryLoader loader = new RegistryLoader();
+            Iterator<RegistryProvider> registries = loader.getRegistries();
             while (registries.hasNext()) {
                 try {
-                    DropwizardRegistryProvider serviceProvider = registries.next();
-                    log.info("Registering dropwizard provider: {}", serviceProvider);
-                    MetricRegistry registeredRegistry = serviceProvider.provideRegistry();
-                    MeterRegistry wrappedRegistry = DropwizardRegistryWrapper.wrap(registeredRegistry);
-                    addToCompositeRegistry(() -> Optional.of(wrappedRegistry));
+                    RegistryProvider registryProvider = registries.next();
+                    log.info("Registering provider: {}", registryProvider);
+                    MeterRegistry registry = registryProvider.provideRegistry();
+                    addToCompositeRegistry(() -> Optional.of(registry));
                 } catch (Exception exception) {
-                    log.error("Problems registering a dropwizard registry", exception);
+                    log.error("Problems registering a registry", exception);
                 }
             }
         }

@@ -230,7 +230,7 @@ public class CorfuServer {
                 Optional.ofNullable(context.exists(DEFAULT_METRICS_LOGGER_NAME))
                         .ifPresent(logger -> MeterRegistryProvider.MeterRegistryInitializer.initLoggingRegistry(logger,
                                 DEFAULT_METRICS_LOGGING_INTERVAL, localEndpoint));
-                MeterRegistryProvider.MeterRegistryInitializer.registerProvidedDropwizardRegistries();
+                MeterRegistryProvider.MeterRegistryInitializer.registerProvidedRegistries();
             }
             catch (IllegalStateException ise) {
                 log.warn("Registry has been previously initialized. Skipping.");
