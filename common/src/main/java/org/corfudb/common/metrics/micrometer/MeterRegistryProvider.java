@@ -24,7 +24,7 @@ import java.util.function.Supplier;
  */
 @Slf4j
 public class MeterRegistryProvider {
-    private static CompositeMeterRegistry meterRegistry = new CompositeMeterRegistry();
+    private static final CompositeMeterRegistry meterRegistry = new CompositeMeterRegistry();
     private static Optional<String> id = Optional.empty();
 
     private MeterRegistryProvider() {
@@ -146,7 +146,8 @@ public class MeterRegistryProvider {
      */
     public static synchronized void deregisterServerMeter(String name, Tags tags, Meter.Type type) {
         if (!id.isPresent()) {
-            throw new IllegalStateException("Id must be present to deregister meters.");
+            log.warn("Id must be present to deregister meters.");
+            return;
         }
         String server = id.get();
         Tags tagsToLookFor = tags.and(Tag.of("id", server));
