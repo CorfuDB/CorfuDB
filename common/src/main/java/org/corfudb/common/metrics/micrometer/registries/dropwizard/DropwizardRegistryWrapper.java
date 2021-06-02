@@ -1,4 +1,4 @@
-package org.corfudb.common.metrics.micrometer.registries;
+package org.corfudb.common.metrics.micrometer.registries.dropwizard;
 
 import com.codahale.metrics.MetricRegistry;
 import io.micrometer.core.instrument.Clock;

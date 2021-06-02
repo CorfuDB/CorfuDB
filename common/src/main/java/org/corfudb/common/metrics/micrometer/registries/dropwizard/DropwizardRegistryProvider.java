@@ -1,9 +1,9 @@
-package org.corfudb.common.metrics.micrometer.registries;
+package org.corfudb.common.metrics.micrometer.registries.dropwizard;
 
 import com.codahale.metrics.MetricRegistry;
 
 /**
- * Clients who are willing to provide their dropwizard registries to Corfu metrics registry
+ * Clients who are willing to integrate their dropwizard registries into Corfu metrics registry
  * must implement this interface.
  */
 public interface DropwizardRegistryProvider {

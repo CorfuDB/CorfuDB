@@ -968,6 +968,7 @@ public class CorfuRuntime {
         if (parameters.shutdownNettyEventLoop) {
             nettyEventLoop.shutdownGracefully();
         }
+        MeterRegistryProvider.close();
     }
 
     /**

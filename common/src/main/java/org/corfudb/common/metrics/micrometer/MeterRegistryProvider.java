@@ -8,10 +8,10 @@ import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import io.micrometer.core.instrument.logging.LoggingRegistryConfig;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.registries.DropwizardRegistryLoader;
-import org.corfudb.common.metrics.micrometer.registries.DropwizardRegistryProvider;
-import org.corfudb.common.metrics.micrometer.registries.DropwizardRegistryWrapper;
 import org.corfudb.common.metrics.micrometer.registries.LoggingMeterRegistryWithHistogramSupport;
+import org.corfudb.common.metrics.micrometer.registries.dropwizard.DropwizardRegistryLoader;
+import org.corfudb.common.metrics.micrometer.registries.dropwizard.DropwizardRegistryProvider;
+import org.corfudb.common.metrics.micrometer.registries.dropwizard.DropwizardRegistryWrapper;
 import org.slf4j.Logger;
 
 import java.time.Duration;
@@ -69,8 +69,9 @@ public class MeterRegistryProvider {
             DropwizardRegistryLoader loader = new DropwizardRegistryLoader();
             Iterator<DropwizardRegistryProvider> registries = loader.getRegistries();
             while (registries.hasNext()) {
-                DropwizardRegistryProvider serviceProvider = registries.next();
                 try {
+                    DropwizardRegistryProvider serviceProvider = registries.next();
+                    log.info("Registering dropwizard provider: {}", serviceProvider);
                     MetricRegistry registeredRegistry = serviceProvider.provideRegistry();
                     MeterRegistry wrappedRegistry = DropwizardRegistryWrapper.wrap(registeredRegistry);
                     addToCompositeRegistry(() -> Optional.of(wrappedRegistry));
@@ -82,9 +83,9 @@ public class MeterRegistryProvider {
 
         private static void addToCompositeRegistry(Supplier<Optional<MeterRegistry>> meterRegistrySupplier) {
             Optional<MeterRegistry> componentRegistry = meterRegistrySupplier.get();
-            log.warn("Registry has already been initialized.");
             componentRegistry.ifPresent(registry -> {
                 if (containsRegistry(registry)) {
+                    log.warn("Registry has already been initialized.");
                     removeRegistry(registry);
                 }
                 addRegistry(registry);
@@ -127,6 +128,13 @@ public class MeterRegistryProvider {
      */
     public static synchronized Optional<MeterRegistry> getInstance() {
         return Optional.of(meterRegistry);
+    }
+
+    /**
+     * Close all the registries.
+     */
+    public static synchronized void close() {
+        meterRegistry.close();
     }
 
     /**
