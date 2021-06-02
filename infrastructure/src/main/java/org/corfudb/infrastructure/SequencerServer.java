@@ -3,16 +3,15 @@ package org.corfudb.infrastructure;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.TextFormat;
-import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.Tags;
-import io.micrometer.core.instrument.Timer;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.SequencerServerCache.ConflictTxStream;
 import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
@@ -44,7 +43,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -127,12 +125,6 @@ public class SequencerServer extends AbstractServer {
 
     private final SequencerServerInitializer sequencerFactoryHelper;
 
-
-    /**
-     * The percentiles to compute and publish for {@link this#streamsPerTx}.
-     */
-    private final double[] percentiles = {0.50, 0.95, 0.99};
-
     /**
      * RequestHandlerMethods for the Sequencer server
      */
@@ -163,10 +155,6 @@ public class SequencerServer extends AbstractServer {
      */
     @Getter
     private long globalLogTail;
-
-    private final Optional<Timer> txResolutionTimer;
-
-    private final Optional<DistributionSummary> streamsPerTx;
 
     /**
      * Note: This setter method is only used for testing, since we want to
@@ -209,14 +197,6 @@ public class SequencerServer extends AbstractServer {
         );
         streamsAddressMap = sequencerFactoryHelper.getStreamAddressSpaceMap();
         streamTailToGlobalTailMap = sequencerFactoryHelper.getStreamTailToGlobalTailMap();
-
-        txResolutionTimer = MeterRegistryProvider.getInstance().map(registry ->
-                registry.timer("sequencer.tx-resolution.timer"));
-        streamsPerTx = MeterRegistryProvider.getInstance().map(registry ->
-                DistributionSummary.builder("sequencer.tx-resolution.num_streams")
-                        .baseUnit("stream")
-                        .publishPercentiles(percentiles)
-                        .register(registry));
     }
 
     @Override
@@ -295,7 +275,7 @@ public class SequencerServer extends AbstractServer {
                     txInfo, txSnapshotTimestamp, trimMark);
             return new TxResolutionResponse(TokenType.TX_ABORT_SEQ_TRIM);
         }
-        streamsPerTx.ifPresent(dist -> dist.record(txInfo.getConflictSet().size()));
+        MicroMeterUtils.measure(txInfo.getConflictSet().size(), "sequencer.tx-resolution.num_streams");
         for (Map.Entry<UUID, Set<byte[]>> conflictStream : txInfo.getConflictSet().entrySet()) {
 
             // if conflict-parameters are present, check for conflict based on conflict-parameter
@@ -400,7 +380,7 @@ public class SequencerServer extends AbstractServer {
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
         ResponseMsg response = getResponseMsg(
-                req.getHeader(),
+                getHeaderMsg(req.getHeader()),
                 getTokenResponseMsg(TokenType.NORMAL,
                         TokenResponse.NO_CONFLICT_KEY,
                         TokenResponse.NO_CONFLICT_STREAM,
@@ -478,7 +458,7 @@ public class SequencerServer extends AbstractServer {
 
             // Note: we reuse the request header as the ignore_cluster_id and
             // ignore_epoch fields are the same in both cases.
-            r.sendResponse(getResponseMsg(req.getHeader(),
+            r.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()),
                     getBootstrapSequencerResponseMsg(false)), ctx);
             return;
         }
@@ -492,7 +472,7 @@ public class SequencerServer extends AbstractServer {
 
             // Note: we reuse the request header as the ignore_cluster_id and
             // ignore_epoch fields are the same in both cases.
-            r.sendResponse(getResponseMsg(req.getHeader(),
+            r.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()),
                     getBootstrapSequencerResponseMsg(false)), ctx);
             return;
         }
@@ -578,7 +558,7 @@ public class SequencerServer extends AbstractServer {
         // sequencer is in a ready state.
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
-        ResponseMsg response = getResponseMsg(req.getHeader(),
+        ResponseMsg response = getResponseMsg(getHeaderMsg(req.getHeader()),
                 getSequencerMetricsResponseMsg(new SequencerMetrics(SequencerStatus.READY)));
 
         r.sendResponse(response, ctx);
@@ -634,7 +614,7 @@ public class SequencerServer extends AbstractServer {
 
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
-        ResponseMsg response = getResponseMsg(req.getHeader(),
+        ResponseMsg response = getResponseMsg(getHeaderMsg(req.getHeader()),
                 getTokenResponseMsg(token, Collections.emptyMap()));
         r.sendResponse(response, ctx);
     }
@@ -661,8 +641,7 @@ public class SequencerServer extends AbstractServer {
         Supplier<TxResolutionResponse> txResponseSupplier =
                 () -> txnCanCommit(getTxResolutionInfo(tokenRequest.getTxnResolution()));
         TxResolutionResponse txResolutionResponse =
-                txResolutionTimer.map(timer -> timer.record(txResponseSupplier))
-                        .orElseGet(txResponseSupplier);
+                MicroMeterUtils.time(txResponseSupplier, "sequencer.tx-resolution.timer");
 
         if (txResolutionResponse.getTokenType() != TokenType.NORMAL) {
             // If the txn aborts, then DO NOT hand out a token.
@@ -670,7 +649,7 @@ public class SequencerServer extends AbstractServer {
 
             // Note: we reuse the request header as the ignore_cluster_id and
             // ignore_epoch fields are the same in both cases.
-            ResponseMsg response = getResponseMsg(req.getHeader(), getTokenResponseMsg(
+            ResponseMsg response = getResponseMsg(getHeaderMsg(req.getHeader()), getTokenResponseMsg(
                     txResolutionResponse.getTokenType(),
                     txResolutionResponse.getConflictingKey(),
                     txResolutionResponse.getConflictingStream(),
@@ -756,7 +735,7 @@ public class SequencerServer extends AbstractServer {
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
         ResponseMsg response = getResponseMsg(
-                req.getHeader(), getTokenResponseMsg(newToken, backPointerMap.build()));
+                getHeaderMsg(req.getHeader()), getTokenResponseMsg(newToken, backPointerMap.build()));
         r.sendResponse(response, ctx);
     }
 
@@ -798,7 +777,7 @@ public class SequencerServer extends AbstractServer {
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
         ResponseMsg response = getResponseMsg(
-                req.getHeader(),
+                getHeaderMsg(req.getHeader()),
                 getStreamsAddressResponseMsg(
                         streamsAddressResponse.getLogTail(),
                         streamsAddressResponse.getEpoch(),
@@ -827,8 +806,6 @@ public class SequencerServer extends AbstractServer {
                         .getAddressesInRange(getStreamAddressRange(streamAddressRange));
                 requestedAddressSpaces.put(streamId, addressesInRange);
             } else {
-                log.warn("getStreamsAddressesMap: address space map is not present for stream {}." +
-                        " Verify this is a valid stream.", streamId);
                 requestedAddressSpaces.put(streamId, new StreamAddressSpace(Address.NON_EXIST, Collections.EMPTY_SET));
             }
         }

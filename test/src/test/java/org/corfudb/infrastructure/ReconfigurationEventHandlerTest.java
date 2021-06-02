@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ConservativeFailureHandlerPolicy;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
@@ -57,12 +58,18 @@ public class ReconfigurationEventHandlerTest extends AbstractViewTest {
         Set<String> failedServers = new HashSet<>();
         failedServers.add(getEndpoint(SERVERS.PORT_2));
 
-        ReconfigurationEventHandler reconfigurationEventHandler = new ReconfigurationEventHandler();
+        // Exclude SERVER 2 from the Quorum of this test layout to prevent it from getting a
+        // falsely positive response from sealMinServerSet() method.
+        addClientRule(corfuRuntime, SERVERS.ENDPOINT_2, new TestRule().always().drop());
+
         IReconfigurationHandlerPolicy failureHandlerPolicy = new ConservativeFailureHandlerPolicy();
-        reconfigurationEventHandler.handleFailure(failureHandlerPolicy,
-                        originalLayout,
-                        corfuRuntime,
-                        failedServers);
+        boolean succeed = ReconfigurationEventHandler.handleFailure(failureHandlerPolicy,
+                originalLayout, corfuRuntime, failedServers);
+
+        clearClientRules(corfuRuntime);
+
+        // Verify that handleFailure correctly returns true.
+        assertThat(succeed).isEqualTo(true);
 
         Layout expectedLayout = new TestLayoutBuilder()
                 .setEpoch(2L)

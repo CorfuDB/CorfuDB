@@ -15,6 +15,8 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -73,18 +75,22 @@ public class Backup {
     }
 
     /**
-     * The difference from the constructor above is that this one will automatically discover
-     * tables which require back up from their tags.
+     * Discover and back up all tables, or tables with requires_backup_support tag
      *
-     * @param filePath      - the filePath where the generated backup tar file will be placed
-     * @param runtime       - the runtime which is performing the back up
-     * @throws IOException  - when failed to create the temp directory
+     * @param filePath          - the filePath where the generated backup tar file will be placed
+     * @param runtime           - the runtime which is performing the back up
+     * @param taggedTablesOnly  - if true, back up tables which has requires_backup_support tag set;
+     *                            if false, back up all UFO tables
      */
-    public Backup(String filePath, CorfuRuntime runtime) throws IOException {
+    public Backup(String filePath, CorfuRuntime runtime, boolean taggedTablesOnly) throws IOException {
         this.filePath = filePath;
         this.backupTempDirPath = Files.createTempDirectory(BACKUP_TEMP_DIR_PREFIX).toString();
         this.runtime = runtime;
-        this.streamIDs = getTaggedTables();
+        if (taggedTablesOnly) {
+            this.streamIDs = getTaggedTables();
+        } else {
+            this.streamIDs = getAllTables();
+        }
     }
 
     /**
@@ -139,15 +145,24 @@ public class Backup {
             return;
         }
 
+        long startTime = System.currentTimeMillis();
+        Map<UUID, String> streamIdToTableNameMap = getStreamIdToTableNameMap();
         for (UUID streamId : streamIDs) {
             if (!tableExists(streamId)) {
-                log.warn("cannot back up a non-existent table: {}", streamId);
+                log.warn("cannot back up a non-existent table stream id {} table name {}",
+                        streamId, streamIdToTableNameMap.get(streamId));
                 continue;
             }
-            String fileName = backupTempDirPath + File.separator + streamId;
-            backupTable(fileName, streamId);
+
+            // temporary backup file's name format: uuid.namespace$tableName
+            Path filePath = Paths.get(backupTempDirPath)
+                    .resolve(streamId + "." + streamIdToTableNameMap.get(streamId));
+            backupTable(filePath, streamId);
         }
-        log.info("successfully backed up {} tables to {} directory", streamIDs.size(), backupTempDirPath);
+        long elapsedTime = System.currentTimeMillis() - startTime;
+
+        log.info("successfully backed up {} tables to {} directory, elapsed time {}ms",
+                streamIDs.size(), backupTempDirPath, elapsedTime);
     }
 
     /**
@@ -156,43 +171,53 @@ public class Backup {
      * If the log is trimmed at timestamp, the backupTable will fail.
      * If the table has no data to be backed up, it will create a file with empty contents.
      *
-     * @param fileName   - the name of the backup file
+     * @param filePath   - the path of the backup file
      * @param uuid       - the uuid of the table which is being backed up
      * @throws IOException
      */
-    private void backupTable(String fileName, UUID uuid) throws IOException {
-        try (FileOutputStream fileOutput = new FileOutputStream(fileName)) {
+    private void backupTable(Path filePath, UUID uuid) throws IOException {
+        long startTime = System.currentTimeMillis();
+        BackupTableStats backupTableStats;
+
+        try (FileOutputStream fileOutput = new FileOutputStream(filePath.toString())) {
             StreamOptions options = StreamOptions.builder()
                     .ignoreTrimmed(false)
                     .cacheEntries(false)
                     .build();
-            Stream<OpaqueEntry> stream = (new OpaqueStream(runtime, runtime.getStreamsView().get(uuid, options))).streamUpTo(timestamp);
+            Stream<OpaqueEntry> stream = (new OpaqueStream(runtime.getStreamsView().get(uuid, options))).streamUpTo(timestamp);
 
-            writeTableToFile(fileOutput, stream, uuid);
+            backupTableStats = writeTableToFile(fileOutput, stream, uuid);
         } catch (IOException e) {
-            log.error("failed to back up table {} to file {}", uuid, fileName);
+            log.error("failed to back up table {} to file {}", uuid, filePath);
             throw e;
         } catch (TrimmedException e) {
             log.error("failed to back up tables as log was trimmed after back up starts.");
             throw e;
         }
 
-        log.info("{} table is backed up and stored to temp file {}", uuid, fileName);
+        long elapsedTime = System.currentTimeMillis() - startTime;
+
+        log.info("{} entries (size: {} bytes, elapsed time: {} ms) saved to temp file {}",
+                backupTableStats.getNumOfEntries(), backupTableStats.getTableSize(), elapsedTime, filePath);
     }
 
-    private void writeTableToFile(FileOutputStream fileOutput, Stream<OpaqueEntry> stream, UUID uuid) throws IOException {
+    private BackupTableStats writeTableToFile(FileOutputStream fileOutput, Stream<OpaqueEntry> stream, UUID uuid) throws IOException {
         Iterator<OpaqueEntry> iterator = stream.iterator();
+        int numOfEntries = 0;
+        int tableSize = 0;
         while (iterator.hasNext()) {
+            numOfEntries++;
             OpaqueEntry lastEntry = iterator.next();
             List<SMREntry> smrEntries = lastEntry.getEntries().get(uuid);
             if (smrEntries != null) {
                 Map<UUID, List<SMREntry>> map = new HashMap<>();
                 map.put(uuid, smrEntries);
                 OpaqueEntry newOpaqueEntry = new OpaqueEntry(lastEntry.getVersion(), map);
-                OpaqueEntry.write(fileOutput, newOpaqueEntry);
+                tableSize = OpaqueEntry.write(fileOutput, newOpaqueEntry);
             }
         }
         fileOutput.flush();
+        return new BackupTableStats(numOfEntries, tableSize);
     }
 
     /**
@@ -210,6 +235,8 @@ public class Backup {
 
         try (FileOutputStream fileOutput = new FileOutputStream(filePath);
              TarArchiveOutputStream tarOutput = new TarArchiveOutputStream(fileOutput)) {
+            // truncate file names if too long
+            tarOutput.setLongFileMode(TarArchiveOutputStream.LONGFILE_TRUNCATE);
             for (File srcFile : srcFiles) {
                 addToTarFile(srcFile, tarOutput);
             }
@@ -247,7 +274,7 @@ public class Backup {
     }
 
     /**
-     * Find tables which have the requires_backup_support tag set
+     * Get UUIDs of tables which have the requires_backup_support tag set
      *
      * @return  List<UUID>   - a list of UUIDs for all the tables which require backup support
      */
@@ -265,11 +292,36 @@ public class Backup {
                 .map(tableName -> CorfuRuntime
                         .getStreamID(TableRegistry.getFullyQualifiedTableName(tableName)))
                 .collect(Collectors.toList());
-        log.info("{} tables need to be backed up: {}", tables.size(), tables);
+        log.info("{} tables need to be backed up.", tables.size());
 
         return tables;
     }
 
+    /**
+     * Get UUIDs of all registered UFO tables
+     *
+     * @return  List<UUID>   - a list of UUIDs for all registered UFO tables
+     */
+    private List<UUID> getAllTables() {
+        return runtime.getTableRegistry().listTables().stream()
+                .map(table -> CorfuRuntime.getStreamID(
+                        TableRegistry.getFullyQualifiedTableName(table.getNamespace(), table.getTableName())))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get a map which maps stream ID to TableName
+     *
+     * @return  Map<UUID, String>   - a map: streamId -> fully qualified table name
+     */
+    private Map<UUID, String> getStreamIdToTableNameMap() {
+        Map<UUID, String> streamIdToTableNameMap = new HashMap<>();
+        runtime.getTableRegistry().listTables().forEach(tableName -> {
+                String name = TableRegistry.getFullyQualifiedTableName(tableName);
+                streamIdToTableNameMap.put(CorfuRuntime.getStreamID(name), name);
+        });
+        return streamIdToTableNameMap;
+    }
     /**
      * Cleanup the table backup files under the backupDir directory.
      */
@@ -278,6 +330,25 @@ public class Backup {
             FileUtils.deleteDirectory(new File(backupTempDirPath));
         } catch (IOException e) {
             log.error("failed to clean up the temporary backup directory {}", backupTempDirPath);
+        }
+    }
+
+    private static class BackupTableStats {
+
+        private final int numOfEntries;
+        private final int tableSize;
+
+        BackupTableStats(int numOfEntries, int tableSize) {
+            this.numOfEntries = numOfEntries;
+            this.tableSize = tableSize;
+        }
+
+        public int getNumOfEntries() {
+            return numOfEntries;
+        }
+
+        public int getTableSize() {
+            return tableSize;
         }
     }
 }

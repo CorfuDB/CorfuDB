@@ -1,8 +1,5 @@
 package org.corfudb.infrastructure.log;
 
-import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
-
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
@@ -18,6 +15,32 @@ import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
 import io.netty.buffer.Unpooled;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
+import org.corfudb.common.compression.Codec;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
+import org.corfudb.infrastructure.ResourceQuota;
+import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.log.LogFormat.CheckpointEntryType;
+import org.corfudb.infrastructure.log.LogFormat.DataType;
+import org.corfudb.infrastructure.log.LogFormat.LogEntry;
+import org.corfudb.infrastructure.log.LogFormat.LogHeader;
+import org.corfudb.infrastructure.log.LogFormat.Metadata;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.runtime.exceptions.DataCorruptionException;
+import org.corfudb.runtime.exceptions.LogUnitException;
+import org.corfudb.runtime.exceptions.OverwriteCause;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+
+import javax.annotation.Nullable;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.FileNotFoundException;
@@ -51,30 +74,8 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
-import javax.annotation.Nullable;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.IOUtils;
-import org.corfudb.common.compression.Codec;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
-import org.corfudb.infrastructure.ResourceQuota;
-import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.log.LogFormat.CheckpointEntryType;
-import org.corfudb.infrastructure.log.LogFormat.DataType;
-import org.corfudb.infrastructure.log.LogFormat.LogEntry;
-import org.corfudb.infrastructure.log.LogFormat.LogHeader;
-import org.corfudb.infrastructure.log.LogFormat.Metadata;
-import org.corfudb.protocols.logprotocol.CheckpointEntry;
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
-import org.corfudb.protocols.wireprotocol.TailsResponse;
-import org.corfudb.runtime.exceptions.DataCorruptionException;
-import org.corfudb.runtime.exceptions.LogUnitException;
-import org.corfudb.runtime.exceptions.OverwriteCause;
-import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.TrimmedException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+
+import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
 
 /**
  * This class implements the StreamLog by persisting the stream log as records in multiple files.
@@ -160,16 +161,16 @@ public class StreamLogFiles implements StreamLog {
         String baseUnits = "bytes";
         logUnitSizeBytes = MeterRegistryProvider.getInstance().map(registry ->
                 registry.gauge(logUnitSizeMetricName,
-                ImmutableList.of(Tag.of("unit", baseUnits)), new AtomicDouble(0)));
+                        ImmutableList.of(Tag.of("unit", baseUnits)), new AtomicDouble(0)));
         logUnitSizeEntries = MeterRegistryProvider.getInstance().map(registry ->
                 registry.gauge(logUnitSizeMetricName,
-                ImmutableList.of(Tag.of("unit", "entries")), new AtomicLong(0L)));
+                        ImmutableList.of(Tag.of("unit", "entries")), new AtomicLong(0L)));
         openSegments = MeterRegistryProvider.getInstance().map(registry ->
                 registry.gauge(logUnitSizeMetricName,
-                ImmutableList.of(Tag.of("unit", "segments")), new AtomicLong(0L)));
+                        ImmutableList.of(Tag.of("unit", "segments")), new AtomicLong(0L)));
         currentTrimMark = MeterRegistryProvider.getInstance().map(registry ->
                 registry.gauge(logUnitTrimMarkMetricName,
-                new AtomicLong(getTrimMark())));
+                        new AtomicLong(getTrimMark())));
         writeDistributionSummary = MeterRegistryProvider.getInstance()
                 .map(registry -> DistributionSummary.builder("logunit.write.throughput")
                         .baseUnit(baseUnits).register(registry));
@@ -179,7 +180,7 @@ public class StreamLogFiles implements StreamLog {
 
         fsyncTimer = MeterRegistryProvider.getInstance()
                 .map(registry -> Timer.builder("logunit.fsync.timer")
-                        .publishPercentiles(0.50, 0.95, 0.99)
+                        .publishPercentiles(0.50, 0.99)
                         .publishPercentileHistogram(true)
                         .register(registry));
         long initialLogSize = estimateSize(logDir);
@@ -207,6 +208,7 @@ public class StreamLogFiles implements StreamLog {
 
     /**
      * Create stream log directory if not exists
+     *
      * @return total capacity of the file system that owns the log files.
      */
     private long initStreamLogDirectory() {
@@ -243,7 +245,7 @@ public class StreamLogFiles implements StreamLog {
      * This method will scan the log (i.e. read all log segment files)
      * on this LU and create a map of stream offsets and the global
      * addresses seen.
-     *
+     * <p>
      * consecutive segments from [startSegment, endSegment]
      */
     private void initializeLogMetadata() {
@@ -444,9 +446,9 @@ public class StreamLogFiles implements StreamLog {
         if (force) {
             for (FileChannel ch : channelsToSync) {
                 Optional<Timer.Sample> sample =
-                        MeterRegistryProvider.getInstance().map(Timer::start);
+                        MicroMeterUtils.startTimer();
                 ch.force(true);
-                fsyncTimer.ifPresent(timer -> sample.ifPresent(s -> s.stop(timer)));
+                MicroMeterUtils.time(sample, "logunit.fsync.timer");
             }
         }
         log.trace("Sync'd {} channels", channelsToSync.size());

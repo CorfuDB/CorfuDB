@@ -32,7 +32,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
 
 /**
@@ -77,8 +76,6 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
     @Getter
     public ClusterManagerCallback clusterManagerCallback;
 
-    private Thread thread;
-
     private CorfuRuntime corfuRuntime;
 
     private CorfuStore corfuStore;
@@ -111,7 +108,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         corfuStore.subscribe(configStreamListener, CONFIG_NAMESPACE,
                 Collections.singletonList(new TableSchema(CONFIG_TABLE_NAME,
                         UuidMsg.class, UuidMsg.class, UuidMsg.class)), ts);
-        thread = new Thread(clusterManagerCallback);
+        Thread thread = new Thread(clusterManagerCallback);
         thread.start();
     }
 

@@ -80,7 +80,7 @@ public class LogUpdateAPITest extends AbstractViewTest {
                 .cacheEntries(false)
                 .build();
 
-        Stream streamA = (new OpaqueStream(runtime2, runtime2.getStreamsView().
+        Stream streamA = (new OpaqueStream(runtime2.getStreamsView().
                 get(uuidA, options))).streamUpTo(runtime2.getAddressSpaceView().getLogTail());
 
         IStreamView txStream = runtime2.getStreamsView()

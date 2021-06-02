@@ -18,7 +18,6 @@ import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.service.CorfuProtocolLogReplication;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.SerializerException;
@@ -62,7 +61,7 @@ public class OpaqueStreamTest extends AbstractViewTest {
         CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
 
         IStreamView sv = rt2.getStreamsView().get(streamId);
-        OpaqueStream opaqueStream = new OpaqueStream(rt2, sv);
+        OpaqueStream opaqueStream = new OpaqueStream(sv);
         final long snapshot = 100;
         Stream<OpaqueEntry> stream = opaqueStream.streamUpTo(snapshot);
 
@@ -103,7 +102,7 @@ public class OpaqueStreamTest extends AbstractViewTest {
         CorfuRuntime newRuntime = getNewRuntime(getDefaultNode()).connect();
 
         IStreamView streamView = newRuntime.getStreamsView().get(streamId);
-        OpaqueStream opaqueStream = new OpaqueStream(newRuntime, streamView);
+        OpaqueStream opaqueStream = new OpaqueStream(streamView);
         List<OpaqueEntry> entries = opaqueStream.streamUpTo(Integer.MAX_VALUE).collect(Collectors.toList());
         Assertions.assertThat(extractOpaqueEntries(generatePayload(entries)).size()).isEqualTo(entries.size());
     }
@@ -143,7 +142,7 @@ public class OpaqueStreamTest extends AbstractViewTest {
         CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
 
         IStreamView sv = rt2.getStreamsView().get(streamId);
-        OpaqueStream opaqueStream = new OpaqueStream(rt2, sv);
+        OpaqueStream opaqueStream = new OpaqueStream(sv);
         final long snapshot = 100;
         Stream<OpaqueEntry> stream = opaqueStream.streamUpTo(snapshot);
 

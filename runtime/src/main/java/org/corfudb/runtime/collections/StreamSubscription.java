@@ -49,28 +49,27 @@ public class StreamSubscription<K extends Message, V extends Message, M extends 
     private final Map<UUID, TableSchema<K, V, M>> tableSchemas;
 
     // The buffer of polled transaction data changes.
-    private final BlockingQueue<CorfuStreamEntries> streamBuffer;
+    private final BlockingQueue<CorfuStreamQueueEntry> streamBuffer;
 
     // The size of the stream buffer.
     @Getter
     private final int streamBufferSize;
 
-    // The streaming metrics to report to.
+    // The listener id to tag metrics with.
     @Getter
-    private final StreamSubscriptionMetrics streamingMetrics;
+    private final String listenerId;
 
     // Whether the subscription is stopped because of error or is unsubscribed.
     private volatile boolean stopped = false;
 
     public StreamSubscription(CorfuRuntime runtime, StreamListener listener, String namespace,
-                       String streamTag, List<String> tablesOfInterest, int bufferSize,
-                       StreamSubscriptionMetrics streamingMetrics) {
+                       String streamTag, List<String> tablesOfInterest, int bufferSize) {
         this.runtime = runtime;
         this.listener = listener;
         this.namespace = namespace;
         this.streamBuffer = new ArrayBlockingQueue<>(bufferSize);
         this.streamBufferSize = bufferSize;
-        this.streamingMetrics = streamingMetrics;
+        this.listenerId = String.format("listener_%s_%s_%s", listener, namespace, streamTag);
 
         // Generate table name to table schema mapping.
         TableRegistry registry = runtime.getTableRegistry();
@@ -143,7 +142,8 @@ public class StreamSubscription<K extends Message, V extends Message, M extends 
                 .setEpoch(epoch)
                 .build();
 
-        return streamBuffer.offer(new CorfuStreamEntries(streamEntries, timestamp), maxBlockTime, TimeUnit.NANOSECONDS);
+        CorfuStreamEntries entries = new CorfuStreamEntries(streamEntries, timestamp);
+        return streamBuffer.offer(new CorfuStreamQueueEntry(entries, System.nanoTime()), maxBlockTime, TimeUnit.NANOSECONDS);
     }
 
     /**
@@ -151,11 +151,11 @@ public class StreamSubscription<K extends Message, V extends Message, M extends 
      * queue is not empty or the specified waiting time elapses.
      *
      * @param maxBlockTime maximum time waiting if buffer is empty
-     * @return true if successfully dequeue the first update, false otherwise
+     * @return entry if successfully dequeue the first update, null otherwise
      * @throws InterruptedException if interrupted while waiting
      */
     @Nullable
-    CorfuStreamEntries dequeueStreamEntry(long maxBlockTime) throws InterruptedException {
+    CorfuStreamQueueEntry dequeueStreamEntry(long maxBlockTime) throws InterruptedException {
         return streamBuffer.poll(maxBlockTime, TimeUnit.NANOSECONDS);
     }
 

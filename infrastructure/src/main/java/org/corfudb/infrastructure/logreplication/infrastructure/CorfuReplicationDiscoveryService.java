@@ -135,12 +135,13 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private NodeDescriptor localNodeDescriptor;
 
     /**
-     * Unique node identifier
+     * Unique node identifier of lock
      */
     // Note: not to be confused with NodeDescriptor's NodeId, which is a unique
     // identifier for the node as reported by the Cluster/Topology Manager
     // This node Id is internal to Corfu Log Replication and used for the lock acquisition
-    private final UUID logReplicationNodeId;
+    @Getter
+    private final UUID logReplicationLockId;
 
     /**
      * A queue of Discovery Service events
@@ -205,7 +206,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                                             @Nonnull CorfuReplicationClusterManagerAdapter clusterManagerAdapter,
                                             @Nonnull CompletableFuture<CorfuInterClusterReplicationServerNode> serverCallback) {
         this.clusterManagerAdapter = clusterManagerAdapter;
-        this.logReplicationNodeId = serverContext.getNodeId();
+        this.logReplicationLockId = serverContext.getNodeId();
         this.serverContext = serverContext;
         this.localEndpoint = serverContext.getLocalEndpoint();
         this.serverCallback = serverCallback;
@@ -445,7 +446,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
             IRetry.build(IntervalRetry.class, () -> {
                 try {
-                    lockClient = new LockClient(logReplicationNodeId, getCorfuRuntime());
+                    lockClient = new LockClient(logReplicationLockId, getCorfuRuntime());
                     // Callback on lock acquisition or revoke
                     LockListener logReplicationLockListener = new LogReplicationLockListener(this);
                     // Register Interest on the shared Log Replication Lock
@@ -455,8 +456,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     throw new RetryNeededException();
                 }
 
-                log.debug("Registered to lock, client msb={}, lsb={}", logReplicationNodeId.getMostSignificantBits(),
-                        logReplicationNodeId.getLeastSignificantBits());
+                log.debug("Registered to lock, client msb={}, lsb={}", logReplicationLockId.getMostSignificantBits(),
+                        logReplicationLockId.getLeastSignificantBits());
                 return null;
             }).run();
         } catch (InterruptedException e) {
@@ -564,8 +565,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     public void processLockRelease() {
         log.debug("Lock released");
-        isLeader.set(false);
+        // Unset isLeader flag after stopping log replication
         stopLogReplication();
+        isLeader.set(false);
         // Signal Log Replication Server/Sink to stop receiving messages, leadership loss
         interClusterReplicationService.getLogReplicationServer().setLeadership(false);
         recordLockRelease();

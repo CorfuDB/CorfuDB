@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.util.Utils;
 
 
 /** A data class which keeps data for each stream context.
@@ -79,8 +80,8 @@ public abstract class AbstractStreamContext implements
      */
     protected void validateGlobalPointerPosition(long globalPointer) {
         if (globalPointer < gcTrimMark && globalPointer > Address.NON_ADDRESS) {
-            throw new TrimmedException(String.format("Global pointer position[%s] is in GC trim range. GC Trim mark: [%s]. This address is trimmed from the log.",
-                    globalPointer, gcTrimMark));
+            throw new TrimmedException(String.format("Stream[%s] global pointer position[%s] is in GC trim range. " +
+                            "GC Trim mark: [%s]. This address is trimmed from the log.", Utils.toReadableId(id), globalPointer, gcTrimMark));
         }
     }
 
