@@ -1,11 +1,7 @@
 package org.corfudb.protocols.service;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.VersionInfo;
-import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.proto.service.Base.HandshakeRequestMsg;
 import org.corfudb.runtime.proto.service.Base.HandshakeResponseMsg;
 import org.corfudb.runtime.proto.service.Base.PingRequestMsg;
@@ -16,8 +12,6 @@ import org.corfudb.runtime.proto.service.Base.RestartRequestMsg;
 import org.corfudb.runtime.proto.service.Base.RestartResponseMsg;
 import org.corfudb.runtime.proto.service.Base.SealRequestMsg;
 import org.corfudb.runtime.proto.service.Base.SealResponseMsg;
-import org.corfudb.runtime.proto.service.Base.VersionRequestMsg;
-import org.corfudb.runtime.proto.service.Base.VersionResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 
@@ -125,51 +119,6 @@ public final class CorfuProtocolBase {
     }
 
     /**
-     * Returns a VERSION request message that can be sent by the client.
-     *
-     * @return   a RequestPayloadMsg containing a VERSION request
-     */
-    public static RequestPayloadMsg getVersionRequestMsg() {
-        return RequestPayloadMsg.newBuilder()
-                .setVersionRequest(VersionRequestMsg.getDefaultInstance())
-                .build();
-    }
-
-    /**
-     * Returns a VERSION response message that can be sent by the server.
-     *
-     * @param vi   the version information of the server
-     * @return     a ResponsePayloadMsg containing a VERSION response
-     */
-    public static ResponsePayloadMsg getVersionResponseMsg(VersionInfo vi) {
-        final Gson parser = new GsonBuilder().create();
-        String payload = parser.toJson(vi);
-
-        return ResponsePayloadMsg.newBuilder()
-                .setVersionResponse(VersionResponseMsg.newBuilder()
-                        .setJsonPayloadMsg(payload)
-                        .build())
-                .build();
-    }
-
-    /**
-     * Returns a Java VersionInfo object from its Protobuf representation.
-     *
-     * @param msg   the Protobuf VERSION response message
-     * @return      a corresponding VersionInfo object from its JSON representation
-     * @throws      SerializerException if unable to deserialize the JSON payload
-     */
-    public static VersionInfo getVersionInfo(VersionResponseMsg msg) {
-        final Gson parser = new GsonBuilder().create();
-
-        try {
-            return parser.fromJson(msg.getJsonPayloadMsg(), VersionInfo.class);
-        } catch (Exception ex) {
-            throw new SerializerException("Unexpected error while deserializing VersionInfo JSON", ex);
-        }
-    }
-
-    /**
      * Returns a HANDSHAKE request message that is sent by the client
      * when initiating a handshake with the server.
      *
@@ -191,14 +140,12 @@ public final class CorfuProtocolBase {
      * when responding to a handshake request.
      *
      * @param nodeId         the server id
-     * @param corfuVersion   a string containing corfu version information
      * @return               a ResponsePayloadMsg containing a HANDSHAKE response
      */
-    public static ResponsePayloadMsg getHandshakeResponseMsg(UUID nodeId, String corfuVersion) {
+    public static ResponsePayloadMsg getHandshakeResponseMsg(UUID nodeId) {
         return ResponsePayloadMsg.newBuilder()
                 .setHandshakeResponse(HandshakeResponseMsg.newBuilder()
                         .setServerId(getUuidMsg(nodeId))
-                        .setCorfuVersion(corfuVersion)
                         .build())
                 .build();
     }

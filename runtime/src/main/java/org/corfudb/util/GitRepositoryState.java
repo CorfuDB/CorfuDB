@@ -10,8 +10,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class GitRepositoryState {
 
-    private static GitRepositoryState _gitRepositoryState = null;
-
     public final String tags;
     public final String branch;
     public final String dirty;
@@ -33,7 +31,15 @@ public class GitRepositoryState {
     public final String buildHost;
     public final String buildVersion;
 
-    private GitRepositoryState(Properties properties) {
+    private GitRepositoryState() {
+        Properties properties = new Properties();
+        try {
+            properties.load(GitRepositoryState.class.getClassLoader()
+                    .getResourceAsStream("git.properties"));
+        } catch (IOException ie) {
+            log.error("Failed to get repository state", ie);
+        }
+
         this.tags = properties.get("git.tags").toString();
         this.branch = properties.get("git.branch").toString();
         this.dirty = properties.get("git.dirty").toString();
@@ -59,21 +65,32 @@ public class GitRepositoryState {
     }
 
     /**
+     * This helper class loads when getRepositoryState() is called for the first time. It gives us
+     * thread-safe lazy-initialization because the class loader guarantees that all static
+     * initialization is complete before getting access to the class.
+     */
+    private static class GitRepositoryStateHelper {
+        private static final GitRepositoryState gitRepositoryState = new GitRepositoryState();
+    }
+
+    /**
      * Return git repo state.
      * @return git repo state
      */
     public static GitRepositoryState getRepositoryState() {
-        if (_gitRepositoryState == null) {
-            Properties properties = new Properties();
-            try {
-                properties.load(GitRepositoryState.class.getClassLoader()
-                        .getResourceAsStream("git.properties"));
-            } catch (IOException ie) {
-                log.error("Failed to get repository state", ie);
-            }
-            _gitRepositoryState = new GitRepositoryState(properties);
-        }
-        return _gitRepositoryState;
+        return GitRepositoryStateHelper.gitRepositoryState;
     }
 
+    /**
+     * Getter for the long value which will be populated into our protobuf header. We only
+     * take the first CUTOFF characters of parent git commit id as they are more than enough
+     * to uniquely identify a commit in our codebase.
+     *
+     * @return Long value converted from the first 12 characters of parent git commit id.
+     */
+    public static long getCorfuSourceCodeVersion() {
+        final int CUTOFF = 12;
+        final int HEX_OPT = 16;
+        return Long.parseLong(getRepositoryState().commitId.substring(0, CUTOFF), HEX_OPT);
+    }
 }

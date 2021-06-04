@@ -10,7 +10,6 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.RemoteMonitoringService;
 import org.corfudb.protocols.wireprotocol.ClusterState;
@@ -280,8 +279,7 @@ public class FailureDetector implements IDetector {
         Map<String, CompletableFuture<NodeState>> clusterState = new HashMap<>();
         allServers.forEach(s -> {
             try {
-                MeterRegistryProvider.timer("failure-detector.ping-latency", "node", s);
-                Optional<Timer.Sample> sample = MeterRegistryProvider.getInstance().map(Timer::start);
+                Optional<Timer.Sample> sample = MicroMeterUtils.startTimer();
                 CompletableFuture<NodeState> nodeStateFuture =
                         MicroMeterUtils.timeWhenCompletes(new ManagementClient(clientRouters.get(s), epoch, clusterId)
                                         .sendNodeStateRequest(), sample,

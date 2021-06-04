@@ -1,42 +1,33 @@
 package org.corfudb.runtime.collections;
 
 import com.google.gson.JsonObject;
-import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.distribution.HistogramSnapshot;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 
-import java.util.concurrent.TimeUnit;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Minimalistic stats to capture time taken.
- *
+ * <p>
  * created by hisundar 2020-09-20
  */
 public class TimingHistogram {
-    private final Optional<DistributionSummary> timer;
-
-    public TimingHistogram(String metricName, String tag) {
-        this.timer = MeterRegistryProvider.getInstance().map(registry ->
-                DistributionSummary
-                        .builder(metricName)
-                        .tag("time_key", tag)
-                        .publishPercentiles(0.50, 0.95, 0.99)
-                        .publishPercentileHistogram()
-                        .baseUnit("s")
-                        .register(registry));
+    private final String tableName;
+    private final String metricsName;
+    public TimingHistogram(String metricName, String tableName) {
+        this.metricsName = metricName;
+        this.tableName = tableName;
     }
 
     /**
      * Record the time elapsed. Recompute stats.
      *
-     * @param val - time elapsed in nano seconds
+     * @param sample - A measurement sample to time.
      */
-    public void update(long val) {
-        if (!timer.isPresent()) {
-            return;
-        }
-        timer.get().record(val);
+    public void update(Optional<Timer.Sample> sample) {
+        MicroMeterUtils.time(sample, this.metricsName, "table.name", this.tableName);
     }
 
     /**
@@ -46,15 +37,15 @@ public class TimingHistogram {
      * @return the stat param with the coarsest time suffix
      */
     public static String coarsestGranularString(double nanos) {
-        long secs = TimeUnit.NANOSECONDS.toSeconds((long)nanos);
+        long secs = TimeUnit.NANOSECONDS.toSeconds((long) nanos);
         if (secs > 0.0) {
             return secs + "s";
         }
-        long millis = TimeUnit.NANOSECONDS.toMillis((long)nanos);
+        long millis = TimeUnit.NANOSECONDS.toMillis((long) nanos);
         if (millis > 0.0) {
             return millis + "ms";
         }
-        long micros = TimeUnit.NANOSECONDS.toMicros((long)nanos);
+        long micros = TimeUnit.NANOSECONDS.toMicros((long) nanos);
         if (micros > 0.0) {
             return micros + "us";
         }
@@ -66,6 +57,10 @@ public class TimingHistogram {
      */
     public JsonObject asJsonObject() {
         JsonObject jsonObject = new JsonObject();
+
+        Optional<Timer> timer =
+                MicroMeterUtils.createOrGetTimer(this.metricsName, "table.name", this.tableName);
+
         if (!timer.isPresent()) {
             return jsonObject;
         }
@@ -74,10 +69,9 @@ public class TimingHistogram {
             jsonObject.addProperty("num", snapshot.total());
             jsonObject.addProperty("avg", coarsestGranularString(snapshot.mean()));
             jsonObject.addProperty("max", coarsestGranularString(snapshot.max()));
-            jsonObject.addProperty("p95", coarsestGranularString(snapshot.percentileValues()[1].value()));
             jsonObject.addProperty("p99", coarsestGranularString(snapshot.percentileValues()[2].value()));
         }
-        return  jsonObject;
+        return jsonObject;
     }
 
     /**

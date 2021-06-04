@@ -101,9 +101,8 @@ public class StreamingManager {
                     "StreamingManager::subscribe: listener already registered " + streamListener);
         }
 
-        StreamSubscriptionMetrics metrics = new StreamSubscriptionMetrics(streamListener, namespace, streamTag);
         StreamSubscription subscription = new StreamSubscription(
-                runtime, streamListener, namespace, streamTag, tablesOfInterest, bufferSize, metrics);
+                runtime, streamListener, namespace, streamTag, tablesOfInterest, bufferSize);
         subscriptions.put(streamListener, subscription);
 
         pollingExecutor.submit(new StreamPollingTask(this, lastAddress, subscription, pollingExecutor,

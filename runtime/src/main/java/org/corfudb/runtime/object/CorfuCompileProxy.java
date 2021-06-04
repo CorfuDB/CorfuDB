@@ -1,9 +1,8 @@
 package org.corfudb.runtime.object;
 
-import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -26,7 +25,6 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
@@ -106,12 +104,6 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     private final Object[] args;
 
     /**
-     * Metrics: meter (counter), histogram.
-     */
-    private final Optional<Timer> readTimer;
-    private final Optional<Timer> writeTimer;
-    private final Optional<Timer> txTimer;
-    /**
      * Correctness Logging
      */
     private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
@@ -142,29 +134,6 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
         underlyingObject = new VersionLockedObject<T>(this::getNewInstance,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
                 wrapperObject);
-
-        String streamIdKey = "streamId";
-        String streamIdValue = getStreamID().toString();
-
-        double [] percentiles = new double [] {0.50, 0.95, 0.99};
-        readTimer = MeterRegistryProvider.getInstance().map(registry ->
-                Timer.builder("vlo.read.timer")
-                        .tag(streamIdKey, streamIdValue)
-                        .publishPercentileHistogram(true)
-                        .publishPercentiles(percentiles)
-                        .register(registry));
-        writeTimer = MeterRegistryProvider.getInstance().map(registry ->
-                Timer.builder("vlo.write.timer")
-                        .tag(streamIdKey, streamIdValue)
-                        .publishPercentileHistogram(true)
-                        .publishPercentiles(percentiles)
-                        .register(registry));
-        txTimer = MeterRegistryProvider.getInstance().map(registry ->
-                Timer.builder("vlo.tx.timer")
-                        .tag(streamIdKey, streamIdValue)
-                        .publishPercentileHistogram(true)
-                        .publishPercentiles(percentiles)
-                        .register(registry));
     }
 
     /**
@@ -181,12 +150,8 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     @Override
     public <R> R access(ICorfuSMRAccess<R, T> accessMethod,
                         Object[] conflictObject) {
-        if (readTimer.isPresent()) {
-            return readTimer.get().record(() -> accessInner(accessMethod, conflictObject));
-        }
-        else {
-            return accessInner(accessMethod, conflictObject);
-        }
+        return MicroMeterUtils.time(() -> accessInner(accessMethod, conflictObject),
+                "vlo.read.timer", "streamId", streamID.toString());
     }
 
     private <R> R accessInner(ICorfuSMRAccess<R, T> accessMethod,
@@ -238,12 +203,9 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     @Override
     public long logUpdate(String smrUpdateFunction, final boolean keepUpcallResult,
                           Object[] conflictObject, Object... args) {
-        if (writeTimer.isPresent()) {
-            return writeTimer.get().record(() -> logUpdateInner(smrUpdateFunction, keepUpcallResult, conflictObject, args));
-        }
-        else {
-            return logUpdateInner(smrUpdateFunction, keepUpcallResult, conflictObject, args);
-        }
+        return MicroMeterUtils.time(
+                () -> logUpdateInner(smrUpdateFunction, keepUpcallResult, conflictObject, args),
+                "vlo.write.timer", "streamId", streamID.toString());
     }
 
     private long logUpdateInner(String smrUpdateFunction, final boolean keepUpcallResult,
@@ -352,12 +314,8 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
      */
     @Override
     public <R> R TXExecute(Supplier<R> txFunction) {
-        if (txTimer.isPresent()) {
-            return txTimer.get().record(() -> TXExecuteInner(txFunction));
-        }
-        else {
-            return TXExecuteInner(txFunction);
-        }
+        return MicroMeterUtils.time(() -> TXExecuteInner(txFunction),
+                "vlo.tx.timer", "streamId", streamID.toString());
     }
 
     @SuppressWarnings({"checkstyle:membername", "checkstyle:abbreviation"})

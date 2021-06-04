@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 
 import com.google.common.reflect.TypeToken;
+import com.google.protobuf.Message;
 import lombok.Getter;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
@@ -9,6 +10,7 @@ import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.CorfuTable;
@@ -21,6 +23,7 @@ import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.StreamingException;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.SampleTableAMsg;
@@ -437,6 +440,130 @@ public class StreamingIT extends AbstractIT {
         assertThrows(StreamingException.class, () -> store.subscribeListener(listenerCommon, "test_namespace", "sample_streamer_4",
                 Collections.singletonList("tableB"), ts1));
 
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    /**
+     * Example to show how to retrieve the previous value from a streamed entry
+     * @param <K>
+     * @param <V>
+     * @param <M>
+     */
+    class PrevValueStreamer<K extends Message, V extends Message, M extends Message> implements StreamListener {
+        @Getter
+        private int recordCount;
+        private CorfuStore corfuStore;
+        private final String namespace;
+        private final String tableName;
+        public PrevValueStreamer(CorfuStore corfuStore, String namespace, String tableName) {
+            recordCount = 0;
+            this.corfuStore = corfuStore;
+            this.namespace = namespace;
+            this.tableName = tableName;
+        }
+
+        public String toString() {
+            return namespace+tableName;
+        }
+        /**
+         * A corfu update can/may have multiple updates belonging to different streams.
+         * This callback will return those updates as a list grouped by their Stream UUIDs.
+         *
+         * @param results is a map of stream UUID -> list of entries of this stream.
+         */
+        @Override
+        public void onNext(CorfuStreamEntries results) {
+            results.getEntries().forEach((k, v) -> {
+                v.forEach(entry -> {
+                    final CorfuStoreEntry<K, V, M> previousRecord =
+                            getPreviousRecord(namespace, tableName, entry, entry.getEpoch(), entry.getAddress());
+                    SampleTableAMsg prevMsg = (SampleTableAMsg) previousRecord.getPayload();
+                    if (recordCount > 0) {
+                        assertThat(prevMsg.getPayload()).isEqualTo("val"+(recordCount - 1));
+                    } else {
+                        assertThat(previousRecord.getPayload()).isNull();
+                    }
+                });
+            });
+            recordCount++;
+        }
+
+        /**
+         *  Fetch the previous value of a record from the table using the sequence - 1 snapshot
+         * @param namespace
+         * @param tableName
+         * @param entry
+         * @param epoch
+         * @param sequence
+         * @return
+         */
+        public CorfuStoreEntry<K, V, M> getPreviousRecord(String namespace, String tableName,
+                                                          CorfuStreamEntry entry,
+                                                          long epoch,
+                                                          long sequence) {
+            Timestamp prevTimestamp = Timestamp.newBuilder()
+                    .setEpoch(epoch)
+                    .setSequence(sequence - 1)
+                    .build();
+            CorfuStoreEntry<K,V,M> prevRecord = null;
+            try (TxnContext tx = this.corfuStore.txn(namespace, IsolationLevel.snapshot(prevTimestamp))) {
+                prevRecord = tx.getRecord(tableName, entry.getKey());
+                tx.commit();
+            }
+            return prevRecord;
+        }
+
+        /**
+         * Callback to indicate that an error or exception has occurred while streaming or that the stream is
+         * shutting down. Some exceptions can be handled by restarting the stream (TrimmedException) while
+         * some errors (SystemUnavailableError) are unrecoverable.
+         *
+         * @param throwable
+         */
+        @Override
+        public void onError(Throwable throwable) {
+            assertThat(throwable).isNull();
+        }
+    }
+
+    /** Verify the same listener cannot be used across different subscribers
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testStreamingPrevValue() throws Exception {
+        // Run a corfu server and start runtime
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStore store = new CorfuStore(runtime);
+        String ns = "test_namespace";
+        String tn = "tableA";
+
+        // Create two tables.
+        Table<Uuid, SampleTableAMsg, Uuid> table = store.openTable(ns, tn,
+                Uuid.class, SampleTableAMsg.class, Uuid.class,
+                TableOptions.builder().build());
+
+        // Record the initial timestamp.
+        Timestamp ts1 = store.getTimestamp();
+        // Subscribe to streaming updates from tableA using listenerCommon
+        PrevValueStreamer listenerCommon = new PrevValueStreamer<Uuid, SampleTableAMsg, Uuid>(store, ns, tn);
+        store.subscribeListener(listenerCommon, ns, "sample_streamer_1",
+                Collections.singletonList(tn), ts1);
+        final int numRecords = PARAMETERS.NUM_ITERATIONS_LOW;
+        for (int i = 0; i < numRecords; i++) {
+            try (TxnContext tx = store.txn(namespace)) {
+                Uuid key = Uuid.newBuilder().setLsb(0).setMsb(0).build();
+                SampleTableAMsg val = SampleTableAMsg.newBuilder()
+                        .setPayload("val"+i).build();
+                tx.putRecord(table, key, val, key);
+                tx.commit();
+            }
+        }
+
+        // After a brief wait verify that the listener gets all the updates.
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
+        assertThat(listenerCommon.getRecordCount()).isEqualTo(numRecords);
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 
@@ -1112,6 +1239,99 @@ public class StreamingIT extends AbstractIT {
 
         runtime.shutdown();
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    /**
+     * Test subscribe streaming API for which only streams tags are specified.
+     *
+     * (1) Test the case where tables with a common tag are opened in advance and by subscribing to the tag,
+     * updates for all tables are received.
+     *
+     * (2) Test the case where tables have been registered on a different store, and we attempt to
+     * subscribe without opening the tables (this should fail, as key, value & metadata schemas are required).
+     *
+     * (3) Test the case where partial tables belonging to a tag have been opened by the time of subscription (should still fail).
+     */
+    @Test
+    public void testSubscribeAPIForTagsOnly() throws Exception {
+        // Run a corfu server & initialize Corfu Store
+        initializeCorfu();
+
+        // Write a number of updates to a certain table
+        final int numUpdates = 20;
+        final int totalTables = 3;
+        final String commonStreamTag = "sample_streamer_2";
+        final String uniqueTag = "sample_streamer_1";
+        final String table1Name = defaultTableName;
+        final String table2Name  = "tableSampleB_2";
+        final String table3Name  = "tableSampleB_3";
+
+        writeUpdatesToDefaultTable(numUpdates, 0);
+        writeUpdatesToRandomTable(numUpdates, 0, table2Name);
+        writeUpdatesToRandomTable(numUpdates, 0, table3Name);
+
+        // First CorfuStore used to open 3 tables (2 share the same tag)
+        // Subscribe first store to commonStreamTag and verify updates for all 3 tables are received
+        StreamListenerImpl listener = new StreamListenerImpl("stream_listener");
+        store.subscribeListener(listener, namespace, commonStreamTag, Timestamp.newBuilder().setSequence(Address.NON_ADDRESS).setEpoch(0L).build());
+
+        // Confirm totalUpdates are received
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
+        assertThat(listener.getUpdates().size()).isEqualTo(numUpdates*totalTables);
+
+        // Second CorfuStore (initially no tables opened)
+        CorfuRuntime newRuntime = createRuntime(singleNodeEndpoint);
+        CorfuStore newStore = new CorfuStore(newRuntime);
+
+        StreamListenerImpl newListener = new StreamListenerImpl("new_stream_listener");
+        // Attempt to subscribe to 'commonStreamTag', it should fail as none of the tables labeled with this tag
+        // have been opened
+        assertThatThrownBy(() -> newStore.subscribeListener(newListener, namespace, commonStreamTag,
+                    Timestamp.newBuilder().setSequence(Address.NON_ADDRESS).setEpoch(0L).build()))
+                .isExactlyInstanceOf(IllegalArgumentException.class);
+
+        // Open only 1 of the tables labeled with 'commonStreamTag'
+        newStore.openTable(
+                namespace, table2Name,
+                Uuid.class, SampleTableBMsg.class, Uuid.class,
+                TableOptions.builder().build()
+        );
+
+        // Attempt to subscribe to 'commonStreamTag', it should still fail as ALL of the tables labeled with this tag
+        // have not yet been opened
+        assertThatThrownBy(() -> newStore.subscribeListener(newListener, namespace, commonStreamTag,
+                Timestamp.newBuilder().setSequence(Address.NON_ADDRESS).setEpoch(0L).build()))
+                .isExactlyInstanceOf(IllegalArgumentException.class);
+
+        // Open remaining 2 tables
+        newStore.openTable(
+                namespace, table3Name,
+                Uuid.class, SampleTableBMsg.class, Uuid.class,
+                TableOptions.builder().build()
+        );
+
+        newStore.openTable(
+                namespace, table1Name,
+                Uuid.class, SampleTableAMsg.class, Uuid.class,
+                TableOptions.builder().build()
+        );
+
+        // Attempt to register, now that 3 tables have been opened
+        newStore.subscribeListener(newListener, namespace, commonStreamTag,
+                Timestamp.newBuilder().setSequence(Address.NON_ADDRESS).setEpoch(0L).build());
+
+        // Confirm totalUpdates are received
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
+        assertThat(newListener.getUpdates().size()).isEqualTo(numUpdates*totalTables);
+
+        // Confirm a tag which is unique to 1 table, also works
+        StreamListenerImpl listenerUniqueTag = new StreamListenerImpl("stream_listener_unique");
+        newStore.subscribeListener(listenerUniqueTag, namespace, uniqueTag,
+                Timestamp.newBuilder().setSequence(Address.NON_ADDRESS).setEpoch(0L).build());
+
+        // Confirm totalUpdates are received
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
+        assertThat(listenerUniqueTag.getUpdates().size()).isEqualTo(numUpdates);
     }
 
     private void writeUpdatesToDefaultTable(int numUpdates, int offset) throws Exception {

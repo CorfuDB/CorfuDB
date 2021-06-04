@@ -11,9 +11,8 @@ import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.common.compression.Codec;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer;
-import org.corfudb.protocols.wireprotocol.VersionInfo;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
@@ -22,7 +21,6 @@ import org.corfudb.runtime.clients.LogUnitHandler;
 import org.corfudb.runtime.clients.ManagementHandler;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.clients.SequencerHandler;
-import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -41,7 +39,6 @@ import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.UuidUtils;
-import org.corfudb.util.Version;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -773,8 +770,6 @@ public class CorfuRuntime {
      */
     private volatile Layout latestLayout = null;
 
-    private final Optional<Timer> fetchLayoutTimer;
-
     /**
      * Register SystemDownHandler.
      * Please use CorfuRuntimeParameters builder to register this.
@@ -903,9 +898,8 @@ public class CorfuRuntime {
             log.warn("Runtime metrics are disabled.");
         }
 
-        fetchLayoutTimer = MeterRegistryProvider.getInstance().map(r -> Timer.builder("runtime.fetch_layout.timer")
-                .publishPercentileHistogram(true).publishPercentiles(0.50, 0.95, 0.99).register(r));
-        log.info("Corfu runtime version {} initialized.", getVersionString());
+        log.info("Corfu runtime version {} initialized.",
+                Long.toHexString(GitRepositoryState.getCorfuSourceCodeVersion()));
     }
 
     /**
@@ -1008,18 +1002,6 @@ public class CorfuRuntime {
 
     public static UUID getCheckpointStreamIdFromName(String streamName) {
         return getCheckpointStreamIdFromId(CorfuRuntime.getStreamID(streamName));
-    }
-
-    /**
-     * Get corfu runtime version.
-     **/
-    public static String getVersionString() {
-        if (Version.getVersionString().contains("SNAPSHOT")
-                || Version.getVersionString().contains("source")) {
-            return Version.getVersionString() + "("
-                    + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")";
-        }
-        return Version.getVersionString();
     }
 
     /**
@@ -1159,8 +1141,7 @@ public class CorfuRuntime {
             List<String> layoutServersCopy = new ArrayList<>(servers);
             parameters.getBeforeRpcHandler().run();
             int systemDownTriggerCounter = 0;
-            Optional<Timer.Sample> fetchSample =
-                    MeterRegistryProvider.getInstance().map(Timer::start);
+            Optional<Timer.Sample> fetchSample = MicroMeterUtils.startTimer();
             while (true) {
 
                 Collections.shuffle(layoutServersCopy);
@@ -1197,9 +1178,7 @@ public class CorfuRuntime {
 
                         // Prune away removed node routers from the nodeRouterPool.
                         pruneRemovedRouters(l);
-                        fetchLayoutTimer.ifPresent(flt ->
-                                fetchSample
-                                        .ifPresent(sample -> sample.stop(flt)));
+                        MicroMeterUtils.time(fetchSample, "runtime.fetch_layout.timer");
                         return l;
                     } catch (InterruptedException ie) {
                         throw new UnrecoverableCorfuInterruptedError(
@@ -1239,40 +1218,6 @@ public class CorfuRuntime {
         }, runtimeExecutor);
     }
 
-    @SuppressWarnings("unchecked")
-    private void checkVersion() {
-        try {
-            Layout currentLayout = CFUtils.getUninterruptibly(layout);
-            List<CompletableFuture<VersionInfo>> versions =
-                    currentLayout.getLayoutServers()
-                            .stream().map(s -> getLayoutView().getRuntimeLayout().getBaseClient(s))
-                            .map(BaseClient::getVersionInfo)
-                            .collect(Collectors.toList());
-
-            for (CompletableFuture<VersionInfo> versionCf : versions) {
-                final VersionInfo version = CFUtils.getUninterruptibly(versionCf,
-                        TimeoutException.class, NetworkException.class);
-                if (version.getVersion() == null) {
-                    log.error("Unexpected server version, server is too old to return"
-                            + " version information");
-                } else if (!version.getVersion().equals(getVersionString())) {
-                    log.error("connect: expected version {}, but server version is {}",
-                            getVersionString(), version.getVersion());
-                } else {
-                    log.info("connect: client version {}, server version is {}",
-                            getVersionString(), version.getVersion());
-                }
-            }
-        } catch (TimeoutException | NetworkException e) {
-            log.error("connect: failed to get version. Couldn't connect to server.", e);
-        } catch (Exception ex) {
-            // Because checkVersion is just an informational step (log purpose), we don't need to retry
-            // and we can actually ignore any exception while trying to fetch the server corfu version.
-            // If at any point we decide to abort upon server mismatch this logic must change.
-            log.error("connect: failed to get version.", ex);
-        }
-    }
-
     /**
      * Connect to the Corfu server instance.
      * When this function returns, the Corfu server is ready to be accessed.
@@ -1294,7 +1239,20 @@ public class CorfuRuntime {
             }
         }
 
-        checkVersion();
+        // Build nodeRouterPool and connect with each endpoint
+        Layout currentLayout = CFUtils.getUninterruptibly(layout);
+        List<CompletableFuture<Boolean>> pingEndpoints =
+                currentLayout.getLayoutServers()
+                        .stream().map(s -> getLayoutView().getRuntimeLayout().getBaseClient(s))
+                        .map(BaseClient::ping)
+                        .collect(Collectors.toList());
+        for (CompletableFuture<Boolean> ping : pingEndpoints) {
+            try {
+                CFUtils.getUninterruptibly(ping, Exception.class);
+            } catch (Exception ex) {
+                log.error("connect: Couldn't connect to server.", ex);
+            }
+        }
 
         garbageCollector.start();
 

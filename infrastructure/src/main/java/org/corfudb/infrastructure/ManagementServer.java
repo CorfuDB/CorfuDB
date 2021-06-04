@@ -292,7 +292,8 @@ public class ManagementServer extends AbstractServer {
                             "failedNodes:{} responsiveLayoutNodes:{}, latestLayoutEpoch:{}",
                     req.getHeader().getRequestId(), payload.getFailedNodeList(), allActiveServers, layout.getEpoch());
 
-            response = getResponseMsg(req.getHeader(), getReportFailureResponseMsg(true));
+            responseHeader = getHeaderMsg(req.getHeader());
+            response = getResponseMsg(responseHeader, getReportFailureResponseMsg(true));
             r.sendResponse(response, ctx);
             return;
         }
@@ -304,7 +305,8 @@ public class ManagementServer extends AbstractServer {
                 responsiveFailedNodes);
 
         if (result) {
-            response = getResponseMsg(req.getHeader(), getReportFailureResponseMsg(true));
+            responseHeader = getHeaderMsg(req.getHeader());
+            response = getResponseMsg(responseHeader, getReportFailureResponseMsg(true));
         } else {
             log.error("handleReportFailure[{}]: Failure handling unsuccessful.", req.getHeader().getRequestId());
             responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.CHECK);
@@ -363,7 +365,8 @@ public class ManagementServer extends AbstractServer {
                             "healedNodes:{} unresponsiveLayoutNodes:{}, latestLayoutEpoch:{}",
                     req.getHeader().getRequestId(), payload.getHealedNodeList(), unresponsiveServers, layout.getEpoch());
 
-            response = getResponseMsg(req.getHeader(), getHealFailureResponseMsg(true));
+            responseHeader = getHeaderMsg(req.getHeader());
+            response = getResponseMsg(responseHeader, getHealFailureResponseMsg(true));
             r.sendResponse(response, ctx);
             return;
         }
@@ -393,7 +396,8 @@ public class ManagementServer extends AbstractServer {
         }
 
         if (result) {
-            response = getResponseMsg(req.getHeader(), getHealFailureResponseMsg(true));
+            responseHeader = getHeaderMsg(req.getHeader());
+            response = getResponseMsg(responseHeader, getHealFailureResponseMsg(true));
         } else {
             log.error("handleHealFailure[{}]: healing handling unsuccessful.", req.getHeader().getRequestId());
             responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.CHECK);
@@ -462,7 +466,7 @@ public class ManagementServer extends AbstractServer {
             return;
         }
 
-        ResponseMsg response = getResponseMsg(req.getHeader(),
+        ResponseMsg response = getResponseMsg(getHeaderMsg(req.getHeader()),
                 getManagementLayoutResponseMsg(serverContext.getManagementLayout()));
 
         r.sendResponse(response, ctx);

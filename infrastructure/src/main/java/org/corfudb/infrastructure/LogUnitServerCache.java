@@ -7,10 +7,10 @@ import com.google.common.annotations.VisibleForTesting;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.Tags;
-import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.common.util.Memory;
 import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
 import org.corfudb.infrastructure.log.StreamLog;
@@ -18,6 +18,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 
 import java.util.Optional;
+
 import java.util.function.Supplier;
 
 import static java.lang.Math.toIntExact;
@@ -42,7 +43,7 @@ public class LogUnitServerCache {
     //Empirical threshold of number of streams in a logdata beyond which server performance may be slow
     private final int MAX_STREAM_THRESHOLD = 20;
 
-    private final Optional<Timer> readTimer;
+
     private final String loadTimeName = "logunit.cache.load_time";
     private final String hitRatioName = "logunit.cache.hit_ratio";
     private final String weightName = "logunit.cache.weight";
@@ -70,9 +71,6 @@ public class LogUnitServerCache {
                 Gauge.builder(weightName,
                         dataCache, cache -> cache.stats().evictionWeight())
                         .register(registry));
-
-        readTimer = MeterRegistryProvider.getInstance().map(registry ->
-                Timer.builder("logunit.read.timer").register(registry));
     }
 
     private int getLogDataTotalSize(ILogData logData) {
@@ -96,9 +94,7 @@ public class LogUnitServerCache {
      * as un-written (null).
      */
     private ILogData handleRetrieval(long address) {
-        Supplier<LogData> readSupplier = () -> streamLog.read(address);
-        LogData entry = readTimer.map(timer -> timer.record(readSupplier))
-                .orElseGet(() -> readSupplier.get());
+        LogData entry = MicroMeterUtils.time(() -> streamLog.read(address), "logunit.read.timer");
         log.trace("handleRetrieval: Retrieved[{} : {}]", address, entry);
         return entry;
     }

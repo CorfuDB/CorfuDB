@@ -6,6 +6,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.common.util.Memory;
 import org.corfudb.runtime.view.Address;
 
@@ -87,8 +88,6 @@ public class SequencerServerCache {
      *
      * @param cacheSize cache size
      */
-    @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
-    private final Optional<DistributionSummary> evictionsPerTrimCall;
 
     public SequencerServerCache(int cacheSize, long maxConflictNewSequencer) {
         this.cacheSize = cacheSize;
@@ -103,14 +102,6 @@ public class SequencerServerCache {
                         registry.gauge(conflictKeysCounterName, Collections.emptyList(),
                                 new HashMap<ConflictTxStream, Long>(), HashMap::size))
                 .orElse(new HashMap<>());
-        double [] percentiles = new double[] {0.50, 0.95, 0.99};
-        evictionsPerTrimCall = MeterRegistryProvider.getInstance().map(registry ->
-                DistributionSummary
-                        .builder("sequencer.cache.evictions")
-                        .publishPercentiles(percentiles)
-                        .publishPercentileHistogram()
-                        .baseUnit("eviction")
-                        .register(registry));
         MeterRegistryProvider.getInstance().map(registry ->
                 Gauge.builder(windowSizeName,
                         conflictKeys, HashMap::size).register(registry));
@@ -181,7 +172,7 @@ public class SequencerServerCache {
             entries++;
         }
         final int numPqEntries = pqEntries;
-        evictionsPerTrimCall.ifPresent(ws -> ws.record(numPqEntries));
+        MicroMeterUtils.measure(numPqEntries, "sequencer.cache.evictions");
         log.info("Invalidated entries {} addresses {}", pqEntries, entries);
     }
 
