@@ -90,6 +90,43 @@
                 </plugins>
             </build>
         </profile>
+        <profile>
+            <id>compatibility</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>1.6.0</version>
+                        <executions>
+                            <execution>
+                                <id>Docker build</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>docker</executable>
+                                    <arguments>
+                                        <argument>build</argument>
+                                        <argument>--network=host</argument>
+                                        <argument>--build-arg</argument>
+                                        <argument>
+                                            CORFU_JAR=infrastructure-${project.version}-shaded.jar
+                                        </argument>
+                                        <argument>-t</argument>
+                                        <argument>
+                                            corfudb/corfu-server:latest
+                                        </argument>
+                                        <argument>.</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 
     <build>
