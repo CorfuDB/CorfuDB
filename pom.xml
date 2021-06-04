@@ -196,16 +196,16 @@
     </dependencies>
 
     <distributionManagement>
-        <snapshotRepository>
-            <id>corfudb-snapshots</id>
-            <name>oss-jfrog-artifactory-snapshots</name>
-            <url>https://oss.jfrog.org/artifactory/oss-snapshot-local</url>
-        </snapshotRepository>
         <repository>
-            <id>bintray-corfudb-maven</id>
-            <name>CorfuDB repository</name>
-            <url>https://api.bintray.com/maven/corfudb/maven/org.corfudb/;publish=1;override=1</url>
+            <id>central</id>
+            <name>corfudbcloud-artifactory-primary-0-releases</name>
+            <url>https://corfudbcloud.jfrog.io/artifactory/corfu-cloud</url>
         </repository>
+        <snapshotRepository>
+            <id>snapshots</id>
+            <name>corfudbcloud-artifactory-primary-0-snapshots</name>
+            <url>https://corfudbcloud.jfrog.io/artifactory/corfu-cloud</url>
+        </snapshotRepository>
     </distributionManagement>
 
     <profiles>
