@@ -38,10 +38,6 @@ jobs:
       - name: Prepare Corfu
         run: ./mvnw clean install -Pdocker -DskipTests -Dmaven.javadoc.skip=true -Dcheckstyle.skip -T 1C
 
-      - name: Publish corfu artifacts
-        working-directory: ./
-        run: ./mvnw clean deploy -s ./.mvn/settings.xml -DskipTests -Dmaven.javadoc.skip=true -Dcheckstyle.skip -T 1C
-
       - name: Publish Corfu infrastructure container
         working-directory: ./
         run: ./mvnw -pl infrastructure clean deploy -Pdocker -DskipTests -Dmaven.javadoc.skip=true -Dcheckstyle.skip -T 1C
