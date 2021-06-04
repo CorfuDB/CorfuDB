@@ -8,7 +8,7 @@ import java.util.ServiceLoader;
  */
 public class RegistryLoader {
 
-    ServiceLoader<RegistryProvider> loader = ServiceLoader.load(RegistryProvider.class,
+    private final ServiceLoader<RegistryProvider> loader = ServiceLoader.load(RegistryProvider.class,
             ClassLoader.getSystemClassLoader());
 
     public Iterator<RegistryProvider> getRegistries() {
