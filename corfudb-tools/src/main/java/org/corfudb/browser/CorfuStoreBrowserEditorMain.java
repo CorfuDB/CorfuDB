@@ -30,7 +30,8 @@ public class CorfuStoreBrowserEditorMain {
         listTags,
         listTablesForTag,
         listTagsForTable,
-        listTagsMap
+        listTagsMap,
+        listAllCorfuStreams
     }
 
     private static final String USAGE = "Usage: corfu-browser --host=<host> " +
@@ -49,7 +50,7 @@ public class CorfuStoreBrowserEditorMain {
         + "--port=<port>   Port\n"
         + "--operation=<listTables|infoTable|showTable|dropTable" +
         "|editTable|loadTable|listenOnTable|listTags|listTagsMap" +
-        "|listTablesForTag|listTagsForTable|listAllProtos> Operation\n"
+        "|listTablesForTag|listTagsForTable|listAllProtos|listAllCorfuStreams> Operation\n"
         + "--namespace=<namespace>   Namespace\n"
         + "--tablename=<tablename>   Table Name\n"
         + "--tag=<tag>  Stream tag of interest\n"
@@ -222,6 +223,9 @@ public class CorfuStoreBrowserEditorMain {
                     break;
                 case listAllProtos:
                     browser.printAllProtoDescriptors();
+                    break;
+                case listAllCorfuStreams:
+                    browser.listAllCorfuStreams();
                     break;
                 default:
                     break;

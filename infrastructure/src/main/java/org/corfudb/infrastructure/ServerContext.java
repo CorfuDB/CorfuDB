@@ -6,12 +6,16 @@ import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.EventLoopGroup;
+
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.nio.file.Files;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -116,7 +120,6 @@ public class ServerContext implements AutoCloseable {
             PREFIX_LOGUNIT, EPOCH_WATER_MARK, Long.class
     );
 
-
     /**
      * various duration constants.
      */
@@ -149,6 +152,9 @@ public class ServerContext implements AutoCloseable {
     private final String localEndpoint;
 
     @Getter
+    private final Map<UUID, String> streamNames;
+
+    @Getter
     private final Set<String> dsFilePrefixesForCleanup =
             Sets.newHashSet(PaxosDataStore.PREFIX_PHASE_1, PaxosDataStore.PREFIX_PHASE_2, PREFIX_LAYOUTS);
 
@@ -179,6 +185,40 @@ public class ServerContext implements AutoCloseable {
         nodeLocator = NodeLocator
                 .parseString(serverConfig.get("--address") + ":" + serverConfig.get("<port>"));
         localEndpoint = nodeLocator.toEndpointUrl();
+        streamNames = loadStreamIdToNameMap((String) serverConfig.get("--stream-names-file"));
+    }
+
+    public String toStreamName(UUID streamId) {
+        return streamNames.getOrDefault(streamId, streamId.toString());
+    }
+
+    public static Map<UUID, String> loadStreamIdToNameMap(String streamNameFile) {
+        Map<UUID, String> streamNames = new HashMap<>();
+        if (streamNameFile == null) {
+            return streamNames;
+        }
+        try {
+            BufferedReader csvFile = new BufferedReader(new FileReader(streamNameFile));
+            do {
+                String row = csvFile.readLine();
+                if (row == null) {
+                    break;
+                }
+                String[] tokens = row.split(",");
+                final int expectedColumns = 2;
+                if (tokens.length != expectedColumns) {
+                    log.warn("Bad line found in streamNameFile {}", row);
+                    continue;
+                }
+                UUID streamId = UUID.fromString(tokens[expectedColumns - 1]);
+                streamNames.put(streamId, tokens[0]);
+            } while (true);
+            csvFile.close();
+        } catch (Exception e) {
+            log.error("Unable to read the stream id to name file {}", streamNameFile, e);
+        }
+
+        return streamNames;
     }
 
     int getBaseServerThreadCount() {

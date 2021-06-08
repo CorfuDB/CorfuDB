@@ -54,6 +54,7 @@ public class CorfuServer {
                     + "[--base-server-threads=<base_server_threads>] "
                     + "[--log-size-quota-percentage=<max_log_size_percentage>]"
                     + "[--logunit-threads=<logunit_threads>] [--management-server-threads=<management_server_threads>]"
+                    + "[--stream-names-file=<stream_names_file>]"
                     + "[-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] "
                     + "[-b] [-g -o <username_file> -j <password_file>] "
                     + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] "
@@ -162,6 +163,10 @@ public class CorfuServer {
                     + "              If this limit is exceeded "
                     + "              write requests will be rejected [default: 100.0].\n         "
                     + "                                                                          "
+                    + " --stream-names-file=<stream_names_file>                                  "
+                    + "              A csv file with a mapping of stream UUIDs to their names.\n "
+                    + "              To print meaningful log messages.\n                         "
+
                     + " --management-server-threads=<management_server_threads>                  "
                     + "              Number of threads dedicated for the management server [default: 4].\n"
                     + "                                                                          "

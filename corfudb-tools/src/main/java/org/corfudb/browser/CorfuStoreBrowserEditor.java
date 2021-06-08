@@ -619,4 +619,35 @@ public class CorfuStoreBrowserEditor {
         System.out.println("Tag: " + tag + " --- Total Tables: " + tables.size()
             + "TableNames: " + formatMapping);
     }
+
+    /**
+     * List all known corfu streams with their names and ids in a cluster.
+     *
+     * @return stream tags
+     * */
+    public Set<String> listAllCorfuStreams() {
+        Map<UUID, String> allStreamMap = new HashMap<>();
+        dynamicProtobufSerializer.getCachedRegistryTable().forEach((key, value) -> {
+            String namespace = key.getNamespace();
+            String fullTableName = TableRegistry.getFullyQualifiedTableName(key.getNamespace(), key.getTableName());
+            UUID streamId = CorfuRuntime.getStreamID(fullTableName);
+            allStreamMap.put(streamId, fullTableName);
+            allStreamMap.put(CorfuRuntime.getCheckpointStreamIdFromId(streamId), fullTableName + "#chkpt");
+            value.getMetadata().getTableOptions().getStreamTagList().forEach(tag -> {
+                allStreamMap.put(TableRegistry.getStreamIdForStreamTag(namespace, tag), "stream_tag#" + namespace + "$" + tag);
+            });
+        });
+
+        List<Map.Entry<UUID, String>> list = new ArrayList<>(allStreamMap.entrySet());
+        list.sort(Map.Entry.comparingByValue());
+
+        System.out.println("\n======================\n");
+        System.out.println("Total unique stream Ids: "+allStreamMap.size());
+        list.forEach(entry -> {
+            System.out.println(entry.getKey().toString()+", "+entry.getValue());
+        });
+        System.out.println("\n======================\n");
+
+        return new HashSet<>(allStreamMap.values());
+    }
 }

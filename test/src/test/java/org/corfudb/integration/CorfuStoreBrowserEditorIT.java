@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -227,6 +228,46 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         Set<String> tags = browser.listTagsForTable(namespace, tableName);
         assertThat(tags.size()).isEqualTo(expectedTableNameToTags.get(tableName).size());
         assertThat(tags).containsExactly(expectedTableNameToTags.get(tableName).toArray(new String[0]));
+
+        final int totalExpectedStreams = 32;
+        Set<String> referenceSet = new HashSet<>();
+        Collections.addAll(referenceSet,
+                "UT-namespace$table8#chkpt",
+                "UT-namespace$table11",
+                "UT-namespace$table10",
+                "UT-namespace$table3#chkpt",
+                "UT-namespace$table9",
+                "UT-namespace$table7",
+                "UT-namespace$table8",
+                "UT-namespace$table0#chkpt",
+                "CorfuSystem$RegistryTable",
+                "UT-namespace$table5#chkpt",
+                "stream_tag#UT-namespace$sample_streamer_3",
+                "CorfuSystem$ProtobufDescriptorTable",
+                "stream_tag#UT-namespace$sample_streamer_2",
+                "stream_tag#UT-namespace$sample_streamer_1",
+                "CorfuSystem$ProtobufDescriptorTable#chkpt",
+                "UT-namespace$table7#chkpt",
+                "UT-namespace$table10#chkpt",
+                "UT-namespace$table2#chkpt",
+                "UT-namespace$table1",
+                "UT-namespace$table2",
+                "UT-namespace$table0",
+                "UT-namespace$table5",
+                "UT-namespace$table6",
+                "UT-namespace$table3",
+                "stream_tag#UT-namespace$sample_streamer_4",
+                "UT-namespace$table4",
+                "UT-namespace$table4#chkpt",
+                "UT-namespace$table6#chkpt",
+                "UT-namespace$table9#chkpt",
+                "CorfuSystem$RegistryTable#chkpt",
+                "UT-namespace$table1#chkpt",
+                "UT-namespace$table11#chkpt");
+        // (5) List All known streams and their UUIDs
+        Set<String> allStreams = browser.listAllCorfuStreams();
+        assertThat(allStreams.size()).isEqualTo(totalExpectedStreams);
+        assertThat(allStreams).isEqualTo(referenceSet);
 
         runtime.shutdown();
         Serializers.clearCustomSerializers();

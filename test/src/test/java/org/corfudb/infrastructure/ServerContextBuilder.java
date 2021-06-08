@@ -29,6 +29,7 @@ public class ServerContextBuilder {
     boolean saslPlainTextAuth = false;
     String truststore = "";
     String truststorePasswordFile = "";
+    String streamNamesFile = "";
 
     String implementation = "local";
 
@@ -61,6 +62,7 @@ public class ServerContextBuilder {
                 .put("--HandshakeTimeout", handshakeTimeout)
                 .put("--sequencer-cache-size", seqCache)
                 .put("--log-size-quota-percentage", logSizeLimitPercentage)
+                .put("--stream-names-file", streamNamesFile)
                 .put("--batch-size", batchSize)
                 .put("--metadata-retention", retention);
         if (logPath != null) {

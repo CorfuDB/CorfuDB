@@ -96,6 +96,10 @@ public class CorfuServerParams implements NodeParams {
         return Paths.get(getName(), streamLogDir);
     }
 
+    public String getStreamNamesFile() {
+        return Paths.get(getName(), streamLogDir).toString();
+    }
+
     @Override
     public Set<Integer> getPorts() {
         return ImmutableSet.of(port);

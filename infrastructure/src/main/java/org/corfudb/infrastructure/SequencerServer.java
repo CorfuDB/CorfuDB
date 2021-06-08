@@ -287,7 +287,7 @@ public class SequencerServer extends AbstractServer {
                 Long sequence = streamTailToGlobalTailMap.get(streamId);
                 if (sequence != null && sequence > txSnapshotTimestamp.getSequence()) {
                     log.debug("ABORT[{}] conflict-stream[{}](ts={})",
-                            txInfo, Utils.toReadableId(streamId), sequence);
+                            txInfo, serverContext.toStreamName(streamId), sequence);
                     return new TxResolutionResponse(TokenType.TX_ABORT_CONFLICT);
                 }
                 continue;
@@ -408,7 +408,9 @@ public class SequencerServer extends AbstractServer {
             }
         }
 
-        log.debug("trimCache: global trim {}, streamsAddressSpace {}", trimMark, streamsAddressMap);
+        log.debug("trimCache: global trim {}, streamsAddressSpace {}", trimMark,
+                streamsAddressMap.entrySet().stream().collect(Collectors.toMap(
+                        k -> serverContext.toStreamName(k.getKey()), Map.Entry::getValue)));
 
         HeaderMsg responseHeader = getHeaderMsg(req.getHeader(),
                 ClusterIdCheck.CHECK, EpochCheck.IGNORE);
@@ -505,7 +507,7 @@ public class SequencerServer extends AbstractServer {
                 Long streamTail = streamAddressSpace.getValue().getTail();
                 if (log.isTraceEnabled()) {
                     log.trace("On Sequencer reset, tail for stream {} set to {}",
-                            streamAddressSpace.getKey(), streamTail);
+                            serverContext.toStreamName(streamAddressSpace.getKey()), streamTail);
                 }
                 streamTailToGlobalTailMap.put(streamAddressSpace.getKey(), streamTail);
             }
@@ -517,7 +519,7 @@ public class SequencerServer extends AbstractServer {
             for (Map.Entry<UUID, StreamAddressSpace> streamAddressSpace :
                     streamsAddressMap.entrySet()) {
                 log.info("Stream[{}]={} on sequencer reset.",
-                        Utils.toReadableId(streamAddressSpace.getKey()),
+                        serverContext.toStreamName(streamAddressSpace.getKey()),
                         streamAddressSpace.getValue());
                 if (log.isTraceEnabled()) {
                     log.trace("Stream[{}] addresses: {}",
@@ -539,7 +541,10 @@ public class SequencerServer extends AbstractServer {
 
         log.info("Sequencer reset with token = {}, size {} streamTailToGlobalTailMap = {}," +
                 " sequencerEpoch = {}", globalLogTail, streamTailToGlobalTailMap.size(),
-                streamTailToGlobalTailMap, sequencerEpoch);
+                streamTailToGlobalTailMap.entrySet().stream().collect(
+                        Collectors.toMap(
+                                k -> serverContext.toStreamName(k.getKey()),
+                                Map.Entry::getValue)), sequencerEpoch);
 
         HeaderMsg responseHeader = getHeaderMsg(req.getHeader(),
                 ClusterIdCheck.CHECK, EpochCheck.IGNORE);
@@ -769,7 +774,7 @@ public class SequencerServer extends AbstractServer {
         }
         if (log.isTraceEnabled()) {
             log.trace("handleStreamsAddressRequest: return address space for streams [{}]",
-                    respStreamsAddressMap.keySet());
+                    respStreamsAddressMap.keySet().stream().map(serverContext::toStreamName));
         }
         StreamsAddressResponse streamsAddressResponse =
                 new StreamsAddressResponse(getGlobalLogTail(), respStreamsAddressMap);

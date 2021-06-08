@@ -33,6 +33,7 @@ import org.corfudb.util.Utils;
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -286,8 +287,13 @@ public class LogUnitServer extends AbstractServer {
     private void handleWrite(RequestMsg req, ChannelHandlerContext ctx, IServerRouter router) {
         LogData logData = getLogData(req.getPayload().getWriteLogRequest().getLogData());
 
+        Map<String, Long> readableBackPointerMap = new HashMap<>();
+        logData.getBackpointerMap().forEach((key, value) -> readableBackPointerMap.put(
+                serverContext.getStreamNames().getOrDefault(key,
+                        key.toString()), value));
         log.debug("handleWrite: type: {}, address: {}, streams: {}",
-                logData.getType(), logData.getToken(), logData.getBackpointerMap());
+                logData.getType(), logData.getToken(), readableBackPointerMap);
+
 
         // Its not clear that making all holes high priority is the right thing to do, but since
         // some reads will block until a hole is filled this is required (i.e. bypass quota checks)
