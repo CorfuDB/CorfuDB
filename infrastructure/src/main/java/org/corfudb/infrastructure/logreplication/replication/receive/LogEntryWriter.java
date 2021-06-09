@@ -33,14 +33,11 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.extractO
 public class LogEntryWriter {
     private final LogReplicationMetadataManager logReplicationMetadataManager;
     private final HashMap<UUID, String> streamMap; //the set of streams that log entry writer will work on.
-    HashMap<UUID, IStreamView> streamViewMap; //map the stream uuid to the stream view.
-    CorfuRuntime rt;
     private long srcGlobalSnapshot; //the source snapshot that the transaction logs are based
     private long lastMsgTs; //the timestamp of the last message processed.
 
-    public LogEntryWriter(CorfuRuntime rt, LogReplicationConfig config,
+    public LogEntryWriter(LogReplicationConfig config,
                           LogReplicationMetadataManager logReplicationMetadataManager) {
-        this.rt = rt;
         this.logReplicationMetadataManager = logReplicationMetadataManager;
 
         Set<String> streams = config.getStreamsToReplicate();
@@ -52,12 +49,6 @@ public class LogEntryWriter {
 
         srcGlobalSnapshot = Address.NON_ADDRESS;
         lastMsgTs = Address.NON_ADDRESS;
-
-        streamViewMap = new HashMap<>();
-
-        for (UUID uuid : streamMap.keySet()) {
-            streamViewMap.put(uuid, rt.getStreamsView().getUnsafe(uuid));
-        }
     }
 
 
@@ -155,6 +146,8 @@ public class LogEntryWriter {
 
         // A new Delta sync is triggered, setup the new srcGlobalSnapshot and msgQ
         if (msg.getMetadata().getSnapshotTimestamp() > srcGlobalSnapshot) {
+            log.warn("setup the new srcGlobalSnapshot and lastMsgTs {}",
+                    msg.getMetadata().getSnapshotTimestamp());
             srcGlobalSnapshot = msg.getMetadata().getSnapshotTimestamp();
             lastMsgTs = srcGlobalSnapshot;
         }
@@ -183,7 +176,7 @@ public class LogEntryWriter {
      * that is the last log entry it has played.
      * This is called while the writer enter the log entry sync state.
      *
-     * @param snapshot
+     * @param snapshot the base snapshot that last full sync based on.
      * @param ackTimestamp
      */
     public void reset(long snapshot, long ackTimestamp) {

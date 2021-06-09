@@ -46,9 +46,12 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
     private static final String DEFAULT_STANDBY_CLUSTER_NAME = "standby_site";
 
     private static final int NUM_NODES_PER_CLUSTER = 3;
+    private static final int BACKUP_CORFU_PORT = 9002;
 
     private static final String ACTIVE_CLUSTER_NAME = "primary_site";
     private static final String STANDBY_CLUSTER_NAME = "standby_site";
+    private static final String BACKUP_CLUSTER_NAME = "backup_site";
+
     private static final String ACTIVE_CLUSTER_CORFU_PORT = "primary_site_corfu_portnumber";
     private static final String STANDBY_CLUSTER_CORFU_PORT = "standby_site_corfu_portnumber";
     private static final String LOG_REPLICATION_SERVICE_ACTIVE_PORT_NUM = "primary_site_portnumber";
@@ -65,6 +68,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
     public static final ClusterUuidMsg OP_ALL_STANDBY = ClusterUuidMsg.newBuilder().setLsb(3L).setMsb(3L).build();
     public static final ClusterUuidMsg OP_INVALID = ClusterUuidMsg.newBuilder().setLsb(4L).setMsb(4L).build();
     public static final ClusterUuidMsg OP_ENFORCE_SNAPSHOT_FULL_SYNC = ClusterUuidMsg.newBuilder().setLsb(5L).setMsb(5L).build();
+    public static final ClusterUuidMsg OP_BACKUP = ClusterUuidMsg.newBuilder().setLsb(6L).setMsb(6L).build();
 
     @Getter
     private long configId;
@@ -316,6 +320,30 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
     }
 
     /**
+     * Create a new topology config, which replaces the active cluster with a backup cluster.
+     **/
+    public TopologyDescriptor generateConfigWithBackup() {
+        TopologyDescriptor currentConfig = new TopologyDescriptor(topologyConfig);
+        ClusterDescriptor currentActive = currentConfig.getActiveClusters().values().iterator().next();
+
+        List<ClusterDescriptor> newActiveClusters = new ArrayList<>();
+        newActiveClusters.add(new ClusterDescriptor(
+                currentActive.getClusterId(), ClusterRole.ACTIVE, BACKUP_CORFU_PORT));
+
+        NodeDescriptor backupNode = new NodeDescriptor(
+                DefaultClusterConfig.getDefaultHost(),
+                DefaultClusterConfig.getBackupLogReplicationPort(),
+                BACKUP_CLUSTER_NAME,
+                DefaultClusterConfig.getBackupNodesUuid().get(0),
+                DefaultClusterConfig.getBackupNodesUuid().get(0)
+                );
+        newActiveClusters.get(0).getNodesDescriptors().add(backupNode);
+        List<ClusterDescriptor> standbyClusters = new ArrayList<>(currentConfig.getStandbyClusters().values());
+
+        return new TopologyDescriptor(++configId, newActiveClusters, standbyClusters);
+    }
+
+    /**
      * Testing purpose to generate cluster role change.
      */
     public static class ClusterManagerCallback implements Runnable {
@@ -384,7 +412,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
                 } else if (entry.getKey().equals(OP_RESUME)) {
                     clusterManager.getClusterManagerCallback()
                             .applyNewTopologyConfig(clusterManager.generateDefaultValidConfig());
-                } else if(entry.getKey().equals(OP_ENFORCE_SNAPSHOT_FULL_SYNC)) {
+                } else if (entry.getKey().equals(OP_ENFORCE_SNAPSHOT_FULL_SYNC)) {
                     try {
                         clusterManager.forceSnapshotSync(clusterManager.queryTopologyConfig(true).getClustersList().get(1).getId());
                     } catch (LogReplicationDiscoveryServiceException e) {
@@ -395,6 +423,9 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
                             Thread.interrupted();
                         }
                     }
+                } else if (entry.getKey().equals(OP_BACKUP)) {
+                    clusterManager.getClusterManagerCallback()
+                            .applyNewTopologyConfig(clusterManager.generateConfigWithBackup());
                 }
             } else {
                 log.info("onNext :: operation={}, key={}, payload={}, metadata={}", entry.getOperation().name(),
