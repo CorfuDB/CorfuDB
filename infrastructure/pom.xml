@@ -52,39 +52,6 @@
                                     </arguments>
                                 </configuration>
                             </execution>
-
-                            <execution>
-                                <id>Docker login</id>
-                                <phase>deploy</phase>
-                                <goals>
-                                    <goal>exec</goal>
-                                </goals>
-                                <configuration>
-                                    <executable>docker</executable>
-                                    <arguments>
-                                        <argument>login</argument>
-                                        <argument>--username=${DOCKER_USER}</argument>
-                                        <argument>--password=${DOCKER_PASSWORD}</argument>
-                                    </arguments>
-                                </configuration>
-                            </execution>
-
-                            <execution>
-                                <id>Docker push</id>
-                                <phase>deploy</phase>
-                                <goals>
-                                    <goal>exec</goal>
-                                </goals>
-                                <configuration>
-                                    <executable>docker</executable>
-                                    <arguments>
-                                        <argument>push</argument>
-                                        <argument>
-                                            corfudb/corfu-server:${project.version}
-                                        </argument>
-                                    </arguments>
-                                </configuration>
-                            </execution>
                         </executions>
                     </plugin>
                 </plugins>
@@ -219,6 +186,45 @@
                             <outputDirectory>
                                 target/generated-sources
                             </outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>1.6.0</version>
+                <executions>
+                    <execution>
+                        <id>Docker login</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>docker</executable>
+                            <arguments>
+                                <argument>login</argument>
+                                <argument>--username=${env.DOCKER_USERNAME}</argument>
+                                <argument>--password=${env.DOCKER_PASSWORD}</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+
+                    <execution>
+                        <id>Docker push</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>docker</executable>
+                            <arguments>
+                                <argument>push</argument>
+                                <argument>
+                                    corfudb/corfu-server:${project.version}
+                                </argument>
+                            </arguments>
                         </configuration>
                     </execution>
                 </executions>

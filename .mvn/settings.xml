@@ -4,12 +4,12 @@
     <servers>
         <server>
             <username>corfudbcloud</username>
-            <password>${secrets.jfrog_oss_password}</password>
+            <password>${env.JFROG_PASSWORD}</password>
             <id>central</id>
         </server>
         <server>
             <username>corfudbcloud</username>
-            <password>${secrets.jfrog_oss_password}</password>
+            <password>${env.JFROG_PASSWORD}</password>
             <id>snapshots</id>
         </server>
     </servers>
