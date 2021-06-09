@@ -24,13 +24,12 @@ message TokenMsg {
  */
 message SequencerMetricsMsg {
   enum SequencerStatus {
-    INVALID = 0;
+    // Sequencer is in a NOT_READY state.
+    NOT_READY = 0;
     // Sequencer is in READY state, and can dispatch tokens.
     READY = 1;
-    // Sequencer is in a NOT_READY state.
-    NOT_READY = 2;
     // Unknown state.
-    UNKNOWN = 3;
+    UNKNOWN = 2;
   }
 
   // Ready state of a sequencer to determine its READY/NOT_READY state.

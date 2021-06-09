@@ -251,23 +251,6 @@ public class SequencerHandlerTest {
     }
 
     /**
-     * Test that the SequencerHandler throws an UnsupportedOperationException when the SequencerStatus is invalid.
-     */
-    @Test
-    public void testSequencerMetricsResponseUnsupported() {
-        SequencerMetrics sequencerMetrics = new SequencerMetrics(null);
-        ResponseMsg response = getResponseMsg(
-                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
-                getSequencerMetricsResponseMsg(sequencerMetrics)
-        );
-
-        sequencerHandler.handleMessage(response, mockChannelHandlerContext);
-        // Verify that the request was completed exceptionally with the expected exception type.
-        verify(mockClientRouter).completeExceptionally(eq(response.getHeader().getRequestId()),
-                any(UnsupportedOperationException.class));
-    }
-
-    /**
      * Test that the SequencerHandler correctly handles a STREAMS_ADDRESS_RESPONSE with empty address map.
      */
     @Test
