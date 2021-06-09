@@ -11,27 +11,27 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.ExampleSchemas.ClusterUuidMsg;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
+import org.corfudb.runtime.view.Address;
 
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 
 /**
@@ -57,15 +57,14 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
     private static final String ACTIVE_CLUSTER_NODE = "primary_site_node";
     private static final String STANDBY_CLUSTER_NODE = "standby_site_node";
 
-
     public static final String CONFIG_NAMESPACE = "ns_lr_config_it";
     public static final String CONFIG_TABLE_NAME = "lr_config_it";
-    public static final UuidMsg OP_RESUME = UuidMsg.newBuilder().setLsb(0L).setMsb(0L).build();
-    public static final UuidMsg OP_SWITCH = UuidMsg.newBuilder().setLsb(1L).setMsb(1L).build();
-    public static final UuidMsg OP_TWO_ACTIVE = UuidMsg.newBuilder().setLsb(2L).setMsb(2L).build();
-    public static final UuidMsg OP_ALL_STANDBY = UuidMsg.newBuilder().setLsb(3L).setMsb(3L).build();
-    public static final UuidMsg OP_INVALID = UuidMsg.newBuilder().setLsb(4L).setMsb(4L).build();
-    public static final UuidMsg OP_ENFORCE_SNAPSHOT_FULL_SYNC = UuidMsg.newBuilder().setLsb(5L).setMsb(5L).build();
+    public static final ClusterUuidMsg OP_RESUME = ClusterUuidMsg.newBuilder().setLsb(0L).setMsb(0L).build();
+    public static final ClusterUuidMsg OP_SWITCH = ClusterUuidMsg.newBuilder().setLsb(1L).setMsb(1L).build();
+    public static final ClusterUuidMsg OP_TWO_ACTIVE = ClusterUuidMsg.newBuilder().setLsb(2L).setMsb(2L).build();
+    public static final ClusterUuidMsg OP_ALL_STANDBY = ClusterUuidMsg.newBuilder().setLsb(3L).setMsb(3L).build();
+    public static final ClusterUuidMsg OP_INVALID = ClusterUuidMsg.newBuilder().setLsb(4L).setMsb(4L).build();
+    public static final ClusterUuidMsg OP_ENFORCE_SNAPSHOT_FULL_SYNC = ClusterUuidMsg.newBuilder().setLsb(5L).setMsb(5L).build();
 
     @Getter
     private long configId;
@@ -91,23 +90,28 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
                 .parseConfigurationString("localhost:9000")
                 .connect();
         corfuStore = new CorfuStore(corfuRuntime);
-        CorfuStoreMetadata.Timestamp ts = corfuStore.getTimestamp();
+        long trimMark = Address.NON_ADDRESS;
         try {
-            Table<UuidMsg, UuidMsg, UuidMsg> table = corfuStore.openTable(
+            // Subscribe from the earliest point in the log.
+            trimMark = corfuRuntime.getLayoutView().getRuntimeLayout().getLogUnitClient(corfuRuntime.getLayoutServers().get(0)).getTrimMark().get();
+        } catch (ExecutionException | InterruptedException e) {
+            log.error("Exception caught while attempting to fetch trim mark. Subscription might fail.", e);
+        }
+        CorfuStoreMetadata.Timestamp ts = CorfuStoreMetadata.Timestamp.newBuilder()
+                .setEpoch(corfuRuntime.getLayoutView().getRuntimeLayout().getLayout().getEpoch())
+                .setSequence(trimMark).build();
+        try {
+            Table<ClusterUuidMsg, ClusterUuidMsg, ClusterUuidMsg> table = corfuStore.openTable(
                     CONFIG_NAMESPACE, CONFIG_TABLE_NAME,
-                    UuidMsg.class, UuidMsg.class, UuidMsg.class,
+                    ClusterUuidMsg.class, ClusterUuidMsg.class, ClusterUuidMsg.class,
                     TableOptions.builder().build()
             );
             table.clear();
-
-
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
         configStreamListener = new ConfigStreamListener(this);
-        corfuStore.subscribe(configStreamListener, CONFIG_NAMESPACE,
-                Collections.singletonList(new TableSchema(CONFIG_TABLE_NAME,
-                        UuidMsg.class, UuidMsg.class, UuidMsg.class)), ts);
+        corfuStore.subscribeListener(configStreamListener, CONFIG_NAMESPACE, "cluster_manager_test", ts);
         Thread thread = new Thread(clusterManagerCallback);
         thread.start();
     }
