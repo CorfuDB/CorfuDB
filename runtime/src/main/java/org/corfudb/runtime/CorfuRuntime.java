@@ -894,7 +894,6 @@ public class CorfuRuntime {
             } else {
                 log.warn("No registered metrics logger provided.");
             }
-            MeterRegistryProvider.MeterRegistryInitializer.registerProvidedRegistries();
 
         } else {
             log.warn("Runtime metrics are disabled.");
