@@ -3,6 +3,7 @@ package org.corfudb.runtime.collections;
 import com.google.protobuf.Descriptors;
 import com.google.protobuf.Message;
 import lombok.Getter;
+import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.exceptions.StaleRevisionUpdateException;
 import org.corfudb.runtime.view.Address;
 
@@ -722,9 +723,12 @@ public class ManagedTxnContext implements AutoCloseable {
      *
      * @return - address at which the commit of this transaction occurred.
      */
-    public long commit() {
+    public Timestamp commit() {
         if (isNested) {
-            return Address.NON_ADDRESS;
+            return Timestamp.newBuilder()
+                    .setEpoch(this.txnContext.getEpoch())
+                    .setSequence(Address.NON_ADDRESS)
+                    .build();
         }
         return this.txnContext.commit();
     }

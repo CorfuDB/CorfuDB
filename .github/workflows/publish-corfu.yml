@@ -1,0 +1,48 @@
+name: CorfuDB Artifacts
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  publish_corfu_db_artifacts:
+
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    env:
+      JFROG_PASSWORD: ${{ secrets.jfrog_oss_password }}
+      DOCKER_USERNAME: ${{ secrets.docker_username }}
+      DOCKER_PASSWORD: ${{ secrets.docker_password }}
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.6.0
+        with:
+          access_token: ${{ github.token }}
+
+      - name: Set up JDK
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.8
+
+      - name: Cache local Maven repository
+        uses: actions/cache@v2
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - uses: satackey/action-docker-layer-caching@v0.0.11
+        continue-on-error: true
+
+      - name: Prepare Corfu
+        run: ./mvnw clean install -Pdocker -DskipTests -Dmaven.javadoc.skip=true -Dcheckstyle.skip -T 1C
+
+      - name: Publish corfu artifacts
+        working-directory: ./
+        run: ./mvnw clean deploy -s ./.mvn/settings.xml -DskipTests -Dmaven.javadoc.skip=true -Dcheckstyle.skip -T 1C

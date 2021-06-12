@@ -359,9 +359,15 @@ public class TableRegistry {
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
 
         // Register the schemas to schema table.
+        if (kClass == null) {
+            throw new IllegalArgumentException("Key type cannot be NULL.");
+        }
         K defaultKeyMessage = (K) kClass.getMethod("getDefaultInstance").invoke(null);
         addTypeToClassMap(defaultKeyMessage);
 
+        if (vClass == null) {
+            throw new IllegalArgumentException("Value type cannot be NULL.");
+        }
         V defaultValueMessage = (V) vClass.getMethod("getDefaultInstance").invoke(null);
         addTypeToClassMap(defaultValueMessage);
 

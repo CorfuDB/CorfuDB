@@ -26,6 +26,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.ExampleSchemas.ExampleTableName;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
@@ -281,8 +282,8 @@ public class CorfuStoreBrowser {
                             .setTableName(Integer.toString(j)).build();
                     tx.putRecord(table, dummyKey, dummyVal, ManagedMetadata.getDefaultInstance());
                 }
-                long address = tx.commit();
-                log.info("loadTable: Txn at address {}. Items  now left {}", address,
+                Timestamp address = tx.commit();
+                log.info("loadTable: Txn at address {}. Items  now left {}", address.getSequence(),
                         itemsRemaining);
             }
         } catch (Exception e) {
