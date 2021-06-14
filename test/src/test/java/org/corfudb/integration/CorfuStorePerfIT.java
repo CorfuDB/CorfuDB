@@ -101,6 +101,9 @@ public class CorfuStorePerfIT extends  AbstractIT {
         List<Uuid> uuids = new ArrayList<>();
         List<EventInfo> events = new ArrayList<>();
 
+        // Fetch timestamp to perform snapshot queries or transactions at a particular timestamp.
+        CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
+
         ManagedResources metadata = ManagedResources.newBuilder().setCreateUser("Pan").build();
 
         // Creating a transaction builder.

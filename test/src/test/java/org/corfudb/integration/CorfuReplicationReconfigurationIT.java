@@ -4,11 +4,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.Sleep;
@@ -18,6 +20,7 @@ import org.junit.Test;
 import java.io.File;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -147,12 +150,12 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             writeToActive(0, numWritesSmaller);
 
             // Confirm data does exist on Active Cluster
-            for (Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapActive.values()) {
+            for(Table<Sample.StringKey, Sample.IntValue, Sample.Metadata> map : mapNameToMapActive.values()) {
                 assertThat(map.count()).isEqualTo(numWritesSmaller);
             }
 
             // Confirm data does not exist on Standby Cluster
-            for (Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapStandby.values()) {
+            for(Table<Sample.StringKey, Sample.IntValue, Sample.Metadata> map : mapNameToMapStandby.values()) {
                 assertThat(map.count()).isEqualTo(0);
             }
 
@@ -255,18 +258,19 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     private void subscribe(String mapName) {
         // Subscribe to mapName and upon changes stop standby LR
         CorfuStore corfuStore = new CorfuStore(standbyRuntime);
-
+        CorfuStoreMetadata.Timestamp ts = corfuStore.getTimestamp();
         try {
             corfuStore.openTable(
                     NAMESPACE, mapName,
-                    Sample.StringKey.class, Sample.IntValueTag.class, Sample.Metadata.class,
+                    Sample.StringKey.class, Sample.IntValue.class, Sample.Metadata.class,
                     TableOptions.builder().build()
             );
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
         StandbyMapListener configStreamListener = new StandbyMapListener(this);
-        corfuStore.subscribeListener(configStreamListener, NAMESPACE, "test");
+        corfuStore.subscribe(configStreamListener, NAMESPACE,
+                Collections.singletonList(new TableSchema(mapName, Sample.StringKey.class, Sample.IntValue.class, Sample.Metadata.class)), ts);
     }
 
     /**

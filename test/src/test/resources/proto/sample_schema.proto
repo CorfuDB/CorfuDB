@@ -45,7 +45,6 @@ message EventInfo {
 }
 
 message Uuid {
-    option (org.corfudb.runtime.table_schema).stream_tag = "tag";
     optional uint64 msb = 1;
     optional uint64 lsb = 2;
 }

@@ -1285,8 +1285,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             log.debug("Metadata response indicates snapshot sync apply has completed");
             blockUntilExpectedMetadataResponse.release();
         } else {
-            log.debug("Metadata response indicates snapshot sync apply is still in progress, transferred={}, applied={}", response.getSnapshotTransferred(),
-                    response.getSnapshotApplied());
+            log.debug("Metadata response indicates snapshot sync apply is still in progress");
         }
     }
 
@@ -1322,9 +1321,11 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private void verifyPersistedSnapshotMetadata() {
-        long lastSnapshotStart = logReplicationMetadataManager.getLastStartedSnapshotTimestamp();
-        long lastSnapshotDone = logReplicationMetadataManager.getLastAppliedSnapshotTimestamp();
-        assertThat(lastSnapshotStart).isEqualTo(lastSnapshotDone);
+        long lastSnapStart = logReplicationMetadataManager.getLastStartedSnapshotTimestamp();
+        long lastSnapDone = logReplicationMetadataManager.getLastAppliedSnapshotTimestamp();
+
+        log.debug("\nlastSnapStart " + lastSnapStart + " lastSnapDone " + lastSnapDone);
+        assertThat(lastSnapStart == lastSnapDone).isTrue();
     }
 
     private void verifyPersistedLogEntryMetadata() {

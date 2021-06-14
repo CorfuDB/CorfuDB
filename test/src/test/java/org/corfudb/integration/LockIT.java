@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.runtime.CorfuRuntime;
@@ -189,7 +190,7 @@ public class LockIT extends AbstractIT implements Observer {
             corfuServer = runServer(activeSiteCorfuPort, true);
             initialize();
 
-            LockDataTypes.LockId lockId = LockDataTypes.LockId.newBuilder()
+            LockDataTypes.LockId lockId =  LockDataTypes.LockId.newBuilder()
                     .setLockGroup(LOCK_GROUP)
                     .setLockName(LOCK_NAME)
                     .build();
@@ -240,7 +241,7 @@ public class LockIT extends AbstractIT implements Observer {
             List<LockClient> clientsWithLock;
             do {
                 clientsWithLock = getClientsThatAcquiredLock(lockId, clientIdToLockClient);
-            } while (clientsWithLock == null || clientsWithLock.size() != 1);
+            } while (clientsWithLock == null || clientsWithLock.isEmpty());
 
             assertThat(clientsWithLock.size()).isEqualTo(1);
             LockClient clientWithLock = clientsWithLock.get(0);
@@ -256,11 +257,9 @@ public class LockIT extends AbstractIT implements Observer {
                 // triggered before the state update
                 do {
                     clientsWithLock = getClientsThatAcquiredLock(lockId, clientIdToLockClient);
-                    // At a given time clients with lock might show 2, because the state is not set atomically
-                } while (clientsWithLock == null || clientsWithLock.size() != 1);
+                } while (clientsWithLock == null || clientsWithLock.isEmpty());
                 assertThat(clientsWithLock.size()).isEqualTo(1);
-                // We can't be 100% sure the client with the lock is same as the initial client, as it might have been revoked
-                // assertThat(clientsWithLock.get(0)).isEqualTo(clientWithLock);
+                assertThat(clientsWithLock.get(0)).isEqualTo(clientWithLock);
             }
 
         } catch (Exception e) {
@@ -338,7 +337,7 @@ public class LockIT extends AbstractIT implements Observer {
             List<LockClient> clientsWithLock;
             do {
                 clientsWithLock = getClientsThatAcquiredLock(lockId, clientIdToLockClient);
-            } while (clientsWithLock == null || clientsWithLock.size() != 1);
+            } while (clientsWithLock == null || clientsWithLock.isEmpty());
 
             assertThat(clientsWithLock.size()).isEqualTo(1);
             LockClient clientWithLock = clientsWithLock.get(0);
@@ -361,7 +360,7 @@ public class LockIT extends AbstractIT implements Observer {
             // triggered before the state update
             do {
                 clientsWithLock = getClientsThatAcquiredLock(lockId, clientIdToLockClient);
-            } while (clientsWithLock == null || clientsWithLock.size() != 1);
+            } while (clientsWithLock == null || clientsWithLock.isEmpty());
 
             assertThat(clientsWithLock.size()).isEqualTo(1);
             LockClient newClientWithLock = clientsWithLock.get(0);

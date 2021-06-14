@@ -19,7 +19,6 @@ import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.collections.CorfuQueue;
@@ -207,9 +206,9 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
                     // Each transaction may or may not sleep to simulate out of order between enQ & commit
                     TimeUnit.MILLISECONDS.sleep(coinToss);
                     lock.lock();
-                    final CorfuStoreMetadata.Timestamp streamOffset = txn.commit();
+                    final long streamOffset = txn.commit();
                     validator.add(i);
-                    log.debug("ENQ: {} => {} at {}", i, queueData, streamOffset.getSequence());
+                    log.debug("ENQ: {} => {} at {}", i, queueData, streamOffset);
                     lock.unlock();
                 } catch (TransactionAbortedException txException) {
                     log.debug("{} ---> Abort!!! ", queueData);

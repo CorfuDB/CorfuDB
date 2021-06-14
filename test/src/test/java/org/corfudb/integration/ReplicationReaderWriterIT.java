@@ -609,6 +609,8 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
     @Test
     public void testSnapshotTransfer() throws Exception {
+        // setup environment
+        log.debug("\ntest start ok");
         setupEnv();
 
         openStreams(srcTables, srcDataRuntime);
@@ -617,6 +619,10 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
         // generate dump data at dst
         openStreams(dstTables, dstDataRuntime);
+        generateData(dstTables, dstHashMap, NUM_KEYS, dstDataRuntime, START_VAL + NUM_KEYS);
+        verifyData("after writing to dst", dstTables, dstHashMap);
+
+        printTails("after writing to server1", srcDataRuntime, dstDataRuntime);
 
         // read snapshot from srcServer and put msgs into Queue
         readSnapLogMsgs(msgQ, srcHashMap.keySet(), readerRuntime);
@@ -631,8 +637,9 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         assertThat(diff == dstEntries);
         printTails("after writing to server2", srcDataRuntime, dstDataRuntime);
 
-        // Verify data with hashtable
+        //verify data with hashtable
         verifyTable("after snap write at dst", dstTables, srcTables);
+        log.debug("test done");
     }
 
 

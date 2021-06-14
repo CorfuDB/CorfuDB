@@ -10,15 +10,13 @@ import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
-import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.collections.TxBuilder;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.IStreamView;
-import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -82,56 +80,53 @@ public class LogEntryWriter {
     private void processMsg(LogReplicationEntryMsg txMessage) {
         List<OpaqueEntry> opaqueEntryList = extractOpaqueEntries(txMessage);
 
-        try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
+        CorfuStoreMetadata.Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
+        long persistedTopologyConfigId = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
+        long persistedSnapshotStart = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
+        long persistedSnapshotDone = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED);
+        long persistedLogTs = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED);
 
-            Map<LogReplicationMetadataType, Long> metadataMap = logReplicationMetadataManager.queryMetadata(txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED,
-                    LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED, LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED);
-            long persistedTopologyConfigId = metadataMap.get(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
-            long persistedSnapshotStart = metadataMap.get(LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
-            long persistedSnapshotDone = metadataMap.get(LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED);
-            long persistedLogTs = metadataMap.get(LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED);
+        long topologyConfigId = txMessage.getMetadata().getTopologyConfigID();
+        long baseSnapshotTs = txMessage.getMetadata().getSnapshotTimestamp();
+        long entryTs = txMessage.getMetadata().getTimestamp();
+        long prevTs = txMessage.getMetadata().getPreviousTimestamp();
 
-            long topologyConfigId = txMessage.getMetadata().getTopologyConfigID();
-            long baseSnapshotTs = txMessage.getMetadata().getSnapshotTimestamp();
-            long entryTs = txMessage.getMetadata().getTimestamp();
-            long prevTs = txMessage.getMetadata().getPreviousTimestamp();
+        lastMsgTs = Math.max(persistedLogTs, lastMsgTs);
 
-            lastMsgTs = Math.max(persistedLogTs, lastMsgTs);
-
-            if (topologyConfigId != persistedTopologyConfigId || baseSnapshotTs != persistedSnapshotStart ||
-                    baseSnapshotTs != persistedSnapshotDone || prevTs != persistedLogTs) {
-                log.warn("Message metadata mismatch. Skip applying message {}, persistedTopologyConfigId={}, persistedSnapshotStart={}, " +
-                                "persistedSnapshotDone={}, persistedLogTs={}", txMessage.getMetadata(), persistedTopologyConfigId,
-                        persistedSnapshotStart, persistedSnapshotDone, persistedLogTs);
-                return;
-            }
-
-            // Skip Opaque entries with timestamp that are not larger than persistedTs
-            OpaqueEntry[] newOpaqueEntryList = opaqueEntryList.stream().filter(x -> x.getVersion() > persistedLogTs).toArray(OpaqueEntry[]::new);
-
-            // Check that all opaque entries contain the correct streams
-            for (OpaqueEntry opaqueEntry : newOpaqueEntryList) {
-                if (!streamMap.keySet().containsAll(opaqueEntry.getEntries().keySet())) {
-                    log.error("txMessage contains noisy streams {}, expecting {}", opaqueEntry.getEntries().keySet(), streamMap);
-                    throw new ReplicationWriterException("Wrong streams set");
-                }
-            }
-
-            logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
-            logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED, entryTs);
-
-            for (OpaqueEntry opaqueEntry : newOpaqueEntryList) {
-                for (UUID uuid : opaqueEntry.getEntries().keySet()) {
-                    for (SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {
-                        txnContext.logUpdate(uuid, smrEntry);
-                    }
-                }
-            }
-
-            txnContext.commit();
-
-            lastMsgTs = Math.max(entryTs, lastMsgTs);
+        if (topologyConfigId != persistedTopologyConfigId || baseSnapshotTs != persistedSnapshotStart ||
+                baseSnapshotTs != persistedSnapshotDone || prevTs != persistedLogTs) {
+            log.warn("Message metadata mismatch. Skip applying message {}, persistedTopologyConfigId={}, persistedSnapshotStart={}, " +
+                            "persistedSnapshotDone={}, persistedLogTs={}", txMessage.getMetadata(), persistedTopologyConfigId,
+                    persistedSnapshotStart, persistedSnapshotDone, persistedLogTs);
+            return;
         }
+
+        // Skip Opaque entries with timestamp that are not larger than persistedTs
+        OpaqueEntry[] newOpaqueEntryList = opaqueEntryList.stream().filter(x->x.getVersion() > persistedLogTs).toArray(OpaqueEntry[]::new);
+
+        // Check that all opaque entries contain the correct streams
+        for (OpaqueEntry opaqueEntry : newOpaqueEntryList) {
+            if (!streamMap.keySet().containsAll(opaqueEntry.getEntries().keySet())) {
+                log.error("txMessage contains noisy streams {}, expecting {}", opaqueEntry.getEntries().keySet(), streamMap);
+                throw new ReplicationWriterException("Wrong streams set");
+            }
+        }
+
+        TxBuilder txBuilder = logReplicationMetadataManager.getTxBuilder();
+
+        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
+        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED, entryTs);
+
+        for (OpaqueEntry opaqueEntry : newOpaqueEntryList) {
+            for (UUID uuid : opaqueEntry.getEntries().keySet()) {
+                for (SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {
+                    txBuilder.logUpdate(uuid, smrEntry);
+                }
+            }
+        }
+
+        txBuilder.commit(timestamp);
+        lastMsgTs = Math.max(entryTs, lastMsgTs);
     }
 
     /**

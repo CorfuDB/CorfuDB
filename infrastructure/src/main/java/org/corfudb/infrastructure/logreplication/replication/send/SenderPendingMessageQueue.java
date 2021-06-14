@@ -56,9 +56,11 @@ public class SenderPendingMessageQueue {
      * Remove all the entries whose timestamp is not larger than the given ts
      * @param ts
      */
-    public void evictAccordingToTimestamp(long ts) {
+    void evictAccordingToTimestamp(long ts) {
         log.trace("Evict all messages whose timestamp is smaller or equal to {}", ts);
 
+        //As the entries are in the order of timestamp value, we can just remove the first each time
+        //until the condition is not met anymore.
         while(!pendingEntries.isEmpty() && pendingEntries.get(0).getData().getMetadata().getTimestamp() <= ts) {
             pendingEntries.remove(0);
         }
@@ -68,22 +70,22 @@ public class SenderPendingMessageQueue {
      * Remove all the entries whose snapshotSeqNum is not larger than the given seqNum
      * @param seqNum
      */
-    public void evictAccordingToSeqNum(long seqNum) {
+    void evictAccordingToSeqNum(long seqNum) {
         log.trace("Evict all messages whose snapshotSeqNum is smaller or equal to {}", seqNum);
 
-        // As entries are ordered by timestamp, we can just remove the first each time
-        // until the condition is not met anymore.
+        //As the entries are in the order of timestamp value, we can just remove the first each time
+        //until the condition is not met anymore.
         while(!pendingEntries.isEmpty() && pendingEntries.get(0).getData().getMetadata().getSnapshotSyncSeqNum() <= seqNum) {
             pendingEntries.remove(0);
         }
     }
 
     /**
-     * Append message to the list according to the sending order
+     * Append message to the list according in the order of sending
      *
      * @param data
      */
-    public void append(LogReplicationEntryMsg data) {
+    void append(LogReplicationEntryMsg data) {
         LogReplicationPendingEntry entry = new LogReplicationPendingEntry(data);
         pendingEntries.add(entry);
     }

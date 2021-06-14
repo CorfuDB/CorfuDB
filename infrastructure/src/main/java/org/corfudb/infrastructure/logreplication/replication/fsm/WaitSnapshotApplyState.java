@@ -136,7 +136,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
 
     private void verifyStatusOfSnapshotSyncApply() {
         try {
-            log.info("Verify snapshot sync apply status, sync={}", transitionEventId);
+            log.debug("Verify snapshot sync apply status, sync={}", transitionEventId);
 
             // Query metadata on remote cluster to verify the status of the snapshot sync apply
             CompletableFuture<LogReplicationMetadataResponseMsg>

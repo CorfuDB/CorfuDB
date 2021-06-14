@@ -19,7 +19,6 @@ import net.jqwik.api.constraints.Size;
 import net.jqwik.api.constraints.StringLength;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.RandomStringUtils;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -43,7 +42,6 @@ import java.nio.file.Paths;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.Collection;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -466,55 +464,45 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
         table.put(firstId, firstEvent, metadata);
 
         // Fetch timestamp to perform snapshot queries or transactions at a particular timestamp.
-        Token token = getDefaultRuntime().getSequencerView().query().getToken();
-        CorfuStoreMetadata.Timestamp timestamp = CorfuStoreMetadata.Timestamp.newBuilder()
-                .setEpoch(token.getEpoch())
-                .setSequence(token.getSequence())
-                .build();
+        CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
+        TxnContext tx = corfuStore.txn(namespace);
 
-        try (TxnContext tx = corfuStore.txn(namespace)) {
-            Streams.zip(ids.stream(), events.stream(), SimpleEntry::new)
-                    .forEach(pair -> tx.putRecord(table, pair.getKey(), pair.getValue(), metadata));
-            tx.commit();
-        }
+        Streams.zip(ids.stream(), events.stream(), SimpleEntry::new)
+                .forEach(pair -> tx.putRecord(table, pair.getKey(), pair.getValue(), metadata));
+        tx.commit();
 
         SimpleEntry<Uuid, EventInfo> sample = Streams
                 .zip(ids.stream(), events.stream(), SimpleEntry::new)
                 .findAny().orElseThrow(() -> new InvalidObjectException("Invalid state."));
 
-        try (TxnContext tx = corfuStore.txn(namespace)) {
-            assertThat(tx.getRecord(tableName, sample.getKey()).getPayload())
-                    .isEqualTo(sample.getValue());
+        Query query = corfuStore.query(namespace);
+        assertThat(query.getRecord(tableName, sample.getKey()).getPayload())
+                .isEqualTo(sample.getValue());
 
-            Collection<Message> secondaryIndex = tx
-                    .getByIndex(tableName, "event_time", sample.getValue().getEventTime())
-                    .stream().map(e -> e.getPayload()).collect(Collectors.toList());
-            assertThat(secondaryIndex).containsExactly(sample.getValue());
+        Collection<Message> secondaryIndex = query
+                .getByIndex(tableName, "event_time", sample.getValue().getEventTime())
+                .getResult().stream().map(Map.Entry::getValue).collect(Collectors.toList());
+        assertThat(secondaryIndex).containsExactly(sample.getValue());
 
-            long medianEventTime = (long) Quantiles.median().compute(events.stream()
-                    .map(EventInfo::getEventTime)
-                    .collect(Collectors.toList()));
+        long medianEventTime = (long) Quantiles.median().compute(events.stream()
+                .map(EventInfo::getEventTime)
+                .collect(Collectors.toList()));
 
-            events.add(firstEvent);
-            Set<EventInfo> filteredEvents = events.stream().filter(
-                    event -> event.getEventTime() > medianEventTime)
-                    .collect(Collectors.toSet());
-            List<CorfuStoreEntry<Uuid, EventInfo, SampleSchema.ManagedResources>> queryResult =
-                    tx.executeQuery(tableName,
-                            record -> ((EventInfo) record.getPayload()).getEventTime() > medianEventTime);
-            Set<EventInfo> scannedValues = queryResult.stream()
-                    .map(CorfuStoreEntry::getPayload).collect(Collectors.toSet());
+        events.add(firstEvent);
+        Set<EventInfo> filteredEvents = events.stream().filter(
+                event -> event.getEventTime() > medianEventTime)
+                .collect(Collectors.toSet());
+        QueryResult<CorfuStoreEntry<Uuid, EventInfo, SampleSchema.ManagedResources>> queryResult =
+                query.executeQuery(tableName,
+                        record -> ((EventInfo) record.getPayload()).getEventTime() > medianEventTime);
+        Set<EventInfo> scannedValues = queryResult.getResult().stream()
+                .map(CorfuStoreEntry::getPayload).collect(Collectors.toSet());
 
-            assertThat(filteredEvents.size()).isGreaterThan(0).isLessThan(SAMPLE_SIZE);
-            assertThat(scannedValues.size()).isEqualTo(filteredEvents.size());
-            assertThat(tx.count(tableName)).isEqualTo(SAMPLE_SIZE + 1);
-            tx.commit();
-        }
+        assertThat(filteredEvents.size()).isGreaterThan(0).isLessThan(SAMPLE_SIZE);
+        assertThat(scannedValues.size()).isEqualTo(filteredEvents.size());
 
-        try (TxnContext tx = corfuStore.txn(namespace, IsolationLevel.snapshot(timestamp))) {
-            assertThat(tx.count(tableName)).isEqualTo(1);
-            tx.commit();
-        }
+        assertThat(query.count(tableName, timestamp)).isEqualTo(1);
+        assertThat(query.count(tableName)).isEqualTo(SAMPLE_SIZE + 1);
 
         assertThat(corfuStore.listTables(namespace))
                 .containsExactly(CorfuStoreMetadata.TableName.newBuilder()

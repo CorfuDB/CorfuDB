@@ -33,6 +33,7 @@ import java.util.UUID;
  * <p>
  * Key APIs exposed are:
  * o-> TxnContext() for CRUD operations
+ * o-> getTimestamp() for database snapshots
  * o-> table lifecycle management
  * <p>
  * Created by zlokhandwala on 2019-08-02.
@@ -74,7 +75,7 @@ public class CorfuStore {
      * @return Timestamp.
      */
     @Nonnull
-    private Timestamp getTimestamp() {
+    public Timestamp getTimestamp() {
         Token token = runtime.getSequencerView().query().getToken();
         return Timestamp.newBuilder()
                 .setEpoch(token.getEpoch())
@@ -181,6 +182,22 @@ public class CorfuStore {
     }
 
     /**
+     * Start a transaction with snapshot isolation level at the latest available corfu snapshot.
+     * The transaction does not begin until either a commit is invoked or a read happens.
+     *
+     * @param namespace Namespace of the tables involved in the transaction.
+     * @return Returns a transaction builder instance.
+     */
+    @Nonnull
+    @Deprecated
+    public TxBuilder tx(@Nonnull final String namespace) {
+        return new TxBuilder(
+                this.runtime.getObjectsView(),
+                this.runtime.getTableRegistry(),
+                namespace);
+    }
+
+    /**
      * Start a transaction with snapshot isolation level at the latest available snapshot.
      *
      * @param namespace Namespace of the tables involved in the transaction.
@@ -261,9 +278,24 @@ public class CorfuStore {
         corfuStoreMetrics.recordBatchReads(numBatches);
         corfuStoreMetrics.recordNumberReads(numBatches * runtime.getParameters().getHighestSequenceNumberBatchSize());
         corfuStoreMetrics.recordHighestSequenceNumberDuration(startTime);
-        log.debug("Stream[{}${}][{}] no DATA entry found. Highest sequence number corresponds to trim mark={}",
+        log.debug("Stream[{}${}][{}]no DATA entry found. Highest sequence number corresponds to trim mark={}",
                 namespace, tableName, Utils.toReadableId(streamId), streamAddressSpace.getTrimMark());
         return streamAddressSpace.getTrimMark();
+    }
+
+    /**
+     * Provides a query interface.
+     *
+     * @param namespace Namespace within which the queries are executed.
+     * @return Query implementation.
+     */
+    @Nonnull
+    @Deprecated
+    public Query query(@Nonnull final String namespace) {
+        return new Query(
+                this.runtime.getTableRegistry(),
+                this.runtime.getObjectsView(),
+                namespace);
     }
 
     /**
@@ -284,43 +316,6 @@ public class CorfuStore {
         runtime.getTableRegistry().getStreamManager()
                 .subscribe(streamListener, namespace, tablesOfInterest,
                         (timestamp == null) ? getTimestamp().getSequence() : timestamp.getSequence());
-    }
-
-    /**
-     * Subscribe to transaction updates on specific tables with the streamTag in the namespace.
-     * Objects returned will honor transactional boundaries.
-     * <p>
-     * This will subscribe to transaction updates starting from the latest state of the log.
-     * <p>
-     * Note: if memory is a consideration consider use the other version of subscribe that is
-     * able to specify the size of buffered transactions entries.
-     *
-     * @param streamListener   callback context
-     * @param namespace        the CorfuStore namespace to subscribe to
-     * @param streamTag        only updates of tables with the stream tag will be polled
-     * @param tablesOfInterest only updates from these tables of interest will be sent to listener
-     */
-    public void subscribeListener(@Nonnull StreamListener streamListener, @Nonnull String namespace,
-                                  @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest) {
-        this.subscribeListener(streamListener,namespace, streamTag, tablesOfInterest, getTimestamp());
-    }
-
-    /**
-     * Subscribe to transaction updates on specific tables with the streamTag in the namespace.
-     * Objects returned will honor transactional boundaries.
-     * <p>
-     * This will subscribe to transaction updates starting from the latest state of the log.
-     * <p>
-     * Note: if memory is a consideration consider use the other version of subscribe that is
-     * able to specify the size of buffered transactions entries.
-     *
-     * @param streamListener   callback context
-     * @param namespace        the CorfuStore namespace to subscribe to
-     * @param streamTag        only updates of tables with the stream tag will be polled
-     */
-    public void subscribeListener(@Nonnull StreamListener streamListener, @Nonnull String namespace,
-                                  @Nonnull String streamTag) {
-        this.subscribeListener(streamListener,namespace, streamTag, getTablesOfInterest(namespace, streamTag), getTimestamp());
     }
 
     /**
@@ -392,9 +387,7 @@ public class CorfuStore {
      * @return table names (without namespace prefix)
      */
     private List<String> getTablesOfInterest(@Nonnull String namespace, @Nonnull String streamTag) {
-        List<String> tablesOfInterest = runtime.getTableRegistry().listTables(namespace, streamTag);
-        log.info("Tag[{}${}] :: Subscribing to {} tables - {}", namespace, streamTag, tablesOfInterest.size(), tablesOfInterest);
-        return tablesOfInterest;
+        return runtime.getTableRegistry().listTables(namespace, streamTag);
     }
 
     /**
@@ -417,6 +410,7 @@ public class CorfuStore {
         List<String> tablesOfInterest = getTablesOfInterest(namespace, streamTag);
         subscribeListener(streamListener, namespace, streamTag, tablesOfInterest, timestamp);
     }
+
 
     /**
      * Gracefully shutdown a streamer.
