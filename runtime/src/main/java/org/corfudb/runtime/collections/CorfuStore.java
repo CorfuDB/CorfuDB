@@ -261,9 +261,9 @@ public class CorfuStore {
         corfuStoreMetrics.recordBatchReads(numBatches);
         corfuStoreMetrics.recordNumberReads(numBatches * runtime.getParameters().getHighestSequenceNumberBatchSize());
         corfuStoreMetrics.recordHighestSequenceNumberDuration(startTime);
-        log.debug("Stream[{}${}][{}] no DATA entry found. Highest sequence number corresponds to trim mark={}",
-                namespace, tableName, Utils.toReadableId(streamId), streamAddressSpace.getTrimMark());
-        return streamAddressSpace.getTrimMark();
+        log.debug("Stream[{}${}][{}] no DATA entry found. Returning -1.",
+                namespace, tableName, Utils.toReadableId(streamId));
+        return -1;
     }
 
     /**
