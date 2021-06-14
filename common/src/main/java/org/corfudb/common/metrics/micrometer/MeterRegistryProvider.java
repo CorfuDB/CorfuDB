@@ -71,7 +71,7 @@ public class MeterRegistryProvider {
                     log.info("Registering provider: {}", registryProvider);
                     MeterRegistry registry = registryProvider.provideRegistry();
                     addToCompositeRegistry(() -> Optional.of(registry));
-                } catch (Exception exception) {
+                } catch (Throwable exception) {
                     log.error("Problems registering a registry", exception);
                 }
             }
