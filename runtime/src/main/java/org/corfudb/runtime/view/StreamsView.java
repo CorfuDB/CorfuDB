@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -50,7 +51,7 @@ public class StreamsView extends AbstractView {
     }
 
     /**
-     * Creates and returns a new StreamView on a stream. 
+     * Creates and returns a new StreamView on a stream.
      *
      * @param stream The UUID of the stream to get a view on.
      * @return A view
@@ -89,7 +90,8 @@ public class StreamsView extends AbstractView {
 
     /**
      * Create and return a stream that won't be automatically garbage collected.
-     * @param stream stream id
+     *
+     * @param stream  stream id
      * @param options open options
      */
     public IStreamView getUnsafe(UUID stream, StreamOptions options) {
@@ -171,7 +173,9 @@ public class StreamsView extends AbstractView {
                     // Run pre-commit listeners if we are in transaction.
                     runPreCommitListeners(tokenResponse, ld, serializeMetadata);
                     // Attempt to write to the log.
-                    runtime.getAddressSpaceView().write(tokenResponse, ld, cacheOption);
+                    final TokenResponse finalTokenResponse = tokenResponse;
+                    MicroMeterUtils.time(() -> runtime.getAddressSpaceView().write(finalTokenResponse, ld, cacheOption),
+                            "address_space.write.latency", "streamId", Arrays.toString(streamIDs));
                     // If we're here, we succeeded, return the acquired token.
                     return tokenResponse.getSequence();
                 } catch (OverwriteException oe) {

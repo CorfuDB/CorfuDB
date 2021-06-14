@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -29,14 +30,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 
-/** The abstract queued stream view implements a stream backed by a read queue.
+/**
+ * The abstract queued stream view implements a stream backed by a read queue.
  *
  * <p>A read queue is a priority queue where addresses can be inserted, and are
  * dequeued in ascending order. Subclasses implement the fillReadQueue()
@@ -62,10 +63,11 @@ public abstract class AbstractQueuedStreamView extends
     @Getter
     private final StreamOptions streamOptions;
 
-    /** Create a new queued stream view.
+    /**
+     * Create a new queued stream view.
      *
-     * @param streamId  The ID of the stream
-     * @param runtime   The runtime used to create this view.
+     * @param streamId The ID of the stream
+     * @param runtime  The runtime used to create this view.
      */
     public AbstractQueuedStreamView(final CorfuRuntime runtime,
                                     final UUID streamId,
@@ -78,10 +80,12 @@ public abstract class AbstractQueuedStreamView extends
         this.streamOptions = streamOptions;
     }
 
-    /** Add the given address to the resolved queue of the
+    /**
+     * Add the given address to the resolved queue of the
      * given context.
-     * @param context           The context to add the address to
-     * @param globalAddress     The resolved global address.
+     *
+     * @param context       The context to add the address to
+     * @param globalAddress The resolved global address.
      */
     protected void addToResolvedQueue(QueuedStreamContext context,
                                       long globalAddress) {
@@ -136,7 +140,7 @@ public abstract class AbstractQueuedStreamView extends
      *
      * @param queue queue of entries.
      * @return next available entry. or null if there are no more entries
-     *         or remaining entries are not part of this stream.
+     * or remaining entries are not part of this stream.
      */
     protected abstract ILogData removeFromQueue(NavigableSet<Long> queue);
 
@@ -210,7 +214,9 @@ public abstract class AbstractQueuedStreamView extends
                 // exception here - any other exception we should pass up
                 // to the client.
                 try {
-                    runtime.getAddressSpaceView().write(tokenResponse, ld);
+                    final TokenResponse finalResponse = tokenResponse;
+                    MicroMeterUtils.time(() -> runtime.getAddressSpaceView().write(finalResponse, ld),
+                            "address_space.write.latency", "streamId", getId().toString());
                     // The write completed successfully, so we return this
                     // address to the client.
                     return tokenResponse.getToken().getSequence();
@@ -248,7 +254,7 @@ public abstract class AbstractQueuedStreamView extends
 
     /**
      * Reads data from an address in the address space.
-     *
+     * <p>
      * It will give the writer a chance to complete based on the time
      * when the reads of which this individual read is a step started.
      * If the reads have been going on for longer than the grace period
@@ -265,13 +271,16 @@ public abstract class AbstractQueuedStreamView extends
         try {
             if (System.currentTimeMillis() - readStartTime <
                     runtime.getParameters().getHoleFillTimeout().toMillis()) {
-                return runtime.getAddressSpaceView().read(address, readOptions);
+                return MicroMeterUtils.time(() -> runtime.getAddressSpaceView().read(address, readOptions),
+                        "address_space.read.latency", "streamId", getId().toString());
+
             }
 
             ReadOptions options = readOptions.toBuilder()
                     .waitForHole(false)
                     .build();
-            return runtime.getAddressSpaceView().read(address, options);
+            return MicroMeterUtils.time(() -> runtime.getAddressSpaceView().read(address, options),
+                    "address_space.read.latency", "streamId", getId().toString());
         } catch (TrimmedException te) {
             processTrimmedException(te);
             throw te;
@@ -281,8 +290,9 @@ public abstract class AbstractQueuedStreamView extends
     @Nonnull
     protected List<ILogData> readAll(@Nonnull List<Long> addresses) {
         try {
-            Map<Long, ILogData> dataMap =
-                    runtime.getAddressSpaceView().read(addresses, readOptions);
+            Map<Long, ILogData> dataMap = MicroMeterUtils.time(() -> runtime.getAddressSpaceView()
+                            .read(addresses, readOptions),
+                    "address_space.read.latency", "streamId", getId().toString());
             // If trimmed exceptions are ignored, the data retrieved by the read API might not correspond
             // to all requested addresses, for this reason we must filter out data entries not included (null).
             // Also, we need to preserve ordering for checkpoint logic.
@@ -303,12 +313,13 @@ public abstract class AbstractQueuedStreamView extends
         }
     }
 
-    /** {@inheritDoc}
+    /**
+     * {@inheritDoc}
      *
      * <p>In the queued implementation, we just read all entries in the read queue
      * in parallel. If there is any entry which changes the context, we cut the
      * list off there.
-     * */
+     */
     @Override
     protected List<ILogData> getNextEntries(QueuedStreamContext context, long maxGlobal) {
         NavigableSet<Long> readSet = new TreeSet<>();
@@ -337,7 +348,7 @@ public abstract class AbstractQueuedStreamView extends
         // If the lowest element is greater than maxGlobal, there's nothing
         // more to return: readSet is ok as-is.
         // Otherwise,
-        if (context.readQueue.isEmpty() || context.readQueue.first() <= maxGlobal){
+        if (context.readQueue.isEmpty() || context.readQueue.first() <= maxGlobal) {
             // Select everything in the read queue between
             // the start and maxGlobal
             readSet.addAll(context.readQueue.headSet(maxGlobal, true));
@@ -361,7 +372,7 @@ public abstract class AbstractQueuedStreamView extends
                 // Case of Checkpoint will never load these addresses, cause this is another stream
                 .filter(x -> x.containsStream(context.id))
                 .collect(Collectors.toList());
-        
+
         // Clear the entries which were read
         context.readQueue.headSet(maxGlobal, true).clear();
         context.readCpQueue.headSet(maxGlobal, true).clear();
@@ -418,12 +429,11 @@ public abstract class AbstractQueuedStreamView extends
      * <p>This method returns true if entries were added to the read queue,
      * false otherwise.
      *
-     * @param maxGlobal     The maximum global address to read to.
-     * @param context       The current stream context.
-     *
-     * @return              True, if entries were added to the read queue,
-     *                      False, otherwise.
-     *
+     * @param maxGlobal The maximum global address to read to.
+     * @param context   The current stream context.
+     * @return True, if entries were added to the read queue,
+     * False, otherwise.
+     * <p>
      * {@inheritDoc}
      */
     protected boolean fillReadQueue(final long maxGlobal,
@@ -541,20 +551,19 @@ public abstract class AbstractQueuedStreamView extends
 
     /**
      * Defines the strategy to discover addresses belonging to this stream.
-     *
+     * <p>
      * We currently support two mechanisms:
-     *      - Following backpointers (@see org.corfudb.runtime.view.stream.BackpointerStreamView)
-     *      - Requesting the sequencer for the complete address map of a stream.
-     *      (@see org.corfudb.runtime.view.stream.AddressMapStreamView)
+     * - Following backpointers (@see org.corfudb.runtime.view.stream.BackpointerStreamView)
+     * - Requesting the sequencer for the complete address map of a stream.
+     * (@see org.corfudb.runtime.view.stream.AddressMapStreamView)
      *
-     * @param streamId stream unique identifier.
-     * @param queue queue to fill up.
+     * @param streamId     stream unique identifier.
+     * @param queue        queue to fill up.
      * @param startAddress read start address (inclusive)
-     * @param stopAddress read stop address (exclusive)
-     * @param filter filter to apply to data
-     * @param checkpoint true if checkpoint discovery, false otherwise.
-     * @param maxGlobal max address to resolve discovery.
-     *
+     * @param stopAddress  read stop address (exclusive)
+     * @param filter       filter to apply to data
+     * @param checkpoint   true if checkpoint discovery, false otherwise.
+     * @param maxGlobal    max address to resolve discovery.
      * @return true if addresses were discovered, false, otherwise.
      */
     protected abstract boolean discoverAddressSpace(final UUID streamId,
@@ -584,12 +593,12 @@ public abstract class AbstractQueuedStreamView extends
     }
 
     /**
-     *  {@inheritDoc}
-     *
+     * {@inheritDoc}
      **/
     protected ILogData read(final long address) {
         try {
-            return runtime.getAddressSpaceView().read(address, readOptions);
+            return MicroMeterUtils.time(() -> runtime.getAddressSpaceView().read(address, readOptions),
+                    "address_space.read.latency", "streamId", getId().toString());
         } catch (TrimmedException te) {
             processTrimmedException(te);
             throw te;
@@ -597,19 +606,21 @@ public abstract class AbstractQueuedStreamView extends
     }
 
     /**
-     *  This method reads a batch of addresses if 'nextRead' is not found in the cache.
-     *  In the case of a cache miss, it piggybacks on the read for 'nextRead'.
+     * This method reads a batch of addresses if 'nextRead' is not found in the cache.
+     * In the case of a cache miss, it piggybacks on the read for 'nextRead'.
+     * <p>
+     * If 'nextRead' is present in the cache, it directly returns this data.
      *
-     *  If 'nextRead' is present in the cache, it directly returns this data.
-     *
-     * @param nextRead current address of interest
+     * @param nextRead  current address of interest
      * @param addresses batch of addresses to read (bring into the cache) in case there is a cache miss (includes
      *                  nextRead)
      * @return data for current 'address' of interest.
      */
-    protected @Nonnull ILogData read(long nextRead, @Nonnull final NavigableSet<Long> addresses) {
+    protected @Nonnull
+    ILogData read(long nextRead, @Nonnull final NavigableSet<Long> addresses) {
         try {
-            return runtime.getAddressSpaceView().read(nextRead, addresses, readOptions);
+            return MicroMeterUtils.time(() -> runtime.getAddressSpaceView().read(nextRead, addresses, readOptions),
+                    "address_space.read.latency", "streamId", getId().toString());
         } catch (TrimmedException te) {
             processTrimmedException(te);
             throw te;
@@ -634,33 +645,33 @@ public abstract class AbstractQueuedStreamView extends
      * {@inheritDoc}
      */
     @Override
-    public void close() {}
-    
+    public void close() {
+    }
+
     // Keeps the latest valid checkpoint (based on the snapshot it covers)
     private StreamCheckpoint latestValidCheckpoint = new StreamCheckpoint();
 
     /**
      * Resolve all potential checkpoints for the given max global.
-     *
+     * <p>
      * Note that, the position of checkpoint entries in the log does not correspond
      * to logical checkpoint ordering. For this reason, we must traverse all valid
      * checkpoints and only after scanning all, pick the checkpoint with the highest coverage.
-     *
+     * <p>
      * For instance, the fact that CP2.entriesGlobalAddress > CP1.entriesGlobalAddress, does not imply
      * that CP2.logicalCheckpointedSpace > CP1.logicalCheckpointedSpace.
      * Consider the case where, CP2 snapshot was taken before CP1, however, CP1 read/write is faster
      * and commits its entries to the log first.
-     *
+     * <p>
      * +------------------------------------------------+
      * | CP1 (snapshot 15) |  |  |  | CP2 (snapshot 10) |
      * +------------------------------------------------+
      *
-     * @param context this stream's current context
-     * @param data checkpoint log data entry
+     * @param context   this stream's current context
+     * @param data      checkpoint log data entry
      * @param maxGlobal maximum global address to resolve this stream up to.
-     *
      * @return true, if the checkpoint was completely resolved (from end to start markers of a checkpoint)
-     *         false, otherwise.
+     * false, otherwise.
      */
     protected boolean scanCheckpointStream(final QueuedStreamContext context, ILogData data,
                                            long maxGlobal) {
@@ -732,7 +743,6 @@ public abstract class AbstractQueuedStreamView extends
      * addresses belonging to this checkpoint.
      *
      * @param context current stream context.
-     *
      * @return addresses for the valid checkpoint.
      */
     public List<Long> resolveCheckpoint(final QueuedStreamContext context) {
@@ -754,7 +764,7 @@ public abstract class AbstractQueuedStreamView extends
 
     /**
      * {@inheritDoc}
-     * */
+     */
     @Override
     public synchronized ILogData previous() {
         final QueuedStreamContext context = getCurrentContext();
@@ -827,8 +837,8 @@ public abstract class AbstractQueuedStreamView extends
 
 
     /**
-    * {@inheritDoc}
-    * */
+     * {@inheritDoc}
+     */
     @Override
     public synchronized ILogData current() {
         final QueuedStreamContext context = getCurrentContext();
@@ -841,7 +851,7 @@ public abstract class AbstractQueuedStreamView extends
 
     /**
      * {@inheritDoc}
-     * */
+     */
     @Override
     public long getCurrentGlobalPosition() {
         return getCurrentContext().getGlobalPointer();
@@ -852,7 +862,8 @@ public abstract class AbstractQueuedStreamView extends
         return this.baseContext;
     }
 
-    /** {@inheritDoc}
+    /**
+     * {@inheritDoc}
      *
      * <p>For the queued stream context, we include just a queue of potential
      * global addresses to be read from.
@@ -860,16 +871,20 @@ public abstract class AbstractQueuedStreamView extends
     @ToString
     static class QueuedStreamContext extends AbstractStreamContext {
 
-        /** A queue of addresses which have already been resolved. */
+        /**
+         * A queue of addresses which have already been resolved.
+         */
         final NavigableSet<Long> resolvedQueue
                 = new TreeSet<>();
 
-        /** The minimum global address which we have resolved this
+        /**
+         * The minimum global address which we have resolved this
          * stream to.
          */
         long minResolution = Address.NON_ADDRESS;
 
-        /** The maximum global address which we have resolved this
+        /**
+         * The maximum global address which we have resolved this
          * stream to.
          */
         long maxResolution = Address.NON_ADDRESS;
@@ -880,21 +895,25 @@ public abstract class AbstractQueuedStreamView extends
         final NavigableSet<Long> readQueue
                 = new TreeSet<>();
 
-        /** List of checkpoint records, if a successful checkpoint has been observed.
+        /**
+         * List of checkpoint records, if a successful checkpoint has been observed.
          */
         final NavigableSet<Long> readCpQueue = new TreeSet<>();
 
-        /** Info on checkpoint we used for initial stream replay,
-         *  other checkpoint-related info & stats.
+        /**
+         * Info on checkpoint we used for initial stream replay,
+         * other checkpoint-related info & stats.
          */
         @Getter
         @Setter
         private StreamCheckpoint checkpoint = StreamCheckpoint.UNINITIALIZED;
 
-        /** Create a new stream context with the given ID and maximum address
+        /**
+         * Create a new stream context with the given ID and maximum address
          * to read to.
-         * @param id                  The ID of the stream to read from
-         * @param maxGlobalAddress    The maximum address for the context.
+         *
+         * @param id               The ID of the stream to read from
+         * @param maxGlobalAddress The maximum address for the context.
          */
         public QueuedStreamContext(UUID id, long maxGlobalAddress) {
             super(id, maxGlobalAddress);
@@ -902,7 +921,7 @@ public abstract class AbstractQueuedStreamView extends
 
         /**
          * {@inheritDoc}
-         * */
+         */
         @Override
         void reset() {
             super.reset();
@@ -916,18 +935,18 @@ public abstract class AbstractQueuedStreamView extends
 
         /**
          * {@inheritDoc}
-         * */
+         */
         @Override
         synchronized void seek(long globalAddress) {
             if (Address.nonAddress(globalAddress)) {
                 throw new IllegalArgumentException("globalAddress must"
                         + " be >= Address.maxNonAddress()");
             }
-            log.trace("Seek[{}]({}), min={} max={}", this,  globalAddress,
+            log.trace("Seek[{}]({}), min={} max={}", this, globalAddress,
                     minResolution, maxResolution);
             // Update minResolution if necessary
             if (globalAddress >= maxResolution) {
-                log.trace("set min res to {}" , globalAddress);
+                log.trace("set min res to {}", globalAddress);
                 minResolution = globalAddress;
             }
             // remove anything in the read queue LESS
@@ -960,9 +979,10 @@ public abstract class AbstractQueuedStreamView extends
         // Total number of Bytes in this checkpoint
         long totalBytes = 0L;
 
-        /** The address the current checkpoint snapshot was taken at.
-         *  The checkpoint guarantees for this stream there are no entries
-         *  between startAddress and snapshot.
+        /**
+         * The address the current checkpoint snapshot was taken at.
+         * The checkpoint guarantees for this stream there are no entries
+         * between startAddress and snapshot.
          */
         long snapshot = Address.NEVER_READ;
         // List of addresses belonging to this checkpoint
@@ -986,10 +1006,10 @@ public abstract class AbstractQueuedStreamView extends
          * Validates current checkpoint against the proposed and keeps the higher,
          * i.e., the latest checkpoint based on the snapshot it covers.
          *
-         * @param id checkpoint id
+         * @param id           checkpoint id
          * @param startAddress checkpoint VLO version (last update observed for this stream at the time of checkpoint)
          * @return true, if this checkpoint if higher.
-         *         false, otherwise.
+         * false, otherwise.
          */
         public boolean validateHigher(UUID id, long startAddress) {
             if (Address.isAddress(startAddress) && startAddress > this.startAddress) {

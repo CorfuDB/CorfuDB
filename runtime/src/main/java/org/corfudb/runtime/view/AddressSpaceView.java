@@ -326,7 +326,7 @@ public class AddressSpaceView extends AbstractView {
             recordLogSizeDist(data.getSizeEstimate());
             return data;
         };
-        return MicroMeterUtils.time(logDataSupplier, "address_space.read.latency", "type", "single");
+        return MicroMeterUtils.time(logDataSupplier, "address_space.read.latency");
     }
 
     /**
@@ -461,7 +461,7 @@ public class AddressSpaceView extends AbstractView {
             result.values().forEach(value -> recordLogSizeDist(value.getSizeEstimate()));
             return result;
         };
-        return MicroMeterUtils.time(readSupplier, "address_space.read.latency", "type", "multi");
+        return MicroMeterUtils.time(readSupplier, "address_space.read.latency");
     }
 
     /**
