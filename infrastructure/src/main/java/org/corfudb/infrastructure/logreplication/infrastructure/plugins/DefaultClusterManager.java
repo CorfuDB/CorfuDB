@@ -106,7 +106,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
                     ClusterUuidMsg.class, ClusterUuidMsg.class, ClusterUuidMsg.class,
                     TableOptions.builder().build()
             );
-            table.clear();
+            table.clearAll();
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

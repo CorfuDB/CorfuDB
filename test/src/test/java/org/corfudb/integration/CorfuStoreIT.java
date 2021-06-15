@@ -81,50 +81,6 @@ public class CorfuStoreIT extends AbstractIT {
     }
 
     /**
-     * Basic test that inserts a single item using protobuf defined in the proto/ directory.
-     */
-    @Test
-    public void testTx() throws Exception {
-        // Run a corfu server
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
-
-        // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
-
-        CorfuStore store = new CorfuStore(runtime);
-
-        Table<Uuid, Uuid, Uuid> table = store.openTable(
-                "namespace", "table", Uuid.class,
-                Uuid.class, Uuid.class,
-                TableOptions.builder().build()
-        );
-
-        final long keyUuid = 1L;
-        final long valueUuid = 3L;
-        final long metadataUuid = 5L;
-        Uuid uuidKey = Uuid.newBuilder()
-                .setMsb(keyUuid)
-                .setLsb(keyUuid)
-                .build();
-        Uuid uuidVal = Uuid.newBuilder()
-                .setMsb(valueUuid)
-                .setLsb(valueUuid)
-                .build();
-        Uuid metadata = Uuid.newBuilder()
-                .setMsb(metadataUuid)
-                .setLsb(metadataUuid)
-                .build();
-        TxnContext tx = store.txn("namespace");
-        tx.putRecord(table, uuidKey, uuidVal, metadata);
-        tx.commit();
-        CorfuRecord record = table.get(uuidKey);
-        assertThat(record.getPayload()).isEqualTo(uuidVal);
-        assertThat(record.getMetadata()).isEqualTo(metadata);
-
-        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
-    }
-
-    /**
      * This test is divided into 3 phases.
      * Phase 1: Writes data to CorfuStore in a Table using the transaction builder.
      * Phase 2: Using DynamicMessages, we try to read and edit the message. The lsb in the metadata is putd.

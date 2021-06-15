@@ -1460,7 +1460,8 @@ public class StreamingIT extends AbstractIT {
             readTable.entryStream().forEach(entry -> entry.getKey().getMsb());
 
             for (int index = 0; index < numUpdates; index++) {
-                CorfuRecord<SampleTableAMsg, Uuid> record = readTable.get(Uuid.newBuilder().setLsb(index).setMsb(index).build());
+                CorfuStoreEntry<Uuid, SampleTableAMsg, Uuid> record = txn.getRecord(readTable,
+                        Uuid.newBuilder().setLsb(index).setMsb(index).build());
                 assertThat(record).isNotNull();
                 assertThat(record.getPayload().getPayload()).isEqualTo(String.valueOf(index));
             }

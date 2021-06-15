@@ -679,7 +679,7 @@ public class TxnContext implements AutoCloseable {
         table1.getMetrics().incNumJoins();
         applyWritesForReadOnTable(table2);
         table2.getMetrics().incNumJoins();
-        return Query.executeJoinQuery(table1, table2,
+        return JoinQuery.executeJoinQuery(table1, table2,
                 query1, query2, queryOptions1,
                 queryOptions2, joinPredicate, joinFunction, joinProjection);
     }

@@ -333,10 +333,10 @@ public class TableRegistry {
      * @param tableDescriptorsBuilder Builder instance.
      * @param rootFileDescriptor      File descriptor to be added.
      */
-    private void insertAllDependingFileDescriptorProtos(TableDescriptors.Builder tableDescriptorsBuilder,
-                                                        FileDescriptor rootFileDescriptor,
-                                                        Map<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>
-                                                                allDescriptors) {
+    public static void insertAllDependingFileDescriptorProtos(TableDescriptors.Builder tableDescriptorsBuilder,
+                                                              FileDescriptor rootFileDescriptor,
+                                                              Map<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>
+                                                                      allDescriptors) {
         Deque<FileDescriptor> fileDescriptorStack = new LinkedList<>();
         fileDescriptorStack.push(rootFileDescriptor);
 
@@ -575,7 +575,7 @@ public class TableRegistry {
      */
     public void deleteTable(String namespace, String tableName) {
         Table<Message, Message, Message> table = getTable(namespace, tableName);
-        table.clear();
+        table.clearAll();
     }
 
     /**
