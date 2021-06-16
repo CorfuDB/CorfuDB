@@ -4,12 +4,16 @@ import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.Tags;
+import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import io.micrometer.core.instrument.logging.LoggingRegistryConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.registries.LoggingMeterRegistryWithHistogramSupport;
+import org.corfudb.common.metrics.micrometer.registries.RegistryLoader;
+import org.corfudb.common.metrics.micrometer.registries.RegistryProvider;
 import org.slf4j.Logger;
 
 import java.time.Duration;
+import java.util.Iterator;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -18,7 +22,7 @@ import java.util.function.Supplier;
  */
 @Slf4j
 public class MeterRegistryProvider {
-    private static Optional<MeterRegistry> meterRegistry = Optional.empty();
+    private static final CompositeMeterRegistry meterRegistry = new CompositeMeterRegistry();
     private static Optional<String> id = Optional.empty();
 
     private MeterRegistryProvider() {
@@ -39,7 +43,7 @@ public class MeterRegistryProvider {
          * @param loggingInterval A duration between log appends for every metric.
          * @param identifier      A global identifier to tag every metric with.
          */
-        public static synchronized void init(Logger logger, Duration loggingInterval, String identifier) {
+        public static synchronized void initLoggingRegistry(Logger logger, Duration loggingInterval, String identifier) {
             Supplier<Optional<MeterRegistry>> supplier = () -> {
                 LoggingRegistryConfig config = new IntervalLoggingConfig(loggingInterval);
                 LoggingMeterRegistryWithHistogramSupport registry =
@@ -51,25 +55,65 @@ public class MeterRegistryProvider {
                 return ret;
             };
 
-            init(supplier);
+            addToCompositeRegistry(supplier);
         }
 
-        private static void init(Supplier<Optional<MeterRegistry>> meterRegistrySupplier) {
-            if (meterRegistry.isPresent()) {
-               log.warn("Registry has already been initialized.");
+        /**
+         * Looks up the implementations of RegistryProvider on the classpath, initializes registries,
+         * and registers them with a global composite registry.
+         */
+        public static synchronized void registerProvidedRegistries() {
+            RegistryLoader loader = new RegistryLoader();
+            Iterator<RegistryProvider> registries = loader.getRegistries();
+            while (registries.hasNext()) {
+                try {
+                    RegistryProvider registryProvider = registries.next();
+                    log.info("Registering provider: {}", registryProvider);
+                    MeterRegistry registry = registryProvider.provideRegistry();
+                    addToCompositeRegistry(() -> Optional.of(registry));
+                } catch (Throwable exception) {
+                    log.error("Problems registering a registry", exception);
+                }
             }
-            meterRegistry = meterRegistrySupplier.get();
+        }
+
+        private static void addToCompositeRegistry(Supplier<Optional<MeterRegistry>> meterRegistrySupplier) {
+            Optional<MeterRegistry> componentRegistry = meterRegistrySupplier.get();
+            componentRegistry.ifPresent(registry -> {
+                if (containsRegistry(registry)) {
+                    log.warn("Registry has already been initialized.");
+                    removeRegistry(registry);
+                }
+                addRegistry(registry);
+            });
+        }
+
+        private static void addRegistry(MeterRegistry componentRegistry) {
+            meterRegistry.add(componentRegistry);
+        }
+
+        private static void removeRegistry(MeterRegistry componentRegistry) {
+            meterRegistry.remove(componentRegistry);
         }
     }
 
+
     /**
-     * Register timer if needed.
+     * Returns true if the composite contains component.
      *
-     * @param name Name of a timer.
-     * @param tags Tags for a timer.
+     * @return Returns true if this registry is present.
      */
-    public static void timer(String name, String... tags) {
-        MeterRegistryProvider.getInstance().ifPresent(registry -> registry.timer(name, tags));
+    public static boolean containsRegistry(MeterRegistry componentRegistry) {
+        return meterRegistry.getRegistries().contains(componentRegistry);
+    }
+
+    /**
+     * Returns true if no registries were registered with the composite registry.
+     *
+     * @return Returns true if 0 registries, false otherwise.
+     */
+    public static boolean isEmpty() {
+        return meterRegistry.getRegistries().isEmpty();
     }
 
     /**
@@ -79,7 +123,14 @@ public class MeterRegistryProvider {
      * @return An optional configured meter registry.
      */
     public static synchronized Optional<MeterRegistry> getInstance() {
-        return meterRegistry;
+        return Optional.of(meterRegistry);
+    }
+
+    /**
+     * Close all the registries.
+     */
+    public static synchronized void close() {
+        meterRegistry.close();
     }
 
     /**
@@ -90,15 +141,13 @@ public class MeterRegistryProvider {
      * @param type Type of a meter.
      */
     public static synchronized void deregisterServerMeter(String name, Tags tags, Meter.Type type) {
-        if (!meterRegistry.isPresent()) {
-            return;
-        }
         if (!id.isPresent()) {
-            throw new IllegalStateException("Id must be present to deregister meters.");
+            log.warn("Id must be present to deregister meters.");
+            return;
         }
         String server = id.get();
         Tags tagsToLookFor = tags.and(Tag.of("id", server));
         Meter.Id id = new Meter.Id(name, tagsToLookFor, null, null, type);
-        meterRegistry.ifPresent(registry -> registry.remove(id));
+        meterRegistry.remove(id);
     }
 }
