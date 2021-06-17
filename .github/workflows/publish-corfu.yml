@@ -12,7 +12,8 @@ jobs:
     if: github.event_name == 'push'
 
     env:
-      JFROG_PASSWORD: ${{ secrets.jfrog_oss_password }}
+      PKG_USERNAME: ${{ secrets.pkg_username }}
+      PUBLISH_TOKEN: ${{ secrets.publish_token }}
       DOCKER_USERNAME: ${{ secrets.docker_username }}
       DOCKER_PASSWORD: ${{ secrets.docker_password }}
 
