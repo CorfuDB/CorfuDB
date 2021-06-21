@@ -24,6 +24,7 @@ import java.util.function.Supplier;
 public class MeterRegistryProvider {
     private static final CompositeMeterRegistry meterRegistry = new CompositeMeterRegistry();
     private static Optional<String> id = Optional.empty();
+    private static Optional<RegistryProvider> provider = Optional.empty();
 
     private MeterRegistryProvider() {
 
@@ -69,6 +70,7 @@ public class MeterRegistryProvider {
                 try {
                     RegistryProvider registryProvider = registries.next();
                     log.info("Registering provider: {}", registryProvider);
+                    provider = Optional.of(registryProvider);
                     MeterRegistry registry = registryProvider.provideRegistry();
                     addToCompositeRegistry(() -> Optional.of(registry));
                 } catch (Throwable exception) {
@@ -131,6 +133,7 @@ public class MeterRegistryProvider {
      */
     public static synchronized void close() {
         meterRegistry.close();
+        provider.ifPresent(RegistryProvider::close);
     }
 
     /**

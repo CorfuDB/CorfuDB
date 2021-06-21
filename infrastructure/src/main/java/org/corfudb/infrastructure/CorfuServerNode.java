@@ -15,6 +15,7 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -156,6 +157,7 @@ public class CorfuServerNode implements AutoCloseable {
 
         CompletableFuture.allOf(shutdownFutures).join();
         shutdownService.shutdown();
+        MeterRegistryProvider.close();
         log.info("close: Server shutdown and resources released");
     }
 
