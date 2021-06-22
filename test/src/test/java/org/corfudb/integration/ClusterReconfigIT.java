@@ -1164,7 +1164,13 @@ public class ClusterReconfigIT extends AbstractIT {
                 );
 
         // Since on fail-over the sequencer state is built, it only accounts of the latest checkpoint
-        assertThat(streamAddressSpace.size()).isEqualTo(0);
+        if (trim) {
+            // Verify that the trim has been materialized
+            assertThat(streamAddressSpace.size()).isEqualTo(0);
+        } else {
+            assertThat(streamAddressSpace.size()).isEqualTo(numEntries+1);
+        }
+
         assertThat(streamAddressSpace.getTrimMark()).isEqualTo(numEntries);
         assertThat(cpStreamAddressSpace.size()).isEqualTo(checkpointSize);
         assertThat(cpStreamAddressSpace.getTrimMark()).isEqualTo(Address.NON_EXIST);

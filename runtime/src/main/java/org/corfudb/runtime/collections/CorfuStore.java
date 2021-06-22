@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.Optional;
+import java.util.TreeSet;
 import java.util.UUID;
 
 /**
@@ -237,8 +238,9 @@ public class CorfuStore {
         int numBatches = 0;
 
         if (streamAddressSpace.size() != 0) {
-            NavigableSet<Long> addresses = streamAddressSpace.copyAddressesToSet(Address.MAX).descendingSet();
-            Iterable<List<Long>> batches = Iterables.partition(addresses,
+            NavigableSet<Long> addresses = new TreeSet<>();
+            streamAddressSpace.forEachUpTo(Address.MAX, addresses::add);
+            Iterable<List<Long>> batches = Iterables.partition(addresses.descendingSet(),
                     runtime.getParameters().getHighestSequenceNumberBatchSize());
 
             for (List<Long> batch : batches) {
