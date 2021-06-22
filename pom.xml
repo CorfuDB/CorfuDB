@@ -197,15 +197,10 @@
 
     <distributionManagement>
         <repository>
-            <id>central</id>
-            <name>corfudbcloud-artifactory-primary-0-releases</name>
-            <url>https://corfudbcloud.jfrog.io/artifactory/corfu-cloud</url>
+            <id>github</id>
+            <name>GitHub CorfuDB Apache Maven Packages</name>
+            <url>https://maven.pkg.github.com/corfudb/corfudb</url>
         </repository>
-        <snapshotRepository>
-            <id>snapshots</id>
-            <name>corfudbcloud-artifactory-primary-0-snapshots</name>
-            <url>https://corfudbcloud.jfrog.io/artifactory/corfu-cloud</url>
-        </snapshotRepository>
     </distributionManagement>
 
     <profiles>

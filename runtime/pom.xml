@@ -90,7 +90,7 @@
         </dependency>
         <dependency>
             <groupId>org.corfudb</groupId>
-            <artifactId>annotationProcessor</artifactId>
+            <artifactId>annotation-processor</artifactId>
             <version>${project.version}</version>
         </dependency>
 
