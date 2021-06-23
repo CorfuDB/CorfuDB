@@ -1049,18 +1049,11 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         assertThat(mapBackup.size()).isZero();
 
         // Write 10 entries to active map
-        for (int i = 0; i < firstBatch; i++) {
-            activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
-            activeRuntime.getObjectsView().TXEnd();
-        }
+        writeEntries(activeRuntime, 0, firstBatch, mapActive);
+
         // Write 50 entries of dummy data to standby map, so we make it have longer corfu log tail.
         // We can also use it to confirm data is wiped during the snapshot sync.
-        for (int i = 0; i < largeBatch; i++) {
-            standbyRuntime.getObjectsView().TXBegin();
-            mapStandby.put(String.valueOf(i), i);
-            standbyRuntime.getObjectsView().TXEnd();
-        }
+        writeEntries(standbyRuntime, 0, largeBatch, mapStandby);
         assertThat(mapActive.size()).isEqualTo(firstBatch);
         assertThat(mapStandby.size()).isEqualTo(largeBatch);
 
@@ -1082,20 +1075,12 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 standbyClusterCorfuPort, standbyRuntime.getAddressSpaceView().getLogTail());
 
         // Write 50 entries to active map
-        for (int i = 0; i < largeBatch; i++) {
-            activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
-            activeRuntime.getObjectsView().TXEnd();
-        }
+        writeEntries(activeRuntime, 0, largeBatch, mapActive);
         assertThat(mapActive.size()).isEqualTo(largeBatch);
 
         // Write 10 entries to backup map
         // It is a backup of the active cluster when it has 10 entries
-        for (int i = 0; i < firstBatch; i++) {
-            backupRuntime.getObjectsView().TXBegin();
-            mapBackup.put(String.valueOf(i), i);
-            backupRuntime.getObjectsView().TXEnd();
-        }
+        writeEntries(backupRuntime, 0, firstBatch, mapBackup);
 
         // Wait until data is fully replicated again
         waitForReplication(size -> size == largeBatch, mapStandby, largeBatch);
@@ -1110,32 +1095,21 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         }
 
         // Change the topology - brings up the backup cluster
-        try (TxnContext txn = activeCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-            txn.putRecord(configTable, DefaultClusterManager.OP_BACKUP, DefaultClusterManager.OP_BACKUP, DefaultClusterManager.OP_BACKUP);
-            txn.commit();
-        }
+        updateTopology(activeCorfuStore, DefaultClusterManager.OP_BACKUP);
         log.info("Change the topology!!!");
 
         TimeUnit.SECONDS.sleep(shortInterval);
 
 
         // Perform an enforce full snapshot sync
-        try (TxnContext txn = activeCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-            txn.putRecord(configTable, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC,
-                    DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC);
-            txn.commit();
-        }
+        updateTopology(activeCorfuStore, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC);
         TimeUnit.SECONDS.sleep(mediumInterval);
 
         // Standby map size should be 10
         waitForReplication(size -> size == firstBatch, mapStandby, firstBatch);
 
         // Write 5 entries to backup map
-        for (int i = firstBatch; i < secondBatch; i++) {
-            backupRuntime.getObjectsView().TXBegin();
-            mapBackup.put(String.valueOf(i), i);
-            backupRuntime.getObjectsView().TXEnd();
-        }
+        writeEntries(backupRuntime, firstBatch, secondBatch, mapBackup);
         assertThat(mapBackup.size()).isEqualTo(secondBatch);
 
         // Wait until data is fully replicated again
@@ -1165,6 +1139,22 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             TimeUnit.SECONDS.sleep(seconds);
         } catch (InterruptedException ie) {
             throw new UnrecoverableCorfuInterruptedError(ie);
+        }
+    }
+
+    private void writeEntries(CorfuRuntime runtime,
+                              int startIdx, int endIdx, CorfuTable<String, Integer> table) {
+        for (int i = startIdx; i < endIdx; i++) {
+            runtime.getObjectsView().TXBegin();
+            table.put(String.valueOf(i), i);
+            runtime.getObjectsView().TXEnd();
+        }
+    }
+
+    private void updateTopology(CorfuStore corfuStore, ClusterUuidMsg op) {
+        try (TxnContext txn = corfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, op, op, op);
+            txn.commit();
         }
     }
 }
