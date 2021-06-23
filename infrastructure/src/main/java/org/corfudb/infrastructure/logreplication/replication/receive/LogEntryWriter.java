@@ -146,8 +146,9 @@ public class LogEntryWriter {
 
         // A new Delta sync is triggered, setup the new srcGlobalSnapshot and msgQ
         if (msg.getMetadata().getSnapshotTimestamp() > srcGlobalSnapshot) {
-            log.warn("setup the new srcGlobalSnapshot and lastMsgTs {}",
-                    msg.getMetadata().getSnapshotTimestamp());
+            log.warn("A new log entry sync is triggered with higher snapshot, previous snapshot " +
+                            "is {} and setup the new srcGlobalSnapshot & lastMsgTs as {}",
+                    srcGlobalSnapshot, msg.getMetadata().getSnapshotTimestamp());
             srcGlobalSnapshot = msg.getMetadata().getSnapshotTimestamp();
             lastMsgTs = srcGlobalSnapshot;
         }
@@ -172,11 +173,11 @@ public class LogEntryWriter {
     }
 
     /**
-     * Set the base snapshot that last full sync based on and ackTimestamp
+     * Set the base snapshot on which the last full sync was based on and ackTimestamp
      * that is the last log entry it has played.
      * This is called while the writer enter the log entry sync state.
      *
-     * @param snapshot the base snapshot that last full sync based on.
+     * @param snapshot the base snapshot on which the last full sync was based on.
      * @param ackTimestamp
      */
     public void reset(long snapshot, long ackTimestamp) {

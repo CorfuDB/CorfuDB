@@ -1012,15 +1012,17 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     }
 
     /**
-     * This test verifies log entry works after a force snap sync
+     * This test verifies log entry works after a force snapshot sync
      * in the backup/restore workflow.
      * <p>
      * 1. Init with corfu 9000 active, 9001 standby, 9002 backup
      * 2. Write 10 entries to active map
      * 3. Start log replication: Node 9010 - active, Node 9020 - standby, Node 9030 - backup
      * 4. Wait for Snapshot Sync, both maps have size 10
-     * 5. Write 5 more entries to active map, to verify Log Entry Sync
-     * 6. Change the topology, backup 9030 will be the new active
+     * 5. Write 50 entries to active map, to verify Log Entry Sync
+     * 6. Right now both cluster have 50 entries,
+     *    and we have a cluster that is a backup of active when active has 10 entries.
+     *    Change the topology, the backup cluster 9030 will be the new active cluster.
      * 7. Trigger a force snapshot sync
      * 8. Verify the force snapshot sync is completed
      * 9. Write 5 entries to backup map, to verify Log Entry Sync
@@ -1052,7 +1054,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             mapActive.put(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
-        // Write 50 entries to standby map to make it have longer corfu log tail
+        // Write 50 entries of dummy data to standby map, so we make it have longer corfu log tail.
+        // We can also use it to confirm data is wiped during the snapshot sync.
         for (int i = 0; i < largeBatch; i++) {
             standbyRuntime.getObjectsView().TXBegin();
             mapStandby.put(String.valueOf(i), i);
@@ -1087,6 +1090,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         assertThat(mapActive.size()).isEqualTo(largeBatch);
 
         // Write 10 entries to backup map
+        // It is a backup of the active cluster when it has 10 entries
         for (int i = 0; i < firstBatch; i++) {
             backupRuntime.getObjectsView().TXBegin();
             mapBackup.put(String.valueOf(i), i);
