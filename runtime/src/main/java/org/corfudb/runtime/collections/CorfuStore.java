@@ -110,11 +110,13 @@ public class CorfuStore {
                              @Nullable final Class<M> mClass,
                              @Nonnull final TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+        long startTime = System.currentTimeMillis();
         Optional<Timer.Sample> sample = MeterRegistryProvider.getInstance().map(Timer::start);
         Table table =
                 runtime.getTableRegistry().openTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
         corfuStoreMetrics.recordTableCount();
         table.getMetrics().recordTableOpenTime(sample);
+        log.info("openTable {}${} took {}ms", namespace, tableName, (System.currentTimeMillis() - startTime));
         return table;
     }
 
