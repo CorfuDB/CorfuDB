@@ -18,7 +18,6 @@ import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileDescriptor;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
-import org.corfudb.runtime.collections.StreamManager;
 import org.corfudb.runtime.collections.StreamingManager;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.StreamingMapDecorator;
@@ -83,11 +82,6 @@ public class TableRegistry {
      * Connected runtime instance.
      */
     private final CorfuRuntime runtime;
-
-    /**
-     * A TableRegistry should just have one stream manager for lifecycle management.
-     */
-    private StreamManager streamManager;
 
     /**
      * A TableRegistry should just have one streaming manager for lifecycle management.
@@ -653,17 +647,6 @@ public class TableRegistry {
     }
 
     /**
-     * Register a stream subscription manager. We want only one of these per runtime.
-     */
-    @Deprecated
-    public synchronized StreamManager getStreamManager() {
-        if (this.streamManager == null) {
-            this.streamManager = new StreamManager(runtime);
-        }
-        return this.streamManager;
-    }
-
-    /**
      * Register a streaming subscription manager as a singleton.
      */
     public synchronized StreamingManager getStreamingManager() {
@@ -677,9 +660,6 @@ public class TableRegistry {
      * Shutdown the table register, cleaning up relevant resources.
      */
     public void shutdown() {
-        if (streamManager != null) {
-            streamManager.shutdown();
-        }
         if (streamingManager != null) {
             streamingManager.shutdown();
         }
