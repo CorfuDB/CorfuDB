@@ -478,7 +478,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
             assertThat(entry.getValue().count()).isEqualTo(expectedConsecutiveWrites);
 
             for (int i = 0; i < (expectedConsecutiveWrites); i++) {
-                assertThat(entry.getValue().get(Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build()).getPayload()).isNotNull();
+                try (TxnContext tx = corfuStoreStandby.txn(entry.getValue().getNamespace())) {
+                    assertThat(tx.getRecord(entry.getValue(),
+                            Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build()).getPayload()).isNotNull();
+                    tx.commit();
+                }
             }
         }
     }

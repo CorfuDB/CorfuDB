@@ -27,6 +27,7 @@ import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
+import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileName;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.ExampleSchemas.ExampleTableName;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
@@ -214,6 +215,34 @@ public class CorfuStoreBrowser {
                 tablename, namespace, streamUUID.toString(), tableSize);
         log.info("\n======================\n");
         return tableSize;
+    }
+
+    /**
+     * Helper to analyze all the protobufs used in this cluster
+     */
+    public int printAllProtoDescriptors() {
+        int numProtoFiles = -1;
+        log.info("=========PROTOBUF FILE NAMES===========");
+        for (ProtobufFileName protoFileName : runtime.getTableRegistry().getProtobufDescriptorTable().keySet()) {
+            try {
+                log.info("{}", JsonFormat.printer().print(protoFileName));
+            } catch (InvalidProtocolBufferException e) {
+                log.error("Unable to print protobuf for key {}", protoFileName, e);
+            }
+            numProtoFiles++;
+        }
+        log.info("=========PROTOBUF FILE DESCRIPTORS ===========");
+        for (ProtobufFileName protoFileName : runtime.getTableRegistry().getProtobufDescriptorTable().keySet()) {
+            try {
+                log.info("{}", JsonFormat.printer().print(protoFileName));
+                log.info("{}", JsonFormat.printer().print(
+                        runtime.getTableRegistry().getProtobufDescriptorTable().get(protoFileName).getPayload())
+                );
+            } catch (InvalidProtocolBufferException e) {
+                log.error("Unable to print protobuf for key {}", protoFileName, e);
+            }
+        }
+        return numProtoFiles;
     }
 
     /**
