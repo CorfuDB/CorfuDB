@@ -82,7 +82,7 @@ Options:
                                          (doseq [server (into [] (remove (set (.getLayoutServers layout)) (.getLayoutServers new-layout)))]
                                                 (do
                                                     (try
-                                                      (.get (.bootstrapLayout (get-layout-client (get-router server localcmd) 0 (.UUID (fromString "00000000-0000-0000-0000-000000000000"))) new-layout))
+                                                      (.get (.bootstrapLayout (get-layout-client (get-router server localcmd) 0 (uuid-from-string "00000000-0000-0000-0000-000000000000")) new-layout))
                                                       (catch Exception e
                                                         (println server ":" (.getMessage e))
                                                         (throw e)))
