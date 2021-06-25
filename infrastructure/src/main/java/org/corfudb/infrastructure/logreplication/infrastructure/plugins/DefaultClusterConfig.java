@@ -18,6 +18,9 @@ public final class DefaultClusterConfig {
     private static final List<String> standbyNodesUuid = Collections.singletonList("123e4567-e89b-12d3-a456-556642440123");
 
     @Getter
+    private static final List<String> backupNodesUuid = Collections.singletonList("923e4567-e89b-12d3-a456-556642440000");
+
+    @Getter
     private static final List<String> activeNodeNames = Collections.singletonList("standby_site_node0");
 
     @Getter
@@ -45,6 +48,9 @@ public final class DefaultClusterConfig {
     private static final String standbyLogReplicationPort = "9020";
 
     @Getter
+    private static final String backupLogReplicationPort = "9030";
+
+    @Getter
     private static final int logSenderBufferSize = 2;
 
     @Getter
@@ -70,12 +76,15 @@ public final class DefaultClusterConfig {
 
     public static String getDefaultNodeId(String endpoint) {
         String port = endpoint.split(":")[1];
-        if (port.equals(activeLogReplicationPort)) {
-            return activeNodesUuid.get(0);
-        } else if (port.equals(standbyLogReplicationPort)) {
-            return standbyNodesUuid.get(0);
-        } else {
-            return null;
+        switch (port) {
+            case activeLogReplicationPort:
+                return activeNodesUuid.get(0);
+            case standbyLogReplicationPort:
+                return standbyNodesUuid.get(0);
+            case backupLogReplicationPort:
+                return backupNodesUuid.get(0);
+            default:
+                return null;
         }
     }
 
