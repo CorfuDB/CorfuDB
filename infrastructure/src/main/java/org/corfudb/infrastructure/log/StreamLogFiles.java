@@ -138,17 +138,26 @@ public class StreamLogFiles implements StreamLog {
      *
      * @param serverContext Context object that provides server state such as epoch,
      *                      segment and start address
+     */
+    public StreamLogFiles(ServerContext serverContext) {
+        this(serverContext, !serverContext.getConfiguration().getVerifyChecksum());
+    }
+
+    /**
+     * Returns a file-based stream log object.
+     *
+     * @param serverContext Context object that provides server state such as epoch,
+     *                      segment and start address
      * @param noVerify      Disable checksum if true
      */
     public StreamLogFiles(ServerContext serverContext, boolean noVerify) {
-        logDir = Paths.get(serverContext.getServerConfig().get("--log-path").toString(), "log");
+        logDir = Paths.get(serverContext.getConfiguration().getLogDir());
         writeChannels = new ConcurrentHashMap<>();
         channelsToSync = new HashSet<>();
         this.verify = !noVerify;
         this.dataStore = new StreamLogDataStore(serverContext.getDataStore());
 
-        String logSizeLimitPercentageParam = (String) serverContext.getServerConfig().get("--log-size-quota-percentage");
-        final double logSizeLimitPercentage = Double.parseDouble(logSizeLimitPercentageParam);
+        final double logSizeLimitPercentage = serverContext.getConfiguration().getLogSizeQuota();
         if (logSizeLimitPercentage < 0.0 || 100.0 < logSizeLimitPercentage) {
             String msg = String.format("Invalid quota: quota(%f)%% must be between 0-100%%",
                     logSizeLimitPercentage);

@@ -81,7 +81,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         String dirPath = PARAMETERS.TEST_TEMP_DIR;
         serverContext = new ServerContextBuilder()
                 .setSingle(true)
-                .setNoVerify(false)
+                .setVerifyChecksum(true)
                 .setMemory(false)
                 .setLogPath(dirPath)
                 .setServerRouter(serverRouter)
@@ -195,7 +195,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
                 .setMemory(false)
                 .setLogPath(dirPath)
                 .setServerRouter(serverRouter)
-                .setLogSizeLimitPercentage(Double.toString(maxLogSizeInPercentage))
+                .setLogSizeLimitPercentage(maxLogSizeInPercentage)
                 .build();
         LogUnitServer server = new LogUnitServer(sc);
         serverRouter.addServer(server);
@@ -389,7 +389,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
                 testString, Collections.emptyMap()).get();
 
         // Corrupt the written log entry
-        String logDir = serverContext.getServerConfig().get("--log-path") + File.separator + "log";
+        String logDir = serverContext.getConfiguration().getLogDir();
         String logFilePath = logDir + File.separator + "0.log";
         RandomAccessFile file = new RandomAccessFile(logFilePath, "rw");
 

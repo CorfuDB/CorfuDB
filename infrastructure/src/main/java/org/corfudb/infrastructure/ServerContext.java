@@ -27,6 +27,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.infrastructure.configuration.ServerConfiguration;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
@@ -123,7 +124,7 @@ public class ServerContext implements AutoCloseable {
     public static final Duration SHUTDOWN_TIMER = Duration.ofSeconds(5);
 
     @Getter
-    private final Map<String, Object> serverConfig;
+    private final ServerConfiguration configuration;
 
     @Getter
     private final DataStore dataStore;
@@ -155,47 +156,30 @@ public class ServerContext implements AutoCloseable {
     /**
      * Returns a new ServerContext.
      *
-     * @param serverConfig map of configuration strings to objects
+     * @param conf server configuration object
      */
-    public ServerContext(Map<String, Object> serverConfig) {
-        this.serverConfig = serverConfig;
-        this.dataStore = new DataStore(serverConfig, this::dataStoreFileCleanup);
+    public ServerContext(ServerConfiguration conf) {
+        this.configuration = conf;
+        this.dataStore = new DataStore(configuration, this::dataStoreFileCleanup);
         generateNodeId();
         this.failureHandlerPolicy = new ConservativeFailureHandlerPolicy();
 
         // Setup the netty event loops. In tests, these loops may be provided by
         // a test framework to save resources.
-        final boolean providedEventLoops =
-                 getChannelImplementation().equals(ChannelImplementation.LOCAL);
 
-        if (providedEventLoops) {
-            clientGroup = getServerConfig(EventLoopGroup.class, "client");
-            workerGroup = getServerConfig(EventLoopGroup.class, "worker");
+        if (conf.getChannelImplementation().equals(ChannelImplementation.LOCAL)) {
+            clientGroup = conf.getTestClientEventLoop();
+            workerGroup = conf.getTestWorkerEventLoop();
         } else {
             clientGroup = getNewClientGroup();
             workerGroup = getNewWorkerGroup();
         }
 
         nodeLocator = NodeLocator
-                .parseString(serverConfig.get("--address") + ":" + serverConfig.get("<port>"));
+                .parseString(conf.getLocalServerEndpoint());
         localEndpoint = nodeLocator.toEndpointUrl();
     }
-
-    int getBaseServerThreadCount() {
-        Optional<String> threadCount = getServerConfig("--base-server-threads");
-        return threadCount.map(Integer::parseInt).orElse(1);
-    }
-
-    public int getLogUnitThreadCount() {
-        Optional<String> threadCount = getServerConfig("--logunit-threads");
-        return threadCount.map(Integer::parseInt).orElse(Runtime.getRuntime().availableProcessors() * 2);
-    }
-
-    public int getManagementServerThreadCount() {
-        Optional<String> threadCount = getServerConfig("--management-server-threads");
-        return threadCount.map(Integer::parseInt).orElse(4);
-    }
-
+    //TODO(NEIL): implement plugin config file path in ServerConfiguration, see if LayoutServerThreadCount has been moved
     public String getPluginConfigFilePath() {
         String pluginConfigFilePath = getServerConfig(String.class, "--plugin");
         return pluginConfigFilePath == null ? PLUGIN_CONFIG_FILE_PATH : pluginConfigFilePath;
@@ -229,11 +213,13 @@ public class ServerContext implements AutoCloseable {
      * Get the max number of messages can be sent over per batch.
      * @return
      */
+    //TODO(NEIL): add this field to ServerConfig
     public int getLogReplicationMaxNumMsgPerBatch() {
         String val = getServerConfig(String.class, "--snapshot-batch");
         return val == null ? DEFAULT_MAX_NUM_MSG_PER_BATCH : Integer.parseInt(val);
     }
 
+    //TODO(NEIL): add this field to ServerConfig
     public int getLockLeaseDuration() {
         Integer lockLeaseDuration;
         try {
@@ -251,6 +237,7 @@ public class ServerContext implements AutoCloseable {
      * @return
      */
     public int getLogReplicationMaxDataMessageSize() {
+        //TODO(NEIL): add this field to ServerConfig
         String val = getServerConfig(String.class, "--max-replication-data-message-size");
         return val == null ? MAX_DATA_MSG_SIZE_SUPPORTED : Integer.parseInt(val);
     }
@@ -261,14 +248,14 @@ public class ServerContext implements AutoCloseable {
      * retention limit. Cleanup is always done on files with lower epochs.
      */
     private void dataStoreFileCleanup(String fileName) {
-        String logDirPath = getServerConfig(String.class, "--log-path");
+        String logDirPath = configuration.getServerDir();
         if (logDirPath == null) {
             return;
         }
 
         File logDir = new File(logDirPath);
         Set<String> prefixesToClean = getDsFilePrefixesForCleanup();
-        int numRetention = Integer.parseInt(getServerConfig(String.class, "--metadata-retention"));
+        int numRetention = configuration.getMetadataRetention();
 
         prefixesToClean.stream()
                 .filter(fileName::startsWith)
@@ -299,16 +286,6 @@ public class ServerContext implements AutoCloseable {
     }
 
     /**
-     * Get the {@link ChannelImplementation} to use.
-     *
-     * @return The server channel type.
-     */
-    public ChannelImplementation getChannelImplementation() {
-        final String type = getServerConfig(String.class, "--implementation");
-        return ChannelImplementation.valueOf(type.toUpperCase());
-    }
-
-    /**
      * Get an instance of {@link CorfuRuntimeParameters} representing the default Corfu Runtime's
      * parameters.
      *
@@ -319,15 +296,15 @@ public class ServerContext implements AutoCloseable {
                 .priorityLevel(PriorityLevel.HIGH)
                 .nettyEventLoop(clientGroup)
                 .shutdownNettyEventLoop(false)
-                .tlsEnabled((Boolean) serverConfig.get("--enable-tls"))
-                .keyStore((String) serverConfig.get("--keystore"))
-                .ksPasswordFile((String) serverConfig.get("--keystore-password-file"))
-                .trustStore((String) serverConfig.get("--truststore"))
-                .tsPasswordFile((String) serverConfig.get("--truststore-password-file"))
-                .saslPlainTextEnabled((Boolean) serverConfig.get("--enable-sasl-plain-text-auth"))
-                .usernameFile((String) serverConfig.get("--sasl-plain-text-username-file"))
-                .passwordFile((String) serverConfig.get("--sasl-plain-text-password-file"))
-                .bulkReadSize(Integer.parseInt((String) serverConfig.get("--batch-size")))
+                .tlsEnabled(configuration.isTlsEnabled())
+                .keyStore(configuration.getKeystore())
+                .ksPasswordFile(configuration.getKeystorePasswordFile())
+                .trustStore(configuration.getTruststore())
+                .tsPasswordFile(configuration.getTruststorePasswordFile())
+                .saslPlainTextEnabled(configuration.getEnableSaslPlainTextAuth())
+                .usernameFile(configuration.getSaslPlainTextUsernameFile())
+                .passwordFile(configuration.getSaslPlainTextPasswordFile())
+                .bulkReadSize(configuration.getStateTransferBatchSize())
                 .build();
     }
 
@@ -362,30 +339,30 @@ public class ServerContext implements AutoCloseable {
         return getDataStore().get(NODE_ID_RECORD);
     }
 
-    /**
-     * Get a field from the server configuration map.
-     *
-     * @param type          The type of the field.
-     * @param optionName    The name of the option to retrieve.
-     * @param <T>           The type of the field to return.
-     * @return              The field with the give option name.
-     */
-    @SuppressWarnings("unchecked")
-    public <T> T getServerConfig(Class<T> type, String optionName) {
-        return (T) getServerConfig().get(optionName);
-    }
-
-    /**
-     * Get a field from the server configuration map.
-     *
-     * @param optionName    The name of the option to retrieve.
-     * @param <T>           The type of the field to return.
-     * @return              The field with the give option name.
-     */
-    @SuppressWarnings("unchecked")
-    public <T> Optional<T> getServerConfig(String optionName) {
-        return Optional.ofNullable((T) getServerConfig().get(optionName));
-    }
+//    /**
+//     * Get a field from the server configuration map.
+//     *
+//     * @param type          The type of the field.
+//     * @param optionName    The name of the option to retrieve.
+//     * @param <T>           The type of the field to return.
+//     * @return              The field with the give option name.
+//     */
+//    @SuppressWarnings("unchecked")
+//    public <T> T getServerConfig(Class<T> type, String optionName) {
+//        return (T) getServerConfig().get(optionName);
+//    }
+//
+//    /**
+//     * Get a field from the server configuration map.
+//     *
+//     * @param optionName    The name of the option to retrieve.
+//     * @param <T>           The type of the field to return.
+//     * @return              The field with the give option name.
+//     */
+//    @SuppressWarnings("unchecked")
+//    public <T> Optional<T> getServerConfig(String optionName) {
+//        return Optional.ofNullable((T) getServerConfig().get(optionName));
+//    }
 
     /**
      * Install a single node layout if and only if no layout is currently installed.
@@ -406,7 +383,7 @@ public class ServerContext implements AutoCloseable {
      * @return True if it is, false otherwise.
      */
     public boolean isSingleNodeSetup(){
-        return (Boolean) getServerConfig().get("--single");
+        return configuration.isSingleMode();
     }
 
     /**
@@ -417,7 +394,7 @@ public class ServerContext implements AutoCloseable {
      *  @throws IllegalArgumentException    If the cluster id was not auto, base64 or a UUID string
      */
     public Layout getNewSingleNodeLayout() {
-        final String clusterIdString = (String) getServerConfig().get("--cluster-id");
+        final String clusterIdString = configuration.getClusterId();
         UUID clusterId;
         if (clusterIdString.equals("auto")) {
             clusterId = UUID.randomUUID();
@@ -432,8 +409,7 @@ public class ServerContext implements AutoCloseable {
         }
         log.info("getNewSingleNodeLayout: Bootstrapping with cluster Id {} [{}]",
             clusterId, UuidUtils.asBase64(clusterId));
-        String localAddress = getServerConfig().get("--address") + ":"
-            + getServerConfig().get("<port>");
+        String localAddress = configuration.getLocalServerEndpoint();
         return new Layout(
             Collections.singletonList(localAddress),
             Collections.singletonList(localAddress),
@@ -667,16 +643,10 @@ public class ServerContext implements AutoCloseable {
                 .setNameFormat(getThreadPrefix() + "worker-%d")
                 .build();
 
-        final int requestedThreads =
-                Integer.parseInt(getServerConfig(String.class, "--Threads"));
-        final int numThreads = requestedThreads == 0
-                ? Runtime.getRuntime().availableProcessors() * 2
-                : requestedThreads;
-        EventLoopGroup group = getChannelImplementation().getGenerator()
-            .generate(numThreads, threadFactory);
+        EventLoopGroup group = configuration.getChannelImplementation().getGenerator().generate(configuration.getNumIOThreads(), threadFactory);
 
         log.info("getWorkerGroup: Type {} with {} threads",
-                group.getClass().getSimpleName(), numThreads);
+                group.getClass().getSimpleName(), configuration.getNumIOThreads());
         return group;
     }
 
@@ -690,16 +660,10 @@ public class ServerContext implements AutoCloseable {
                 .setNameFormat(getThreadPrefix() + "client-%d")
                 .build();
 
-        final int requestedThreads =
-            Integer.parseInt(getServerConfig(String.class, "--Threads"));
-        final int numThreads = requestedThreads == 0
-            ? Runtime.getRuntime().availableProcessors() * 2
-            : requestedThreads;
-        EventLoopGroup group = getChannelImplementation().getGenerator()
-            .generate(numThreads, threadFactory);
+        EventLoopGroup group = configuration.getChannelImplementation().getGenerator().generate(6, threadFactory);
 
         log.info("getClientGroup: Type {} with {} threads",
-            group.getClass().getSimpleName(), numThreads);
+            group.getClass().getSimpleName(), 6);
         return group;
     }
 
@@ -709,12 +673,7 @@ public class ServerContext implements AutoCloseable {
      * @return A string that should be prepended to threads this server creates.
      */
     public @Nonnull String getThreadPrefix() {
-        final String prefix = getServerConfig(String.class, "--Prefix");
-        if (prefix.equals("")) {
-            return "";
-        } else {
-            return prefix + "-";
-        }
+        return "corfu-"
     }
 
     /**
@@ -727,7 +686,7 @@ public class ServerContext implements AutoCloseable {
     public void close() {
         CorfuRuntimeParameters params = getManagementRuntimeParameters();
         // Shutdown the active event loops unless they were provided to us
-        if (!getChannelImplementation().equals(ChannelImplementation.LOCAL)) {
+        if (!configuration.getChannelImplementation().equals(ChannelImplementation.LOCAL)) {
             clientGroup.shutdownGracefully(
                     params.getNettyShutdownQuitePeriod(),
                     params.getNettyShutdownTimeout(),

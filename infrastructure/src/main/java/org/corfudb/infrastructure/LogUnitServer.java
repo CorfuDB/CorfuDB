@@ -88,11 +88,6 @@ import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 public class LogUnitServer extends AbstractServer {
 
     /**
-     * The options map.
-     */
-    private final LogUnitServerConfig config;
-
-    /**
      * The server context of the node.
      */
     private final ServerContext serverContext;
@@ -135,23 +130,23 @@ public class LogUnitServer extends AbstractServer {
      */
     public LogUnitServer(ServerContext serverContext, LogUnitServerInitializer serverInitializer) {
         this.serverContext = serverContext;
-        config = LogUnitServerConfig.parse(serverContext.getServerConfig());
-        executor = serverContext.getExecutorService(serverContext.getLogUnitThreadCount(), "LogUnit-");
+        executor = serverContext.getExecutorService(serverContext.getConfiguration().getNumLogUnitWorkerThreads(),
+                "LogUnit-");
 
-        if (config.isMemoryMode()) {
+        if (serverContext.getConfiguration().isInMemoryMode()) {
             log.warn("Log unit opened in-memory mode (Maximum size={}). "
                     + "This should be run for testing purposes only. "
                     + "If you exceed the maximum size of the unit, old entries will be "
                     + "AUTOMATICALLY trimmed. "
                     + "The unit WILL LOSE ALL DATA if it exits.", Utils
-                    .convertToByteStringRepresentation(config.getMaxCacheSize()));
+                    .convertToByteStringRepresentation(serverContext.getConfiguration().getMaxLogUnitCacheSize()));
             streamLog = serverInitializer.buildInMemoryStreamLog();
         } else {
-            streamLog = serverInitializer.buildStreamLog(config, serverContext);
+            streamLog = serverInitializer.buildStreamLog(serverContext);
         }
 
-        dataCache = serverInitializer.buildLogUnitServerCache(config, streamLog);
-        batchWriter = serverInitializer.buildBatchProcessor(config, streamLog, serverContext);
+        dataCache = serverInitializer.buildLogUnitServerCache(streamLog, serverContext);
+        batchWriter = serverInitializer.buildBatchProcessor(streamLog, serverContext);
         logCleaner = serverInitializer.buildStreamLogCompaction(streamLog);
     }
 
@@ -544,7 +539,7 @@ public class LogUnitServer extends AbstractServer {
 
     @VisibleForTesting
     long getMaxCacheSize() {
-        return config.getMaxCacheSize();
+        return serverContext.getConfiguration().getMaxLogUnitCacheSize();
     }
 
     @VisibleForTesting
@@ -558,37 +553,6 @@ public class LogUnitServer extends AbstractServer {
     }
 
     /**
-     * Log unit server parameters.
-     */
-    @Builder
-    @Getter
-    public static class LogUnitServerConfig {
-        private final double cacheSizeHeapRatio;
-        private final long maxCacheSize;
-        private final boolean memoryMode;
-        private final boolean noVerify;
-        private final boolean noSync;
-
-        /**
-         * Parse legacy configuration options
-         *
-         * @param opts legacy config
-         * @return log unit configuration
-         */
-        public static LogUnitServerConfig parse(Map<String, Object> opts) {
-            double cacheSizeHeapRatio = Double.parseDouble((String) opts.get("--cache-heap-ratio"));
-
-            return LogUnitServerConfig.builder()
-                    .cacheSizeHeapRatio(cacheSizeHeapRatio)
-                    .maxCacheSize((long) (Runtime.getRuntime().maxMemory() * cacheSizeHeapRatio))
-                    .memoryMode(Boolean.parseBoolean(opts.get("--memory").toString()))
-                    .noVerify((Boolean) opts.get("--no-verify"))
-                    .noSync((Boolean) opts.get("--no-sync"))
-                    .build();
-        }
-    }
-
-    /**
      * Utility class used by the LogUnit server to initialize its components,
      * including the StreamLog, LogUnitServerCache, BatchProcessor and StreamLogCompaction.
      * This facilitates the injection of mocked objects during unit tests.
@@ -598,20 +562,18 @@ public class LogUnitServer extends AbstractServer {
             return new InMemoryStreamLog();
         }
 
-        StreamLog buildStreamLog(@Nonnull LogUnitServerConfig config,
-                                 @Nonnull ServerContext serverContext) {
-            return new StreamLogFiles(serverContext, config.isNoVerify());
+        StreamLog buildStreamLog(@Nonnull ServerContext serverContext) {
+            return new StreamLogFiles(serverContext);
         }
 
-        LogUnitServerCache buildLogUnitServerCache(@Nonnull LogUnitServerConfig config,
-                                                   @Nonnull StreamLog streamLog) {
-            return new LogUnitServerCache(config, streamLog);
+        LogUnitServerCache buildLogUnitServerCache(@Nonnull StreamLog streamLog,
+                                                   @Nonnull ServerContext  serverContext) {
+            return new LogUnitServerCache(streamLog, serverContext.getConfiguration().getMaxLogUnitCacheSize());
         }
 
-        BatchProcessor buildBatchProcessor(@Nonnull LogUnitServerConfig config,
-                                           @Nonnull StreamLog streamLog,
+        BatchProcessor buildBatchProcessor(@Nonnull StreamLog streamLog,
                                            @Nonnull ServerContext serverContext) {
-            return new BatchProcessor(streamLog, serverContext.getServerEpoch(), !config.isNoSync());
+            return new BatchProcessor(streamLog, serverContext.getServerEpoch(), serverContext.getConfiguration().getSyncData());
         }
 
         StreamLogCompaction buildStreamLogCompaction(@Nonnull StreamLog streamLog) {

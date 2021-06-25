@@ -115,7 +115,7 @@ public class LogUnitCacheTest extends AbstractServerTest {
         LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
-                .setCacheSizeHeapRatio(String.valueOf(randomCacheRatio))
+                .setCacheSizeHeapRatio(randomCacheRatio)
                 .build());
 
         assertThat(s1).hasMaxCorrectCacheSize(randomCacheRatio);

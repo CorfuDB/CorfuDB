@@ -12,7 +12,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.common.util.Memory;
-import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -48,11 +47,11 @@ public class LogUnitServerCache {
     private final String hitRatioName = "logunit.cache.hit_ratio";
     private final String weightName = "logunit.cache.weight";
 
-    public LogUnitServerCache(LogUnitServerConfig config, StreamLog streamLog) {
+    public LogUnitServerCache(StreamLog streamLog, long maxSize) {
         this.streamLog = streamLog;
         this.dataCache = Caffeine.newBuilder()
                 .<Long, ILogData>weigher((addr, logData) -> getLogDataTotalSize(logData))
-                .maximumWeight(config.getMaxCacheSize())
+                .maximumWeight(maxSize)
                 .recordStats()
                 .executor(Runnable::run)
                 .removalListener(this::handleEviction)

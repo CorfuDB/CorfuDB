@@ -59,7 +59,7 @@ public abstract class AbstractCorfuServer<T extends CorfuServerParams, U extends
 
         cmd.append(" -d ").append(params.getLogLevel().toString()).append(" ");
 
-        cmd.append(params.getPort());
+        cmd.append(" -p ").append(params.getPort());
 
         String cmdLineParams = cmd.toString();
         log.trace("Corfu server. Command line parameters: {}", cmdLineParams);

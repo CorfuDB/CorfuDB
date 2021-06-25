@@ -511,17 +511,17 @@ public class LogUnitServerTest extends AbstractServerTest {
 
     @Test(expected = RuntimeException.class)
     public void testVerifyWithNoVerifyLog() throws Exception {
-        boolean noVerify = true;
+        boolean verifyChecksum = false;
 
         // Generate a log file without computing the checksum for log entries
         String tempDir = PARAMETERS.TEST_TEMP_DIR;
-        createLogFile(tempDir, StreamLogFiles.VERSION + 1, noVerify);
+        createLogFile(tempDir, StreamLogFiles.VERSION + 1, !verifyChecksum);
 
         // Start a new logging version
         ServerContextBuilder builder = new ServerContextBuilder();
         builder.setMemory(false);
         builder.setLogPath(tempDir);
-        builder.setNoVerify(!noVerify);
+        builder.setVerifyChecksum(verifyChecksum);
         ServerContext context = builder.build();
         LogUnitServer logunit = new LogUnitServer(context);
     }

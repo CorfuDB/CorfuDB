@@ -146,7 +146,7 @@ public class ManagementServer extends AbstractServer {
 
         corfuRuntime = SingletonResource.withInitial(this::getNewCorfuRuntime);
 
-        executor = serverContext.getExecutorService(serverContext.getManagementServerThreadCount(), "management-");
+        executor = serverContext.getExecutorService(serverContext.getConfiguration().getNumManagementServerThreads(), "management-");
         failureHandlerPolicy = serverContext.getFailureHandlerPolicy();
 
         clusterContext = serverInitializer.buildDefaultClusterContext(serverContext);

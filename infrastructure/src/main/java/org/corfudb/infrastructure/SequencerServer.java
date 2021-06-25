@@ -185,14 +185,13 @@ public class SequencerServer extends AbstractServer {
                            SequencerServerInitializer sequencerFactoryHelper) {
         this.serverContext = serverContext;
         this.sequencerFactoryHelper = sequencerFactoryHelper;
-        Config config = Config.parse(serverContext.getServerConfig());
 
         // Sequencer server is single threaded by current design
         executor = serverContext.getExecutorService(1, "sequencer-");
 
         globalLogTail = sequencerFactoryHelper.getGlobalLogTail();
         cache = sequencerFactoryHelper.getSequencerServerCache(
-                config.getCacheSize(),
+                serverContext.getConfiguration().getSequencerConflictWindowSize(),
                 globalLogTail - 1
         );
         streamsAddressMap = sequencerFactoryHelper.getStreamAddressSpaceMap();
@@ -811,27 +810,6 @@ public class SequencerServer extends AbstractServer {
         }
 
         return requestedAddressSpaces;
-    }
-
-    /**
-     * Sequencer server configuration
-     */
-    @Builder
-    @Getter
-    public static class Config {
-        private static final int DEFAULT_CACHE_SIZE = 250_000;
-
-        @Default
-        private final int cacheSize = DEFAULT_CACHE_SIZE;
-
-        public static Config parse(Map<String, Object> opts) {
-            int cacheSize = opts.containsKey("--sequencer-cache-size") ?
-                    Integer.parseInt((String) opts.get("--sequencer-cache-size")) :
-                    DEFAULT_CACHE_SIZE;
-            return Config.builder()
-                    .cacheSize(cacheSize)
-                    .build();
-        }
     }
 
 
