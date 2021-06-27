@@ -178,7 +178,7 @@ jobs:
         continue-on-error: true
 
       - name: Prepare top of trunk docker image
-        run: ./mvnw clean install -DskipTests -Pdocker -Dmaven.javadoc.skip=true -T 1C
+        run: ./mvnw clean package -DskipTests -Pdocker -Dmaven.javadoc.skip=true -T 1C
 
       - uses: actions/checkout@v2
         with:
@@ -194,4 +194,4 @@ jobs:
 
       - name: Run injection framework verification
         working-directory: ./tests/build/corfu-longevity-app
-        run: docker run -v correctness.log:/injection_framework/correctness.log corfudb/injection-framework-verification:latest
+        run: docker run -v ${PWD}/correctness.log:/injection_framework/correctness.log corfudb/injection-framework-verification:latest
