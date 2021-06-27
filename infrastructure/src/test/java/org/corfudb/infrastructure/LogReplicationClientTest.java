@@ -8,7 +8,6 @@ import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClient;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationHandler;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
-import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationLeadershipLossResponseMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationLeadershipResponseMsg;
