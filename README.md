@@ -17,9 +17,9 @@ software architecture and example usage.
 ### Table of Contents
 [System Requirements](#what-do-i-need-to-run-corfu) 
 
-[Corfu Basics](#corfu-basics)
+[Corfu Basics](#so-how-does-corfu-work)
 
-[Corfu Quick Start](#ok-great-get-me-started-running-corfu)
+[Corfu Quick Start](#ok-great---get-me-started-running-corfu)
 
 [Developing with Corfu](#now-i-want-to-write-a-program-that-uses-corfu)
 
