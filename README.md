@@ -163,7 +163,9 @@ You should get output similar to this:
       ]
     }
   ],
-  "epoch": 0
+  "unresponsiveServers": [],
+  "epoch": 0,
+  "clusterId": "fd3802dc-9db4-4a7c-98d6-1aecfbc964ae"
 }
 ```
 
@@ -238,38 +240,27 @@ a single failure.
 
 To learn more about segments, see the [Corfu wiki](https://github.com/CorfuDB/CorfuDB/wiki).
 
-To scale Corfu, we add additional ``stripes''. To add an additional stripe, first 
-start a new ```corfu_server``` on port 9002:
+To add more nodes, begin by 
+starting a new ```corfu_server``` on port 9002:
 ```
 ./CorfuDB/bin/corfu_server -m 9002
 ```
-Redeploy this cluster with the following additions to layout.json:
-The layoutServers line should read:
-```json
-  "layoutServers": [
-    "localhost:9000", "localhost:9001", "localhost:9002"
-  ],
-```
-This time we add localhost:9002 as a new stripe.
 
-```json
-      "stripes": [
-        {
-          "logServers": [
-            "localhost:9000",
-            "localhost:9001"
-          ]
-        },
-        {
-          "logServers": [
-            "localhost:9002"
-          ]
-        }
-      ]
+The server can be added to the existing cluster:
+```
+./CorfuDB/bin/corfu_add_node -c localhost:9000,localhost:9001 -n localhost:9002
 ```
 
-This adds the logunit at localhost:9002 as an additional stripe in the system. That is, writes to even addresses will now go to
-localhost:9000 and localhost:9001, while writes to odd addresses will go to localhost:9002.
+If you now check the layout of the cluster:
+```
+./CorfuDB/bin/corfu_layouts query -c localhost:9000,localhost:9001,localhost:9002
+```
+You will see that the cluster contains the new node.
+
+To remove the added node from the cluster:
+```
+./CorfuDB/bin/corfu_remove_node -c localhost:9000,localhost:9001,localhost:9002 -n localhost:9002
+```
 
 ## Now I want to write a program that uses Corfu!
 
