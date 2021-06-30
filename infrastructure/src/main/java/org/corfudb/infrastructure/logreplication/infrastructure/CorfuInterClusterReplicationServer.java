@@ -4,10 +4,12 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.joran.spi.JoranException;
+import io.grpc.Server;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.configuration.ServerConfiguration;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -42,6 +44,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      * <p>Note that the java implementation of docopt has a strange requirement
      * that each option must be preceded with a space.
      */
+    //TODO(NEIL): consolidate if possible
     private static final String USAGE =
             "Corfu Log Replication Server, the server for replication across clusters.\n"
                     + "\n"
@@ -231,14 +234,16 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                 .withVersion(GitRepositoryState.getRepositoryState().describe)
                 .parse(args);
 
-        printStartupMsg(opts);
-        configureLogger(opts);
+        ServerConfiguration conf = ServerConfiguration.getServerConfigFromMap(opts);
 
-        log.info("Started with arguments: {}", opts);
+        printStartupMsg(conf);
+        configureLogger(conf);
 
-        ServerContext serverContext = getServerContext(opts);
+        log.info("Started with arguments: {}", conf);
 
-        configureMetrics(opts, serverContext.getLocalEndpoint());
+        ServerContext serverContext = getServerContext(conf);
+
+        configureMetrics(conf, serverContext.getLocalEndpoint());
 
         // Register shutdown handler
         Thread shutdownThread = new Thread(this::cleanShutdown);
@@ -276,23 +281,8 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         flushAsyncLogAppender();
     }
 
-    private ServerContext getServerContext(Map<String, Object> opts ) {
-        // Bind to all interfaces only if no address or interface specified by the user.
-        // Fetch the address if given a network interface.
-        if (opts.get("--network-interface") != null) {
-            opts.put("--address", getAddressFromInterfaceName((String) opts.get("--network-interface")));
-            opts.put("--bind-to-all-interfaces", false);
-        } else if (opts.get("--address") == null) {
-            // Default the address to localhost and set the bind to all interfaces flag to true,
-            // if the address and interface is not specified.
-            opts.put("--bind-to-all-interfaces", true);
-            opts.put("--address", "localhost");
-        } else {
-            // Address is specified by the user.
-            opts.put("--bind-to-all-interfaces", false);
-        }
-
-        return new ServerContext(opts);
+    private ServerContext getServerContext(ServerConfiguration conf) {
+        return new ServerContext(conf);
     }
 
     /**
@@ -325,17 +315,17 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      * - pick the correct logging level before outputting error messages
      * - add serverEndpoint information
      *
-     * @param opts command line parameters
+     * @param conf Server Configuration Options
      * @throws JoranException logback exception
      */
-    private static void configureLogger(Map<String, Object> opts) {
+    private static void configureLogger(ServerConfiguration conf) {
         final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
-        final Level level = Level.toLevel(((String) opts.get("--log-level")).toUpperCase());
+        final Level level = conf.getLogLevel();
         root.setLevel(level);
     }
 
-    public static void configureMetrics(Map<String, Object> opts, String localEndpoint) {
-        if ((boolean) opts.get("--metrics")) {
+    public static void configureMetrics(ServerConfiguration conf, String localEndpoint) {
+        if (conf.isMetricsEnabled()) {
             try {
                 LoggerContext context =  (LoggerContext) LoggerFactory.getILoggerFactory();
                 Optional.ofNullable(context.exists(DEFAULT_METRICS_LOGGER_NAME))
@@ -399,15 +389,15 @@ public class CorfuInterClusterReplicationServer implements Runnable {
     /**
      * Print the welcome message, logo and the arguments for Log Replication Server
      *
-     * @param opts Arguments.
+     * @param conf Server Configuration.
      */
-    private static void printStartupMsg(Map<String, Object> opts) {
+    private static void printStartupMsg(ServerConfiguration conf) {
             printLogo();
             println("");
             println("------------------------------------");
             println("Initializing LOG REPLICATION SERVER");
             println("Version (" + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")");
-            final int port = Integer.parseInt((String) opts.get("<port>"));
+            final int port = conf.getServerPort();
             println("Serving on port " + port);
             println("------------------------------------");
             println("");

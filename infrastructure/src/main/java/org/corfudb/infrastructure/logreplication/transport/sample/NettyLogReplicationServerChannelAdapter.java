@@ -45,7 +45,7 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
             @Nonnull ServerContext serverContext,
             @Nonnull LogReplicationServerRouter router) {
         super(serverContext, router);
-        this.port = Integer.parseInt((String) serverContext.getServerConfig().get("<port>"));
+        this.port = serverContext.getConfiguration().getServerPort();
         this.nettyServerChannel = new CorfuNettyServerChannel(this);
     }
 
@@ -92,12 +92,10 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
         try {
             ServerBootstrap bootstrap = new ServerBootstrap();
             bootstrap.group(serverContext.getWorkerGroup())
-                    .channel(serverContext.getChannelImplementation().getServerChannelClass());
+                    .channel(serverContext.getConfiguration().getChannelImplementation().getServerChannelClass());
             bootstrapConfigurer.configure(bootstrap);
             bootstrap.childHandler(getServerChannelInitializer(serverContext));
-            boolean bindToAllInterfaces =
-                    Optional.ofNullable(getServerContext().getServerConfig(Boolean.class, "--bind-to-all-interfaces"))
-                            .orElse(false);
+            boolean bindToAllInterfaces = getServerContext().getConfiguration().getBindToAllInterfaces();
             if (bindToAllInterfaces) {
                 log.info("Log Replication Server listening on all interfaces on port:{}", port);
                 return bootstrap.bind(port).sync();
@@ -117,7 +115,7 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
     private ChannelFuture startServer() {
         bindFuture = bindServer(getServerContext(),
                 this::configureBootstrapOptions,
-                (String) getServerContext().getServerConfig().get("--address"),
+                getServerContext().getConfiguration().getHostAddress(),
                 port);
 
         return bindFuture.syncUninterruptibly();
@@ -157,12 +155,11 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
                 final String[] enabledTlsCipherSuites;
 
                 // Security Initialization
-                Boolean tlsEnabled = context.getServerConfig(Boolean.class, "--enable-tls");
-                Boolean tlsMutualAuthEnabled = context.getServerConfig(Boolean.class,
-                        "--enable-tls-mutual-auth");
+                Boolean tlsEnabled = context.getConfiguration().isTlsEnabled();
+                Boolean tlsMutualAuthEnabled = context.getConfiguration().getEnableTlsMutualAuth();
                 if (tlsEnabled) {
                     // Get the TLS cipher suites to enable
-                    String ciphs = context.getServerConfig(String.class, "--tls-ciphers");
+                    String ciphs = context.getConfiguration().getTlsCiphers();
                     if (ciphs != null) {
                         enabledTlsCipherSuites = Pattern.compile(",")
                                 .splitAsStream(ciphs)
@@ -173,7 +170,7 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
                     }
 
                     // Get the TLS protocols to enable
-                    String protos = context.getServerConfig(String.class, "--tls-protocols");
+                    String protos = context.getConfiguration().getTlsProtocols();
                     if (protos != null) {
                         enabledTlsProtocols = Pattern.compile(",")
                                 .splitAsStream(protos)
@@ -185,11 +182,10 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
 
                     try {
                         sslContext = SslContextConstructor.constructSslContext(true,
-                                context.getServerConfig(String.class, "--keystore"),
-                                context.getServerConfig(String.class, "--keystore-password-file"),
-                                context.getServerConfig(String.class, "--truststore"),
-                                context.getServerConfig(String.class,
-                                        "--truststore-password-file"));
+                                context.getConfiguration().getKeystore(),
+                                context.getConfiguration().getKeystorePasswordFile(),
+                                context.getConfiguration().getTruststore(),
+                                context.getConfiguration().getTruststorePasswordFile());
                     } catch (SSLException e) {
                         log.error("Could not build the SSL context", e);
                         throw new RuntimeException("Couldn't build the SSL context", e);
@@ -200,8 +196,7 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
                     sslContext = null;
                 }
 
-                Boolean saslPlainTextAuth = context.getServerConfig(Boolean.class,
-                        "--enable-sasl-plain-text-auth");
+                Boolean saslPlainTextAuth = context.getConfiguration().getEnableSaslPlainTextAuth();
 
                 // If TLS is enabled, setup the encryption pipeline.
                 if (tlsEnabled) {
