@@ -1,12 +1,15 @@
 package org.corfudb.infrastructure.configuration;
-
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 
 import ch.qos.logback.classic.Level;
+import io.grpc.Server;
 import io.netty.channel.EventLoopGroup;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.configuration.PropertiesConfiguration;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.utils.lock.Lock;
 
 import java.io.File;
 import java.util.HashMap;
@@ -65,6 +68,16 @@ public class ServerConfiguration extends PropertiesConfiguration {
     private static final String STATE_TRANSFER_BATCH_SIZE = "stateTransferBatchSize";
     private static final String NUM_MANAGEMENT_SERVER_THREADS = "numManagementServerThreads";
 
+    //Added parameters
+    private static final String AUTO_COMMIT = "autoCommit";
+    private static final String MAX_REPLICATION_DATA_MESSAGE_SIZE = "maxReplicationDataMessageSize";
+    private static final String COMPACT_RATE = "compactRate";
+    private static final String PLUGIN_CONFIG_FILE_PATH = "pluginConfigFilePath";
+    private static final String ENABLE_METRICS = "enableMetrics";
+    private static final String SNAPSHOT_BATCH_SIZE = "snapshotBatchSize";
+    private static final String LOCK_LEASE_DURATION = "lockLeaseDuration";
+    private static final String THREAD_PREFIX = "threadPrefix";
+
     // The underlying map of PropertiesConfiguration can't be used to store an EventLoopGroup,
     // so a separate map is needed. This shouldn't be here, but the Unit Tests rely on
     // these event loops to be here
@@ -109,6 +122,82 @@ public class ServerConfiguration extends PropertiesConfiguration {
         } else if (!cmdOptions.getArgList().isEmpty()) {
             throw new IllegalArgumentException("Unknown arguments: " + cmdOptions.getArgList());
         }
+
+        return conf;
+    }
+
+    public static ServerConfiguration getServerConfigFromMap(Map<String, Object> opts) {
+        ServerConfiguration conf = new ServerConfiguration();
+        if (opts.containsKey("--memory")) {
+            conf.setInMemoryMode(true);
+        } else {
+            conf.setServerDirectory((String) opts.get("--log-path"));
+        }
+        conf.setVerifyChecksum(!opts.containsKey("--no-verify"));
+        conf.setSyncData(!opts.containsKey("--no-sync"));
+        conf.setSingleMode(opts.containsKey("--single"));
+        conf.setAutoCommit(opts.containsKey("--no-auto-commit"));
+
+        if (opts.containsKey("--address")) {
+            conf.setHostAddress((String) opts.get("--address"));
+        } else if (opts.containsKey("--network-interface")){
+            conf.setNetworkInterface((String) opts.get("--network-interface"));
+        } else {
+            conf.setHostAddress("localhost");
+        }
+        conf.setMaxReplicationDataMessageSize(Integer.parseInt((String) opts.getOrDefault("--max-replication-data-message-size", Integer.toString(MAX_DATA_MSG_SIZE_SUPPORTED))));
+        conf.setLogUnitCacheRatio(Double.parseDouble((String) opts.getOrDefault("--cache-heap-ratio", "0.5")));
+        conf.setLogLevel((String) opts.getOrDefault("--log-level", "INFO"));
+        conf.setCompactRate(Integer.parseInt((String) opts.getOrDefault("--compact", "60")));
+        conf.setPluginConfigFilePath((String) opts.get("--plugin"));
+        conf.setNumBaseServerThreads(Integer.parseInt((String) opts.get("--base-server-threads")));
+        conf.setLogSizeQuota(Double.parseDouble((String) opts.getOrDefault("--log-size-quota-percentage", "100.0")));
+
+        //TODO(NEIL): double check
+        conf.setNumLogUnitWorkerThreads(Integer.parseInt((String) opts.getOrDefault("--logunit-threads", "4")));
+        conf.setNumLayoutServerThreads(Integer.parseInt((String) opts.getOrDefault("--management-server-threads", "4")));
+        conf.setNumIOThreads(Integer.parseInt((String) opts.getOrDefault("--Threads", "4")));
+
+        conf.setEnableTls(opts.containsKey("--enable-tls"));
+        conf.setKeystore((String) opts.get("--keystore"));
+        conf.setKeystorePasswordFile((String) opts.get("--keystore-password-file"));
+        conf.setTruststore((String) opts.get("--truststore"));
+        conf.setTruststorePasswordFile((String) opts.get("--truststore-password-file"));
+        conf.setEnableTlsMutualAuth(opts.containsKey("--enable-tls-mutual-auth"));
+        conf.setEnableSaslPlainTextAuth(opts.containsKey("--enable-sasl-plain-text-auth"));
+        conf.setSaslPlainTextUserFile((String) opts.get("--sasl-plain-text-username-file"));
+        conf.setSaslPlainTextPasswordFile((String) opts.get("--sasl-plain-text-password-file"));
+        conf.setSequencerConflictWindowSize(Integer.parseInt((String) opts.getOrDefault("--sequencer-cache-size","250000")));
+
+        conf.setStateTransferBatchSize(Integer.parseInt((String) opts.getOrDefault("--batch-size", "100")));
+
+        String implementationType = (String) opts.getOrDefault("--implementation","");
+        if (implementationType.equals("auto")) {
+            conf.setChannelImplementation(ChannelImplementation.AUTO);
+        } else if (implementationType.equals("local")) {
+            conf.setChannelImplementation(ChannelImplementation.LOCAL);
+        } else if (implementationType.equals("epoll")) {
+            conf.setChannelImplementation(ChannelImplementation.EPOLL);
+        } else if (implementationType.equals("kqueue")) {
+            conf.setChannelImplementation(ChannelImplementation.KQUEUE);
+        } else {
+            conf.setChannelImplementation(ChannelImplementation.NIO);
+        }
+
+        conf.setHandshakeTimeout(Integer.parseInt((String) opts.getOrDefault("--HandshakeTimeout", "10")));
+        conf.setClusterId((String) opts.getOrDefault("--cluster-id", "auto"));
+
+        //TODO(NEIL): find out if the Cipher has some constants file
+        conf.setTlsCiphers((String) opts.getOrDefault("--tls-ciphers","TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"));
+        conf.setTlsProtocols((String) opts.getOrDefault("--tls-protocols", "TLSv1.1,TLSv1.2"));
+
+        conf.setEnableMetrics(opts.containsKey("--metrics"));
+        conf.setSnapshotBatchSize(Integer.parseInt((String) opts.getOrDefault("--snapshot-batch", Integer.toString(DEFAULT_MAX_NUM_MSG_PER_BATCH))));
+        conf.setLockLeaseDuration(Integer.parseInt((String) opts.getOrDefault("--lock-lease", Integer.toString(Lock.leaseDuration))));
+        conf.setThreadPrefix((String) opts.getOrDefault("--Prefix", ""));
+        conf.setMetadataRetention(Integer.parseInt((String) opts.getOrDefault("--metadata-retention", "1000")));
+
+        conf.setServerPort(Integer.parseInt((String) opts.get("<port>")));
 
         return conf;
     }
@@ -442,6 +531,15 @@ public class ServerConfiguration extends PropertiesConfiguration {
         return getBoolean(SYNC_DATA, true);
     }
 
+    public ServerConfiguration setAutoCommit(boolean autoCommit) {
+        setProperty(AUTO_COMMIT, autoCommit);
+        return this;
+    }
+
+    public boolean getAutoCommit() {
+        return getBoolean(AUTO_COMMIT, true);
+    }
+
     public ServerConfiguration setNumLogUnitWorkerThreads(int numThreads) {
         setProperty(NUM_LOGUNIT_WORKER_THREADS, numThreads);
         return this;
@@ -489,6 +587,69 @@ public class ServerConfiguration extends PropertiesConfiguration {
 
     public int getNumManagementServerThreads() {
         return getInt(NUM_MANAGEMENT_SERVER_THREADS, 4);
+    }
+
+    public ServerConfiguration setMaxReplicationDataMessageSize(int maxReplicationDataMessageSize) {
+        setProperty(MAX_REPLICATION_DATA_MESSAGE_SIZE, maxReplicationDataMessageSize);
+        return this;
+    }
+
+    public int getMaxReplicationDataMessageSize() {
+        return getInt(MAX_REPLICATION_DATA_MESSAGE_SIZE,MAX_DATA_MSG_SIZE_SUPPORTED);
+    }
+
+    public ServerConfiguration setCompactRate(int compactRate) {
+        setProperty(COMPACT_RATE, compactRate);
+        return this;
+    }
+
+    public int getCompactRate() {
+        return getInt(COMPACT_RATE, 60);
+    }
+
+    public ServerConfiguration setPluginConfigFilePath(String pluginConfigFilePath) {
+        setProperty(PLUGIN_CONFIG_FILE_PATH, pluginConfigFilePath);
+        return this;
+    }
+
+    public String getPluginConfigFilePath() {
+        return getString(PLUGIN_CONFIG_FILE_PATH);
+    }
+
+    public ServerConfiguration setEnableMetrics(boolean enableMetrics) {
+        setProperty(ENABLE_METRICS, enableMetrics);
+        return this;
+    }
+
+    public boolean isMetricsEnabled() {
+        return getBoolean(ENABLE_METRICS, false);
+    }
+
+    public ServerConfiguration setSnapshotBatchSize(int snapshotBatchSize) {
+        setProperty(SNAPSHOT_BATCH_SIZE, snapshotBatchSize);
+        return this;
+    }
+
+    public int getSnapshotBatchSize() {
+        return getInt(SNAPSHOT_BATCH_SIZE, DEFAULT_MAX_NUM_MSG_PER_BATCH);
+    }
+
+    public ServerConfiguration setLockLeaseDuration(int lockLeaseDuration) {
+        setProperty(LOCK_LEASE_DURATION, lockLeaseDuration);
+        return this;
+    }
+
+    public int getLockLeaseDuration() {
+        return getInt(LOCK_LEASE_DURATION, Lock.leaseDuration);
+    }
+
+    public ServerConfiguration setThreadPrefix(String threadPrefix) {
+        setProperty(THREAD_PREFIX, threadPrefix);
+        return this;
+    }
+
+    public String getThreadPrefix() {
+        return getString(THREAD_PREFIX, "");
     }
 
     @Override

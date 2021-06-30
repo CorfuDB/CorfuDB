@@ -1,8 +1,5 @@
 package org.corfudb.infrastructure;
 
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
-
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.EventLoopGroup;
@@ -179,9 +176,9 @@ public class ServerContext implements AutoCloseable {
                 .parseString(conf.getLocalServerEndpoint());
         localEndpoint = nodeLocator.toEndpointUrl();
     }
-    //TODO(NEIL): implement plugin config file path in ServerConfiguration, see if LayoutServerThreadCount has been moved
+    //TODO(NEIL): see if LayoutServerThreadCount has been moved
     public String getPluginConfigFilePath() {
-        String pluginConfigFilePath = getServerConfig(String.class, "--plugin");
+        String pluginConfigFilePath = configuration.getPluginConfigFilePath();
         return pluginConfigFilePath == null ? PLUGIN_CONFIG_FILE_PATH : pluginConfigFilePath;
     }
 
@@ -213,22 +210,12 @@ public class ServerContext implements AutoCloseable {
      * Get the max number of messages can be sent over per batch.
      * @return
      */
-    //TODO(NEIL): add this field to ServerConfig
     public int getLogReplicationMaxNumMsgPerBatch() {
-        String val = getServerConfig(String.class, "--snapshot-batch");
-        return val == null ? DEFAULT_MAX_NUM_MSG_PER_BATCH : Integer.parseInt(val);
+        return configuration.getSnapshotBatchSize();
     }
 
-    //TODO(NEIL): add this field to ServerConfig
     public int getLockLeaseDuration() {
-        Integer lockLeaseDuration;
-        try {
-            lockLeaseDuration = getServerConfig(Integer.class, "--lock-lease");
-        } catch (ClassCastException e) {
-            // In the testing framework we only support Strings
-            lockLeaseDuration = Integer.valueOf(getServerConfig(String.class, "--lock-lease"));
-        }
-        return lockLeaseDuration == null ? Lock.leaseDuration : lockLeaseDuration;
+        return configuration.getLockLeaseDuration();
     }
 
     /**
@@ -237,9 +224,7 @@ public class ServerContext implements AutoCloseable {
      * @return
      */
     public int getLogReplicationMaxDataMessageSize() {
-        //TODO(NEIL): add this field to ServerConfig
-        String val = getServerConfig(String.class, "--max-replication-data-message-size");
-        return val == null ? MAX_DATA_MSG_SIZE_SUPPORTED : Integer.parseInt(val);
+        return configuration.getMaxReplicationDataMessageSize();
     }
 
     /**
@@ -673,7 +658,7 @@ public class ServerContext implements AutoCloseable {
      * @return A string that should be prepended to threads this server creates.
      */
     public @Nonnull String getThreadPrefix() {
-        return "corfu-"
+        return "corfu-";
     }
 
     /**

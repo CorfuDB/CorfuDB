@@ -42,6 +42,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      * <p>Note that the java implementation of docopt has a strange requirement
      * that each option must be preceded with a space.
      */
+    //TODO(NEIL): consolidate if possible
     private static final String USAGE =
             "Corfu Log Replication Server, the server for replication across clusters.\n"
                     + "\n"

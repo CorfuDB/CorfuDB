@@ -102,8 +102,6 @@ public class CorfuServer {
                     + " -H <seconds>, --HandshakeTimeout=<seconds>                               "
                     + "              Handshake timeout in seconds [default: 10].\n               "
                     + "                                                                          "
-                    + "              from the log. [default: -1].\n                              "
-                    + "                                                                          "
                     + " -k <seqcache>, --sequencer-cache-size=<seqcache>                         "
                     + "               The size of the sequencer's cache. [default: 250000].\n    "
                     + " -B <size> --batch-size=<size>                                            "
