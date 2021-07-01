@@ -4,6 +4,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.ByteString;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.configuration.ServerConfiguration;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
@@ -141,6 +142,7 @@ public class SequencerServerTest {
     public void setup() {
         when(mockServerContext.getExecutorService(anyInt(), anyString()))
                 .thenReturn(MoreExecutors.newDirectExecutorService());
+        when(mockServerContext.getConfiguration()).thenReturn(new ServerConfiguration());
     }
 
     /**

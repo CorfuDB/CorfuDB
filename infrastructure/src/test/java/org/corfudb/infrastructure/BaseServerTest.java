@@ -4,6 +4,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import io.netty.channel.ChannelHandlerContext;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.configuration.ServerConfiguration;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -97,6 +98,7 @@ public class BaseServerTest {
         // handler methods on the calling thread
         when(mockServerContext.getExecutorService(anyInt(), anyString()))
                 .thenReturn(MoreExecutors.newDirectExecutorService());
+        when(mockServerContext.getConfiguration()).thenReturn(new ServerConfiguration());
 
         baseServer = new BaseServer(mockServerContext);
     }
