@@ -1039,7 +1039,7 @@ public class StateTransferTest extends AbstractViewTest {
                     .setServerRouter(new TestServerRouter(SERVERS.PORT_0))
                     .setPort(SERVERS.PORT_0)
                     .setMemory(false)
-                    .setCacheSizeHeapRatio("0.0")
+                    .setCacheSizeHeapRatio(0.0)
                     .setLogPath(tempDirs.get(0).getAbsolutePath())
                     .build();
 
@@ -1066,7 +1066,7 @@ public class StateTransferTest extends AbstractViewTest {
                     .setServerRouter(new TestServerRouter(SERVERS.PORT_1))
                     .setPort(SERVERS.PORT_1)
                     .setMemory(false)
-                    .setCacheSizeHeapRatio("0.0")
+                    .setCacheSizeHeapRatio(0.0)
                     .setLogPath(tempDirs.get(1).getAbsolutePath())
                     .build();
 
@@ -1090,7 +1090,7 @@ public class StateTransferTest extends AbstractViewTest {
                     .setServerRouter(new TestServerRouter(SERVERS.PORT_2))
                     .setPort(SERVERS.PORT_2)
                     .setMemory(false)
-                    .setCacheSizeHeapRatio("0.0")
+                    .setCacheSizeHeapRatio(0.0)
                     .setLogPath(tempDirs.get(2).getAbsolutePath())
                     .build();
 
@@ -1141,7 +1141,7 @@ public class StateTransferTest extends AbstractViewTest {
                     .setServerRouter(new TestServerRouter(SERVERS.PORT_0))
                     .setPort(SERVERS.PORT_0)
                     .setMemory(false)
-                    .setCacheSizeHeapRatio("0.0")
+                    .setCacheSizeHeapRatio(0.0)
                     .setLogPath(tempDirs.get(0).getAbsolutePath())
                     .build();
 
@@ -1150,7 +1150,7 @@ public class StateTransferTest extends AbstractViewTest {
                     .setServerRouter(new TestServerRouter(SERVERS.PORT_1))
                     .setPort(SERVERS.PORT_1)
                     .setMemory(false)
-                    .setCacheSizeHeapRatio("0.0")
+                    .setCacheSizeHeapRatio(0.0)
                     .setLogPath(tempDirs.get(1).getAbsolutePath())
                     .build();
 
@@ -1188,7 +1188,7 @@ public class StateTransferTest extends AbstractViewTest {
                     .setServerRouter(new TestServerRouter(SERVERS.PORT_2))
                     .setPort(SERVERS.PORT_2)
                     .setMemory(false)
-                    .setCacheSizeHeapRatio("0.0")
+                    .setCacheSizeHeapRatio(0.0)
                     .setLogPath(tempDirs.get(2).getAbsolutePath())
                     .build();
 
@@ -1248,7 +1248,7 @@ public class StateTransferTest extends AbstractViewTest {
                     .setServerRouter(new TestServerRouter(SERVERS.PORT_0))
                     .setPort(SERVERS.PORT_0)
                     .setMemory(false)
-                    .setCacheSizeHeapRatio("0.0")
+                    .setCacheSizeHeapRatio(0.0)
                     .setLogPath(tempDirs.get(0).getAbsolutePath())
                     .build();
 
@@ -1257,7 +1257,7 @@ public class StateTransferTest extends AbstractViewTest {
                     .setServerRouter(new TestServerRouter(SERVERS.PORT_1))
                     .setPort(SERVERS.PORT_1)
                     .setMemory(false)
-                    .setCacheSizeHeapRatio("0.0")
+                    .setCacheSizeHeapRatio(0.0)
                     .setLogPath(tempDirs.get(1).getAbsolutePath())
                     .build();
 
@@ -1266,7 +1266,7 @@ public class StateTransferTest extends AbstractViewTest {
                     .setServerRouter(new TestServerRouter(SERVERS.PORT_2))
                     .setPort(SERVERS.PORT_2)
                     .setMemory(false)
-                    .setCacheSizeHeapRatio("0.0")
+                    .setCacheSizeHeapRatio(0.0)
                     .setLogPath(tempDirs.get(2).getAbsolutePath())
                     .build();
 
@@ -1378,7 +1378,7 @@ public class StateTransferTest extends AbstractViewTest {
                     .setServerRouter(new TestServerRouter(SERVERS.PORT_0))
                     .setPort(SERVERS.PORT_0)
                     .setMemory(false)
-                    .setCacheSizeHeapRatio("0.0")
+                    .setCacheSizeHeapRatio(0.0)
                     .setLogPath(tempDirs.get(0).getAbsolutePath())
                     .build();
 
@@ -1387,7 +1387,7 @@ public class StateTransferTest extends AbstractViewTest {
                     .setServerRouter(new TestServerRouter(SERVERS.PORT_1))
                     .setPort(SERVERS.PORT_1)
                     .setMemory(false)
-                    .setCacheSizeHeapRatio("0.0")
+                    .setCacheSizeHeapRatio(0.0)
                     .setLogPath(tempDirs.get(1).getAbsolutePath())
                     .build();
 
@@ -1396,7 +1396,7 @@ public class StateTransferTest extends AbstractViewTest {
                     .setServerRouter(new TestServerRouter(SERVERS.PORT_2))
                     .setPort(SERVERS.PORT_2)
                     .setMemory(false)
-                    .setCacheSizeHeapRatio("0.0")
+                    .setCacheSizeHeapRatio(0.0)
                     .setLogPath(tempDirs.get(2).getAbsolutePath())
                     .build();
 
@@ -1515,7 +1515,7 @@ public class StateTransferTest extends AbstractViewTest {
                     .setServerRouter(new TestServerRouter(SERVERS.PORT_0))
                     .setPort(SERVERS.PORT_0)
                     .setMemory(false)
-                    .setCacheSizeHeapRatio("0.0")
+                    .setCacheSizeHeapRatio(0.0)
                     .setLogPath(tempDirs.get(0).getAbsolutePath())
                     .build();
 
@@ -1524,7 +1524,7 @@ public class StateTransferTest extends AbstractViewTest {
                     .setServerRouter(new TestServerRouter(SERVERS.PORT_1))
                     .setPort(SERVERS.PORT_1)
                     .setMemory(false)
-                    .setCacheSizeHeapRatio("0.0")
+                    .setCacheSizeHeapRatio(0.0)
                     .setLogPath(tempDirs.get(1).getAbsolutePath())
                     .build();
 

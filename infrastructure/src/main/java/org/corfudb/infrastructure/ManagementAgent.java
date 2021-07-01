@@ -202,7 +202,7 @@ public class ManagementAgent {
         if (!shutdown) {
             localMonitoringService.start(METRICS_POLL_INTERVAL);
             remoteMonitoringService.start(POLICY_EXECUTE_INTERVAL);
-            if (!serverContext.getServerConfig(Boolean.class, "--no-auto-commit")) {
+            if (serverContext.getConfiguration().getAutoCommit()) {
                 autoCommitService.start(AUTO_COMMIT_INTERVAL);
             } else {
                 log.info("Auto commit service disabled.");

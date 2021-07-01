@@ -48,7 +48,7 @@ public class AutoCommitServiceTest extends AbstractViewTest {
                 .setServerRouter(new TestServerRouter(SERVERS.PORT_0))
                 .setPort(SERVERS.PORT_0)
                 .setMemory(false)
-                .setCacheSizeHeapRatio("0.0")
+                .setCacheSizeHeapRatio(0.0)
                 .setLogPath(com.google.common.io.Files.createTempDir().getAbsolutePath())
                 .build();
         ServerContext sc1 = new ServerContextBuilder()
@@ -56,7 +56,7 @@ public class AutoCommitServiceTest extends AbstractViewTest {
                 .setServerRouter(new TestServerRouter(SERVERS.PORT_1))
                 .setPort(SERVERS.PORT_1)
                 .setMemory(false)
-                .setCacheSizeHeapRatio("0.0")
+                .setCacheSizeHeapRatio(0.0)
                 .setLogPath(com.google.common.io.Files.createTempDir().getAbsolutePath())
                 .build();
         ServerContext sc2 = new ServerContextBuilder()
@@ -64,7 +64,7 @@ public class AutoCommitServiceTest extends AbstractViewTest {
                 .setServerRouter(new TestServerRouter(SERVERS.PORT_2))
                 .setPort(SERVERS.PORT_2)
                 .setMemory(false)
-                .setCacheSizeHeapRatio("0.0")
+                .setCacheSizeHeapRatio(0.0)
                 .setLogPath(com.google.common.io.Files.createTempDir().getAbsolutePath())
                 .build();
 

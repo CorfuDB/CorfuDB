@@ -358,11 +358,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         if (runtime == null) {
             log.debug("Connecting to local Corfu {}", localCorfuEndpoint);
             runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
-                    .trustStore((String) serverContext.getServerConfig().get("--truststore"))
-                    .tsPasswordFile((String) serverContext.getServerConfig().get("--truststore-password-file"))
-                    .keyStore((String) serverContext.getServerConfig().get("--keystore"))
-                    .ksPasswordFile((String) serverContext.getServerConfig().get("--keystore-password-file"))
-                    .tlsEnabled((Boolean) serverContext.getServerConfig().get("--enable-tls"))
+                    .trustStore(serverContext.getConfiguration().getTruststore())
+                    .tsPasswordFile(serverContext.getConfiguration().getTruststorePasswordFile())
+                    .keyStore(serverContext.getConfiguration().getKeystore())
+                    .ksPasswordFile(serverContext.getConfiguration().getKeystorePasswordFile())
+                    .tlsEnabled(serverContext.getConfiguration().isTlsEnabled())
                     .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
                     .build())
                     .parseConfigurationString(localCorfuEndpoint).connect();

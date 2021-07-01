@@ -6,6 +6,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.configuration.ServerConfiguration;
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
@@ -86,6 +87,10 @@ import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
  */
 @Slf4j
 public class LogUnitServer extends AbstractServer {
+    /**
+     * The options map.
+     */
+    private final LogUnitServerConfig config;
 
     /**
      * The server context of the node.
@@ -130,6 +135,7 @@ public class LogUnitServer extends AbstractServer {
      */
     public LogUnitServer(ServerContext serverContext, LogUnitServerInitializer serverInitializer) {
         this.serverContext = serverContext;
+        config = LogUnitServerConfig.parse(serverContext.getConfiguration());
         executor = serverContext.getExecutorService(serverContext.getConfiguration().getNumLogUnitWorkerThreads(),
                 "LogUnit-");
 
@@ -550,6 +556,37 @@ public class LogUnitServer extends AbstractServer {
     @VisibleForTesting
     void prefixTrim(long trimAddress) {
         streamLog.prefixTrim(trimAddress);
+    }
+
+    /**
+     * Log unit server parameters.
+     */
+    @Builder
+    @Getter
+    public static class LogUnitServerConfig {
+        private final double cacheSizeHeapRatio;
+        private final long maxCacheSize;
+        private final boolean memoryMode;
+        private final boolean noVerify;
+        private final boolean noSync;
+
+        /**
+         * Parse legacy configuration options
+         *
+         * @param conf Server Configuration options
+         * @return log unit configuration
+         */
+        public static LogUnitServerConfig parse(ServerConfiguration conf) {
+            double cacheSizeHeapRatio = conf.getLogUnitCacheRatio();
+
+            return LogUnitServerConfig.builder()
+                    .cacheSizeHeapRatio(cacheSizeHeapRatio)
+                    .maxCacheSize((long) (Runtime.getRuntime().maxMemory() * cacheSizeHeapRatio))
+                    .memoryMode(conf.isInMemoryMode())
+                    .noVerify(!conf.getVerifyChecksum())
+                    .noSync(!conf.getSyncData())
+                    .build();
+        }
     }
 
     /**

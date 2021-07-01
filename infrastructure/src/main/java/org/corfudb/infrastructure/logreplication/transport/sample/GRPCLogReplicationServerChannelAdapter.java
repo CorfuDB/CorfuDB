@@ -35,7 +35,7 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
     public GRPCLogReplicationServerChannelAdapter(ServerContext serverContext, LogReplicationServerRouter router) {
         super(serverContext, router);
         this.service = new GRPCLogReplicationServerHandler(router);
-        this.port = Integer.parseInt((String) serverContext.getServerConfig().get("<port>"));
+        this.port = serverContext.getConfiguration().getServerPort();
         this.server = ServerBuilder.forPort(port).addService(service).build();
     }
 

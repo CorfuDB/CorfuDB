@@ -35,7 +35,7 @@ public class ServerHandshakeHandlerTest {
     // Some utility variables needed for following test cases.
     private final AtomicInteger requestCounter = new AtomicInteger();
 
-    private static final String DEFAULT_HANDSHAKE_TIMEOUT = "10";
+    private static final int DEFAULT_HANDSHAKE_TIMEOUT = 10;
 
     private static final long FAKE_CLIENT_VERSION = 111111111;
 

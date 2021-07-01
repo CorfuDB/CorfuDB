@@ -138,7 +138,7 @@ public class ServerConfiguration extends PropertiesConfiguration {
         conf.setVerifyChecksum(!opts.containsKey("--no-verify"));
         conf.setSyncData(!opts.containsKey("--no-sync"));
         conf.setSingleMode(opts.containsKey("--single"));
-        conf.setAutoCommit(opts.containsKey("--no-auto-commit"));
+        conf.setAutoCommit(!opts.containsKey("--no-auto-commit"));
 
         // Bind to all interfaces only if no address or interface specified by the user.
         // Fetch the address if given a network interface.
