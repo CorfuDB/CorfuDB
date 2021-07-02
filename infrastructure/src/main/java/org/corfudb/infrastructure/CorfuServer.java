@@ -303,11 +303,23 @@ public class CorfuServer {
         if (conf.isInMemoryMode()) {
             return;
         }
-        String corfuServiceDirPath = conf.getServerDir();
-        File corfuServiceDir = new File(corfuServiceDirPath);
-        if (!corfuServiceDir.exists() && corfuServiceDir.mkdirs()) {
-            log.info("Created new service directory at {}.", corfuServiceDir);
+
+        File parentDir = new File(conf.getServerDir());
+        if (!parentDir.isDirectory()) {
+            throw new UnrecoverableCorfuError("Service path " + conf.getServerDir() + " must be a directory!");
         }
+        String corfuServiceDirPath = parentDir.getAbsolutePath()
+                + File.separator
+                + "corfu";
+        File corfuServiceDir = new File(corfuServiceDirPath);
+
+        if (!corfuServiceDir.exists() && !corfuServiceDir.mkdirs()) {
+            throw new UnrecoverableCorfuError("Couldn't create " + corfuServiceDir);
+        }
+        log.info("Created new service directory at {}.", corfuServiceDir);
+        // Update the new path with the dedicated child service directory.
+        conf.setServerDirectory(corfuServiceDirPath);
+
     }
 
     /**

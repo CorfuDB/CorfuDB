@@ -216,20 +216,7 @@ public class ServerConfiguration extends PropertiesConfiguration {
 
 
     public ServerConfiguration setServerDirectory(String path) {
-        File parentDir = new File(path);
-        if (!parentDir.isDirectory()) {
-            throw new UnrecoverableCorfuError("Service path " + path + " must be a directory!");
-        }
-
-        File corfuServerDir = new File(parentDir.getAbsolutePath()
-                + File.separator
-                + "corfu");
-        // Update the new path with the dedicated child service directory.
-        if (!corfuServerDir.exists() && !corfuServerDir.mkdirs()) {
-            throw new UnrecoverableCorfuError("Couldn't create " + corfuServerDir);
-        }
-
-        setProperty(SERVER_DIR, corfuServerDir.getAbsolutePath());
+        setProperty(SERVER_DIR, path);
         return this;
     }
 
