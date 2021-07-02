@@ -77,8 +77,8 @@
 
 
     <root level="INFO">
-        <!--<appender-ref ref="FILE" />-->
-        <!--<appender-ref ref="STDOUT" />-->
-        <!--<appender-ref ref="MetricsRollingFile" />-->
+        <appender-ref ref="FILE" />
+        <appender-ref ref="STDOUT" />
+        <appender-ref ref="MetricsRollingFile" />
     </root>
 </configuration>
