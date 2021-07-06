@@ -253,7 +253,7 @@ public class ServerConfiguration extends BaseConfiguration {
         if (opts.containsKey("--log-size-quota-percentage")) {
             configProperties.setProperty(LOG_SIZE_QUOTA, (String) opts.get("--log-size-quota-percentage"));
         }
-        //TODO(NEIL): double check
+
         if (opts.containsKey("--logunit-threads")) {
             configProperties.setProperty(NUM_LOGUNIT_WORKER_THREADS, (String) opts.get("--logunit-threads"));
         }

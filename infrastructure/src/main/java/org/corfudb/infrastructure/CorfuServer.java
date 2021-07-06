@@ -59,7 +59,7 @@ public class CorfuServer {
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
                     + "[--metrics]"
                     + "[--snapshot-batch=<batch-size>] [--lock-lease=<lease-duration>]"
-                    + "[-P <prefix>] [-R <retention>] <port>\n"
+                    + "[-P <prefix>] [-R <retention>] [--config-file=<config-file-path>] <port>\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <path>, --log-path=<path>                                             "
@@ -172,6 +172,8 @@ public class CorfuServer {
                     + "              The max size of replication data message in bytes.\n   "
                     + " --lock-lease=<lease-duration>                                            "
                     + "              Lock lease duration in seconds\n                            "
+                    + " --config-file=<config-file-path>                                         "
+                    + "              Location of configuration options file. Will override command line options.\n"
                     + " -h, --help                                                               "
                     + "              Show this screen\n"
                     + " --version                                                                "
@@ -201,6 +203,13 @@ public class CorfuServer {
             Map<String, Object> opts = new Docopt(USAGE)
                     .withVersion(GitRepositoryState.getRepositoryState().describe)
                     .parse(args);
+            ServerConfiguration conf;
+            if (opts.containsKey("--config-file") && opts.get("--config-file") != null) {
+                conf = ServerConfiguration.getServerConfigFromFile((String) opts.get("--config-file"));
+            } else {
+                conf = ServerConfiguration.getServerConfigFromMap(opts);
+            }
+
             // Note: this is a temporal solution for license reuse.
 
             // We currently identify the Log Replication Server by the use of a specific
@@ -208,10 +217,9 @@ public class CorfuServer {
             // In the future, log replication will not run as a separate process
             // but it will be an aggregated functionality of Corfu's Server so this will
             // be removed.
-            if (opts.containsKey("--plugin") && opts.get("--plugin") != null) {
+            if (conf.getPluginConfigFilePath() != null) {
                 CorfuInterClusterReplicationServer.main(args);
             } else {
-                ServerConfiguration conf = ServerConfiguration.getServerConfigFromMap(opts);
                 startServer(conf);
             }
         } catch (Throwable err) {

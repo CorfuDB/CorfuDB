@@ -63,7 +63,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] "
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
                     + "[--metrics]"
-                    + "[-P <prefix>] [-R <retention>] <port>\n"
+                    + "[-P <prefix>] [-R <retention>] [--config-file=<config-file-path>] <port>\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <path>, --log-path=<path>                                             "
@@ -179,6 +179,8 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "                                                                          "
                     + " --lock-lease=<lease-duration>                                            "
                     + "              Lock lease duration in seconds\n                            "
+                    + " --config-file=<config-file-path>                                         "
+                    + "              Location of configuration options file. Will override command line options.\n"
                     + " -h, --help                                                               "
                     + "              Show this screen\n"
                     + " --version                                                                "
@@ -234,7 +236,12 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                 .withVersion(GitRepositoryState.getRepositoryState().describe)
                 .parse(args);
 
-        ServerConfiguration conf = ServerConfiguration.getServerConfigFromMap(opts);
+        ServerConfiguration conf;
+        if (opts.containsKey("--config-file") && opts.get("--config-file") != null) {
+            conf = ServerConfiguration.getServerConfigFromFile((String) opts.get("--config-file"));
+        } else {
+            conf = ServerConfiguration.getServerConfigFromMap(opts);
+        }
 
         printStartupMsg(conf);
         configureLogger(conf);

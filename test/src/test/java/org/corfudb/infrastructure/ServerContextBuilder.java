@@ -22,7 +22,6 @@ public class ServerContextBuilder {
     private boolean verifyChecksum = true;
     private boolean syncData = true;
 
-    //TODO(NEIL) add noAutoCommit to ServerConfiguration
     private boolean noAutoCommit = true;
 
     private boolean tlsEnabled = false;

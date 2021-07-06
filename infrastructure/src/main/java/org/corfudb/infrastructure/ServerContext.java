@@ -176,7 +176,7 @@ public class ServerContext implements AutoCloseable {
                 .parseString(conf.getLocalServerEndpoint());
         localEndpoint = nodeLocator.toEndpointUrl();
     }
-    //TODO(NEIL): see if LayoutServerThreadCount has been moved
+
     public String getPluginConfigFilePath() {
         String pluginConfigFilePath = configuration.getPluginConfigFilePath();
         return pluginConfigFilePath == null ? PLUGIN_CONFIG_FILE_PATH : pluginConfigFilePath;
@@ -620,8 +620,9 @@ public class ServerContext implements AutoCloseable {
                 .setNameFormat(getThreadPrefix() + "client-%d")
                 .build();
 
-        //TODO(NEIL): Change hardcoded values
-        EventLoopGroup group = configuration.getChannelImplementation().getGenerator().generate(6, threadFactory);
+        final int requestedThreads = configuration.getNumIOThreads();
+        final int numThreads = (requestedThreads == 0) ? Runtime.getRuntime().availableProcessors() * 2 : requestedThreads;
+        EventLoopGroup group = configuration.getChannelImplementation().getGenerator().generate(numThreads, threadFactory);
 
         log.info("getClientGroup: Type {} with {} threads",
             group.getClass().getSimpleName(), 6);

@@ -191,7 +191,7 @@ public class SequencerServer extends AbstractServer {
 
         globalLogTail = sequencerFactoryHelper.getGlobalLogTail();
         cache = sequencerFactoryHelper.getSequencerServerCache(
-                serverContext.getConfiguration().getSequencerConflictWindowSize(),
+                serverContext.getConfiguration().getSequencerCacheSize(),
                 globalLogTail - 1
         );
         streamsAddressMap = sequencerFactoryHelper.getStreamAddressSpaceMap();
