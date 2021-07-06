@@ -62,7 +62,7 @@ public class ServerContextBuilder {
                 .setSingleMode(single)
                 .setInMemoryMode(memory)
                 .setHandshakeTimeout(handshakeTimeout)
-                .setSequencerConflictWindowSize(seqCache)
+                .setSequencerCacheSize(seqCache)
                 .setLogSizeQuota(logSizeLimitPercentage)
                 .setStateTransferBatchSize(batchSize)
                 .setMetadataRetention(retention);

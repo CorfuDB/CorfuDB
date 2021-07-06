@@ -324,31 +324,6 @@ public class ServerContext implements AutoCloseable {
         return getDataStore().get(NODE_ID_RECORD);
     }
 
-//    /**
-//     * Get a field from the server configuration map.
-//     *
-//     * @param type          The type of the field.
-//     * @param optionName    The name of the option to retrieve.
-//     * @param <T>           The type of the field to return.
-//     * @return              The field with the give option name.
-//     */
-//    @SuppressWarnings("unchecked")
-//    public <T> T getServerConfig(Class<T> type, String optionName) {
-//        return (T) getServerConfig().get(optionName);
-//    }
-//
-//    /**
-//     * Get a field from the server configuration map.
-//     *
-//     * @param optionName    The name of the option to retrieve.
-//     * @param <T>           The type of the field to return.
-//     * @return              The field with the give option name.
-//     */
-//    @SuppressWarnings("unchecked")
-//    public <T> Optional<T> getServerConfig(String optionName) {
-//        return Optional.ofNullable((T) getServerConfig().get(optionName));
-//    }
-
     /**
      * Install a single node layout if and only if no layout is currently installed.
      * Synchronized, so this method is thread-safe.

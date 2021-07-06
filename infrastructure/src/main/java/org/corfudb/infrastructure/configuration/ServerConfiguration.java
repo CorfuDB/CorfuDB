@@ -4,18 +4,25 @@ import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEF
 import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 
 import ch.qos.logback.classic.Level;
+import ch.qos.logback.core.joran.event.SaxEvent;
 import io.grpc.Server;
 import io.netty.channel.EventLoopGroup;
 import org.apache.commons.cli.CommandLine;
+import org.apache.commons.configuration.BaseConfiguration;
+import org.apache.commons.configuration.ConfigurationException;
 import org.apache.commons.configuration.PropertiesConfiguration;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.utils.lock.Lock;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Properties;
 
 /**
  * This class holds various server configuration parameters.
@@ -23,62 +30,78 @@ import java.util.Map;
  * <p>Created by maithem on 12/4/19.
  */
 
-public class ServerConfiguration extends PropertiesConfiguration {
+public class ServerConfiguration extends BaseConfiguration {
     // Server general parameters
-    private static final String SERVER_DIR = "serverDirectory";
-    private static final String SINGLE_MODE = "singleMode";
-    private static final String CLUSTER_ID = "clusterId";
-    private static final String NUM_IO_THREADS = "numIOThreads";
-    private static final String HOST_ADDRESS = "hostAddress";
-    private static final String SERVER_PORT = "serverPort";
-    private static final String NETWORK_INTERFACE = "networkInterface";
-    private static final String HANDSHAKE_TIMEOUT = "handshakeTimeout";
-    private static final String METADATA_RETENTION = "metadataRetention";
-    private static final String LOG_LEVEL = "logLevel";
-    private static final String NUM_BASE_SERVER_THREADS = "numBaseServerThreads";
+    private static final String SERVER_DIR = "log-path";
+    private static final String SINGLE_MODE = "single-mode";
+    private static final String CLUSTER_ID = "cluster-id";
+    private static final String NUM_IO_THREADS = "io-threads";
+    private static final String HOST_ADDRESS = "address";
+    private static final String SERVER_PORT = "port";
+    private static final String NETWORK_INTERFACE = "network-interface";
+    private static final String HANDSHAKE_TIMEOUT = "handshake-timeout";
+    private static final String METADATA_RETENTION = "metadata-retention";
+    private static final String LOG_LEVEL = "log-level";
+    private static final String NUM_BASE_SERVER_THREADS = "base-server-threads";
     private static final String METRICS_PROVIDER_ADDRESS = "metricsProviderAddress";
-    private static final String CHANNEL_IMPLEMENTATION = "channelImplementation";
-    private static final String ENABLE_TLS = "enableTls";
-    private static final String ENABLE_TLS_MUTUAL_AUTH = "enableTlsMutualAuth";
+    private static final String CHANNEL_IMPLEMENTATION = "channel-implementation";
+    private static final String ENABLE_TLS = "tls-enabled";
+    private static final String ENABLE_TLS_MUTUAL_AUTH = "tls-mutual-auth-enabled";
     private static final String KEYSTORE = "keystore";
-    private static final String KEYSTORE_PASSWORD_FILE = "keystorePasswordFile";
+    private static final String KEYSTORE_PASSWORD_FILE = "keystore-password-file";
     private static final String TRUSTSTORE = "truststore";
-    private static final String TRUSTSTORE_PASSWORD_FILE = "truststorePasswordFile";
-    private static final String ENABLE_SASL_PLAIN_TEXT_AUTH = "enableSaslPlainTextAuth";
-    private static final String SASL_PLAIN_TEXT_USERNAME_FILE = "saslPlainTextUsernameFile";
-    private static final String SASL_PLAIN_TEXT_PASSWORD_FILE = "saslPlainTextPasswordFile";
-    private static final String TLS_CIPHERS = "tlsCiphers";
-    private static final String TLS_PROTOCOLS = "tlsProtocols";
-
-    // Layout Server parameters
-    private static final String NUM_LAYOUT_SERVER_THREADS = "numLayoutServerThreads";
+    private static final String TRUSTSTORE_PASSWORD_FILE = "truststore-password-file";
+    private static final String ENABLE_SASL_PLAIN_TEXT_AUTH = "sasl-plain-text-auth-enabled";
+    private static final String SASL_PLAIN_TEXT_USERNAME_FILE = "sasl-plain-text-username-file";
+    private static final String SASL_PLAIN_TEXT_PASSWORD_FILE = "sasl-plain-text-password-file";
+    private static final String TLS_CIPHERS = "tls-ciphers";
+    private static final String TLS_PROTOCOLS = "tls-protocols";
 
     // LogUnit parameters
-    private static final String IN_MEMORY_MODE = "inMemoryMode";
-    private static final String LOG_UNIT_CACHE_RATIO = "logUnitCacheRatio";
-    private static final String VERIFY_CHECKSUM = "verifyChecksum";
-    private static final String SYNC_DATA = "syncData";
-    private static final String NUM_LOGUNIT_WORKER_THREADS = "numLogUnitWorkerThreads";
-    private static final String LOG_SIZE_QUOTA = "logSizeQuota";
+    private static final String IN_MEMORY_MODE = "memory-mode";
+    private static final String LOG_UNIT_CACHE_RATIO = "cache-heap-ratio";
+    private static final String VERIFY_CHECKSUM = "verify-checksum";
+    private static final String SYNC_DATA = "sync-data";
+    private static final String NUM_LOGUNIT_WORKER_THREADS = "logunit-threads";
+    private static final String LOG_SIZE_QUOTA = "log-size-quota-percentage";
 
 
     // Sequencer parameters
-    private static final String SEQUENCER_CONFLICT_WINDOW_SIZE = "sequencerConflictWindowSize";
+    private static final String SEQUENCER_CACHE_SIZE = "sequencer-cache-size";
 
     // Management parameters
-    private static final String STATE_TRANSFER_BATCH_SIZE = "stateTransferBatchSize";
-    private static final String NUM_MANAGEMENT_SERVER_THREADS = "numManagementServerThreads";
+    private static final String STATE_TRANSFER_BATCH_SIZE = "state-transfer-batch-size";
+    private static final String NUM_MANAGEMENT_SERVER_THREADS = "management-server-threads";
 
     //Added parameters
-    private static final String AUTO_COMMIT = "autoCommit";
-    private static final String MAX_REPLICATION_DATA_MESSAGE_SIZE = "maxReplicationDataMessageSize";
-    private static final String COMPACT_RATE = "compactRate";
-    private static final String PLUGIN_CONFIG_FILE_PATH = "pluginConfigFilePath";
-    private static final String ENABLE_METRICS = "enableMetrics";
-    private static final String SNAPSHOT_BATCH_SIZE = "snapshotBatchSize";
-    private static final String LOCK_LEASE_DURATION = "lockLeaseDuration";
-    private static final String THREAD_PREFIX = "threadPrefix";
+    private static final String AUTO_COMMIT = "auto-commit";
+    private static final String MAX_REPLICATION_DATA_MESSAGE_SIZE = "max-replication-data-message-size";
+    private static final String COMPACT_RATE = "compact-rate";
+    private static final String PLUGIN_CONFIG_FILE_PATH = "plugin-config-file-path";
+    private static final String ENABLE_METRICS = "metrics-enabled";
+    private static final String SNAPSHOT_BATCH_SIZE = "snapshot-batch";
+    private static final String LOCK_LEASE_DURATION = "lock-lease";
+    private static final String THREAD_PREFIX = "thread-prefix";
     private static final String BIND_TO_ALL_INTERFACES = "bindToAllInterfaces";
+
+    //Default Configuration Values
+    private static final String DEFAULT_LOG_UNIT_CACHE_RATIO = "0.5";
+    private static final String DEFAULT_LOG_LEVEL = "INFO";
+    private static final String DEFAULT_COMPACT_RATE = "60";
+    private static final String DEFAULT_BASE_SERVER_THREADS = "1";
+    private static final String DEFAULT_LOG_SIZE_QUOTA = "100.0";
+    private static final String DEFAULT_LOG_UNIT_WORKER_THREADS = "4";
+    private static final String DEFAULT_MANAGEMENT_SERVER_THREADS = "4";
+    private static final String DEFAULT_IO_THREADS = "4";
+    private static final String DEFAULT_SEQUENCER_CACHE_SIZE = "250000";
+    private static final String DEFAULT_STATE_TRANSFER_BATCH_SIZE = "100";
+    private static final String DEFAULT_CHANNEL_IMPLEMENTATION_TYPE = "nio";
+    private static final String DEFAULT_HANDSHAKE_TIMEOUT = "10";
+    private static final String DEFAULT_CLUSTER_ID = "auto";
+    private static final String DEFAULT_TLS_CIPHERS = "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256";
+    private static final String DEFAULT_TLS_PROTOCOLS = "TLSv1.1,TLSv1.2";
+    private static final String DEFAULT_THREAD_PREFIX = "";
+    private static final String DEFAULT_METADATA_RETENTION = "1000";
 
     // The underlying map of PropertiesConfiguration can't be used to store an EventLoopGroup,
     // so a separate map is needed. This shouldn't be here, but the Unit Tests rely on
@@ -86,64 +109,41 @@ public class ServerConfiguration extends PropertiesConfiguration {
     private Map<String, EventLoopGroup> testEventLoops = new HashMap<>();
 
 
-    public static ServerConfiguration getServerConfigFromCommandLineArg(CommandLine cmdOptions) {
-        ServerConfiguration conf = new ServerConfiguration();
-        // merge command line with conf
-        // This mapping is a temporary solution until we merge the command line config names
-        // with the config names in this file
-        if (!cmdOptions.hasOption("memory")) {
-            conf.setServerDirectory(cmdOptions.getOptionValue("log-path"));
+
+
+    public static ServerConfiguration getServerConfigFromFile(String configFilePath) {
+        FileInputStream configFileStream;
+        Properties configProperties = new Properties();
+
+        try {
+            configFileStream = new FileInputStream(configFilePath);
+            configProperties.load(configFileStream);
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Unable to load config from file " + configFilePath, e);
         }
 
-        conf.setInMemoryMode(cmdOptions.hasOption("memory"));
-        conf.setSingleMode(cmdOptions.hasOption("single"));
-        conf.setHostAddress(cmdOptions.getOptionValue("address", "localhost"));
-        conf.setServerPort(Integer.parseInt(cmdOptions.getOptionValue("port", "9000")));
-        conf.setNetworkInterface(cmdOptions.getOptionValue("network-interface"));
-        conf.setLogUnitCacheRatio(Double
-                .parseDouble(cmdOptions.getOptionValue("cache-heap-ratio", "0.5")));
-        conf.setSequencerConflictWindowSize(Integer
-                .parseInt(cmdOptions.getOptionValue("sequencer-cache-size", "250000")));
-        conf.setLogLevel(cmdOptions.getOptionValue("log-level", "INFO"));
-        conf.setEnableTls(cmdOptions.hasOption("enable-tls"));
-        conf.setEnableTlsMutualAuth(cmdOptions.hasOption("enable-tls-mutual-auth"));
-        conf.setKeystore(cmdOptions.getOptionValue("keystore"));
-        conf.setKeystorePasswordFile(cmdOptions.getOptionValue("keystore-password-file"));
-        conf.setTruststore(cmdOptions.getOptionValue("truststore"));
-        conf.setTruststorePasswordFile(cmdOptions.getOptionValue("truststore-password-file"));
-        conf.setLogSizeQuota(Double.parseDouble(cmdOptions
-                .getOptionValue("log-size-quota-percentage", "100.0")));
-        conf.setMetricsProviderAddress(cmdOptions.hasOption("metrics-port") ?
-                Integer.parseInt(cmdOptions.getOptionValue("metrics-port")) : null);
-
-        // Special handling is needed because the port can be specified without
-        // an option name
-        if (cmdOptions.getArgList().size() == 1) {
-            int port = Integer.valueOf(cmdOptions.getArgList().get(0));
-            conf.setServerPort(port);
-        } else if (!cmdOptions.getArgList().isEmpty()) {
-            throw new IllegalArgumentException("Unknown arguments: " + cmdOptions.getArgList());
-        }
-
-        return conf;
+        return applyServerConfigurationOptions(configProperties);
     }
 
-    public static ServerConfiguration getServerConfigFromMap(Map<String, Object> opts) {
-        ServerConfiguration conf = new ServerConfiguration();
-        if (opts.containsKey("--memory")) {
-            conf.setInMemoryMode(true);
-        } else {
-            conf.setServerDirectory((String) opts.get("--log-path"));
-        }
-        conf.setVerifyChecksum(!opts.containsKey("--no-verify"));
-        conf.setSyncData(!opts.containsKey("--no-sync"));
-        conf.setSingleMode(opts.containsKey("--single"));
-        conf.setAutoCommit(!opts.containsKey("--no-auto-commit"));
+    private static ServerConfiguration applyServerConfigurationOptions(Properties configProperties) {
 
-        // Bind to all interfaces only if no address or interface specified by the user.
-        // Fetch the address if given a network interface.
-        String networkInterfaceName = (String) opts.get("--network-interface");
-        String address = (String) opts.get("--address");
+        ServerConfiguration conf = new ServerConfiguration();
+
+        if (Boolean.parseBoolean(configProperties.getProperty(IN_MEMORY_MODE, "false"))) {
+            conf.setInMemoryMode(true);
+        } else if (!configProperties.containsKey(SERVER_DIR)) {
+            throw new IllegalStateException("Configuration must either provide log-path or be set to memory mode");
+        } else {
+            conf.setServerDirectory(configProperties.getProperty(SERVER_DIR));
+        }
+
+        conf.setVerifyChecksum(Boolean.parseBoolean(configProperties.getProperty(VERIFY_CHECKSUM, "true")));
+        conf.setSyncData(Boolean.parseBoolean(configProperties.getProperty(SYNC_DATA, "true")));
+        conf.setSingleMode(Boolean.parseBoolean(configProperties.getProperty(SINGLE_MODE, "false")));
+        conf.setAutoCommit(Boolean.parseBoolean(configProperties.getProperty(AUTO_COMMIT, "true")));
+
+        String networkInterfaceName = configProperties.getProperty(NETWORK_INTERFACE);
+        String address = configProperties.getProperty(HOST_ADDRESS);
         if (networkInterfaceName != null) {
             conf.setHostAddress(getAddressFromInterfaceName(networkInterfaceName));
             conf.setNetworkInterface(networkInterfaceName);
@@ -159,33 +159,33 @@ public class ServerConfiguration extends PropertiesConfiguration {
             conf.setBindToAllInterfaces(false);
         }
 
-        conf.setMaxReplicationDataMessageSize(Integer.parseInt((String) opts.getOrDefault("--max-replication-data-message-size", Integer.toString(MAX_DATA_MSG_SIZE_SUPPORTED))));
-        conf.setLogUnitCacheRatio(Double.parseDouble((String) opts.getOrDefault("--cache-heap-ratio", "0.5")));
-        conf.setLogLevel((String) opts.getOrDefault("--log-level", "INFO"));
-        conf.setCompactRate(Integer.parseInt((String) opts.getOrDefault("--compact", "60")));
-        conf.setPluginConfigFilePath((String) opts.get("--plugin"));
-        conf.setNumBaseServerThreads(Integer.parseInt((String) opts.get("--base-server-threads")));
-        conf.setLogSizeQuota(Double.parseDouble((String) opts.getOrDefault("--log-size-quota-percentage", "100.0")));
+        conf.setMaxReplicationDataMessageSize(Integer.parseInt(configProperties.getProperty(MAX_REPLICATION_DATA_MESSAGE_SIZE, Integer.toString(MAX_DATA_MSG_SIZE_SUPPORTED))));
+        conf.setLogUnitCacheRatio(Double.parseDouble(configProperties.getProperty(LOG_UNIT_CACHE_RATIO, DEFAULT_LOG_UNIT_CACHE_RATIO)));
+        conf.setLogLevel(configProperties.getProperty(LOG_LEVEL, DEFAULT_LOG_LEVEL));
+        conf.setCompactRate(Integer.parseInt(configProperties.getProperty(COMPACT_RATE, DEFAULT_COMPACT_RATE)));
+        conf.setPluginConfigFilePath(configProperties.getProperty(PLUGIN_CONFIG_FILE_PATH));
+        conf.setNumBaseServerThreads(Integer.parseInt(configProperties.getProperty(NUM_BASE_SERVER_THREADS, DEFAULT_BASE_SERVER_THREADS)));
+        conf.setLogSizeQuota(Double.parseDouble(configProperties.getProperty(LOG_SIZE_QUOTA, DEFAULT_LOG_SIZE_QUOTA)));
 
-        //TODO(NEIL): double check
-        conf.setNumLogUnitWorkerThreads(Integer.parseInt((String) opts.getOrDefault("--logunit-threads", "4")));
-        conf.setNumLayoutServerThreads(Integer.parseInt((String) opts.getOrDefault("--management-server-threads", "4")));
-        conf.setNumIOThreads(Integer.parseInt((String) opts.getOrDefault("--Threads", "4")));
+        //TODO(NEIL): double check especially management threads
+        conf.setNumLogUnitWorkerThreads(Integer.parseInt(configProperties.getProperty(NUM_LOGUNIT_WORKER_THREADS, DEFAULT_LOG_UNIT_WORKER_THREADS)));
+        conf.setNumManagementServerThreads(Integer.parseInt(configProperties.getProperty(NUM_MANAGEMENT_SERVER_THREADS, DEFAULT_MANAGEMENT_SERVER_THREADS)));
+        conf.setNumIOThreads(Integer.parseInt(configProperties.getProperty(NUM_IO_THREADS, DEFAULT_IO_THREADS)));
 
-        conf.setEnableTls(opts.containsKey("--enable-tls"));
-        conf.setKeystore((String) opts.get("--keystore"));
-        conf.setKeystorePasswordFile((String) opts.get("--keystore-password-file"));
-        conf.setTruststore((String) opts.get("--truststore"));
-        conf.setTruststorePasswordFile((String) opts.get("--truststore-password-file"));
-        conf.setEnableTlsMutualAuth(opts.containsKey("--enable-tls-mutual-auth"));
-        conf.setEnableSaslPlainTextAuth(opts.containsKey("--enable-sasl-plain-text-auth"));
-        conf.setSaslPlainTextUserFile((String) opts.get("--sasl-plain-text-username-file"));
-        conf.setSaslPlainTextPasswordFile((String) opts.get("--sasl-plain-text-password-file"));
-        conf.setSequencerConflictWindowSize(Integer.parseInt((String) opts.getOrDefault("--sequencer-cache-size","250000")));
+        conf.setEnableTls(Boolean.getBoolean(configProperties.getProperty(ENABLE_TLS, "false")));
+        conf.setKeystore(configProperties.getProperty(KEYSTORE));
+        conf.setKeystorePasswordFile(configProperties.getProperty(KEYSTORE_PASSWORD_FILE));
+        conf.setTruststore(configProperties.getProperty(TRUSTSTORE));
+        conf.setTruststorePasswordFile(configProperties.getProperty(TRUSTSTORE_PASSWORD_FILE));
+        conf.setEnableTlsMutualAuth(Boolean.parseBoolean(configProperties.getProperty(ENABLE_TLS_MUTUAL_AUTH, "false")));
+        conf.setEnableSaslPlainTextAuth(Boolean.parseBoolean(configProperties.getProperty(ENABLE_SASL_PLAIN_TEXT_AUTH, "false")));
+        conf.setSaslPlainTextUserFile(configProperties.getProperty(SASL_PLAIN_TEXT_USERNAME_FILE));
+        conf.setSaslPlainTextPasswordFile(configProperties.getProperty(SASL_PLAIN_TEXT_PASSWORD_FILE));
+        conf.setSequencerCacheSize(Integer.parseInt(configProperties.getProperty(SEQUENCER_CACHE_SIZE,DEFAULT_SEQUENCER_CACHE_SIZE)));
 
-        conf.setStateTransferBatchSize(Integer.parseInt((String) opts.getOrDefault("--batch-size", "100")));
+        conf.setStateTransferBatchSize(Integer.parseInt(configProperties.getProperty(STATE_TRANSFER_BATCH_SIZE, DEFAULT_STATE_TRANSFER_BATCH_SIZE)));
 
-        String implementationType = (String) opts.getOrDefault("--implementation","");
+        String implementationType = configProperties.getProperty(CHANNEL_IMPLEMENTATION,DEFAULT_CHANNEL_IMPLEMENTATION_TYPE);
         if (implementationType.equals("auto")) {
             conf.setChannelImplementation(ChannelImplementation.AUTO);
         } else if (implementationType.equals("local")) {
@@ -198,20 +198,151 @@ public class ServerConfiguration extends PropertiesConfiguration {
             conf.setChannelImplementation(ChannelImplementation.NIO);
         }
 
-        conf.setHandshakeTimeout(Integer.parseInt((String) opts.getOrDefault("--HandshakeTimeout", "10")));
-        conf.setClusterId((String) opts.getOrDefault("--cluster-id", "auto"));
-        conf.setTlsCiphers((String) opts.getOrDefault("--tls-ciphers","TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"));
-        conf.setTlsProtocols((String) opts.getOrDefault("--tls-protocols", "TLSv1.1,TLSv1.2"));
+        conf.setHandshakeTimeout(Integer.parseInt(configProperties.getProperty(HANDSHAKE_TIMEOUT, DEFAULT_HANDSHAKE_TIMEOUT)));
+        conf.setClusterId(configProperties.getProperty(CLUSTER_ID, DEFAULT_CLUSTER_ID));
+        conf.setTlsCiphers(configProperties.getProperty(TLS_CIPHERS,DEFAULT_TLS_CIPHERS));
+        conf.setTlsProtocols(configProperties.getProperty(TLS_PROTOCOLS, DEFAULT_TLS_PROTOCOLS));
 
-        conf.setEnableMetrics(opts.containsKey("--metrics"));
-        conf.setSnapshotBatchSize(Integer.parseInt((String) opts.getOrDefault("--snapshot-batch", Integer.toString(DEFAULT_MAX_NUM_MSG_PER_BATCH))));
-        conf.setLockLeaseDuration(Integer.parseInt((String) opts.getOrDefault("--lock-lease", Integer.toString(Lock.leaseDuration))));
-        conf.setThreadPrefix((String) opts.getOrDefault("--Prefix", ""));
-        conf.setMetadataRetention(Integer.parseInt((String) opts.getOrDefault("--metadata-retention", "1000")));
+        conf.setEnableMetrics(Boolean.parseBoolean(configProperties.getProperty(ENABLE_METRICS, "false")));
+        conf.setSnapshotBatchSize(Integer.parseInt(configProperties.getProperty(SNAPSHOT_BATCH_SIZE, Integer.toString(DEFAULT_MAX_NUM_MSG_PER_BATCH))));
+        conf.setLockLeaseDuration(Integer.parseInt(configProperties.getProperty(LOCK_LEASE_DURATION, Integer.toString(Lock.leaseDuration))));
+        conf.setThreadPrefix(configProperties.getProperty(THREAD_PREFIX, DEFAULT_THREAD_PREFIX));
+        conf.setMetadataRetention(Integer.parseInt(configProperties.getProperty(METADATA_RETENTION, DEFAULT_METADATA_RETENTION)));
 
-        conf.setServerPort(Integer.parseInt((String) opts.get("<port>")));
+        conf.setServerPort(Integer.parseInt(configProperties.getProperty(SERVER_PORT)));
 
         return conf;
+    }
+
+    public static ServerConfiguration getServerConfigFromMap(Map<String, Object> opts) {
+        Properties configProperties = new Properties();
+        configProperties.setProperty(IN_MEMORY_MODE,Boolean.toString(opts.containsKey("--memory")));
+        if (opts.containsKey("--log-path")) {
+            configProperties.setProperty(SERVER_DIR, (String) opts.get("--log-path"));
+        }
+
+        configProperties.setProperty(VERIFY_CHECKSUM, Boolean.toString(!opts.containsKey("--no-verify")));
+        configProperties.setProperty(SYNC_DATA, Boolean.toString(!opts.containsKey("--no-sync")));
+        configProperties.setProperty(SINGLE_MODE, Boolean.toString(opts.containsKey("--single")));
+        configProperties.setProperty(AUTO_COMMIT, Boolean.toString(!opts.containsKey("--no-auto-commit")));
+
+        if (opts.containsKey("--network-interface")) {
+            configProperties.setProperty(NETWORK_INTERFACE, (String) opts.get("--network-interface"));
+        }
+        if (opts.containsKey("--address")) {
+            configProperties.setProperty(HOST_ADDRESS, (String) opts.get("--address"));
+        }
+        if (opts.containsKey("--max-replication-data-message-size")) {
+            configProperties.setProperty(MAX_REPLICATION_DATA_MESSAGE_SIZE, (String) opts.get("--max-replication-data-message-size"));
+        }
+        if (opts.containsKey("--cache-heap-ratio")) {
+            configProperties.setProperty(LOG_UNIT_CACHE_RATIO, (String) opts.get("--cache-heap-ratio"));
+        }
+        if (opts.containsKey("--log-level")) {
+            configProperties.setProperty(LOG_LEVEL, (String) opts.get("--log-level"));
+        }
+        if (opts.containsKey("--compact")) {
+            configProperties.setProperty(COMPACT_RATE, (String) opts.get("--compact"));
+        }
+        if (opts.containsKey("--plugin")) {
+            configProperties.setProperty(PLUGIN_CONFIG_FILE_PATH, (String) opts.get("--plugin"));
+        }
+        if (opts.containsKey("--base-server-threads")) {
+            configProperties.setProperty(NUM_BASE_SERVER_THREADS, (String) opts.get("--base-server-threads"));
+        }
+        if (opts.containsKey("--log-size-quota-percentage")) {
+            configProperties.setProperty(LOG_SIZE_QUOTA, (String) opts.get("--log-size-quota-percentage"));
+        }
+        //TODO(NEIL): double check
+        if (opts.containsKey("--logunit-threads")) {
+            configProperties.setProperty(NUM_LOGUNIT_WORKER_THREADS, (String) opts.get("--logunit-threads"));
+        }
+        if (opts.containsKey("--management-server-threads")) {
+            configProperties.setProperty(NUM_MANAGEMENT_SERVER_THREADS,(String) opts.get("--management-server-threads"));
+        }
+        if (opts.containsKey("--Threads")) {
+            configProperties.setProperty(NUM_IO_THREADS,(String) opts.get("--Threads"));
+        }
+
+        configProperties.setProperty(ENABLE_TLS, Boolean.toString(opts.containsKey("--enable-tls")));
+
+        if (opts.containsKey("--keystore")) {
+            configProperties.setProperty(KEYSTORE, (String) opts.get("--keystore"));
+        }
+        if (opts.containsKey("--keystore-password-file")) {
+            configProperties.setProperty(KEYSTORE_PASSWORD_FILE, (String) opts.get("--keystore-password-file"));
+        }
+
+        if (opts.containsKey("--truststore")) {
+            configProperties.setProperty(TRUSTSTORE, (String) opts.get("--truststore"));
+        }
+
+        if (opts.containsKey("--truststore-password-file")) {
+            configProperties.setProperty(TRUSTSTORE_PASSWORD_FILE, (String) opts.get("--truststore-password-file"));
+        }
+
+        configProperties.setProperty(ENABLE_TLS_MUTUAL_AUTH, Boolean.toString(opts.containsKey("--enable-tls-mutual-auth")));
+        configProperties.setProperty(ENABLE_SASL_PLAIN_TEXT_AUTH, Boolean.toString(opts.containsKey("--enable-sasl-plain-text-auth")));
+
+        if (opts.containsKey("--sasl-plain-text-username-file")) {
+            configProperties.setProperty(SASL_PLAIN_TEXT_USERNAME_FILE, (String) opts.get("--sasl-plain-text-username-file"));
+        }
+
+        if (opts.containsKey("--sasl-plain-text-password-file")) {
+            configProperties.setProperty(SASL_PLAIN_TEXT_PASSWORD_FILE, (String) opts.get("--sasl-plain-text-password-file"));
+        }
+
+        if (opts.containsKey("--sequencer-cache-size")) {
+            configProperties.setProperty(SEQUENCER_CACHE_SIZE, (String) opts.get("--sequencer-cache-size"));
+        }
+
+        if (opts.containsKey("--batch-size")) {
+            configProperties.setProperty(SNAPSHOT_BATCH_SIZE, (String) opts.get("--batch-size"));
+        }
+
+        if (opts.containsKey("--implementation")) {
+            configProperties.setProperty(CHANNEL_IMPLEMENTATION, (String) opts.get("--implementation"));
+        }
+
+        if (opts.containsKey("--HandshakeTimeout")) {
+            configProperties.setProperty(HANDSHAKE_TIMEOUT, (String) opts.get("--HandshakeTimeout"));
+        }
+
+        if (opts.containsKey("--cluster-id")) {
+            configProperties.setProperty(CLUSTER_ID, (String) opts.get("--cluster-id"));
+        }
+
+        if (opts.containsKey("--tls-ciphers")) {
+            configProperties.setProperty(TLS_CIPHERS, (String) opts.get("--tls-ciphers"));
+        }
+
+        if (opts.containsKey("--tls-protocols")) {
+            configProperties.setProperty(TLS_PROTOCOLS, (String) opts.get("--tls-protocols"));
+        }
+
+        configProperties.setProperty(ENABLE_METRICS, Boolean.toString(opts.containsKey("--metrics")));
+
+        if (opts.containsKey("--snapshot-batch")) {
+            configProperties.setProperty(SNAPSHOT_BATCH_SIZE, (String) opts.get("--snapshot-batch"));
+        }
+
+        if (opts.containsKey("--lock-lease")) {
+            configProperties.setProperty(LOCK_LEASE_DURATION, (String) opts.get("--lock-lease"));
+        }
+
+        if (opts.containsKey("--Prefix")) {
+            configProperties.setProperty(THREAD_PREFIX, (String) opts.get("--Prefix"));
+        }
+
+        if (opts.containsKey("--metadata-retention")) {
+            configProperties.setProperty(METADATA_RETENTION, (String) opts.get("--metadata-retention"));
+        }
+
+        if (opts.containsKey("<port>")) {
+            configProperties.setProperty(SERVER_PORT, (String) opts.get("<port>"));
+        }
+
+        return applyServerConfigurationOptions(configProperties);
     }
 
 
@@ -243,7 +374,7 @@ public class ServerConfiguration extends PropertiesConfiguration {
     }
 
     public String getClusterId() {
-        return getString(CLUSTER_ID, "auto");
+        return getString(CLUSTER_ID, DEFAULT_CLUSTER_ID);
     }
 
     public ServerConfiguration setNumIOThreads(int num) {
@@ -292,7 +423,7 @@ public class ServerConfiguration extends PropertiesConfiguration {
     }
 
     public int getHandshakeTimeout() {
-        return getInt(HANDSHAKE_TIMEOUT, 10);
+        return getInt(HANDSHAKE_TIMEOUT, Integer.parseInt(DEFAULT_HANDSHAKE_TIMEOUT));
     }
 
     public ServerConfiguration setMetadataRetention(int numFiles) {
@@ -304,7 +435,7 @@ public class ServerConfiguration extends PropertiesConfiguration {
     }
 
     public int getMetadataRetention() {
-        return getInt(METADATA_RETENTION, 1000);
+        return getInt(METADATA_RETENTION, Integer.parseInt(DEFAULT_METADATA_RETENTION));
     }
 
     public ServerConfiguration setLogLevel(String levelStr) {
@@ -326,7 +457,7 @@ public class ServerConfiguration extends PropertiesConfiguration {
     }
 
     public int getNumBaseServerThreads() {
-        return getInt(NUM_BASE_SERVER_THREADS, 8);
+        return getInt(NUM_BASE_SERVER_THREADS, Integer.parseInt(DEFAULT_BASE_SERVER_THREADS));
     }
 
     public ServerConfiguration setMetricsProviderAddress(Integer port) {
@@ -467,7 +598,7 @@ public class ServerConfiguration extends PropertiesConfiguration {
     }
 
     public String getTlsCiphers() {
-        return getString(TLS_CIPHERS, "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256");
+        return getString(TLS_CIPHERS, DEFAULT_TLS_CIPHERS);
     }
 
     public ServerConfiguration setTlsProtocols(String ciphers) {
@@ -476,16 +607,7 @@ public class ServerConfiguration extends PropertiesConfiguration {
     }
 
     public String getTlsProtocols() {
-        return getString(TLS_PROTOCOLS, "TLSv1.1,TLSv1.2");
-    }
-
-    public ServerConfiguration setNumLayoutServerThreads(int numThreads) {
-        setProperty(NUM_LAYOUT_SERVER_THREADS, numThreads);
-        return this;
-    }
-
-    public int getNumLayoutServerThreads() {
-        return getInt(NUM_LAYOUT_SERVER_THREADS, 8);
+        return getString(TLS_PROTOCOLS, DEFAULT_TLS_PROTOCOLS);
     }
 
     public ServerConfiguration setInMemoryMode(boolean inMemoryMode) {
@@ -503,7 +625,7 @@ public class ServerConfiguration extends PropertiesConfiguration {
     }
 
     public double getLogUnitCacheRatio() {
-        return getDouble(LOG_UNIT_CACHE_RATIO, 0.5);
+        return getDouble(LOG_UNIT_CACHE_RATIO, Double.parseDouble(DEFAULT_LOG_UNIT_CACHE_RATIO));
     }
 
     public ServerConfiguration setVerifyChecksum(boolean verifyChecksum) {
@@ -539,7 +661,7 @@ public class ServerConfiguration extends PropertiesConfiguration {
     }
 
     public int getNumLogUnitWorkerThreads() {
-        return getInt(NUM_LOGUNIT_WORKER_THREADS, 8);
+        return getInt(NUM_LOGUNIT_WORKER_THREADS, Integer.parseInt(DEFAULT_LOG_UNIT_WORKER_THREADS));
     }
 
     public ServerConfiguration setLogSizeQuota(double logSizeQuota) {
@@ -548,20 +670,20 @@ public class ServerConfiguration extends PropertiesConfiguration {
     }
 
     public double getLogSizeQuota() {
-        return getDouble(LOG_SIZE_QUOTA, 100);
+        return getDouble(LOG_SIZE_QUOTA, Double.parseDouble(DEFAULT_LOG_SIZE_QUOTA));
     }
 
     public long getMaxLogUnitCacheSize() {
         return (long) (Runtime.getRuntime().maxMemory() * getLogUnitCacheRatio());
     }
 
-    public ServerConfiguration setSequencerConflictWindowSize(int size) {
-        setProperty(SEQUENCER_CONFLICT_WINDOW_SIZE, size);
+    public ServerConfiguration setSequencerCacheSize(int size) {
+        setProperty(SEQUENCER_CACHE_SIZE, size);
         return this;
     }
 
-    public int getSequencerConflictWindowSize() {
-        return getInt(SEQUENCER_CONFLICT_WINDOW_SIZE, 250000);
+    public int getSequencerCacheSize() {
+        return getInt(SEQUENCER_CACHE_SIZE, Integer.parseInt(DEFAULT_SEQUENCER_CACHE_SIZE));
     }
 
     public ServerConfiguration setStateTransferBatchSize(int batchSize) {
@@ -570,16 +692,16 @@ public class ServerConfiguration extends PropertiesConfiguration {
     }
 
     public int getStateTransferBatchSize() {
-        return getInt(STATE_TRANSFER_BATCH_SIZE, 100);
+        return getInt(STATE_TRANSFER_BATCH_SIZE, Integer.parseInt(DEFAULT_STATE_TRANSFER_BATCH_SIZE));
     }
 
-    public ServerConfiguration numManagementServerThreads(int numThreads) {
+    public ServerConfiguration setNumManagementServerThreads(int numThreads) {
         setProperty(NUM_MANAGEMENT_SERVER_THREADS, numThreads);
         return this;
     }
 
     public int getNumManagementServerThreads() {
-        return getInt(NUM_MANAGEMENT_SERVER_THREADS, 4);
+        return getInt(NUM_MANAGEMENT_SERVER_THREADS, Integer.parseInt(DEFAULT_MANAGEMENT_SERVER_THREADS));
     }
 
     public ServerConfiguration setMaxReplicationDataMessageSize(int maxReplicationDataMessageSize) {
@@ -597,7 +719,7 @@ public class ServerConfiguration extends PropertiesConfiguration {
     }
 
     public int getCompactRate() {
-        return getInt(COMPACT_RATE, 60);
+        return getInt(COMPACT_RATE, Integer.parseInt(DEFAULT_COMPACT_RATE));
     }
 
     public ServerConfiguration setPluginConfigFilePath(String pluginConfigFilePath) {
@@ -642,7 +764,7 @@ public class ServerConfiguration extends PropertiesConfiguration {
     }
 
     public String getThreadPrefix() {
-        return getString(THREAD_PREFIX, "");
+        return getString(THREAD_PREFIX, DEFAULT_THREAD_PREFIX);
     }
 
     public ServerConfiguration setBindToAllInterfaces(boolean bindToAllInterfaces) {
