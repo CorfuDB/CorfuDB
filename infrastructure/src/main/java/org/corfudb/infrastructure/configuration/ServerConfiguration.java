@@ -186,17 +186,7 @@ public class ServerConfiguration extends BaseConfiguration {
         conf.setStateTransferBatchSize(Integer.parseInt(configProperties.getProperty(STATE_TRANSFER_BATCH_SIZE, DEFAULT_STATE_TRANSFER_BATCH_SIZE)));
 
         String implementationType = configProperties.getProperty(CHANNEL_IMPLEMENTATION,DEFAULT_CHANNEL_IMPLEMENTATION_TYPE);
-        if (implementationType.equals("auto")) {
-            conf.setChannelImplementation(ChannelImplementation.AUTO);
-        } else if (implementationType.equals("local")) {
-            conf.setChannelImplementation(ChannelImplementation.LOCAL);
-        } else if (implementationType.equals("epoll")) {
-            conf.setChannelImplementation(ChannelImplementation.EPOLL);
-        } else if (implementationType.equals("kqueue")) {
-            conf.setChannelImplementation(ChannelImplementation.KQUEUE);
-        } else {
-            conf.setChannelImplementation(ChannelImplementation.NIO);
-        }
+        conf.setChannelImplementation(ChannelImplementation.valueOf(implementationType.toUpperCase()));
 
         conf.setHandshakeTimeout(Integer.parseInt(configProperties.getProperty(HANDSHAKE_TIMEOUT, DEFAULT_HANDSHAKE_TIMEOUT)));
         conf.setClusterId(configProperties.getProperty(CLUSTER_ID, DEFAULT_CLUSTER_ID));
@@ -216,129 +206,129 @@ public class ServerConfiguration extends BaseConfiguration {
 
     public static ServerConfiguration getServerConfigFromMap(Map<String, Object> opts) {
         Properties configProperties = new Properties();
-        configProperties.setProperty(IN_MEMORY_MODE,Boolean.toString(opts.containsKey("--memory")));
-        if (opts.containsKey("--log-path")) {
+        configProperties.setProperty(IN_MEMORY_MODE, Boolean.toString((Boolean) opts.get("--memory")));
+        if (opts.get("--log-path") != null) {
             configProperties.setProperty(SERVER_DIR, (String) opts.get("--log-path"));
         }
 
-        configProperties.setProperty(VERIFY_CHECKSUM, Boolean.toString(!opts.containsKey("--no-verify")));
-        configProperties.setProperty(SYNC_DATA, Boolean.toString(!opts.containsKey("--no-sync")));
-        configProperties.setProperty(SINGLE_MODE, Boolean.toString(opts.containsKey("--single")));
-        configProperties.setProperty(AUTO_COMMIT, Boolean.toString(!opts.containsKey("--no-auto-commit")));
+        configProperties.setProperty(VERIFY_CHECKSUM, Boolean.toString(!((Boolean) opts.get("--no-verify"))));
+        configProperties.setProperty(SYNC_DATA, Boolean.toString(!((Boolean) opts.get("--no-sync"))));
+        configProperties.setProperty(SINGLE_MODE, Boolean.toString((Boolean) opts.get("--single")));
+        configProperties.setProperty(AUTO_COMMIT, Boolean.toString(!((Boolean) opts.get("--no-auto-commit"))));
 
-        if (opts.containsKey("--network-interface")) {
+        if (opts.get("--network-interface") != null) {
             configProperties.setProperty(NETWORK_INTERFACE, (String) opts.get("--network-interface"));
         }
-        if (opts.containsKey("--address")) {
+        if (opts.get("--address") != null) {
             configProperties.setProperty(HOST_ADDRESS, (String) opts.get("--address"));
         }
-        if (opts.containsKey("--max-replication-data-message-size")) {
+        if (opts.get("--max-replication-data-message-size") != null) {
             configProperties.setProperty(MAX_REPLICATION_DATA_MESSAGE_SIZE, (String) opts.get("--max-replication-data-message-size"));
         }
-        if (opts.containsKey("--cache-heap-ratio")) {
+        if (opts.get("--cache-heap-ratio") != null) {
             configProperties.setProperty(LOG_UNIT_CACHE_RATIO, (String) opts.get("--cache-heap-ratio"));
         }
-        if (opts.containsKey("--log-level")) {
+        if (opts.get("--log-level") != null) {
             configProperties.setProperty(LOG_LEVEL, (String) opts.get("--log-level"));
         }
-        if (opts.containsKey("--compact")) {
+        if (opts.get("--compact") != null) {
             configProperties.setProperty(COMPACT_RATE, (String) opts.get("--compact"));
         }
-        if (opts.containsKey("--plugin")) {
+        if (opts.get("--plugin") != null) {
             configProperties.setProperty(PLUGIN_CONFIG_FILE_PATH, (String) opts.get("--plugin"));
         }
-        if (opts.containsKey("--base-server-threads")) {
+        if (opts.get("--base-server-threads") != null) {
             configProperties.setProperty(NUM_BASE_SERVER_THREADS, (String) opts.get("--base-server-threads"));
         }
-        if (opts.containsKey("--log-size-quota-percentage")) {
+        if (opts.get("--log-size-quota-percentage") != null) {
             configProperties.setProperty(LOG_SIZE_QUOTA, (String) opts.get("--log-size-quota-percentage"));
         }
 
-        if (opts.containsKey("--logunit-threads")) {
+        if (opts.get("--logunit-threads") != null) {
             configProperties.setProperty(NUM_LOGUNIT_WORKER_THREADS, (String) opts.get("--logunit-threads"));
         }
-        if (opts.containsKey("--management-server-threads")) {
+        if (opts.get("--management-server-threads") != null) {
             configProperties.setProperty(NUM_MANAGEMENT_SERVER_THREADS,(String) opts.get("--management-server-threads"));
         }
-        if (opts.containsKey("--Threads")) {
+        if (opts.get("--Threads") != null) {
             configProperties.setProperty(NUM_IO_THREADS,(String) opts.get("--Threads"));
         }
 
-        configProperties.setProperty(ENABLE_TLS, Boolean.toString(opts.containsKey("--enable-tls")));
+        configProperties.setProperty(ENABLE_TLS, Boolean.toString((Boolean) opts.get("--enable-tls")));
 
-        if (opts.containsKey("--keystore")) {
+        if (opts.get("--keystore") != null) {
             configProperties.setProperty(KEYSTORE, (String) opts.get("--keystore"));
         }
-        if (opts.containsKey("--keystore-password-file")) {
+        if (opts.get("--keystore-password-file") != null) {
             configProperties.setProperty(KEYSTORE_PASSWORD_FILE, (String) opts.get("--keystore-password-file"));
         }
 
-        if (opts.containsKey("--truststore")) {
+        if (opts.get("--truststore") != null) {
             configProperties.setProperty(TRUSTSTORE, (String) opts.get("--truststore"));
         }
 
-        if (opts.containsKey("--truststore-password-file")) {
+        if (opts.get("--truststore-password-file") != null) {
             configProperties.setProperty(TRUSTSTORE_PASSWORD_FILE, (String) opts.get("--truststore-password-file"));
         }
 
-        configProperties.setProperty(ENABLE_TLS_MUTUAL_AUTH, Boolean.toString(opts.containsKey("--enable-tls-mutual-auth")));
-        configProperties.setProperty(ENABLE_SASL_PLAIN_TEXT_AUTH, Boolean.toString(opts.containsKey("--enable-sasl-plain-text-auth")));
+        configProperties.setProperty(ENABLE_TLS_MUTUAL_AUTH, Boolean.toString((Boolean) opts.get("--enable-tls-mutual-auth")));
+        configProperties.setProperty(ENABLE_SASL_PLAIN_TEXT_AUTH, Boolean.toString((Boolean) opts.get("--enable-sasl-plain-text-auth")));
 
-        if (opts.containsKey("--sasl-plain-text-username-file")) {
+        if (opts.get("--sasl-plain-text-username-file") != null) {
             configProperties.setProperty(SASL_PLAIN_TEXT_USERNAME_FILE, (String) opts.get("--sasl-plain-text-username-file"));
         }
 
-        if (opts.containsKey("--sasl-plain-text-password-file")) {
+        if (opts.get("--sasl-plain-text-password-file") != null) {
             configProperties.setProperty(SASL_PLAIN_TEXT_PASSWORD_FILE, (String) opts.get("--sasl-plain-text-password-file"));
         }
 
-        if (opts.containsKey("--sequencer-cache-size")) {
+        if (opts.get("--sequencer-cache-size") != null) {
             configProperties.setProperty(SEQUENCER_CACHE_SIZE, (String) opts.get("--sequencer-cache-size"));
         }
 
-        if (opts.containsKey("--batch-size")) {
+        if (opts.get("--batch-size") != null) {
             configProperties.setProperty(SNAPSHOT_BATCH_SIZE, (String) opts.get("--batch-size"));
         }
 
-        if (opts.containsKey("--implementation")) {
+        if (opts.get("--implementation") != null) {
             configProperties.setProperty(CHANNEL_IMPLEMENTATION, (String) opts.get("--implementation"));
         }
 
-        if (opts.containsKey("--HandshakeTimeout")) {
+        if (opts.get("--HandshakeTimeout") != null) {
             configProperties.setProperty(HANDSHAKE_TIMEOUT, (String) opts.get("--HandshakeTimeout"));
         }
 
-        if (opts.containsKey("--cluster-id")) {
+        if (opts.get("--cluster-id") != null) {
             configProperties.setProperty(CLUSTER_ID, (String) opts.get("--cluster-id"));
         }
 
-        if (opts.containsKey("--tls-ciphers")) {
+        if (opts.get("--tls-ciphers") != null) {
             configProperties.setProperty(TLS_CIPHERS, (String) opts.get("--tls-ciphers"));
         }
 
-        if (opts.containsKey("--tls-protocols")) {
+        if (opts.get("--tls-protocols") != null) {
             configProperties.setProperty(TLS_PROTOCOLS, (String) opts.get("--tls-protocols"));
         }
 
-        configProperties.setProperty(ENABLE_METRICS, Boolean.toString(opts.containsKey("--metrics")));
+        configProperties.setProperty(ENABLE_METRICS, Boolean.toString((Boolean) opts.get("--metrics")));
 
-        if (opts.containsKey("--snapshot-batch")) {
+        if (opts.get("--snapshot-batch") != null) {
             configProperties.setProperty(SNAPSHOT_BATCH_SIZE, (String) opts.get("--snapshot-batch"));
         }
 
-        if (opts.containsKey("--lock-lease")) {
+        if (opts.get("--lock-lease") != null) {
             configProperties.setProperty(LOCK_LEASE_DURATION, (String) opts.get("--lock-lease"));
         }
 
-        if (opts.containsKey("--Prefix")) {
+        if (opts.get("--Prefix") != null) {
             configProperties.setProperty(THREAD_PREFIX, (String) opts.get("--Prefix"));
         }
 
-        if (opts.containsKey("--metadata-retention")) {
+        if (opts.get("--metadata-retention") != null) {
             configProperties.setProperty(METADATA_RETENTION, (String) opts.get("--metadata-retention"));
         }
 
-        if (opts.containsKey("<port>")) {
+        if (opts.get("<port>") != null) {
             configProperties.setProperty(SERVER_PORT, (String) opts.get("<port>"));
         }
 
