@@ -39,36 +39,9 @@ For more details on the inner workings of Corfu, see the [Corfu wiki](https://gi
 
 ## Ok, great - get me started running Corfu!
 
-There are currently two ways to run Corfu - by building the development sources, or on Debian-based systems, installing the corfu-server package. We'll describe how to build Corfu from the development sources first. If you just want to install the Debian package, skip [here](#install-from-debian-package).
-
-### Install From Debian Package
-
-We currently host an apt repository for Ubuntu 14.04 LTS (Trusty).
-To install Corfu via ```apt-get```, run the following commands:
-
-```bash
-# Install the package for add-apt-repository
-$ sudo apt-get install python-software-properties
-# Add the Corfu signing key to your keychain
-$ sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 482CD4B4
-# Add the Corfu repository
-$ sudo apt-add-repository "deb https://raw.github.com/CorfuDB/Corfu-Repos/debian/ trusty main"
-# Update packages and install the Corfu server infrastructure
-$ sudo apt-get update
-$ sudo apt-get install corfu-server
-```
-
 ### Building Corfu From Source
 To build Corfu, you will need the Java JDK 8 as well as Apache Maven
 3.3 or later to invoke the build system.
-
-On Linux (Debian/Ubuntu), run:
-
-```bash
-sudo add-apt-repository ppa:webupd8team/java
-sudo apt-get update
-sudo apt-get install oracle-java8-installer
-```
 
 Your major release number of Debian/Ubuntu will determine whether the
 simple command below is sufficient to install Maven 3.3 or later.
@@ -274,21 +247,7 @@ To write your first program that uses Corfu, you will want to add Corfu as a dep
     <scope>compile</scope>
 </dependency>
 ```
-to your pom.xml file. 
-
-You will also want to add the Corfu Maven repository, unless you ran ```mvn install``` from source to install the jar files locally:
-```xml
-<repositories>
-    <repository>
-        <id>corfu-mvn-repo</id>
-        <url>https://raw.github.com/CorfuDB/Corfu-Repos/mvn-repo/</url>
-        <snapshots>
-            <enabled>true</enabled>
-            <updatePolicy>always</updatePolicy>
-        </snapshots>
-    </repository>
-</repositories>
-```
+to your pom.xml file.
 
 Once you have Corfu added as a dependency, you can start writing Corfu code. Let's start with a map:
 ```java
