@@ -8,6 +8,8 @@ import java.lang.invoke.MethodHandles;
 import java.util.concurrent.ExecutorService;
 import java.util.Optional;
 import javax.annotation.Nonnull;
+import javax.annotation.concurrent.NotThreadSafe;
+
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -68,6 +70,7 @@ import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 //TODO Finer grained synchronization needed for this class.
 //TODO Need a janitor to cleanup old phases data and to fill up holes in layout history.
 @Slf4j
+@NotThreadSafe
 public class LayoutServer extends AbstractServer {
 
     @Getter
