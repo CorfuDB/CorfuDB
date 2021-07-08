@@ -1,27 +1,20 @@
 package org.corfudb.common.metrics.micrometer;
 
-import com.codahale.metrics.MetricFilter;
-import com.codahale.metrics.MetricRegistry;
-import io.micrometer.core.instrument.Clock;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
-import io.micrometer.core.instrument.dropwizard.DropwizardConfig;
 import io.micrometer.core.instrument.logging.LoggingRegistryConfig;
-import io.micrometer.core.instrument.util.HierarchicalNameMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.registries.LoggingMeterRegistryWithHistogramSupport;
 import org.corfudb.common.metrics.micrometer.registries.RegistryLoader;
 import org.corfudb.common.metrics.micrometer.registries.RegistryProvider;
-import org.corfudb.common.metrics.micrometer.registries.dropwizard.DropwizardMeterRegistryWithSlidingTimeWindow;
 import org.slf4j.Logger;
 
 import java.time.Duration;
 import java.util.Iterator;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 /**
@@ -63,43 +56,6 @@ public class MeterRegistryProvider {
             };
 
             addToCompositeRegistry(supplier);
-        }
-
-        public static synchronized void initDropwizardRegistry() {
-            DropwizardConfig consoleConfig = new DropwizardConfig() {
-                @Override
-                public Duration step() {
-                    return Duration.ofSeconds(
-                            1
-                    );
-                }
-
-                @Override
-                public String prefix() {
-                    return "console";
-                }
-
-                @Override
-                public String get(String key) {
-                    return "";
-                }
-            };
-
-
-            MetricRegistry metricRegistry = new MetricRegistry();
-            TestReporter reporter = new TestReporter(metricRegistry, "reporter", MetricFilter.ALL, TimeUnit.SECONDS, TimeUnit.SECONDS);
-            reporter.start(1, TimeUnit.SECONDS);
-
-            MeterRegistry dropwizardMeterRegistry = new DropwizardMeterRegistryWithSlidingTimeWindow(consoleConfig, metricRegistry, HierarchicalNameMapper.DEFAULT, Clock.SYSTEM, 10, TimeUnit.SECONDS) {
-                @Override
-
-                protected Double nullGaugeValue() {
-                    return null;
-                }
-            };
-
-            addToCompositeRegistry(() -> Optional.of(dropwizardMeterRegistry));
-            log.info("Dropwizard registry initialized.");
         }
 
         /**

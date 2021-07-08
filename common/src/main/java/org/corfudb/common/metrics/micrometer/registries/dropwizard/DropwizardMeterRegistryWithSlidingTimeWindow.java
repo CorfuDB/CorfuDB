@@ -14,6 +14,12 @@ import io.micrometer.core.instrument.util.HierarchicalNameMapper;
 
 import java.util.concurrent.TimeUnit;
 
+/**
+ * This class overrides the timer and histogram of DropwizardMeterRegistry and adds a
+ * SlidingWindowReservoirArray. This allows for the reporting of measurements made within the last
+ * n TimeUnits. This is done for consistency, as this is the default behavior in other micrometer
+ * registries.
+ */
 public class DropwizardMeterRegistryWithSlidingTimeWindow extends DropwizardMeterRegistry {
     private final long windowSize;
     private final TimeUnit windowUnits;
@@ -53,6 +59,6 @@ public class DropwizardMeterRegistryWithSlidingTimeWindow extends DropwizardMete
 
     @Override
     protected TimeUnit getBaseTimeUnit() {
-        return TimeUnit.SECONDS;
+        return TimeUnit.MICROSECONDS;
     }
 }
