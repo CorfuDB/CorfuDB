@@ -1,28 +1,22 @@
 package org.corfudb.infrastructure.configuration;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
-import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 
 import ch.qos.logback.classic.Level;
-import ch.qos.logback.core.joran.event.SaxEvent;
-import io.grpc.Server;
 import io.netty.channel.EventLoopGroup;
-import org.apache.commons.cli.CommandLine;
 import org.apache.commons.configuration.BaseConfiguration;
-import org.apache.commons.configuration.ConfigurationException;
-import org.apache.commons.configuration.PropertiesConfiguration;
 import org.corfudb.comm.ChannelImplementation;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.utils.lock.Lock;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Properties;
+
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
+import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 
 /**
  * This class holds various server configuration parameters.
@@ -128,6 +122,7 @@ public class ServerConfiguration extends BaseConfiguration {
     private static ServerConfiguration applyServerConfigurationOptions(Properties configProperties) {
 
         ServerConfiguration conf = new ServerConfiguration();
+        conf.setDelimiterParsingDisabled(true);
 
         if (Boolean.parseBoolean(configProperties.getProperty(IN_MEMORY_MODE, "false"))) {
             conf.setInMemoryMode(true);
@@ -167,12 +162,11 @@ public class ServerConfiguration extends BaseConfiguration {
         conf.setNumBaseServerThreads(Integer.parseInt(configProperties.getProperty(NUM_BASE_SERVER_THREADS, DEFAULT_BASE_SERVER_THREADS)));
         conf.setLogSizeQuota(Double.parseDouble(configProperties.getProperty(LOG_SIZE_QUOTA, DEFAULT_LOG_SIZE_QUOTA)));
 
-        //TODO(NEIL): double check especially management threads
         conf.setNumLogUnitWorkerThreads(Integer.parseInt(configProperties.getProperty(NUM_LOGUNIT_WORKER_THREADS, DEFAULT_LOG_UNIT_WORKER_THREADS)));
         conf.setNumManagementServerThreads(Integer.parseInt(configProperties.getProperty(NUM_MANAGEMENT_SERVER_THREADS, DEFAULT_MANAGEMENT_SERVER_THREADS)));
         conf.setNumIOThreads(Integer.parseInt(configProperties.getProperty(NUM_IO_THREADS, DEFAULT_IO_THREADS)));
 
-        conf.setEnableTls(Boolean.getBoolean(configProperties.getProperty(ENABLE_TLS, "false")));
+        conf.setEnableTls(Boolean.parseBoolean(configProperties.getProperty(ENABLE_TLS, "false")));
         conf.setKeystore(configProperties.getProperty(KEYSTORE));
         conf.setKeystorePasswordFile(configProperties.getProperty(KEYSTORE_PASSWORD_FILE));
         conf.setTruststore(configProperties.getProperty(TRUSTSTORE));
@@ -211,10 +205,21 @@ public class ServerConfiguration extends BaseConfiguration {
             configProperties.setProperty(SERVER_DIR, (String) opts.get("--log-path"));
         }
 
-        configProperties.setProperty(VERIFY_CHECKSUM, Boolean.toString(!((Boolean) opts.get("--no-verify"))));
-        configProperties.setProperty(SYNC_DATA, Boolean.toString(!((Boolean) opts.get("--no-sync"))));
-        configProperties.setProperty(SINGLE_MODE, Boolean.toString((Boolean) opts.get("--single")));
-        configProperties.setProperty(AUTO_COMMIT, Boolean.toString(!((Boolean) opts.get("--no-auto-commit"))));
+        if (opts.get("--no-verify") != null) {
+            configProperties.setProperty(VERIFY_CHECKSUM, Boolean.toString(!((Boolean) opts.get("--no-verify"))));
+        }
+
+        if (opts.get("--no-sync") != null) {
+            configProperties.setProperty(SYNC_DATA, Boolean.toString(!((Boolean) opts.get("--no-sync"))));
+        }
+
+        if (opts.get("--single") != null) {
+            configProperties.setProperty(SINGLE_MODE, Boolean.toString((Boolean) opts.get("--single")));
+        }
+
+        if (opts.get("--no-auto-commit") != null) {
+            configProperties.setProperty(AUTO_COMMIT, Boolean.toString(!((Boolean) opts.get("--no-auto-commit"))));
+        }
 
         if (opts.get("--network-interface") != null) {
             configProperties.setProperty(NETWORK_INTERFACE, (String) opts.get("--network-interface"));
@@ -254,7 +259,9 @@ public class ServerConfiguration extends BaseConfiguration {
             configProperties.setProperty(NUM_IO_THREADS,(String) opts.get("--Threads"));
         }
 
-        configProperties.setProperty(ENABLE_TLS, Boolean.toString((Boolean) opts.get("--enable-tls")));
+        if (opts.get("--enable-tls") != null) {
+            configProperties.setProperty(ENABLE_TLS, Boolean.toString((Boolean) opts.get("--enable-tls")));
+        }
 
         if (opts.get("--keystore") != null) {
             configProperties.setProperty(KEYSTORE, (String) opts.get("--keystore"));
@@ -271,8 +278,13 @@ public class ServerConfiguration extends BaseConfiguration {
             configProperties.setProperty(TRUSTSTORE_PASSWORD_FILE, (String) opts.get("--truststore-password-file"));
         }
 
-        configProperties.setProperty(ENABLE_TLS_MUTUAL_AUTH, Boolean.toString((Boolean) opts.get("--enable-tls-mutual-auth")));
-        configProperties.setProperty(ENABLE_SASL_PLAIN_TEXT_AUTH, Boolean.toString((Boolean) opts.get("--enable-sasl-plain-text-auth")));
+        if (opts.get("--enable-tls-mutual-auth") != null) {
+            configProperties.setProperty(ENABLE_TLS_MUTUAL_AUTH, Boolean.toString((Boolean) opts.get("--enable-tls-mutual-auth")));
+        }
+
+        if (opts.get("--enable-sasl-plain-text-auth") != null) {
+            configProperties.setProperty(ENABLE_SASL_PLAIN_TEXT_AUTH, Boolean.toString((Boolean) opts.get("--enable-sasl-plain-text-auth")));
+        }
 
         if (opts.get("--sasl-plain-text-username-file") != null) {
             configProperties.setProperty(SASL_PLAIN_TEXT_USERNAME_FILE, (String) opts.get("--sasl-plain-text-username-file"));
@@ -310,7 +322,9 @@ public class ServerConfiguration extends BaseConfiguration {
             configProperties.setProperty(TLS_PROTOCOLS, (String) opts.get("--tls-protocols"));
         }
 
-        configProperties.setProperty(ENABLE_METRICS, Boolean.toString((Boolean) opts.get("--metrics")));
+        if (opts.get("--metrics") != null) {
+            configProperties.setProperty(ENABLE_METRICS, Boolean.toString((Boolean) opts.get("--metrics")));
+        }
 
         if (opts.get("--snapshot-batch") != null) {
             configProperties.setProperty(SNAPSHOT_BATCH_SIZE, (String) opts.get("--snapshot-batch"));

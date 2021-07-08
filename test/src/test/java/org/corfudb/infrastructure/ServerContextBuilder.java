@@ -1,9 +1,7 @@
 package org.corfudb.infrastructure;
 
-import com.google.common.collect.ImmutableMap;
 import lombok.Data;
 import lombok.experimental.Accessors;
-
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.configuration.ServerConfiguration;
 import org.corfudb.test.concurrent.TestThreadGroups;

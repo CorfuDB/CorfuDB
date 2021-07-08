@@ -4,7 +4,6 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.joran.spi.JoranException;
-import io.grpc.Server;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
@@ -24,8 +23,6 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-
-import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 
 /**
  * This class represents the Corfu Replication Server. This Server will be running on both ends
@@ -49,7 +46,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
             "Corfu Log Replication Server, the server for replication across clusters.\n"
                     + "\n"
                     + "Usage:\n"
-                    + "\tlog_replication_server (-l <path>|-m) [-nsN] [-a <address>|-q <interface-name>] "
+                    + "\tcorfu_replication_server (-l <path>|-m) [-nsN] [-a <address>|-q <interface-name>] "
                     + "[--snapshot-batch=<batch-size>] "
                     + "[--max-replication-data-message-size=<msg-size>] "
                     + "[--lock-lease=<lease-duration>]"
@@ -64,7 +61,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
                     + "[--metrics]"
                     + "[-P <prefix>] [-R <retention>] <port>\n"
-                    + "\tcorfu_server (--config-file=<config-file-path>)\n"
+                    + "\tcorfu_replication_server (--config-file=<config-file-path>)\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <path>, --log-path=<path>                                             "
