@@ -237,17 +237,9 @@ To remove the added node from the cluster:
 
 ## Now I want to write a program that uses Corfu!
 
-To write your first program that uses Corfu, you will want to add Corfu as a dependency. For Maven-based projects, you can add:
+To write your first program that uses Corfu, you will want to add all Corfu dependencies from the [Corfu Package Page](https://github.com/orgs/CorfuDB/packages?repo_name=CorfuDB). 
 
-```xml
- <dependency>
-    <groupId>org.corfudb</groupId>
-    <artifactId>runtime</artifactId>
-    <version>0.1-SNAPSHOT</version>
-    <scope>compile</scope>
-</dependency>
-```
-to your pom.xml file.
+For instructions on how to add the dependency from GitHub, refer to [this page](https://docs.github.com/en/packages/working-with-a-github-packages-registry).
 
 Once you have Corfu added as a dependency, you can start writing Corfu code. Let's start with a map:
 ```java
