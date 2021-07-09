@@ -14,8 +14,13 @@ import org.corfudb.infrastructure.SequencerServerCache.ConflictTxStream;
 import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
-import org.corfudb.protocols.wireprotocol.*;
+import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.protocols.wireprotocol.TokenType;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.proto.RpcCommon.StreamAddressRangeMsg;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.proto.RpcCommon.UuidToStreamAddressSpacePairMsg;
@@ -37,11 +42,18 @@ import java.util.concurrent.ExecutorService;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import static org.corfudb.protocols.CorfuProtocolCommon.*;
+
+import static org.corfudb.protocols.CorfuProtocolCommon.getStreamAddressRange;
+import static org.corfudb.protocols.CorfuProtocolCommon.getStreamsAddressResponseMsg;
+import static org.corfudb.protocols.CorfuProtocolCommon.getStreamAddressSpace;
+import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.CorfuProtocolTxResolution.getTxResolutionInfo;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
-import static org.corfudb.protocols.service.CorfuProtocolSequencer.*;
+import static org.corfudb.protocols.service.CorfuProtocolSequencer.getBootstrapSequencerResponseMsg;
+import static org.corfudb.protocols.service.CorfuProtocolSequencer.getSequencerMetricsResponseMsg;
+import static org.corfudb.protocols.service.CorfuProtocolSequencer.getSequencerTrimResponseMsg;
+import static org.corfudb.protocols.service.CorfuProtocolSequencer.getTokenResponseMsg;
 
 /**
  * This server implements the sequencer functionality of Corfu.

@@ -35,7 +35,6 @@ import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletionException;
@@ -595,25 +594,25 @@ public class LogUnitServer extends AbstractServer {
      * This facilitates the injection of mocked objects during unit tests.
      */
     public static class LogUnitServerInitializer {
-        StreamLog buildInMemoryStreamLog() {
+        public StreamLog buildInMemoryStreamLog() {
             return new InMemoryStreamLog();
         }
 
-        StreamLog buildStreamLog(@Nonnull ServerContext serverContext) {
+        public StreamLog buildStreamLog(@Nonnull ServerContext serverContext) {
             return new StreamLogFiles(serverContext);
         }
 
-        LogUnitServerCache buildLogUnitServerCache(@Nonnull StreamLog streamLog,
+        public LogUnitServerCache buildLogUnitServerCache(@Nonnull StreamLog streamLog,
                                                    @Nonnull ServerContext  serverContext) {
             return new LogUnitServerCache(streamLog, serverContext.getConfiguration().getMaxLogUnitCacheSize());
         }
 
-        BatchProcessor buildBatchProcessor(@Nonnull StreamLog streamLog,
+        public BatchProcessor buildBatchProcessor(@Nonnull StreamLog streamLog,
                                            @Nonnull ServerContext serverContext) {
             return new BatchProcessor(streamLog, serverContext.getServerEpoch(), serverContext.getConfiguration().getSyncData());
         }
 
-        StreamLogCompaction buildStreamLogCompaction(@Nonnull StreamLog streamLog) {
+        public StreamLogCompaction buildStreamLogCompaction(@Nonnull StreamLog streamLog) {
             return new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER);
         }
     }
