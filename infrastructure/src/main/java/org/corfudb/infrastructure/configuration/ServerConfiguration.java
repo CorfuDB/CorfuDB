@@ -1,7 +1,9 @@
 package org.corfudb.infrastructure.configuration;
 
 import ch.qos.logback.classic.Level;
+import com.google.common.collect.ImmutableSet;
 import io.netty.channel.EventLoopGroup;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.configuration.BaseConfiguration;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.utils.lock.Lock;
@@ -9,10 +11,7 @@ import org.corfudb.utils.lock.Lock;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Properties;
+import java.util.*;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
@@ -23,7 +22,7 @@ import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
  *
  * <p>Created by maithem on 12/4/19.
  */
-
+@Slf4j
 public class ServerConfiguration extends BaseConfiguration {
     // Server general parameters
     private static final String SERVER_DIR = "log-path";
@@ -200,153 +199,76 @@ public class ServerConfiguration extends BaseConfiguration {
 
     public static ServerConfiguration getServerConfigFromMap(Map<String, Object> opts) {
         Properties configProperties = new Properties();
-        configProperties.setProperty(IN_MEMORY_MODE, Boolean.toString((Boolean) opts.get("--memory")));
-        if (opts.get("--log-path") != null) {
-            configProperties.setProperty(SERVER_DIR, (String) opts.get("--log-path"));
-        }
-
-        if (opts.get("--no-verify") != null) {
-            configProperties.setProperty(VERIFY_CHECKSUM, Boolean.toString(!((Boolean) opts.get("--no-verify"))));
-        }
-
-        if (opts.get("--no-sync") != null) {
-            configProperties.setProperty(SYNC_DATA, Boolean.toString(!((Boolean) opts.get("--no-sync"))));
-        }
-
-        if (opts.get("--single") != null) {
-            configProperties.setProperty(SINGLE_MODE, Boolean.toString((Boolean) opts.get("--single")));
-        }
-
-        if (opts.get("--no-auto-commit") != null) {
-            configProperties.setProperty(AUTO_COMMIT, Boolean.toString(!((Boolean) opts.get("--no-auto-commit"))));
-        }
-
-        if (opts.get("--network-interface") != null) {
-            configProperties.setProperty(NETWORK_INTERFACE, (String) opts.get("--network-interface"));
-        }
-        if (opts.get("--address") != null) {
-            configProperties.setProperty(HOST_ADDRESS, (String) opts.get("--address"));
-        }
-        if (opts.get("--max-replication-data-message-size") != null) {
-            configProperties.setProperty(MAX_REPLICATION_DATA_MESSAGE_SIZE, (String) opts.get("--max-replication-data-message-size"));
-        }
-        if (opts.get("--cache-heap-ratio") != null) {
-            configProperties.setProperty(LOG_UNIT_CACHE_RATIO, (String) opts.get("--cache-heap-ratio"));
-        }
-        if (opts.get("--log-level") != null) {
-            configProperties.setProperty(LOG_LEVEL, (String) opts.get("--log-level"));
-        }
-        if (opts.get("--compact") != null) {
-            configProperties.setProperty(COMPACT_RATE, (String) opts.get("--compact"));
-        }
-        if (opts.get("--plugin") != null) {
-            configProperties.setProperty(PLUGIN_CONFIG_FILE_PATH, (String) opts.get("--plugin"));
-        }
-        if (opts.get("--base-server-threads") != null) {
-            configProperties.setProperty(NUM_BASE_SERVER_THREADS, (String) opts.get("--base-server-threads"));
-        }
-        if (opts.get("--log-size-quota-percentage") != null) {
-            configProperties.setProperty(LOG_SIZE_QUOTA, (String) opts.get("--log-size-quota-percentage"));
-        }
-
-        if (opts.get("--logunit-threads") != null) {
-            configProperties.setProperty(NUM_LOGUNIT_WORKER_THREADS, (String) opts.get("--logunit-threads"));
-        }
-        if (opts.get("--management-server-threads") != null) {
-            configProperties.setProperty(NUM_MANAGEMENT_SERVER_THREADS,(String) opts.get("--management-server-threads"));
-        }
-        if (opts.get("--Threads") != null) {
-            configProperties.setProperty(NUM_IO_THREADS,(String) opts.get("--Threads"));
-        }
-
-        if (opts.get("--enable-tls") != null) {
-            configProperties.setProperty(ENABLE_TLS, Boolean.toString((Boolean) opts.get("--enable-tls")));
-        }
-
-        if (opts.get("--keystore") != null) {
-            configProperties.setProperty(KEYSTORE, (String) opts.get("--keystore"));
-        }
-        if (opts.get("--keystore-password-file") != null) {
-            configProperties.setProperty(KEYSTORE_PASSWORD_FILE, (String) opts.get("--keystore-password-file"));
-        }
-
-        if (opts.get("--truststore") != null) {
-            configProperties.setProperty(TRUSTSTORE, (String) opts.get("--truststore"));
-        }
-
-        if (opts.get("--truststore-password-file") != null) {
-            configProperties.setProperty(TRUSTSTORE_PASSWORD_FILE, (String) opts.get("--truststore-password-file"));
-        }
-
-        if (opts.get("--enable-tls-mutual-auth") != null) {
-            configProperties.setProperty(ENABLE_TLS_MUTUAL_AUTH, Boolean.toString((Boolean) opts.get("--enable-tls-mutual-auth")));
-        }
-
-        if (opts.get("--enable-sasl-plain-text-auth") != null) {
-            configProperties.setProperty(ENABLE_SASL_PLAIN_TEXT_AUTH, Boolean.toString((Boolean) opts.get("--enable-sasl-plain-text-auth")));
-        }
-
-        if (opts.get("--sasl-plain-text-username-file") != null) {
-            configProperties.setProperty(SASL_PLAIN_TEXT_USERNAME_FILE, (String) opts.get("--sasl-plain-text-username-file"));
-        }
-
-        if (opts.get("--sasl-plain-text-password-file") != null) {
-            configProperties.setProperty(SASL_PLAIN_TEXT_PASSWORD_FILE, (String) opts.get("--sasl-plain-text-password-file"));
-        }
-
-        if (opts.get("--sequencer-cache-size") != null) {
-            configProperties.setProperty(SEQUENCER_CACHE_SIZE, (String) opts.get("--sequencer-cache-size"));
-        }
-
-        if (opts.get("--batch-size") != null) {
-            configProperties.setProperty(SNAPSHOT_BATCH_SIZE, (String) opts.get("--batch-size"));
-        }
-
-        if (opts.get("--implementation") != null) {
-            configProperties.setProperty(CHANNEL_IMPLEMENTATION, (String) opts.get("--implementation"));
-        }
-
-        if (opts.get("--HandshakeTimeout") != null) {
-            configProperties.setProperty(HANDSHAKE_TIMEOUT, (String) opts.get("--HandshakeTimeout"));
-        }
-
-        if (opts.get("--cluster-id") != null) {
-            configProperties.setProperty(CLUSTER_ID, (String) opts.get("--cluster-id"));
-        }
-
-        if (opts.get("--tls-ciphers") != null) {
-            configProperties.setProperty(TLS_CIPHERS, (String) opts.get("--tls-ciphers"));
-        }
-
-        if (opts.get("--tls-protocols") != null) {
-            configProperties.setProperty(TLS_PROTOCOLS, (String) opts.get("--tls-protocols"));
-        }
-
-        if (opts.get("--metrics") != null) {
-            configProperties.setProperty(ENABLE_METRICS, Boolean.toString((Boolean) opts.get("--metrics")));
-        }
-
-        if (opts.get("--snapshot-batch") != null) {
-            configProperties.setProperty(SNAPSHOT_BATCH_SIZE, (String) opts.get("--snapshot-batch"));
-        }
-
-        if (opts.get("--lock-lease") != null) {
-            configProperties.setProperty(LOCK_LEASE_DURATION, (String) opts.get("--lock-lease"));
-        }
-
-        if (opts.get("--Prefix") != null) {
-            configProperties.setProperty(THREAD_PREFIX, (String) opts.get("--Prefix"));
-        }
-
-        if (opts.get("--metadata-retention") != null) {
-            configProperties.setProperty(METADATA_RETENTION, (String) opts.get("--metadata-retention"));
-        }
-
-        if (opts.get("<port>") != null) {
-            configProperties.setProperty(SERVER_PORT, (String) opts.get("<port>"));
+        //in the future, if more formats need to be supported, this mapping can be passed as a parameter
+        Map<String, String> optionsToPropertiesMapping = getOptionsToPropertiesMapping();
+        Set<String> flags = ImmutableSet.of("--memory", "--single", "--enable-tls",
+                "--enable-tls-mutual-auth","--enable-sasl-plain-text-auth", "--metrics");
+        Set<String> inverseFlags = ImmutableSet.of("--no-verify", "--no-sync", "--no-auto-commit");
+        for (String key : opts.keySet()) {
+            if (optionsToPropertiesMapping.containsKey(key)) {
+                if (opts.get(key) != null) {
+                    if (flags.contains(key)) {
+                        configProperties.setProperty(optionsToPropertiesMapping.get(key),
+                                Boolean.toString((Boolean) opts.get(key)));
+                    } else if (inverseFlags.contains(key)) {
+                        configProperties.setProperty(optionsToPropertiesMapping.get(key),
+                                Boolean.toString(!((Boolean) opts.get(key))));
+                    } else {
+                        configProperties.setProperty(optionsToPropertiesMapping.get(key), (String) opts.get(key));
+                    }
+                }
+            } else {
+                log.warn("Encountered unknown option: {}", key);
+            }
         }
 
         return applyServerConfigurationOptions(configProperties);
+    }
+
+    private static Map<String, String> getOptionsToPropertiesMapping() {
+        Map<String, String> mapping = new Hashtable<>();
+        mapping.put("--memory", IN_MEMORY_MODE);
+        mapping.put("--log-path", SERVER_DIR);
+        mapping.put("--no-verify", VERIFY_CHECKSUM);
+        mapping.put("--no-sync", SYNC_DATA);
+        mapping.put("--single", SINGLE_MODE);
+        mapping.put("--no-auto-commit", AUTO_COMMIT);
+        mapping.put("--network-interface", NETWORK_INTERFACE);
+        mapping.put("--address", HOST_ADDRESS);
+        mapping.put("--max-replication-data-message-size", MAX_REPLICATION_DATA_MESSAGE_SIZE);
+        mapping.put("--cache-heap-ratio", LOG_UNIT_CACHE_RATIO);
+        mapping.put("--log-level", LOG_LEVEL);
+        mapping.put("--compact", COMPACT_RATE);
+        mapping.put("--plugin", PLUGIN_CONFIG_FILE_PATH);
+        mapping.put("--base-server-threads", NUM_BASE_SERVER_THREADS);
+        mapping.put("--log-size-quota-percentage", LOG_SIZE_QUOTA);
+        mapping.put("--logunit-threads", NUM_LOGUNIT_WORKER_THREADS);
+        mapping.put("--management-server-threads", NUM_MANAGEMENT_SERVER_THREADS);
+        mapping.put("--Threads", NUM_IO_THREADS);
+        mapping.put("--enable-tls", ENABLE_TLS);
+        mapping.put("--keystore", KEYSTORE);
+        mapping.put("--keystore-password-file", KEYSTORE_PASSWORD_FILE);
+        mapping.put("--truststore", TRUSTSTORE);
+        mapping.put("--truststore-password-file", TRUSTSTORE_PASSWORD_FILE);
+        mapping.put("--enable-tls-mutual-auth", ENABLE_TLS_MUTUAL_AUTH);
+        mapping.put("--enable-sasl-plain-text-auth", ENABLE_SASL_PLAIN_TEXT_AUTH);
+        mapping.put("--sasl-plain-text-username-file", SASL_PLAIN_TEXT_USERNAME_FILE);
+        mapping.put("--sasl-plain-text-password-file", SASL_PLAIN_TEXT_PASSWORD_FILE);
+        mapping.put("--sequencer-cache-size", SEQUENCER_CACHE_SIZE);
+        mapping.put("--batch-size", SNAPSHOT_BATCH_SIZE);
+        mapping.put("--implementation", CHANNEL_IMPLEMENTATION);
+        mapping.put("--HandshakeTimeout", HANDSHAKE_TIMEOUT);
+        mapping.put("--cluster-id", CLUSTER_ID);
+        mapping.put("--tls-ciphers", TLS_CIPHERS);
+        mapping.put("--tls-protocols", TLS_PROTOCOLS);
+        mapping.put("--metrics", ENABLE_METRICS);
+        mapping.put("--snapshot-batch", SNAPSHOT_BATCH_SIZE);
+        mapping.put("--lock-lease", LOCK_LEASE_DURATION);
+        mapping.put("--Prefix", THREAD_PREFIX);
+        mapping.put("--metadata-retention", METADATA_RETENTION);
+        mapping.put("<port>", SERVER_PORT);
+
+        return mapping;
     }
 
 
