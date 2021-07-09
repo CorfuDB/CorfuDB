@@ -6,7 +6,7 @@
 (require 'clojure.java.shell)
 (import org.corfudb.runtime.view.Layout)
 (import java.util.UUID)
-(def usage "corfu_bootstrap_cluster, setup the Corfu cluster where all nodes are NOT bootstrapped.
+(def usage "corfu_bootstrap_cluster, setup the Corfu cluster from nodes that have NOT been previously bootstrapped.
 Usage:
   corfu_bootstrap_cluster -l <layout> [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] [-g -o <username_file> -j <password_file>]]
 Options:
