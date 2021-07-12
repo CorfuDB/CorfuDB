@@ -293,7 +293,6 @@ public class CorfuServer {
      * - add serverEndpoint information
      *
      * @param conf Server Configuration parameters
-     * @throws JoranException logback exception
      */
     private static void configureLogger(ServerConfiguration conf) {
         final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
@@ -313,6 +312,8 @@ public class CorfuServer {
 
         File parentDir = new File(conf.getServerDir());
         if (!parentDir.isDirectory()) {
+            log.error("Service directory {} does not point to a directory. Aborting.",
+                    parentDir);
             throw new UnrecoverableCorfuError("Service path " + conf.getServerDir() + " must be a directory!");
         }
         String corfuServiceDirPath = parentDir.getAbsolutePath()

@@ -11,7 +11,12 @@ import org.corfudb.utils.lock.Lock;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
@@ -99,7 +104,7 @@ public class ServerConfiguration extends BaseConfiguration {
     // The underlying map of PropertiesConfiguration can't be used to store an EventLoopGroup,
     // so a separate map is needed. This shouldn't be here, but the Unit Tests rely on
     // these event loops to be here
-    private Map<String, EventLoopGroup> testEventLoops = new HashMap<>();
+    private final Map<String, EventLoopGroup> testEventLoops = new HashMap<>();
 
 
 

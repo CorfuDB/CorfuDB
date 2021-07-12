@@ -258,8 +258,8 @@ public class CorfuServerNode implements AutoCloseable {
 
                 // Security Initialization
                 ServerConfiguration conf = context.getConfiguration();
-                Boolean tlsEnabled = conf.isTlsEnabled();
-                Boolean tlsMutualAuthEnabled = conf.getEnableTlsMutualAuth();
+                boolean tlsEnabled = conf.isTlsEnabled();
+                boolean tlsMutualAuthEnabled = conf.getEnableTlsMutualAuth();
 
                 if (tlsEnabled) {
                     // Get the TLS cipher suites to enable
@@ -300,7 +300,7 @@ public class CorfuServerNode implements AutoCloseable {
                     sslContext = null;
                 }
 
-                Boolean saslPlainTextAuth = conf.getEnableSaslPlainTextAuth();
+                boolean saslPlainTextAuth = conf.getEnableSaslPlainTextAuth();
 
                 // If TLS is enabled, setup the encryption pipeline.
                 if (tlsEnabled) {
