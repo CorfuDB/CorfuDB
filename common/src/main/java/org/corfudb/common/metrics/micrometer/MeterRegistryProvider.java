@@ -118,8 +118,7 @@ public class MeterRegistryProvider {
     }
 
     /**
-     * Get the previously configured meter registry.
-     * If the registry has not been previously configured, return an empty option.
+     * Get the composite meter registry.
      *
      * @return An optional configured meter registry.
      */
