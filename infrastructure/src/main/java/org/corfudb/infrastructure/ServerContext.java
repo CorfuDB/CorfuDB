@@ -33,6 +33,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -162,7 +163,7 @@ public class ServerContext implements AutoCloseable {
         // Setup the netty event loops. In tests, these loops may be provided by
         // a test framework to save resources.
 
-        if (conf.getChannelImplementation().equals(ChannelImplementation.LOCAL)) {
+        if (conf.getChannelImplementation() == ChannelImplementation.LOCAL) {
             clientGroup = conf.getTestClientEventLoop();
             workerGroup = conf.getTestWorkerEventLoop();
         } else {
