@@ -199,7 +199,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         snapshotSyncPlugin = getSnapshotPlugin();
 
         snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadataManager);
-        logEntryWriter = new LogEntryWriter(runtime, config, logReplicationMetadataManager);
+        logEntryWriter = new LogEntryWriter(config, logReplicationMetadataManager);
         logEntryWriter.reset(logReplicationMetadataManager.getLastAppliedSnapshotTimestamp(),
                 logReplicationMetadataManager.getLastProcessedLogEntryTimestamp());
 
@@ -383,14 +383,14 @@ public class LogReplicationSinkManager implements DataReceiver {
      * If it is requesting a new snapshot with higher timestamp, transition to SNAPSHOT_SYNC state,
      * otherwise ignore the message.
      *
-     * @param entry
+     * @param entry a SNAPSHOT_START message
      */
-    private boolean processSnapshotStart(LogReplicationEntry entry) {
-        long topologyConfigId = entry.getMetadata().getTopologyConfigId();
+    private void processSnapshotStart(LogReplicationEntry entry) {
+        long topologyId = entry.getMetadata().getTopologyConfigId();
         long timestamp = entry.getMetadata().getSnapshotTimestamp();
 
         // Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
-        snapshotWriter.reset(topologyConfigId, timestamp);
+        snapshotWriter.reset(topologyId, timestamp);
 
         // Update lastTransferDone with the new snapshot transfer timestamp.
         baseSnapshotTimestamp = entry.getMetadata().getSnapshotTimestamp();
@@ -402,7 +402,6 @@ public class LogReplicationSinkManager implements DataReceiver {
         // Set state in SNAPSHOT_SYNC state.
         rxState = RxState.SNAPSHOT_SYNC;
         log.info("Sink manager entry {} state, snapshot start with {}", rxState, entry.getMetadata());
-        return true;
     }
 
     /**
@@ -418,6 +417,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         rxState = RxState.LOG_ENTRY_SYNC;
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
                 logReplicationMetadataManager.getLastProcessedLogEntryTimestamp(), this);
+        logEntryWriter.reset(entry.getMetadata().getSnapshotTimestamp(), entry.getMetadata().getSnapshotTimestamp());
 
         log.info("Snapshot apply complete, sync_id={}, snapshot={}, state={}", entry.getMetadata().getSyncRequestId(),
                 entry.getMetadata().getSnapshotTimestamp(), rxState);

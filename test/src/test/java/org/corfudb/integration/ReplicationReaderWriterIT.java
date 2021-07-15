@@ -365,7 +365,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     public static void writeLogEntryMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
         LogReplicationConfig config = new LogReplicationConfig(streams);
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
-        LogEntryWriter writer = new LogEntryWriter(rt, config, logReplicationMetadataManager);
+        LogEntryWriter writer = new LogEntryWriter(config, logReplicationMetadataManager);
 
         if (msgQ.isEmpty()) {
             log.debug("msgQ is empty");
