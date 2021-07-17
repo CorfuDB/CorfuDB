@@ -33,6 +33,20 @@ storing tables server-side allows for client machines to use less memory/storage
 
 ##Architecture
 
+###Overview
+####Current workflow 
+Currently, when a CorfuTable is queried, the query is redirected to the VersionLockedObject through a 
+CorfuSMRProxy. Any rollback or sync required is performed in the VLO, using the local table in memory to apply updates
+to the object state. If an intermediary update or undoRecord is missing, then the VLO queries the server log to receive
+all commited updates, and builds up the requested state from the base state of the object. 
+
+####Proposed workflow
+We aim to create a new CorfuSMRProxy to bypass the VLO, and instead query a server-side database containing all commited
+versions of the requested object. Instead of performing client-side rollback/sync from a copy of the table in memory,
+the server side database will be queried for the most recent object state prior to the requested version. By storing
+multiple versions of objects in the server side database, clients can concurrently access various versions of the data,
+increasing throughput and decreasing client-side memory limitations.
+
 ###Storage Engine
 We looked into many options to store the CorfuTable. For this use case, we prioritized implementations that provide fast
 write times and effecient ranged scans, which are especially important for finding the most recent stored versions for
@@ -56,3 +70,7 @@ Tkrzw provides many different implementations of DBM, including implementations 
 (TreeDBM and BabyDBM) are ordered, allowing for iteration over keys, and performing seeks to the latest version of a
 record. These DBMs can work with both String keys, and byte arrays. However, Tkrzw is not an open source project, and
 the dependency is not available on Maven central.
+
+After considering the options, we have decided to utilize RocksDB due to its write-efficiency, configurability, and
+support for essential features.
+
