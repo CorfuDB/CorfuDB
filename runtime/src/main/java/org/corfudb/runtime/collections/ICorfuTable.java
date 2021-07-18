@@ -5,8 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
 
-public interface ICorfuTable<K, V>
-        extends StreamingMap<K, V> {
+public interface ICorfuTable<K, V> extends StreamingMap<K, V> {
 
     /** Insert a key-value pair into a map, overwriting any previous mapping.
      *

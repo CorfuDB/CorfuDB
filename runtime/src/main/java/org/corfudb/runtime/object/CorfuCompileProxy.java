@@ -28,6 +28,7 @@ import java.time.Duration;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -171,30 +172,32 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
 
         log.debug("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
 
+        Function<VersionLockedObject<T>, Boolean> accessChecker = vlo ->
+                vlo.getVersionUnsafe() >= timestamp.get() && !vlo.isOptimisticallyModifiedUnsafe();
+
         // Perform underlying access
-        return underlyingObject.access(o -> o.getVersionUnsafe() >= timestamp.get()
-                        && !o.isOptimisticallyModifiedUnsafe(),
-                o -> {
-                    for (int x = 0; x < rt.getParameters().getTrimRetry(); x++) {
-                        try {
-                            o.syncObjectUnsafe(timestamp.get());
-                            break;
-                        } catch (TrimmedException te) {
-                            log.info("accessInner: Encountered trimmed address space " +
-                                            "while accessing version {} of stream {} on attempt {}",
-                                    timestamp.get(), getStreamID(), x);
+        Consumer<VersionLockedObject<T>> updateFunction = vlo -> {
+            for (int retry = 0; retry < rt.getParameters().getTrimRetry(); retry++) {
+                try {
+                    vlo.syncObjectUnsafe(timestamp.get());
+                    break;
+                } catch (TrimmedException te) {
+                    String errMsg = "accessInner: Encountered trimmed address space " +
+                            "while accessing version {} of stream {} on attempt {}";
+                    log.info(errMsg, timestamp.get(), getStreamID(), retry);
 
-                            o.resetUnsafe();
+                    vlo.resetUnsafe();
 
-                            if (x == (rt.getParameters().getTrimRetry() - 1)) {
-                                throw te;
-                            }
-
-                            timestamp.set(rt.getSequencerView().query(getStreamID()));
-                        }
+                    if (retry == rt.getParameters().getTrimRetry() - 1) {
+                        throw te;
                     }
-                },
-                o -> accessMethod.access(o));
+
+                    timestamp.set(rt.getSequencerView().query(getStreamID()));
+                }
+            }
+        };
+
+        return underlyingObject.access(accessChecker, updateFunction, accessMethod::access);
     }
 
     /**
@@ -231,6 +234,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
         log.trace("Update[{}] {}@{} ({}) conflictObj={}",
                 this, smrUpdateFunction, address, args, conflictObject);
         correctnessLogger.trace("Version, {}", address);
+        VloVersionListener.submit(address);
         return address;
     }
 
@@ -442,3 +446,4 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
         throw tae;
     }
 }
+

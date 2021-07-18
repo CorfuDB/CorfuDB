@@ -144,7 +144,7 @@ public class ClusterStatusReport {
      * Individual Node Status (within cluster view).
      */
     @NonNull
-    private final Map<String, NodeStatus> clusterNodeStatusMap;
+    private final Map<String,  NodeStatus> clusterNodeStatusMap;
 
     /**
      * Map of connectivity of the client to the each cluster node.

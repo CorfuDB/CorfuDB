@@ -30,8 +30,6 @@ public class LongevityRun {
         Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
         root.setLevel(Level.INFO);
 
-        long longevity;
-
         Options options = new Options();
 
         Option amountTime = new Option("t", TIME_AMOUNT, true, "time amount");
@@ -47,7 +45,6 @@ public class LongevityRun {
         options.addOption(timeUnit);
         options.addOption(corfuEndpoint);
         options.addOption(checkPointFlag);
-
 
         CommandLineParser parser = new DefaultParser();
         HelpFormatter formatter = new HelpFormatter();
@@ -65,37 +62,45 @@ public class LongevityRun {
             log.info(e.getMessage());
             formatter.printHelp("longevity", options);
 
-            System.exit(1);
+            System.exit(LongevityApp.ExitStatus.ERROR.getCode());
             return;
         }
-
-        long amountTimeValue = Long.parseLong(cmd.getOptionValue(TIME_AMOUNT));
-        String timeUnitValue = cmd.getOptionValue(TIME_UNIT);
 
         String configurationString = cmd.hasOption(CORFU_ENDPOINT) ?
                 cmd.getOptionValue(CORFU_ENDPOINT) : "localhost:9000";
 
         boolean checkPoint = cmd.hasOption(CHECKPOINT);
 
+        Duration longevity = parseLongevity(cmd);
+
+        LongevityApp la = new LongevityApp(longevity, 10, configurationString, checkPoint);
+        LongevityApp.ExitStatus exitStatus = la.runLongevityTest();
+
+        System.exit(exitStatus.getCode());
+    }
+
+    private static Duration parseLongevity(CommandLine cmd) {
+        Duration longevity;
+
+        long amountTimeValue = Long.parseLong(cmd.getOptionValue(TIME_AMOUNT));
+        String timeUnitValue = cmd.getOptionValue(TIME_UNIT);
         switch (timeUnitValue) {
             case "s":
-                longevity = Duration.ofSeconds(amountTimeValue).toMillis();
+                longevity = Duration.ofSeconds(amountTimeValue);
                 break;
 
             case "m":
-                longevity = Duration.ofMinutes(amountTimeValue).toMillis();
+                longevity = Duration.ofMinutes(amountTimeValue);
                 break;
 
             case "h":
-                longevity = Duration.ofHours(amountTimeValue).toMillis();
+                longevity = Duration.ofHours(amountTimeValue);
                 break;
 
             default:
-                longevity = Duration.ofHours(1).toMillis();
+                longevity = Duration.ofHours(1);
                 break;
         }
-
-        LongevityApp la = new LongevityApp(longevity, 10, configurationString, checkPoint);
-        la.runLongevityTest();
+        return longevity;
     }
 }

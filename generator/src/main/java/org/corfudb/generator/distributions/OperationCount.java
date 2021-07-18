@@ -10,6 +10,7 @@ import java.util.List;
  * Created by maithem on 7/14/17.
  */
 public class OperationCount implements DataSet<Integer> {
+
     public void populate() {
         //no-op
     }

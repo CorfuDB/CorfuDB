@@ -1,8 +1,9 @@
 package org.corfudb.generator.distributions;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * This class defines a generic data distribution. A DataSet is used by operations
@@ -27,13 +28,12 @@ public interface DataSet<T> {
      * @return random data points
      */
     default List<T> sample(int num) {
-        List<T> ret = new ArrayList<>();
+        final List<T> dataSet = getDataSet();
+        final int bound = dataSet.size();
 
-        for (int x = 0; x < num; x++) {
-            ret.add(getDataSet().get(RANDOM.nextInt(getDataSet().size())));
-        }
-
-        return ret;
+        return IntStream.range(0, num)
+                .mapToObj(index -> dataSet.get(RANDOM.nextInt(bound)))
+                .collect(Collectors.toList());
     }
 
     default T sample() {

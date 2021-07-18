@@ -1,9 +1,16 @@
 package org.corfudb.generator;
 
+import org.corfudb.generator.correctness.Correctness;
+import org.corfudb.generator.distributions.Keys;
+import org.corfudb.generator.distributions.Operations;
+import org.corfudb.generator.distributions.Streams;
 import org.corfudb.generator.operations.CheckpointOperation;
 import org.corfudb.generator.operations.Operation;
+import org.corfudb.generator.state.CorfuTablesGenerator;
+import org.corfudb.generator.state.State;
 import org.corfudb.runtime.CorfuRuntime;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -23,6 +30,7 @@ import static java.util.concurrent.Executors.newWorkStealingPool;
  * Created by maithem on 7/14/17.
  */
 public class Generator {
+
     public static void main(String[] args) {
         String endPoint = args[0];
         int numStreams = Integer.parseInt(args[1]);
@@ -33,22 +41,33 @@ public class Generator {
 
         CorfuRuntime rt = new CorfuRuntime(endPoint).connect();
 
-        State state = new State(numStreams, numKeys, rt);
+        Streams streams = new Streams(numStreams);
+        Keys keys = new Keys(numKeys);
+        streams.populate();
+        keys.populate();
+
+        CorfuTablesGenerator tablesManager = new CorfuTablesGenerator(rt, streams);
+        tablesManager.openObjects();
+
+        State state = new State(streams, keys);
+        Operations operations = new Operations(state, tablesManager, new Correctness());
+        operations.populate();
 
         Runnable cpTrimTask = () -> {
-            Operation op = new CheckpointOperation(state);
+            Operation op = new CheckpointOperation(state, tablesManager);
             op.execute();
         };
 
-        final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
         scheduler.scheduleAtFixedRate(cpTrimTask, 30, cpPeriod, TimeUnit.SECONDS);
 
         ExecutorService appWorkers = newWorkStealingPool(numThreads);
 
         Runnable app = () -> {
-            List<Operation> operations = state.getOperations().sample(numOperations);
-            for (Operation operation : operations) {
+            List<Operation.Type> ops = operations.sample(numOperations);
+            for (Operation.Type opType : ops) {
                 try {
+                    Operation operation = operations.create(opType);
                     operation.execute();
                 } catch (Exception ex) {
                     throw new RuntimeException(ex);
@@ -56,15 +75,15 @@ public class Generator {
             }
         };
 
-        Future[] appsFutures = new Future[numThreads];
+        List<Future<?>> appsFutures = new ArrayList<>(numThreads);
 
-        for (int x = 0; x < numThreads; x++) {
-            appsFutures[x] = appWorkers.submit(app);
+        for (int i = 0; i < numThreads; i++) {
+            appsFutures.add(appWorkers.submit(app));
         }
 
-        for (int x = 0; x < numThreads; x++) {
+        for (Future<?> future : appsFutures) {
             try {
-                appsFutures[x].get();
+                future.get();
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
