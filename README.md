@@ -17,9 +17,9 @@ software architecture and example usage.
 ### Table of Contents
 [System Requirements](#what-do-i-need-to-run-corfu) 
 
-[Corfu Basics](#corfu-basics)
+[Corfu Basics](#so-how-does-corfu-work)
 
-[Corfu Quick Start](#ok-great-get-me-started-running-corfu)
+[Corfu Quick Start](#ok-great---get-me-started-running-corfu)
 
 [Developing with Corfu](#now-i-want-to-write-a-program-that-uses-corfu)
 
@@ -39,36 +39,9 @@ For more details on the inner workings of Corfu, see the [Corfu wiki](https://gi
 
 ## Ok, great - get me started running Corfu!
 
-There are currently two ways to run Corfu - by building the development sources, or on Debian-based systems, installing the corfu-server package. We'll describe how to build Corfu from the development sources first. If you just want to install the Debian package, skip [here](#install-from-debian-package).
-
-### Install From Debian Package
-
-We currently host an apt repository for Ubuntu 14.04 LTS (Trusty).
-To install Corfu via ```apt-get```, run the following commands:
-
-```bash
-# Install the package for add-apt-repository
-$ sudo apt-get install python-software-properties
-# Add the Corfu signing key to your keychain
-$ sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 482CD4B4
-# Add the Corfu repository
-$ sudo apt-add-repository "deb https://raw.github.com/CorfuDB/Corfu-Repos/debian/ trusty main"
-# Update packages and install the Corfu server infrastructure
-$ sudo apt-get update
-$ sudo apt-get install corfu-server
-```
-
 ### Building Corfu From Source
 To build Corfu, you will need the Java JDK 8 as well as Apache Maven
 3.3 or later to invoke the build system.
-
-On Linux (Debian/Ubuntu), run:
-
-```bash
-sudo add-apt-repository ppa:webupd8team/java
-sudo apt-get update
-sudo apt-get install oracle-java8-installer
-```
 
 Your major release number of Debian/Ubuntu will determine whether the
 simple command below is sufficient to install Maven 3.3 or later.
@@ -163,7 +136,9 @@ You should get output similar to this:
       ]
     }
   ],
-  "epoch": 0
+  "unresponsiveServers": [],
+  "epoch": 0,
+  "clusterId": "fd3802dc-9db4-4a7c-98d6-1aecfbc964ae"
 }
 ```
 
@@ -238,66 +213,33 @@ a single failure.
 
 To learn more about segments, see the [Corfu wiki](https://github.com/CorfuDB/CorfuDB/wiki).
 
-To scale Corfu, we add additional ``stripes''. To add an additional stripe, first 
-start a new ```corfu_server``` on port 9002:
+To add more nodes, begin by 
+starting a new ```corfu_server``` on port 9002:
 ```
 ./CorfuDB/bin/corfu_server -m 9002
 ```
-Redeploy this cluster with the following additions to layout.json:
-The layoutServers line should read:
-```json
-  "layoutServers": [
-    "localhost:9000", "localhost:9001", "localhost:9002"
-  ],
-```
-This time we add localhost:9002 as a new stripe.
 
-```json
-      "stripes": [
-        {
-          "logServers": [
-            "localhost:9000",
-            "localhost:9001"
-          ]
-        },
-        {
-          "logServers": [
-            "localhost:9002"
-          ]
-        }
-      ]
+The server can be added to the existing cluster:
+```
+./CorfuDB/bin/corfu_add_node -c localhost:9000,localhost:9001 -n localhost:9002
 ```
 
-This adds the logunit at localhost:9002 as an additional stripe in the system. That is, writes to even addresses will now go to
-localhost:9000 and localhost:9001, while writes to odd addresses will go to localhost:9002.
+If you now check the layout of the cluster:
+```
+./CorfuDB/bin/corfu_layouts query -c localhost:9000,localhost:9001,localhost:9002
+```
+You will see that the cluster contains the new node.
+
+To remove the added node from the cluster:
+```
+./CorfuDB/bin/corfu_remove_node -c localhost:9000,localhost:9001,localhost:9002 -n localhost:9002
+```
 
 ## Now I want to write a program that uses Corfu!
 
-To write your first program that uses Corfu, you will want to add Corfu as a dependency. For Maven-based projects, you can add:
+To write your first program that uses Corfu, you will want to add all Corfu dependencies from the [Corfu Package Page](https://github.com/orgs/CorfuDB/packages?repo_name=CorfuDB). 
 
-```xml
- <dependency>
-    <groupId>org.corfudb</groupId>
-    <artifactId>runtime</artifactId>
-    <version>0.1-SNAPSHOT</version>
-    <scope>compile</scope>
-</dependency>
-```
-to your pom.xml file. 
-
-You will also want to add the Corfu Maven repository, unless you ran ```mvn install``` from source to install the jar files locally:
-```xml
-<repositories>
-    <repository>
-        <id>corfu-mvn-repo</id>
-        <url>https://raw.github.com/CorfuDB/Corfu-Repos/mvn-repo/</url>
-        <snapshots>
-            <enabled>true</enabled>
-            <updatePolicy>always</updatePolicy>
-        </snapshots>
-    </repository>
-</repositories>
-```
+For instructions on how to add the dependency from GitHub, refer to [this page](https://docs.github.com/en/packages/working-with-a-github-packages-registry).
 
 Once you have Corfu added as a dependency, you can start writing Corfu code. Let's start with a map:
 ```java
