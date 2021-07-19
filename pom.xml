@@ -390,19 +390,6 @@
                     </execution>
                 </executions>
             </plugin>
-            <!--Plugin used for code coverage integration with Github-->
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>cobertura-maven-plugin</artifactId>
-                <version>2.7</version>
-                <configuration>
-                    <formats>
-                        <format>html</format>
-                        <format>xml</format>
-                    </formats>
-                    <check/>
-                </configuration>
-            </plugin>
             <!-- Add a license to all files using mvn license:format -->
             <plugin>
                 <groupId>com.mycila</groupId>
