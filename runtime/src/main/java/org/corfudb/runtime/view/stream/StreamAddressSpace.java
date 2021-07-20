@@ -141,7 +141,13 @@ final public class StreamAddressSpace {
      * @param address address to add.
      */
     public void addAddress(long address) {
-        if (address <= this.trimMark || Address.nonAddress(address)) {
+        // Temporarily log error on trim mark comparison, as throwing an exception
+        // unveils an underlying issue in the reset workflow (wipe data + data transfer in colibri)
+        if (address <= this.trimMark) {
+            log.error("IllegalArgumentException :: Address={}, TrimMark={}", address, this.trimMark);
+        }
+
+        if (Address.nonAddress(address)) {
             throw new IllegalArgumentException("Address=" + address + " TrimMark=" + this.trimMark);
         }
         bitmap.addLong(address);
