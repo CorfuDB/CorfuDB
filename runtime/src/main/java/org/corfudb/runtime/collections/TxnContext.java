@@ -8,6 +8,7 @@ import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.exceptions.TransactionAlreadyStartedException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.Transaction;
@@ -149,6 +150,35 @@ public class TxnContext implements AutoCloseable {
      */
     private <K extends Message, V extends Message, M extends Message>
     void validateWrite(@Nonnull Table<K, V, M> table, K key, boolean validateKey) {
+        baseValidateWrite(table, key, validateKey);
+
+        txnType |= WRITE_ONLY;
+        tablesInTxn.putIfAbsent(table.getStreamUUID(), table);
+    }
+
+    /**
+     * All write api must be validate to ensure that the table belongs to the namespace.
+     *
+     * @param table       - table being written to
+     * @param key         - key used in the transaction to check for null.
+     * @param validateKey - should key be validated for null.
+     * @param <K>         - type of the key
+     * @param <V>         - type of the payload/value
+     * @param <M>         - type of the metadata
+     */
+    private <K extends Message, V extends Message, M extends Message>
+    void validateWrite(@Nonnull Table<K, V, M> table, K key, M metadata, boolean validateKey) {
+        baseValidateWrite(table, key, validateKey);
+        if (table.getMetadataClass() == null && metadata != null) {
+            throw new IllegalArgumentException("Metadata schema for table " + table.getFullyQualifiedTableName() + " is defined as NULL, non-null metadata is not allowed.");
+        }
+
+        txnType |= WRITE_ONLY;
+        tablesInTxn.putIfAbsent(table.getStreamUUID(), table);
+    }
+
+    private <K extends Message, V extends Message, M extends Message>
+    void baseValidateWrite(@Nonnull Table<K, V, M> table, K key, boolean validateKey) {
         if (!table.getNamespace().equals(namespace)) {
             throw new IllegalArgumentException("TxnContext can't apply table from namespace "
                     + table.getNamespace() + " to transaction on namespace " + namespace);
@@ -162,8 +192,6 @@ public class TxnContext implements AutoCloseable {
             throw new IllegalArgumentException("Key cannot be null on "
                     + table.getFullyQualifiedTableName() + " in transaction on namespace " + namespace);
         }
-        txnType |= WRITE_ONLY;
-        tablesInTxn.putIfAbsent(table.getStreamUUID(), table);
     }
 
     private <K extends Message, V extends Message, M extends Message>
@@ -174,6 +202,11 @@ public class TxnContext implements AutoCloseable {
     private <K extends Message, V extends Message, M extends Message>
     void validateWrite(@Nonnull Table<K, V, M> table, K key) {
         validateWrite(table, key, true);
+    }
+
+    private <K extends Message, V extends Message, M extends Message>
+    void validateWrite(@Nonnull Table<K, V, M> table, K key, M metadata) {
+        validateWrite(table, key, metadata, true);
     }
 
     /**
@@ -192,11 +225,15 @@ public class TxnContext implements AutoCloseable {
                    @Nonnull final K key,
                    @Nonnull final V value,
                    @Nullable final M metadata) {
-        validateWrite(table, key);
+        validateWrite(table, key, metadata);
         operations.add(() -> {
             table.put(key, value, metadata);
             table.getMetrics().incNumPuts();
         });
+    }
+
+    public long getEpoch() {
+        return isolationLevel.getTimestamp().getEpoch();
     }
 
     /**
@@ -642,7 +679,7 @@ public class TxnContext implements AutoCloseable {
         table1.getMetrics().incNumJoins();
         applyWritesForReadOnTable(table2);
         table2.getMetrics().incNumJoins();
-        return Query.executeJoinQuery(table1, table2,
+        return JoinQuery.executeJoinQuery(table1, table2,
                 query1, query2, queryOptions1,
                 queryOptions2, joinPredicate, joinFunction, joinProjection);
     }
@@ -759,7 +796,7 @@ public class TxnContext implements AutoCloseable {
      *
      * @return - address at which the commit of this transaction occurred.
      */
-    public long commit() {
+    public Timestamp commit() {
         if (!isInMyTransaction()) {
             throw new IllegalStateException("commit() called without a transaction!");
         }
@@ -796,7 +833,7 @@ public class TxnContext implements AutoCloseable {
                 tablesInTxn.values().forEach(t -> t.getMetrics().recordReadWriteTxnTime(startTxSample));
                 break;
             default:
-                log.error("UNKNOWN TxnType!!");
+                log.warn("UNKNOWN TxnType! Started a transaction but no operations done?!");
                 break;
         }
 
@@ -814,7 +851,11 @@ public class TxnContext implements AutoCloseable {
         });
         commitCallbacks.forEach(cb -> cb.onCommit(mutations));
         operations.clear();
-        return commitAddress;
+
+        return Timestamp.newBuilder()
+                .setEpoch(getEpoch())
+                .setSequence(commitAddress)
+                .build();
     }
 
 

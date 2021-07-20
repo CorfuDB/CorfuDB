@@ -3,6 +3,7 @@ package org.corfudb.runtime;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.embedded.EmbeddedChannel;
+import org.corfudb.common.util.CompatibilityVectorUtils;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.ClientHandshakeHandler;
@@ -97,20 +98,21 @@ public class ClientHandshakeHandlerTest {
         // Get a HandshakeResponseMsg whose corfu_source_code_version set in the header is different
         // from that at client side.
         ResponseMsg response = getResponseMsg(
-                HeaderMsg.newBuilder()
-                        .setVersion(
-                                ProtocolVersionMsg.newBuilder()
-                                        .setCorfuSourceCodeVersion(FAKE_SERVER_VERSION)
-                                        .build())
-                        .setRequestId(requestCounter.incrementAndGet())
-                        .setPriority(PriorityLevel.NORMAL)
-                        .setEpoch(0L)
-                        .setClusterId(getUuidMsg(DEFAULT_UUID))
-                        .setClientId(getUuidMsg(DEFAULT_UUID))
-                        .setIgnoreClusterId(false)
-                        .setIgnoreEpoch(true)
-                        .build(),
-                getHandshakeResponseMsg(SERVER_NODEID)
+            HeaderMsg.newBuilder()
+                .setVersion(
+                    ProtocolVersionMsg.newBuilder()
+                        .setCorfuSourceCodeVersion(FAKE_SERVER_VERSION)
+                        .setCapabilityVector(CompatibilityVectorUtils.getCompatibilityVectors())
+                        .build())
+                .setRequestId(requestCounter.incrementAndGet())
+                .setPriority(PriorityLevel.NORMAL)
+                .setEpoch(0L)
+                .setClusterId(getUuidMsg(DEFAULT_UUID))
+                .setClientId(getUuidMsg(DEFAULT_UUID))
+                .setIgnoreClusterId(false)
+                .setIgnoreEpoch(true)
+                .build(),
+            getHandshakeResponseMsg(SERVER_NODEID)
         );
 
         when(mockChannelContext.pipeline()).thenReturn(mockChannelPipeline);

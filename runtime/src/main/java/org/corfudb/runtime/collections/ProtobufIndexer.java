@@ -111,6 +111,9 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
                             return processNonPrimitive(lastNestedField);
                         }
                         subMessage = (Message) subMessage.getField(nestedFieldDescriptor);
+                    } else if (oneOfDescriptor != null && lastNestedField) {
+                        // Case of 'oneOf' field unset, which should be indexed as NULL
+                        subMessage = null;
                     }
                 } else {
                     // Case: Primitive Type
@@ -129,7 +132,7 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
         if (!repeatedValues.isEmpty()) {
             return repeatedValues;
         } else {
-            return Arrays.asList((T)ClassUtils.cast(subMessage));
+            return Arrays.asList((T)subMessage);
         }
     }
 
@@ -174,7 +177,10 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
      */
     private boolean isValidField(OneofDescriptor oneOfDescriptor, Message message, String fieldName) {
         if (oneOfDescriptor != null) {
-            return message.getOneofFieldDescriptor(oneOfDescriptor).getName().equals(fieldName);
+            FieldDescriptor fieldDescriptor = message.getOneofFieldDescriptor(oneOfDescriptor);
+            if (fieldDescriptor != null) {
+                return fieldDescriptor.getName().equals(fieldName);
+            }
         }
         return true;
     }

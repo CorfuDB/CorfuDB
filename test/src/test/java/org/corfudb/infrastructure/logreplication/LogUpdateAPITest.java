@@ -12,11 +12,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.IsolationLevel;
-import org.corfudb.runtime.collections.Query;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
@@ -49,7 +49,7 @@ public class LogUpdateAPITest extends AbstractViewTest {
         String tableBName = "tableB";
         String tableCName = "tableC";
 
-        //start runtime 1, populate some data for table A, table C
+        // Start runtime 1, populate some data for table A, table C
         CorfuRuntime runtime1 = getDefaultRuntime().setTransactionLogging(true).connect();
         CorfuStore corfuStore1 = new CorfuStore(runtime1);
 
@@ -58,7 +58,7 @@ public class LogUpdateAPITest extends AbstractViewTest {
 
         UUID uuidA = CorfuRuntime.getStreamID(tableA.getFullyQualifiedTableName());
 
-        //update tableA
+        // Update tableA
         for (int i = 0; i < NUM_KEYS; i ++) {
             UUID uuid = UUID.randomUUID();
             Uuid key = Uuid.newBuilder()
@@ -69,7 +69,7 @@ public class LogUpdateAPITest extends AbstractViewTest {
             txnContext.commit();
         }
 
-        //start runtime 2, open A, B as a stream and C as an UFO
+        // Start runtime 2, open A, B as a stream and C as an UFO
         CorfuRuntime runtime2 = getNewRuntime(getDefaultNode()).setTransactionLogging(true).connect();
         CorfuStore corfuStore2 = new CorfuStore(runtime2);
         Table<Uuid, Uuid, Uuid> tableC2 = corfuStore2.openTable(namespace, tableCName,
@@ -97,10 +97,12 @@ public class LogUpdateAPITest extends AbstractViewTest {
         UUID uuidB = CorfuRuntime.getStreamID(tableB.getFullyQualifiedTableName());
 
         while (iterator.hasNext()) {
-            CorfuStoreMetadata.Timestamp timestamp = corfuStore2.getTimestamp();
+            Token token = runtime2.getSequencerView().query().getToken();
+            CorfuStoreMetadata.Timestamp timestamp = CorfuStoreMetadata.Timestamp.newBuilder()
+                    .setEpoch(token.getEpoch())
+                    .setSequence(token.getSequence())
+                    .build();
             TxnContext txnContext = corfuStore2.txn(namespace, IsolationLevel.snapshot(timestamp));
-
-            //runtime2.getObjectsView().TXBegin();
 
             UUID uuid = UUID.randomUUID();
             Uuid key = Uuid.newBuilder()
@@ -114,24 +116,20 @@ public class LogUpdateAPITest extends AbstractViewTest {
             txnContext.commit();
         }
 
-        //verify data at B and C with runtime 1
+        // Verify data at B and C with runtime 1
         txStream.seek(tail);
         Iterator<ILogData> iterator1 = txStream.streamUpTo(runtime2.getAddressSpaceView().getLogTail()).iterator();
-        while(iterator1.hasNext()) {
+        while (iterator1.hasNext()) {
             ILogData data = iterator1.next();
             data.getStreams().contains(uuidB);
         }
-        log.debug("streamBTail {}", runtime2.getAddressSpaceView()
-                .getAllTails()
-                .getStreamTails().get(uuidB));
 
-
-        Query q = corfuStore1.query(namespace);
-        Set<Uuid> aSet = q.keySet(tableAName, null);
-        Set<Uuid> bSet = q.keySet(tableBName, null);
-
-        log.debug("aSet {} bSet {}", aSet, bSet);
-        assertThat(bSet.containsAll(aSet)).isTrue();
-        assertThat(aSet.containsAll(bSet)).isTrue();
+        try (TxnContext txn = corfuStore1.txn(namespace)) {
+            Set<Uuid> aSet = txn.keySet(tableAName);
+            Set<Uuid> bSet = txn.keySet(tableBName);
+            assertThat(bSet.containsAll(aSet)).isTrue();
+            assertThat(aSet.containsAll(bSet)).isTrue();
+            txn.commit();
+        }
     }
 }

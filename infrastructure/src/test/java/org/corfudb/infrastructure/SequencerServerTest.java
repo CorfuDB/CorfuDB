@@ -625,10 +625,8 @@ public class SequencerServerTest {
         long globalTailA = 0;
         long globalTailB = 1;
 
-        StreamAddressSpace streamAddressSpaceA = new StreamAddressSpace(1L,
-                Collections.singleton(globalTailA));
-        StreamAddressSpace streamAddressSpaceB = new StreamAddressSpace(2L,
-                Collections.singleton(globalTailB));
+        StreamAddressSpace streamAddressSpaceA = new StreamAddressSpace(Collections.singleton(globalTailA));
+        StreamAddressSpace streamAddressSpaceB = new StreamAddressSpace(Collections.singleton(globalTailB));
         tailMap.put(streamA, streamAddressSpaceA);
         tailMap.put(streamB, streamAddressSpaceB);
         long sequencerEpoch = 1;

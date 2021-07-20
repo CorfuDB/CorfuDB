@@ -86,11 +86,112 @@ jobs:
         with:
           java-version: 1.8
 
-      - uses: satackey/action-docker-layer-caching@v0.0.8
+      - uses: satackey/action-docker-layer-caching@v0.0.11
         continue-on-error: true
 
-      - name: Prepare docker image
-        run: ./mvnw clean install -DskipTests -Pdocker -Dmaven.javadoc.skip=true -T 1C
+      - name: Prepare Corfu
+        run: ./mvnw clean install -Pdocker -DskipTests -Dmaven.javadoc.skip=true -Dcheckstyle.skip -T 1C
 
       - name: Run universe tests
         run: ./mvnw -pl :universe verify -Puniverse -Dmaven.javadoc.skip=true
+
+  compatibility_test:
+    # https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
+    runs-on: ubuntu-18.04
+
+    env:
+      PKG_USERNAME: ${{ secrets.pkg_username }}
+      PUBLISH_TOKEN: ${{ secrets.publish_token }}
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.6.0
+        with:
+          access_token: ${{ github.token }}
+
+      - name: Cache local Maven repository
+        uses: actions/cache@v2
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Set up JDK 1.8
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.8
+
+      - uses: satackey/action-docker-layer-caching@v0.0.8
+        continue-on-error: true
+
+      - name: Prepare top of trunk docker image
+        run: ./mvnw clean install -DskipTests -Pcompatibility -Dmaven.javadoc.skip=true -T 1C
+
+      - name: Pull docker image built from master parent commit
+        run: docker pull corfudb/corfu-server:0.3.1-SNAPSHOT
+
+      - uses: actions/checkout@v2
+        with:
+          repository: 'CorfuDB/corfudb-cloud'
+
+      - name: Build universe-core
+        working-directory: ./universe
+        run: rm -r ~/.m2/repository/org/corfudb && ./gradlew clean publishToMavenLocal
+
+      - name: Run version compatibility tests
+        working-directory: ./tests
+        run: ./gradlew clean test -Dtags=version-compatibility
+
+  injection_framework_test:
+    # https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
+    runs-on: ubuntu-18.04
+
+    env:
+      PKG_USERNAME: ${{ secrets.pkg_username }}
+      PUBLISH_TOKEN: ${{ secrets.publish_token }}
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.6.0
+        with:
+          access_token: ${{ github.token }}
+
+      - name: Cache local Maven repository
+        uses: actions/cache@v2
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Set up JDK 1.8
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.8
+
+      - uses: satackey/action-docker-layer-caching@v0.0.8
+        continue-on-error: true
+
+      - name: Prepare top of trunk docker image
+        run: ./mvnw clean package -DskipTests -Pdocker -Dmaven.javadoc.skip=true -T 1C
+
+      - uses: actions/checkout@v2
+        with:
+          repository: 'CorfuDB/corfudb-cloud'
+
+      - name: Build universe-core
+        working-directory: ./universe
+        run: rm -rf ~/.m2/repository/org/corfudb && ./gradlew clean publishToMavenLocal
+
+      - name: Run injection framework with universe framework
+        working-directory: ./tests
+        run: ./gradlew clean test -Dtags=longevity-docker
+
+      - name: Run injection framework verification
+        working-directory: ./tests/build/corfu-longevity-app
+        run: docker run -v ${PWD}/correctness.log:/injection_framework/correctness.log corfudb/injection-framework-verification:latest

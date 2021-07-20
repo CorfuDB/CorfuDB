@@ -19,11 +19,16 @@ message TableName {
     string table_name = 2;
 }
 
-// Descriptor to provide self describing schemas for the records.
+// Describe the protos in a file.
 message TableDescriptors {
     // File Descriptor protobufs map.
     // Contains file descriptors of key, value, metadata and their dependencies.
     map<string, google.protobuf.FileDescriptorProto> fileDescriptors = 1;
+
+    // 'Any' representing the key, value and metadata of a table
+    google.protobuf.Any key = 2;
+    google.protobuf.Any value = 3;
+    google.protobuf.Any metadata = 4;
 }
 
 // Metadata.
@@ -44,4 +49,12 @@ message TableMetadata {
 message Record {
     google.protobuf.Any payload = 1;
     google.protobuf.Any metadata = 2;
+}
+
+message ProtobufFileName {
+    string file_name = 1;
+}
+
+message ProtobufFileDescriptor {
+    google.protobuf.FileDescriptorProto file_descriptor = 1;
 }

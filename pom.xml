@@ -196,15 +196,10 @@
     </dependencies>
 
     <distributionManagement>
-        <snapshotRepository>
-            <id>corfudb-snapshots</id>
-            <name>oss-jfrog-artifactory-snapshots</name>
-            <url>https://oss.jfrog.org/artifactory/oss-snapshot-local</url>
-        </snapshotRepository>
         <repository>
-            <id>bintray-corfudb-maven</id>
-            <name>CorfuDB repository</name>
-            <url>https://api.bintray.com/maven/corfudb/maven/org.corfudb/;publish=1;override=1</url>
+            <id>github</id>
+            <name>GitHub CorfuDB Apache Maven Packages</name>
+            <url>https://maven.pkg.github.com/corfudb/corfudb</url>
         </repository>
     </distributionManagement>
 
@@ -394,19 +389,6 @@
                         </goals>
                     </execution>
                 </executions>
-            </plugin>
-            <!--Plugin used for code coverage integration with Github-->
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>cobertura-maven-plugin</artifactId>
-                <version>2.7</version>
-                <configuration>
-                    <formats>
-                        <format>html</format>
-                        <format>xml</format>
-                    </formats>
-                    <check/>
-                </configuration>
             </plugin>
             <!-- Add a license to all files using mvn license:format -->
             <plugin>

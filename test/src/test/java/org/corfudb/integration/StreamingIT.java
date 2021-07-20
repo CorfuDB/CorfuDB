@@ -202,40 +202,6 @@ public class StreamingIT extends AbstractIT {
     }
 
     /**
-     * Test that streaming API throws an Exception when number of subscribers is exceeded.
-     */
-    @Test
-    public void testStreamingMaxNumberOfSubscribers() throws Exception {
-        // Run a corfu server.
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
-
-        // Start a Corfu runtime & CorfuStore
-        runtime = createRuntime(singleNodeEndpoint);
-        CorfuStore store = new CorfuStore(runtime);
-
-        // Record the initial timestamp.
-        Timestamp ts1 = store.getTimestamp();
-
-        // Create a table.
-        store.openTable(
-                "test_namespace", "tableA",
-                Uuid.class, Uuid.class, Uuid.class,
-                TableOptions.builder().build()
-        );
-
-        assertThatThrownBy( () -> {
-                    for (int i = 0; i < StreamManager.MAX_SUBSCRIBERS + 1; i++) {
-                        // Subscribe to streaming updates from the table using customized buffer size.
-                        StreamListenerImpl listener = new StreamListenerImpl("stream_listener_" + i);
-                        store.subscribe(listener, "test_namespace",
-                                Collections.singletonList(new TableSchema<>("tableA", Uuid.class, Uuid.class, Uuid.class)), ts1);
-                    }
-                }).isInstanceOf(IllegalStateException.class);
-
-        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
-    }
-
-    /**
      * Basic Streaming Test with a single table.
      * <p>
      * The test updates a single table a few times and ensures that the listeners subscribed
@@ -258,7 +224,7 @@ public class StreamingIT extends AbstractIT {
         CorfuStore store = new CorfuStore(runtime);
 
         // Record the initial timestamp.
-        Timestamp ts1 = store.getTimestamp();
+        Timestamp ts1 = Timestamp.newBuilder().setEpoch(0L).setSequence(Address.NON_ADDRESS).build();
 
         // Create a table.
         Table<Uuid, SampleTableAMsg, Uuid> tableA = store.openTable(
@@ -379,7 +345,7 @@ public class StreamingIT extends AbstractIT {
         CorfuStore store = new CorfuStore(runtime);
 
         // Record the initial timestamp.
-        Timestamp ts1 = store.getTimestamp();
+        Timestamp ts1 = Timestamp.newBuilder().setEpoch(0L).setSequence(Address.NON_ADDRESS).build();
         final String tableName = "tableNoTags";
 
         // Create a table.
@@ -429,7 +395,7 @@ public class StreamingIT extends AbstractIT {
                 TableOptions.builder().build());
 
         // Record the initial timestamp.
-        Timestamp ts1 = store.getTimestamp();
+        Timestamp ts1 = Timestamp.newBuilder().setEpoch(0L).setSequence(Address.NON_ADDRESS).build();
 
         // Subscribe to streaming updates from tableA using listenerCommon
         StreamListenerImpl listenerCommon = new StreamListenerImpl("stream_listener_common");
@@ -544,12 +510,10 @@ public class StreamingIT extends AbstractIT {
                 Uuid.class, SampleTableAMsg.class, Uuid.class,
                 TableOptions.builder().build());
 
-        // Record the initial timestamp.
-        Timestamp ts1 = store.getTimestamp();
         // Subscribe to streaming updates from tableA using listenerCommon
         PrevValueStreamer listenerCommon = new PrevValueStreamer<Uuid, SampleTableAMsg, Uuid>(store, ns, tn);
         store.subscribeListener(listenerCommon, ns, "sample_streamer_1",
-                Collections.singletonList(tn), ts1);
+                Collections.singletonList(tn));
         final int numRecords = PARAMETERS.NUM_ITERATIONS_LOW;
         for (int i = 0; i < numRecords; i++) {
             try (TxnContext tx = store.txn(namespace)) {
@@ -584,7 +548,7 @@ public class StreamingIT extends AbstractIT {
         CorfuStore store = new CorfuStore(runtime);
 
         // Record the initial timestamp.
-        Timestamp ts1 = store.getTimestamp();
+        Timestamp ts1 = Timestamp.newBuilder().setEpoch(0L).setSequence(Address.NON_ADDRESS).build();
 
         // Create 2 tables.
         Table<Uuid, SampleTableAMsg, Uuid> tableA = store.openTable(
@@ -707,7 +671,7 @@ public class StreamingIT extends AbstractIT {
         CorfuStore store = new CorfuStore(runtime);
 
         // Record the initial timestamp.
-        Timestamp ts1 = store.getTimestamp();
+        Timestamp ts1 = Timestamp.newBuilder().setEpoch(0L).setSequence(Address.NON_ADDRESS).build();
 
         // Create a table.
         Table<Uuid, SampleTableAMsg, Uuid> tableA = store.openTable(
@@ -780,7 +744,7 @@ public class StreamingIT extends AbstractIT {
         CorfuStore store = new CorfuStore(runtime);
 
         // Record the initial timestamp.
-        Timestamp ts1 = store.getTimestamp();
+        Timestamp ts1 = Timestamp.newBuilder().setEpoch(0L).setSequence(Address.NON_ADDRESS).build();
         final String namespace = "test_namespace";
         final String tableName = "table_test";
 
@@ -847,7 +811,7 @@ public class StreamingIT extends AbstractIT {
         CorfuStore store = new CorfuStore(runtime);
 
         // Record the initial timestamp.
-        Timestamp ts1 = store.getTimestamp();
+        Timestamp ts1 = Timestamp.newBuilder().setEpoch(0L).setSequence(Address.NON_ADDRESS).build();
         final String namespace = "test_namespace";
         final String tableNameA = "table_testA";
         final String tableNameB = "table_testB";
@@ -962,17 +926,17 @@ public class StreamingIT extends AbstractIT {
         CorfuStore store = new CorfuStore(runtime);
 
         // Record the initial timestamp.
-        Timestamp ts1 = store.getTimestamp();
+        Timestamp ts1 = Timestamp.newBuilder().setEpoch(0L).setSequence(Address.NON_ADDRESS).build();
 
         // Create 2 tables in the same namespace.
         Table<Uuid, Uuid, Uuid> n1t1 = store.openTable(
-                "n1", "t1", Uuid.class,
+                namespace, "t1", Uuid.class,
                 Uuid.class, Uuid.class,
                 TableOptions.builder().build()
         );
 
         Table<Uuid, Uuid, Uuid> n1t2 = store.openTable(
-                "n1", "t2", Uuid.class,
+                namespace, "t2", Uuid.class,
                 Uuid.class, Uuid.class,
                 TableOptions.builder().build()
         );
@@ -982,19 +946,17 @@ public class StreamingIT extends AbstractIT {
         final int t2_uuid = 10;
         Uuid t1Uuid = Uuid.newBuilder().setMsb(t1_uuid).setLsb(t1_uuid).build();
         Uuid t2Uuid = Uuid.newBuilder().setMsb(t2_uuid).setLsb(t2_uuid).build();
-        TxnContext txnContext = store.txn("n1");
-        txnContext.putRecord(n1t1, t1Uuid, t1Uuid, t1Uuid);
-        txnContext.putRecord(n1t2, t2Uuid, t2Uuid, t2Uuid);
-        txnContext.commit();
+        try (TxnContext txnContext = store.txn(namespace)) {
+            txnContext.putRecord(n1t1, t1Uuid, t1Uuid, t1Uuid);
+            txnContext.putRecord(n1t2, t2Uuid, t2Uuid, t2Uuid);
+            txnContext.commit();
+        }
 
         // Subscribe to both tables.
-        List<TableSchema<Uuid, Uuid, Uuid>> tablesSubscribed = new ArrayList<>();
         TableSchema<Uuid, Uuid, Uuid> schema1 = new TableSchema<>("t1", Uuid.class, Uuid.class, Uuid.class);
         TableSchema<Uuid, Uuid, Uuid> schema2 = new TableSchema<>("t2", Uuid.class, Uuid.class, Uuid.class);
-        tablesSubscribed.add(schema1);
-        tablesSubscribed.add(schema2);
         StreamListenerImpl listener = new StreamListenerImpl("n1_listener");
-        store.subscribe(listener, "n1", tablesSubscribed, ts1);
+        store.subscribeListener(listener, namespace, "tag", Arrays.asList("t1", "t2"), ts1);
 
         // Verify that both updates come to the subscriber in the same StreamEntry.
         TimeUnit.MILLISECONDS.sleep(sleepTime);
@@ -1012,6 +974,56 @@ public class StreamingIT extends AbstractIT {
         assertThat(updates.getFirst().getEntries().get(schema2).get(0).getPayload()).isEqualTo(t2Uuid);
         assertThat(updates.getFirst().getEntries().get(schema2).get(0).getMetadata()).isEqualTo(t2Uuid);
         assertThat(updates.getFirst().getEntries().get(schema2).get(0).getOperation()).isEqualTo(CorfuStreamEntry.OperationType.UPDATE);
+
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    /**
+     * Test the case where a snapshot of the database is captured and we stream from this snapshot onwards.
+     * Verify deltas are not missed and that tx.commit() returns the correct timestamp.
+     *
+     * We will write data to 2 tables, but snapshot/stream on only one of them.
+     *
+     */
+    @Test
+    public void testFullSyncDeltaSyncPattern() throws Exception {
+        // Run a corfu server & initialize CorfuStore
+        initializeCorfu();
+
+        final int numUpdates = 10;
+        final int indexDefault= 0;
+        // Write updates to table_A
+        writeUpdatesToDefaultTable(numUpdates, 0);
+
+        // Write updates to table_B
+        writeUpdatesToRandomTable(numUpdates, 0, "table_B");
+
+        // Perform Full Sync (snapshot)
+        Timestamp snapshotTs;
+        Uuid firstKey = Uuid.newBuilder().setMsb(indexDefault).setLsb(indexDefault).build();
+        SampleTableAMsg firstValue = SampleTableAMsg.newBuilder().setPayload(String.valueOf(indexDefault)).build();
+
+        try (TxnContext txn = store.txn(namespace)) {
+            CorfuStoreEntry<Uuid, SampleTableAMsg, Uuid> entry = txn.getRecord(defaultTableName, firstKey);
+            assertThat(entry.getPayload()).isEqualTo(firstValue);
+            snapshotTs = txn.commit();
+            assertThat(snapshotTs.getSequence()).isEqualTo(runtime.getSequencerView()
+                    .query(CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(namespace, defaultTableName))));
+        }
+
+        // Subscribe from latest full sync
+        StreamListenerImpl listener = new StreamListenerImpl("stream_listener");
+        store.subscribeListener(listener, namespace, defaultTag, Arrays.asList(defaultTableName), snapshotTs);
+
+        // Write more updates to table_B (not streaming)
+        writeUpdatesToRandomTable(numUpdates, 0, "table_B");
+        // Write more updates to table_A (streaming)
+        writeUpdatesToDefaultTable(numUpdates/2, 0);
+
+        // Give time for deltas to be processed
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
+        LinkedList<CorfuStreamEntries> updates = listener.getUpdates();
+        assertThat(updates.size()).isEqualTo(numUpdates/2);
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
@@ -1071,7 +1083,7 @@ public class StreamingIT extends AbstractIT {
         initializeCorfu();
 
         // Record the initial timestamp.
-        Timestamp initTs = store.getTimestamp();
+        Timestamp initTs = Timestamp.newBuilder().setEpoch(0L).setSequence(Address.NON_ADDRESS).build();
 
         final int totalUpdates = 20;
         final int numCheckpointTrimCycles = 5;
@@ -1090,10 +1102,14 @@ public class StreamingIT extends AbstractIT {
         TimeUnit.MILLISECONDS.sleep(sleepTime);
         assertThat(listener.getUpdates().size()).isEqualTo(totalUpdates);
 
+        long seqNumBeforeTrim = -1L; // Default value expected for empty streams on getHighestSequence()
+
         // Run X number of checkpoint/trim (on each run, trigger runtimeGC)
         for (int i = 0; i < numCheckpointTrimCycles; i++) {
             checkpointAndTrim(namespace, Arrays.asList(defaultTableName, randomTableName), false);
             runtime.getGarbageCollector().runRuntimeGC();
+            long seqNumberAfterTrim = store.getHighestSequence(namespace, defaultTableName);
+            assertThat(seqNumberAfterTrim).isEqualTo(seqNumBeforeTrim);
         }
 
         // Confirm first untrimmed address is higher than the last received update (confirm pointer is below global trim mark)
@@ -1101,7 +1117,7 @@ public class StreamingIT extends AbstractIT {
 
         // Check listener was not unsubscribed due to a Trimmed Exception (as pointer was kept below the latest trim mark)
         assertThrows(StreamingException.class, () -> store.subscribeListener(listener, namespace, defaultTag,
-                Collections.singletonList(defaultTableName), store.getTimestamp()));
+                Collections.singletonList(defaultTableName)));
 
         // Add new updates to the stream being subscribed to, confirm data is received
         writeUpdatesToDefaultTable(totalUpdates, totalUpdates);
@@ -1115,7 +1131,7 @@ public class StreamingIT extends AbstractIT {
             initializeCorfu();
 
             // Record the initial timestamp.
-            Timestamp ts1 = store.getTimestamp();
+            Timestamp ts1 = Timestamp.newBuilder().setEpoch(0L).setSequence(Address.NON_ADDRESS).build();
 
             final int totalUpdates = 100;
             final int fewUpdates = 5;
@@ -1334,6 +1350,52 @@ public class StreamingIT extends AbstractIT {
         assertThat(listenerUniqueTag.getUpdates().size()).isEqualTo(numUpdates);
     }
 
+    /**
+     * Verify subscribe API for which no timestamp is specified.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testSubscribeListenerNoTimestamp() throws Exception {
+        final String defaultTag = "sample_streamer_1";
+
+        // Run a corfu server & initialize Corfu Store
+        initializeCorfu();
+
+        // Open Default Table (if table is not opened, subscribing to a tag will not capture any tables)
+        store.openTable(
+                namespace, defaultTableName,
+                Uuid.class, SampleTableAMsg.class, Uuid.class,
+                TableOptions.builder().build()
+        );
+
+        // Subscribe before any data is written to the tables, to verify the timestamp corresponds to the current state
+        StreamListenerImpl listenerPreWrites = new StreamListenerImpl("stream_listener_pre");
+        store.subscribeListener(listenerPreWrites, namespace, defaultTag);
+
+        // Write a number of updates to 'default' table
+        final int numUpdates = 50;
+        writeUpdatesToDefaultTable(numUpdates, 0);
+
+        // Confirm totalUpdates are received by preWrites listener
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
+        assertThat(listenerPreWrites.getUpdates().size()).isEqualTo(numUpdates);
+
+        // Subscribe to tag belonging to 'default' table and confirm no updates are received (as it should subscribed in the current timestamp)
+        StreamListenerImpl listenerPostWrites = new StreamListenerImpl("stream_listener_post");
+        store.subscribeListener(listenerPostWrites, namespace, defaultTag);
+
+        // Confirm NO updates are received by postWrite listener
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
+        assertThat(listenerPostWrites.getUpdates().size()).isZero();
+
+        // Write extra updates, and confirm both listeners receive them
+        writeUpdatesToDefaultTable(numUpdates, numUpdates);
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
+        assertThat(listenerPreWrites.getUpdates().size()).isEqualTo(numUpdates*2);
+        assertThat(listenerPostWrites.getUpdates().size()).isEqualTo(numUpdates);
+    }
+
     private void writeUpdatesToDefaultTable(int numUpdates, int offset) throws Exception {
         Table<Uuid, SampleTableAMsg, Uuid> tableA = store.openTable(
                 namespace, defaultTableName,
@@ -1353,6 +1415,12 @@ public class StreamingIT extends AbstractIT {
         }
     }
 
+    /**
+     * Write updates to any given table with the following schema:
+     *      key: Uuid
+     *      value: SampleTableBMsg
+     *      metadata: Uuid
+     */
     private void writeUpdatesToRandomTable(int numUpdates, int offset, String tableName) throws Exception {
         Table<Uuid, SampleTableBMsg, Uuid> tableB = store.openTable(
                 namespace, tableName,
@@ -1360,7 +1428,6 @@ public class StreamingIT extends AbstractIT {
                 TableOptions.builder().build()
         );
 
-        // Make some updates to tableB
         for (int index = offset; index < offset + numUpdates; index++) {
             try (TxnContext tx = store.txn(namespace)) {
                 Uuid uuid = Uuid.newBuilder().setMsb(index).setLsb(index).build();
@@ -1393,7 +1460,8 @@ public class StreamingIT extends AbstractIT {
             readTable.entryStream().forEach(entry -> entry.getKey().getMsb());
 
             for (int index = 0; index < numUpdates; index++) {
-                CorfuRecord<SampleTableAMsg, Uuid> record = readTable.get(Uuid.newBuilder().setLsb(index).setMsb(index).build());
+                CorfuStoreEntry<Uuid, SampleTableAMsg, Uuid> record = txn.getRecord(readTable,
+                        Uuid.newBuilder().setLsb(index).setMsb(index).build());
                 assertThat(record).isNotNull();
                 assertThat(record.getPayload().getPayload()).isEqualTo(String.valueOf(index));
             }
@@ -1417,6 +1485,7 @@ public class StreamingIT extends AbstractIT {
 
         // Add Registry Table
         mcw.addMap(rt.getTableRegistry().getRegistryTable());
+        mcw.addMap(rt.getTableRegistry().getProtobufDescriptorTable());
         // Checkpoint & Trim
         Token trimPoint = mcw.appendCheckpoints(rt, "StreamingIT");
         if (partialTrim) {

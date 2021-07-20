@@ -6,19 +6,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataVal;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
-import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.ExampleSchemas.ClusterUuidMsg;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.util.Sleep;
 import org.corfudb.utils.lock.LockDataTypes;
 import org.junit.After;
@@ -47,7 +47,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     private final static String streamName = "Table001";
     private static final String LOCK_TABLE_NAME = "LOCK";
 
-
     private final static long shortInterval = 1L;
     private final static long mediumInterval = 10L;
     private final static long lockInterval = 6L;
@@ -59,10 +58,14 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
     private final static int activeClusterCorfuPort = 9000;
     private final static int standbyClusterCorfuPort = 9001;
+    private final static int backupClusterCorfuPort = 9002;
     private final static int activeReplicationServerPort = 9010;
     private final static int standbyReplicationServerPort = 9020;
+    private final static int backupReplicationServerPort = 9030;
     private final static String activeCorfuEndpoint = DEFAULT_HOST + ":" + activeClusterCorfuPort;
     private final static String standbyCorfuEndpoint = DEFAULT_HOST + ":" + standbyClusterCorfuPort;
+    private final static String backupCorfuEndpoint = DEFAULT_HOST + ":" + backupClusterCorfuPort;
+
     private static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
 
     private Process activeCorfuServer = null;
@@ -77,7 +80,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
     private CorfuStore activeCorfuStore;
     private CorfuStore standbyCorfuStore;
-    private Table<RpcCommon.UuidMsg, RpcCommon.UuidMsg, RpcCommon.UuidMsg> configTable;
+    private Table<ClusterUuidMsg, ClusterUuidMsg, ClusterUuidMsg> configTable;
     private Table<LockDataTypes.LockId, LockDataTypes.LockData, Message> activeLockTable;
 
     @Before
@@ -117,7 +120,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         configTable = activeCorfuStore.openTable(
                 DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
-                RpcCommon.UuidMsg.class, RpcCommon.UuidMsg.class, RpcCommon.UuidMsg.class,
+                ClusterUuidMsg.class, ClusterUuidMsg.class, ClusterUuidMsg.class,
                 TableOptions.builder().build()
         );
 
@@ -226,9 +229,12 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                         .newBuilder()
                         .setClusterId(DefaultClusterConfig.getStandbyClusterId())
                         .build();
-        CorfuRecord<LogReplicationMetadata.ReplicationStatusVal, Message> record =
-                activeCorfuStore.query(LogReplicationMetadataManager.NAMESPACE).getRecord(REPLICATION_STATUS_TABLE, key);
-        LogReplicationMetadata.ReplicationStatusVal replicationStatusVal = record.getPayload();
+
+        ReplicationStatusVal replicationStatusVal;
+        try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+            txn.commit();
+        }
 
         log.info("ReplicationStatusVal: RemainingEntriesToSend: {}, SyncType: {}, Status: {}",
                 replicationStatusVal.getRemainingEntriesToSend(), replicationStatusVal.getSyncType(),
@@ -237,6 +243,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         log.info("SnapshotSyncInfo: Base: {}, Type: {}, Status: {}, CompletedTime: {}",
                 replicationStatusVal.getSnapshotSyncInfo().getBaseSnapshot(), replicationStatusVal.getSnapshotSyncInfo().getType(),
                 replicationStatusVal.getSnapshotSyncInfo().getStatus(), replicationStatusVal.getSnapshotSyncInfo().getCompletedTime());
+
 
         assertThat(replicationStatusVal.getSyncType())
                 .isEqualTo(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
@@ -249,10 +256,11 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
 
         // Perform a role switch
-        activeCorfuStore.tx(DefaultClusterManager.CONFIG_NAMESPACE)
-                .update(DefaultClusterManager.CONFIG_TABLE_NAME, DefaultClusterManager.OP_SWITCH,
-                        DefaultClusterManager.OP_SWITCH, DefaultClusterManager.OP_SWITCH)
-                .commit();
+        try (TxnContext txn = activeCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_SWITCH, DefaultClusterManager.OP_SWITCH, DefaultClusterManager.OP_SWITCH);
+            txn.commit();
+        }
+
         assertThat(configTable.count()).isOne();
 
         // Write 5 more entries to mapStandby
@@ -271,13 +279,13 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                         .newBuilder()
                         .setClusterId(DefaultClusterConfig.getActiveClusterId())
                         .build();
-        CorfuRecord<LogReplicationMetadata.ReplicationStatusVal, Message> standbyRecord =
-                standbyCorfuStore.query(LogReplicationMetadataManager.NAMESPACE).getRecord(REPLICATION_STATUS_TABLE, StandbyKey);
-        LogReplicationMetadata.ReplicationStatusVal standbyStatusVal = standbyRecord.getPayload();
 
-        CorfuRecord<LogReplicationMetadata.ReplicationStatusVal, Message> oldRecord =
-                standbyCorfuStore.query(LogReplicationMetadataManager.NAMESPACE).getRecord(REPLICATION_STATUS_TABLE, key);
-        assertThat(oldRecord).isNull();
+        LogReplicationMetadata.ReplicationStatusVal standbyStatusVal;
+        try (TxnContext txn = standbyCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            standbyStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, StandbyKey).getPayload();
+            assertThat(txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload()).isNull();
+            txn.commit();
+        }
 
         log.info("ReplicationStatusVal: RemainingEntriesToSend: {}, SyncType: {}, Status: {}",
                 standbyStatusVal.getRemainingEntriesToSend(), standbyStatusVal.getSyncType(),
@@ -310,10 +318,10 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         assertThat(mapStandby.size()).isEqualTo(thirdBatch);
 
         // Second Role Switch
-        activeCorfuStore.tx(DefaultClusterManager.CONFIG_NAMESPACE)
-                .update(DefaultClusterManager.CONFIG_TABLE_NAME, DefaultClusterManager.OP_SWITCH,
-                        DefaultClusterManager.OP_SWITCH, DefaultClusterManager.OP_SWITCH)
-                .commit();
+        try (TxnContext txn = activeCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_SWITCH, DefaultClusterManager.OP_SWITCH, DefaultClusterManager.OP_SWITCH);
+            txn.commit();
+        }
         assertThat(configTable.count()).isOne();
 
         // Write 5 more entries to mapStandby
@@ -337,8 +345,10 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         assertThat(mapStandby.size()).isEqualTo(fourthBatch);
 
         // Verify Sync Status
-        record = activeCorfuStore.query(LogReplicationMetadataManager.NAMESPACE).getRecord(REPLICATION_STATUS_TABLE, key);
-        replicationStatusVal = record.getPayload();
+        try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+            txn.commit();
+        }
 
         log.info("ReplicationStatusVal: RemainingEntriesToSend: {}, SyncType: {}, Status: {}",
                 replicationStatusVal.getRemainingEntriesToSend(), replicationStatusVal.getSyncType(),
@@ -392,10 +402,10 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         // Perform a role switch during transfer
         assertThat(mapStandby.size()).isEqualTo(0);
-        activeCorfuStore.tx(DefaultClusterManager.CONFIG_NAMESPACE)
-                .update(DefaultClusterManager.CONFIG_TABLE_NAME, DefaultClusterManager.OP_SWITCH,
-                        DefaultClusterManager.OP_SWITCH, DefaultClusterManager.OP_SWITCH)
-                .commit();
+        try (TxnContext txn = activeCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_SWITCH, DefaultClusterManager.OP_SWITCH, DefaultClusterManager.OP_SWITCH);
+            txn.commit();
+        }
         assertThat(configTable.count()).isOne();
         assertThat(mapStandby.size()).isEqualTo(0);
 
@@ -452,10 +462,10 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         log.info("======standby tail is : " + standbyRuntime.getAddressSpaceView().getAllTails().getStreamTails().get(standbyStream));
 
         // Perform a role switch
-        activeCorfuStore.tx(DefaultClusterManager.CONFIG_NAMESPACE)
-                .update(DefaultClusterManager.CONFIG_TABLE_NAME, DefaultClusterManager.OP_SWITCH,
-                        DefaultClusterManager.OP_SWITCH, DefaultClusterManager.OP_SWITCH)
-                .commit();
+        try (TxnContext txn = activeCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_SWITCH, DefaultClusterManager.OP_SWITCH, DefaultClusterManager.OP_SWITCH);
+            txn.commit();
+        }
         assertThat(configTable.count()).isOne();
 
         // Should finish apply
@@ -533,10 +543,10 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         log.info("Log replication succeeds without config change!");
 
         // Perform a config update with two active
-        activeCorfuStore.tx(DefaultClusterManager.CONFIG_NAMESPACE)
-                .update(DefaultClusterManager.CONFIG_TABLE_NAME, DefaultClusterManager.OP_TWO_ACTIVE,
-                        DefaultClusterManager.OP_TWO_ACTIVE, DefaultClusterManager.OP_TWO_ACTIVE)
-                .commit();
+        try (TxnContext txn = activeCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_TWO_ACTIVE, DefaultClusterManager.OP_TWO_ACTIVE, DefaultClusterManager.OP_TWO_ACTIVE);
+            txn.commit();
+        }
         assertThat(configTable.count()).isOne();
         log.info("New topology config applied!");
         TimeUnit.SECONDS.sleep(mediumInterval);
@@ -621,10 +631,10 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         log.info("Log replication succeeds without config change!");
 
         // Perform a config update with all standby
-        activeCorfuStore.tx(DefaultClusterManager.CONFIG_NAMESPACE)
-                .update(DefaultClusterManager.CONFIG_TABLE_NAME, DefaultClusterManager.OP_ALL_STANDBY,
-                        DefaultClusterManager.OP_ALL_STANDBY, DefaultClusterManager.OP_ALL_STANDBY)
-                .commit();
+        try (TxnContext txn = activeCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_ALL_STANDBY, DefaultClusterManager.OP_ALL_STANDBY, DefaultClusterManager.OP_ALL_STANDBY);
+            txn.commit();
+        }
         assertThat(configTable.count()).isOne();
         log.info("New topology config applied!");
         TimeUnit.SECONDS.sleep(mediumInterval);
@@ -709,10 +719,10 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         log.info("Log replication succeeds without config change!");
 
         // Perform a config update with invalid state
-        activeCorfuStore.tx(DefaultClusterManager.CONFIG_NAMESPACE)
-                .update(DefaultClusterManager.CONFIG_TABLE_NAME, DefaultClusterManager.OP_INVALID,
-                        DefaultClusterManager.OP_INVALID, DefaultClusterManager.OP_INVALID)
-                .commit();
+        try (TxnContext txn = activeCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_INVALID, DefaultClusterManager.OP_INVALID, DefaultClusterManager.OP_INVALID);
+            txn.commit();
+        }
         assertThat(configTable.count()).isOne();
         log.info("New topology config applied!");
         TimeUnit.SECONDS.sleep(mediumInterval);
@@ -735,10 +745,10 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         log.info("After {} seconds sleep, double check passed", mediumInterval);
 
         // Change to default active standby config
-        activeCorfuStore.tx(DefaultClusterManager.CONFIG_NAMESPACE)
-                .update(DefaultClusterManager.CONFIG_TABLE_NAME, DefaultClusterManager.OP_RESUME,
-                        DefaultClusterManager.OP_RESUME, DefaultClusterManager.OP_RESUME)
-                .commit();
+        try (TxnContext txn = activeCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_RESUME, DefaultClusterManager.OP_RESUME, DefaultClusterManager.OP_RESUME);
+            txn.commit();
+        }
         assertThat(configTable.count()).isEqualTo(2);
         log.info("New topology config applied!");
         TimeUnit.SECONDS.sleep(mediumInterval);
@@ -822,9 +832,12 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                         .newBuilder()
                         .setClusterId(DefaultClusterConfig.getStandbyClusterId())
                         .build();
-        CorfuRecord<LogReplicationMetadata.ReplicationStatusVal, Message> record =
-                activeCorfuStore.query(LogReplicationMetadataManager.NAMESPACE).getRecord(REPLICATION_STATUS_TABLE, key);
-        LogReplicationMetadata.ReplicationStatusVal replicationStatusVal = record.getPayload();
+
+        LogReplicationMetadata.ReplicationStatusVal replicationStatusVal;
+        try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+            txn.commit();
+        }
 
         log.info("ReplicationStatusVal: RemainingEntriesToSend: {}, SyncType: {}, Status: {}",
                 replicationStatusVal.getRemainingEntriesToSend(), replicationStatusVal.getSyncType(),
@@ -874,10 +887,11 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         assertThat(mapActive.size()).isEqualTo(thirdBatch);
 
         // Perform an enforce full snapshot sync
-        activeCorfuStore.tx(DefaultClusterManager.CONFIG_NAMESPACE)
-                .update(DefaultClusterManager.CONFIG_TABLE_NAME, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC,
-                        DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC)
-                .commit();
+        try (TxnContext txn = activeCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC,
+                    DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC);
+            txn.commit();
+        }
         TimeUnit.SECONDS.sleep(mediumInterval);
 
         // Standby map should have thirdBatch size, since topology config is resumed.
@@ -885,8 +899,10 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         assertThat(mapStandby.size()).isEqualTo(thirdBatch);
 
         // Verify that a forced snapshot sync is finished.
-        record = activeCorfuStore.query(LogReplicationMetadataManager.NAMESPACE).getRecord(REPLICATION_STATUS_TABLE, key);
-        replicationStatusVal = record.getPayload();
+        try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+            txn.commit();
+        }
 
         log.info("ReplicationStatusVal: RemainingEntriesToSend: {}, SyncType: {}, Status: {}",
                 replicationStatusVal.getRemainingEntriesToSend(), replicationStatusVal.getSyncType(),
@@ -968,16 +984,19 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         log.info("Log replication succeeds without config change!");
 
         // Release Active's lock
-        TxnContext txnContext = activeCorfuStore.txn(CORFU_SYSTEM_NAMESPACE);
-        txnContext.clear(activeLockTable);
-        txnContext.commit();
+        try (TxnContext txnContext = activeCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            txnContext.clear(activeLockTable);
+            txnContext.commit();
+        }
+
         log.info("Active's lock is released!");
         TimeUnit.SECONDS.sleep(lockInterval);
 
         // Release Active's lock again
-        txnContext = activeCorfuStore.txn(CORFU_SYSTEM_NAMESPACE);
-        txnContext.clear(activeLockTable);
-        txnContext.commit();
+        try (TxnContext txnContext = activeCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            txnContext.clear(activeLockTable);
+            txnContext.commit();
+        }
 
         for (int i = secondBatch; i < thirdBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
@@ -992,6 +1011,118 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         assertThat(mapStandby.size()).isEqualTo(secondBatch);
     }
 
+    /**
+     * This test verifies log entry works after a force snapshot sync
+     * in the backup/restore workflow.
+     * <p>
+     * 1. Init with corfu 9000 active, 9001 standby, 9002 backup
+     * 2. Write 10 entries to active map
+     * 3. Start log replication: Node 9010 - active, Node 9020 - standby, Node 9030 - backup
+     * 4. Wait for Snapshot Sync, both maps have size 10
+     * 5. Write 50 entries to active map, to verify Log Entry Sync
+     * 6. Right now both cluster have 50 entries,
+     *    and we have a cluster that is a backup of active when active has 10 entries.
+     *    Change the topology, the backup cluster 9030 will be the new active cluster.
+     * 7. Trigger a force snapshot sync
+     * 8. Verify the force snapshot sync is completed
+     * 9. Write 5 entries to backup map, to verify Log Entry Sync
+     */
+    @Test
+    public void testBackupRestoreWorkflow() throws Exception {
+        Process backupCorfu = runServer(backupClusterCorfuPort, true);
+        Process backupReplicationServer = runReplicationServer(backupReplicationServerPort, nettyPluginPath);
+
+        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
+                .builder()
+                .build();
+
+        CorfuRuntime backupRuntime = CorfuRuntime.fromParameters(params).setTransactionLogging(true);
+        backupRuntime.parseConfigurationString(backupCorfuEndpoint).connect();
+
+        CorfuTable<String, Integer> mapBackup = backupRuntime.getObjectsView()
+                .build()
+                .setStreamName(streamName)
+                .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {
+                })
+                .open();
+
+        assertThat(mapBackup.size()).isZero();
+
+        // Write 10 entries to active map
+        writeEntries(activeRuntime, 0, firstBatch, mapActive);
+
+        // Write 50 entries of dummy data to standby map, so we make it have longer corfu log tail.
+        // We can also use it to confirm data is wiped during the snapshot sync.
+        writeEntries(standbyRuntime, 0, largeBatch, mapStandby);
+        assertThat(mapActive.size()).isEqualTo(firstBatch);
+        assertThat(mapStandby.size()).isEqualTo(largeBatch);
+
+        log.info("Before log replication, append {} entries to active map. Current active corfu" +
+                        "[{}] log tail is {}, standby corfu[{}] log tail is {}", firstBatch, activeClusterCorfuPort,
+                activeRuntime.getAddressSpaceView().getLogTail(), standbyClusterCorfuPort,
+                standbyRuntime.getAddressSpaceView().getLogTail());
+
+        activeReplicationServer = runReplicationServer(activeReplicationServerPort, nettyPluginPath);
+        standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, nettyPluginPath);
+        log.info("Replication servers started, and replication is in progress...");
+
+        // Wait until data is fully replicated
+        waitForReplication(size -> size == firstBatch, mapStandby, firstBatch);
+
+        log.info("After full sync, both maps have size {}. Current active corfu[{}] log tail " +
+                        "is {}, standby corfu[{}] log tail is {}",
+                firstBatch, activeClusterCorfuPort, activeRuntime.getAddressSpaceView().getLogTail(),
+                standbyClusterCorfuPort, standbyRuntime.getAddressSpaceView().getLogTail());
+
+        // Write 50 entries to active map
+        writeEntries(activeRuntime, 0, largeBatch, mapActive);
+        assertThat(mapActive.size()).isEqualTo(largeBatch);
+
+        // Write 10 entries to backup map
+        // It is a backup of the active cluster when it has 10 entries
+        writeEntries(backupRuntime, 0, firstBatch, mapBackup);
+
+        // Wait until data is fully replicated again
+        waitForReplication(size -> size == largeBatch, mapStandby, largeBatch);
+        log.info("After delta sync, both maps have size {}. Current active corfu[{}] log tail " +
+                        "is {}, standby corfu[{}] log tail is {}", secondBatch, activeClusterCorfuPort,
+                activeRuntime.getAddressSpaceView().getLogTail(), standbyClusterCorfuPort,
+                standbyRuntime.getAddressSpaceView().getLogTail());
+
+        // Verify data
+        for (int i = 0; i < largeBatch; i++) {
+            assertThat(mapStandby.containsKey(String.valueOf(i))).isTrue();
+        }
+
+        // Change the topology - brings up the backup cluster
+        updateTopology(activeCorfuStore, DefaultClusterManager.OP_BACKUP);
+        log.info("Change the topology!!!");
+
+        TimeUnit.SECONDS.sleep(shortInterval);
+
+
+        // Perform an enforce full snapshot sync
+        updateTopology(activeCorfuStore, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC);
+        TimeUnit.SECONDS.sleep(mediumInterval);
+
+        // Standby map size should be 10
+        waitForReplication(size -> size == firstBatch, mapStandby, firstBatch);
+
+        // Write 5 entries to backup map
+        writeEntries(backupRuntime, firstBatch, secondBatch, mapBackup);
+        assertThat(mapBackup.size()).isEqualTo(secondBatch);
+
+        // Wait until data is fully replicated again
+        waitForReplication(size -> size == secondBatch, mapStandby, secondBatch);
+        log.info("After delta sync, both maps have size {}. Current backup corfu[{}] log tail " +
+                        "is {}, standby corfu[{}] log tail is {}", firstBatch, backupClusterCorfuPort,
+                backupRuntime.getAddressSpaceView().getLogTail(), standbyClusterCorfuPort,
+                standbyRuntime.getAddressSpaceView().getLogTail());
+
+        shutdownCorfuServer(backupCorfu);
+        shutdownCorfuServer(backupReplicationServer);
+    }
+
     private void waitForReplication(IntPredicate verifier, CorfuTable table, int expected) {
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             log.info("Waiting for replication, table size is {}, expected size is {}", table.size(), expected);
@@ -1003,12 +1134,27 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         assertThat(verifier.test(table.size())).isTrue();
     }
 
-
     private void sleepUninterruptibly(long seconds) {
         try {
             TimeUnit.SECONDS.sleep(seconds);
         } catch (InterruptedException ie) {
             throw new UnrecoverableCorfuInterruptedError(ie);
+        }
+    }
+
+    private void writeEntries(CorfuRuntime runtime,
+                              int startIdx, int endIdx, CorfuTable<String, Integer> table) {
+        for (int i = startIdx; i < endIdx; i++) {
+            runtime.getObjectsView().TXBegin();
+            table.put(String.valueOf(i), i);
+            runtime.getObjectsView().TXEnd();
+        }
+    }
+
+    private void updateTopology(CorfuStore corfuStore, ClusterUuidMsg op) {
+        try (TxnContext txn = corfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, op, op, op);
+            txn.commit();
         }
     }
 }

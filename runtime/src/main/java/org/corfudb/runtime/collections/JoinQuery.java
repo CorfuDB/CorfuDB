@@ -29,12 +29,11 @@ import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;
 
 /**
- * Query class provides methods to query the CorfuStore tables.
- * It has several methods to query by secondary index, to perform predicate joins and apply merge filters.
+ * JoinQuery class provides methods to query multiple tables in the CorfuStore tables.
  * <p>
  * Created by zlokhandwala on 2019-08-09.
  */
-public class Query {
+public class JoinQuery {
 
     private final TableRegistry tableRegistry;
 
@@ -43,172 +42,17 @@ public class Query {
     private final String namespace;
 
     /**
-     * Creates a Query interface.
+     * Creates a JoinQuery interface.
      *
      * @param tableRegistry Table registry from the corfu client.
      * @param objectsView   Objects View from the corfu client.
      * @param namespace     Namespace to perform the queries within.
      */
     @Deprecated
-    public Query(final TableRegistry tableRegistry, final ObjectsView objectsView, final String namespace) {
+    public JoinQuery(final TableRegistry tableRegistry, final ObjectsView objectsView, final String namespace) {
         this.tableRegistry = tableRegistry;
         this.objectsView = objectsView;
         this.namespace = namespace;
-    }
-
-    private Token getToken(Timestamp timestamp) {
-        return new Token(timestamp.getEpoch(), timestamp.getSequence());
-    }
-
-    private void txBegin(Timestamp timestamp) {
-        TransactionBuilder transactionBuilder = objectsView.TXBuild()
-                .type(TransactionType.SNAPSHOT);
-
-        if (timestamp != null) {
-            transactionBuilder.snapshot(getToken(timestamp));
-        }
-
-        transactionBuilder.build().begin();
-    }
-
-    private void txEnd() {
-        objectsView.TXEnd();
-    }
-
-    private <K extends Message, V extends Message, M extends Message>
-    Table<K, V, M> getTable(@Nonnull final String tableName) {
-        return tableRegistry.getTable(this.namespace, tableName);
-    }
-
-    /**
-     * Fetch the CorfuRecord for the specified key at the LATEST timestamp (default).
-     *
-     * @param tableName Table name.
-     * @param key       Key.
-     * @param <K>       Type of key.
-     * @param <V>       Type of the payload/value.
-     * @param <M>       Type of the metadata.
-     * @return CorfuRecord encapsulating the payload and the metadata.
-     */
-    @Nullable
-    @Deprecated
-    public <K extends Message, V extends Message, M extends Message>
-    CorfuRecord<V, M> getRecord(@Nonnull final String tableName,
-                                @Nonnull final K key) {
-        return getRecord(tableName, null, key);
-    }
-
-    /**
-     * Fetch the Value payload for the specified key at the specified snapshot/timestamp.
-     *
-     * @param tableName Table name.
-     * @param timestamp Timestamp to perform the query.
-     * @param key       Key.
-     * @param <K>       Type of key.
-     * @param <V>       Type of value/payload.
-     * @param <M>       Type of metadata.
-     * @return Value.
-     */
-    @Nullable
-    @Deprecated
-    public <K extends Message, V extends Message, M extends Message>
-    CorfuRecord<V, M> getRecord(@Nonnull final String tableName,
-                                @Nullable final Timestamp timestamp,
-                                @Nonnull final K key) {
-        if (tableName == null) {
-            throw new IllegalArgumentException("Query::getRecord needs a valid tableName");
-        }
-        try {
-            txBegin(timestamp);
-            Table<K, V, M> table = getTable(tableName);
-            return table.get(key);
-        } finally {
-            txEnd();
-        }
-    }
-
-    /**
-     * Gets the count of records in the table.
-     *
-     * @param tableName Table name.
-     * @return Count of records.
-     */
-    @Deprecated
-    public int count(@Nonnull final String tableName) {
-        return count(tableName, null);
-    }
-
-    /**
-     * Gets the count of records in the table at a particular timestamp.
-     *
-     * @param tableName Table name.
-     * @param timestamp Timestamp to perform the query on.
-     * @return Count of records.
-     */
-    @Deprecated
-    public int count(@Nonnull final String tableName,
-                     @Nullable final Timestamp timestamp) {
-        try {
-            txBegin(timestamp);
-            return getTable(tableName).count();
-        } finally {
-            txEnd();
-        }
-    }
-
-    /**
-     * Returns the keySet of the Table.
-     *
-     * @param tableName TableName to query.
-     * @param timestamp Timestamp to query at. If null, latest timestamp is used.
-     * @param <K>       Type of Key.
-     * @return Set of keys.
-     */
-    @Nonnull
-    @Deprecated
-    public <K extends Message> Set<K> keySet(@Nonnull String tableName,
-                                             @Nullable Timestamp timestamp) {
-        try {
-            txBegin(timestamp);
-            return (Set<K>) getTable(tableName).keySet();
-        } finally {
-            txEnd();
-        }
-    }
-
-    @Nonnull
-    @Deprecated
-    private <K extends Message, V extends Message, M extends Message>
-    List<CorfuStoreEntry<K, V, M>> scanAndFilterByEntry(
-            @Nonnull final String tableName,
-            @Nullable Timestamp timestamp,
-            @Nonnull final Predicate<CorfuStoreEntry<K, V, M>> predicate) {
-        try {
-            txBegin(timestamp);
-            return ((Table<K, V, M>) getTable(tableName)).scanAndFilterByEntry(predicate);
-        } finally {
-            txEnd();
-        }
-    }
-
-    /**
-     * Query by a secondary index.
-     *
-     * @param tableName Table name.
-     * @param indexName Index name. In case of protobuf-defined secondary index it is the field name.
-     * @param indexKey  Key to query.
-     * @param <K>       Type of Key.
-     * @param <V>       Type of Value.
-     * @param <I>       Type of index/secondary key.
-     * @return Result of the query.
-     */
-    @Nonnull
-    @Deprecated
-    public <K extends Message, V extends Message, M extends Message, I>
-    QueryResult<Entry<K, V>> getByIndex(@Nonnull final String tableName,
-                                        @Nonnull final String indexName,
-                                        @Nonnull final I indexKey) {
-        return new QueryResult<>(((Table<K, V, M>) getTable(tableName)).getByIndexAsQueryResult(indexName, indexKey));
     }
 
     private static <K extends Message, V extends Message, M extends Message, R>
@@ -231,51 +75,6 @@ public class Query {
                         .map(function -> function.apply(v))
                         .orElse((R) v))
                 .collect(Collectors.toCollection(() -> resultCollection));
-    }
-
-    /**
-     * Execute a scan and filter query.
-     *
-     * @param tableName Table name.
-     * @param query     Predicate to filter the values.
-     * @param <K>       Type of Key.
-     * @param <V>       Type of Value.
-     * @param <R>       Type of returned projected values.
-     * @return Result of the query.
-     */
-    @Nonnull
-    @Deprecated
-    public <K extends Message, V extends Message, M extends Message, R>
-    QueryResult<R> executeQuery(@Nonnull final String tableName,
-                                @Nonnull final Predicate<CorfuStoreEntry<K, V, M>> query) {
-        return executeQuery(tableName, query, DEFAULT_OPTIONS);
-    }
-
-    /**
-     * Execute a scan and filter query.
-     * The query options enables to define:
-     * a projection function,
-     * timestamp at which the table needs to be queried,
-     * Flag to return only distinct results.
-     *
-     * @param tableName    Table name.
-     * @param query        Predicate to filter the values.
-     * @param queryOptions Query options.
-     * @param <V>          Type of Value.
-     * @param <R>          Type of returned projected values.
-     * @return Result of the query.
-     */
-    @Nonnull
-    @Deprecated
-    public <K extends Message, V extends Message, M extends Message, R>
-    QueryResult<R> executeQuery(@Nonnull final String tableName,
-                                @Nonnull final Predicate<CorfuStoreEntry<K, V, M>> query,
-                                @Nonnull final QueryOptions<K, V, M, R> queryOptions) {
-
-        List<CorfuStoreEntry<K, V, M>> filterResult
-                = scanAndFilterByEntry(tableName, queryOptions.getTimestamp(), query);
-        Collection<R> result = initializeResultCollection(queryOptions);
-        return new QueryResult<>(transform(filterResult, result, queryOptions.getProjection()));
     }
 
     /**
@@ -325,8 +124,8 @@ public class Query {
      * @param table2         Second table to join with the first one.
      * @param query1         Predicate to filter entries in table 1.
      * @param query2         Predicate to filter entries in table 2.
-     * @param queryOptions1  Query options to transform table 1 filtered values.
-     * @param queryOptions2  Query options to transform table 2 filtered values.
+     * @param queryOptions1  JoinQuery options to transform table 1 filtered values.
+     * @param queryOptions2  JoinQuery options to transform table 2 filtered values.
      * @param joinPredicate  Predicate to filter entries during the join.
      * @param joinFunction   Function to merge entries.
      * @param joinProjection Project the merged entries.
@@ -442,32 +241,5 @@ public class Query {
             result.addAll(merge(list, mergeList, func, depth + 1));
         }
         return result;
-    }
-
-    /**
-     * Performs join of multiple tables.
-     *
-     * @param tableNames   Collection of table names to be joined.
-     * @param joinFunction MergeFunction to perform the join across the specified tables.
-     * @param <R>          Type of resultant Object.
-     * @return Result of the query.
-     */
-    @Nonnull
-    @Deprecated
-    public <R> QueryResult<R> executeMultiJoinQuery(@Nonnull final Collection<String> tableNames,
-                                                    @Nonnull final MergeFunction<R> joinFunction) {
-
-        List<Collection<?>> values = new ArrayList<>();
-        for (String tableName : tableNames) {
-            Collection<Message> messages = scanAndFilterByEntry(tableName, null, corfuStoreEntry -> true)
-                    .stream()
-                    .map(CorfuStoreEntry::getPayload)
-                    .collect(Collectors.toList());
-            values.add(messages);
-        }
-
-        int mergeJoinDepth = 0; // shallow merges for now
-        Collection<R> mergedResults = merge(values, new ArrayList<>(), joinFunction, mergeJoinDepth);
-        return new QueryResult<>(mergedResults);
     }
 }

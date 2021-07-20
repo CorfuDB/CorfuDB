@@ -7,12 +7,15 @@ import com.google.protobuf.DynamicMessage;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.IsolationLevel;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.Table;
@@ -52,6 +55,7 @@ public class CorfuStoreIT extends AbstractIT {
     private static String corfuSingleNodeHost;
     private static int corfuStringNodePort;
     private static String singleNodeEndpoint;
+    private CorfuStore corfuStore;
 
     /* A helper method that takes host and port specification, start a single server and
      *  returns a process. */
@@ -74,51 +78,6 @@ public class CorfuStoreIT extends AbstractIT {
         singleNodeEndpoint = String.format("%s:%d",
                 corfuSingleNodeHost,
                 corfuStringNodePort);
-    }
-
-
-    /**
-     * Basic test that inserts a single item using protobuf defined in the proto/ directory.
-     */
-    @Test
-    public void testTx() throws Exception {
-        // Run a corfu server
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
-
-        // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
-
-        CorfuStore store = new CorfuStore(runtime);
-
-        Table<Uuid, Uuid, Uuid> table = store.openTable(
-                "namespace", "table", Uuid.class,
-                Uuid.class, Uuid.class,
-                TableOptions.builder().build()
-        );
-
-        final long keyUuid = 1L;
-        final long valueUuid = 3L;
-        final long metadataUuid = 5L;
-        Uuid uuidKey = Uuid.newBuilder()
-                .setMsb(keyUuid)
-                .setLsb(keyUuid)
-                .build();
-        Uuid uuidVal = Uuid.newBuilder()
-                .setMsb(valueUuid)
-                .setLsb(valueUuid)
-                .build();
-        Uuid metadata = Uuid.newBuilder()
-                .setMsb(metadataUuid)
-                .setLsb(metadataUuid)
-                .build();
-        TxnContext tx = store.txn("namespace");
-        tx.putRecord(table, uuidKey, uuidVal, metadata);
-        tx.commit();
-        CorfuRecord record = table.get(uuidKey);
-        assertThat(record.getPayload()).isEqualTo(uuidVal);
-        assertThat(record.getMetadata()).isEqualTo(metadata);
-
-        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 
     /**
@@ -210,13 +169,23 @@ public class CorfuStoreIT extends AbstractIT {
         CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> tableRegistry = runtime.getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {
                 })
-                .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME))
+                .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
+                        TableRegistry.REGISTRY_TABLE_NAME))
+                .setSerializer(dynamicProtobufSerializer)
+                .addOpenOption(ObjectOpenOption.NO_CACHE)
+                .open();
+        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> descriptorTable = runtime.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {
+                })
+                .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
+                        TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME))
                 .setSerializer(dynamicProtobufSerializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
 
         mcw.addMap(corfuTable);
         mcw.addMap(tableRegistry);
+        mcw.addMap(descriptorTable);
         Token trimPoint = mcw.appendCheckpoints(runtime, "checkpointer");
 
         runtime.getAddressSpaceView().prefixTrim(trimPoint);
@@ -240,23 +209,39 @@ public class CorfuStoreIT extends AbstractIT {
         Table<Uuid, Uuid, ManagedResources> table1 = store3.openTable(namespace,
                 tableName, Uuid.class, Uuid.class, ManagedResources.class,
                 TableOptions.builder().build());
-        CorfuRecord<Uuid, ManagedResources> record = store3.query(namespace).getRecord(tableName, uuidKey);
-        assertThat(record.getMetadata().getCreateTimestamp()).isEqualTo(newMetadataUuid);
-
-        tx = store3.txn(namespace);
-        tx.putRecord(table1, uuidKey, uuidVal, metadata);
-        tx.commit();
+        try (TxnContext txn = store3.txn(namespace)) {
+            CorfuStoreEntry<Uuid, Uuid, ManagedResources> record = txn.getRecord(tableName, uuidKey);
+            assertThat(record.getMetadata().getCreateTimestamp()).isEqualTo(newMetadataUuid);
+            txn.putRecord(table1, uuidKey, uuidVal, metadata);
+            txn.commit();
+        }
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 
     public Token checkpointAndTrimCorfuStore(CorfuRuntime runtimeC, boolean skipTrim, String tempDiskPath) {
 
+        // open these metadata system tables in normal Protobuf serializer since we know their types!
         TableRegistry tableRegistry = runtimeC.getTableRegistry();
         CorfuTable<CorfuStoreMetadata.TableName,
                 CorfuRecord<CorfuStoreMetadata.TableDescriptors,
                         CorfuStoreMetadata.TableMetadata>>
                         tableRegistryCT = tableRegistry.getRegistryTable();
+        CorfuTable<CorfuStoreMetadata.ProtobufFileName,
+                CorfuRecord<CorfuStoreMetadata.ProtobufFileDescriptor,
+                        CorfuStoreMetadata.TableMetadata>>
+                descriptorTableCT = tableRegistry.getProtobufDescriptorTable();
+
+        Token trimToken = new Token(Token.UNINITIALIZED.getEpoch(), Token.UNINITIALIZED.getSequence());
+
+        // First checkpoint the TableRegistry & Descriptor system tables because they get opened
+        // BEFORE any DynamicProtobufSerializer and CorfuDynamicMessage kicks in
+        MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
+        // First checkpoint the TableRegistry and Descriptor system tables..
+        mcw.addMap(tableRegistryCT);
+        mcw.addMap(descriptorTableCT);
+        Token token = mcw.appendCheckpoints(runtimeC, "checkpointer");
+        trimToken = Token.min(trimToken, token);
 
         // Save the regular serializer first..
         ISerializer protobufSerializer = Serializers.getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
@@ -266,14 +251,16 @@ public class CorfuStoreIT extends AbstractIT {
         ISerializer dynamicProtobufSerializer = new DynamicProtobufSerializer(runtimeC);
         Serializers.registerSerializer(dynamicProtobufSerializer);
 
-        // First checkpoint the TableRegistry system table
-        MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
-
-        Token trimToken = new Token(Token.UNINITIALIZED.getEpoch(), Token.UNINITIALIZED.getSequence());
         for (CorfuStoreMetadata.TableName tableName : tableRegistry.listTables(null)) {
             String fullTableName = TableRegistry.getFullyQualifiedTableName(
                     tableName.getNamespace(), tableName.getTableName()
-                    );
+            );
+            if (tableName.getNamespace().equals(TableRegistry.CORFU_SYSTEM_NAMESPACE) &&
+                    (tableName.getTableName().equals(TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME) ||
+                    tableName.getTableName().equals(TableRegistry.REGISTRY_TABLE_NAME))) {
+                continue; // these tables should have already been checkpointed using normal serializer!
+            }
+
             SMRObject.Builder<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> corfuTableBuilder = runtimeC.getObjectsView().build()
                     .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
                     .setStreamName(fullTableName)
@@ -292,14 +279,9 @@ public class CorfuStoreIT extends AbstractIT {
 
             mcw = new MultiCheckpointWriter<>();
             mcw.addMap(corfuTableBuilder.open());
-            Token token = mcw.appendCheckpoints(runtimeC, "checkpointer");
-            trimToken = Token.min(trimToken, token);
+            Token tableToken = mcw.appendCheckpoints(runtimeC, "checkpointer");
+            trimToken = Token.min(trimToken, tableToken);
         }
-
-        // Finally checkpoint the TableRegistry system table itself..
-        mcw.addMap(tableRegistryCT);
-        Token token = mcw.appendCheckpoints(runtimeC, "checkpointer");
-        trimToken = Token.min(trimToken, token);
 
         if (!skipTrim) {
             runtimeC.getAddressSpaceView().prefixTrim(trimToken);
@@ -347,8 +329,11 @@ public class CorfuStoreIT extends AbstractIT {
             tx.commit();
         }
         final int TEN = 10;
-        Set<Uuid> keys = store.query(namespace).keySet(tableName, null);
-        Iterables.partition(keys, TEN);
+        try (TxnContext txn = store.txn(namespace)) {
+            Set<Uuid> keys = txn.keySet(tableName);
+            Iterables.partition(keys, TEN);
+            txn.commit();
+        }
 
         runtime.shutdown();
 
@@ -431,6 +416,7 @@ public class CorfuStoreIT extends AbstractIT {
                 .open();
         mcw.addMap(corfuTable);
         mcw.addMap(runtime.getTableRegistry().getRegistryTable());
+        mcw.addMap(runtime.getTableRegistry().getProtobufDescriptorTable());
         Token trimPoint = mcw.appendCheckpoints(runtime, "checkpointer");
         runtime.getAddressSpaceView().prefixTrim(trimPoint);
         runtime.getAddressSpaceView().gc();
@@ -457,5 +443,176 @@ public class CorfuStoreIT extends AbstractIT {
         tx.commit();
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    /**
+     * Test that tx.commit()---in the context of read-only transactions---returns the sequence
+     * for the max tail of all streams accessed in the transaction. For the following scenarios:
+     *
+     * (1) Snapshot Transaction at an intermediate state (sequence = 7L) where the snapshot matches last update of one
+     * of the streams of interest (streams accessed in the tx)
+     * (2) Snapshot Transaction at an intermediate state, where the snapshot DOES NOT match last update of one
+     * of the streams of interest (streams accessed in the tx) (sequence = 9L)
+     * (3) Snapshot Transaction at latest state (sequence = 10L)
+     *
+     * In this test we write to 3 tables (T1, T2 & T3). Read-only transaction is performed across T1 & T2 at different points.
+     * The following diagram illustrates the write pattern:
+     *
+     * +-----------------------------------------------------------+
+     * | 0 |   1  |   2  |  3   | 4  |  5 |  6 |  7 |  8 |  9 | 10 |
+     * +-----------------------------------------------------------+
+     * | R | T1_R | T2_R | T3_R | T1 | T2 | T1 | T2 | T3 | T3 | T1 |
+     * +-----------------------------------------------------------+
+     *
+     * R : Registry table registration
+     * TX_R : TX registration in the Registry Table
+     * TX : TX entry (update)
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testReadTransactionCommit() throws Exception {
+        Process corfuServer = startCorfu();
+
+        // Define a namespace for the table and table name
+        final String namespace = "corfu-namespace";
+        final String tableName1 = "Community-EventInfo";
+        final String tableName2 = "Work-EventInfo";
+        final String tableName3 = "Empty-EventInfo";
+        final int numUpdates = 2;
+        final long OFFSET = 5L;
+
+        // Create & Register the table.
+        Table<Uuid, SampleSchema.EventInfo, ManagedResources> table1 = corfuStore.openTable(
+                namespace,
+                tableName1,
+                Uuid.class,
+                SampleSchema.EventInfo.class,
+                ManagedResources.class,
+                TableOptions.builder().build());
+
+       Table<Uuid, SampleSchema.EventInfo, ManagedResources> table2 = corfuStore.openTable(
+                namespace,
+                tableName2,
+                Uuid.class,
+                SampleSchema.EventInfo.class,
+                ManagedResources.class,
+                TableOptions.builder().build());
+
+        Table<Uuid, SampleSchema.EventInfo, ManagedResources> table3 = corfuStore.openTable(
+                namespace,
+                tableName3,
+                Uuid.class,
+                SampleSchema.EventInfo.class,
+                ManagedResources.class,
+                TableOptions.builder().build());
+
+        // addresses 0, 1, 2, 3, 4 are taken by updates to the Registry Table & Descriptors
+        long offsetLog = OFFSET;
+        long partialSnapshot = offsetLog + (numUpdates*2) - 1;
+
+        long maxGlobalAddress = generateUpdates(namespace, table1, table2, table3, offsetLog, numUpdates);
+
+        // Start READ transaction on T1 & T2, at an intermediate SNAPSHOT (which matches exactly the last update of T1)
+        try (TxnContext tx = corfuStore.txn(namespace,
+                IsolationLevel.snapshot(CorfuStoreMetadata.Timestamp.newBuilder().setSequence(partialSnapshot).setEpoch(0L).build()))) {
+            assertThat(tx.getTable(tableName1).count()).isEqualTo(numUpdates);
+            assertThat(tx.getTable(tableName2).count()).isEqualTo(numUpdates);
+            Timestamp readTx = tx.commit();
+            assertThat(readTx.getSequence()).isEqualTo(partialSnapshot);
+        }
+
+        // Start READ transaction on T1 & T2, at a SNAPSHOT that does not match an update to any of the tables of interest
+        try (TxnContext tx = corfuStore.txn(namespace,
+                IsolationLevel.snapshot(CorfuStoreMetadata.Timestamp.newBuilder().setSequence(partialSnapshot + numUpdates).setEpoch(0L).build()))) {
+            assertThat(tx.getTable(tableName1).count()).isEqualTo(numUpdates);
+            assertThat(tx.getTable(tableName2).count()).isEqualTo(numUpdates);
+            Timestamp readTx = tx.commit();
+            assertThat(readTx.getSequence()).isEqualTo(partialSnapshot);
+        }
+
+        // Start READ transaction on T1 & T2 at the latest timestamp
+        try (TxnContext tx = corfuStore.txn(namespace)) {
+            assertThat(tx.getTable(tableName1).count()).isEqualTo(numUpdates + 1);
+            assertThat(tx.getTable(tableName2).count()).isEqualTo(numUpdates);
+            Timestamp readTx = tx.commit();
+            assertThat(readTx.getSequence()).isEqualTo(maxGlobalAddress);
+        }
+
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    private long generateUpdates(String namespace, Table<Uuid, SampleSchema.EventInfo, ManagedResources> table1,
+                                 Table<Uuid, SampleSchema.EventInfo, ManagedResources> table2,
+                                 Table<Uuid, SampleSchema.EventInfo, ManagedResources> table3,
+                                 long offsetLog, int numUpdates) {
+        Uuid key;
+        SampleSchema.EventInfo value;
+        Timestamp sequenceNumber;
+        long offsetCounter = offsetLog;
+
+        // Generate updates to table1 and table2
+        for (int i = 0; i < numUpdates; i++) {
+            key = Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            value = SampleSchema.EventInfo.newBuilder().setName("simpleValue" + i).build();
+
+            long timestamp = System.currentTimeMillis();
+            try (TxnContext tx = corfuStore.txn(namespace)) {
+                tx.putRecord(table1, key, value,
+                        ManagedResources.newBuilder()
+                                .setCreateTimestamp(timestamp).build());
+                sequenceNumber = tx.commit();
+                assertThat(sequenceNumber.getSequence()).isEqualTo(offsetCounter);
+                offsetCounter++;
+            }
+
+            try (TxnContext tx = corfuStore.txn(namespace)) {
+                tx.putRecord(table2, key, value,
+                        ManagedResources.newBuilder()
+                                .setCreateTimestamp(timestamp).build());
+                sequenceNumber = tx.commit();
+                assertThat(sequenceNumber.getSequence()).isEqualTo(offsetCounter);
+                offsetCounter++;
+            }
+        }
+
+        // Generate updates to table3 (such that there are unrelated updates of the read TX in between the next update to table1)
+        for (int i = 0; i < numUpdates; i++) {
+            key = Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            value = SampleSchema.EventInfo.newBuilder().setName("simpleValue" + i).build();
+
+            long timestamp = System.currentTimeMillis();
+            try (TxnContext tx = corfuStore.txn(namespace)) {
+                tx.putRecord(table3, key, value,
+                        ManagedResources.newBuilder()
+                                .setCreateTimestamp(timestamp).build());
+                sequenceNumber = tx.commit();
+                assertThat(sequenceNumber.getSequence()).isEqualTo(offsetCounter);
+                offsetCounter++;
+            }
+        }
+
+        // Generate last update to table1 (such that at least one of the tables of interest
+        // has an update after other unrelated updates)
+        long timestamp = System.currentTimeMillis();
+        try (TxnContext tx = corfuStore.txn(namespace)) {
+            key = Uuid.newBuilder().setLsb(offsetCounter).setMsb(offsetCounter).build();
+            value = SampleSchema.EventInfo.newBuilder().setName("simpleValue" + offsetCounter).build();
+            tx.putRecord(table1, key, value,
+                    ManagedResources.newBuilder()
+                            .setCreateTimestamp(timestamp).build());
+            sequenceNumber = tx.commit();
+            assertThat(sequenceNumber.getSequence()).isEqualTo(offsetCounter);
+        }
+
+        return offsetCounter;
+    }
+
+    private Process startCorfu() throws Exception {
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        runtime = createRuntime(singleNodeEndpoint);
+        corfuStore = new CorfuStore(runtime);
+
+        return corfuServer;
     }
 }

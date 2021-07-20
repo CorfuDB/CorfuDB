@@ -3,7 +3,6 @@ package org.corfudb.runtime.exceptions;
 import java.util.UUID;
 import javax.annotation.Nullable;
 import lombok.Getter;
-import org.corfudb.util.UuidUtils;
 
 public class WrongClusterException extends RuntimeException {
 
@@ -23,9 +22,9 @@ public class WrongClusterException extends RuntimeException {
     public WrongClusterException(@Nullable UUID expectedCluster,
                                  @Nullable UUID actualCluster) {
         super("Expected: "
-            + ((expectedCluster == null) ? "null" : UuidUtils.asBase64(expectedCluster))
+            + ((expectedCluster == null) ? "null" : expectedCluster)
             + " Actual: "
-            + ((actualCluster == null) ? "null" : UuidUtils.asBase64(actualCluster)));
+            + ((actualCluster == null) ? "null" : actualCluster));
         this.expectedCluster = expectedCluster;
         this.actualCluster = actualCluster;
     }

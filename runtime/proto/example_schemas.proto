@@ -19,6 +19,12 @@ message Uuid {
     fixed64 lsb = 2;
 }
 
+message ClusterUuidMsg {
+    option (org.corfudb.runtime.table_schema).stream_tag = "cluster_manager_test";
+    fixed64 msb = 1;
+    fixed64 lsb = 2;
+}
+
 message ExampleValue {
     option (org.corfudb.runtime.table_schema).stream_tag = "search_streamer";
     option (org.corfudb.runtime.table_schema).stream_tag = "slow_streamer";
@@ -112,6 +118,46 @@ message Adult {
                        (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "person.children.child"}];
     Company work = 2 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "work.company_id" }];
     repeated Address addresses = 3 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "addresses.unique_address_id" index_name: "address"}];
+}
+
+message SportsProfessional {
+    Person person  = 1;
+    // Non-Repeated Field followed by oneOf non-primitive sub-field
+    Hobby profession = 3 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "profession.basket" index_name: "basketPlayers"},
+                             (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "profession.baseball" index_name: "baseballPlayers"}];
+    // Repeated Field followed by oneOf non-primitive sub-field
+    repeated Hobby hobby = 4 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "hobby.basket" index_name: "basketAsHobby"},
+                             (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "hobby.baseball" index_name: "baseballAsHobby"}];
+    // Repeated Field followed by repeated field sub-field
+    repeated TrainingPlan training = 5 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "training.exercises" }];
+}
+
+message TrainingPlan {
+    repeated Exercise exercises = 1;
+    string date = 2;
+}
+
+message Exercise {
+    string name = 1;
+    fixed64 repetitions = 2;
+    fixed64 weight = 3;
+}
+
+message Hobby {
+    oneof sport {
+        Basketball basket = 1;
+        Baseball baseball = 2;
+    }
+}
+
+message Basketball {
+     fixed64 players = 1;
+     string team = 2;
+}
+
+message Baseball {
+    fixed64 balls = 1;
+    string pitchersName = 2;
 }
 
 message Children {
