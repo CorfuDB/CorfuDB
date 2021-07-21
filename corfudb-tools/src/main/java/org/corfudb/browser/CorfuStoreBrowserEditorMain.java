@@ -17,7 +17,7 @@ import org.docopt.Docopt;
  * - Created by pmajmudar on 10/16/2019
  */
 @Slf4j
-public class CorfuStoreBrowserMain {
+public class CorfuStoreBrowserEditorMain {
     private enum OperationType {
         listTables,
         loadTable,
@@ -34,7 +34,7 @@ public class CorfuStoreBrowserMain {
     }
 
     private static final String USAGE = "Usage: corfu-browser --host=<host> " +
-        "--port=<port> --namespace=<namespace> --tablename=<tablename> " +
+        "--port=<port> [--namespace=<namespace>] [--tablename=<tablename>] " +
         "--operation=<operation> "+
         "[--keystore=<keystore_file>] [--ks_password=<keystore_password>] " +
         "[--truststore=<truststore_file>] [--truststore_password=<truststore_password>] " +
@@ -108,11 +108,12 @@ public class CorfuStoreBrowserMain {
             runtime.connect();
             log.info("Successfully connected to {}", singleNodeEndpoint);
 
-            CorfuStoreBrowser browser;
+            CorfuStoreBrowserEditor browser;
             if (opts.get("--diskPath") != null) {
-                browser = new CorfuStoreBrowser(runtime, opts.get("--diskPath").toString());
+                browser = new CorfuStoreBrowserEditor(runtime, opts.get(
+                    "--diskPath").toString());
             } else {
-                browser = new CorfuStoreBrowser(runtime);
+                browser = new CorfuStoreBrowserEditor(runtime);
             }
             String namespace = Optional.ofNullable(opts.get("--namespace"))
                     .map(Object::toString)
