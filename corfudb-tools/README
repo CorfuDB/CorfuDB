@@ -9,9 +9,9 @@ definitions or proto files to serialize/deserialize the data.
 --------
 Browser
 --------
-The CorfuStore Browser supports the following operations -
-The browser supports read operation which reads and outputs all entries in a
-given table and namespace, or list tables in a given namespace.
+The browser supports read operations which reads and outputs all entries in a
+given table and namespace, list tables in a given namespace, list stream tags
+for a table or all known stream tags, etc.
 
 1. showTable to read and output all entries in a given table and namespace.
 It can be invoked like the below example-
@@ -23,10 +23,10 @@ org.corfudb.browser.CorfuStoreBrowserMain
 --namespace=sample_namespace
 --tablename=sample_tablename
 --tlsEnabled=true
---keystore=/config/cluster-manager/corfu/private/keystore.jks
---ks_password=/config/cluster-manager/corfu/private/keystore.password
---truststore=/config/cluster-manager/corfu/public/truststore.jks
---truststore_password=/config/cluster-manager/corfu/public/truststore.password
+--keystore=<path to keystore file>
+--ks_password=<path to keystore password file>
+--truststore=<path to truststore file>
+--truststore_password=<path to truststore password file>
 
 2. listTables to list all table names in a given namespace(all namespaces if the
 namespace param is null)-
@@ -37,19 +37,33 @@ org.corfudb.browser.CorfuBrowserMain
 --operation=listTables
 --namespace=sample_namespace
 --tlsEnabled=true
---keystore=/config/cluster-manager/corfu/private/keystore.jks
---ks_password=/config/cluster-manager/corfu/private/keystore.password
---truststore=/config/cluster-manager/corfu/public/truststore.jks
---truststore_password=/config/cluster-manager/corfu/public/truststore.password
+--keystore=<path to keystore file>
+--ks_password=<path to keystore password file>
+--truststore=<path to truststore file>
+--truststore_password=<path to truststore password file>
 
 Keystore and truststore parameters are not required if tls is disabled.
 
 For usage help,
 java -cp "corfudb-tools-0.3.0-SNAPSHOT-shaded.jar" org.corfudb.browser.CorfuStoreBrowserMain <--help|-h>
 
-TODO(pmajmudar): Add a user script to invoke the browser.
 
 -------
 Editor
 -------
-Coming Soon
+editTable to edit the value associated with a key in a given table and
+namespace-
+java -cp "corfudb-tools-0.3.0-SNAPSHOT-shaded.jar" --Dlogback.configurationFile=logback.prod.xml
+org.corfudb.browser.CorfuBrowserMain
+--host=10.160.29.112
+--port=9000
+--operation=editTable
+--namespace=sample_namespace
+--tablename=sample_tablename
+--keyToEdit=<json string representing the key to edit>
+--newRecord=<json string representing the new value>
+--tlsEnabled=true
+--keystore=<path to keystore file>
+--ks_password=<path to keystore password file>
+--truststore=<path to truststore file>
+--truststore_password=<path to truststore password file>
