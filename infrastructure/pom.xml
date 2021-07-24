@@ -280,6 +280,11 @@
             <version>3.6.0</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.rocksdb</groupId>
+            <artifactId>rocksdbjni</artifactId>
+            <version>6.22.1</version>
+        </dependency>
     </dependencies>
 
 </project>
