@@ -101,6 +101,8 @@ public class SequencerServerTest {
     private IServerRouter mockServerRouter;
     @Mock
     private ChannelHandlerContext mockChannelHandlerContext;
+    @Mock
+    private ServerConfiguration mockServerConfig;
 
     // Using spy as we use the default behaviour most of the times and
     // override only a few times.
@@ -140,9 +142,11 @@ public class SequencerServerTest {
      */
     @Before
     public void setup() {
+        when(mockServerConfig.getSequencerCacheSize()).thenReturn(250000);
+
         when(mockServerContext.getExecutorService(anyInt(), anyString()))
                 .thenReturn(MoreExecutors.newDirectExecutorService());
-        when(mockServerContext.getConfiguration()).thenReturn(new ServerConfiguration());
+        when(mockServerContext.getConfiguration()).thenReturn(mockServerConfig);
     }
 
     /**

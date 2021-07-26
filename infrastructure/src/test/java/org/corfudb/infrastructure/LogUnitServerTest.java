@@ -96,6 +96,7 @@ public class LogUnitServerTest {
     private BatchProcessor mBatchProcessor;
     private StreamLog mStreamLog;
     private LogUnitServerCache mCache;
+    private ServerConfiguration mServerConfig;
 
     private final AtomicInteger requestCounter = new AtomicInteger();
     private final String PAYLOAD_DATA = "PAYLOAD";
@@ -155,6 +156,13 @@ public class LogUnitServerTest {
         mBatchProcessor = mock(BatchProcessor.class);
         mStreamLog = mock(StreamLog.class);
         mCache = mock(LogUnitServerCache.class);
+        mServerConfig = mock(ServerConfiguration.class);
+
+        //Mock Config Options
+        when(mServerConfig.getLogUnitCacheRatio()).thenReturn(0.5);
+        when(mServerConfig.isInMemoryMode()).thenReturn(false);
+        when(mServerConfig.getVerifyChecksum()).thenReturn(true);
+        when(mServerConfig.getSyncData()).thenReturn(true);
 
         // Initialize with newDirectExecutorService to execute the server RPC
         // handler methods on the calling thread.
@@ -163,17 +171,13 @@ public class LogUnitServerTest {
 
         // Initialize basic LogUnit server parameters.
         when(mServerContext.getConfiguration())
-                .thenReturn(new ServerConfiguration()
-                .setLogUnitCacheRatio(0.5)
-                .setInMemoryMode(false)
-                .setVerifyChecksum(true)
-                .setSyncData(true));
+                .thenReturn(mServerConfig);
 
         // Prepare the LogUnitServerInitializer.
         LogUnitServer.LogUnitServerInitializer mLUSI = mock(LogUnitServer.LogUnitServerInitializer.class);
         when(mLUSI.buildStreamLog(eq(mServerContext))).thenReturn(mStreamLog);
         when(mLUSI.buildLogUnitServerCache(eq(mStreamLog), eq(mServerContext))).thenReturn(mCache);
-        when(mLUSI.buildStreamLogCompaction(mStreamLog)).thenReturn(mock(StreamLogCompaction.class));
+        when(mLUSI.buildStreamLogCompaction(eq(mStreamLog))).thenReturn(mock(StreamLogCompaction.class));
         when(mLUSI.buildBatchProcessor(eq(mStreamLog), eq(mServerContext))).thenReturn(mBatchProcessor);
 
         logUnitServer = new LogUnitServer(mServerContext, mLUSI);

@@ -12,7 +12,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Properties;
@@ -110,11 +109,9 @@ public class ServerConfiguration extends BaseConfiguration {
 
 
     public static ServerConfiguration getServerConfigFromFile(String configFilePath) {
-        FileInputStream configFileStream;
         Properties configProperties = new Properties();
 
-        try {
-            configFileStream = new FileInputStream(configFilePath);
+        try (FileInputStream configFileStream = new FileInputStream(configFilePath)) {
             configProperties.load(configFileStream);
         } catch (IOException e) {
             throw new IllegalArgumentException("Unable to load config from file " + configFilePath, e);
@@ -209,21 +206,21 @@ public class ServerConfiguration extends BaseConfiguration {
         Set<String> flags = ImmutableSet.of("--memory", "--single", "--enable-tls",
                 "--enable-tls-mutual-auth","--enable-sasl-plain-text-auth", "--metrics");
         Set<String> inverseFlags = ImmutableSet.of("--no-verify", "--no-sync", "--no-auto-commit");
-        for (String key : opts.keySet()) {
-            if (optionsToPropertiesMapping.containsKey(key)) {
-                if (opts.get(key) != null) {
-                    if (flags.contains(key)) {
-                        configProperties.setProperty(optionsToPropertiesMapping.get(key),
-                                Boolean.toString((Boolean) opts.get(key)));
-                    } else if (inverseFlags.contains(key)) {
-                        configProperties.setProperty(optionsToPropertiesMapping.get(key),
-                                Boolean.toString(!((Boolean) opts.get(key))));
+        for (Map.Entry<String,Object> entry : opts.entrySet()) {
+            if (optionsToPropertiesMapping.containsKey(entry.getKey())) {
+                if (entry.getValue() != null) {
+                    if (flags.contains(entry.getKey())) {
+                        configProperties.setProperty(optionsToPropertiesMapping.get(entry.getKey()),
+                                Boolean.toString((Boolean) entry.getValue()));
+                    } else if (inverseFlags.contains(entry.getKey())) {
+                        configProperties.setProperty(optionsToPropertiesMapping.get(entry.getKey()),
+                                Boolean.toString(!((Boolean) entry.getValue())));
                     } else {
-                        configProperties.setProperty(optionsToPropertiesMapping.get(key), (String) opts.get(key));
+                        configProperties.setProperty(optionsToPropertiesMapping.get(entry.getKey()), (String) entry.getValue());
                     }
                 }
             } else {
-                log.warn("Encountered unknown option: {}", key);
+                log.warn("Encountered unknown option: {}", entry.getKey());
             }
         }
 
@@ -231,7 +228,7 @@ public class ServerConfiguration extends BaseConfiguration {
     }
 
     private static Map<String, String> getOptionsToPropertiesMapping() {
-        Map<String, String> mapping = new Hashtable<>();
+        Map<String, String> mapping = new HashMap<>();
         mapping.put("--memory", IN_MEMORY_MODE);
         mapping.put("--log-path", SERVER_DIR);
         mapping.put("--no-verify", VERIFY_CHECKSUM);

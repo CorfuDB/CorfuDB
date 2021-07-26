@@ -54,6 +54,7 @@ public class BaseServerTest {
     private ServerContext mockServerContext;
     private IServerRouter mockServerRouter;
     private ChannelHandlerContext mockChannelHandlerContext;
+    private ServerConfiguration mockServerConfig;
 
     private final AtomicInteger requestCounter = new AtomicInteger();
 
@@ -93,12 +94,13 @@ public class BaseServerTest {
         mockServerContext = mock(ServerContext.class);
         mockServerRouter = mock(IServerRouter.class);
         mockChannelHandlerContext = mock(ChannelHandlerContext.class);
+        mockServerConfig = mock(ServerConfiguration.class);
 
         // Initialize with newDirectExecutorService to execute the server RPC
         // handler methods on the calling thread
         when(mockServerContext.getExecutorService(anyInt(), anyString()))
                 .thenReturn(MoreExecutors.newDirectExecutorService());
-        when(mockServerContext.getConfiguration()).thenReturn(new ServerConfiguration());
+        when(mockServerContext.getConfiguration()).thenReturn(mockServerConfig);
 
         baseServer = new BaseServer(mockServerContext);
     }

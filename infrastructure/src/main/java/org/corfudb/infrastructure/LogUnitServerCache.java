@@ -16,10 +16,6 @@ import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 
-import java.util.Optional;
-
-import java.util.function.Supplier;
-
 import static java.lang.Math.toIntExact;
 
 /**

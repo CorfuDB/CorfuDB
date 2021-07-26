@@ -559,6 +559,9 @@ public class LogUnitServer extends AbstractServer {
 
     /**
      * Log unit server parameters.
+     *
+     * This class is currently unused, but is available for future changes to remove the heavy ServerContext
+     * from LogUnit component initialization.
      */
     @Builder
     @Getter
@@ -594,25 +597,25 @@ public class LogUnitServer extends AbstractServer {
      * This facilitates the injection of mocked objects during unit tests.
      */
     public static class LogUnitServerInitializer {
-        public StreamLog buildInMemoryStreamLog() {
+        protected StreamLog buildInMemoryStreamLog() {
             return new InMemoryStreamLog();
         }
 
-        public StreamLog buildStreamLog(@Nonnull ServerContext serverContext) {
+        protected StreamLog buildStreamLog(@Nonnull ServerContext serverContext) {
             return new StreamLogFiles(serverContext);
         }
 
-        public LogUnitServerCache buildLogUnitServerCache(@Nonnull StreamLog streamLog,
+        protected LogUnitServerCache buildLogUnitServerCache(@Nonnull StreamLog streamLog,
                                                    @Nonnull ServerContext  serverContext) {
             return new LogUnitServerCache(streamLog, serverContext.getConfiguration().getMaxLogUnitCacheSize());
         }
 
-        public BatchProcessor buildBatchProcessor(@Nonnull StreamLog streamLog,
+        protected BatchProcessor buildBatchProcessor(@Nonnull StreamLog streamLog,
                                            @Nonnull ServerContext serverContext) {
             return new BatchProcessor(streamLog, serverContext.getServerEpoch(), serverContext.getConfiguration().getSyncData());
         }
 
-        public StreamLogCompaction buildStreamLogCompaction(@Nonnull StreamLog streamLog) {
+        protected StreamLogCompaction buildStreamLogCompaction(@Nonnull StreamLog streamLog) {
             return new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER);
         }
     }
