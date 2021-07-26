@@ -300,7 +300,7 @@ public class CorfuServerNode implements AutoCloseable {
                     sslContext = null;
                 }
 
-                boolean saslPlainTextAuth = conf.getEnableSaslPlainTextAuth();
+
 
                 // If TLS is enabled, setup the encryption pipeline.
                 if (tlsEnabled) {
@@ -317,6 +317,8 @@ public class CorfuServerNode implements AutoCloseable {
                 ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer
                         .MAX_VALUE, 0, 4,
                         0, 4));
+
+                boolean saslPlainTextAuth = conf.getEnableSaslPlainTextAuth();
                 // If SASL authentication is requested, perform a SASL plain-text auth.
                 if (saslPlainTextAuth) {
                     ch.pipeline().addLast("sasl/plain-text", new

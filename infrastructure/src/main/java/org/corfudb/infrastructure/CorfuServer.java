@@ -421,8 +421,12 @@ public class CorfuServer {
         println("Version (" + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")");
 
         final int port = conf.getServerPort();
-        final String dataLocation = conf.isInMemoryMode() ? "MEMORY mode" :
-                conf.getServerDir();
+        final String dataLocation;
+        if (conf.isInMemoryMode()) {
+            dataLocation = "MEMORY mode";
+        } else {
+            dataLocation = conf.getServerDir();
+        }
 
         println("Serving on port " + port);
         println("Data location: " + dataLocation);

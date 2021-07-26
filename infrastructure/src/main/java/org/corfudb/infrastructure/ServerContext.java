@@ -618,7 +618,12 @@ public class ServerContext implements AutoCloseable {
                 .build();
 
         final int requestedThreads = configuration.getNumIOThreads();
-        final int numThreads = (requestedThreads == 0) ? Runtime.getRuntime().availableProcessors() * 2 : requestedThreads;
+        final int numThreads;
+        if (requestedThreads == 0) {
+            numThreads = Runtime.getRuntime().availableProcessors() * 2;
+        } else {
+            numThreads = requestedThreads;
+        }
         EventLoopGroup group = configuration.getChannelImplementation().getGenerator().generate(numThreads, threadFactory);
 
         log.info("getClientGroup: Type {} with {} threads",

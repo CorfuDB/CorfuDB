@@ -357,7 +357,7 @@ StreamLogFilesTest extends AbstractCorfuTest {
         // This test manipulates a log file directly and manipulates
         // log records by overwriting some parts of the record simulating
         // different data corruption scenarios
-        String logDir = getContext().getConfiguration().getLogDir();
+
         StreamLog log = new StreamLogFiles(getContext(), false);
         ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
@@ -373,6 +373,7 @@ StreamLogFilesTest extends AbstractCorfuTest {
 
         final int OVERWRITE_BYTES = 4;
 
+        String logDir = getContext().getConfiguration().getLogDir();
         // Overwrite 2 bytes of the checksum and 2 bytes of the entry's address
         String logFilePath1 = logDir + File.separator + 0 + ".log";
         String logFilePath2 = logDir + File.separator + 1 + ".log";

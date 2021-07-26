@@ -19,7 +19,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.configuration.ServerConfiguration;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
-import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.DataType;

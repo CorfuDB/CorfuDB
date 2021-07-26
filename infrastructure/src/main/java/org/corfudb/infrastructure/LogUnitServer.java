@@ -606,7 +606,7 @@ public class LogUnitServer extends AbstractServer {
         }
 
         protected LogUnitServerCache buildLogUnitServerCache(@Nonnull StreamLog streamLog,
-                                                   @Nonnull ServerContext  serverContext) {
+                                                   @Nonnull ServerContext serverContext) {
             return new LogUnitServerCache(streamLog, serverContext.getConfiguration().getMaxLogUnitCacheSize());
         }
 

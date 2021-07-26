@@ -120,6 +120,60 @@ public class ServerConfiguration extends BaseConfiguration {
         return applyServerConfigurationOptions(configProperties);
     }
 
+    private static void applyFlags(Properties configProperties, ServerConfiguration conf) {
+        conf.setVerifyChecksum(Boolean.parseBoolean(configProperties.getProperty(VERIFY_CHECKSUM, "true")));
+        conf.setSyncData(Boolean.parseBoolean(configProperties.getProperty(SYNC_DATA, "true")));
+        conf.setSingleMode(Boolean.parseBoolean(configProperties.getProperty(SINGLE_MODE, "false")));
+        conf.setAutoCommit(Boolean.parseBoolean(configProperties.getProperty(AUTO_COMMIT, "true")));
+        conf.setEnableTls(Boolean.parseBoolean(configProperties.getProperty(ENABLE_TLS, "false")));
+        conf.setEnableTlsMutualAuth(Boolean.parseBoolean(configProperties.getProperty(ENABLE_TLS_MUTUAL_AUTH, "false")));
+        conf.setEnableSaslPlainTextAuth(Boolean.parseBoolean(configProperties.getProperty(ENABLE_SASL_PLAIN_TEXT_AUTH, "false")));
+        conf.setEnableMetrics(Boolean.parseBoolean(configProperties.getProperty(ENABLE_METRICS, "false")));
+    }
+
+    private static void applyIntegralOptions(Properties configProperties, ServerConfiguration conf) {
+        conf.setMaxReplicationDataMessageSize(Integer.parseInt(configProperties.getProperty(MAX_REPLICATION_DATA_MESSAGE_SIZE, Integer.toString(MAX_DATA_MSG_SIZE_SUPPORTED))));
+        conf.setLogUnitCacheRatio(Double.parseDouble(configProperties.getProperty(LOG_UNIT_CACHE_RATIO, DEFAULT_LOG_UNIT_CACHE_RATIO)));
+        conf.setCompactRate(Integer.parseInt(configProperties.getProperty(COMPACT_RATE, DEFAULT_COMPACT_RATE)));
+        conf.setNumBaseServerThreads(Integer.parseInt(configProperties.getProperty(NUM_BASE_SERVER_THREADS, DEFAULT_BASE_SERVER_THREADS)));
+        conf.setLogSizeQuota(Double.parseDouble(configProperties.getProperty(LOG_SIZE_QUOTA, DEFAULT_LOG_SIZE_QUOTA)));
+
+        conf.setNumLogUnitWorkerThreads(Integer.parseInt(configProperties.getProperty(NUM_LOGUNIT_WORKER_THREADS, DEFAULT_LOG_UNIT_WORKER_THREADS)));
+        conf.setNumManagementServerThreads(Integer.parseInt(configProperties.getProperty(NUM_MANAGEMENT_SERVER_THREADS, DEFAULT_MANAGEMENT_SERVER_THREADS)));
+        conf.setNumIOThreads(Integer.parseInt(configProperties.getProperty(NUM_IO_THREADS, DEFAULT_IO_THREADS)));
+
+        conf.setSequencerCacheSize(Integer.parseInt(configProperties.getProperty(SEQUENCER_CACHE_SIZE,DEFAULT_SEQUENCER_CACHE_SIZE)));
+
+        conf.setStateTransferBatchSize(Integer.parseInt(configProperties.getProperty(STATE_TRANSFER_BATCH_SIZE, DEFAULT_STATE_TRANSFER_BATCH_SIZE)));
+
+        conf.setHandshakeTimeout(Integer.parseInt(configProperties.getProperty(HANDSHAKE_TIMEOUT, DEFAULT_HANDSHAKE_TIMEOUT)));
+        conf.setSnapshotBatchSize(Integer.parseInt(configProperties.getProperty(SNAPSHOT_BATCH_SIZE, Integer.toString(DEFAULT_MAX_NUM_MSG_PER_BATCH))));
+        conf.setLockLeaseDuration(Integer.parseInt(configProperties.getProperty(LOCK_LEASE_DURATION, Integer.toString(Lock.leaseDuration))));
+
+        conf.setMetadataRetention(Integer.parseInt(configProperties.getProperty(METADATA_RETENTION, DEFAULT_METADATA_RETENTION)));
+
+        conf.setServerPort(Integer.parseInt(configProperties.getProperty(SERVER_PORT)));
+    }
+
+    private static void applyStringOptions(Properties configProperties, ServerConfiguration conf) {
+        conf.setLogLevel(configProperties.getProperty(LOG_LEVEL, DEFAULT_LOG_LEVEL));
+        conf.setPluginConfigFilePath(configProperties.getProperty(PLUGIN_CONFIG_FILE_PATH));
+
+
+        conf.setKeystore(configProperties.getProperty(KEYSTORE));
+        conf.setKeystorePasswordFile(configProperties.getProperty(KEYSTORE_PASSWORD_FILE));
+        conf.setTruststore(configProperties.getProperty(TRUSTSTORE));
+        conf.setTruststorePasswordFile(configProperties.getProperty(TRUSTSTORE_PASSWORD_FILE));
+        conf.setSaslPlainTextUserFile(configProperties.getProperty(SASL_PLAIN_TEXT_USERNAME_FILE));
+        conf.setSaslPlainTextPasswordFile(configProperties.getProperty(SASL_PLAIN_TEXT_PASSWORD_FILE));
+
+        conf.setClusterId(configProperties.getProperty(CLUSTER_ID, DEFAULT_CLUSTER_ID));
+        conf.setTlsCiphers(configProperties.getProperty(TLS_CIPHERS,DEFAULT_TLS_CIPHERS));
+        conf.setTlsProtocols(configProperties.getProperty(TLS_PROTOCOLS, DEFAULT_TLS_PROTOCOLS));
+
+        conf.setThreadPrefix(configProperties.getProperty(THREAD_PREFIX, DEFAULT_THREAD_PREFIX));
+    }
+
     private static ServerConfiguration applyServerConfigurationOptions(Properties configProperties) {
 
         ServerConfiguration conf = new ServerConfiguration();
@@ -132,11 +186,6 @@ public class ServerConfiguration extends BaseConfiguration {
         } else {
             conf.setServerDirectory(configProperties.getProperty(SERVER_DIR));
         }
-
-        conf.setVerifyChecksum(Boolean.parseBoolean(configProperties.getProperty(VERIFY_CHECKSUM, "true")));
-        conf.setSyncData(Boolean.parseBoolean(configProperties.getProperty(SYNC_DATA, "true")));
-        conf.setSingleMode(Boolean.parseBoolean(configProperties.getProperty(SINGLE_MODE, "false")));
-        conf.setAutoCommit(Boolean.parseBoolean(configProperties.getProperty(AUTO_COMMIT, "true")));
 
         String networkInterfaceName = configProperties.getProperty(NETWORK_INTERFACE);
         String address = configProperties.getProperty(HOST_ADDRESS);
@@ -155,46 +204,12 @@ public class ServerConfiguration extends BaseConfiguration {
             conf.setBindToAllInterfaces(false);
         }
 
-        conf.setMaxReplicationDataMessageSize(Integer.parseInt(configProperties.getProperty(MAX_REPLICATION_DATA_MESSAGE_SIZE, Integer.toString(MAX_DATA_MSG_SIZE_SUPPORTED))));
-        conf.setLogUnitCacheRatio(Double.parseDouble(configProperties.getProperty(LOG_UNIT_CACHE_RATIO, DEFAULT_LOG_UNIT_CACHE_RATIO)));
-        conf.setLogLevel(configProperties.getProperty(LOG_LEVEL, DEFAULT_LOG_LEVEL));
-        conf.setCompactRate(Integer.parseInt(configProperties.getProperty(COMPACT_RATE, DEFAULT_COMPACT_RATE)));
-        conf.setPluginConfigFilePath(configProperties.getProperty(PLUGIN_CONFIG_FILE_PATH));
-        conf.setNumBaseServerThreads(Integer.parseInt(configProperties.getProperty(NUM_BASE_SERVER_THREADS, DEFAULT_BASE_SERVER_THREADS)));
-        conf.setLogSizeQuota(Double.parseDouble(configProperties.getProperty(LOG_SIZE_QUOTA, DEFAULT_LOG_SIZE_QUOTA)));
-
-        conf.setNumLogUnitWorkerThreads(Integer.parseInt(configProperties.getProperty(NUM_LOGUNIT_WORKER_THREADS, DEFAULT_LOG_UNIT_WORKER_THREADS)));
-        conf.setNumManagementServerThreads(Integer.parseInt(configProperties.getProperty(NUM_MANAGEMENT_SERVER_THREADS, DEFAULT_MANAGEMENT_SERVER_THREADS)));
-        conf.setNumIOThreads(Integer.parseInt(configProperties.getProperty(NUM_IO_THREADS, DEFAULT_IO_THREADS)));
-
-        conf.setEnableTls(Boolean.parseBoolean(configProperties.getProperty(ENABLE_TLS, "false")));
-        conf.setKeystore(configProperties.getProperty(KEYSTORE));
-        conf.setKeystorePasswordFile(configProperties.getProperty(KEYSTORE_PASSWORD_FILE));
-        conf.setTruststore(configProperties.getProperty(TRUSTSTORE));
-        conf.setTruststorePasswordFile(configProperties.getProperty(TRUSTSTORE_PASSWORD_FILE));
-        conf.setEnableTlsMutualAuth(Boolean.parseBoolean(configProperties.getProperty(ENABLE_TLS_MUTUAL_AUTH, "false")));
-        conf.setEnableSaslPlainTextAuth(Boolean.parseBoolean(configProperties.getProperty(ENABLE_SASL_PLAIN_TEXT_AUTH, "false")));
-        conf.setSaslPlainTextUserFile(configProperties.getProperty(SASL_PLAIN_TEXT_USERNAME_FILE));
-        conf.setSaslPlainTextPasswordFile(configProperties.getProperty(SASL_PLAIN_TEXT_PASSWORD_FILE));
-        conf.setSequencerCacheSize(Integer.parseInt(configProperties.getProperty(SEQUENCER_CACHE_SIZE,DEFAULT_SEQUENCER_CACHE_SIZE)));
-
-        conf.setStateTransferBatchSize(Integer.parseInt(configProperties.getProperty(STATE_TRANSFER_BATCH_SIZE, DEFAULT_STATE_TRANSFER_BATCH_SIZE)));
-
         String implementationType = configProperties.getProperty(CHANNEL_IMPLEMENTATION,DEFAULT_CHANNEL_IMPLEMENTATION_TYPE);
         conf.setChannelImplementation(ChannelImplementation.valueOf(implementationType.toUpperCase()));
 
-        conf.setHandshakeTimeout(Integer.parseInt(configProperties.getProperty(HANDSHAKE_TIMEOUT, DEFAULT_HANDSHAKE_TIMEOUT)));
-        conf.setClusterId(configProperties.getProperty(CLUSTER_ID, DEFAULT_CLUSTER_ID));
-        conf.setTlsCiphers(configProperties.getProperty(TLS_CIPHERS,DEFAULT_TLS_CIPHERS));
-        conf.setTlsProtocols(configProperties.getProperty(TLS_PROTOCOLS, DEFAULT_TLS_PROTOCOLS));
-
-        conf.setEnableMetrics(Boolean.parseBoolean(configProperties.getProperty(ENABLE_METRICS, "false")));
-        conf.setSnapshotBatchSize(Integer.parseInt(configProperties.getProperty(SNAPSHOT_BATCH_SIZE, Integer.toString(DEFAULT_MAX_NUM_MSG_PER_BATCH))));
-        conf.setLockLeaseDuration(Integer.parseInt(configProperties.getProperty(LOCK_LEASE_DURATION, Integer.toString(Lock.leaseDuration))));
-        conf.setThreadPrefix(configProperties.getProperty(THREAD_PREFIX, DEFAULT_THREAD_PREFIX));
-        conf.setMetadataRetention(Integer.parseInt(configProperties.getProperty(METADATA_RETENTION, DEFAULT_METADATA_RETENTION)));
-
-        conf.setServerPort(Integer.parseInt(configProperties.getProperty(SERVER_PORT)));
+        applyFlags(configProperties, conf);
+        applyIntegralOptions(configProperties, conf);
+        applyStringOptions(configProperties, conf);
 
         return conf;
     }
@@ -207,68 +222,79 @@ public class ServerConfiguration extends BaseConfiguration {
                 "--enable-tls-mutual-auth","--enable-sasl-plain-text-auth", "--metrics");
         Set<String> inverseFlags = ImmutableSet.of("--no-verify", "--no-sync", "--no-auto-commit");
         for (Map.Entry<String,Object> entry : opts.entrySet()) {
-            if (optionsToPropertiesMapping.containsKey(entry.getKey())) {
-                if (entry.getValue() != null) {
-                    if (flags.contains(entry.getKey())) {
-                        configProperties.setProperty(optionsToPropertiesMapping.get(entry.getKey()),
-                                Boolean.toString((Boolean) entry.getValue()));
-                    } else if (inverseFlags.contains(entry.getKey())) {
-                        configProperties.setProperty(optionsToPropertiesMapping.get(entry.getKey()),
-                                Boolean.toString(!((Boolean) entry.getValue())));
-                    } else {
-                        configProperties.setProperty(optionsToPropertiesMapping.get(entry.getKey()), (String) entry.getValue());
-                    }
-                }
-            } else {
+            if (!optionsToPropertiesMapping.containsKey(entry.getKey())) {
                 log.warn("Encountered unknown option: {}", entry.getKey());
+            } else if (entry.getValue() != null) {
+                if (flags.contains(entry.getKey())) {
+                    configProperties.setProperty(optionsToPropertiesMapping.get(entry.getKey()),
+                            Boolean.toString((Boolean) entry.getValue()));
+                } else if (inverseFlags.contains(entry.getKey())) {
+                    configProperties.setProperty(optionsToPropertiesMapping.get(entry.getKey()),
+                            Boolean.toString(!((Boolean) entry.getValue())));
+                } else {
+                    configProperties.setProperty(optionsToPropertiesMapping.get(entry.getKey()), (String) entry.getValue());
+                }
             }
         }
 
         return applyServerConfigurationOptions(configProperties);
     }
 
-    private static Map<String, String> getOptionsToPropertiesMapping() {
-        Map<String, String> mapping = new HashMap<>();
+    private static void putOptionsToPropertiesFlags(Map<String, String> mapping) {
         mapping.put("--memory", IN_MEMORY_MODE);
-        mapping.put("--log-path", SERVER_DIR);
         mapping.put("--no-verify", VERIFY_CHECKSUM);
         mapping.put("--no-sync", SYNC_DATA);
         mapping.put("--single", SINGLE_MODE);
         mapping.put("--no-auto-commit", AUTO_COMMIT);
-        mapping.put("--network-interface", NETWORK_INTERFACE);
-        mapping.put("--address", HOST_ADDRESS);
+        mapping.put("--enable-tls", ENABLE_TLS);
+        mapping.put("--enable-tls-mutual-auth", ENABLE_TLS_MUTUAL_AUTH);
+        mapping.put("--enable-sasl-plain-text-auth", ENABLE_SASL_PLAIN_TEXT_AUTH);
+        mapping.put("--metrics", ENABLE_METRICS);
+    }
+
+    private static void putOptionsToPropertiesIntegral(Map<String,String> mapping) {
         mapping.put("--max-replication-data-message-size", MAX_REPLICATION_DATA_MESSAGE_SIZE);
         mapping.put("--cache-heap-ratio", LOG_UNIT_CACHE_RATIO);
-        mapping.put("--log-level", LOG_LEVEL);
         mapping.put("--compact", COMPACT_RATE);
-        mapping.put("--plugin", PLUGIN_CONFIG_FILE_PATH);
         mapping.put("--base-server-threads", NUM_BASE_SERVER_THREADS);
         mapping.put("--log-size-quota-percentage", LOG_SIZE_QUOTA);
         mapping.put("--logunit-threads", NUM_LOGUNIT_WORKER_THREADS);
         mapping.put("--management-server-threads", NUM_MANAGEMENT_SERVER_THREADS);
         mapping.put("--Threads", NUM_IO_THREADS);
-        mapping.put("--enable-tls", ENABLE_TLS);
+        mapping.put("--sequencer-cache-size", SEQUENCER_CACHE_SIZE);
+        mapping.put("--batch-size", SNAPSHOT_BATCH_SIZE);
+        mapping.put("--HandshakeTimeout", HANDSHAKE_TIMEOUT);
+        mapping.put("--snapshot-batch", SNAPSHOT_BATCH_SIZE);
+        mapping.put("--lock-lease", LOCK_LEASE_DURATION);
+        mapping.put("--metadata-retention", METADATA_RETENTION);
+        mapping.put("<port>", SERVER_PORT);
+    }
+
+    private static void putOptionsToPropertiesString(Map<String,String> mapping) {
+        mapping.put("--log-path", SERVER_DIR);
+        mapping.put("--network-interface", NETWORK_INTERFACE);
+        mapping.put("--address", HOST_ADDRESS);
+        mapping.put("--log-level", LOG_LEVEL);
+        mapping.put("--plugin", PLUGIN_CONFIG_FILE_PATH);
         mapping.put("--keystore", KEYSTORE);
         mapping.put("--keystore-password-file", KEYSTORE_PASSWORD_FILE);
         mapping.put("--truststore", TRUSTSTORE);
         mapping.put("--truststore-password-file", TRUSTSTORE_PASSWORD_FILE);
-        mapping.put("--enable-tls-mutual-auth", ENABLE_TLS_MUTUAL_AUTH);
-        mapping.put("--enable-sasl-plain-text-auth", ENABLE_SASL_PLAIN_TEXT_AUTH);
         mapping.put("--sasl-plain-text-username-file", SASL_PLAIN_TEXT_USERNAME_FILE);
         mapping.put("--sasl-plain-text-password-file", SASL_PLAIN_TEXT_PASSWORD_FILE);
-        mapping.put("--sequencer-cache-size", SEQUENCER_CACHE_SIZE);
-        mapping.put("--batch-size", SNAPSHOT_BATCH_SIZE);
         mapping.put("--implementation", CHANNEL_IMPLEMENTATION);
-        mapping.put("--HandshakeTimeout", HANDSHAKE_TIMEOUT);
         mapping.put("--cluster-id", CLUSTER_ID);
         mapping.put("--tls-ciphers", TLS_CIPHERS);
         mapping.put("--tls-protocols", TLS_PROTOCOLS);
-        mapping.put("--metrics", ENABLE_METRICS);
-        mapping.put("--snapshot-batch", SNAPSHOT_BATCH_SIZE);
-        mapping.put("--lock-lease", LOCK_LEASE_DURATION);
         mapping.put("--Prefix", THREAD_PREFIX);
-        mapping.put("--metadata-retention", METADATA_RETENTION);
-        mapping.put("<port>", SERVER_PORT);
+    }
+
+    private static Map<String, String> getOptionsToPropertiesMapping() {
+        Map<String, String> mapping = new HashMap<>();
+
+        putOptionsToPropertiesFlags(mapping);
+        putOptionsToPropertiesIntegral(mapping);
+        putOptionsToPropertiesString(mapping);
 
         return mapping;
     }
