@@ -42,11 +42,11 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.extractO
 @NotThreadSafe
 public class StreamsSnapshotWriter implements SnapshotWriter {
 
-    private final static String SHADOW_STREAM_SUFFIX = "_SHADOW";
+    private static final String SHADOW_STREAM_SUFFIX = "_SHADOW";
 
     // Mapping from regular stream Id to stream Name
     private final HashMap<UUID, String> streamViewMap;
-    private CorfuRuntime rt;
+    private final CorfuRuntime rt;
 
     private long topologyConfigId;
     private long srcGlobalSnapshot; // The source snapshot timestamp
@@ -54,9 +54,9 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     private Optional<SnapshotSyncStartMarker> snapshotSyncStartMarker;
 
     @Getter
-    private LogReplicationMetadataManager logReplicationMetadataManager;
+    private final LogReplicationMetadataManager logReplicationMetadataManager;
     // Mapping from regular stream Id to shadow stream Id
-    private HashMap<UUID, UUID> regularToShadowStreamId;
+    private final HashMap<UUID, UUID> regularToShadowStreamId;
 
     @Getter
     private Phase phase;

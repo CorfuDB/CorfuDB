@@ -81,50 +81,6 @@ public class CorfuStoreIT extends AbstractIT {
     }
 
     /**
-     * Basic test that inserts a single item using protobuf defined in the proto/ directory.
-     */
-    @Test
-    public void testTx() throws Exception {
-        // Run a corfu server
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
-
-        // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
-
-        CorfuStore store = new CorfuStore(runtime);
-
-        Table<Uuid, Uuid, Uuid> table = store.openTable(
-                "namespace", "table", Uuid.class,
-                Uuid.class, Uuid.class,
-                TableOptions.builder().build()
-        );
-
-        final long keyUuid = 1L;
-        final long valueUuid = 3L;
-        final long metadataUuid = 5L;
-        Uuid uuidKey = Uuid.newBuilder()
-                .setMsb(keyUuid)
-                .setLsb(keyUuid)
-                .build();
-        Uuid uuidVal = Uuid.newBuilder()
-                .setMsb(valueUuid)
-                .setLsb(valueUuid)
-                .build();
-        Uuid metadata = Uuid.newBuilder()
-                .setMsb(metadataUuid)
-                .setLsb(metadataUuid)
-                .build();
-        TxnContext tx = store.txn("namespace");
-        tx.putRecord(table, uuidKey, uuidVal, metadata);
-        tx.commit();
-        CorfuRecord record = table.get(uuidKey);
-        assertThat(record.getPayload()).isEqualTo(uuidVal);
-        assertThat(record.getMetadata()).isEqualTo(metadata);
-
-        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
-    }
-
-    /**
      * This test is divided into 3 phases.
      * Phase 1: Writes data to CorfuStore in a Table using the transaction builder.
      * Phase 2: Using DynamicMessages, we try to read and edit the message. The lsb in the metadata is putd.
@@ -213,13 +169,23 @@ public class CorfuStoreIT extends AbstractIT {
         CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> tableRegistry = runtime.getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {
                 })
-                .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME))
+                .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
+                        TableRegistry.REGISTRY_TABLE_NAME))
+                .setSerializer(dynamicProtobufSerializer)
+                .addOpenOption(ObjectOpenOption.NO_CACHE)
+                .open();
+        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> descriptorTable = runtime.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {
+                })
+                .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
+                        TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME))
                 .setSerializer(dynamicProtobufSerializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
 
         mcw.addMap(corfuTable);
         mcw.addMap(tableRegistry);
+        mcw.addMap(descriptorTable);
         Token trimPoint = mcw.appendCheckpoints(runtime, "checkpointer");
 
         runtime.getAddressSpaceView().prefixTrim(trimPoint);
@@ -255,11 +221,27 @@ public class CorfuStoreIT extends AbstractIT {
 
     public Token checkpointAndTrimCorfuStore(CorfuRuntime runtimeC, boolean skipTrim, String tempDiskPath) {
 
+        // open these metadata system tables in normal Protobuf serializer since we know their types!
         TableRegistry tableRegistry = runtimeC.getTableRegistry();
         CorfuTable<CorfuStoreMetadata.TableName,
                 CorfuRecord<CorfuStoreMetadata.TableDescriptors,
                         CorfuStoreMetadata.TableMetadata>>
                         tableRegistryCT = tableRegistry.getRegistryTable();
+        CorfuTable<CorfuStoreMetadata.ProtobufFileName,
+                CorfuRecord<CorfuStoreMetadata.ProtobufFileDescriptor,
+                        CorfuStoreMetadata.TableMetadata>>
+                descriptorTableCT = tableRegistry.getProtobufDescriptorTable();
+
+        Token trimToken = new Token(Token.UNINITIALIZED.getEpoch(), Token.UNINITIALIZED.getSequence());
+
+        // First checkpoint the TableRegistry & Descriptor system tables because they get opened
+        // BEFORE any DynamicProtobufSerializer and CorfuDynamicMessage kicks in
+        MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
+        // First checkpoint the TableRegistry and Descriptor system tables..
+        mcw.addMap(tableRegistryCT);
+        mcw.addMap(descriptorTableCT);
+        Token token = mcw.appendCheckpoints(runtimeC, "checkpointer");
+        trimToken = Token.min(trimToken, token);
 
         // Save the regular serializer first..
         ISerializer protobufSerializer = Serializers.getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
@@ -269,14 +251,16 @@ public class CorfuStoreIT extends AbstractIT {
         ISerializer dynamicProtobufSerializer = new DynamicProtobufSerializer(runtimeC);
         Serializers.registerSerializer(dynamicProtobufSerializer);
 
-        // First checkpoint the TableRegistry system table
-        MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
-
-        Token trimToken = new Token(Token.UNINITIALIZED.getEpoch(), Token.UNINITIALIZED.getSequence());
         for (CorfuStoreMetadata.TableName tableName : tableRegistry.listTables(null)) {
             String fullTableName = TableRegistry.getFullyQualifiedTableName(
                     tableName.getNamespace(), tableName.getTableName()
-                    );
+            );
+            if (tableName.getNamespace().equals(TableRegistry.CORFU_SYSTEM_NAMESPACE) &&
+                    (tableName.getTableName().equals(TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME) ||
+                    tableName.getTableName().equals(TableRegistry.REGISTRY_TABLE_NAME))) {
+                continue; // these tables should have already been checkpointed using normal serializer!
+            }
+
             SMRObject.Builder<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> corfuTableBuilder = runtimeC.getObjectsView().build()
                     .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
                     .setStreamName(fullTableName)
@@ -295,14 +279,9 @@ public class CorfuStoreIT extends AbstractIT {
 
             mcw = new MultiCheckpointWriter<>();
             mcw.addMap(corfuTableBuilder.open());
-            Token token = mcw.appendCheckpoints(runtimeC, "checkpointer");
-            trimToken = Token.min(trimToken, token);
+            Token tableToken = mcw.appendCheckpoints(runtimeC, "checkpointer");
+            trimToken = Token.min(trimToken, tableToken);
         }
-
-        // Finally checkpoint the TableRegistry system table itself..
-        mcw.addMap(tableRegistryCT);
-        Token token = mcw.appendCheckpoints(runtimeC, "checkpointer");
-        trimToken = Token.min(trimToken, token);
 
         if (!skipTrim) {
             runtimeC.getAddressSpaceView().prefixTrim(trimToken);
@@ -437,6 +416,7 @@ public class CorfuStoreIT extends AbstractIT {
                 .open();
         mcw.addMap(corfuTable);
         mcw.addMap(runtime.getTableRegistry().getRegistryTable());
+        mcw.addMap(runtime.getTableRegistry().getProtobufDescriptorTable());
         Token trimPoint = mcw.appendCheckpoints(runtime, "checkpointer");
         runtime.getAddressSpaceView().prefixTrim(trimPoint);
         runtime.getAddressSpaceView().gc();
@@ -500,7 +480,7 @@ public class CorfuStoreIT extends AbstractIT {
         final String tableName2 = "Work-EventInfo";
         final String tableName3 = "Empty-EventInfo";
         final int numUpdates = 2;
-        final long OFFSET = 4L;
+        final long OFFSET = 5L;
 
         // Create & Register the table.
         Table<Uuid, SampleSchema.EventInfo, ManagedResources> table1 = corfuStore.openTable(
@@ -527,7 +507,8 @@ public class CorfuStoreIT extends AbstractIT {
                 ManagedResources.class,
                 TableOptions.builder().build());
 
-        long offsetLog = OFFSET; // addresses 0, 1, 2, 3 are taken by updates to the Registry Table
+        // addresses 0, 1, 2, 3, 4 are taken by updates to the Registry Table & Descriptors
+        long offsetLog = OFFSET;
         long partialSnapshot = offsetLog + (numUpdates*2) - 1;
 
         long maxGlobalAddress = generateUpdates(namespace, table1, table2, table3, offsetLog, numUpdates);

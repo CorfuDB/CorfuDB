@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure;
 
 import io.netty.channel.embedded.EmbeddedChannel;
+import org.corfudb.common.util.CompatibilityVectorUtils;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
@@ -89,6 +90,7 @@ public class ServerHandshakeHandlerTest {
                 .setVersion(
                      ProtocolVersionMsg.newBuilder()
                     .setCorfuSourceCodeVersion(FAKE_CLIENT_VERSION)
+                    .setCapabilityVector(CompatibilityVectorUtils.getCompatibilityVectors())
                     .build())
                 .setRequestId(requestCounter.incrementAndGet())
                 .setPriority(PriorityLevel.NORMAL)

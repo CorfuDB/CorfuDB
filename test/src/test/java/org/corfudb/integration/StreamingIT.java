@@ -1102,10 +1102,14 @@ public class StreamingIT extends AbstractIT {
         TimeUnit.MILLISECONDS.sleep(sleepTime);
         assertThat(listener.getUpdates().size()).isEqualTo(totalUpdates);
 
+        long seqNumBeforeTrim = -1L; // Default value expected for empty streams on getHighestSequence()
+
         // Run X number of checkpoint/trim (on each run, trigger runtimeGC)
         for (int i = 0; i < numCheckpointTrimCycles; i++) {
             checkpointAndTrim(namespace, Arrays.asList(defaultTableName, randomTableName), false);
             runtime.getGarbageCollector().runRuntimeGC();
+            long seqNumberAfterTrim = store.getHighestSequence(namespace, defaultTableName);
+            assertThat(seqNumberAfterTrim).isEqualTo(seqNumBeforeTrim);
         }
 
         // Confirm first untrimmed address is higher than the last received update (confirm pointer is below global trim mark)
@@ -1456,7 +1460,8 @@ public class StreamingIT extends AbstractIT {
             readTable.entryStream().forEach(entry -> entry.getKey().getMsb());
 
             for (int index = 0; index < numUpdates; index++) {
-                CorfuRecord<SampleTableAMsg, Uuid> record = readTable.get(Uuid.newBuilder().setLsb(index).setMsb(index).build());
+                CorfuStoreEntry<Uuid, SampleTableAMsg, Uuid> record = txn.getRecord(readTable,
+                        Uuid.newBuilder().setLsb(index).setMsb(index).build());
                 assertThat(record).isNotNull();
                 assertThat(record.getPayload().getPayload()).isEqualTo(String.valueOf(index));
             }
@@ -1480,6 +1485,7 @@ public class StreamingIT extends AbstractIT {
 
         // Add Registry Table
         mcw.addMap(rt.getTableRegistry().getRegistryTable());
+        mcw.addMap(rt.getTableRegistry().getProtobufDescriptorTable());
         // Checkpoint & Trim
         Token trimPoint = mcw.appendCheckpoints(rt, "StreamingIT");
         if (partialTrim) {

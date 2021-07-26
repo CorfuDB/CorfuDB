@@ -216,7 +216,7 @@ public class ManagedTxnContext implements AutoCloseable {
     }
 
     /**
-     * Query by a secondary index.
+     * JoinQuery by a secondary index.
      *
      * @param table     Table object.
      * @param indexName Index name. In case of protobuf-defined secondary index it is the field name.
@@ -232,7 +232,7 @@ public class ManagedTxnContext implements AutoCloseable {
     }
 
     /**
-     * Query by a secondary index given just the full tableName.
+     * JoinQuery by a secondary index given just the full tableName.
      *
      * @param tableName fullyQualified name of the table.
      * @param indexName Index name. In case of protobuf-defined secondary index it is the field name.
@@ -358,8 +358,8 @@ public class ManagedTxnContext implements AutoCloseable {
      * @param table2         Second table to join with the first one.
      * @param query1         Predicate to filter entries in table 1.
      * @param query2         Predicate to filter entries in table 2.
-     * @param queryOptions1  Query options to transform table 1 filtered values.
-     * @param queryOptions2  Query options to transform table 2 filtered values.
+     * @param queryOptions1  JoinQuery options to transform table 1 filtered values.
+     * @param queryOptions2  JoinQuery options to transform table 2 filtered values.
      * @param joinPredicate  Predicate to filter entries during the join.
      * @param joinFunction   Function to merge entries.
      * @param joinProjection Project the merged entries.
