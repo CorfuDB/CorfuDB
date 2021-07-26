@@ -17,6 +17,65 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+import static org.corfudb.infrastructure.configuration.ServerConfigurationDefaultOptions.DEFAULT_BASE_SERVER_THREADS;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationDefaultOptions.DEFAULT_CHANNEL_IMPLEMENTATION_TYPE;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationDefaultOptions.DEFAULT_CLUSTER_ID;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationDefaultOptions.DEFAULT_COMPACT_RATE;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationDefaultOptions.DEFAULT_HANDSHAKE_TIMEOUT;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationDefaultOptions.DEFAULT_IO_THREADS;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationDefaultOptions.DEFAULT_MANAGEMENT_SERVER_THREADS;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationDefaultOptions.DEFAULT_METADATA_RETENTION;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationDefaultOptions.DEFAULT_LOG_LEVEL;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationDefaultOptions.DEFAULT_LOG_SIZE_QUOTA;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationDefaultOptions.DEFAULT_LOG_UNIT_CACHE_RATIO;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationDefaultOptions.DEFAULT_LOG_UNIT_WORKER_THREADS;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationDefaultOptions.DEFAULT_SEQUENCER_CACHE_SIZE;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationDefaultOptions.DEFAULT_STATE_TRANSFER_BATCH_SIZE;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationDefaultOptions.DEFAULT_THREAD_PREFIX;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationDefaultOptions.DEFAULT_TLS_CIPHERS;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationDefaultOptions.DEFAULT_TLS_PROTOCOLS;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.AUTO_COMMIT;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.BIND_TO_ALL_INTERFACES;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.CHANNEL_IMPLEMENTATION;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.CLUSTER_ID;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.COMPACT_RATE;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.ENABLE_METRICS;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.ENABLE_SASL_PLAIN_TEXT_AUTH;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.ENABLE_TLS;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.ENABLE_TLS_MUTUAL_AUTH;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.HANDSHAKE_TIMEOUT;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.HOST_ADDRESS;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.IN_MEMORY_MODE;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.KEYSTORE;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.KEYSTORE_PASSWORD_FILE;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.LOCK_LEASE_DURATION;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.LOG_LEVEL;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.LOG_SIZE_QUOTA;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.LOG_UNIT_CACHE_RATIO;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.MAX_REPLICATION_DATA_MESSAGE_SIZE;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.METADATA_RETENTION;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.METRICS_PROVIDER_ADDRESS;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.NETWORK_INTERFACE;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.NUM_BASE_SERVER_THREADS;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.NUM_IO_THREADS;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.NUM_LOGUNIT_WORKER_THREADS;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.NUM_MANAGEMENT_SERVER_THREADS;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.PLUGIN_CONFIG_FILE_PATH;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.SASL_PLAIN_TEXT_PASSWORD_FILE;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.SASL_PLAIN_TEXT_USERNAME_FILE;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.SEQUENCER_CACHE_SIZE;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.SERVER_DIR;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.SERVER_PORT;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.SINGLE_MODE;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.SNAPSHOT_BATCH_SIZE;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.STATE_TRANSFER_BATCH_SIZE;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.SYNC_DATA;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.THREAD_PREFIX;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.TLS_CIPHERS;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.TLS_PROTOCOLS;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.TRUSTSTORE;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.TRUSTSTORE_PASSWORD_FILE;
+import static org.corfudb.infrastructure.configuration.ServerConfigurationOptions.VERIFY_CHECKSUM;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
 import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
@@ -28,77 +87,6 @@ import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
  */
 @Slf4j
 public class ServerConfiguration extends BaseConfiguration {
-    // Server general parameters
-    private static final String SERVER_DIR = "log-path";
-    private static final String SINGLE_MODE = "single-mode";
-    private static final String CLUSTER_ID = "cluster-id";
-    private static final String NUM_IO_THREADS = "io-threads";
-    private static final String HOST_ADDRESS = "address";
-    private static final String SERVER_PORT = "port";
-    private static final String NETWORK_INTERFACE = "network-interface";
-    private static final String HANDSHAKE_TIMEOUT = "handshake-timeout";
-    private static final String METADATA_RETENTION = "metadata-retention";
-    private static final String LOG_LEVEL = "log-level";
-    private static final String NUM_BASE_SERVER_THREADS = "base-server-threads";
-    private static final String METRICS_PROVIDER_ADDRESS = "metricsProviderAddress";
-    private static final String CHANNEL_IMPLEMENTATION = "channel-implementation";
-    private static final String ENABLE_TLS = "tls-enabled";
-    private static final String ENABLE_TLS_MUTUAL_AUTH = "tls-mutual-auth-enabled";
-    private static final String KEYSTORE = "keystore";
-    private static final String KEYSTORE_PASSWORD_FILE = "keystore-password-file";
-    private static final String TRUSTSTORE = "truststore";
-    private static final String TRUSTSTORE_PASSWORD_FILE = "truststore-password-file";
-    private static final String ENABLE_SASL_PLAIN_TEXT_AUTH = "sasl-plain-text-auth-enabled";
-    private static final String SASL_PLAIN_TEXT_USERNAME_FILE = "sasl-plain-text-username-file";
-    private static final String SASL_PLAIN_TEXT_PASSWORD_FILE = "sasl-plain-text-password-file";
-    private static final String TLS_CIPHERS = "tls-ciphers";
-    private static final String TLS_PROTOCOLS = "tls-protocols";
-
-    // LogUnit parameters
-    private static final String IN_MEMORY_MODE = "memory-mode";
-    private static final String LOG_UNIT_CACHE_RATIO = "cache-heap-ratio";
-    private static final String VERIFY_CHECKSUM = "verify-checksum";
-    private static final String SYNC_DATA = "sync-data";
-    private static final String NUM_LOGUNIT_WORKER_THREADS = "logunit-threads";
-    private static final String LOG_SIZE_QUOTA = "log-size-quota-percentage";
-
-
-    // Sequencer parameters
-    private static final String SEQUENCER_CACHE_SIZE = "sequencer-cache-size";
-
-    // Management parameters
-    private static final String STATE_TRANSFER_BATCH_SIZE = "state-transfer-batch-size";
-    private static final String NUM_MANAGEMENT_SERVER_THREADS = "management-server-threads";
-
-    //Added parameters
-    private static final String AUTO_COMMIT = "auto-commit";
-    private static final String MAX_REPLICATION_DATA_MESSAGE_SIZE = "max-replication-data-message-size";
-    private static final String COMPACT_RATE = "compact-rate";
-    private static final String PLUGIN_CONFIG_FILE_PATH = "plugin-config-file-path";
-    private static final String ENABLE_METRICS = "metrics-enabled";
-    private static final String SNAPSHOT_BATCH_SIZE = "snapshot-batch";
-    private static final String LOCK_LEASE_DURATION = "lock-lease";
-    private static final String THREAD_PREFIX = "thread-prefix";
-    private static final String BIND_TO_ALL_INTERFACES = "bindToAllInterfaces";
-
-    //Default Configuration Values
-    private static final String DEFAULT_LOG_UNIT_CACHE_RATIO = "0.5";
-    private static final String DEFAULT_LOG_LEVEL = "INFO";
-    private static final String DEFAULT_COMPACT_RATE = "60";
-    private static final String DEFAULT_BASE_SERVER_THREADS = "1";
-    private static final String DEFAULT_LOG_SIZE_QUOTA = "100.0";
-    private static final String DEFAULT_LOG_UNIT_WORKER_THREADS = "4";
-    private static final String DEFAULT_MANAGEMENT_SERVER_THREADS = "4";
-    private static final String DEFAULT_IO_THREADS = "4";
-    private static final String DEFAULT_SEQUENCER_CACHE_SIZE = "250000";
-    private static final String DEFAULT_STATE_TRANSFER_BATCH_SIZE = "100";
-    private static final String DEFAULT_CHANNEL_IMPLEMENTATION_TYPE = "nio";
-    private static final String DEFAULT_HANDSHAKE_TIMEOUT = "10";
-    private static final String DEFAULT_CLUSTER_ID = "auto";
-    private static final String DEFAULT_TLS_CIPHERS = "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256";
-    private static final String DEFAULT_TLS_PROTOCOLS = "TLSv1.1,TLSv1.2";
-    private static final String DEFAULT_THREAD_PREFIX = "";
-    private static final String DEFAULT_METADATA_RETENTION = "1000";
 
     // The underlying map of PropertiesConfiguration can't be used to store an EventLoopGroup,
     // so a separate map is needed. This shouldn't be here, but the Unit Tests rely on
@@ -214,10 +202,8 @@ public class ServerConfiguration extends BaseConfiguration {
         return conf;
     }
 
-    public static ServerConfiguration getServerConfigFromMap(Map<String, Object> opts) {
+    public static ServerConfiguration getServerConfigFromMap(Map<String, Object> opts, Map<String, String> optionsToPropertiesMapping) {
         Properties configProperties = new Properties();
-        //in the future, if more formats need to be supported, this mapping can be passed as a parameter
-        Map<String, String> optionsToPropertiesMapping = getOptionsToPropertiesMapping();
         Set<String> flags = ImmutableSet.of("--memory", "--single", "--enable-tls",
                 "--enable-tls-mutual-auth","--enable-sasl-plain-text-auth", "--metrics");
         Set<String> inverseFlags = ImmutableSet.of("--no-verify", "--no-sync", "--no-auto-commit");
@@ -239,66 +225,6 @@ public class ServerConfiguration extends BaseConfiguration {
 
         return applyServerConfigurationOptions(configProperties);
     }
-
-    private static void putOptionsToPropertiesFlags(Map<String, String> mapping) {
-        mapping.put("--memory", IN_MEMORY_MODE);
-        mapping.put("--no-verify", VERIFY_CHECKSUM);
-        mapping.put("--no-sync", SYNC_DATA);
-        mapping.put("--single", SINGLE_MODE);
-        mapping.put("--no-auto-commit", AUTO_COMMIT);
-        mapping.put("--enable-tls", ENABLE_TLS);
-        mapping.put("--enable-tls-mutual-auth", ENABLE_TLS_MUTUAL_AUTH);
-        mapping.put("--enable-sasl-plain-text-auth", ENABLE_SASL_PLAIN_TEXT_AUTH);
-        mapping.put("--metrics", ENABLE_METRICS);
-    }
-
-    private static void putOptionsToPropertiesIntegral(Map<String,String> mapping) {
-        mapping.put("--max-replication-data-message-size", MAX_REPLICATION_DATA_MESSAGE_SIZE);
-        mapping.put("--cache-heap-ratio", LOG_UNIT_CACHE_RATIO);
-        mapping.put("--compact", COMPACT_RATE);
-        mapping.put("--base-server-threads", NUM_BASE_SERVER_THREADS);
-        mapping.put("--log-size-quota-percentage", LOG_SIZE_QUOTA);
-        mapping.put("--logunit-threads", NUM_LOGUNIT_WORKER_THREADS);
-        mapping.put("--management-server-threads", NUM_MANAGEMENT_SERVER_THREADS);
-        mapping.put("--Threads", NUM_IO_THREADS);
-        mapping.put("--sequencer-cache-size", SEQUENCER_CACHE_SIZE);
-        mapping.put("--batch-size", SNAPSHOT_BATCH_SIZE);
-        mapping.put("--HandshakeTimeout", HANDSHAKE_TIMEOUT);
-        mapping.put("--snapshot-batch", SNAPSHOT_BATCH_SIZE);
-        mapping.put("--lock-lease", LOCK_LEASE_DURATION);
-        mapping.put("--metadata-retention", METADATA_RETENTION);
-        mapping.put("<port>", SERVER_PORT);
-    }
-
-    private static void putOptionsToPropertiesString(Map<String,String> mapping) {
-        mapping.put("--log-path", SERVER_DIR);
-        mapping.put("--network-interface", NETWORK_INTERFACE);
-        mapping.put("--address", HOST_ADDRESS);
-        mapping.put("--log-level", LOG_LEVEL);
-        mapping.put("--plugin", PLUGIN_CONFIG_FILE_PATH);
-        mapping.put("--keystore", KEYSTORE);
-        mapping.put("--keystore-password-file", KEYSTORE_PASSWORD_FILE);
-        mapping.put("--truststore", TRUSTSTORE);
-        mapping.put("--truststore-password-file", TRUSTSTORE_PASSWORD_FILE);
-        mapping.put("--sasl-plain-text-username-file", SASL_PLAIN_TEXT_USERNAME_FILE);
-        mapping.put("--sasl-plain-text-password-file", SASL_PLAIN_TEXT_PASSWORD_FILE);
-        mapping.put("--implementation", CHANNEL_IMPLEMENTATION);
-        mapping.put("--cluster-id", CLUSTER_ID);
-        mapping.put("--tls-ciphers", TLS_CIPHERS);
-        mapping.put("--tls-protocols", TLS_PROTOCOLS);
-        mapping.put("--Prefix", THREAD_PREFIX);
-    }
-
-    private static Map<String, String> getOptionsToPropertiesMapping() {
-        Map<String, String> mapping = new HashMap<>();
-
-        putOptionsToPropertiesFlags(mapping);
-        putOptionsToPropertiesIntegral(mapping);
-        putOptionsToPropertiesString(mapping);
-
-        return mapping;
-    }
-
 
     public ServerConfiguration setServerDirectory(String path) {
         setProperty(SERVER_DIR, path);

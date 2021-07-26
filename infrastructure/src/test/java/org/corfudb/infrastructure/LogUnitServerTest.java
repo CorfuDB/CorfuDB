@@ -95,7 +95,6 @@ public class LogUnitServerTest {
     private BatchProcessor mBatchProcessor;
     private StreamLog mStreamLog;
     private LogUnitServerCache mCache;
-    private ServerConfiguration mServerConfig;
 
     private final AtomicInteger requestCounter = new AtomicInteger();
     private final String PAYLOAD_DATA = "PAYLOAD";
@@ -155,7 +154,7 @@ public class LogUnitServerTest {
         mBatchProcessor = mock(BatchProcessor.class);
         mStreamLog = mock(StreamLog.class);
         mCache = mock(LogUnitServerCache.class);
-        mServerConfig = mock(ServerConfiguration.class);
+        ServerConfiguration mServerConfig = mock(ServerConfiguration.class);
 
         //Mock Config Options
         when(mServerConfig.getLogUnitCacheRatio()).thenReturn(0.5);

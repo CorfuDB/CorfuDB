@@ -91,7 +91,6 @@ public class ManagementServerTest {
     private Orchestrator mOrchestrator;
     private IReconfigurationHandlerPolicy mFailureHandlerPolicy;
     private CorfuRuntime mCorfuRuntime;
-    private ServerConfiguration mServerConfig;
 
     private final AtomicInteger requestCounter = new AtomicInteger();
     private final List<String> NODES = Arrays.asList("localhost:9000", "localhost:9001", "localhost:9002");
@@ -171,7 +170,7 @@ public class ManagementServerTest {
         mOrchestrator = mock(Orchestrator.class);
         mFailureHandlerPolicy = mock(IReconfigurationHandlerPolicy.class);
         mCorfuRuntime = mock(CorfuRuntime.class);
-        mServerConfig = mock(ServerConfiguration.class);
+        ServerConfiguration mServerConfig = mock(ServerConfiguration.class);
 
         // Initialize with newDirectExecutorService to execute the server RPC
         // handler methods on the calling thread.

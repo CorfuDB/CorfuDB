@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.configuration.CLIArgumentOptionsMappingUtil;
 import org.corfudb.infrastructure.configuration.ServerConfiguration;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
@@ -233,7 +234,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         if (opts.containsKey("--config-file") && opts.get("--config-file") != null) {
             conf = ServerConfiguration.getServerConfigFromFile((String) opts.get("--config-file"));
         } else {
-            conf = ServerConfiguration.getServerConfigFromMap(opts);
+            conf = ServerConfiguration.getServerConfigFromMap(opts, CLIArgumentOptionsMappingUtil.getOptionsToPropertiesMapping());
         }
 
         printStartupMsg(conf);

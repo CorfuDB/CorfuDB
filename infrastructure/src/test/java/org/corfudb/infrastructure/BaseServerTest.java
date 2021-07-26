@@ -5,6 +5,7 @@ import io.netty.channel.ChannelHandlerContext;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.configuration.ServerConfiguration;
+import org.corfudb.infrastructure.configuration.ServerConfigurationOptions;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -54,7 +55,6 @@ public class BaseServerTest {
     private ServerContext mockServerContext;
     private IServerRouter mockServerRouter;
     private ChannelHandlerContext mockChannelHandlerContext;
-    private ServerConfiguration mockServerConfig;
 
     private final AtomicInteger requestCounter = new AtomicInteger();
 
@@ -94,7 +94,7 @@ public class BaseServerTest {
         mockServerContext = mock(ServerContext.class);
         mockServerRouter = mock(IServerRouter.class);
         mockChannelHandlerContext = mock(ChannelHandlerContext.class);
-        mockServerConfig = mock(ServerConfiguration.class);
+        ServerConfiguration mockServerConfig = mock(ServerConfiguration.class);
 
         // Initialize with newDirectExecutorService to execute the server RPC
         // handler methods on the calling thread

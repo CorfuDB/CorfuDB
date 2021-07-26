@@ -549,7 +549,6 @@ StreamLogFilesTest extends AbstractCorfuTest {
 
     @Test
     public void testPrefixTrimAfterRestart() {
-        String logDir = getContext().getConfiguration().getLogDir();
         StreamLog log = new StreamLogFiles(getContext(), false);
 
         final long numSegments = 3;
@@ -564,6 +563,7 @@ StreamLogFilesTest extends AbstractCorfuTest {
         log = new StreamLogFiles(getContext(), false);
         log.compact();
 
+        String logDir = getContext().getConfiguration().getLogDir();
         File logs = new File(logDir);
         final int numFilesLeft = 1;
         assertThat(logs.list()).hasSize(numFilesLeft);

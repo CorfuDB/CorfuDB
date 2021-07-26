@@ -6,6 +6,7 @@ import ch.qos.logback.classic.LoggerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.infrastructure.configuration.CLIArgumentOptionsMappingUtil;
 import org.corfudb.infrastructure.configuration.ServerConfiguration;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -205,7 +206,7 @@ public class CorfuServer {
             if (opts.containsKey("--config-file") && opts.get("--config-file") != null) {
                 conf = ServerConfiguration.getServerConfigFromFile((String) opts.get("--config-file"));
             } else {
-                conf = ServerConfiguration.getServerConfigFromMap(opts);
+                conf = ServerConfiguration.getServerConfigFromMap(opts, CLIArgumentOptionsMappingUtil.getOptionsToPropertiesMapping());
             }
 
             // Note: this is a temporal solution for license reuse.
