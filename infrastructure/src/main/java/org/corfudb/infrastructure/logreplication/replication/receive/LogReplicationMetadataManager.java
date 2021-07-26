@@ -653,7 +653,10 @@ public class LogReplicationMetadataManager {
 
     public void resetReplicationStatus() {
         log.info("Reset replication status");
-        replicationStatusTable.clear();
+        try (TxnContext tx = corfuStore.txn(replicationStatusTable.getNamespace())) {
+            replicationStatusTable.clearAll();
+            tx.commit();
+        }
     }
 
     @Override

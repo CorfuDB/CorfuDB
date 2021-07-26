@@ -197,15 +197,10 @@
 
     <distributionManagement>
         <repository>
-            <id>central</id>
-            <name>corfudbcloud-artifactory-primary-0-releases</name>
-            <url>https://corfudbcloud.jfrog.io/artifactory/corfu-cloud</url>
+            <id>github</id>
+            <name>GitHub CorfuDB Apache Maven Packages</name>
+            <url>https://maven.pkg.github.com/corfudb/corfudb</url>
         </repository>
-        <snapshotRepository>
-            <id>snapshots</id>
-            <name>corfudbcloud-artifactory-primary-0-snapshots</name>
-            <url>https://corfudbcloud.jfrog.io/artifactory/corfu-cloud</url>
-        </snapshotRepository>
     </distributionManagement>
 
     <profiles>
@@ -394,19 +389,6 @@
                         </goals>
                     </execution>
                 </executions>
-            </plugin>
-            <!--Plugin used for code coverage integration with Github-->
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>cobertura-maven-plugin</artifactId>
-                <version>2.7</version>
-                <configuration>
-                    <formats>
-                        <format>html</format>
-                        <format>xml</format>
-                    </formats>
-                    <check/>
-                </configuration>
             </plugin>
             <!-- Add a license to all files using mvn license:format -->
             <plugin>

@@ -1368,6 +1368,103 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                 ageChild, Arrays.asList(idRicky, idMary, idKate));
     }
 
+    /**
+     * Test indexing of 'NULL' (i.e., unset non-primitive sub-fields) for the following sub-field patterns (from
+     * the root):
+     *
+     * Refer to SportsProfessional proto, in 'example_schemas.proto' for definitions.
+     *
+     * (1) Repeated field followed by oneOf field (e.g., hobby.sport)
+     * (2) Non-repeated field followed by oneOf field (e.g., profession.sport)
+     * (3) Repeated field followed by repeated field (e.g., training.exercises)
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testNestedIndexesWithNullValues() throws Exception {
+
+        final String someNamespace = "major-league";
+        final String tableName = "ProPlayers";
+
+        // Get a Corfu Runtime instance and create Corfu Store
+        CorfuRuntime corfuRuntime = getTestRuntime();
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Create & Register the table.
+        shimStore.openTable(
+                someNamespace,
+                tableName,
+                UuidMsg.class,
+                ExampleSchemas.SportsProfessional.class,
+                ManagedMetadata.class,
+                TableOptions.builder().build());
+
+        // Define a player and set only (1) oneOf type, then query for the unset field to confirm this
+        // is indexed as NULL (i.e., not set)
+        ExampleSchemas.SportsProfessional player1 = ExampleSchemas.SportsProfessional.newBuilder()
+                .setPerson(ExampleSchemas.Person.newBuilder().setName("Michael Jordan").build())
+                // Set Basket as profession (oneOf field) so query for Baseball as profession
+                .setProfession(ExampleSchemas.Hobby.newBuilder().setBasket(ExampleSchemas.Basketball.newBuilder().setTeam("Chicago Bulls").build()).build())
+                // Set Baseball as hobby (oneOf field) so query for Basket as hobby
+                .addHobby(ExampleSchemas.Hobby.newBuilder().setBaseball(ExampleSchemas.Baseball.newBuilder().build()).build())
+                // Do not define any sub-field of repeated type (Exercises) and confirmed its indexed as NULL
+                .addTraining(ExampleSchemas.TrainingPlan.newBuilder().build())
+                .build();
+
+        // Define a player which does not have any indexed sub-field set (therefore, it should be indexed as NULL)
+        ExampleSchemas.SportsProfessional playerUndefined = ExampleSchemas.SportsProfessional.newBuilder()
+                .setPerson(ExampleSchemas.Person.newBuilder().setName("Undefined").build())
+                // Don't set any 'oneOf' sport for profession (sub-field)
+                .setProfession(ExampleSchemas.Hobby.newBuilder().build())
+                // Don't set any 'oneOf' sport for Hobby (sub-field)
+                .addHobby(ExampleSchemas.Hobby.newBuilder().setBaseball(ExampleSchemas.Baseball.newBuilder().build()).build())
+                // Do not define any sub-field of repeated type (Exercises) and confirmed its indexed as NULL
+                .addTraining(ExampleSchemas.TrainingPlan.newBuilder().build())
+                .build();
+
+        // Add players to Table
+        UUID id1 = UUID.randomUUID();
+        UuidMsg idPlayer1 = UuidMsg.newBuilder()
+                .setMsb(id1.getMostSignificantBits()).setLsb(id1.getLeastSignificantBits())
+                .build();
+
+        UUID id2 = UUID.randomUUID();
+        UuidMsg idPlayerUndefined = UuidMsg.newBuilder()
+                .setMsb(id2.getMostSignificantBits()).setLsb(id2.getLeastSignificantBits())
+                .build();
+
+        try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
+            txn.putRecord(tableName, idPlayer1, player1, ManagedMetadata.newBuilder().setCreateUser("user_UT").build());
+            txn.putRecord(tableName, idPlayerUndefined, playerUndefined, ManagedMetadata.newBuilder().setCreateUser("user_UT").build());
+            txn.commit();
+        }
+
+        // Query secondary indexes
+        // (1) Repeated field followed by oneOf field (e.g., hobby.sport)
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
+            List<CorfuStoreEntry<UuidMsg, ExampleSchemas.SportsProfessional, ManagedMetadata>> entries = readWriteTxn
+                    .getByIndex(tableName, "basketAsHobby", null);
+            assertThat(entries.size()).isEqualTo(2);
+            readWriteTxn.commit();
+        }
+
+        // (2) Non-repeated field followed by oneOf field (e.g., profession.sport)
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
+            List<CorfuStoreEntry<UuidMsg, ExampleSchemas.SportsProfessional, ManagedMetadata>> entries = readWriteTxn
+                    .getByIndex(tableName, "baseballPlayers", null);
+            assertThat(entries.size()).isEqualTo(2);
+            readWriteTxn.commit();
+        }
+
+        // (3) Repeated field followed by repeated field (e.g., training.exercises)
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
+            List<CorfuStoreEntry<UuidMsg, ExampleSchemas.SportsProfessional, ManagedMetadata>> entries = readWriteTxn
+                    .getByIndex(tableName, "exercises", null);
+            assertThat(entries.size()).isEqualTo(2);
+            readWriteTxn.commit();
+        }
+    }
+
     // ****** Utility Functions *******
 
     private UuidMsg getUuid() {
@@ -1465,7 +1562,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
         UuidMsg key = UuidMsg.newBuilder()
                 .setMsb(id.getMostSignificantBits()).setLsb(id.getLeastSignificantBits())
                 .build();
-        try (ManagedTxnContext txn = shimStore.txn(namespace)) {
+        try (ManagedTxnContext txn = shimStore.tx(namespace)) {
             txn.putRecord(tableName, key, adult,
                     ManagedMetadata.newBuilder().setCreateUser("user_UT").build());
             txn.commit();
@@ -1477,7 +1574,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
     private void verifySecondaryIndex(CorfuStoreShim shimStore, String someNamespace, String tableName,
                                       Map<UuidMsg, Adult> adults, List<String> adults45y, long ageAdult,
                                       long ageChild, List<UuidMsg> adultsId) {
-        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
 
             // Verify index by age for a known value
             List<CorfuStoreEntry<UuidMsg, ExampleSchemas.Adult, ManagedMetadata>> entries = readWriteTxn

@@ -38,7 +38,6 @@ import org.corfudb.util.CFUtils;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
-import org.corfudb.util.UuidUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1088,7 +1087,7 @@ public class CorfuRuntime {
         if (clusterId == null) {
             clusterId = layout.getClusterId();
             if (clusterId != null) {
-                log.info("Connected to new cluster {}", UuidUtils.asBase64(clusterId));
+                log.info("Connected to new cluster {}", clusterId);
             }
         } else if (!clusterId.equals(layout.getClusterId())) {
             // We connected but got a cluster id we didn't expect.

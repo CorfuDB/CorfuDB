@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.Optional;
+import java.util.TreeSet;
 import java.util.UUID;
 
 /**
@@ -109,11 +110,13 @@ public class CorfuStore {
                              @Nullable final Class<M> mClass,
                              @Nonnull final TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+        long startTime = System.currentTimeMillis();
         Optional<Timer.Sample> sample = MeterRegistryProvider.getInstance().map(Timer::start);
         Table table =
                 runtime.getTableRegistry().openTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
         corfuStoreMetrics.recordTableCount();
         table.getMetrics().recordTableOpenTime(sample);
+        log.info("openTable {}${} took {}ms", namespace, tableName, (System.currentTimeMillis() - startTime));
         return table;
     }
 
@@ -237,8 +240,9 @@ public class CorfuStore {
         int numBatches = 0;
 
         if (streamAddressSpace.size() != 0) {
-            NavigableSet<Long> addresses = streamAddressSpace.copyAddressesToSet(Address.MAX).descendingSet();
-            Iterable<List<Long>> batches = Iterables.partition(addresses,
+            NavigableSet<Long> addresses = new TreeSet<>();
+            streamAddressSpace.forEachUpTo(Address.MAX, addresses::add);
+            Iterable<List<Long>> batches = Iterables.partition(addresses.descendingSet(),
                     runtime.getParameters().getHighestSequenceNumberBatchSize());
 
             for (List<Long> batch : batches) {
@@ -261,9 +265,9 @@ public class CorfuStore {
         corfuStoreMetrics.recordBatchReads(numBatches);
         corfuStoreMetrics.recordNumberReads(numBatches * runtime.getParameters().getHighestSequenceNumberBatchSize());
         corfuStoreMetrics.recordHighestSequenceNumberDuration(startTime);
-        log.debug("Stream[{}${}][{}] no DATA entry found. Highest sequence number corresponds to trim mark={}",
-                namespace, tableName, Utils.toReadableId(streamId), streamAddressSpace.getTrimMark());
-        return streamAddressSpace.getTrimMark();
+        log.debug("Stream[{}${}][{}] no DATA entry found. Returning -1.",
+                namespace, tableName, Utils.toReadableId(streamId));
+        return -1;
     }
 
     /**

@@ -90,7 +90,7 @@
         </dependency>
         <dependency>
             <groupId>org.corfudb</groupId>
-            <artifactId>annotationProcessor</artifactId>
+            <artifactId>annotation-processor</artifactId>
             <version>${project.version}</version>
         </dependency>
 
@@ -140,15 +140,15 @@
             <artifactId>rocksdbjni</artifactId>
             <version>6.8.1</version>
         </dependency>
-        <dependency>
-            <groupId>org.roaringbitmap</groupId>
-            <artifactId>RoaringBitmap</artifactId>
-            <version>0.8.13</version>
-        </dependency>
         <!-- https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java -->
         <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
+            <version>3.6.1</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java-util</artifactId>
             <version>3.6.1</version>
         </dependency>
         <!--grpc dependencies-->

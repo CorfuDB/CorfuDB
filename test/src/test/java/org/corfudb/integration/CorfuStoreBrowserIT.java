@@ -1,5 +1,7 @@
 package org.corfudb.integration;
 
+import com.google.protobuf.Any;
+import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.UnknownFieldSet;
 
 import java.io.IOException;
@@ -120,14 +122,15 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         tx.commit();
         runtime.shutdown();
 
+        final int one = 1;
         runtime = createRuntime(singleNodeEndpoint);
         CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
         // Invoke listTables and verify table count
-        Assert.assertEquals(browser.listTables(namespace), 1);
+        Assert.assertEquals(browser.listTables(namespace), one);
 
         // Invoke the browser and go through each item
         CorfuTable table = browser.getTable(namespace, tableName);
-        Assert.assertEquals(browser.printTable(namespace, tableName), 1);
+        Assert.assertEquals(browser.printTable(namespace, tableName), one);
         for(Object obj : table.values()) {
             CorfuDynamicRecord record = (CorfuDynamicRecord)obj;
             Assert.assertEquals(
@@ -136,9 +139,9 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         }
 
         // Invoke tableInfo and verify size
-        Assert.assertEquals(browser.printTableInfo(namespace, tableName), 1);
+        Assert.assertEquals(browser.printTableInfo(namespace, tableName), one);
         // Invoke dropTable and verify size
-        Assert.assertEquals(browser.dropTable(namespace, tableName), 1);
+        Assert.assertEquals(browser.dropTable(namespace, tableName), one);
         // Invoke tableInfo and verify size
         Assert.assertEquals(browser.printTableInfo(namespace, tableName), 0);
         // TODO: Remove this once serializers move into the runtime
@@ -262,6 +265,32 @@ public class CorfuStoreBrowserIT extends AbstractIT {
     }
 
     /**
+     * Test Corfu Browser protobuf descriptor table
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testListAllProtos() throws Exception {
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost,
+                corfuStringNodePort);
+
+        final String namespace = "UT-namespace";
+        final String tableBaseName = "table";
+
+        final int expectedFiles = 5;
+        populateRegistryTable(namespace, tableBaseName);
+
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
+        assertThat(browser.printAllProtoDescriptors()).isEqualTo(expectedFiles);
+
+        runtime.shutdown();
+        Serializers.clearCustomSerializers();
+
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    /**
      * Create a table and add nested protobufs as data to it.  Verify that the
      * browser tool is able to read the contents accurately.
      * @throws IOException
@@ -381,7 +410,9 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         runtime = createRuntime(singleNodeEndpoint);
         CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
         // Invoke listTables and verify table count
-        Assert.assertEquals(2, browser.printTableInfo(TableRegistry.CORFU_SYSTEM_NAMESPACE,
+        final int three = 3;
+        Assert.assertEquals(three,
+            browser.printTableInfo(TableRegistry.CORFU_SYSTEM_NAMESPACE,
         TableRegistry.REGISTRY_TABLE_NAME));
         Assert.assertEquals(1, browser.printTableInfo(namespace, tableName));
         // Todo: Remove this once serializers move into the runtime
@@ -452,6 +483,88 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         Assert.assertEquals(1, browser.printTable(namespace, tableName));
 
         // Todo: Remove this once serializers move into the runtime
+        Serializers.clearCustomSerializers();
+        runtime.shutdown();
+    }
+
+    @Test
+    public void editorTest() throws IOException, NoSuchMethodException,
+        IllegalAccessException, InvocationTargetException {
+        final String namespace = "namespace";
+        final String tableName = "table";
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost,
+            corfuStringNodePort);
+
+        // Start a Corfu runtime
+        runtime = createRuntime(singleNodeEndpoint);
+
+        CorfuStore store = new CorfuStore(runtime);
+
+        final Table<SampleSchema.Uuid, SampleSchema.Uuid, SampleSchema.Uuid> table1 = store.openTable(
+            namespace,
+            tableName,
+            SampleSchema.Uuid.class,
+            SampleSchema.Uuid.class,
+            SampleSchema.Uuid.class,
+            TableOptions.builder().build());
+
+        final long keyUuid = 1L;
+        final long valueUuid = 3L;
+        final long metadataUuid = 5L;
+
+        SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder()
+            .setMsb(keyUuid)
+            .setLsb(keyUuid)
+            .build();
+        SampleSchema.Uuid uuidVal = SampleSchema.Uuid.newBuilder()
+            .setMsb(valueUuid)
+            .setLsb(valueUuid)
+            .build();
+        SampleSchema.Uuid metadata = SampleSchema.Uuid.newBuilder()
+            .setMsb(metadataUuid)
+            .setLsb(metadataUuid)
+            .build();
+        TxnContext tx = store.txn(namespace);
+        tx.putRecord(table1, uuidKey, uuidVal, metadata);
+        tx.commit();
+        runtime.shutdown();
+
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
+        // Invoke listTables and verify table count
+        Assert.assertEquals(browser.listTables(namespace), 1);
+
+        // Edit the record changing value from 3L -> 5L
+        String keyString = "{\"msb\": \"1\", \"lsb\": \"1\"}";
+        String newValString = "{\"msb\": \"5\", \"lsb\": \"5\"}";
+        final long newVal = 5L;
+        SampleSchema.Uuid newValUuid = SampleSchema.Uuid.newBuilder()
+            .setMsb(newVal)
+            .setLsb(newVal)
+            .build();
+
+        CorfuDynamicRecord editedRecord = browser.editRecord(namespace,
+            tableName, keyString, newValString);
+        Assert.assertNotNull(editedRecord);
+
+        DynamicMessage dynamicValMessage = DynamicMessage.newBuilder(newValUuid)
+            .build();
+        String valTypeUrl = Any.pack(newValUuid).getTypeUrl();
+        DynamicMessage dynamicMetadataMessage = DynamicMessage.newBuilder(metadata)
+            .build();
+        String metadataTypeUrl = Any.pack(metadata).getTypeUrl();
+        CorfuDynamicRecord expectedRecord = new CorfuDynamicRecord(valTypeUrl,
+            dynamicValMessage, metadataTypeUrl, dynamicMetadataMessage);
+
+        Assert.assertEquals(expectedRecord, editedRecord);
+
+        // Try to edit a record corresponding to a non-existent key and
+        // verify it is a no-op
+        keyString = "{\"msb\": \"2\", \"lsb\": \"2\"}";
+        Assert.assertNull(browser.editRecord(namespace, tableName, keyString,
+            newValString));
+        
+        // TODO: Remove this once serializers move into the runtime
         Serializers.clearCustomSerializers();
         runtime.shutdown();
     }

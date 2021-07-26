@@ -63,6 +63,7 @@ import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getTrimLogRespo
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getTrimMarkResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getUpdateCommittedTailResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getWriteLogResponseMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getDefaultProtocolVersionMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
@@ -468,7 +469,11 @@ public class LogUnitServer extends AbstractServer {
     @Override
     public void sealServerWithEpoch(long epoch) {
         RequestMsg batchProcessorReq = getRequestMsg(
-                HeaderMsg.newBuilder().setEpoch(epoch).setPriority(PriorityLevel.HIGH).build(),
+                HeaderMsg.newBuilder()
+                        .setVersion(getDefaultProtocolVersionMsg())
+                        .setEpoch(epoch)
+                        .setPriority(PriorityLevel.HIGH)
+                        .build(),
                 getSealRequestMsg(epoch)
         );
 
