@@ -575,7 +575,7 @@ StreamLogFilesTest extends AbstractCorfuTest {
      */
     @Test
     public void testResetStreamLog() {
-        String logDir = getContext().getConfiguration().getLogDir();
+
         StreamLog log = new StreamLogFiles(getContext(), false);
 
         final long numSegments = 3;
@@ -586,6 +586,7 @@ StreamLogFilesTest extends AbstractCorfuTest {
         log.prefixTrim(RECORDS_PER_LOG_FILE * filesToBeTrimmed);
         log.compact();
 
+        String logDir = getContext().getConfiguration().getLogDir();
         File logsDir = new File(logDir);
 
         final int expectedFilesBeforeReset = (int) (numSegments - filesToBeTrimmed);

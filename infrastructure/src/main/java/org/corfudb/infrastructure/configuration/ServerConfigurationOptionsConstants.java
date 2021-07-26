@@ -5,10 +5,7 @@ package org.corfudb.infrastructure.configuration;
  *
  * <p>Created by nvaishampayan517 on 07/26/21.
  */
-public final class ServerConfigurationOptions {
-    // Prevent class from being instantiated
-    private ServerConfigurationOptions() {}
-
+public final class ServerConfigurationOptionsConstants {
     // Server general parameters
     public static final String SERVER_DIR = "log-path";
     public static final String SINGLE_MODE = "single-mode";
@@ -61,4 +58,7 @@ public final class ServerConfigurationOptions {
     public static final String LOCK_LEASE_DURATION = "lock-lease";
     public static final String THREAD_PREFIX = "thread-prefix";
     public static final String BIND_TO_ALL_INTERFACES = "bindToAllInterfaces";
+
+    // Prevent class from being instantiated
+    private ServerConfigurationOptionsConstants() {}
 }

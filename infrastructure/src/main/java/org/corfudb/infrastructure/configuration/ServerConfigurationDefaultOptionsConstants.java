@@ -5,10 +5,7 @@ package org.corfudb.infrastructure.configuration;
  *
  * <p>Created by nvaishampayan517 on 07/26/21.
  */
-public final class ServerConfigurationDefaultOptions {
-    // Prevent class from being instantiated
-    private ServerConfigurationDefaultOptions() {}
-
+public final class ServerConfigurationDefaultOptionsConstants {
     //Default Configuration Values
     public static final String DEFAULT_LOG_UNIT_CACHE_RATIO = "0.5";
     public static final String DEFAULT_LOG_LEVEL = "INFO";
@@ -27,4 +24,7 @@ public final class ServerConfigurationDefaultOptions {
     public static final String DEFAULT_TLS_PROTOCOLS = "TLSv1.1,TLSv1.2";
     public static final String DEFAULT_THREAD_PREFIX = "";
     public static final String DEFAULT_METADATA_RETENTION = "1000";
+
+    // Prevent class from being instantiated
+    private ServerConfigurationDefaultOptionsConstants() {}
 }
