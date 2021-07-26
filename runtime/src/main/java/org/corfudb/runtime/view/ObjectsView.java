@@ -4,6 +4,7 @@ import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
@@ -23,6 +24,7 @@ import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 
 import javax.annotation.Nonnull;
+import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -148,6 +150,7 @@ public class ObjectsView extends AbstractView {
 
         // Continue with ending the transaction if the context is not null
         long totalTime = System.currentTimeMillis() - context.getStartTime();
+        MicroMeterUtils.time(Duration.ofMillis(totalTime), "txn.duration");
         log.trace("TXEnd[{}] time={} ms", context, totalTime);
 
         try {
