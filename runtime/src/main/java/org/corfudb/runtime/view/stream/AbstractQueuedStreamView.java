@@ -645,8 +645,7 @@ public abstract class AbstractQueuedStreamView extends
      * {@inheritDoc}
      */
     @Override
-    public void close() {
-    }
+    public void close() {}
 
     // Keeps the latest valid checkpoint (based on the snapshot it covers)
     private StreamCheckpoint latestValidCheckpoint = new StreamCheckpoint();
