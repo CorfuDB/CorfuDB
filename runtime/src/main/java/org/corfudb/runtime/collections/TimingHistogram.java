@@ -14,11 +14,17 @@ import java.util.concurrent.TimeUnit;
  * created by hisundar 2020-09-20
  */
 public class TimingHistogram {
-    private final String tableName;
+    private final Optional<String> tableName;
     private final String metricsName;
+
     public TimingHistogram(String metricName, String tableName) {
         this.metricsName = metricName;
-        this.tableName = tableName;
+        this.tableName = Optional.of(tableName);
+    }
+
+    public TimingHistogram(String metricName) {
+        this.metricsName = metricName;
+        this.tableName = Optional.empty();
     }
 
     /**
@@ -27,7 +33,11 @@ public class TimingHistogram {
      * @param sample - A measurement sample to time.
      */
     public void update(Optional<Timer.Sample> sample) {
-        MicroMeterUtils.time(sample, this.metricsName, "table.name", this.tableName);
+        if (tableName.isPresent()) {
+            MicroMeterUtils.time(sample, this.metricsName, "table.name", this.tableName.get());
+        } else {
+            MicroMeterUtils.time(sample, this.metricsName);
+        }
     }
 
     /**
@@ -59,7 +69,8 @@ public class TimingHistogram {
         JsonObject jsonObject = new JsonObject();
 
         Optional<Timer> timer =
-                MicroMeterUtils.createOrGetTimer(this.metricsName, "table.name", this.tableName);
+                tableName.map(name -> MicroMeterUtils.createOrGetTimer(this.metricsName, "table.name", name))
+                        .orElseGet(() -> MicroMeterUtils.createOrGetTimer(this.metricsName));
 
         if (!timer.isPresent()) {
             return jsonObject;
