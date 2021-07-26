@@ -151,7 +151,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     public <R> R access(ICorfuSMRAccess<R, T> accessMethod,
                         Object[] conflictObject) {
         return MicroMeterUtils.time(() -> accessInner(accessMethod, conflictObject),
-                "vlo.read.timer", "streamId", streamID.toString());
+                "vlo.read.timer");
     }
 
     private <R> R accessInner(ICorfuSMRAccess<R, T> accessMethod,
@@ -205,7 +205,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
                           Object[] conflictObject, Object... args) {
         return MicroMeterUtils.time(
                 () -> logUpdateInner(smrUpdateFunction, keepUpcallResult, conflictObject, args),
-                "vlo.write.timer", "streamId", streamID.toString());
+                "vlo.write.timer");
     }
 
     private long logUpdateInner(String smrUpdateFunction, final boolean keepUpcallResult,
@@ -315,7 +315,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     @Override
     public <R> R TXExecute(Supplier<R> txFunction) {
         return MicroMeterUtils.time(() -> TXExecuteInner(txFunction),
-                "vlo.tx.timer", "streamId", streamID.toString());
+                "vlo.tx.timer");
     }
 
     @SuppressWarnings({"checkstyle:membername", "checkstyle:abbreviation"})

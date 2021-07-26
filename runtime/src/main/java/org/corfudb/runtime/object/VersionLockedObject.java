@@ -697,8 +697,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                                 throw new UnrecoverableCorfuError(e);
                             }
                         });
-        MicroMeterUtils.time(syncStreamRunnable, "vlo.sync.timer",
-                "streamId", getID().toString());
+        MicroMeterUtils.time(syncStreamRunnable, "vlo.sync.timer");
     }
 
     /**
