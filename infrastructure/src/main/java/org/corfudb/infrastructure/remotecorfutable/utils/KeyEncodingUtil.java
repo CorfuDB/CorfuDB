@@ -16,6 +16,7 @@ import java.nio.ByteBuffer;
  */
 public final class KeyEncodingUtil {
     //TODO: explore reusing byte buffer -> maybe have pool of ByteBuffers?
+    //TODO: possibly remove byte buffers entirely -> work only with loops and byte[]
     //prevent instantiation
     private KeyEncodingUtil() {}
 
