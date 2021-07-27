@@ -145,6 +145,13 @@ jobs:
         working-directory: ./tests
         run: ./gradlew clean test -Dtags=version-compatibility
 
+      - name: Upload compatibility test logs
+        uses: actions/upload-artifact@v2
+        with:
+          name: compatibility-test-logs
+          retention-days: 3
+          path: ./tests/build/logs
+
   injection_framework_test:
     # https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
     runs-on: ubuntu-18.04
