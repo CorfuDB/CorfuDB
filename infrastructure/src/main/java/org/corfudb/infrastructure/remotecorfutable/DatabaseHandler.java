@@ -130,7 +130,59 @@ public class DatabaseHandler implements AutoCloseable {
         }
     }
 
-    //TODO: implement default for starting at beginning
+    /**
+     * This function performs a cursor scan of the first 20 elemenmts of the database.
+     * @param streamID The stream backing the database to scan.
+     * @param timestamp The version of the table to view.
+     * @return A list of results from the scan.
+     * @throws RocksDBException An error occuring in iteration.
+     */
+    public List<byte[][]> scan(byte[] streamID, long timestamp) throws RocksDBException {
+        return scan(20,streamID, timestamp);
+    }
+
+    /**
+     * This function performs a cursor scan of the database from the start.
+     * @param numEntries The number of results requested.
+     * @param streamID The stream backing the database to scan.
+     * @param timestamp The version of the table to view.
+     * @return A list of results from the scan.
+     * @throws RocksDBException An error occuring in iteration.
+     */
+    public List<byte[][]> scan(int numEntries, byte[] streamID, long timestamp) throws RocksDBException {
+        ReadOptions iterOptions = new ReadOptions().setTotalOrderSeek(true);
+        RocksIterator iter = database.newIterator(columnFamilies.get(streamID), iterOptions);
+        iter.seekToFirst();
+        if (!iter.isValid()) {
+            try {
+                iter.status();
+            } catch (RocksDBException e) {
+                log.error("Error in RocksDB scan operation:", e);
+                throw e;
+            } finally {
+                iter.close();
+                iterOptions.close();
+            }
+            //otherwise, the database is empty
+            return new LinkedList<>();
+        }  else {
+            //begin at first value -> extract prefix and add timestamp to it
+            KeyEncodingUtil.VersionedKey first = KeyEncodingUtil.extractEncodedKey(iter.key());
+            byte[] startingKey = KeyEncodingUtil.constructDatabaseKey(first.getEncodedRemoteCorfuTableKey(),
+                    first.getEncodedKeySize(),timestamp);
+            iter.close();
+            iterOptions.close();
+            return scan(startingKey,numEntries,streamID);
+        }
+    }
+
+    /**
+     * This function performs a cursor scan of the database, returning 20 entries (if possible).
+     * @param encodedKeyBegin The starting point of the scan.
+     * @param streamID The stream backing the database to scan.
+     * @return A list of results from the scan.
+     * @throws RocksDBException An error occuring in iteration.
+     */
     public List<byte[][]> scan(byte[] encodedKeyBegin, byte[] streamID) throws RocksDBException {
         return scan(encodedKeyBegin, 20, streamID);
     }
@@ -144,7 +196,6 @@ public class DatabaseHandler implements AutoCloseable {
      * @throws RocksDBException An error occuring in iteration.
      */
     public List<byte[][]> scan(byte[] encodedKeyBegin, int numEntries, byte[] streamID) throws RocksDBException {
-        //TODO: add null check for key to start at beginning of database
         KeyEncodingUtil.VersionedKey start = KeyEncodingUtil.extractEncodedKey(encodedKeyBegin);
         long timestamp = start.getTimestamp();
         ReadOptions iterOptions = new ReadOptions().setTotalOrderSeek(true);
@@ -185,6 +236,8 @@ public class DatabaseHandler implements AutoCloseable {
             }
             //Otherwise, we have simply hit the end of the database
         }
+        iter.close();
+        iterOptions.close();
         return results;
     }
 
