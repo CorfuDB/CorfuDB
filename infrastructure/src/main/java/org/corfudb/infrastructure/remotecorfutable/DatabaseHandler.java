@@ -248,6 +248,24 @@ public class DatabaseHandler implements AutoCloseable {
     }
 
     /**
+     * This function provides an interface to check if a key is present in the table.
+     * Equivalent to (get(encodedKey, streamID) != null)
+     * @param encodedKey The key to check.
+     * @param streamID The stream backing the table to check.
+     * @return True, if a non-null value exists in the table for the given key and timestamp.
+     * @throws RocksDBException An error occuring in the search.
+     */
+    public boolean containsKey(byte[] encodedKey, byte[] streamID) throws RocksDBException {
+        try {
+            byte[] val = get(encodedKey, streamID);
+            return val != null;
+        } catch (RocksDBException e) {
+            log.error("Error in RocksDB containsKey operation:", e);
+            throw e;
+        }
+    }
+
+    /**
      * This function releases all resources held by C++ objects backing the RocksDB objects.
      */
     @Override
