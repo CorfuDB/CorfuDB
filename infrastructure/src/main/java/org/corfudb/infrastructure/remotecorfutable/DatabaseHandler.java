@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure.remotecorfutable;
 
+import com.google.common.primitives.Bytes;
+import com.google.common.primitives.Longs;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.remotecorfutable.utils.KeyEncodingUtil;
@@ -12,6 +14,9 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadPoolExecutor;
+
+import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.LATEST_VERSION_READ;
+import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.METADATA_COLUMN_SUFFIX;
 
 /**
  * The DatabaseHandler provides an interface for the RocksDB instance storing data for server side
@@ -82,9 +87,8 @@ public class DatabaseHandler implements AutoCloseable {
             //TODO: add read from log stream check
             returnVal = null;
         } else {
-            byte[] currKey = iter.key();
-            //TODO: replace with a check to see if prefixes of both values are equivalent
-            if (true) {
+            if (Arrays.equals(KeyEncodingUtil.extractEncodedKey(iter.key()),
+                    KeyEncodingUtil.extractEncodedKey(encodedKey))) {
                 //This works due to latest version first comparator
                 returnVal = iter.value();
             } else {
@@ -107,6 +111,9 @@ public class DatabaseHandler implements AutoCloseable {
     public void update(byte[] encodedKey, byte[] value, byte[] streamID) throws RocksDBException {
         try {
             database.put(columnFamilies.get(streamID), encodedKey, value);
+            byte[] metadataColumn = Bytes.concat(streamID,METADATA_COLUMN_SUFFIX);
+            database.put(columnFamilies.get(metadataColumn), LATEST_VERSION_READ,
+                    KeyEncodingUtil.extractTimestampAsByteArray(encodedKey));
         } catch (RocksDBException e) {
             log.error("Error in RocksDB put operation:", e);
             throw e;
@@ -167,9 +174,8 @@ public class DatabaseHandler implements AutoCloseable {
             return new LinkedList<>();
         }  else {
             //begin at first value -> extract prefix and add timestamp to it
-            KeyEncodingUtil.VersionedKey first = KeyEncodingUtil.extractEncodedKey(iter.key());
-            byte[] startingKey = KeyEncodingUtil.constructDatabaseKey(first.getEncodedRemoteCorfuTableKey(),
-                    first.getEncodedKeySize(),timestamp);
+            byte[] startingPrefix = KeyEncodingUtil.extractEncodedKey(iter.key());
+            byte[] startingKey = KeyEncodingUtil.constructDatabaseKey(startingPrefix, timestamp);
             iter.close();
             iterOptions.close();
             return scan(startingKey,numEntries,streamID);
@@ -196,7 +202,7 @@ public class DatabaseHandler implements AutoCloseable {
      * @throws RocksDBException An error occuring in iteration.
      */
     public List<byte[][]> scan(byte[] encodedKeyBegin, int numEntries, byte[] streamID) throws RocksDBException {
-        KeyEncodingUtil.VersionedKey start = KeyEncodingUtil.extractEncodedKey(encodedKeyBegin);
+        KeyEncodingUtil.VersionedKey start = KeyEncodingUtil.extractVersionedKey(encodedKeyBegin);
         long timestamp = start.getTimestamp();
         ReadOptions iterOptions = new ReadOptions().setTotalOrderSeek(true);
         RocksIterator iter = database.newIterator(columnFamilies.get(streamID), iterOptions);
@@ -207,7 +213,7 @@ public class DatabaseHandler implements AutoCloseable {
         List<byte[][]> results = new LinkedList<>();
         int elements = 0;
         while (iter.isValid()) {
-            currPrefix = KeyEncodingUtil.extractEncodedKey(iter.key()).getEncodedRemoteCorfuTableKey();
+            currPrefix = KeyEncodingUtil.extractEncodedKey(iter.key());
             if (Arrays.equals(currPrefix, prevPrefix)) {
                 if (!encounteredPrefix) {
                     results.add(new byte[][]{iter.key(), iter.value()});
@@ -216,7 +222,7 @@ public class DatabaseHandler implements AutoCloseable {
                 }
                 iter.next();
             } else {
-                byte[] nextKey = KeyEncodingUtil.constructDatabaseKey(currPrefix, currPrefix.length, timestamp);
+                byte[] nextKey = KeyEncodingUtil.constructDatabaseKey(currPrefix, timestamp);
                 iter.seek(nextKey);
                 prevPrefix = currPrefix;
             }
