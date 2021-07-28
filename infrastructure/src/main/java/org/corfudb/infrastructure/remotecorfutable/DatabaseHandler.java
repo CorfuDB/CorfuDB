@@ -5,7 +5,9 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.remotecorfutable.utils.KeyEncodingUtil;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.rocksdb.ColumnFamilyDescriptor;
 import org.rocksdb.ColumnFamilyHandle;
+import org.rocksdb.ColumnFamilyOptions;
 import org.rocksdb.Options;
 import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDB;
@@ -18,9 +20,11 @@ import java.util.Hashtable;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.LATEST_VERSION_READ;
+import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.METADATA_COLUMN_CACHE_SIZE;
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.METADATA_COLUMN_SUFFIX;
 
 /**
@@ -60,7 +64,53 @@ public class DatabaseHandler implements AutoCloseable {
         this.threadPoolExecutor = threadPoolExecutor;
 
         //Must be initialized as an empty map and updated through the add table function
-        this.columnFamilies = new Hashtable<>();
+        this.columnFamilies = new ConcurrentHashMap<>();
+    }
+
+    public void addTable(byte[] streamID) throws RocksDBException {
+        ColumnFamilyOptions tableOptions = new ColumnFamilyOptions();
+        tableOptions.optimizeUniversalStyleCompaction();
+        ColumnFamilyDescriptor tableDescriptor = new ColumnFamilyDescriptor(streamID, tableOptions);
+        ColumnFamilyHandle tableHandle;
+        try {
+            tableHandle = database.createColumnFamily(tableDescriptor);
+        } catch (RocksDBException e) {
+            log.error("Error in creating column family for table {}.", new String(streamID));
+            log.error("Cause of error: ", e);
+            throw e;
+        } finally {
+            tableOptions.close();
+        }
+
+        ColumnFamilyOptions metadataOptions = new ColumnFamilyOptions();
+        metadataOptions.optimizeForPointLookup(METADATA_COLUMN_CACHE_SIZE);
+        ColumnFamilyDescriptor metadataDescriptor = new ColumnFamilyDescriptor(
+                Bytes.concat(streamID, METADATA_COLUMN_SUFFIX), metadataOptions);
+
+        ColumnFamilyHandle metadataHandle;
+        try {
+             metadataHandle = database.createColumnFamily(metadataDescriptor);
+        } catch (RocksDBException e) {
+            log.error("Error in creating metadata column family for table {}.", new String(streamID));
+            log.error("Cause of error: ", e);
+            throw e;
+        } finally {
+            tableHandle.close();
+            try {
+                database.dropColumnFamily(tableHandle);
+            } catch (RocksDBException e) {
+                log.error("Error in dropping column family for table {}.", new String(streamID));
+                log.error("Cause of error: ", e);
+                throw e;
+            } finally {
+                metadataOptions.close();
+            }
+        }
+
+        synchronized (columnFamilies) {
+         columnFamilies.put(streamID, tableHandle);
+         columnFamilies.put(metadataDescriptor.getName(), metadataHandle);
+        }
     }
     //TODO: add aysnc API
 

@@ -14,6 +14,7 @@ public final class DatabaseConstants {
     public static final byte[] SIZE_KEY = "size".getBytes(METADATA_CHARSET);
     public static final byte[] LATEST_VERSION_READ = "latest-version".getBytes(METADATA_CHARSET);
 
+    public static final long METADATA_COLUMN_CACHE_SIZE = 64;
     //prevent instantiation
     private DatabaseConstants() {}
 }
