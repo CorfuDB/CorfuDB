@@ -62,7 +62,7 @@ public class DatabaseHandler implements AutoCloseable {
         //Must be initialized as an empty map and updated through the add table function
         this.columnFamilies = new Hashtable<>();
     }
-    //TODO: make all core functionality private and expose methods that perform the operations through the thread pool
+    //TODO: add aysnc API
 
     /**
      * This function provides an interface to read a key from the database.
@@ -71,10 +71,10 @@ public class DatabaseHandler implements AutoCloseable {
      * @return A byte[] containing the value mapped to the key, or null if the key is associated to a null value.
      * @throws RocksDBException An error raised in scan.
      */
-    public byte[] get(byte[] encodedKey, byte[] streamID) throws RocksDBException {
+    public byte[] get(byte[] encodedKey, byte[] streamID) throws RocksDBException, DatabaseOperationException {
         final byte[] returnVal;
         if (!columnFamilies.containsKey(streamID)) {
-            //TODO: create explicit stream read up to latest timestamp
+            throw new DatabaseOperationException("GET", "Invalid stream ID");
         }
         RocksIterator iter = database.newIterator(columnFamilies.get(streamID));
         iter.seek(encodedKey);
@@ -113,7 +113,10 @@ public class DatabaseHandler implements AutoCloseable {
      * @param streamID The stream backing the database that the key will be added to.
      * @throws RocksDBException A database error on put.
      */
-    public void update(byte[] encodedKey, byte[] value, byte[] streamID) throws RocksDBException {
+    public void update(byte[] encodedKey, byte[] value, byte[] streamID) throws RocksDBException, DatabaseOperationException {
+        if (!columnFamilies.containsKey(streamID)) {
+            throw new DatabaseOperationException("PUT", "Invalid stream ID");
+        }
         try {
             database.put(columnFamilies.get(streamID), encodedKey, value);
             byte[] metadataColumn = Bytes.concat(streamID,METADATA_COLUMN_SUFFIX);
@@ -133,7 +136,10 @@ public class DatabaseHandler implements AutoCloseable {
      * @param streamID The stream backing the database from which the keys are deleted.
      * @throws RocksDBException A database error on delete.
      */
-    public void delete(byte[] encodedKeyBegin, byte[] encodedKeyEnd, byte[] streamID) throws RocksDBException {
+    public void delete(byte[] encodedKeyBegin, byte[] encodedKeyEnd, byte[] streamID) throws RocksDBException, DatabaseOperationException {
+        if (!columnFamilies.containsKey(streamID)) {
+            throw new DatabaseOperationException("DELETE", "Invalid stream ID");
+        }
         try {
             database.deleteRange(columnFamilies.get(streamID), encodedKeyBegin, encodedKeyEnd);
         } catch (RocksDBException e) {
@@ -149,7 +155,7 @@ public class DatabaseHandler implements AutoCloseable {
      * @return A list of results from the scan.
      * @throws RocksDBException An error occuring in iteration.
      */
-    public List<byte[][]> scan(byte[] streamID, long timestamp) throws RocksDBException {
+    public List<byte[][]> scan(byte[] streamID, long timestamp) throws RocksDBException, DatabaseOperationException {
         return scan(20,streamID, timestamp);
     }
 
@@ -161,7 +167,7 @@ public class DatabaseHandler implements AutoCloseable {
      * @return A list of results from the scan.
      * @throws RocksDBException An error occuring in iteration.
      */
-    public List<byte[][]> scan(int numEntries, byte[] streamID, long timestamp) throws RocksDBException {
+    public List<byte[][]> scan(int numEntries, byte[] streamID, long timestamp) throws RocksDBException, DatabaseOperationException {
         ReadOptions iterOptions = new ReadOptions().setTotalOrderSeek(true);
         RocksIterator iter = database.newIterator(columnFamilies.get(streamID), iterOptions);
         iter.seekToFirst();
@@ -194,7 +200,7 @@ public class DatabaseHandler implements AutoCloseable {
      * @return A list of results from the scan.
      * @throws RocksDBException An error occuring in iteration.
      */
-    public List<byte[][]> scan(byte[] encodedKeyBegin, byte[] streamID) throws RocksDBException {
+    public List<byte[][]> scan(byte[] encodedKeyBegin, byte[] streamID) throws RocksDBException, DatabaseOperationException {
         return scan(encodedKeyBegin, 20, streamID);
     }
 
@@ -206,12 +212,15 @@ public class DatabaseHandler implements AutoCloseable {
      * @return A list of results from the scan.
      * @throws RocksDBException An error occuring in iteration.
      */
-    public List<byte[][]> scan(byte[] encodedKeyBegin, int numEntries, byte[] streamID) throws RocksDBException {
+    public List<byte[][]> scan(byte[] encodedKeyBegin, int numEntries, byte[] streamID) throws RocksDBException, DatabaseOperationException {
         //TODO: address double counting issue -> need to skip first value when restarting from previous scan
         return scanInternal(encodedKeyBegin, numEntries, streamID, true);
     }
 
-    private List<byte[][]> scanInternal(byte[] encodedKeyBegin, int numEntries, byte[] streamID, boolean skipFirst) throws RocksDBException {
+    private List<byte[][]> scanInternal(byte[] encodedKeyBegin, int numEntries, byte[] streamID, boolean skipFirst) throws RocksDBException, DatabaseOperationException {
+        if (!columnFamilies.containsKey(streamID)) {
+            throw new DatabaseOperationException("SCAN", "Invalid stream ID");
+        }
         KeyEncodingUtil.VersionedKey start = KeyEncodingUtil.extractVersionedKey(encodedKeyBegin);
         long timestamp = start.getTimestamp();
         ReadOptions iterOptions = new ReadOptions().setTotalOrderSeek(true);
@@ -271,11 +280,11 @@ public class DatabaseHandler implements AutoCloseable {
      * @return True, if a non-null value exists in the table for the given key and timestamp.
      * @throws RocksDBException An error occuring in the search.
      */
-    public boolean containsKey(byte[] encodedKey, byte[] streamID) throws RocksDBException {
+    public boolean containsKey(byte[] encodedKey, byte[] streamID) throws RocksDBException, DatabaseOperationException {
         try {
             byte[] val = get(encodedKey, streamID);
             return val != null;
-        } catch (RocksDBException e) {
+        } catch (RocksDBException | DatabaseOperationException e) {
             log.error("Error in RocksDB containsKey operation:", e);
             throw e;
         }
@@ -290,7 +299,7 @@ public class DatabaseHandler implements AutoCloseable {
      * @return True, if the given value exists in the table.
      * @throws RocksDBException An error occuring in the search.
      */
-    public boolean containsValue(byte[] encodedValue, byte[] streamID, long timestamp, int scanSize) throws RocksDBException {
+    public boolean containsValue(byte[] encodedValue, byte[] streamID, long timestamp, int scanSize) throws RocksDBException, DatabaseOperationException {
         boolean first = true;
         byte[] lastKey = null;
         List<byte[][]> scannedEntries;
@@ -313,7 +322,7 @@ public class DatabaseHandler implements AutoCloseable {
     }
 
     //TODO: when writing async versions of these methods, count needs to be incremented atomically
-    public int size(byte[] streamID, long timestamp, int scanSize) throws RocksDBException {
+    public int size(byte[] streamID, long timestamp, int scanSize) throws RocksDBException, DatabaseOperationException {
         boolean first = true;
         byte[] lastKey = null;
         int count = 0;
