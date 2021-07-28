@@ -143,7 +143,7 @@ public class TableMetrics {
         this.numTxnAborts = registryProvider.map(registry ->
                 registry.counter("table.numTxnAborts", "tbl", fullTableName));
 
-        this.openTableTimes = new TimingHistogram("openTable");
+        this.openTableTimes = new TimingHistogram("openTable", fullTableName);
         this.writeOnlyTxnTimes = new TimingHistogram("writeTxn");
         this.readOnlyTxnTimes = new TimingHistogram("readTxn");
         this.readWriteTxnTimes = new TimingHistogram("readWriteTxn");

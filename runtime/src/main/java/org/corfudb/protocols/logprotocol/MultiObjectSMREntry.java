@@ -106,27 +106,16 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
             super.deserializeBuffer(b, rt);
             for (int i = 0; i < numStreams; i++) {
                 UUID streamId = new UUID(b.readLong(), b.readLong());
-                Optional<Timer.Sample> deserializeStreamSample = MicroMeterUtils.startTimer();
                 // The MultiObjectSMREntry payload is structure as follows:
                 // LogEntry Type | number of MultiSMREntry entries | MultiSMREntry id | serialized MultiSMREntry | ...
                 // Therefore we need to unpack the MultiSMREntry entries one-by-one
-                int multiSMRLen = 0;
-                try {
-                    int start = b.readerIndex();
-                    MultiSMREntry.seekToEnd(b);
-                    multiSMRLen = b.readerIndex() - start;
-                    b.readerIndex(start);
-                    byte[] streamUpdates = new byte[multiSMRLen];
-                    b.readBytes(streamUpdates);
-                    streamBuffers.put(streamId, streamUpdates);
-                } finally {
-                    MicroMeterUtils.time(deserializeStreamSample,
-                            METRIC_PREFIX + "." + "deserialize.stream",
-                            STREAM_ID, streamId.toString());
-                    MicroMeterUtils.measure(multiSMRLen,
-                            METRIC_PREFIX + "." + "deserialize.stream.size",
-                            STREAM_ID, streamId.toString());
-                }
+                int start = b.readerIndex();
+                MultiSMREntry.seekToEnd(b);
+                int multiSMRLen = b.readerIndex() - start;
+                b.readerIndex(start);
+                byte[] streamUpdates = new byte[multiSMRLen];
+                b.readBytes(streamUpdates);
+                streamBuffers.put(streamId, streamUpdates);
             }
         } finally {
             MicroMeterUtils.time(deserializeSample,
@@ -142,25 +131,11 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
         try {
             super.serialize(b);
             b.writeInt(streamUpdates.size());
-            streamUpdates.entrySet().stream()
+            streamUpdates.entrySet()
                     .forEach(x -> {
-                        int streamStart = b.writerIndex();
-                        Optional<Timer.Sample> serializeStreamSample = MicroMeterUtils.startTimer();
-                        try {
-                            b.writeLong(x.getKey().getMostSignificantBits());
-                            b.writeLong(x.getKey().getLeastSignificantBits());
-                            Serializers.CORFU.serialize(x.getValue(), b);
-                        } finally {
-                            MicroMeterUtils.time(serializeStreamSample,
-                                    METRIC_PREFIX + "." + "serialize.stream",
-                                    STREAM_ID, x.getKey().toString());
-                            MicroMeterUtils.measure(b.writerIndex() - streamStart,
-                                    METRIC_PREFIX + "." + "serialize.stream.size",
-                                    STREAM_ID, x.getKey().toString());
-                            MicroMeterUtils.measure(x.getValue().getUpdates().size(),
-                                    METRIC_PREFIX + "." + "serialize.stream.updates",
-                                    STREAM_ID, x.getKey().toString());
-                        }
+                        b.writeLong(x.getKey().getMostSignificantBits());
+                        b.writeLong(x.getKey().getLeastSignificantBits());
+                        Serializers.CORFU.serialize(x.getValue(), b);
                     });
         } finally {
             MicroMeterUtils.time(serializeSample,
@@ -188,7 +163,6 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
             if (!streamBuffers.containsKey(id)) {
                 return null;
             }
-
             // The stream exists and it needs to be deserialized
             Optional<Timer.Sample> deserializeStreamSample = MicroMeterUtils.startTimer();
             try {
