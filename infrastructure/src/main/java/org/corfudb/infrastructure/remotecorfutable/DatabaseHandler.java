@@ -1,15 +1,20 @@
 package org.corfudb.infrastructure.remotecorfutable;
 
 import com.google.common.primitives.Bytes;
-import com.google.common.primitives.Longs;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.remotecorfutable.utils.KeyEncodingUtil;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.rocksdb.*;
+import org.rocksdb.ColumnFamilyHandle;
+import org.rocksdb.Options;
+import org.rocksdb.ReadOptions;
+import org.rocksdb.RocksDB;
+import org.rocksdb.RocksDBException;
+import org.rocksdb.RocksIterator;
 
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.Hashtable;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -42,11 +47,9 @@ public class DatabaseHandler implements AutoCloseable {
      * @param dataPath The filepath for the database files.
      * @param options The configuration options to start the database.
      * @param threadPoolExecutor The thread pool to serve client requests.
-     * @param columnFamilies The map storing the internal ColumnFamilyHandles by the streamIDs they read from.
      */
     public DatabaseHandler(@NonNull Path dataPath, @NonNull Options options,
-                           @NonNull ThreadPoolExecutor threadPoolExecutor,
-                           @NonNull Map<byte[], ColumnFamilyHandle> columnFamilies) {
+                           @NonNull ThreadPoolExecutor threadPoolExecutor) {
         try {
             RocksDB.destroyDB(dataPath.toFile().getAbsolutePath(), options);
             this.database = RocksDB.open(options, dataPath.toFile().getAbsolutePath());
@@ -55,7 +58,9 @@ public class DatabaseHandler implements AutoCloseable {
         }
 
         this.threadPoolExecutor = threadPoolExecutor;
-        this.columnFamilies = columnFamilies;
+
+        //Must be initialized as an empty map and updated through the add table function
+        this.columnFamilies = new Hashtable<>();
     }
     //TODO: make all core functionality private and expose methods that perform the operations through the thread pool
 
@@ -178,7 +183,7 @@ public class DatabaseHandler implements AutoCloseable {
             byte[] startingKey = KeyEncodingUtil.constructDatabaseKey(startingPrefix, timestamp);
             iter.close();
             iterOptions.close();
-            return scan(startingKey,numEntries,streamID);
+            return scanInternal(startingKey,numEntries,streamID, false);
         }
     }
 
@@ -202,12 +207,17 @@ public class DatabaseHandler implements AutoCloseable {
      * @throws RocksDBException An error occuring in iteration.
      */
     public List<byte[][]> scan(byte[] encodedKeyBegin, int numEntries, byte[] streamID) throws RocksDBException {
+        //TODO: address double counting issue -> need to skip first value when restarting from previous scan
+        return scanInternal(encodedKeyBegin, numEntries, streamID, true);
+    }
+
+    private List<byte[][]> scanInternal(byte[] encodedKeyBegin, int numEntries, byte[] streamID, boolean skipFirst) throws RocksDBException {
         KeyEncodingUtil.VersionedKey start = KeyEncodingUtil.extractVersionedKey(encodedKeyBegin);
         long timestamp = start.getTimestamp();
         ReadOptions iterOptions = new ReadOptions().setTotalOrderSeek(true);
         RocksIterator iter = database.newIterator(columnFamilies.get(streamID), iterOptions);
         byte[] prevPrefix = start.getEncodedRemoteCorfuTableKey();
-        byte[] currPrefix = null;
+        byte[] currPrefix;
         boolean encounteredPrefix = false;
         iter.seek(encodedKeyBegin);
         List<byte[][]> results = new LinkedList<>();
@@ -216,8 +226,13 @@ public class DatabaseHandler implements AutoCloseable {
             currPrefix = KeyEncodingUtil.extractEncodedKey(iter.key());
             if (Arrays.equals(currPrefix, prevPrefix)) {
                 if (!encounteredPrefix) {
-                    results.add(new byte[][]{iter.key(), iter.value()});
-                    elements++;
+                    if (!skipFirst) {
+                        results.add(new byte[][]{iter.key(), iter.value()});
+                        elements++;
+
+                    } else {
+                        skipFirst = false;
+                    }
                     encounteredPrefix = true;
                 }
                 iter.next();
@@ -225,6 +240,7 @@ public class DatabaseHandler implements AutoCloseable {
                 byte[] nextKey = KeyEncodingUtil.constructDatabaseKey(currPrefix, timestamp);
                 iter.seek(nextKey);
                 prevPrefix = currPrefix;
+                encounteredPrefix = false;
             }
             if (elements >= numEntries) {
                 break;
@@ -263,6 +279,58 @@ public class DatabaseHandler implements AutoCloseable {
             log.error("Error in RocksDB containsKey operation:", e);
             throw e;
         }
+    }
+
+    /**
+     * This function provides an interface to check if a value is present in the table.
+     * @param encodedValue The value to check.
+     * @param streamID The stream backing the table to check.
+     * @param timestamp The timestamp of the check request.
+     * @param scanSize The size of each cursor scan to the database.
+     * @return True, if the given value exists in the table.
+     * @throws RocksDBException An error occuring in the search.
+     */
+    public boolean containsValue(byte[] encodedValue, byte[] streamID, long timestamp, int scanSize) throws RocksDBException {
+        boolean first = true;
+        byte[] lastKey = null;
+        List<byte[][]> scannedEntries;
+        do {
+            if (first) {
+                scannedEntries = scan(streamID, timestamp);
+                first = false;
+            } else {
+                scannedEntries = scan(lastKey,scanSize, streamID);
+            }
+
+            for (byte[][] scannedEntry : scannedEntries) {
+                if (Arrays.equals(scannedEntry[1], encodedValue)) {
+                    return true;
+                }
+            }
+            lastKey = scannedEntries.get(scannedEntries.size()-1)[0];
+        } while (scannedEntries.size() >= scanSize);
+        return false;
+    }
+
+    //TODO: when writing async versions of these methods, count needs to be incremented atomically
+    public int size(byte[] streamID, long timestamp, int scanSize) throws RocksDBException {
+        boolean first = true;
+        byte[] lastKey = null;
+        int count = 0;
+        List<byte[][]> scannedEntries;
+        do {
+            if (first) {
+                scannedEntries = scan(streamID, timestamp);
+                first = false;
+            } else {
+                scannedEntries = scan(lastKey,scanSize, streamID);
+            }
+
+            count += scannedEntries.size();
+
+            lastKey = scannedEntries.get(scannedEntries.size()-1)[0];
+        } while (scannedEntries.size() >= scanSize);
+        return count;
     }
 
     /**
