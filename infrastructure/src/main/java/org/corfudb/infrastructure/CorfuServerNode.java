@@ -98,16 +98,11 @@ public class CorfuServerNode implements AutoCloseable {
      * Start the Corfu Server by listening on the specified port.
      */
     public ChannelFuture start() {
-        String host = serverContext.getConfiguration().getHostAddress();
-        String interfaceToBind = serverContext.getConfiguration().getNetworkInterface();
-        if (interfaceToBind != null) {
-            host = NetworkUtils.getAddressFromInterfaceName(interfaceToBind);
-        }
         bindFuture = bindServer(serverContext.getWorkerGroup(),
                 this::configureBootstrapOptions,
                 serverContext,
                 router,
-                host,
+                serverContext.getConfiguration().getHostAddress(),
                 serverContext.getConfiguration().getServerPort());
 
         return bindFuture.syncUninterruptibly();
