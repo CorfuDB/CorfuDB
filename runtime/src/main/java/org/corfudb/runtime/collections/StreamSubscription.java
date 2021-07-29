@@ -127,8 +127,13 @@ public class StreamSubscription<K extends Message, V extends Message, M extends 
                     .stream()
                     .map(entry -> CorfuStreamEntry.fromSMREntry(entry, epoch))
                     .collect(Collectors.toList());
+
+            // Deduplicate entries per stream Id, ordering within a transaction is not guaranteed
+            Map<Message, CorfuStreamEntry> observedKeys = new HashMap<>();
+            entryList.forEach(entry -> observedKeys.put(entry.getKey(), entry));
+
             if (!entryList.isEmpty()) {
-                streamEntries.put(schema, entryList);
+                streamEntries.put(schema, observedKeys.values().stream().collect(Collectors.toList()));
             }
         });
 
