@@ -20,9 +20,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.DATABASE_CHARSET;
 import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -90,8 +89,6 @@ public class DatabaseHandlerTest {
         assertArrayEquals(expectedValue,readinVal);
     }
 
-    //TODO: test is failing, check reverse comparator in db
-    //ISSUE: Reverse comparator option is not affecting order of iteration
     @Test
     public void testVersionedGetFunctionality() throws RocksDBException, DatabaseOperationException {
         byte[] v1Val = "ver1val".getBytes(DATABASE_CHARSET);
@@ -118,6 +115,7 @@ public class DatabaseHandlerTest {
                         break;
                     case 1:
                         assertArrayEquals(readinVal,v1Val);
+                        break;
                     default:
                         assertNull(readinVal);
                 }
@@ -126,6 +124,27 @@ public class DatabaseHandlerTest {
             log.error("Error in test versioned GET: ", e);
             throw e;
         }
+    }
+
+    @Test
+    public void testStreamIDNotInDatabase() throws RocksDBException, DatabaseOperationException {
+        byte[] dummyVal = "dummy".getBytes(DATABASE_CHARSET);
+        assertThrows("Expected PUT to throw StreamID not found error",
+                DatabaseOperationException.class,() -> databaseHandler.update(key1,dummyVal,stream1));
+        assertThrows("Expected GET to throw StreamID not found error",
+                DatabaseOperationException.class,() -> databaseHandler.get(key1,stream1));
+        assertThrows("Expected DELETE to throw StreamID not found error",
+                DatabaseOperationException.class,() -> databaseHandler.delete(key1,dummyVal,stream1));
+        assertThrows("Expected PUT to throw StreamID not found error",
+                DatabaseOperationException.class,() -> databaseHandler.update(key1,dummyVal,stream1));
+        assertThrows("Expected SCAN to throw StreamID not found error",
+                DatabaseOperationException.class,() -> databaseHandler.scan(stream1,0L));
+        assertThrows("Expected CONTAINSKEY to throw StreamID not found error",
+                DatabaseOperationException.class,() -> databaseHandler.containsKey(key1,stream1));
+        assertThrows("Expected CONTAINSVALUE to throw StreamID not found error",
+                DatabaseOperationException.class,() -> databaseHandler.containsValue(dummyVal,stream1,0L,10));
+        assertThrows("Expected SIZE to throw StreamID not found error",
+                DatabaseOperationException.class,() -> databaseHandler.size(stream1,0L,10));
     }
 
     @Test

@@ -4,8 +4,10 @@ import com.google.errorprone.annotations.DoNotCall;
 import com.google.protobuf.ByteString;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.checkerframework.checker.index.qual.Positive;
 import org.corfudb.infrastructure.remotecorfutable.utils.KeyEncodingUtil;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.rocksdb.BuiltinComparator;
 import org.rocksdb.ColumnFamilyDescriptor;
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.ColumnFamilyOptions;
@@ -74,6 +76,7 @@ public class DatabaseHandler implements AutoCloseable {
         }
         ColumnFamilyOptions tableOptions = new ColumnFamilyOptions();
         tableOptions.optimizeUniversalStyleCompaction();
+        tableOptions.setComparator(BuiltinComparator.REVERSE_BYTEWISE_COMPARATOR);
         ColumnFamilyDescriptor tableDescriptor = new ColumnFamilyDescriptor(streamID.toByteArray(), tableOptions);
         ColumnFamilyHandle tableHandle;
         try {
@@ -219,6 +222,9 @@ public class DatabaseHandler implements AutoCloseable {
      * @throws RocksDBException An error occuring in iteration.
      */
     public List<byte[][]> scan(int numEntries, ByteString streamID, long timestamp) throws RocksDBException, DatabaseOperationException {
+        if (!columnFamilies.containsKey(streamID)) {
+            throw new DatabaseOperationException("SCAN", "Invalid stream ID");
+        }
         ReadOptions iterOptions = new ReadOptions().setTotalOrderSeek(true);
         RocksIterator iter = database.newIterator(columnFamilies.get(streamID), iterOptions);
         iter.seekToFirst();
@@ -263,7 +269,6 @@ public class DatabaseHandler implements AutoCloseable {
      * @throws RocksDBException An error occuring in iteration.
      */
     public List<byte[][]> scan(byte[] encodedKeyBegin, int numEntries, ByteString streamID) throws RocksDBException, DatabaseOperationException {
-        //TODO: address double counting issue -> need to skip first value when restarting from previous scan
         return scanInternal(encodedKeyBegin, numEntries, streamID, true);
     }
 
@@ -348,7 +353,7 @@ public class DatabaseHandler implements AutoCloseable {
      * @return True, if the given value exists in the table.
      * @throws RocksDBException An error occuring in the search.
      */
-    public boolean containsValue(byte[] encodedValue, ByteString streamID, long timestamp, int scanSize) throws RocksDBException, DatabaseOperationException {
+    public boolean containsValue(byte[] encodedValue, ByteString streamID, long timestamp, @Positive int scanSize) throws RocksDBException, DatabaseOperationException {
         boolean first = true;
         byte[] lastKey = null;
         List<byte[][]> scannedEntries;
@@ -371,7 +376,7 @@ public class DatabaseHandler implements AutoCloseable {
     }
 
     //TODO: when writing async versions of these methods, count needs to be incremented atomically
-    public int size(ByteString streamID, long timestamp, int scanSize) throws RocksDBException, DatabaseOperationException {
+    public int size(ByteString streamID, long timestamp, @Positive int scanSize) throws RocksDBException, DatabaseOperationException {
         boolean first = true;
         byte[] lastKey = null;
         int count = 0;
