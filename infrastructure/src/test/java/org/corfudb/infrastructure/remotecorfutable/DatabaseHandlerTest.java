@@ -14,13 +14,11 @@ import org.rocksdb.Options;
 import org.rocksdb.RocksDBException;
 
 import java.io.File;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ThreadPoolExecutor;
 
-import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.METADATA_CHARSET;
+import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.DATABASE_CHARSET;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -48,8 +46,8 @@ public class DatabaseHandlerTest {
     private ThreadPoolExecutor mThreadPoolExecutor;
 
     //constants
-    private final ByteString stream1 = ByteString.copyFrom("stream1", METADATA_CHARSET);
-    private final byte[] key1 = "key1".getBytes(METADATA_CHARSET);
+    private final ByteString stream1 = ByteString.copyFrom("stream1", DATABASE_CHARSET);
+    private final byte[] key1 = "key1".getBytes(DATABASE_CHARSET);
 
     /**
      * Mocks required objects and sets up database handler.
@@ -78,7 +76,7 @@ public class DatabaseHandlerTest {
 
     @Test
     public void testPutandGetBasicFunctionality() throws RocksDBException, DatabaseOperationException {
-        byte[] expectedValue = "ver0val".getBytes(METADATA_CHARSET);
+        byte[] expectedValue = "ver0val".getBytes(DATABASE_CHARSET);
         byte[] encodedKey = KeyEncodingUtil.constructDatabaseKey(key1,0L);
         byte[] readinVal;
         try {
@@ -93,11 +91,12 @@ public class DatabaseHandlerTest {
     }
 
     //TODO: test is failing, check reverse comparator in db
+    //ISSUE: Reverse comparator option is not affecting order of iteration
     @Test
     public void testVersionedGetFunctionality() throws RocksDBException, DatabaseOperationException {
-        byte[] v1Val = "ver1val".getBytes(METADATA_CHARSET);
-        byte[] v2Val = "ver2val".getBytes(METADATA_CHARSET);
-        byte[] v4Val = "ver1val".getBytes(METADATA_CHARSET);
+        byte[] v1Val = "ver1val".getBytes(DATABASE_CHARSET);
+        byte[] v2Val = "ver2val".getBytes(DATABASE_CHARSET);
+        byte[] v4Val = "ver1val".getBytes(DATABASE_CHARSET);
         byte[][] keys = new byte[6][];
         for (int i = 0; i < 6; i++) {
             keys[i] = KeyEncodingUtil.constructDatabaseKey(key1,i);
@@ -130,24 +129,26 @@ public class DatabaseHandlerTest {
     }
 
     @Test
-    public void testDatabaseScan() throws RocksDBException, DatabaseOperationException {
+    public void testDatabaseOrdering() throws RocksDBException, DatabaseOperationException {
         byte[][] keys = new byte[6][];
         byte[][] vals = new byte[6][];
         for (int i = 0; i < 6; i++) {
             keys[i] = KeyEncodingUtil.constructDatabaseKey(key1,i);
-            vals[i] = ("ver" + i + "val").getBytes(METADATA_CHARSET);
+            vals[i] = ("ver" + i + "val").getBytes(DATABASE_CHARSET);
         }
         try {
             databaseHandler.addTable(stream1);
             for (int i = 0; i < 6; i++) {
                 databaseHandler.update(keys[i], vals[i], stream1);
-                List<byte[][]> entries = databaseHandler.scan(stream1, 0);
-                assertTrue(entries.size() == 1);
-                assertArrayEquals(keys[i], entries.get(0)[0]);
-                assertArrayEquals(vals[i], entries.get(0)[1]);
+            }
+            List<byte[][]> allEntries = databaseHandler.fullDatabaseScan(stream1);
+            for (byte[][] entry : allEntries) {
+                KeyEncodingUtil.VersionedKey key = KeyEncodingUtil.extractVersionedKey(entry[0]);
+                String val = new String(entry[1], DATABASE_CHARSET);
+                System.out.println(String.format("%s, %s",key,val));
             }
         } catch (RocksDBException | DatabaseOperationException e) {
-            log.error("Error in test SCAN: ", e);
+            log.error("Error in test database ordering: ", e);
             throw e;
         }
     }

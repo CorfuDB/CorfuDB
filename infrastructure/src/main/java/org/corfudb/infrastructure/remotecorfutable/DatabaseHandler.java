@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.remotecorfutable;
 
+import com.google.errorprone.annotations.DoNotCall;
 import com.google.protobuf.ByteString;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.LATEST_VERSION_READ;
-import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.METADATA_CHARSET;
+import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.DATABASE_CHARSET;
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.METADATA_COLUMN_CACHE_SIZE;
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.METADATA_COLUMN_SUFFIX;
 
@@ -78,7 +79,7 @@ public class DatabaseHandler implements AutoCloseable {
         try {
             tableHandle = database.createColumnFamily(tableDescriptor);
         } catch (RocksDBException e) {
-            log.error("Error in creating column family for table {}.", streamID.toString(METADATA_CHARSET));
+            log.error("Error in creating column family for table {}.", streamID.toString(DATABASE_CHARSET));
             log.error("Cause of error: ", e);
             tableOptions.close();
             throw e;
@@ -93,13 +94,13 @@ public class DatabaseHandler implements AutoCloseable {
         try {
              metadataHandle = database.createColumnFamily(metadataDescriptor);
         } catch (RocksDBException e) {
-            log.error("Error in creating metadata column family for table {}.", streamID.toString(METADATA_CHARSET));
+            log.error("Error in creating metadata column family for table {}.", streamID.toString(DATABASE_CHARSET));
             log.error("Cause of error: ", e);
             tableHandle.close();
             try {
                 database.dropColumnFamily(tableHandle);
             } catch (RocksDBException r) {
-                log.error("Error in dropping column family for table {}.", streamID.toString(METADATA_CHARSET));
+                log.error("Error in dropping column family for table {}.", streamID.toString(DATABASE_CHARSET));
                 log.error("Cause of error: ", r);
                 throw e;
             } finally {
@@ -403,5 +404,23 @@ public class DatabaseHandler implements AutoCloseable {
             handle.close();
         }
         database.close();
+    }
+
+    /**
+     * FOR DEBUG USE ONLY - WILL SCAN EVERY KEY IN THE DATABASE
+     * @param streamID
+     * @return
+     */
+    @DoNotCall
+    @Deprecated
+    protected List<byte[][]> fullDatabaseScan(ByteString streamID) {
+        List<byte[][]> allEntries = new LinkedList<>();
+        RocksIterator iter = database.newIterator(columnFamilies.get(streamID));
+        iter.seekToFirst();
+        while(iter.isValid()) {
+            allEntries.add(new byte[][]{iter.key(),iter.value()});
+            iter.next();
+        }
+        return allEntries;
     }
 }

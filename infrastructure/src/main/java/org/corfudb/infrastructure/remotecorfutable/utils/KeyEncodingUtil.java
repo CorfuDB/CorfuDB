@@ -5,6 +5,9 @@ import com.google.common.primitives.Longs;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.ToString;
+
+import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.DATABASE_CHARSET;
 
 /**
  * This utility class aids with constructing a RocksDB store key from a RemoteCorfuTable key and a timestamp, and
@@ -85,5 +88,10 @@ public final class KeyEncodingUtil {
     public static class VersionedKey {
         private byte[] encodedRemoteCorfuTableKey;
         private long timestamp;
+
+        @Override
+        public String toString() {
+            return (new String(encodedRemoteCorfuTableKey, DATABASE_CHARSET) + timestamp);
+        }
     }
 }
