@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure.remotecorfutable.utils;
 
+import com.google.protobuf.ByteString;
+
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
@@ -10,7 +12,7 @@ import java.nio.charset.StandardCharsets;
  */
 public final class DatabaseConstants {
     public static final Charset METADATA_CHARSET = StandardCharsets.UTF_8;
-    public static final byte[] METADATA_COLUMN_SUFFIX = "_mtd".getBytes(METADATA_CHARSET);
+    public static final ByteString METADATA_COLUMN_SUFFIX = ByteString.copyFrom("_mtd", METADATA_CHARSET);
     public static final byte[] SIZE_KEY = "size".getBytes(METADATA_CHARSET);
     public static final byte[] LATEST_VERSION_READ = "latest-version".getBytes(METADATA_CHARSET);
 
