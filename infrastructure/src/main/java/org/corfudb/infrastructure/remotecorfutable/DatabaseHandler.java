@@ -184,22 +184,63 @@ public class DatabaseHandler implements AutoCloseable {
 
     /**
      * This function provides an interface to delete a range of keys from the database.
+     * encodedKeyBegin must be less than encodedKeyEnd with the comparator used (REVERSE_BYTEWISE_COMPARATOR)
      *
-     * @param encodedKeyBegin The start of the range (inclusive).
-     * @param encodedKeyEnd The end of the range (exclusive).
+     * @param encodedKeyBegin The start of the range.
+     * @param encodedKeyEnd The end of the range.
+     * @param includeFirstKey If true, delete encodedKeyBegin from the database as well.
+     * @param includeLastKey If true, delete encodedKeyEnd from the database as well.
      * @param streamID The stream backing the database from which the keys are deleted.
      * @throws RocksDBException A database error on delete.
      */
-    public void delete(byte[] encodedKeyBegin, byte[] encodedKeyEnd, ByteString streamID) throws RocksDBException, DatabaseOperationException {
+    public void delete(byte[] encodedKeyBegin, byte[] encodedKeyEnd, boolean includeFirstKey, boolean includeLastKey, ByteString streamID) throws RocksDBException, DatabaseOperationException {
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("DELETE", "Invalid stream ID");
         }
+        byte[] start;
+        byte[] end;
+        if (!includeFirstKey) {
+            start = findNextKey(encodedKeyBegin);
+        } else {
+            start = encodedKeyBegin;
+        }
+        if (includeLastKey) {
+            end = findNextKey(encodedKeyEnd);
+        } else {
+            end = encodedKeyEnd;
+        }
+        deleteInternal(start, end, streamID);
+    }
+
+    private void deleteInternal(byte[] encodedKeyBegin, byte[] encodedKeyEnd, ByteString streamID) throws RocksDBException {
         try {
+            //this range deletes from start (inclusive) to end (exclusive)
             database.deleteRange(columnFamilies.get(streamID), encodedKeyBegin, encodedKeyEnd);
         } catch (RocksDBException e) {
             log.error("Error in RocksDB delete operation:", e);
             throw e;
         }
+    }
+
+    private byte[] findNextKey(byte[] encodedPrevKey) throws DatabaseOperationException {
+        KeyEncodingUtil.VersionedKey currVersionedKey = KeyEncodingUtil.extractVersionedKey(encodedPrevKey);
+        if (currVersionedKey.getTimestamp() != 0) {
+            return KeyEncodingUtil.constructDatabaseKey(currVersionedKey.getEncodedRemoteCorfuTableKey(), currVersionedKey.getTimestamp()-1);
+        }
+        boolean replaced = false;
+        byte[] nextKeyPrefix = currVersionedKey.getEncodedRemoteCorfuTableKey();
+        for (int i = nextKeyPrefix.length-1; (i >= 0 && !replaced); i--) {
+            if (nextKeyPrefix[i] != 0) {
+                nextKeyPrefix[i] -= 1;
+                replaced = true;
+            }
+        }
+        if (!replaced) {
+            log.error("Attempted to find next key of null key");
+            throw new DatabaseOperationException("Find next key", "null keys are unsupported");
+        }
+        //in java, bytes are signed, but rocks db stores unsigned bytes so -1L is the largest version possible
+        return KeyEncodingUtil.constructDatabaseKey(nextKeyPrefix,-1L);
     }
 
     /**
@@ -413,8 +454,8 @@ public class DatabaseHandler implements AutoCloseable {
 
     /**
      * FOR DEBUG USE ONLY - WILL SCAN EVERY KEY IN THE DATABASE
-     * @param streamID
-     * @return
+     * @param streamID The stream to scan.
+     * @return Every key in the database with the specified streamID.
      */
     @DoNotCall
     @Deprecated

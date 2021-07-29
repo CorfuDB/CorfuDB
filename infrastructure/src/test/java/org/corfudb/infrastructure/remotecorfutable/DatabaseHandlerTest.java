@@ -20,6 +20,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.DATABASE_CHARSET;
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.mockito.Mockito.mock;
@@ -108,13 +109,13 @@ public class DatabaseHandlerTest {
                 readinVal = databaseHandler.get(keys[i],stream1);
                 switch (i) {
                     case 5: case 4:
-                        assertArrayEquals(readinVal,v4Val);
+                        assertArrayEquals(v4Val, readinVal);
                         break;
                     case 3: case 2:
-                        assertArrayEquals(readinVal,v2Val);
+                        assertArrayEquals(v2Val, readinVal);
                         break;
                     case 1:
-                        assertArrayEquals(readinVal,v1Val);
+                        assertArrayEquals(v1Val, readinVal);
                         break;
                     default:
                         assertNull(readinVal);
@@ -127,14 +128,14 @@ public class DatabaseHandlerTest {
     }
 
     @Test
-    public void testStreamIDNotInDatabase() throws RocksDBException, DatabaseOperationException {
+    public void testStreamIDNotInDatabase() {
         byte[] dummyVal = "dummy".getBytes(DATABASE_CHARSET);
         assertThrows("Expected PUT to throw StreamID not found error",
                 DatabaseOperationException.class,() -> databaseHandler.update(key1,dummyVal,stream1));
         assertThrows("Expected GET to throw StreamID not found error",
                 DatabaseOperationException.class,() -> databaseHandler.get(key1,stream1));
         assertThrows("Expected DELETE to throw StreamID not found error",
-                DatabaseOperationException.class,() -> databaseHandler.delete(key1,dummyVal,stream1));
+                DatabaseOperationException.class,() -> databaseHandler.delete(key1,dummyVal, true, true, stream1));
         assertThrows("Expected PUT to throw StreamID not found error",
                 DatabaseOperationException.class,() -> databaseHandler.update(key1,dummyVal,stream1));
         assertThrows("Expected SCAN to throw StreamID not found error",
@@ -148,7 +149,7 @@ public class DatabaseHandlerTest {
     }
 
     @Test
-    public void testDatabaseOrdering() throws RocksDBException, DatabaseOperationException {
+    public void testDatabaseReverseOrdering() throws RocksDBException, DatabaseOperationException {
         byte[][] keys = new byte[6][];
         byte[][] vals = new byte[6][];
         for (int i = 0; i < 6; i++) {
@@ -161,13 +162,117 @@ public class DatabaseHandlerTest {
                 databaseHandler.update(keys[i], vals[i], stream1);
             }
             List<byte[][]> allEntries = databaseHandler.fullDatabaseScan(stream1);
-            for (byte[][] entry : allEntries) {
-                KeyEncodingUtil.VersionedKey key = KeyEncodingUtil.extractVersionedKey(entry[0]);
-                String val = new String(entry[1], DATABASE_CHARSET);
-                System.out.println(String.format("%s, %s",key,val));
+            assertEquals(allEntries.size(), 6);
+            for (int i = 0; i < allEntries.size(); i++) {
+                assertArrayEquals(keys[5-i], allEntries.get(i)[0]);
+                assertArrayEquals( vals[5-i], allEntries.get(i)[1]);
             }
         } catch (RocksDBException | DatabaseOperationException e) {
             log.error("Error in test database ordering: ", e);
+            throw e;
+        }
+    }
+
+    @Test
+    public void testDeleteRangeAll() throws RocksDBException, DatabaseOperationException {
+        byte[][] keys = new byte[6][];
+        byte[][] vals = new byte[6][];
+        for (int i = 0; i < 6; i++) {
+            keys[i] = KeyEncodingUtil.constructDatabaseKey(key1,i);
+            vals[i] = ("ver" + i + "val").getBytes(DATABASE_CHARSET);
+        }
+        try {
+            databaseHandler.addTable(stream1);
+            for (int i = 0; i < 6; i++) {
+                databaseHandler.update(keys[i], vals[i], stream1);
+            }
+            //Expected to result in deleting all versions of key1
+            databaseHandler.delete(keys[5], keys[0], true, true, stream1);
+            //should be empty
+            List<byte[][]> allEntries = databaseHandler.fullDatabaseScan(stream1);
+            assertEquals(0, allEntries.size());
+        } catch (RocksDBException | DatabaseOperationException e) {
+            log.error("Error in test full inclusive delete range: ", e);
+            throw e;
+        }
+    }
+
+    @Test
+    public void testExclusiveEndDeleteRange() throws RocksDBException, DatabaseOperationException {
+        byte[][] keys = new byte[6][];
+        byte[][] vals = new byte[6][];
+        for (int i = 0; i < 6; i++) {
+            keys[i] = KeyEncodingUtil.constructDatabaseKey(key1,i);
+            vals[i] = ("ver" + i + "val").getBytes(DATABASE_CHARSET);
+        }
+        try {
+            databaseHandler.addTable(stream1);
+            for (int i = 0; i < 6; i++) {
+                databaseHandler.update(keys[i], vals[i], stream1);
+            }
+            //Expected to result in deleting all versions of key1 except ver0
+            databaseHandler.delete(keys[5], keys[0], true, false,stream1);
+            //should have 1 element
+            List<byte[][]> allEntries = databaseHandler.fullDatabaseScan(stream1);
+            assertEquals(1, allEntries.size());
+            assertArrayEquals(keys[0], allEntries.get(0)[0]);
+            assertArrayEquals(vals[0], allEntries.get(0)[1]);
+        } catch (RocksDBException | DatabaseOperationException e) {
+            log.error("Error in exclusive end delete range test: ", e);
+            throw e;
+        }
+    }
+
+    @Test
+    public void testExclusiveStartDeleteRange() throws RocksDBException, DatabaseOperationException {
+        byte[][] keys = new byte[6][];
+        byte[][] vals = new byte[6][];
+        for (int i = 0; i < 6; i++) {
+            keys[i] = KeyEncodingUtil.constructDatabaseKey(key1,i);
+            vals[i] = ("ver" + i + "val").getBytes(DATABASE_CHARSET);
+        }
+        try {
+            databaseHandler.addTable(stream1);
+            for (int i = 0; i < 6; i++) {
+                databaseHandler.update(keys[i], vals[i], stream1);
+            }
+            //Expected to result in deleting all versions of key1 except ver5
+            databaseHandler.delete(keys[5], keys[0], false, true,stream1);
+            //should have 1 element
+            List<byte[][]> allEntries = databaseHandler.fullDatabaseScan(stream1);
+            assertEquals(1, allEntries.size());
+            assertArrayEquals(keys[5], allEntries.get(0)[0]);
+            assertArrayEquals(vals[5], allEntries.get(0)[1]);
+        } catch (RocksDBException | DatabaseOperationException e) {
+            log.error("Error in exclusive end delete range test: ", e);
+            throw e;
+        }
+    }
+
+    @Test
+    public void testExclusiveStartAndEndDeleteRange() throws RocksDBException, DatabaseOperationException {
+        byte[][] keys = new byte[6][];
+        byte[][] vals = new byte[6][];
+        for (int i = 0; i < 6; i++) {
+            keys[i] = KeyEncodingUtil.constructDatabaseKey(key1,i);
+            vals[i] = ("ver" + i + "val").getBytes(DATABASE_CHARSET);
+        }
+        try {
+            databaseHandler.addTable(stream1);
+            for (int i = 0; i < 6; i++) {
+                databaseHandler.update(keys[i], vals[i], stream1);
+            }
+            //Expected to result in deleting all versions of key1 except ver5 and ver0
+            databaseHandler.delete(keys[5], keys[0], false, false,stream1);
+            //should have 2 elements
+            List<byte[][]> allEntries = databaseHandler.fullDatabaseScan(stream1);
+            assertEquals(2, allEntries.size());
+            assertArrayEquals(keys[5], allEntries.get(0)[0]);
+            assertArrayEquals(vals[5], allEntries.get(0)[1]);
+            assertArrayEquals(keys[0], allEntries.get(1)[0]);
+            assertArrayEquals(vals[0], allEntries.get(1)[1]);
+        } catch (RocksDBException | DatabaseOperationException e) {
+            log.error("Error in exclusive end delete range test: ", e);
             throw e;
         }
     }
