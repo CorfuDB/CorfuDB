@@ -22,7 +22,6 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
 import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.util.GitRepositoryState;
-import org.corfudb.util.NetworkUtils;
 
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLEngine;
