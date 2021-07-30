@@ -5,7 +5,7 @@ package org.corfudb.infrastructure.remotecorfutable;
  *
  * <p>Created by nvaishampayan517 on 7/27/21.
  */
-public class DatabaseOperationException extends Exception {
+public class DatabaseOperationException extends RuntimeException {
     public DatabaseOperationException(String operation, String reason) {
         super(String.format("Remote Corfu Table Operation %s failed due to %s", operation, reason));
     }

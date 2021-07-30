@@ -143,15 +143,13 @@ public class DatabaseHandler implements AutoCloseable {
                 throw e;
             }
             //We've reached the end of the data
-            //TODO: add read from log stream check
             returnVal = null;
         } else {
             if (Arrays.equals(KeyEncodingUtil.extractEncodedKey(iter.key()),
-                    KeyEncodingUtil.extractEncodedKey(encodedKey))) {
+                    KeyEncodingUtil.extractEncodedKey(encodedKey)) && iter.value().length != 0) {
                 //This works due to latest version first comparator
                 returnVal = iter.value();
             } else {
-                //TODO: add read from log stream check
                 returnVal = null;
             }
         }
@@ -170,6 +168,9 @@ public class DatabaseHandler implements AutoCloseable {
     public void update(byte[] encodedKey, byte[] value, ByteString streamID) throws RocksDBException, DatabaseOperationException {
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("PUT", "Invalid stream ID");
+        }
+        if (value == null) {
+            value = new byte[0];
         }
         try {
             database.put(columnFamilies.get(streamID), encodedKey, value);
@@ -329,25 +330,23 @@ public class DatabaseHandler implements AutoCloseable {
         int elements = 0;
         while (iter.isValid()) {
             currPrefix = KeyEncodingUtil.extractEncodedKey(iter.key());
-            if (Arrays.equals(currPrefix, prevPrefix)) {
-                if (!encounteredPrefix) {
-                    if (!skipFirst) {
-                        results.add(new byte[][]{iter.key(), iter.value()});
-                        elements++;
-
-                    } else {
-                        skipFirst = false;
-                    }
-                    encounteredPrefix = true;
-                }
-                iter.next();
-            } else {
+            if (!Arrays.equals(currPrefix, prevPrefix)) {
                 byte[] nextKey = KeyEncodingUtil.constructDatabaseKey(currPrefix, timestamp);
                 iter.seek(nextKey);
                 prevPrefix = currPrefix;
                 encounteredPrefix = false;
+            } else if (encounteredPrefix) {
+                iter.next();
+            } else if (iter.value().length == 0) {
+                encounteredPrefix = true;
+                iter.next();
+            } else {
+                results.add(new byte[][]{iter.key(), iter.value()});
+                elements++;
+                encounteredPrefix = true;
+                iter.next();
             }
-            if (elements >= numEntries) {
+            if (elements > numEntries) {
                 break;
             }
         }
@@ -361,6 +360,11 @@ public class DatabaseHandler implements AutoCloseable {
                 throw e;
             }
             //Otherwise, we have simply hit the end of the database
+        }
+        if (skipFirst) {
+            results.remove(0);
+        } else if (results.size() == numEntries+1){
+            results.remove(results.size()-1);
         }
         iter.close();
         iterOptions.close();

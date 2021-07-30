@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.remotecorfutable;
 
+import com.google.common.collect.Streams;
 import com.google.common.primitives.Bytes;
 import com.google.common.primitives.Longs;
 import com.google.protobuf.ByteString;
@@ -16,8 +17,8 @@ import org.rocksdb.Options;
 import org.rocksdb.RocksDBException;
 
 import java.io.File;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -340,6 +341,127 @@ public class DatabaseHandlerTest {
             }
         } catch (RocksDBException | DatabaseOperationException e) {
             log.error("Error in no version full DB cursor scan test: ", e);
+            throw e;
+        }
+    }
+
+    @Test
+    public void testFullDBScanWithVersion() throws RocksDBException, DatabaseOperationException {
+        byte[][][] keys = new byte[200][5][];
+        byte[][][] vals = new byte[200][5][];
+        for (int i = 0; i < 200; i++) {
+            for (int j = 0; j < 5; j++) {
+                keys[i][j] = KeyEncodingUtil.constructDatabaseKey(Bytes.concat("key".getBytes(DATABASE_CHARSET),
+                        Longs.toByteArray(i)), j);
+                vals[i][j] = ("val" + i + "ver" + j).getBytes(DATABASE_CHARSET);
+            }
+        }
+        try {
+            databaseHandler.addTable(stream1);
+            for (int i = 0; i < 200; i++) {
+                for (int j = 0; j < 5; j++) {
+                    databaseHandler.update(keys[i][j], vals[i][j], stream1);
+                }
+            }
+            for (int j = 0; j < 5; j++) {
+                List<byte[][]> allEntriesForVersion = databaseHandler.scan(200,stream1,j);
+                assertEquals(200, allEntriesForVersion.size());
+                for (int i = 0; i < 200; i++) {
+                    assertArrayEquals(keys[199-i][j], allEntriesForVersion.get(i)[0]);
+                    assertArrayEquals(vals[199-i][j], allEntriesForVersion.get(i)[1]);
+                }
+            }
+        } catch (RocksDBException | DatabaseOperationException e) {
+            log.error("Error in version full DB scan test: ", e);
+            throw e;
+        }
+    }
+
+    @Test
+    public void testFullDBCursorScanWithVersion() throws RocksDBException, DatabaseOperationException {
+        byte[][][] keys = new byte[200][5][];
+        byte[][][] vals = new byte[200][5][];
+        for (int i = 0; i < 200; i++) {
+            for (int j = 0; j < 5; j++) {
+                keys[i][j] = KeyEncodingUtil.constructDatabaseKey(Bytes.concat("key".getBytes(DATABASE_CHARSET),
+                        Longs.toByteArray(i)), j);
+                vals[i][j] = ("val" + i + "ver" + j).getBytes(DATABASE_CHARSET);
+            }
+        }
+        List<byte[][]> allEntriesForVersion;
+        List<byte[][]> currEntries = null;
+        boolean first = true;
+        try {
+            databaseHandler.addTable(stream1);
+            for (int i = 0; i < 200; i++) {
+                for (int j = 0; j < 5; j++) {
+                    databaseHandler.update(keys[i][j], vals[i][j], stream1);
+                }
+            }
+            for (int j = 0; j < 5; j++) {
+                allEntriesForVersion = new LinkedList<>();
+                first = true;
+                do {
+                    if (first) {
+                        first = false;
+                        currEntries = databaseHandler.scan(10,stream1,j);
+                    } else {
+                        currEntries = databaseHandler.scan(currEntries.get(currEntries.size()-1)[0],
+                                10, stream1);
+                    }
+                    allEntriesForVersion.addAll(currEntries);
+                } while (currEntries.size() >= 10);
+                assertEquals(200, allEntriesForVersion.size());
+                for (int i = 0; i < 200; i++) {
+                    assertArrayEquals(keys[199-i][j], allEntriesForVersion.get(i)[0]);
+                    assertArrayEquals(vals[199-i][j], allEntriesForVersion.get(i)[1]);
+                }
+            }
+        } catch (RocksDBException | DatabaseOperationException e) {
+            log.error("Error in version full DB cursor scan test: ", e);
+            throw e;
+        }
+    }
+
+    @Test
+    public void testScanWithNullValuesNoVersioning() throws RocksDBException, DatabaseOperationException {
+        List<byte[]> keys = new ArrayList<>(1000);
+        List<byte[]> vals = new ArrayList<>(1000);
+        int k = 1;
+        int skip = k;
+        for (int i = 0; i < 1000; i++) {
+            keys.add(KeyEncodingUtil.constructDatabaseKey(Bytes.concat("key".getBytes(DATABASE_CHARSET),
+                    Longs.toByteArray(i)), 0L));
+            if (skip == 0) {
+                k++;
+                skip = k;
+                vals.add(new byte[0]);
+            } else {
+                vals.add(("val" + i).getBytes(DATABASE_CHARSET));
+            }
+            skip--;
+        }
+        try {
+            databaseHandler.addTable(stream1);
+            for (int i = 0; i < 1000; i++) {
+                databaseHandler.update(keys.get(i), vals.get(i), stream1);
+            }
+            List<byte[]> nonNullKeys = new LinkedList<>();
+            List<byte[]> nonNullValues = new LinkedList<>();
+            for (int i = 0; i < 1000; i++) {
+                if (vals.get(i).length != 0) {
+                    nonNullKeys.add(keys.get(i));
+                    nonNullValues.add(vals.get(i));
+                }
+            }
+            List<byte[][]> allScannedEntries = databaseHandler.scan(1000, stream1, 0L);
+            assertEquals(nonNullKeys.size(), allScannedEntries.size());
+            for (int i = 0; i < allScannedEntries.size(); i++) {
+                assertArrayEquals(nonNullKeys.get(allScannedEntries.size()-1-i), allScannedEntries.get(i)[0]);
+                assertArrayEquals(nonNullValues.get(allScannedEntries.size()-1-i), allScannedEntries.get(i)[1]);
+            }
+        } catch (RocksDBException | DatabaseOperationException e) {
+            log.error("Error in no version null values scan test: ", e);
             throw e;
         }
     }
