@@ -355,7 +355,7 @@ public class DatabaseHandler implements AutoCloseable {
             try {
                 iter.status();
             } catch (RocksDBException e) {
-                log.error("Error in RocksDB delete operation:", e);
+                log.error("Error in RocksDB scan operation:", e);
                 iter.close();
                 iterOptions.close();
                 throw e;

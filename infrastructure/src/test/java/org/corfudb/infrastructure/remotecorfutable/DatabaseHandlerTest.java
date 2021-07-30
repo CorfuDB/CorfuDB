@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure.remotecorfutable;
 
+import com.google.common.primitives.Bytes;
+import com.google.common.primitives.Longs;
 import com.google.protobuf.ByteString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.remotecorfutable.utils.KeyEncodingUtil;
@@ -14,7 +16,9 @@ import org.rocksdb.Options;
 import org.rocksdb.RocksDBException;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ThreadPoolExecutor;
 
@@ -244,7 +248,7 @@ public class DatabaseHandlerTest {
             assertArrayEquals(keys[5], allEntries.get(0)[0]);
             assertArrayEquals(vals[5], allEntries.get(0)[1]);
         } catch (RocksDBException | DatabaseOperationException e) {
-            log.error("Error in exclusive end delete range test: ", e);
+            log.error("Error in exclusive start delete range test: ", e);
             throw e;
         }
     }
@@ -272,7 +276,70 @@ public class DatabaseHandlerTest {
             assertArrayEquals(keys[0], allEntries.get(1)[0]);
             assertArrayEquals(vals[0], allEntries.get(1)[1]);
         } catch (RocksDBException | DatabaseOperationException e) {
-            log.error("Error in exclusive end delete range test: ", e);
+            log.error("Error in exclusive start and end delete range test: ", e);
+            throw e;
+        }
+    }
+
+    @Test
+    public void testFullDBScanNoVersioning() throws RocksDBException, DatabaseOperationException {
+        byte[][] keys = new byte[1000][];
+        byte[][] vals = new byte[1000][];
+        for (int i = 0; i < 1000; i++) {
+            keys[i] = KeyEncodingUtil.constructDatabaseKey(Bytes.concat("key".getBytes(DATABASE_CHARSET),
+                    Longs.toByteArray(i)), 0L);
+            vals[i] = ("val" + i).getBytes(DATABASE_CHARSET);
+        }
+        try {
+            databaseHandler.addTable(stream1);
+            for (int i = 0; i < 1000; i++) {
+                databaseHandler.update(keys[i],vals[i],stream1);
+            }
+            List<byte[][]> fullDB = databaseHandler.scan(1000,stream1, 0);
+            assertEquals(1000, fullDB.size());
+            for (int i = 0; i < 1000; i++) {
+                assertArrayEquals(keys[999-i], fullDB.get(i)[0]);
+                assertArrayEquals(vals[999-i], fullDB.get(i)[1]);
+            }
+        } catch (RocksDBException | DatabaseOperationException e) {
+            log.error("Error in no version full DB scan test: ", e);
+            throw e;
+        }
+    }
+
+    @Test
+    public void testFullDBCursorScanNoVersioning() throws RocksDBException, DatabaseOperationException {
+        byte[][] keys = new byte[1000][];
+        byte[][] vals = new byte[1000][];
+        for (int i = 0; i < 1000; i++) {
+            keys[i] = KeyEncodingUtil.constructDatabaseKey(Bytes.concat("key".getBytes(DATABASE_CHARSET),
+                    Longs.toByteArray(i)), 0L);
+            vals[i] = ("val" + i).getBytes(DATABASE_CHARSET);
+        }
+        try {
+            databaseHandler.addTable(stream1);
+            for (int i = 0; i < 1000; i++) {
+                databaseHandler.update(keys[i],vals[i],stream1);
+            }
+            List<byte[][]> fullDB = new LinkedList<>();
+            List<byte[][]> currScan = null;
+            boolean first = true;
+            do {
+                if (first) {
+                    currScan = databaseHandler.scan(20, stream1, 0);
+                    first = false;
+                } else {
+                    currScan = databaseHandler.scan(currScan.get(currScan.size()-1)[0], 20, stream1);
+                }
+                fullDB.addAll(currScan);
+            } while (currScan.size() >= 20);
+            assertEquals(1000, fullDB.size());
+            for (int i = 0; i < 1000; i++) {
+                assertArrayEquals(keys[999-i], fullDB.get(i)[0]);
+                assertArrayEquals(vals[999-i], fullDB.get(i)[1]);
+            }
+        } catch (RocksDBException | DatabaseOperationException e) {
+            log.error("Error in no version full DB cursor scan test: ", e);
             throw e;
         }
     }
