@@ -1003,6 +1003,7 @@ public class StreamingIT extends AbstractIT {
         Uuid firstKey = Uuid.newBuilder().setMsb(indexDefault).setLsb(indexDefault).build();
         SampleTableAMsg firstValue = SampleTableAMsg.newBuilder().setPayload(String.valueOf(indexDefault)).build();
 
+        // Full-Sync (one or more tables) read-only transaction
         try (TxnContext txn = store.txn(namespace)) {
             CorfuStoreEntry<Uuid, SampleTableAMsg, Uuid> entry = txn.getRecord(defaultTableName, firstKey);
             assertThat(entry.getPayload()).isEqualTo(firstValue);
