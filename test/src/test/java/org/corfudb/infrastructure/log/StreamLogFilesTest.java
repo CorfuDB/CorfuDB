@@ -1,13 +1,24 @@
 package org.corfudb.infrastructure.log;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
-import static org.corfudb.infrastructure.log.StreamLogFiles.RECORDS_PER_LOG_FILE;
-
-import io.grpc.Server;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import org.apache.commons.io.FileUtils;
+import org.assertj.core.api.Assertions;
+import org.corfudb.AbstractCorfuTest;
+import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.ServerContextBuilder;
+import org.corfudb.infrastructure.log.LogFormat.LogHeader;
+import org.corfudb.infrastructure.log.LogFormat.Metadata;
+import org.corfudb.infrastructure.log.StreamLogFiles.Checksum;
+import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.runtime.exceptions.DataCorruptionException;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.test.LsofSpec;
+import org.corfudb.util.serializer.Serializers;
+import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
@@ -21,23 +32,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import org.apache.commons.io.FileUtils;
-import org.assertj.core.api.Assertions;
-import org.corfudb.AbstractCorfuTest;
-import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.ServerContextBuilder;
-import org.corfudb.infrastructure.log.StreamLogFiles.Checksum;
-import org.corfudb.infrastructure.log.LogFormat.Metadata;
-import org.corfudb.infrastructure.log.LogFormat.LogHeader;
-import org.corfudb.protocols.wireprotocol.DataType;
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.runtime.exceptions.DataCorruptionException;
-import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.view.Address;
-import org.corfudb.test.LsofSpec;
-import org.corfudb.util.serializer.Serializers;
-import org.junit.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
+import static org.corfudb.infrastructure.log.StreamLogFiles.RECORDS_PER_LOG_FILE;
 
 
 /**
