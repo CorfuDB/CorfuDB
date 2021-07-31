@@ -139,10 +139,8 @@ public class DynamicProtobufSerializer implements ISerializer {
             String protoFileName = fileDescriptorProto.getPayload().getFileDescriptor().getName();
             // Since corfu_options is something within repo, the path gets truncated on insert.
             // However dynamicProtobufSerializer fails since the full path is needed.
-            if (protoFileName.equals("corfu_options.proto")) {
-                fdProtoMap.putIfAbsent(protoFileName, fileDescriptorProto.getPayload().getFileDescriptor());
-                // Until the truncating issue can be addressed, manually add both paths.
-                protoFileName = "corfudb/runtime/corfu_options.proto";
+            if (protoFileName.equals("corfudb/runtime/corfu_options.proto")) {
+                fdProtoMap.putIfAbsent("corfu_options.proto", fileDescriptorProto.getPayload().getFileDescriptor());
             }
             fdProtoMap.putIfAbsent(protoFileName, fileDescriptorProto.getPayload().getFileDescriptor());
             identifyMessageTypesinFileDescriptorProto(fileDescriptorProto.getPayload().getFileDescriptor());

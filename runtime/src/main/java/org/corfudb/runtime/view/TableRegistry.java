@@ -664,4 +664,44 @@ public class TableRegistry {
             streamingManager.shutdown();
         }
     }
+
+    /**
+     * Populate the ProtobufDescriptorTable using the RegistryTable.
+     * Enables backward compatibility in case of data migration.
+     */
+    public void syncProtobufDescriptorTable() {
+        log.info("Running syncProtobufDescriptorTable() ...");
+
+        int numRetries = 9;
+        while (true) {
+            if (TransactionalContext.isInTransaction()) {
+                throw new IllegalThreadStateException("openTable: Called on an existing transaction");
+            }
+            try {
+                this.runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
+                registryTable.forEach((tableName, corfuRecord) ->
+                        corfuRecord.getPayload().getFileDescriptorsMap()
+                                .forEach((protoName, fileDescriptorProto) -> {
+                                    ProtobufFileName fileName = ProtobufFileName
+                                            .newBuilder().setFileName(protoName).build();
+                                    ProtobufFileDescriptor fileDescriptor = ProtobufFileDescriptor
+                                            .newBuilder().setFileDescriptor(fileDescriptorProto).build();
+                                    protobufDescriptorTable.putIfAbsent(fileName, new CorfuRecord<>(
+                                            fileDescriptor, corfuRecord.getMetadata()));
+                                }));
+                this.runtime.getObjectsView().TXEnd();
+                log.info("syncProtobufDescriptorTable: completed!");
+                break;
+            } catch (TransactionAbortedException txAbort) {
+                if (numRetries-- <= 0) {
+                    throw txAbort;
+                }
+                log.info("syncProtobufDescriptorTable: commit failed. Will retry {} times. Cause {}", numRetries, txAbort);
+            } finally {
+                if (TransactionalContext.isInTransaction()) { // Transaction failed or an exception occurred.
+                    this.runtime.getObjectsView().TXAbort(); // clear Txn context so thread can be reused.
+                }
+            }
+        }
+    }
 }
