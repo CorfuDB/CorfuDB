@@ -167,7 +167,7 @@ public class DatabaseHandlerTest {
                 databaseHandler.update(keys[i], vals[i], stream1);
             }
             List<byte[][]> allEntries = databaseHandler.fullDatabaseScan(stream1);
-            assertEquals(allEntries.size(), 6);
+            assertEquals( 6, allEntries.size());
             for (int i = 0; i < allEntries.size(); i++) {
                 assertArrayEquals(keys[5-i], allEntries.get(i)[0]);
                 assertArrayEquals( vals[5-i], allEntries.get(i)[1]);
@@ -390,7 +390,7 @@ public class DatabaseHandlerTest {
         }
         List<byte[][]> allEntriesForVersion;
         List<byte[][]> currEntries = null;
-        boolean first = true;
+        boolean first;
         try {
             databaseHandler.addTable(stream1);
             for (int i = 0; i < 200; i++) {
@@ -459,6 +459,76 @@ public class DatabaseHandlerTest {
             for (int i = 0; i < allScannedEntries.size(); i++) {
                 assertArrayEquals(nonNullKeys.get(allScannedEntries.size()-1-i), allScannedEntries.get(i)[0]);
                 assertArrayEquals(nonNullValues.get(allScannedEntries.size()-1-i), allScannedEntries.get(i)[1]);
+            }
+        } catch (RocksDBException | DatabaseOperationException e) {
+            log.error("Error in no version null values scan test: ", e);
+            throw e;
+        }
+    }
+
+    @Test
+    public void testScanWithNullValuesVersioning() throws RocksDBException, DatabaseOperationException {
+        List<List<byte[]>> keys = new ArrayList<>(250);
+        List<List<byte[]>> vals = new ArrayList<>(250);
+        for (int i = 0; i < 250; i++) {
+            keys.add(new ArrayList<>(4));
+            vals.add(new ArrayList<>(4));
+        }
+        int k = 5;
+        int skip = k;
+        for (int j = 0; j < 4; j++) {
+            for (int i = 0; i < 250; i++) {
+                keys.get(i).add(KeyEncodingUtil.constructDatabaseKey(Bytes.concat("key".getBytes(DATABASE_CHARSET),
+                        Longs.toByteArray(i)), j));
+                if (skip == 0) {
+                    if (k == 0) {
+                        k = 5;
+                    } else {
+                        k--;
+                    }
+                    skip = k;
+                    vals.get(i).add(new byte[0]);
+                } else {
+                    vals.get(i).add(("val" + i + "ver" + j).getBytes(DATABASE_CHARSET));
+                }
+                skip--;
+            }
+        }
+        try {
+            databaseHandler.addTable(stream1);
+            for (int i = 0; i < 250; i++) {
+                for (int j = 0; j < 4; j++) {
+                    databaseHandler.update(keys.get(i).get(j), vals.get(i).get(j), stream1);
+                }
+            }
+            List<byte[]> nonNullKeysByVersion;
+            List<byte[]> nonNullValsByVersion;
+            List<byte[][]> scannedEntriesByVersion;
+            for (int j = 0; j < 4; j++) {
+                nonNullKeysByVersion = new LinkedList<>();
+                nonNullValsByVersion = new LinkedList<>();
+                for (int i = 0; i < 250; i++) {
+                    if (vals.get(i).get(j).length != 0) {
+                        nonNullKeysByVersion.add(keys.get(i).get(j));
+                        nonNullValsByVersion.add(vals.get(i).get(j));
+                    } else {
+                        for (int l = j-1; l >= 0; l--) {
+                            if (vals.get(i).get(l).length != 0) {
+                                nonNullKeysByVersion.add(keys.get(i).get(l));
+                                nonNullValsByVersion.add(vals.get(i).get(l));
+                                break;
+                            }
+                        }
+                    }
+                }
+                scannedEntriesByVersion = databaseHandler.scan(250, stream1, j);
+                assertEquals(nonNullKeysByVersion.size(), scannedEntriesByVersion.size());
+                for (int i = 0; i < scannedEntriesByVersion.size(); i++) {
+                    assertArrayEquals(nonNullKeysByVersion.get(scannedEntriesByVersion.size()-1-i),
+                            scannedEntriesByVersion.get(i)[0]);
+                    assertArrayEquals(nonNullValsByVersion.get(scannedEntriesByVersion.size()-1-i),
+                            scannedEntriesByVersion.get(i)[1]);
+                }
             }
         } catch (RocksDBException | DatabaseOperationException e) {
             log.error("Error in no version null values scan test: ", e);

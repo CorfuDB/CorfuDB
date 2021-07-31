@@ -5,7 +5,6 @@ import com.google.common.primitives.Longs;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
-import lombok.ToString;
 
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.DATABASE_CHARSET;
 
@@ -86,8 +85,8 @@ public final class KeyEncodingUtil {
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
     @Getter
     public static class VersionedKey {
-        private byte[] encodedRemoteCorfuTableKey;
-        private long timestamp;
+        private final byte[] encodedRemoteCorfuTableKey;
+        private final long timestamp;
 
         @Override
         public String toString() {

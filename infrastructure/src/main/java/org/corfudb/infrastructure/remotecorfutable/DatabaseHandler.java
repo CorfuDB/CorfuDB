@@ -6,6 +6,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.index.qual.Positive;
 import org.corfudb.infrastructure.remotecorfutable.utils.KeyEncodingUtil;
+import org.corfudb.runtime.collections.RocksDbEntryIterator;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.rocksdb.BuiltinComparator;
 import org.rocksdb.ColumnFamilyDescriptor;
@@ -16,6 +17,8 @@ import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
+import org.rocksdb.WriteBatch;
+import org.rocksdb.WriteOptions;
 
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -45,6 +48,7 @@ public class DatabaseHandler implements AutoCloseable {
     }
 
     private RocksDB database;
+    //instead of using this use completable future
     private ThreadPoolExecutor threadPoolExecutor;
     private final Map<ByteString, ColumnFamilyHandle> columnFamilies;
 
@@ -111,7 +115,7 @@ public class DatabaseHandler implements AutoCloseable {
             }
             throw e;
         }
-
+        //TODO: double check the ordering between this section and the get
         synchronized (columnFamilies) {
          columnFamilies.put(streamID, tableHandle);
          columnFamilies.put(getMetadataColumnName(streamID), metadataHandle);
@@ -126,6 +130,7 @@ public class DatabaseHandler implements AutoCloseable {
      * @return A byte[] containing the value mapped to the key, or null if the key is associated to a null value.
      * @throws RocksDBException An error raised in scan.
      */
+    //TODO: Refactor with try-with-resources - see Slava's comment
     public byte[] get(byte[] encodedKey, ByteString streamID) throws RocksDBException, DatabaseOperationException {
         final byte[] returnVal;
         if (!columnFamilies.containsKey(streamID)) {
@@ -179,6 +184,40 @@ public class DatabaseHandler implements AutoCloseable {
                     KeyEncodingUtil.extractTimestampAsByteArray(encodedKey));
         } catch (RocksDBException e) {
             log.error("Error in RocksDB put operation:", e);
+            throw e;
+        }
+    }
+
+    /**
+     * This function provides an interface to clear the entire table at a specific version,
+     * which is performed by atomically inputting null values at every key in the table.
+     * @param streamID The stream backing the table to clear.
+     * @param timestamp The timestamp at which the clear was requested.
+     * @throws RocksDBException An error in writing all updates.
+     */
+    public void clear(ByteString streamID, long timestamp) throws RocksDBException {
+        if (!columnFamilies.containsKey(streamID)) {
+            throw new DatabaseOperationException("PUT", "Invalid stream ID");
+        }
+        //no data race on cached value since only mutates allowed are add/remove to columnFamilies
+        //if streamID is removed during write batch creation, write will fail, so no inconsistency
+        ColumnFamilyHandle currTable = columnFamilies.get(streamID);
+        byte[] keyPrefix;
+        try (RocksIterator iter = database.newIterator(currTable);
+             WriteBatch batchedWrite = new WriteBatch();
+             WriteOptions writeOptions = new WriteOptions()) {
+            iter.seekToFirst();
+            while (iter.isValid()) {
+                keyPrefix = KeyEncodingUtil.extractEncodedKey(iter.key());
+                //put empty "null" value at every key in the table
+                batchedWrite.put(currTable,KeyEncodingUtil.constructDatabaseKey(keyPrefix, timestamp), new byte[0]);
+                //seek will move iterator to value after the "next key" if it does not exist
+                iter.seek(findNextKey(keyPrefix));
+            }
+            iter.status();
+            database.write(writeOptions,batchedWrite);
+        } catch (RocksDBException e) {
+            log.error("Error in RocksDB clear operation:", e);
             throw e;
         }
     }
@@ -267,7 +306,8 @@ public class DatabaseHandler implements AutoCloseable {
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("SCAN", "Invalid stream ID");
         }
-        ReadOptions iterOptions = new ReadOptions().setTotalOrderSeek(true);
+        ReadOptions iterOptions = new ReadOptions();
+        iterOptions.setTotalOrderSeek(true);
         RocksIterator iter = database.newIterator(columnFamilies.get(streamID), iterOptions);
         iter.seekToFirst();
         if (!iter.isValid()) {
@@ -275,9 +315,10 @@ public class DatabaseHandler implements AutoCloseable {
                 iter.status();
             } catch (RocksDBException e) {
                 log.error("Error in RocksDB scan operation:", e);
+                throw e;
+            } finally {
                 iter.close();
                 iterOptions.close();
-                throw e;
             }
             //otherwise, the database is empty
             return new LinkedList<>();
@@ -320,7 +361,8 @@ public class DatabaseHandler implements AutoCloseable {
         }
         KeyEncodingUtil.VersionedKey start = KeyEncodingUtil.extractVersionedKey(encodedKeyBegin);
         long timestamp = start.getTimestamp();
-        ReadOptions iterOptions = new ReadOptions().setTotalOrderSeek(true);
+        ReadOptions iterOptions = new ReadOptions();
+        iterOptions.setTotalOrderSeek(true);
         RocksIterator iter = database.newIterator(columnFamilies.get(streamID), iterOptions);
         byte[] prevPrefix = start.getEncodedRemoteCorfuTableKey();
         byte[] currPrefix;
@@ -420,6 +462,15 @@ public class DatabaseHandler implements AutoCloseable {
         return false;
     }
 
+    /**
+     * This function provides an interface to check the size of the table at a given version.
+     * @param streamID The stream backing the table to check.
+     * @param timestamp The timestamp of the requested table version.
+     * @param scanSize The size of each cursor scan to the database.
+     * @return The amount of non-null keys present in the database with version earlier than given timestamp.
+     * @throws RocksDBException An error occuring in the search.
+     * @throws DatabaseOperationException An error occuring with requested stream.
+     */
     //TODO: when writing async versions of these methods, count needs to be incremented atomically
     public int size(ByteString streamID, long timestamp, @Positive int scanSize) throws RocksDBException, DatabaseOperationException {
         boolean first = true;
@@ -460,6 +511,7 @@ public class DatabaseHandler implements AutoCloseable {
      * FOR DEBUG USE ONLY - WILL SCAN EVERY KEY IN THE DATABASE
      * @param streamID The stream to scan.
      * @return Every key in the database with the specified streamID.
+     * @deprecated Use only for debug.
      */
     @DoNotCall
     @Deprecated
@@ -471,6 +523,7 @@ public class DatabaseHandler implements AutoCloseable {
             allEntries.add(new byte[][]{iter.key(),iter.value()});
             iter.next();
         }
+        iter.close();
         return allEntries;
     }
 }
