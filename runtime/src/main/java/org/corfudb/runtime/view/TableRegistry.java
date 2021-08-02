@@ -270,9 +270,6 @@ public class TableRegistry {
                         log.warn("Protobuf file list changed for {} table {}. Prev list {}, new list {}",
                             namespace, tableName, oldRecord.getPayload().getFileDescriptorsMap().keySet(),
                             tableDescriptors.getFileDescriptorsMap().keySet());
-                        for (StackTraceElement st : Thread.currentThread().getStackTrace()) {
-                            log.debug("{}", st);
-                        }
                         schemaChanged = true;
                     }
 
