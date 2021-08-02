@@ -142,7 +142,7 @@ public class DatabaseHandler implements AutoCloseable {
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("GET", "Invalid stream ID");
         }
-        try (RocksIterator iter = database.newIterator(columnFamilies.get(streamID));) {
+        try (RocksIterator iter = database.newIterator(columnFamilies.get(streamID))) {
             iter.seek(encodedKey);
             if (!iter.isValid()) {
                 iter.status();

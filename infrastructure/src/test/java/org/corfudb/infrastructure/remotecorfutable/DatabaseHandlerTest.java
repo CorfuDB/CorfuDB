@@ -133,6 +133,17 @@ public class DatabaseHandlerTest {
     }
 
     @Test
+    public void testUpdateAllBasic() {
+        List<byte[][]> keyValuePairs = new LinkedList<>();
+        for (int i = 0; i < 1000; i++) {
+            byte[][] pair = new byte[2][];
+            pair[0] = KeyEncodingUtil.constructDatabaseKey(Bytes.concat("key".getBytes(DATABASE_CHARSET),
+                    Longs.toByteArray(i)), 0L);
+            vals[i] = ("val" + i).getBytes(DATABASE_CHARSET);
+        }
+    }
+
+    @Test
     public void testStreamIDNotInDatabase() {
         byte[] dummyVal = "dummy".getBytes(DATABASE_CHARSET);
         assertThrows("Expected PUT to throw StreamID not found error",
