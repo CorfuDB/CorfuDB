@@ -45,6 +45,12 @@ public abstract class StreamListenerResumeOrFullSync extends StreamListenerResum
      */
     protected abstract Timestamp performFullSync();
 
+    /**
+     * This method contains the subscription policy in case the attempt to 'resume' streaming from
+     * the last processed entry fails. In this case, full sync is performed (such that a snapshot
+     * of the tables of interest is captured) and we subscribe from the full sync timestamp
+     * (ensuring no data loss).
+     */
     @Override
     public void subscribeOnResumeError() {
         try {
@@ -56,7 +62,7 @@ public abstract class StreamListenerResumeOrFullSync extends StreamListenerResum
                 store.subscribeListener(this, namespace, streamTag, tablesOfInterest, fullSyncTimestamp);
             }
         } catch (StreamingException se) {
-            log.error("Failed to subscribe listener [tag:{}] {}$[{}]", streamTag, namespace, tablesOfInterest);
+            log.error("Failed to subscribe listener [tag:{}] {}$[{}]. Listener is NOT SUBSCRIBED!", streamTag, namespace, tablesOfInterest);
         } catch (Exception e) {
             log.error("Failed to perform full sync [tag:{}] {}$[{}]. Listener is NOT SUBSCRIBED!", streamTag, namespace,
                     tablesOfInterest);

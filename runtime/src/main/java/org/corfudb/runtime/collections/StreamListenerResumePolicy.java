@@ -38,7 +38,11 @@ abstract class StreamListenerResumePolicy implements StreamListener {
     }
 
     /**
-     * Implementation of re-subscription policy in case resuming subscription from last processed entry fails.
+     * This method contains the subscription policy in case the attempt to 'resume' streaming from
+     * the last processed entry fails. Currently, we have 2 different re-subscription policies:
+     *
+     *   (1) Subscribe from latest position in the log (StreamListenerResumeOrDefault) which can incur in data loss.
+     *   (2) Full Sync and subscribe from the full sync timestamp (no data loss).
      */
     public abstract void subscribeOnResumeError();
 

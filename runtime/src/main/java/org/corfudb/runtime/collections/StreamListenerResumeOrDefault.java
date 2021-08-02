@@ -9,7 +9,7 @@ import java.util.List;
  * This is an abstract stream listener callback implementation for clients
  * interested in automatic re-subscription upon any error.
  * The re-subscription policy of this implementation is an attempt to
- * optimize and resume streaming from the last processed entry. If and only if
+ * optimize and resume streaming after the last processed entry. If and only if
  * we can't resume from the last processed entry, we subscribe from the latest
  * position in the log (default), which can incur in data loss, as the latest
  * position in the log might have progressed beyond several updates from
@@ -32,6 +32,12 @@ public abstract class StreamListenerResumeOrDefault extends StreamListenerResume
         this(store, namespace, streamTag, null);
     }
 
+    /**
+     * This method contains the subscription policy in case the attempt to 'resume' streaming from
+     * the last processed entry fails. In this case we subscribe from the latest position in the log
+     * (which can incur in data loss, i.e., updates between last processed entry and latest position in the log
+     * would be lost).
+     */
     @Override
     public void subscribeOnResumeError() {
         // Immediately re-subscribe from the latest point in the log, this means there is no interest in

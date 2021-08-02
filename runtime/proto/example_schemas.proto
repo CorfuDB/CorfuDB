@@ -39,6 +39,28 @@ message ExampleValue {
                                                       (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "non_primitive_field_level_0.key_2_level_1.key_1_level_2"}];
 }
 
+message ActivitySchedule {
+    string activity = 1;
+    Time time = 2 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "time.day" index_name: "day" }];
+    Day freeDay = 3 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "freeDay" index_name: "free" }];
+    Day optionalDay = 4 [(org.corfudb.runtime.schema).secondary_key = true];
+}
+
+message Time {
+    int64 hour = 1;
+    Day day = 2;
+}
+
+enum Day {
+    MONDAY = 0;
+    TUESDAY = 1;
+    WEDNESDAY = 2;
+    THURSDAY = 3;
+    FRIDAY = 4;
+    SATURDAY = 5;
+    SUNDAY = 6;
+}
+
 message ExampleTableName {
     option (org.corfudb.runtime.table_schema).stream_tag = "table_name_streamer";
     string namespace = 1;
