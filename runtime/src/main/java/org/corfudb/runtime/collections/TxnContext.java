@@ -96,17 +96,9 @@ public class TxnContext implements AutoCloseable {
         if (TransactionalContext.isInTransaction()) {
             TxnContext txnContext = TransactionalContext.getRootContext().getTxnContext();
             if (!allowNestedTransactions) {
-                log.error("Nested transactions are disabled & current thread already has a transaction started at...");
-                for (StackTraceElement st : TransactionalContext.getRootContext().getBeginTxnStackTrace()) {
-                    log.error("{}", st);
-                }
                 throw new TransactionAlreadyStartedException(TransactionalContext.getRootContext().toString());
             }
             if (txnContext != null) {
-                log.error("Cannot start new CorfuStore transaction in this thread without ending previous one at...");
-                for (StackTraceElement st : TransactionalContext.getRootContext().getBeginTxnStackTrace()) {
-                    log.error("{}", st);
-                }
                 throw new TransactionAlreadyStartedException(TransactionalContext.getRootContext().toString());
             }
             this.startTxSample = MeterRegistryProvider.getInstance().map(Timer::start);
