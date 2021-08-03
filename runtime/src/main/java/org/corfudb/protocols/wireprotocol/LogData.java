@@ -102,10 +102,8 @@ public class LogData implements IMetadata, ILogData {
                             ByteBuf compressedBuf = CorfuProtocolCommon.fromBuffer(data, ByteBuf.class);
                             byte[] compressedArrayBuf = new byte[compressedBuf.readableBytes()];
                             compressedBuf.readBytes(compressedArrayBuf);
-                            Supplier<ByteBuf> bufSupplier = () -> Unpooled.wrappedBuffer(getPayloadCodecType()
+                            serializedBuf = Unpooled.wrappedBuffer(getPayloadCodecType()
                                     .getInstance().decompress(ByteBuffer.wrap(compressedArrayBuf)));
-                            serializedBuf = MicroMeterUtils.time(bufSupplier,
-                                    "logdata.decompress");
                         }
 
                         final Object actualValue;
@@ -341,8 +339,7 @@ public class LogData implements IMetadata, ILogData {
 
     private void doCompressInternal(ByteBuf bufData, ByteBuf buf) {
         ByteBuffer wrappedByteBuf = ByteBuffer.wrap(bufData.array(), 0, bufData.readableBytes());
-        Supplier<ByteBuffer> compressSupplier = () -> getPayloadCodecType().getInstance().compress(wrappedByteBuf);
-        ByteBuffer compressedBuf = MicroMeterUtils.time(compressSupplier, "logdata.compress");
+        ByteBuffer compressedBuf = getPayloadCodecType().getInstance().compress(wrappedByteBuf);
         CorfuProtocolCommon.serialize(buf, Unpooled.wrappedBuffer(compressedBuf));
     }
 

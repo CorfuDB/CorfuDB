@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.collect.ImmutableSet;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +34,18 @@ public class RequestHandlerMethods {
     private final Map<PayloadCase, String> timerNameCache = new EnumMap<>(PayloadCase.class);
 
     /**
+     * Ignore measuring rpc latencies for these request types.
+     */
+    private final Set<PayloadCase> ignoreMeasureReqs = ImmutableSet.of(
+            PayloadCase.FLUSH_CACHE_REQUEST,
+            PayloadCase.INSPECT_ADDRESSES_REQUEST,
+            PayloadCase.QUERY_NODE_REQUEST,
+            PayloadCase.SEQUENCER_METRICS_REQUEST,
+            PayloadCase.UPDATE_COMMITTED_TAIL_REQUEST,
+            PayloadCase.REPORT_FAILURE_REQUEST,
+            PayloadCase.HEAL_FAILURE_REQUEST
+    );
+    /**
      * The handler map.
      */
     private final Map<PayloadCase, HandlerMethod> handlerMap;
@@ -53,7 +66,7 @@ public class RequestHandlerMethods {
     /**
      * Get the types of requests this handler will handle.
      *
-     * @return  A set containing the types of requests this handler will handle.
+     * @return A set containing the types of requests this handler will handle.
      */
     public Set<PayloadCase> getHandledTypes() {
         return handlerMap.keySet();
@@ -69,8 +82,8 @@ public class RequestHandlerMethods {
     /**
      * Given a {@link RequestMsg} return the corresponding handler.
      *
-     * @param request   The request message to handle.
-     * @return          The appropriate {@link HandlerMethod}.
+     * @param request The request message to handle.
+     * @return The appropriate {@link HandlerMethod}.
      */
     protected HandlerMethod getHandler(RequestMsg request) {
         return handlerMap.get(request.getPayload().getPayloadCase());
@@ -79,9 +92,9 @@ public class RequestHandlerMethods {
     /**
      * Handle an incoming Corfu request message.
      *
-     * @param req       The request message to handle.
-     * @param ctx       The channel handler context.
-     * @param r         The server router.
+     * @param req The request message to handle.
+     * @param ctx The channel handler context.
+     * @param r   The server router.
      */
     @SuppressWarnings("unchecked")
     public void handle(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
@@ -100,9 +113,9 @@ public class RequestHandlerMethods {
     /**
      * Generate handlers for a particular server.
      *
-     * @param caller    The context that is being used. Call MethodHandles.lookup() to obtain.
-     * @param server    The object that implements the server.
-     * @return          New request handlers for caller class.
+     * @param caller The context that is being used. Call MethodHandles.lookup() to obtain.
+     * @param server The object that implements the server.
+     * @return New request handlers for caller class.
      */
     public static RequestHandlerMethods generateHandler(@Nonnull final MethodHandles.Lookup caller,
                                                         @NonNull final AbstractServer server) {
@@ -155,10 +168,11 @@ public class RequestHandlerMethods {
     /**
      * Generate a conditional handler, which instruments the handler with metrics if
      * configured as enabled and checks whether the server is shutdown and ready.
-     * @param type          The type the request message is being handled for.
-     * @param handler       The {@link RequestHandlerMethods.HandlerMethod} which handles the message.
-     * @return              A new {@link RequestHandlerMethods.HandlerMethod} which conditionally executes the
-     *                      handler based on preconditions (whether the server is shutdown/ready).
+     *
+     * @param type    The type the request message is being handled for.
+     * @param handler The {@link RequestHandlerMethods.HandlerMethod} which handles the message.
+     * @return A new {@link RequestHandlerMethods.HandlerMethod} which conditionally executes the
+     * handler based on preconditions (whether the server is shutdown/ready).
      */
     private HandlerMethod generateConditionalHandler(@NonNull final PayloadCase type,
                                                      @NonNull final HandlerMethod handler) {
@@ -166,7 +180,13 @@ public class RequestHandlerMethods {
         String timerName = getTimerName(type);
         // Register the handler. Depending on metrics collection configuration by MetricsUtil,
         // handler will be instrumented by the metrics context.
-        return (req, ctx, r) -> MicroMeterUtils.time(() -> handler.handle(req, ctx, r), timerName);
+        return (req, ctx, r) -> {
+            if (!ignoreMeasureReqs.contains(type)) {
+                MicroMeterUtils.time(() -> handler.handle(req, ctx, r), timerName);
+            } else {
+                handler.handle(req, ctx, r);
+            }
+        };
     }
 
     // Create a timer using cached timer name for the corresponding type

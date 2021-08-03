@@ -1,22 +1,18 @@
 package org.corfudb.infrastructure;
 
-import io.micrometer.core.instrument.DistributionSummary;
-import io.micrometer.core.instrument.Gauge;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.common.util.Memory;
 import org.corfudb.runtime.view.Address;
 
 import javax.annotation.concurrent.NotThreadSafe;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.Optional;
 import java.util.PriorityQueue;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * Sequencer server cache.
@@ -81,6 +77,7 @@ public class SequencerServerCache {
     private final String conflictKeysCounterName = "sequencer.conflict-keys.size";
     @Getter
     private final String windowSizeName = "sequencer.cache.window";
+
     /**
      * The cache limited by size.
      * For a synchronous cache we are using a same-thread executor (Runnable::run)
@@ -91,21 +88,16 @@ public class SequencerServerCache {
 
     public SequencerServerCache(int cacheSize, long maxConflictNewSequencer) {
         this.cacheSize = cacheSize;
-
-        cacheEntries = new PriorityQueue(cacheSize, Comparator.comparingLong
-                (conflict -> ((ConflictTxStream) conflict).txVersion));
         maxConflictWildcard = maxConflictNewSequencer;
         this.maxConflictNewSequencer = maxConflictNewSequencer;
-        conflictKeys = MeterRegistryProvider
-                .getInstance()
-                .map(registry ->
-                        registry.gauge(conflictKeysCounterName, Collections.emptyList(),
-                                new HashMap<ConflictTxStream, Long>(), HashMap::size))
-                .orElse(new HashMap<>());
-        MeterRegistryProvider.getInstance().map(registry ->
-                Gauge.builder(windowSizeName,
-                        conflictKeys, HashMap::size).register(registry));
-
+        Supplier<PriorityQueue<ConflictTxStream>> queueSupplier = () ->
+                new PriorityQueue<>(cacheSize, Comparator.comparingLong
+                        (conflict -> conflict.txVersion));
+        cacheEntries = MicroMeterUtils.gauge(windowSizeName, queueSupplier.get(), PriorityQueue::size)
+                .orElseGet(queueSupplier);
+        conflictKeys = MicroMeterUtils
+                .gauge(conflictKeysCounterName, new HashMap<ConflictTxStream, Long>(), HashMap::size)
+                .orElseGet(HashMap::new);
     }
 
     /**
@@ -129,34 +121,34 @@ public class SequencerServerCache {
         return cacheEntries.peek().txVersion;
     }
 
-  /**
-   * Invalidate the records with the minAddress. It could be one or multiple records
-   *
-   * @return the number of entries has been invalidated and removed from the cache.
-   */
-  private int invalidateSmallestTxVersion() {
-    ConflictTxStream firstEntry = cacheEntries.peek();
-    if (cacheEntries.size() == 0) {
-      return 0;
+    /**
+     * Invalidate the records with the minAddress. It could be one or multiple records
+     *
+     * @return the number of entries has been invalidated and removed from the cache.
+     */
+    private int invalidateSmallestTxVersion() {
+        ConflictTxStream firstEntry = cacheEntries.peek();
+        if (cacheEntries.size() == 0) {
+            return 0;
+        }
+
+        int numEntries = 0;
+
+        while (firstAddress() == firstEntry.txVersion) {
+            if (log.isTraceEnabled()) {
+                log.trace(
+                        "invalidateSmallestTxVersion: items evicted {} min address {}",
+                        numEntries,
+                        firstAddress());
+            }
+            ConflictTxStream entry = cacheEntries.poll();
+            conflictKeys.remove(entry);
+            numEntries++;
+        }
+
+        maxConflictWildcard = Math.max(maxConflictWildcard, firstEntry.txVersion);
+        return numEntries;
     }
-
-    int numEntries = 0;
-
-    while (firstAddress() == firstEntry.txVersion) {
-      if (log.isTraceEnabled()) {
-        log.trace(
-            "invalidateSmallestTxVersion: items evicted {} min address {}",
-            numEntries,
-            firstAddress());
-      }
-      ConflictTxStream entry = cacheEntries.poll();
-      conflictKeys.remove(entry);
-      numEntries++;
-    }
-
-    maxConflictWildcard = Math.max(maxConflictWildcard, firstEntry.txVersion);
-    return numEntries;
-  }
 
     /**
      * Invalidate all records up to a trim mark (not included).
@@ -188,6 +180,7 @@ public class SequencerServerCache {
     /**
      * The memory space used by the entries and also the space used by
      * priority queue and hashmap to store the pointers
+     *
      * @return the memory space used in bytes:
      */
     public long byteSize() {

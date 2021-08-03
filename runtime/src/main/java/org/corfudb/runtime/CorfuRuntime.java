@@ -886,7 +886,7 @@ public class CorfuRuntime {
         if (parameters.metricsEnabled) {
             Logger logger = LoggerFactory.getLogger("org.corfudb.client.metricsdata");
             if (logger.isDebugEnabled()) {
-                MeterRegistryInitializer.init(logger,
+                MeterRegistryInitializer.initClientMetrics(logger,
                         Duration.ofMinutes(1),
                         parameters.clientId.toString());
             } else {

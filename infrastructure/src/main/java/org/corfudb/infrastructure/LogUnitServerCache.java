@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
@@ -16,8 +17,6 @@ import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
-
-import java.util.Optional;
 
 import java.util.function.Supplier;
 
@@ -58,19 +57,10 @@ public class LogUnitServerCache {
                 .removalListener(this::handleEviction)
                 .build(this::handleRetrieval);
 
-        MeterRegistryProvider.getInstance().ifPresent(registry ->
-                CaffeineCacheMetrics.monitor(registry, dataCache, "logunit.read_cache"));
-        MeterRegistryProvider.getInstance().map(registry ->
-                Gauge.builder(hitRatioName,
-                dataCache, cache -> cache.stats().hitRate()).register(registry));
-        MeterRegistryProvider.getInstance().map(registry ->
-                Gauge.builder(loadTimeName,
-                        dataCache, cache -> cache.stats().totalLoadTime())
-                        .register(registry));
-        MeterRegistryProvider.getInstance().map(registry ->
-                Gauge.builder(weightName,
-                        dataCache, cache -> cache.stats().evictionWeight())
-                        .register(registry));
+        MicroMeterUtils.monitorCaffeineCache("logunit.read_cache", dataCache);
+        MicroMeterUtils.gauge(hitRatioName, dataCache, cache -> cache.stats().hitRate());
+        MicroMeterUtils.gauge(loadTimeName, dataCache, cache -> cache.stats().totalLoadTime());
+        MicroMeterUtils.gauge(weightName, dataCache, cache -> cache.stats().evictionWeight());
     }
 
     private int getLogDataTotalSize(ILogData logData) {

@@ -1,13 +1,20 @@
 package org.corfudb.common.metrics.micrometer;
 
+import com.github.benmanes.caffeine.cache.Cache;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
+import java.util.function.ToDoubleFunction;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class MicroMeterUtils {
 
@@ -19,7 +26,7 @@ public class MicroMeterUtils {
     }
 
     public static Optional<Timer> createOrGetTimer(String name, String... tags) {
-        return MeterRegistryProvider.getInstance().map(registry ->
+        return MeterRegistryProvider.getInstanceForConfiguredMetric(name).map(registry ->
                 Timer.builder(name)
                         .tags(tags)
                         .publishPercentileHistogram(PUBLISH_HISTOGRAM)
@@ -28,12 +35,36 @@ public class MicroMeterUtils {
     }
 
     private static Optional<DistributionSummary> createOrGetDistSummary(String name, String... tags) {
-        return MeterRegistryProvider.getInstance().map(registry ->
+        return MeterRegistryProvider.getInstanceForConfiguredMetric(name).map(registry ->
                 DistributionSummary.builder(name)
                         .tags(tags)
                         .publishPercentileHistogram(PUBLISH_HISTOGRAM)
                         .publishPercentiles(PERCENTILES)
                         .register(registry));
+    }
+
+    public static <C extends Cache<?, ?>> void monitorCaffeineCache(String name, C cache, String... tags) {
+        MeterRegistryProvider.getInstanceForConfiguredMetric(name)
+                .map(registry -> CaffeineCacheMetrics.monitor(registry, cache,
+                        name, tags));
+    }
+
+    public static <T> Optional<T> gauge(String name, T state, ToDoubleFunction<T> valueFunction, String... tags) {
+        if (tags.length % 2 != 0) {
+            throw new IllegalArgumentException("Only key-value pairs allowed.");
+        }
+        return MeterRegistryProvider.getInstanceForConfiguredMetric(name).map(registry -> {
+            if (tags.length != 0) {
+                List<Tag> tagsList = IntStream.range(1, tags.length)
+                        .filter(i -> i % 2 != 0)
+                        .mapToObj(i -> Tag.of(tags[i - 1], tags[i]))
+                        .collect(Collectors.toList());
+                return registry.gauge(name, tagsList, state, valueFunction);
+            }
+
+            return registry.gauge(name, state, valueFunction);
+
+        });
     }
 
     public static void time(Duration duration, String name, String... tags) {
@@ -45,8 +76,7 @@ public class MicroMeterUtils {
         Optional<Timer> timer = createOrGetTimer(name, tags);
         if (timer.isPresent()) {
             timer.get().record(runnable);
-        }
-        else{
+        } else {
             runnable.run();
         }
     }
