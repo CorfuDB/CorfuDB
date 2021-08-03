@@ -1,8 +1,11 @@
 package org.corfudb.infrastructure.remotecorfutable;
 
+import com.google.common.primitives.Bytes;
 import com.google.common.primitives.Longs;
 import com.google.errorprone.annotations.DoNotCall;
-import com.google.protobuf.ByteString;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.index.qual.Positive;
@@ -25,11 +28,11 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadPoolExecutor;
 
-import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.DATABASE_CHARSET;
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.LATEST_VERSION_READ;
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.METADATA_COLUMN_CACHE_SIZE;
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.METADATA_COLUMN_SUFFIX;
@@ -51,7 +54,7 @@ public class DatabaseHandler implements AutoCloseable {
     private RocksDB database;
     //instead of using this use completable future
     private ThreadPoolExecutor threadPoolExecutor;
-    private final Map<ByteString, ColumnFamilyHandle> columnFamilies;
+    private final Map<UUID, ColumnFamilyHandlePair> columnFamilies;
 
     /**
      * Constructor for the database handler. Each server should have a single database handler to serve all requests
@@ -81,19 +84,19 @@ public class DatabaseHandler implements AutoCloseable {
      * @param streamID The table to add to the database.
      * @throws RocksDBException An error in adding the database table.
      */
-    public void addTable(@NonNull ByteString streamID) throws RocksDBException {
+    public void addTable(@NonNull UUID streamID) throws RocksDBException {
         if (columnFamilies.containsKey(streamID)) {
             return;
         }
         ColumnFamilyOptions tableOptions = new ColumnFamilyOptions();
         tableOptions.optimizeUniversalStyleCompaction();
         tableOptions.setComparator(BuiltinComparator.REVERSE_BYTEWISE_COMPARATOR);
-        ColumnFamilyDescriptor tableDescriptor = new ColumnFamilyDescriptor(streamID.toByteArray(), tableOptions);
+        ColumnFamilyDescriptor tableDescriptor = new ColumnFamilyDescriptor(getBytes(streamID), tableOptions);
         ColumnFamilyHandle tableHandle;
         try {
             tableHandle = database.createColumnFamily(tableDescriptor);
         } catch (RocksDBException e) {
-            log.error("Error in creating column family for table {}.", streamID.toString(DATABASE_CHARSET));
+            log.error("Error in creating column family for table {}.", streamID);
             log.error("Cause of error: ", e);
             tableOptions.close();
             throw e;
@@ -102,19 +105,19 @@ public class DatabaseHandler implements AutoCloseable {
         ColumnFamilyOptions metadataOptions = new ColumnFamilyOptions();
         metadataOptions.optimizeForPointLookup(METADATA_COLUMN_CACHE_SIZE);
         ColumnFamilyDescriptor metadataDescriptor = new ColumnFamilyDescriptor(
-                getMetadataColumnName(streamID).toByteArray(), metadataOptions);
+                getMetadataColumnName(getBytes(streamID)), metadataOptions);
 
         ColumnFamilyHandle metadataHandle;
         try {
              metadataHandle = database.createColumnFamily(metadataDescriptor);
         } catch (RocksDBException e) {
-            log.error("Error in creating metadata column family for table {}.", streamID.toString(DATABASE_CHARSET));
+            log.error("Error in creating metadata column family for table {}.", streamID);
             log.error("Cause of error: ", e);
             tableHandle.close();
             try {
                 database.dropColumnFamily(tableHandle);
             } catch (RocksDBException r) {
-                log.error("Error in dropping column family for table {}.", streamID.toString(DATABASE_CHARSET));
+                log.error("Error in dropping column family for table {}.", streamID);
                 log.error("Cause of error: ", r);
                 throw e;
             } finally {
@@ -122,11 +125,8 @@ public class DatabaseHandler implements AutoCloseable {
             }
             throw e;
         }
-        //TODO: double check the ordering between this section and the get
-        synchronized (columnFamilies) {
-         columnFamilies.put(streamID, tableHandle);
-         columnFamilies.put(getMetadataColumnName(streamID), metadataHandle);
-        }
+        ColumnFamilyHandlePair addedTables = new ColumnFamilyHandlePair(tableHandle, metadataHandle);
+        columnFamilies.put(streamID, addedTables);
     }
 
     /**
@@ -136,13 +136,13 @@ public class DatabaseHandler implements AutoCloseable {
      * @return A byte[] containing the value mapped to the key, or null if the key is associated to a null value.
      * @throws RocksDBException An error raised in scan.
      */
-    public byte[] get(byte[] encodedKey, @NonNull ByteString streamID)
+    public byte[] get(byte[] encodedKey, @NonNull UUID streamID)
             throws RocksDBException, DatabaseOperationException {
         final byte[] returnVal;
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("GET", "Invalid stream ID");
         }
-        try (RocksIterator iter = database.newIterator(columnFamilies.get(streamID))) {
+        try (RocksIterator iter = database.newIterator(columnFamilies.get(streamID).getStreamTable())) {
             iter.seek(encodedKey);
             if (!iter.isValid()) {
                 iter.status();
@@ -150,6 +150,7 @@ public class DatabaseHandler implements AutoCloseable {
                 returnVal = null;
             } else {
                 if (Arrays.equals(KeyEncodingUtil.extractEncodedKey(iter.key()),
+                        //TODO: factor out length check
                         KeyEncodingUtil.extractEncodedKey(encodedKey)) && iter.value().length != 0) {
                     //This works due to latest version first comparator
                     returnVal = iter.value();
@@ -162,9 +163,9 @@ public class DatabaseHandler implements AutoCloseable {
     }
 
     /**
-     * This method performs {@link #get(byte[], ByteString)} asynchronously.
+     * This method performs {@link #get(byte[], UUID)} asynchronously.
      */
-    public CompletableFuture<byte[]> getAsync(byte[] encodedKey, @NonNull ByteString streamID) {
+    public CompletableFuture<byte[]> getAsync(byte[] encodedKey, @NonNull UUID streamID) {
         CompletableFuture<byte[]> result = new CompletableFuture<>();
         CompletableFuture.runAsync(()-> {
             try {
@@ -186,25 +187,25 @@ public class DatabaseHandler implements AutoCloseable {
      * @param streamID The stream backing the database that the key will be added to.
      * @throws RocksDBException A database error on put.
      */
-    public void update(byte[] encodedKey, byte[] value, @NonNull ByteString streamID)
+    public void update(byte[] encodedKey, byte[] value, @NonNull UUID streamID)
             throws RocksDBException, DatabaseOperationException {
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("PUT", "Invalid stream ID");
         }
         if (value == null) {
+            //TODO: add empty value
             value = new byte[0];
         }
-        ByteString metadataColumn = getMetadataColumnName(streamID);
-        database.put(columnFamilies.get(streamID), encodedKey, value);
-        database.put(columnFamilies.get(metadataColumn), LATEST_VERSION_READ,
+        database.put(columnFamilies.get(streamID).getStreamTable(), encodedKey, value);
+        database.put(columnFamilies.get(streamID).getMetadataTable(), LATEST_VERSION_READ,
                 KeyEncodingUtil.extractTimestampAsByteArray(encodedKey));
 
     }
 
     /**
-     * This method performs {@link #update(byte[], byte[], ByteString)} asynchronously.
+     * This method performs {@link #update(byte[], byte[], UUID)} asynchronously.
      */
-    public CompletableFuture<Void> updateAsync(byte[] encodedKey, byte[] value, @NonNull ByteString streamID) {
+    public CompletableFuture<Void> updateAsync(byte[] encodedKey, byte[] value, @NonNull UUID streamID) {
         CompletableFuture<Void> result = new CompletableFuture<>();
         CompletableFuture.runAsync(()-> {
             try {
@@ -224,14 +225,14 @@ public class DatabaseHandler implements AutoCloseable {
      * @param streamID The stream backing the table the updates are written to.
      * @throws RocksDBException An error in the batched write.
      */
-    public void updateAll(@NonNull List<byte[][]> encodedKeyValuePairs,@NonNull ByteString streamID)
+    public void updateAll(@NonNull List<byte[][]> encodedKeyValuePairs,@NonNull UUID streamID)
             throws RocksDBException {
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("PUTALL", "Invalid stream ID");
         }
         //encodedKeyValuePairs must be non-empty
-        ColumnFamilyHandle currTable = columnFamilies.get(streamID);
-        ColumnFamilyHandle metadataTable = columnFamilies.get(getMetadataColumnName(streamID));
+        ColumnFamilyHandle currTable = columnFamilies.get(streamID).getStreamTable();
+        ColumnFamilyHandle metadataTable = columnFamilies.get(streamID).getMetadataTable();
         try (WriteBatch batchedWrite = new WriteBatch();
              WriteOptions writeOptions = new WriteOptions()) {
             for (byte[][] encodedKeyValuePair : encodedKeyValuePairs) {
@@ -249,10 +250,10 @@ public class DatabaseHandler implements AutoCloseable {
     }
 
     /**
-     * This method performs {@link #updateAll(List, ByteString)} asynchronously.
+     * This method performs {@link #updateAll(List, UUID)} asynchronously.
      */
     public CompletableFuture<Void> updateAllAsync(@NonNull List<byte[][]> encodedKeyValuePairs,
-                                                  @NonNull ByteString streamID) {
+                                                  @NonNull UUID streamID) {
         CompletableFuture<Void> result = new CompletableFuture<>();
         CompletableFuture.runAsync(()-> {
             try {
@@ -273,14 +274,15 @@ public class DatabaseHandler implements AutoCloseable {
      * @param timestamp The timestamp at which the clear was requested.
      * @throws RocksDBException An error in writing all updates.
      */
-    public void clear(@NonNull ByteString streamID, long timestamp) throws RocksDBException {
+    //TODO: Debug for double deletion
+    public void clear(@NonNull UUID streamID, long timestamp) throws RocksDBException {
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("CLEAR", "Invalid stream ID");
         }
         //no data race on cached value since only mutates allowed are add/remove to columnFamilies
         //if streamID is removed during write batch creation, write will fail, so no inconsistency
-        ColumnFamilyHandle currTable = columnFamilies.get(streamID);
-        ColumnFamilyHandle metadataTable = columnFamilies.get(getMetadataColumnName(streamID));
+        ColumnFamilyHandle currTable = columnFamilies.get(streamID).getStreamTable();
+        ColumnFamilyHandle metadataTable = columnFamilies.get(streamID).getMetadataTable();
         byte[] keyPrefix;
         try (RocksIterator iter = database.newIterator(currTable);
              WriteBatch batchedWrite = new WriteBatch();
@@ -289,6 +291,7 @@ public class DatabaseHandler implements AutoCloseable {
             while (iter.isValid()) {
                 keyPrefix = KeyEncodingUtil.extractEncodedKey(iter.key());
                 //put empty "null" value at every key in the table
+                //TODO: use constant
                 batchedWrite.put(currTable,KeyEncodingUtil.constructDatabaseKey(keyPrefix, timestamp), new byte[0]);
                 //seek will move iterator to value after the "next key" if it does not exist
                 iter.seek(findNextKey(keyPrefix));
@@ -300,9 +303,9 @@ public class DatabaseHandler implements AutoCloseable {
     }
 
     /**
-     * This method performs {@link #clear(ByteString, long)} asynchronously.
+     * This method performs {@link #clear(UUID, long)} asynchronously.
      */
-    public CompletableFuture<Void> clearAsync(@NonNull ByteString streamID, long timestamp) {
+    public CompletableFuture<Void> clearAsync(@NonNull UUID streamID, long timestamp) {
         CompletableFuture<Void> result = new CompletableFuture<>();
         CompletableFuture.runAsync(()-> {
             try {
@@ -327,8 +330,9 @@ public class DatabaseHandler implements AutoCloseable {
      * @param streamID The stream backing the database from which the keys are deleted.
      * @throws RocksDBException A database error on delete.
      */
+    //TODO: test with manual 000000 key for end deletion
     public void delete(byte[] encodedKeyBegin, byte[] encodedKeyEnd, boolean includeFirstKey,
-                       boolean includeLastKey, @NonNull ByteString streamID)
+                       boolean includeLastKey, @NonNull UUID streamID)
             throws RocksDBException, DatabaseOperationException {
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("DELETE", "Invalid stream ID");
@@ -349,10 +353,11 @@ public class DatabaseHandler implements AutoCloseable {
     }
 
     private void deleteInternal(byte[] encodedKeyBegin, byte[] encodedKeyEnd,
-                                ByteString streamID) throws RocksDBException {
+                                UUID streamID) throws RocksDBException {
         //this range deletes from start (inclusive) to end (exclusive)
-        database.deleteRange(columnFamilies.get(streamID), encodedKeyBegin, encodedKeyEnd);
+        database.deleteRange(columnFamilies.get(streamID).getStreamTable(), encodedKeyBegin, encodedKeyEnd);
     }
+
 
     private byte[] findNextKey(byte[] encodedPrevKey) throws DatabaseOperationException {
         KeyEncodingUtil.VersionedKey currVersionedKey = KeyEncodingUtil.extractVersionedKey(encodedPrevKey);
@@ -366,7 +371,7 @@ public class DatabaseHandler implements AutoCloseable {
             if (nextKeyPrefix[i] != 0) {
                 nextKeyPrefix[i] -= 1;
                 replaced = true;
-            }
+            } //TODO: add hard set to ff
         }
         if (!replaced) {
             log.error("Attempted to find next key of null key");
@@ -377,11 +382,11 @@ public class DatabaseHandler implements AutoCloseable {
     }
 
     /**
-     * This method performs {@link #delete(byte[], byte[], boolean, boolean, ByteString)} asynchronously.
+     * This method performs {@link #delete(byte[], byte[], boolean, boolean, UUID)} asynchronously.
      */
     public CompletableFuture<Void> deleteAsync(byte[] encodedKeyBegin, byte[] encodedKeyEnd,
                                                boolean includeFirstKey, boolean includeLastKey,
-                                               @NonNull ByteString streamID) {
+                                               @NonNull UUID streamID) {
         CompletableFuture<Void> result = new CompletableFuture<>();
         CompletableFuture.runAsync(()-> {
             try {
@@ -402,15 +407,15 @@ public class DatabaseHandler implements AutoCloseable {
      * @return A list of results from the scan.
      * @throws RocksDBException An error occuring in iteration.
      */
-    public List<byte[][]> scan(@NonNull ByteString streamID, long timestamp)
+    public List<byte[][]> scan(@NonNull UUID streamID, long timestamp)
             throws RocksDBException, DatabaseOperationException {
         return scan(20,streamID, timestamp);
     }
 
     /**
-     * This method performs {@link #scan(ByteString, long)} asynchronously.
+     * This method performs {@link #scan(UUID, long)} asynchronously.
      */
-    public CompletableFuture<List<byte[][]>> scanAsync(@NonNull ByteString streamID, long timestamp) {
+    public CompletableFuture<List<byte[][]>> scanAsync(@NonNull UUID streamID, long timestamp) {
         return scanAsync(20, streamID, timestamp);
     }
 
@@ -422,41 +427,33 @@ public class DatabaseHandler implements AutoCloseable {
      * @return A list of results from the scan.
      * @throws RocksDBException An error occuring in iteration.
      */
-    public List<byte[][]> scan(@Positive int numEntries, @NonNull ByteString streamID,
+    public List<byte[][]> scan(@Positive int numEntries, @NonNull UUID streamID,
                                long timestamp) throws RocksDBException, DatabaseOperationException {
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("SCAN", "Invalid stream ID");
         }
-        ReadOptions iterOptions = new ReadOptions();
-        iterOptions.setTotalOrderSeek(true);
-        RocksIterator iter = database.newIterator(columnFamilies.get(streamID), iterOptions);
-        iter.seekToFirst();
-        if (!iter.isValid()) {
-            try {
-                iter.status();
-            } catch (RocksDBException e) {
-                log.error("Error in RocksDB scan operation:", e);
-                throw e;
-            } finally {
-                iter.close();
-                iterOptions.close();
+        try (ReadOptions iterOptions = new ReadOptions()){
+            iterOptions.setTotalOrderSeek(true);
+            try (RocksIterator iter = database.newIterator(columnFamilies.get(streamID).getStreamTable(), iterOptions)) {
+                iter.seekToFirst();
+                if (!iter.isValid()) {
+                    iter.status();
+                    //otherwise, the database is empty
+                    return new LinkedList<>();
+                } else {
+                    //begin at first value -> extract prefix and add timestamp to it
+                    byte[] startingPrefix = KeyEncodingUtil.extractEncodedKey(iter.key());
+                    byte[] startingKey = KeyEncodingUtil.constructDatabaseKey(startingPrefix, timestamp);
+                    return scanInternal(startingKey, numEntries, streamID, false);
+                }
             }
-            //otherwise, the database is empty
-            return new LinkedList<>();
-        }  else {
-            //begin at first value -> extract prefix and add timestamp to it
-            byte[] startingPrefix = KeyEncodingUtil.extractEncodedKey(iter.key());
-            byte[] startingKey = KeyEncodingUtil.constructDatabaseKey(startingPrefix, timestamp);
-            iter.close();
-            iterOptions.close();
-            return scanInternal(startingKey,numEntries,streamID, false);
         }
     }
 
     /**
-     * This method performs {@link #scan(int, ByteString, long)} asynchronously.
+     * This method performs {@link #scan(int, UUID, long)} asynchronously.
      */
-    public CompletableFuture<List<byte[][]>> scanAsync(@Positive int numEntries,@NonNull ByteString streamID,
+    public CompletableFuture<List<byte[][]>> scanAsync(@Positive int numEntries,@NonNull UUID streamID,
                                                        long timestamp) {
         CompletableFuture<List<byte[][]>> result = new CompletableFuture<>();
         CompletableFuture.runAsync(()-> {
@@ -478,15 +475,15 @@ public class DatabaseHandler implements AutoCloseable {
      * @return A list of results from the scan.
      * @throws RocksDBException An error occuring in iteration.
      */
-    public List<byte[][]> scan(byte[] encodedKeyBegin, @NonNull ByteString streamID)
+    public List<byte[][]> scan(byte[] encodedKeyBegin, @NonNull UUID streamID)
             throws RocksDBException, DatabaseOperationException {
         return scan(encodedKeyBegin, 20, streamID);
     }
 
     /**
-     * This method performs {@link #scan(byte[], ByteString)} asynchronously.
+     * This method performs {@link #scan(byte[], UUID)} asynchronously.
      */
-    public CompletableFuture<List<byte[][]>> scanAsync(byte[] encodedKeyBegin, @NonNull ByteString streamID) {
+    public CompletableFuture<List<byte[][]>> scanAsync(byte[] encodedKeyBegin, @NonNull UUID streamID) {
         return scanAsync(encodedKeyBegin, 20, streamID);
     }
 
@@ -498,16 +495,16 @@ public class DatabaseHandler implements AutoCloseable {
      * @return A list of results from the scan.
      * @throws RocksDBException An error occuring in iteration.
      */
-    public List<byte[][]> scan(byte[] encodedKeyBegin, @Positive int numEntries, @NonNull ByteString streamID)
+    public List<byte[][]> scan(byte[] encodedKeyBegin, @Positive int numEntries, @NonNull UUID streamID)
             throws RocksDBException, DatabaseOperationException {
         return scanInternal(encodedKeyBegin, numEntries, streamID, true);
     }
 
     /**
-     * This method performs {@link #scan(byte[], int, ByteString)} asynchronously.
+     * This method performs {@link #scan(byte[], int, UUID)} asynchronously.
      */
     public CompletableFuture<List<byte[][]>> scanAsync(byte[] encodedKeyBegin, @Positive int numEntries,
-                                                       @NonNull ByteString streamID) {
+                                                       @NonNull UUID streamID) {
         CompletableFuture<List<byte[][]>> result = new CompletableFuture<>();
         CompletableFuture.runAsync(()-> {
             try {
@@ -521,7 +518,7 @@ public class DatabaseHandler implements AutoCloseable {
         return result;
     }
 
-    private List<byte[][]> scanInternal(byte[] encodedKeyBegin, int numEntries, ByteString streamID, boolean skipFirst)
+    private List<byte[][]> scanInternal(byte[] encodedKeyBegin, int numEntries, UUID streamID, boolean skipFirst)
             throws RocksDBException, DatabaseOperationException {
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("SCAN", "Invalid stream ID");
@@ -535,7 +532,8 @@ public class DatabaseHandler implements AutoCloseable {
         int elements = 0;
         try (ReadOptions iterOptions = new ReadOptions()){
             iterOptions.setTotalOrderSeek(true);
-            try (RocksIterator iter = database.newIterator(columnFamilies.get(streamID), iterOptions)) {
+            try (RocksIterator iter = database.newIterator(columnFamilies.get(streamID).getStreamTable(),
+                    iterOptions)) {
                 iter.seek(encodedKeyBegin);
                 while (iter.isValid()) {
                     currPrefix = KeyEncodingUtil.extractEncodedKey(iter.key());
@@ -581,16 +579,16 @@ public class DatabaseHandler implements AutoCloseable {
      * @return True, if a non-null value exists in the table for the given key and timestamp.
      * @throws RocksDBException An error occuring in the search.
      */
-    public boolean containsKey(byte[] encodedKey, @NonNull ByteString streamID)
+    public boolean containsKey(byte[] encodedKey, @NonNull UUID streamID)
             throws RocksDBException, DatabaseOperationException {
         byte[] val = get(encodedKey, streamID);
         return val != null;
     }
 
     /**
-     * This method performs {@link #containsKey(byte[], ByteString)} asynchronously.
+     * This method performs {@link #containsKey(byte[], UUID)} asynchronously.
      */
-    public CompletableFuture<Boolean> containsKeyAsync(byte[] encodedKey, @NonNull ByteString streamID) {
+    public CompletableFuture<Boolean> containsKeyAsync(byte[] encodedKey, @NonNull UUID streamID) {
         CompletableFuture<Boolean> result = new CompletableFuture<>();
         CompletableFuture.runAsync(()-> {
             try {
@@ -613,7 +611,7 @@ public class DatabaseHandler implements AutoCloseable {
      * @return True, if the given value exists in the table.
      * @throws RocksDBException An error occuring in the search.
      */
-    public boolean containsValue(byte[] encodedValue, @NonNull ByteString streamID,
+    public boolean containsValue(byte[] encodedValue, @NonNull UUID streamID,
                                  long timestamp, @Positive int scanSize)
             throws RocksDBException, DatabaseOperationException {
         boolean first = true;
@@ -638,9 +636,9 @@ public class DatabaseHandler implements AutoCloseable {
     }
 
     /**
-     * This method performs {@link #containsValue(byte[], ByteString, long, int)} asynchronously.
+     * This method performs {@link #containsValue(byte[], UUID, long, int)} asynchronously.
      */
-    public CompletableFuture<Boolean> containsValueAsync(byte[] encodedValue, @NonNull ByteString streamID,
+    public CompletableFuture<Boolean> containsValueAsync(byte[] encodedValue, @NonNull UUID streamID,
                                                          long timestamp, @Positive int scanSize) {
         CompletableFuture<Boolean> result = new CompletableFuture<>();
         CompletableFuture.runAsync(()-> {
@@ -664,7 +662,7 @@ public class DatabaseHandler implements AutoCloseable {
      * @throws RocksDBException An error occuring in the search.
      * @throws DatabaseOperationException An error occuring with requested stream.
      */
-    public int size(@NonNull ByteString streamID, long timestamp, @Positive int scanSize)
+    public int size(@NonNull UUID streamID, long timestamp, @Positive int scanSize)
             throws RocksDBException, DatabaseOperationException {
         boolean first = true;
         byte[] lastKey = null;
@@ -686,9 +684,9 @@ public class DatabaseHandler implements AutoCloseable {
     }
 
     /**
-     * This method performs {@link #sizeAsync(ByteString, long, int)} asynchronously.
+     * This method performs {@link #size(UUID, long, int)} asynchronously.
      */
-    public CompletableFuture<Integer> sizeAsync(@NonNull ByteString streamID, long timestamp,
+    public CompletableFuture<Integer> sizeAsync(@NonNull UUID streamID, long timestamp,
                                                 @Positive int scanSize) {
         CompletableFuture<Integer> result = new CompletableFuture<>();
         CompletableFuture.runAsync(()-> {
@@ -703,8 +701,13 @@ public class DatabaseHandler implements AutoCloseable {
         return result;
     }
 
-    private ByteString getMetadataColumnName(ByteString streamID) {
-        return streamID.concat(METADATA_COLUMN_SUFFIX);
+    private byte[] getBytes(UUID id) {
+        return Bytes.concat(Longs.toByteArray(id.getMostSignificantBits()),
+                Longs.toByteArray(id.getLeastSignificantBits()));
+    }
+
+    private byte[] getMetadataColumnName(byte[] streamTable) {
+        return Bytes.concat(streamTable, METADATA_COLUMN_SUFFIX);
     }
 
     /**
@@ -712,8 +715,9 @@ public class DatabaseHandler implements AutoCloseable {
      */
     @Override
     public void close() {
-        for (ColumnFamilyHandle handle : columnFamilies.values()) {
-            handle.close();
+        for (ColumnFamilyHandlePair handle : columnFamilies.values()) {
+            handle.getStreamTable().close();
+            handle.getMetadataTable().close();
         }
         database.close();
     }
@@ -726,9 +730,9 @@ public class DatabaseHandler implements AutoCloseable {
      */
     @DoNotCall
     @Deprecated
-    protected List<byte[][]> fullDatabaseScan(ByteString streamID) {
+    protected List<byte[][]> fullDatabaseScan(UUID streamID) {
         List<byte[][]> allEntries = new LinkedList<>();
-        RocksIterator iter = database.newIterator(columnFamilies.get(streamID));
+        RocksIterator iter = database.newIterator(columnFamilies.get(streamID).getStreamTable());
         iter.seekToFirst();
         while(iter.isValid()) {
             allEntries.add(new byte[][]{iter.key(),iter.value()});
@@ -736,5 +740,12 @@ public class DatabaseHandler implements AutoCloseable {
         }
         iter.close();
         return allEntries;
+    }
+
+    @AllArgsConstructor(access = AccessLevel.PRIVATE)
+    @Getter
+    private class ColumnFamilyHandlePair {
+        private final ColumnFamilyHandle streamTable;
+        private final ColumnFamilyHandle metadataTable;
     }
 }

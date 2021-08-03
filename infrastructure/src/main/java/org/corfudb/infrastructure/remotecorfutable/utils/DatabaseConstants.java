@@ -12,7 +12,7 @@ import java.nio.charset.StandardCharsets;
  */
 public final class DatabaseConstants {
     public static final Charset DATABASE_CHARSET = StandardCharsets.UTF_8;
-    public static final ByteString METADATA_COLUMN_SUFFIX = ByteString.copyFrom("_mtd", DATABASE_CHARSET);
+    public static final byte[] METADATA_COLUMN_SUFFIX = "_mtd".getBytes(DATABASE_CHARSET);
     public static final byte[] SIZE_KEY = "size".getBytes(DATABASE_CHARSET);
     public static final byte[] LATEST_VERSION_READ = "latest-version".getBytes(DATABASE_CHARSET);
     public static final byte[] EMPTY_VALUE = new byte[0];

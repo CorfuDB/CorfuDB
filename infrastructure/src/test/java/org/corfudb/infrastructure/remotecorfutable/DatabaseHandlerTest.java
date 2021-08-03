@@ -1,9 +1,7 @@
 package org.corfudb.infrastructure.remotecorfutable;
 
-import com.google.common.collect.Streams;
 import com.google.common.primitives.Bytes;
 import com.google.common.primitives.Longs;
-import com.google.protobuf.ByteString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.remotecorfutable.utils.KeyEncodingUtil;
 import org.junit.After;
@@ -21,6 +19,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.DATABASE_CHARSET;
@@ -51,7 +50,7 @@ public class DatabaseHandlerTest {
     private ThreadPoolExecutor mThreadPoolExecutor;
 
     //constants
-    private final ByteString stream1 = ByteString.copyFrom("stream1", DATABASE_CHARSET);
+    private final UUID stream1 = UUID.nameUUIDFromBytes("stream1".getBytes(DATABASE_CHARSET));
     private final byte[] key1 = "key1".getBytes(DATABASE_CHARSET);
 
     /**
@@ -133,13 +132,21 @@ public class DatabaseHandlerTest {
     }
 
     @Test
-    public void testUpdateAllBasic() {
+    public void testUpdateAllBasic() throws RocksDBException {
         List<byte[][]> keyValuePairs = new LinkedList<>();
         for (int i = 0; i < 1000; i++) {
             byte[][] pair = new byte[2][];
             pair[0] = KeyEncodingUtil.constructDatabaseKey(Bytes.concat("key".getBytes(DATABASE_CHARSET),
                     Longs.toByteArray(i)), 0L);
-            vals[i] = ("val" + i).getBytes(DATABASE_CHARSET);
+            pair[1] = ("val" + i).getBytes(DATABASE_CHARSET);
+            keyValuePairs.add(pair);
+        }
+        databaseHandler.addTable(stream1);
+        databaseHandler.updateAll(keyValuePairs, stream1);
+        List<byte[][]> read = databaseHandler.fullDatabaseScan(stream1);
+        for (int i = 0; i < 1000; i++) {
+            assertArrayEquals(keyValuePairs.get(i)[0],read.get(999-i)[0]);
+            assertArrayEquals(keyValuePairs.get(i)[1],read.get(999-i)[1]);
         }
     }
 
