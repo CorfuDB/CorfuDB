@@ -15,6 +15,7 @@ import org.rocksdb.BuiltinComparator;
 import org.rocksdb.ColumnFamilyDescriptor;
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.ColumnFamilyOptions;
+import org.rocksdb.ComparatorOptions;
 import org.rocksdb.Options;
 import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDB;
@@ -33,9 +34,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadPoolExecutor;
 
+import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.EMPTY_VALUE;
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.LATEST_VERSION_READ;
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.METADATA_COLUMN_CACHE_SIZE;
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.METADATA_COLUMN_SUFFIX;
+import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.isEmpty;
 
 /**
  * The DatabaseHandler provides an interface for the RocksDB instance storing data for server side
@@ -90,7 +93,9 @@ public class DatabaseHandler implements AutoCloseable {
         }
         ColumnFamilyOptions tableOptions = new ColumnFamilyOptions();
         tableOptions.optimizeUniversalStyleCompaction();
-        tableOptions.setComparator(BuiltinComparator.REVERSE_BYTEWISE_COMPARATOR);
+        ComparatorOptions comparatorOptions = new ComparatorOptions();
+        ReversedVersionedKeyComparator comparator = new ReversedVersionedKeyComparator(comparatorOptions);
+        tableOptions.setComparator(comparator);
         ColumnFamilyDescriptor tableDescriptor = new ColumnFamilyDescriptor(getBytes(streamID), tableOptions);
         ColumnFamilyHandle tableHandle;
         try {
@@ -99,6 +104,8 @@ public class DatabaseHandler implements AutoCloseable {
             log.error("Error in creating column family for table {}.", streamID);
             log.error("Cause of error: ", e);
             tableOptions.close();
+            comparatorOptions.close();
+            comparator.close();
             throw e;
         }
 
@@ -114,6 +121,8 @@ public class DatabaseHandler implements AutoCloseable {
             log.error("Error in creating metadata column family for table {}.", streamID);
             log.error("Cause of error: ", e);
             tableHandle.close();
+            comparatorOptions.close();
+            comparator.close();
             try {
                 database.dropColumnFamily(tableHandle);
             } catch (RocksDBException r) {
@@ -150,8 +159,7 @@ public class DatabaseHandler implements AutoCloseable {
                 returnVal = null;
             } else {
                 if (Arrays.equals(KeyEncodingUtil.extractEncodedKey(iter.key()),
-                        //TODO: factor out length check
-                        KeyEncodingUtil.extractEncodedKey(encodedKey)) && iter.value().length != 0) {
+                        KeyEncodingUtil.extractEncodedKey(encodedKey)) && !isEmpty(iter.value())) {
                     //This works due to latest version first comparator
                     returnVal = iter.value();
                 } else {
@@ -193,8 +201,7 @@ public class DatabaseHandler implements AutoCloseable {
             throw new DatabaseOperationException("PUT", "Invalid stream ID");
         }
         if (value == null) {
-            //TODO: add empty value
-            value = new byte[0];
+            value = EMPTY_VALUE;
         }
         database.put(columnFamilies.get(streamID).getStreamTable(), encodedKey, value);
         database.put(columnFamilies.get(streamID).getMetadataTable(), LATEST_VERSION_READ,
@@ -239,7 +246,7 @@ public class DatabaseHandler implements AutoCloseable {
                 byte[] key = encodedKeyValuePair[0];
                 byte[] value = encodedKeyValuePair[1];
                 if (value == null) {
-                    value = new byte[0];
+                    value = EMPTY_VALUE;
                 }
                 batchedWrite.put(currTable,key,value);
             }
@@ -291,10 +298,9 @@ public class DatabaseHandler implements AutoCloseable {
             while (iter.isValid()) {
                 keyPrefix = KeyEncodingUtil.extractEncodedKey(iter.key());
                 //put empty "null" value at every key in the table
-                //TODO: use constant
-                batchedWrite.put(currTable,KeyEncodingUtil.constructDatabaseKey(keyPrefix, timestamp), new byte[0]);
+                batchedWrite.put(currTable,KeyEncodingUtil.constructDatabaseKey(keyPrefix, timestamp), EMPTY_VALUE);
                 //seek will move iterator to value after the "next key" if it does not exist
-                iter.seek(findNextKey(keyPrefix));
+                iter.seek(findNextKey(keyPrefix, true));
             }
             batchedWrite.put(metadataTable,LATEST_VERSION_READ, Longs.toByteArray(timestamp));
             iter.status();
@@ -340,12 +346,12 @@ public class DatabaseHandler implements AutoCloseable {
         byte[] start;
         byte[] end;
         if (!includeFirstKey) {
-            start = findNextKey(encodedKeyBegin);
+            start = findNextKey(encodedKeyBegin, false);
         } else {
             start = encodedKeyBegin;
         }
         if (includeLastKey) {
-            end = findNextKey(encodedKeyEnd);
+            end = findNextKey(encodedKeyEnd, false);
         } else {
             end = encodedKeyEnd;
         }
@@ -359,9 +365,9 @@ public class DatabaseHandler implements AutoCloseable {
     }
 
 
-    private byte[] findNextKey(byte[] encodedPrevKey) throws DatabaseOperationException {
+    private byte[] findNextKey(byte[] encodedPrevKey, boolean ignoreVersion) throws DatabaseOperationException {
         KeyEncodingUtil.VersionedKey currVersionedKey = KeyEncodingUtil.extractVersionedKey(encodedPrevKey);
-        if (currVersionedKey.getTimestamp() != 0) {
+        if (!ignoreVersion && currVersionedKey.getTimestamp() != 0) {
             return KeyEncodingUtil.constructDatabaseKey(currVersionedKey.getEncodedRemoteCorfuTableKey(),
                     currVersionedKey.getTimestamp()-1);
         }
@@ -369,9 +375,9 @@ public class DatabaseHandler implements AutoCloseable {
         byte[] nextKeyPrefix = currVersionedKey.getEncodedRemoteCorfuTableKey();
         for (int i = nextKeyPrefix.length-1; (i >= 0 && !replaced); i--) {
             if (nextKeyPrefix[i] != 0) {
-                nextKeyPrefix[i] -= 1;
                 replaced = true;
-            } //TODO: add hard set to ff
+            }
+            nextKeyPrefix[i] -= 1;
         }
         if (!replaced) {
             log.error("Attempted to find next key of null key");
@@ -544,7 +550,7 @@ public class DatabaseHandler implements AutoCloseable {
                         encounteredPrefix = false;
                     } else if (encounteredPrefix) {
                         iter.next();
-                    } else if (iter.value().length == 0) {
+                    } else if (isEmpty(iter.value())) {
                         encounteredPrefix = true;
                         iter.next();
                     } else {

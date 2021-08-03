@@ -1,7 +1,5 @@
 package org.corfudb.infrastructure.remotecorfutable.utils;
 
-import com.google.protobuf.ByteString;
-
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
@@ -20,4 +18,8 @@ public final class DatabaseConstants {
     public static final long METADATA_COLUMN_CACHE_SIZE = 64;
     //prevent instantiation
     private DatabaseConstants() {}
+
+    public static boolean isEmpty(byte[] arr) {
+        return arr.length == 0;
+    }
 }
