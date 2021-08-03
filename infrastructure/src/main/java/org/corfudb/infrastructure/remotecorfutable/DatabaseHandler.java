@@ -25,6 +25,7 @@ import org.rocksdb.WriteBatch;
 import org.rocksdb.WriteOptions;
 
 import java.nio.file.Path;
+import java.security.Key;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
@@ -281,7 +282,7 @@ public class DatabaseHandler implements AutoCloseable {
      * @param timestamp The timestamp at which the clear was requested.
      * @throws RocksDBException An error in writing all updates.
      */
-    //TODO: Debug for double deletion
+    //TODO: write test cases
     public void clear(@NonNull UUID streamID, long timestamp) throws RocksDBException {
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("CLEAR", "Invalid stream ID");
@@ -291,19 +292,25 @@ public class DatabaseHandler implements AutoCloseable {
         ColumnFamilyHandle currTable = columnFamilies.get(streamID).getStreamTable();
         ColumnFamilyHandle metadataTable = columnFamilies.get(streamID).getMetadataTable();
         byte[] keyPrefix;
+        byte[] prevPrefix = EMPTY_VALUE;
         try (RocksIterator iter = database.newIterator(currTable);
              WriteBatch batchedWrite = new WriteBatch();
              WriteOptions writeOptions = new WriteOptions()) {
             iter.seekToFirst();
             while (iter.isValid()) {
                 keyPrefix = KeyEncodingUtil.extractEncodedKey(iter.key());
+                if (Arrays.equals(keyPrefix, prevPrefix)) {
+                    iter.next();
+                    continue;
+                }
                 //put empty "null" value at every key in the table
                 batchedWrite.put(currTable,KeyEncodingUtil.constructDatabaseKey(keyPrefix, timestamp), EMPTY_VALUE);
                 //seek will move iterator to value after the "next key" if it does not exist
-                iter.seek(findNextKey(keyPrefix, true));
+                iter.seek(KeyEncodingUtil.constructDatabaseKey(keyPrefix, 0L));
+                prevPrefix = keyPrefix;
             }
-            batchedWrite.put(metadataTable,LATEST_VERSION_READ, Longs.toByteArray(timestamp));
             iter.status();
+            batchedWrite.put(metadataTable,LATEST_VERSION_READ, Longs.toByteArray(timestamp));
             database.write(writeOptions,batchedWrite);
         }
     }
@@ -327,76 +334,40 @@ public class DatabaseHandler implements AutoCloseable {
 
     /**
      * This function provides an interface to delete a range of keys from the database.
-     * encodedKeyBegin must be less than encodedKeyEnd with the comparator used (REVERSE_BYTEWISE_COMPARATOR)
+     * encodedKeyBegin must be less than encodedKeyEnd with the comparator used (reverse lexicographic)
      *
      * @param encodedKeyBegin The start of the range.
      * @param encodedKeyEnd The end of the range.
-     * @param includeFirstKey If true, delete encodedKeyBegin from the database as well.
      * @param includeLastKey If true, delete encodedKeyEnd from the database as well.
      * @param streamID The stream backing the database from which the keys are deleted.
      * @throws RocksDBException A database error on delete.
      */
-    //TODO: test with manual 000000 key for end deletion
-    public void delete(byte[] encodedKeyBegin, byte[] encodedKeyEnd, boolean includeFirstKey,
+    public void delete(byte[] encodedKeyBegin, byte[] encodedKeyEnd,
                        boolean includeLastKey, @NonNull UUID streamID)
             throws RocksDBException, DatabaseOperationException {
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("DELETE", "Invalid stream ID");
         }
-        byte[] start;
-        byte[] end;
-        if (!includeFirstKey) {
-            start = findNextKey(encodedKeyBegin, false);
-        } else {
-            start = encodedKeyBegin;
-        }
-        if (includeLastKey) {
-            end = findNextKey(encodedKeyEnd, false);
-        } else {
-            end = encodedKeyEnd;
-        }
-        deleteInternal(start, end, streamID);
-    }
-
-    private void deleteInternal(byte[] encodedKeyBegin, byte[] encodedKeyEnd,
-                                UUID streamID) throws RocksDBException {
-        //this range deletes from start (inclusive) to end (exclusive)
-        database.deleteRange(columnFamilies.get(streamID).getStreamTable(), encodedKeyBegin, encodedKeyEnd);
-    }
-
-
-    private byte[] findNextKey(byte[] encodedPrevKey, boolean ignoreVersion) throws DatabaseOperationException {
-        KeyEncodingUtil.VersionedKey currVersionedKey = KeyEncodingUtil.extractVersionedKey(encodedPrevKey);
-        if (!ignoreVersion && currVersionedKey.getTimestamp() != 0) {
-            return KeyEncodingUtil.constructDatabaseKey(currVersionedKey.getEncodedRemoteCorfuTableKey(),
-                    currVersionedKey.getTimestamp()-1);
-        }
-        boolean replaced = false;
-        byte[] nextKeyPrefix = currVersionedKey.getEncodedRemoteCorfuTableKey();
-        for (int i = nextKeyPrefix.length-1; (i >= 0 && !replaced); i--) {
-            if (nextKeyPrefix[i] != 0) {
-                replaced = true;
+        ColumnFamilyHandle currTable = columnFamilies.get(streamID).getStreamTable();
+        try (WriteBatch batchedWrite = new WriteBatch();
+             WriteOptions writeOptions = new WriteOptions()){
+            batchedWrite.deleteRange(currTable, encodedKeyBegin, encodedKeyEnd);
+            if (includeLastKey) {
+                batchedWrite.delete(currTable, encodedKeyEnd);
             }
-            nextKeyPrefix[i] -= 1;
+            database.write(writeOptions, batchedWrite);
         }
-        if (!replaced) {
-            log.error("Attempted to find next key of null key");
-            throw new DatabaseOperationException("Find next key", "null keys are unsupported");
-        }
-        //in java, bytes are signed, but rocks db stores unsigned bytes so -1L is the largest version possible
-        return KeyEncodingUtil.constructDatabaseKey(nextKeyPrefix,-1L);
     }
 
     /**
-     * This method performs {@link #delete(byte[], byte[], boolean, boolean, UUID)} asynchronously.
+     * This method performs {@link #delete(byte[], byte[], boolean, UUID)} asynchronously.
      */
-    public CompletableFuture<Void> deleteAsync(byte[] encodedKeyBegin, byte[] encodedKeyEnd,
-                                               boolean includeFirstKey, boolean includeLastKey,
+    public CompletableFuture<Void> deleteAsync(byte[] encodedKeyBegin, byte[] encodedKeyEnd, boolean includeLastKey,
                                                @NonNull UUID streamID) {
         CompletableFuture<Void> result = new CompletableFuture<>();
         CompletableFuture.runAsync(()-> {
             try {
-                delete(encodedKeyBegin, encodedKeyEnd, includeFirstKey, includeLastKey, streamID);
+                delete(encodedKeyBegin, encodedKeyEnd, includeLastKey, streamID);
                 result.complete(null);
             } catch (RocksDBException|DatabaseOperationException e) {
                 log.error("Error in RocksDB delete operation: ", e);

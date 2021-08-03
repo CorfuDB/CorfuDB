@@ -158,7 +158,8 @@ public class DatabaseHandlerTest {
         assertThrows("Expected GET to throw StreamID not found error",
                 DatabaseOperationException.class,() -> databaseHandler.get(key1,stream1));
         assertThrows("Expected DELETE to throw StreamID not found error",
-                DatabaseOperationException.class,() -> databaseHandler.delete(key1,dummyVal, true, true, stream1));
+                DatabaseOperationException.class,
+                () -> databaseHandler.delete(key1,dummyVal, true, stream1));
         assertThrows("Expected PUT to throw StreamID not found error",
                 DatabaseOperationException.class,() -> databaseHandler.update(key1,dummyVal,stream1));
         assertThrows("Expected SCAN to throw StreamID not found error",
@@ -166,7 +167,8 @@ public class DatabaseHandlerTest {
         assertThrows("Expected CONTAINSKEY to throw StreamID not found error",
                 DatabaseOperationException.class,() -> databaseHandler.containsKey(key1,stream1));
         assertThrows("Expected CONTAINSVALUE to throw StreamID not found error",
-                DatabaseOperationException.class,() -> databaseHandler.containsValue(dummyVal,stream1,0L,10));
+                DatabaseOperationException.class,
+                () -> databaseHandler.containsValue(dummyVal,stream1,0L,10));
         assertThrows("Expected SIZE to throw StreamID not found error",
                 DatabaseOperationException.class,() -> databaseHandler.size(stream1,0L,10));
     }
@@ -210,7 +212,7 @@ public class DatabaseHandlerTest {
                 databaseHandler.update(keys[i], vals[i], stream1);
             }
             //Expected to result in deleting all versions of key1
-            databaseHandler.delete(keys[5], keys[0], true, true, stream1);
+            databaseHandler.delete(keys[5], keys[0], true, stream1);
             //should be empty
             List<byte[][]> allEntries = databaseHandler.fullDatabaseScan(stream1);
             assertEquals(0, allEntries.size());
@@ -234,7 +236,7 @@ public class DatabaseHandlerTest {
                 databaseHandler.update(keys[i], vals[i], stream1);
             }
             //Expected to result in deleting all versions of key1 except ver0
-            databaseHandler.delete(keys[5], keys[0], true, false,stream1);
+            databaseHandler.delete(keys[5], keys[0], false,stream1);
             //should have 1 element
             List<byte[][]> allEntries = databaseHandler.fullDatabaseScan(stream1);
             assertEquals(1, allEntries.size());
@@ -247,11 +249,12 @@ public class DatabaseHandlerTest {
     }
 
     @Test
-    public void testExclusiveStartDeleteRange() throws RocksDBException, DatabaseOperationException {
+    public void testEndOfDataDeletion() throws RocksDBException {
         byte[][] keys = new byte[6][];
         byte[][] vals = new byte[6][];
+        byte[] nullKeyPrefix = new byte[]{0,0,0,0};
         for (int i = 0; i < 6; i++) {
-            keys[i] = KeyEncodingUtil.constructDatabaseKey(key1,i);
+            keys[i] = KeyEncodingUtil.constructDatabaseKey(nullKeyPrefix,i);
             vals[i] = ("ver" + i + "val").getBytes(DATABASE_CHARSET);
         }
         try {
@@ -259,43 +262,13 @@ public class DatabaseHandlerTest {
             for (int i = 0; i < 6; i++) {
                 databaseHandler.update(keys[i], vals[i], stream1);
             }
-            //Expected to result in deleting all versions of key1 except ver5
-            databaseHandler.delete(keys[5], keys[0], false, true,stream1);
-            //should have 1 element
+            //Expected to result in deleting all versions of the null prefix
+            databaseHandler.delete(keys[5], keys[0], true, stream1);
+            //should be empty
             List<byte[][]> allEntries = databaseHandler.fullDatabaseScan(stream1);
-            assertEquals(1, allEntries.size());
-            assertArrayEquals(keys[5], allEntries.get(0)[0]);
-            assertArrayEquals(vals[5], allEntries.get(0)[1]);
+            assertEquals(0, allEntries.size());
         } catch (RocksDBException | DatabaseOperationException e) {
-            log.error("Error in exclusive start delete range test: ", e);
-            throw e;
-        }
-    }
-
-    @Test
-    public void testExclusiveStartAndEndDeleteRange() throws RocksDBException, DatabaseOperationException {
-        byte[][] keys = new byte[6][];
-        byte[][] vals = new byte[6][];
-        for (int i = 0; i < 6; i++) {
-            keys[i] = KeyEncodingUtil.constructDatabaseKey(key1,i);
-            vals[i] = ("ver" + i + "val").getBytes(DATABASE_CHARSET);
-        }
-        try {
-            databaseHandler.addTable(stream1);
-            for (int i = 0; i < 6; i++) {
-                databaseHandler.update(keys[i], vals[i], stream1);
-            }
-            //Expected to result in deleting all versions of key1 except ver5 and ver0
-            databaseHandler.delete(keys[5], keys[0], false, false,stream1);
-            //should have 2 elements
-            List<byte[][]> allEntries = databaseHandler.fullDatabaseScan(stream1);
-            assertEquals(2, allEntries.size());
-            assertArrayEquals(keys[5], allEntries.get(0)[0]);
-            assertArrayEquals(vals[5], allEntries.get(0)[1]);
-            assertArrayEquals(keys[0], allEntries.get(1)[0]);
-            assertArrayEquals(vals[0], allEntries.get(1)[1]);
-        } catch (RocksDBException | DatabaseOperationException e) {
-            log.error("Error in exclusive start and end delete range test: ", e);
+            log.error("Error in test full inclusive delete range: ", e);
             throw e;
         }
     }
