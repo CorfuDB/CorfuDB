@@ -142,6 +142,26 @@ public class DatabaseHandler implements AutoCloseable {
         columnFamilies.put(streamID, addedTables);
     }
 
+    public void removeTable(@NonNull UUID streamID) throws RocksDBException {
+        if (!columnFamilies.containsKey(streamID)) {
+            throw new DatabaseOperationException("REMOVETABLE", INVALID_STREAM_ID_MSG);
+        }
+        ColumnFamilyHandlePair tablesToClose = columnFamilies.get(streamID);
+        tablesToClose.getMetadataTable().close();
+        tablesToClose.getStreamTable().close();
+        //possible half delete inconsistencies can be addressed in GC
+        try {
+            database.dropColumnFamily(tablesToClose.getStreamTable());
+            database.dropColumnFamily(tablesToClose.getMetadataTable());
+        } catch (RocksDBException e) {
+            log.error("Error in dropping column families for table {}.", streamID);
+            log.error("Cause of error: ", e);
+            throw e;
+        }
+
+        columnFamilies.remove(streamID);
+    }
+
     /**
      * This function provides an interface to read a key from the database.
      * @param encodedKey The key to read.
