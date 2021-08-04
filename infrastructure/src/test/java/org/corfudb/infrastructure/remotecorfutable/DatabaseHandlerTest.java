@@ -452,7 +452,7 @@ public class DatabaseHandlerTest {
             List<byte[]> nonNullKeys = new LinkedList<>();
             List<byte[]> nonNullValues = new LinkedList<>();
             for (int i = 0; i < 1000; i++) {
-                if (vals.get(i).length != 0) {
+                if (!isEmpty(vals.get(i))) {
                     nonNullKeys.add(keys.get(i));
                     nonNullValues.add(vals.get(i));
                 }
@@ -511,12 +511,12 @@ public class DatabaseHandlerTest {
                 nonNullKeysByVersion = new LinkedList<>();
                 nonNullValsByVersion = new LinkedList<>();
                 for (int i = 0; i < 250; i++) {
-                    if (vals.get(i).get(j).length != 0) {
+                    if (!isEmpty(vals.get(i).get(j))) {
                         nonNullKeysByVersion.add(keys.get(i).get(j));
                         nonNullValsByVersion.add(vals.get(i).get(j));
                     } else {
                         for (int l = j-1; l >= 0; l--) {
-                            if (vals.get(i).get(l).length != 0) {
+                            if (!isEmpty(vals.get(i).get(l))) {
                                 nonNullKeysByVersion.add(keys.get(i).get(l));
                                 nonNullValsByVersion.add(vals.get(i).get(l));
                                 break;
@@ -633,6 +633,117 @@ public class DatabaseHandlerTest {
             }
         } catch (RocksDBException | DatabaseOperationException e) {
             log.error("Error in contains key test: ", e);
+            throw e;
+        }
+    }
+
+    //Intermittently throws UnsupportedOperationException for ByteBuffer.array, does not seem to be affecting test performance
+    // may be related to https://github.com/facebook/rocksdb/issues/6608, with C++ handling issues
+
+    @Test
+    public void testContainsValueFunctionality() throws RocksDBException {
+        List<List<byte[]>> keys = new ArrayList<>(250);
+        List<List<byte[]>> vals = new ArrayList<>(250);
+        for (int i = 0; i < 250; i++) {
+            keys.add(new ArrayList<>(4));
+            vals.add(new ArrayList<>(4));
+        }
+        int k = 5;
+        int skip = k;
+        for (int j = 0; j < 4; j++) {
+            for (int i = 0; i < 250; i++) {
+                keys.get(i).add(KeyEncodingUtil.constructDatabaseKey(Bytes.concat("key".getBytes(DATABASE_CHARSET),
+                        Longs.toByteArray(i)), j));
+                if (skip == 0) {
+                    if (k == 0) {
+                        k = 5;
+                    } else {
+                        k--;
+                    }
+                    skip = k;
+                    vals.get(i).add(EMPTY_VALUE);
+                } else {
+                    vals.get(i).add(("val" + i + "ver" + j).getBytes(DATABASE_CHARSET));
+                }
+                skip--;
+            }
+        }
+        try {
+            databaseHandler.addTable(stream1);
+            for (int i = 0; i < 250; i++) {
+                for (int j = 0; j < 4; j++) {
+                    databaseHandler.update(keys.get(i).get(j), vals.get(i).get(j), stream1);
+                }
+            }
+            for (int i = 0; i < 250; i++) {
+                List<byte[]> versionVals = vals.get(i);
+                for (int j = 0; j < 4; j++) {
+                    for (int l = 0; l < 4; l++) {
+                        assert isEmpty(versionVals.get(l)) || (databaseHandler.containsValue(versionVals.get(l),
+                                stream1, j, 10) == (l == j));
+                    }
+                }
+            }
+        } catch (RocksDBException | DatabaseOperationException e) {
+            log.error("Error in contains value test: ", e);
+            throw e;
+        }
+    }
+
+    @Test
+    public void testSizeFunctionality() throws RocksDBException {
+        List<List<byte[]>> keys = new ArrayList<>(250);
+        List<List<byte[]>> vals = new ArrayList<>(250);
+        for (int i = 0; i < 250; i++) {
+            keys.add(new ArrayList<>(4));
+            vals.add(new ArrayList<>(4));
+        }
+        int k = 5;
+        int skip = k;
+        for (int j = 0; j < 4; j++) {
+            for (int i = 0; i < 250; i++) {
+                keys.get(i).add(KeyEncodingUtil.constructDatabaseKey(Bytes.concat("key".getBytes(DATABASE_CHARSET),
+                        Longs.toByteArray(i)), j));
+                if (skip == 0) {
+                    if (k == 0) {
+                        k = 5;
+                    } else {
+                        k--;
+                    }
+                    skip = k;
+                    vals.get(i).add(EMPTY_VALUE);
+                } else {
+                    vals.get(i).add(("val" + i + "ver" + j).getBytes(DATABASE_CHARSET));
+                }
+                skip--;
+            }
+        }
+        try {
+            databaseHandler.addTable(stream1);
+            for (int i = 0; i < 250; i++) {
+                for (int j = 0; j < 4; j++) {
+                    databaseHandler.update(keys.get(i).get(j), vals.get(i).get(j), stream1);
+                }
+            }
+            List<byte[]> nonNullKeysByVersion;
+            for (int j = 0; j < 4; j++) {
+                nonNullKeysByVersion = new LinkedList<>();
+                for (int i = 0; i < 250; i++) {
+                    if (!isEmpty(vals.get(i).get(j))) {
+                        nonNullKeysByVersion.add(keys.get(i).get(j));
+                    } else {
+                        for (int l = j-1; l >= 0; l--) {
+                            if (!isEmpty(vals.get(i).get(l))) {
+                                nonNullKeysByVersion.add(keys.get(i).get(l));
+                                break;
+                            }
+                        }
+                    }
+                }
+                assertEquals(nonNullKeysByVersion.size(), databaseHandler.size(stream1,j,10));
+            }
+        } catch (RocksDBException | DatabaseOperationException e) {
+            log.error("Error in size test: ", e);
             throw e;
         }
     }

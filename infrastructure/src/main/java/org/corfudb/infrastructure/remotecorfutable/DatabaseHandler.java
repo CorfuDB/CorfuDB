@@ -608,18 +608,18 @@ public class DatabaseHandler implements AutoCloseable {
      * @return True, if the given value exists in the table.
      * @throws RocksDBException An error occuring in the search.
      */
-    //TODO:Write test cases
     public boolean containsValue(byte[] encodedValue, @NonNull UUID streamID,
                                  long timestamp, @Positive int scanSize)
             throws RocksDBException, DatabaseOperationException {
         boolean first = true;
         byte[] lastKey = null;
-        List<byte[][]> scannedEntries;
+        List<byte[][]> scannedEntries = null;
         do {
             if (first) {
                 scannedEntries = scan(streamID, timestamp);
                 first = false;
             } else {
+                lastKey = scannedEntries.get(scannedEntries.size()-1)[0];
                 scannedEntries = scan(lastKey,scanSize, streamID);
             }
 
@@ -628,7 +628,6 @@ public class DatabaseHandler implements AutoCloseable {
                     return true;
                 }
             }
-            lastKey = scannedEntries.get(scannedEntries.size()-1)[0];
         } while (scannedEntries.size() >= scanSize);
         return false;
     }
@@ -665,18 +664,16 @@ public class DatabaseHandler implements AutoCloseable {
         boolean first = true;
         byte[] lastKey = null;
         int count = 0;
-        List<byte[][]> scannedEntries;
+        List<byte[][]> scannedEntries = null;
         do {
             if (first) {
                 scannedEntries = scan(streamID, timestamp);
                 first = false;
             } else {
+                lastKey = scannedEntries.get(scannedEntries.size()-1)[0];
                 scannedEntries = scan(lastKey,scanSize, streamID);
             }
-
             count += scannedEntries.size();
-
-            lastKey = scannedEntries.get(scannedEntries.size()-1)[0];
         } while (scannedEntries.size() >= scanSize);
         return count;
     }
