@@ -23,10 +23,14 @@ import java.util.UUID;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.DATABASE_CHARSET;
+import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.EMPTY_VALUE;
+import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.isEmpty;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -174,12 +178,20 @@ public class DatabaseHandlerTest {
     }
 
     @Test
-    public void testDatabaseReverseOrdering() throws RocksDBException, DatabaseOperationException {
+    public void testDatabaseComparator() throws RocksDBException, DatabaseOperationException {
         byte[][] keys = new byte[6][];
         byte[][] vals = new byte[6][];
+        byte[] prefix1 = new byte[]{0x12, 0x34, 0x56, 0x78};
+        byte[] prefix2 = new byte[]{0x12, 0x34, 0x56, 0x78, 0x00};
+
+        keys[0] = KeyEncodingUtil.constructDatabaseKey(prefix2, 0x03 << 8);
+        keys[1] = KeyEncodingUtil.constructDatabaseKey(prefix2, 0x02 << 8);
+        keys[2] = KeyEncodingUtil.constructDatabaseKey(prefix2, 0x01 << 8);
+        keys[3] = KeyEncodingUtil.constructDatabaseKey(prefix1, 0x20 << 24);
+        keys[4] = KeyEncodingUtil.constructDatabaseKey(prefix1, 0x01 << 24);
+        keys[5] = KeyEncodingUtil.constructDatabaseKey(prefix1, 0L);
         for (int i = 0; i < 6; i++) {
-            keys[i] = KeyEncodingUtil.constructDatabaseKey(key1,i);
-            vals[i] = ("ver" + i + "val").getBytes(DATABASE_CHARSET);
+            vals[i] = ("val" + i).getBytes(DATABASE_CHARSET);
         }
         try {
             databaseHandler.addTable(stream1);
@@ -189,8 +201,8 @@ public class DatabaseHandlerTest {
             List<byte[][]> allEntries = databaseHandler.fullDatabaseScan(stream1);
             assertEquals( 6, allEntries.size());
             for (int i = 0; i < allEntries.size(); i++) {
-                assertArrayEquals(keys[5-i], allEntries.get(i)[0]);
-                assertArrayEquals( vals[5-i], allEntries.get(i)[1]);
+                assertArrayEquals(keys[i], allEntries.get(i)[0]);
+                assertArrayEquals( vals[i], allEntries.get(i)[1]);
             }
         } catch (RocksDBException | DatabaseOperationException e) {
             log.error("Error in test database ordering: ", e);
@@ -426,7 +438,7 @@ public class DatabaseHandlerTest {
             if (skip == 0) {
                 k++;
                 skip = k;
-                vals.add(new byte[0]);
+                vals.add(EMPTY_VALUE);
             } else {
                 vals.add(("val" + i).getBytes(DATABASE_CHARSET));
             }
@@ -478,7 +490,7 @@ public class DatabaseHandlerTest {
                         k--;
                     }
                     skip = k;
-                    vals.get(i).add(new byte[0]);
+                    vals.get(i).add(EMPTY_VALUE);
                 } else {
                     vals.get(i).add(("val" + i + "ver" + j).getBytes(DATABASE_CHARSET));
                 }
@@ -523,6 +535,104 @@ public class DatabaseHandlerTest {
             }
         } catch (RocksDBException | DatabaseOperationException e) {
             log.error("Error in no version null values scan test: ", e);
+            throw e;
+        }
+    }
+
+    @Test
+    public void testClearFunctionality() throws RocksDBException {
+        byte[][][] keys = new byte[200][5][];
+        byte[][][] vals = new byte[200][5][];
+        for (int i = 0; i < 200; i++) {
+            for (int j = 0; j < 5; j++) {
+                keys[i][j] = KeyEncodingUtil.constructDatabaseKey(Bytes.concat("key".getBytes(DATABASE_CHARSET),
+                        Longs.toByteArray(i)), j);
+                vals[i][j] = ("val" + i + "ver" + j).getBytes(DATABASE_CHARSET);
+            }
+        }
+        try {
+            databaseHandler.addTable(stream1);
+            for (int i = 0; i < 200; i++) {
+                for (int j = 0; j < 5; j++) {
+                    databaseHandler.update(keys[i][j], vals[i][j], stream1);
+                }
+            }
+            databaseHandler.clear(stream1,5);
+            for (int j = 0; j < 5; j++) {
+                List<byte[][]> allEntriesForVersion = databaseHandler.scan(200,stream1,j);
+                assertEquals(200, allEntriesForVersion.size());
+                for (int i = 0; i < 200; i++) {
+                    assertArrayEquals(keys[199-i][j], allEntriesForVersion.get(i)[0]);
+                    assertArrayEquals(vals[199-i][j], allEntriesForVersion.get(i)[1]);
+                }
+            }
+            List<byte[][]> version5Entries = databaseHandler.scan(200, stream1, 5);
+            assertEquals(0, version5Entries.size());
+            List<byte[][]> allEntries = databaseHandler.fullDatabaseScan(stream1);
+            assertEquals(1200, allEntries.size());
+            for (int i = 0; i < 200; i++) {
+                assertArrayEquals(
+                    KeyEncodingUtil.constructDatabaseKey(
+                            KeyEncodingUtil.extractEncodedKey(keys[199-i][0]), 5L),
+                    allEntries.get(i*6)[0]);
+                assertArrayEquals(EMPTY_VALUE, allEntries.get(i*6)[1]);
+                for (int j = 0; j < 5; j++) {
+                    assertArrayEquals(keys[199-i][j], allEntries.get(i*6 + (5-j))[0]);
+                    assertArrayEquals(vals[199-i][j], allEntries.get(i*6 + (5-j))[1]);
+                }
+            }
+        } catch (RocksDBException | DatabaseOperationException e) {
+            log.error("Error in clear test: ", e);
+            throw e;
+        }
+    }
+
+    @Test
+    public void testContainsKeyFunctionality() throws RocksDBException {
+        List<List<byte[]>> keys = new ArrayList<>(250);
+        List<List<byte[]>> vals = new ArrayList<>(250);
+        for (int i = 0; i < 250; i++) {
+            keys.add(new ArrayList<>(4));
+            vals.add(new ArrayList<>(4));
+        }
+        int k = 5;
+        int skip = k;
+        for (int j = 0; j < 4; j++) {
+            for (int i = 0; i < 250; i++) {
+                keys.get(i).add(KeyEncodingUtil.constructDatabaseKey(Bytes.concat("key".getBytes(DATABASE_CHARSET),
+                        Longs.toByteArray(i)), j));
+                if (skip == 0) {
+                    if (k == 0) {
+                        k = 5;
+                    } else {
+                        k--;
+                    }
+                    skip = k;
+                    vals.get(i).add(EMPTY_VALUE);
+                } else {
+                    vals.get(i).add(("val" + i + "ver" + j).getBytes(DATABASE_CHARSET));
+                }
+                skip--;
+            }
+        }
+        try {
+            databaseHandler.addTable(stream1);
+            for (int i = 0; i < 250; i++) {
+                for (int j = 0; j < 4; j++) {
+                    databaseHandler.update(keys.get(i).get(j), vals.get(i).get(j), stream1);
+                }
+            }
+            for (int i = 0; i < 250; i++) {
+                for (int j = 0; j < 4; j++) {
+                    if (isEmpty(vals.get(i).get(j))) {
+                        assertFalse(databaseHandler.containsKey(keys.get(i).get(j), stream1));
+                    } else {
+                        assertTrue(databaseHandler.containsKey(keys.get(i).get(j), stream1));
+                    }
+                }
+            }
+        } catch (RocksDBException | DatabaseOperationException e) {
+            log.error("Error in contains key test: ", e);
             throw e;
         }
     }

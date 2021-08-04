@@ -294,7 +294,6 @@ public class DatabaseHandler implements AutoCloseable {
      * @param timestamp The timestamp at which the clear was requested.
      * @throws RocksDBException An error in writing all updates.
      */
-    //TODO: write test cases
     public void clear(@NonNull UUID streamID, long timestamp) throws RocksDBException {
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("CLEAR", INVALID_STREAM_ID_MSG);
@@ -609,6 +608,7 @@ public class DatabaseHandler implements AutoCloseable {
      * @return True, if the given value exists in the table.
      * @throws RocksDBException An error occuring in the search.
      */
+    //TODO:Write test cases
     public boolean containsValue(byte[] encodedValue, @NonNull UUID streamID,
                                  long timestamp, @Positive int scanSize)
             throws RocksDBException, DatabaseOperationException {
