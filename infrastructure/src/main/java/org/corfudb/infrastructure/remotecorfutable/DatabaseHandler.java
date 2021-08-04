@@ -36,10 +36,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.EMPTY_VALUE;
+import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.INVALID_DATABASE_KEY_MSG;
+import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.INVALID_STREAM_ID_MSG;
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.LATEST_VERSION_READ;
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.METADATA_COLUMN_CACHE_SIZE;
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.METADATA_COLUMN_SUFFIX;
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.isEmpty;
+import static org.corfudb.infrastructure.remotecorfutable.utils.KeyEncodingUtil.validateDatabaseKey;
 
 /**
  * The DatabaseHandler provides an interface for the RocksDB instance storing data for server side
@@ -55,9 +58,9 @@ public class DatabaseHandler implements AutoCloseable {
         RocksDB.loadLibrary();
     }
 
-    private RocksDB database;
+    private final RocksDB database;
     //instead of using this use completable future
-    private ThreadPoolExecutor threadPoolExecutor;
+    private final ThreadPoolExecutor threadPoolExecutor;
     private final Map<UUID, ColumnFamilyHandlePair> columnFamilies;
 
     /**
@@ -150,7 +153,10 @@ public class DatabaseHandler implements AutoCloseable {
             throws RocksDBException, DatabaseOperationException {
         final byte[] returnVal;
         if (!columnFamilies.containsKey(streamID)) {
-            throw new DatabaseOperationException("GET", "Invalid stream ID");
+            throw new DatabaseOperationException("GET", INVALID_STREAM_ID_MSG);
+        }
+        if (!validateDatabaseKey(encodedKey)) {
+            throw new DatabaseOperationException("GET", INVALID_DATABASE_KEY_MSG);
         }
         try (RocksIterator iter = database.newIterator(columnFamilies.get(streamID).getStreamTable())) {
             iter.seek(encodedKey);
@@ -199,7 +205,10 @@ public class DatabaseHandler implements AutoCloseable {
     public void update(byte[] encodedKey, byte[] value, @NonNull UUID streamID)
             throws RocksDBException, DatabaseOperationException {
         if (!columnFamilies.containsKey(streamID)) {
-            throw new DatabaseOperationException("PUT", "Invalid stream ID");
+            throw new DatabaseOperationException("PUT", INVALID_STREAM_ID_MSG);
+        }
+        if (!validateDatabaseKey(encodedKey)) {
+            throw new DatabaseOperationException("PUT", INVALID_DATABASE_KEY_MSG);
         }
         if (value == null) {
             value = EMPTY_VALUE;
@@ -236,7 +245,7 @@ public class DatabaseHandler implements AutoCloseable {
     public void updateAll(@NonNull List<byte[][]> encodedKeyValuePairs,@NonNull UUID streamID)
             throws RocksDBException {
         if (!columnFamilies.containsKey(streamID)) {
-            throw new DatabaseOperationException("PUTALL", "Invalid stream ID");
+            throw new DatabaseOperationException("PUTALL", INVALID_STREAM_ID_MSG);
         }
         //encodedKeyValuePairs must be non-empty
         ColumnFamilyHandle currTable = columnFamilies.get(streamID).getStreamTable();
@@ -245,6 +254,9 @@ public class DatabaseHandler implements AutoCloseable {
              WriteOptions writeOptions = new WriteOptions()) {
             for (byte[][] encodedKeyValuePair : encodedKeyValuePairs) {
                 byte[] key = encodedKeyValuePair[0];
+                if (!validateDatabaseKey(key)) {
+                    throw new DatabaseOperationException("PUTALL", INVALID_DATABASE_KEY_MSG);
+                }
                 byte[] value = encodedKeyValuePair[1];
                 if (value == null) {
                     value = EMPTY_VALUE;
@@ -285,7 +297,7 @@ public class DatabaseHandler implements AutoCloseable {
     //TODO: write test cases
     public void clear(@NonNull UUID streamID, long timestamp) throws RocksDBException {
         if (!columnFamilies.containsKey(streamID)) {
-            throw new DatabaseOperationException("CLEAR", "Invalid stream ID");
+            throw new DatabaseOperationException("CLEAR", INVALID_STREAM_ID_MSG);
         }
         //no data race on cached value since only mutates allowed are add/remove to columnFamilies
         //if streamID is removed during write batch creation, write will fail, so no inconsistency
@@ -346,7 +358,10 @@ public class DatabaseHandler implements AutoCloseable {
                        boolean includeLastKey, @NonNull UUID streamID)
             throws RocksDBException, DatabaseOperationException {
         if (!columnFamilies.containsKey(streamID)) {
-            throw new DatabaseOperationException("DELETE", "Invalid stream ID");
+            throw new DatabaseOperationException("DELETE", INVALID_STREAM_ID_MSG);
+        }
+        if (!validateDatabaseKey(encodedKeyBegin) || !validateDatabaseKey(encodedKeyEnd)) {
+            throw new DatabaseOperationException("DELETE", INVALID_DATABASE_KEY_MSG);
         }
         ColumnFamilyHandle currTable = columnFamilies.get(streamID).getStreamTable();
         try (WriteBatch batchedWrite = new WriteBatch();
@@ -407,7 +422,7 @@ public class DatabaseHandler implements AutoCloseable {
     public List<byte[][]> scan(@Positive int numEntries, @NonNull UUID streamID,
                                long timestamp) throws RocksDBException, DatabaseOperationException {
         if (!columnFamilies.containsKey(streamID)) {
-            throw new DatabaseOperationException("SCAN", "Invalid stream ID");
+            throw new DatabaseOperationException("SCAN", INVALID_STREAM_ID_MSG);
         }
         try (ReadOptions iterOptions = new ReadOptions()){
             iterOptions.setTotalOrderSeek(true);
@@ -454,6 +469,9 @@ public class DatabaseHandler implements AutoCloseable {
      */
     public List<byte[][]> scan(byte[] encodedKeyBegin, @NonNull UUID streamID)
             throws RocksDBException, DatabaseOperationException {
+        if (!validateDatabaseKey(encodedKeyBegin)) {
+            throw new DatabaseOperationException("SCAN", INVALID_DATABASE_KEY_MSG);
+        }
         return scan(encodedKeyBegin, 20, streamID);
     }
 
@@ -474,6 +492,9 @@ public class DatabaseHandler implements AutoCloseable {
      */
     public List<byte[][]> scan(byte[] encodedKeyBegin, @Positive int numEntries, @NonNull UUID streamID)
             throws RocksDBException, DatabaseOperationException {
+        if (!validateDatabaseKey(encodedKeyBegin)) {
+            throw new DatabaseOperationException("SCAN", INVALID_DATABASE_KEY_MSG);
+        }
         return scanInternal(encodedKeyBegin, numEntries, streamID, true);
     }
 
@@ -498,7 +519,7 @@ public class DatabaseHandler implements AutoCloseable {
     private List<byte[][]> scanInternal(byte[] encodedKeyBegin, int numEntries, UUID streamID, boolean skipFirst)
             throws RocksDBException, DatabaseOperationException {
         if (!columnFamilies.containsKey(streamID)) {
-            throw new DatabaseOperationException("SCAN", "Invalid stream ID");
+            throw new DatabaseOperationException("SCAN", INVALID_STREAM_ID_MSG);
         }
         KeyEncodingUtil.VersionedKey start = KeyEncodingUtil.extractVersionedKey(encodedKeyBegin);
         long timestamp = start.getTimestamp();

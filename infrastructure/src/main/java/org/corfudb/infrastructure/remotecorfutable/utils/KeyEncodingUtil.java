@@ -29,6 +29,10 @@ public final class KeyEncodingUtil {
         return Bytes.concat(encodedRemoteCorfuTableKey, Longs.toByteArray(timestamp));
     }
 
+    public static boolean validateDatabaseKey(byte[] databaseKey) {
+        return databaseKey != null && databaseKey.length >= 8;
+    }
+
     /**
      * Extracts original encoded key and timestamp from database key.
      * @param rocksDBKey Encoded database key.

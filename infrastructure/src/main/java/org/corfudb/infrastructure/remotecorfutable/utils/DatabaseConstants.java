@@ -14,6 +14,8 @@ public final class DatabaseConstants {
     public static final byte[] SIZE_KEY = "size".getBytes(DATABASE_CHARSET);
     public static final byte[] LATEST_VERSION_READ = "latest-version".getBytes(DATABASE_CHARSET);
     public static final byte[] EMPTY_VALUE = new byte[0];
+    public static final String INVALID_STREAM_ID_MSG = "Invalid Stream ID";
+    public static final String INVALID_DATABASE_KEY_MSG = "Invalid Database Key";
 
     public static final long METADATA_COLUMN_CACHE_SIZE = 64;
     //prevent instantiation
