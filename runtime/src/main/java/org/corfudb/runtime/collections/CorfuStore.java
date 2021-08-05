@@ -271,26 +271,6 @@ public class CorfuStore {
     }
 
     /**
-     * Subscribe to transaction updates on specific tables in the namespace.
-     * Objects returned will honor transactional boundaries.
-     *
-     * @param streamListener   callback context
-     * @param namespace        the CorfuStore namespace to subscribe to
-     * @param tablesOfInterest only updates from these tables of interest will be sent to listener
-     * @param timestamp        if specified, all stream updates after this timestamp will be returned
-     *                         if null, only future updates will be returned
-     */
-    @Deprecated
-    public <K extends Message, V extends Message, M extends Message>
-    void subscribe(@Nonnull StreamListener streamListener, @Nonnull String namespace,
-                   @Nonnull List<TableSchema<K, V, M>> tablesOfInterest,
-                   @Nullable Timestamp timestamp) {
-        runtime.getTableRegistry().getStreamManager()
-                .subscribe(streamListener, namespace, tablesOfInterest,
-                        (timestamp == null) ? getTimestamp().getSequence() : timestamp.getSequence());
-    }
-
-    /**
      * Subscribe to transaction updates on specific tables with the streamTag in the namespace.
      * Objects returned will honor transactional boundaries.
      * <p>
@@ -420,17 +400,6 @@ public class CorfuStore {
                                   @Nonnull String streamTag, @Nullable Timestamp timestamp) {
         List<String> tablesOfInterest = getTablesOfInterest(namespace, streamTag);
         subscribeListener(streamListener, namespace, streamTag, tablesOfInterest, timestamp);
-    }
-
-    /**
-     * Gracefully shutdown a streamer.
-     * Once this call returns no further stream updates will be returned.
-     *
-     * @param streamListener - callback context.
-     */
-    @Deprecated
-    public void unsubscribe(@Nonnull StreamListener streamListener) {
-        runtime.getTableRegistry().getStreamManager().unsubscribe(streamListener);
     }
 
     /**

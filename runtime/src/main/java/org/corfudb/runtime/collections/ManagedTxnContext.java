@@ -218,6 +218,10 @@ public class ManagedTxnContext implements AutoCloseable {
     /**
      * JoinQuery by a secondary index.
      *
+     * Note: for Enum types the index key should be the ValueDescriptor as this is the way
+     * the protoBuf API deals with enum type field values. For example:
+     * store.getByIndex(table, "dayOfWeek", Days.MONDAY.getValueDescriptor());
+     *
      * @param table     Table object.
      * @param indexName Index name. In case of protobuf-defined secondary index it is the field name.
      * @param indexKey  Key to query.
@@ -233,6 +237,10 @@ public class ManagedTxnContext implements AutoCloseable {
 
     /**
      * JoinQuery by a secondary index given just the full tableName.
+     *
+     * Note: for Enum types the index key should be the ValueDescriptor as this is the way
+     * the protoBuf API deals with enum type field values. For example:
+     * store.getByIndex(table, "dayOfWeek", Days.MONDAY.getValueDescriptor());
      *
      * @param tableName fullyQualified name of the table.
      * @param indexName Index name. In case of protobuf-defined secondary index it is the field name.
