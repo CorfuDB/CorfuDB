@@ -96,11 +96,7 @@ message RequestPayloadMsg {
     LogReplicationLeadershipRequestMsg lr_leadership_query = 72;
 
     // Remote Corfu Table Requests
-    RemoteCorfuTableGetRequestMsg rct_get_request = 80;
-    RemoteCorfuTableScanRequestMsg rct_scan_request = 81;
-    RemoteCorfuTableContainsKeyRequestMsg rct_contains_key_request = 82;
-    RemoteCorfuTableContainsValueRequestMsg rct_contains_value_request = 83;
-    RemoteCorfuTableSizeRequestMsg rct_size_request = 84;
+    RemoteCorfuTableRequestMsg remote_corfu_table_request = 80;
   }
 }
 
@@ -159,11 +155,7 @@ message ResponsePayloadMsg {
     LogReplicationLeadershipLossResponseMsg lr_leadership_loss = 73;
 
     // Remote Corfu Table Responses
-    RemoteCorfuTableGetResponseMsg rct_get_response = 80;
-    RemoteCorfuTableScanResponseMsg rct_scan_response = 81;
-    RemoteCorfuTableContainsKeyResponseMsg rct_contains_key_response = 82;
-    RemoteCorfuTableContainsValueResponseMsg rct_contains_value_response = 83;
-    RemoteCorfuTableSizeResponseMsg rct_size_response = 84;
+    RemoteCorfuTableResponseMsg remote_corfu_table_response = 80;
 
     // Server Error
     ServerErrorMsg server_error = 200;

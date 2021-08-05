@@ -9,6 +9,26 @@ import "rpc_common.proto";
  * include request and response payloads for: GET, SCAN, CONTAINS_KEY, CONTAINS_VALUE, and SIZE.
  */
 
+//message container holding all remote corfu table requests
+message RemoteCorfuTableRequestMsg {
+  oneof payload {
+    RemoteCorfuTableGetRequestMsg get = 1;
+    RemoteCorfuTableScanRequestMsg scan = 2;
+    RemoteCorfuTableContainsKeyRequestMsg contains_key = 3;
+    RemoteCorfuTableContainsValueRequestMsg contains_value = 4;
+    RemoteCorfuTableSizeRequestMsg size = 5;
+  }
+}
+
+message RemoteCorfuTableResponseMsg {
+  oneof payload {
+    RemoteCorfuTableGetResponseMsg get_response = 1;
+    RemoteCorfuTableScanResponseMsg scan_response = 2;
+    RemoteCorfuTableContainsResponseMsg contains_response = 3;
+    RemoteCorfuTableSizeResponseMsg size_response = 4;
+  }
+}
+
 message RemoteCorfuTableGetRequestMsg {
  UuidMsg streamID = 1;
  bytes versionedKey = 2;
@@ -33,8 +53,8 @@ message RemoteCorfuTableContainsKeyRequestMsg {
   bytes versionedKey = 2;
 }
 
-message RemoteCorfuTableContainsKeyResponseMsg {
-  bool containsKey = 1;
+message RemoteCorfuTableContainsResponseMsg {
+  bool contains = 1;
 }
 
 message RemoteCorfuTableContainsValueRequestMsg {
@@ -42,10 +62,6 @@ message RemoteCorfuTableContainsValueRequestMsg {
   UuidMsg streamID = 2;
   uint64 timestamp = 3;
   uint32 internalScanSize = 4;
-}
-
-message RemoteCorfuTableContainsValueResponseMsg {
-  bool containsValue = 1;
 }
 
 message RemoteCorfuTableSizeRequestMsg {
