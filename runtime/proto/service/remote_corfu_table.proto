@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime.proto.service";
+
+import "rpc_common.proto";
+/**
+ * Protobuf definitions for the Remote Corfu Table server RPCs. These
+ * include request and response payloads for: GET, SCAN, CONTAINS_KEY, CONTAINS_VALUE, and SIZE.
+ */
+
+message RemoteCorfuTableGetRequestMsg {
+ UuidMsg streamID = 1;
+ bytes versionedKey = 2;
+}
+
+message RemoteCorfuTableGetResponseMsg {
+  bytes payloadValue = 1;
+}
+
+message RemoteCorfuTableScanRequestMsg {
+  bytes versionedStartKey = 1;
+  uint32 numEntriesToScan = 2;
+  UuidMsg streamID = 3;
+}
+
+message RemoteCorfuTableScanResponseMsg {
+  repeated RemoteCorfuTableEntry entries = 1;
+}
+
+message RemoteCorfuTableContainsKeyRequestMsg {
+  UuidMsg streamID = 1;
+  bytes versionedKey = 2;
+}
+
+message RemoteCorfuTableContainsKeyResponseMsg {
+  bool containsKey = 1;
+}
+
+message RemoteCorfuTableContainsValueRequestMsg {
+  bytes payloadValue = 1;
+  UuidMsg streamID = 2;
+  uint64 timestamp = 3;
+  uint32 internalScanSize = 4;
+}
+
+message RemoteCorfuTableContainsValueResponseMsg {
+  bool containsValue = 1;
+}
+
+message RemoteCorfuTableSizeRequestMsg {
+  UuidMsg streamID = 1;
+  uint64 timestamp = 2;
+  uint32 internalScanSize = 3;
+}
+
+message RemoteCorfuTableSizeResponseMsg {
+  uint32 size = 1;
+}
+
+message RemoteCorfuTableEntry {
+  bytes versionedKey = 1;
+  bytes payloadKey = 2;
+}
