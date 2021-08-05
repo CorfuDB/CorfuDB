@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.index.qual.Positive;
 import org.corfudb.infrastructure.remotecorfutable.utils.KeyEncodingUtil;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.rocksdb.BuiltinComparator;
 import org.rocksdb.ColumnFamilyDescriptor;
 import org.rocksdb.ColumnFamilyHandle;
@@ -34,6 +35,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.EMPTY_VALUE;
 import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.INVALID_DATABASE_KEY_MSG;
@@ -61,6 +63,7 @@ public class DatabaseHandler implements AutoCloseable {
     private final RocksDB database;
     //instead of using this use completable future
     private final ThreadPoolExecutor threadPoolExecutor;
+    private final long SHUTDOWN_TIMEOUT;
     private final Map<UUID, ColumnFamilyHandlePair> columnFamilies;
 
     /**
@@ -69,9 +72,10 @@ public class DatabaseHandler implements AutoCloseable {
      * @param dataPath The filepath for the database files.
      * @param options The configuration options to start the database.
      * @param threadPoolExecutor The thread pool to serve client requests.
+     * @param SHUTDOWN_TIMEOUT The amount of time to await termination of threadPoolExecutor
      */
     public DatabaseHandler(@NonNull Path dataPath, @NonNull Options options,
-                           @NonNull ThreadPoolExecutor threadPoolExecutor) {
+                           @NonNull ThreadPoolExecutor threadPoolExecutor, @NonNull long SHUTDOWN_TIMEOUT) {
         try {
             RocksDB.destroyDB(dataPath.toFile().getAbsolutePath(), options);
             this.database = RocksDB.open(options, dataPath.toFile().getAbsolutePath());
@@ -83,6 +87,7 @@ public class DatabaseHandler implements AutoCloseable {
 
         //Must be initialized as an empty map and updated through the add table function
         this.columnFamilies = new ConcurrentHashMap<>();
+        this.SHUTDOWN_TIMEOUT = SHUTDOWN_TIMEOUT;
     }
 
     /**
@@ -730,6 +735,13 @@ public class DatabaseHandler implements AutoCloseable {
      */
     @Override
     public void close() {
+        threadPoolExecutor.shutdown();
+        try {
+            threadPoolExecutor.awaitTermination(SHUTDOWN_TIMEOUT, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            log.debug("Database Handler executor awaitTermination interrupted.", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
         for (ColumnFamilyHandlePair handle : columnFamilies.values()) {
             handle.getStreamTable().close();
             handle.getMetadataTable().close();
@@ -747,13 +759,13 @@ public class DatabaseHandler implements AutoCloseable {
     @Deprecated
     protected List<byte[][]> fullDatabaseScan(UUID streamID) {
         List<byte[][]> allEntries = new LinkedList<>();
-        RocksIterator iter = database.newIterator(columnFamilies.get(streamID).getStreamTable());
-        iter.seekToFirst();
-        while(iter.isValid()) {
-            allEntries.add(new byte[][]{iter.key(),iter.value()});
-            iter.next();
+        try (RocksIterator iter = database.newIterator(columnFamilies.get(streamID).getStreamTable())) {
+            iter.seekToFirst();
+            while (iter.isValid()) {
+                allEntries.add(new byte[][]{iter.key(), iter.value()});
+                iter.next();
+            }
         }
-        iter.close();
         return allEntries;
     }
 
