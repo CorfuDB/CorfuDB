@@ -75,10 +75,6 @@ public class CorfuRuntime {
     @ToString
     public static class CorfuRuntimeParameters extends RuntimeParameters {
 
-        public static CorfuRuntimeParametersBuilder builder() {
-            return new CorfuRuntimeParametersBuilder();
-        }
-
         /*
          * Max size for a write request.
          */
@@ -266,6 +262,11 @@ public class CorfuRuntime {
          */
         private int streamingNotificationBatchSize = 50;
         // TODO: make it a function of the streaming Queue Size
+
+        // Static builder method
+        public static CorfuRuntimeParametersBuilder builder() {
+            return new CorfuRuntimeParametersBuilder();
+        }
 
         public static class CorfuRuntimeParametersBuilder extends RuntimeParametersBuilder {
             private int maxWriteSize = Integer.MAX_VALUE;
