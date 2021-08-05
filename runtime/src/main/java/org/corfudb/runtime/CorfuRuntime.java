@@ -89,15 +89,6 @@ public class CorfuRuntime {
          */
         int bulkReadSize = 10;
 
-        /*
-         * How much time the Fast Loader has to get the maps up to date.
-         *
-         * <p>Once the timeout is reached, the Fast Loader gives up. Every map that is
-         * not up to date will be loaded through normal path.
-         */
-        Duration fastLoaderTimeout = Duration.ofMinutes(30);
-        // endregion
-
         // region Address Space Parameters
         /*
          * Number of times to attempt to read before hole filling.
@@ -248,7 +239,7 @@ public class CorfuRuntime {
         /*
          * Period of time in ms to sleep before next cycle, when poller gets no new data changes.
          */
-        private int streamingPollingIdleWaitTimeMs = 5;
+        private int streamingPollingIdleWaitTimeMs = 50;
 
         /*
          * Capacity of queue shared by by streaming polling and notification tasks.
@@ -279,7 +270,6 @@ public class CorfuRuntime {
         public static class CorfuRuntimeParametersBuilder extends RuntimeParametersBuilder {
             private int maxWriteSize = Integer.MAX_VALUE;
             private int bulkReadSize = 10;
-            private Duration fastLoaderTimeout = Duration.ofMinutes(30);
             private int holeFillRetry = 10;
             private Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
             private Duration holeFillTimeout = Duration.ofSeconds(10);
@@ -302,11 +292,10 @@ public class CorfuRuntime {
             private PriorityLevel priorityLevel = PriorityLevel.NORMAL;
             private Codec.Type codecType = Codec.Type.ZSTD;
             private boolean metricsEnabled = true;
-            private int highestSequenceNumberBatchSize = 4;
             private long streamingPollingBlockingTimeMs = 5;
             private int streamingQueueSize = 100;
             private int streamingPollingThreadPoolSize = 2;
-            private int streamingPollingIdleWaitTimeMs = 5;
+            private int streamingPollingIdleWaitTimeMs = 50;
             private int streamingNotificationThreadPoolSize = 4;
             private long streamingNotificationBlockingTimeMs = 5;
             private int streamingNotificationBatchSize = 50;
@@ -441,11 +430,6 @@ public class CorfuRuntime {
                 return this;
             }
 
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder fastLoaderTimeout(Duration fastLoaderTimeout) {
-                this.fastLoaderTimeout = fastLoaderTimeout;
-                return this;
-            }
-
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder holeFillRetry(int holeFillRetry) {
                 this.holeFillRetry = holeFillRetry;
                 return this;
@@ -556,11 +540,6 @@ public class CorfuRuntime {
                 return this;
             }
 
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder highestSequenceNumberBatchSize(int highestSequenceNumberBatchSize) {
-                this.highestSequenceNumberBatchSize = highestSequenceNumberBatchSize;
-                return this;
-            }
-
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingPollingBlockingTimeMs(long streamingPollingBlockingTimeMs) {
                 this.streamingPollingBlockingTimeMs = streamingPollingBlockingTimeMs;
                 return this;
@@ -624,7 +603,6 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setBeforeRpcHandler(beforeRpcHandler);
                 corfuRuntimeParameters.setMaxWriteSize(maxWriteSize);
                 corfuRuntimeParameters.setBulkReadSize(bulkReadSize);
-                corfuRuntimeParameters.setFastLoaderTimeout(fastLoaderTimeout);
                 corfuRuntimeParameters.setHoleFillRetry(holeFillRetry);
                 corfuRuntimeParameters.setHoleFillRetryThreshold(holeFillRetryThreshold);
                 corfuRuntimeParameters.setHoleFillTimeout(holeFillTimeout);
@@ -1397,19 +1375,6 @@ public class CorfuRuntime {
     public CorfuRuntime setTrimRetry(int trimRetry) {
         log.warn("setTrimRetry: Deprecated, please set parameters instead");
         parameters.setWriteRetry(trimRetry);
-        return this;
-    }
-
-    /**
-     * Set the timeout of the fast loader, in minutes.
-     *
-     * @param timeout The number of minutes to wait.
-     * @deprecated Deprecated, set using {@link CorfuRuntimeParameters} instead.
-     */
-    @Deprecated
-    public CorfuRuntime setTimeoutInMinutesForFastLoading(int timeout) {
-        log.warn("setTrimRetry: Deprecated, please set parameters instead");
-        parameters.setFastLoaderTimeout(Duration.ofMinutes(timeout));
         return this;
     }
 
