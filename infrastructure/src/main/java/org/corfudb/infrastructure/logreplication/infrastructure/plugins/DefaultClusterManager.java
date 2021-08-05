@@ -128,7 +128,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         }
 
         if(configStreamListener != null) {
-            corfuStore.unsubscribe(configStreamListener);
+            corfuStore.unsubscribeListener(configStreamListener);
         }
 
         log.info("Shutdown Cluster Manager completed.");

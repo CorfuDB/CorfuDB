@@ -10,6 +10,7 @@ import "service/log_replication.proto";
 import "service/log_unit.proto";
 import "service/sequencer.proto";
 import "service/management.proto";
+import "service/remote_corfu_table.proto";
 import "server_errors.proto";
 
 /**
@@ -93,6 +94,9 @@ message RequestPayloadMsg {
     LogReplicationEntryMsg lr_entry = 70;
     LogReplicationMetadataRequestMsg lr_metadata_request = 71;
     LogReplicationLeadershipRequestMsg lr_leadership_query = 72;
+
+    // Remote Corfu Table Requests
+    RemoteCorfuTableRequestMsg remote_corfu_table_request = 80;
   }
 }
 
@@ -149,6 +153,9 @@ message ResponsePayloadMsg {
     LogReplicationLeadershipResponseMsg lr_leadership_response = 72;
 
     LogReplicationLeadershipLossResponseMsg lr_leadership_loss = 73;
+
+    // Remote Corfu Table Responses
+    RemoteCorfuTableResponseMsg remote_corfu_table_response = 80;
 
     // Server Error
     ServerErrorMsg server_error = 200;

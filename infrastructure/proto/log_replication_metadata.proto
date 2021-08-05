@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package org.corfudb.infrastructure.logreplication.proto;
 
+import "corfu_options.proto";
 import "google/protobuf/timestamp.proto";
 
 /**
@@ -94,6 +95,8 @@ message ReplicationEventKey {
 }
 
 message ReplicationEvent {
+  option (org.corfudb.runtime.table_schema).stream_tag = "log_replication";
+
   enum ReplicationEventType {
     FORCE_SNAPSHOT_SYNC = 0;
   }
