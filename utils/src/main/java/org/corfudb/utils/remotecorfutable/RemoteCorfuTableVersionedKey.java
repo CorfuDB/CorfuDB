@@ -1,9 +1,8 @@
-package org.corfudb.infrastructure.remotecorfutable;
+package org.corfudb.utils.remotecorfutable;
 
 import com.google.common.primitives.Longs;
 import com.google.protobuf.ByteString;
 import lombok.NonNull;
-import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.INVALID_DATABASE_KEY_MSG;
 
 /**
  * The RemoteCorfuTableVersionedKey provides an interface for creating and reading
@@ -22,7 +21,7 @@ public class RemoteCorfuTableVersionedKey {
      * @param encodedRemoteCorfuTableKey Serialized Corfu Table key from client.
      * @param timestamp Timestamp of request.
      */
-    public RemoteCorfuTableVersionedKey(@NonNull ByteString encodedRemoteCorfuTableKey, @NonNull long timestamp) {
+    public RemoteCorfuTableVersionedKey(@NonNull ByteString encodedRemoteCorfuTableKey, long timestamp) {
         this.encodedRemoteCorfuTableKey = encodedRemoteCorfuTableKey;
         this.timestamp = timestamp;
         this.encodedVersionedKey = null;
@@ -33,9 +32,9 @@ public class RemoteCorfuTableVersionedKey {
      * read information from the key.
      * @param encodedVersionedKey RocksDB key
      */
-    public RemoteCorfuTableVersionedKey(@NonNull byte[] encodedVersionedKey) {
+    public RemoteCorfuTableVersionedKey(byte[] encodedVersionedKey) {
         if (encodedVersionedKey == null || encodedVersionedKey.length < 8) {
-            throw new DatabaseOperationException("KEYCREATE", INVALID_DATABASE_KEY_MSG);
+            throw new RuntimeException("Invalid database key parameter");
         }
         this.encodedVersionedKey = ByteString.copyFrom(encodedVersionedKey);
         this.encodedRemoteCorfuTableKey = null;
