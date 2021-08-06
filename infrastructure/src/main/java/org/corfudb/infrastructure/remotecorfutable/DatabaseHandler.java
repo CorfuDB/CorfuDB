@@ -59,7 +59,7 @@ public class DatabaseHandler implements AutoCloseable {
     private final RocksDB database;
     //instead of using this use completable future
     private final ThreadPoolExecutor threadPoolExecutor;
-    private final long SHUTDOWN_TIMEOUT;
+    private final long shutdownTimeout;
     private final Map<UUID, ColumnFamilyHandlePair> columnFamilies;
 
     /**
@@ -68,10 +68,10 @@ public class DatabaseHandler implements AutoCloseable {
      * @param dataPath The filepath for the database files.
      * @param options The configuration options to start the database.
      * @param threadPoolExecutor The thread pool to serve client requests.
-     * @param SHUTDOWN_TIMEOUT The amount of time to await termination of threadPoolExecutor
+     * @param shutdownTimeout The amount of time to await termination of threadPoolExecutor
      */
     public DatabaseHandler(@NonNull Path dataPath, @NonNull Options options,
-                           @NonNull ThreadPoolExecutor threadPoolExecutor, @NonNull long SHUTDOWN_TIMEOUT) {
+                           @NonNull ThreadPoolExecutor threadPoolExecutor, long shutdownTimeout) {
         try {
             RocksDB.destroyDB(dataPath.toFile().getAbsolutePath(), options);
             this.database = RocksDB.open(options, dataPath.toFile().getAbsolutePath());
@@ -83,7 +83,7 @@ public class DatabaseHandler implements AutoCloseable {
 
         //Must be initialized as an empty map and updated through the add table function
         this.columnFamilies = new ConcurrentHashMap<>();
-        this.SHUTDOWN_TIMEOUT = SHUTDOWN_TIMEOUT;
+        this.shutdownTimeout = shutdownTimeout;
     }
 
     /**
@@ -185,7 +185,8 @@ public class DatabaseHandler implements AutoCloseable {
                 //We've reached the end of the data
                 returnVal = null;
             } else {
-                if (encodedKey.getEncodedKey().equals(KeyEncodingUtil.extractEncodedKey(iter.key())) && !isEmpty(iter.value())) {
+                if (encodedKey.getEncodedKey().equals(KeyEncodingUtil.extractEncodedKeyAsByteString(iter.key()))
+                        && !isEmpty(iter.value())) {
                     //This works due to latest version first comparator
                     returnVal = ByteString.copyFrom(iter.value());
                 } else {
@@ -327,7 +328,7 @@ public class DatabaseHandler implements AutoCloseable {
             iter.seekToFirst();
             while (iter.isValid()) {
                 keyPrefix = ByteString.copyFrom(KeyEncodingUtil.extractEncodedKey(iter.key()));
-                if (prevPrefix != null && keyPrefix.equals(prevPrefix)) {
+                if (keyPrefix.equals(prevPrefix)) {
                     iter.next();
                     continue;
                 }
@@ -635,7 +636,7 @@ public class DatabaseHandler implements AutoCloseable {
                                  long timestamp, @Positive int scanSize)
             throws RocksDBException, DatabaseOperationException {
         boolean first = true;
-        RemoteCorfuTableVersionedKey lastKey = null;
+        RemoteCorfuTableVersionedKey lastKey;
         List<RemoteCorfuTableEntry> scannedEntries = null;
         do {
             if (first) {
@@ -685,7 +686,7 @@ public class DatabaseHandler implements AutoCloseable {
     public int size(@NonNull UUID streamID, long timestamp, @Positive int scanSize)
             throws RocksDBException, DatabaseOperationException {
         boolean first = true;
-        RemoteCorfuTableVersionedKey lastKey = null;
+        RemoteCorfuTableVersionedKey lastKey;
         int count = 0;
         List<RemoteCorfuTableEntry> scannedEntries = null;
         do {
@@ -735,7 +736,7 @@ public class DatabaseHandler implements AutoCloseable {
     public void close() {
         threadPoolExecutor.shutdown();
         try {
-            threadPoolExecutor.awaitTermination(SHUTDOWN_TIMEOUT, TimeUnit.SECONDS);
+            threadPoolExecutor.awaitTermination(shutdownTimeout, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             log.debug("Database Handler executor awaitTermination interrupted.", e);
             throw new UnrecoverableCorfuInterruptedError(e);
@@ -770,7 +771,7 @@ public class DatabaseHandler implements AutoCloseable {
 
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
     @Getter
-    private class ColumnFamilyHandlePair {
+    private static class ColumnFamilyHandlePair {
         private final ColumnFamilyHandle streamTable;
         private final ColumnFamilyHandle metadataTable;
     }

@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure.remotecorfutable.utils;
 
+import com.google.protobuf.ByteString;
+
 /**
  * This utility class aids with interacting with RocksDB keys.
  *
@@ -19,5 +21,15 @@ public final class KeyEncodingUtil {
         byte[] key = new byte[keysize];
         System.arraycopy(rocksDBKey, 0, key, 0, keysize);
         return key;
+    }
+
+    /**
+     * Extracts the encoded table key from a database key.
+     * @param rocksDBKey Encoded database key.
+     * @return ByteString representation of table key.
+     */
+    public static ByteString extractEncodedKeyAsByteString(byte[] rocksDBKey) {
+        int keysize = rocksDBKey.length - 8;
+        return ByteString.copyFrom(rocksDBKey,0,keysize);
     }
 }
