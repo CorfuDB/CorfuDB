@@ -45,7 +45,7 @@ message RemoteCorfuTableScanRequestMsg {
 }
 
 message RemoteCorfuTableScanResponseMsg {
-  repeated RemoteCorfuTableEntry entries = 1;
+  repeated RemoteCorfuTableEntryMsg entries = 1;
 }
 
 message RemoteCorfuTableContainsKeyRequestMsg {
@@ -74,7 +74,7 @@ message RemoteCorfuTableSizeResponseMsg {
   uint32 size = 1;
 }
 
-message RemoteCorfuTableEntry {
+message RemoteCorfuTableEntryMsg {
   bytes versionedKey = 1;
   bytes payloadKey = 2;
 }
