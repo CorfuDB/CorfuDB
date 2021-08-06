@@ -10,15 +10,17 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.index.qual.Positive;
-import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.EMPTY_VALUE;
-import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.INVALID_STREAM_ID_MSG;
-import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.LATEST_VERSION_READ;
-import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.METADATA_COLUMN_CACHE_SIZE;
-import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.METADATA_COLUMN_SUFFIX;
-import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.isEmpty;
-import org.corfudb.infrastructure.remotecorfutable.utils.KeyEncodingUtil;
+import static org.corfudb.utils.remotecorfutable.DatabaseConstants.EMPTY_VALUE;
+import static org.corfudb.utils.remotecorfutable.DatabaseConstants.INVALID_STREAM_ID_MSG;
+import static org.corfudb.utils.remotecorfutable.DatabaseConstants.LATEST_VERSION_READ;
+import static org.corfudb.utils.remotecorfutable.DatabaseConstants.METADATA_COLUMN_CACHE_SIZE;
+import static org.corfudb.utils.remotecorfutable.DatabaseConstants.METADATA_COLUMN_SUFFIX;
+import static org.corfudb.utils.remotecorfutable.DatabaseConstants.isEmpty;
+import org.corfudb.utils.remotecorfutable.KeyEncodingUtil;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.utils.remotecorfutable.RemoteCorfuTableEntry;
+import org.corfudb.utils.remotecorfutable.RemoteCorfuTableVersionedKey;
 import org.rocksdb.ColumnFamilyDescriptor;
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.ColumnFamilyOptions;
@@ -260,7 +262,7 @@ public class DatabaseHandler implements AutoCloseable {
      * @param streamID The stream backing the table the updates are written to.
      * @throws RocksDBException An error in the batched write.
      */
-    public void updateAll(@NonNull List<RemoteCorfuTableEntry> encodedKeyValuePairs,@NonNull UUID streamID)
+    public void updateAll(@NonNull List<RemoteCorfuTableEntry> encodedKeyValuePairs, @NonNull UUID streamID)
             throws RocksDBException {
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("PUTALL", INVALID_STREAM_ID_MSG);
