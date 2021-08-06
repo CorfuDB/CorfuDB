@@ -3,16 +3,22 @@ package org.corfudb.infrastructure.remotecorfutable;
 import com.google.common.primitives.Bytes;
 import com.google.common.primitives.Longs;
 import com.google.errorprone.annotations.DoNotCall;
+import com.google.protobuf.ByteString;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.index.qual.Positive;
+import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.EMPTY_VALUE;
+import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.INVALID_STREAM_ID_MSG;
+import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.LATEST_VERSION_READ;
+import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.METADATA_COLUMN_CACHE_SIZE;
+import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.METADATA_COLUMN_SUFFIX;
+import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.isEmpty;
 import org.corfudb.infrastructure.remotecorfutable.utils.KeyEncodingUtil;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.rocksdb.BuiltinComparator;
 import org.rocksdb.ColumnFamilyDescriptor;
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.ColumnFamilyOptions;
@@ -26,7 +32,6 @@ import org.rocksdb.WriteBatch;
 import org.rocksdb.WriteOptions;
 
 import java.nio.file.Path;
-import java.security.Key;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
@@ -36,15 +41,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-
-import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.EMPTY_VALUE;
-import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.INVALID_DATABASE_KEY_MSG;
-import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.INVALID_STREAM_ID_MSG;
-import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.LATEST_VERSION_READ;
-import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.METADATA_COLUMN_CACHE_SIZE;
-import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.METADATA_COLUMN_SUFFIX;
-import static org.corfudb.infrastructure.remotecorfutable.utils.DatabaseConstants.isEmpty;
-import static org.corfudb.infrastructure.remotecorfutable.utils.KeyEncodingUtil.validateDatabaseKey;
 
 /**
  * The DatabaseHandler provides an interface for the RocksDB instance storing data for server side
@@ -63,7 +59,7 @@ public class DatabaseHandler implements AutoCloseable {
     private final RocksDB database;
     //instead of using this use completable future
     private final ThreadPoolExecutor threadPoolExecutor;
-    private final long SHUTDOWN_TIMEOUT;
+    private final long shutdownTimeout;
     private final Map<UUID, ColumnFamilyHandlePair> columnFamilies;
 
     /**
@@ -72,10 +68,10 @@ public class DatabaseHandler implements AutoCloseable {
      * @param dataPath The filepath for the database files.
      * @param options The configuration options to start the database.
      * @param threadPoolExecutor The thread pool to serve client requests.
-     * @param SHUTDOWN_TIMEOUT The amount of time to await termination of threadPoolExecutor
+     * @param shutdownTimeout The amount of time to await termination of threadPoolExecutor
      */
     public DatabaseHandler(@NonNull Path dataPath, @NonNull Options options,
-                           @NonNull ThreadPoolExecutor threadPoolExecutor, @NonNull long SHUTDOWN_TIMEOUT) {
+                           @NonNull ThreadPoolExecutor threadPoolExecutor, long shutdownTimeout) {
         try {
             RocksDB.destroyDB(dataPath.toFile().getAbsolutePath(), options);
             this.database = RocksDB.open(options, dataPath.toFile().getAbsolutePath());
@@ -87,7 +83,7 @@ public class DatabaseHandler implements AutoCloseable {
 
         //Must be initialized as an empty map and updated through the add table function
         this.columnFamilies = new ConcurrentHashMap<>();
-        this.SHUTDOWN_TIMEOUT = SHUTDOWN_TIMEOUT;
+        this.shutdownTimeout = shutdownTimeout;
     }
 
     /**
@@ -174,26 +170,25 @@ public class DatabaseHandler implements AutoCloseable {
      * @return A byte[] containing the value mapped to the key, or null if the key is associated to a null value.
      * @throws RocksDBException An error raised in scan.
      */
-    public byte[] get(byte[] encodedKey, @NonNull UUID streamID)
+    public ByteString get(@NonNull RemoteCorfuTableVersionedKey encodedKey, @NonNull UUID streamID)
             throws RocksDBException, DatabaseOperationException {
-        final byte[] returnVal;
+        final ByteString returnVal;
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("GET", INVALID_STREAM_ID_MSG);
         }
-        if (!validateDatabaseKey(encodedKey)) {
-            throw new DatabaseOperationException("GET", INVALID_DATABASE_KEY_MSG);
-        }
+        byte[] searchKey = new byte[encodedKey.size()];
+        encodedKey.getEncodedVersionedKey().copyTo(searchKey, 0);
         try (RocksIterator iter = database.newIterator(columnFamilies.get(streamID).getStreamTable())) {
-            iter.seek(encodedKey);
+            iter.seek(searchKey);
             if (!iter.isValid()) {
                 iter.status();
                 //We've reached the end of the data
                 returnVal = null;
             } else {
-                if (Arrays.equals(KeyEncodingUtil.extractEncodedKey(iter.key()),
-                        KeyEncodingUtil.extractEncodedKey(encodedKey)) && !isEmpty(iter.value())) {
+                if (encodedKey.getEncodedKey().equals(KeyEncodingUtil.extractEncodedKeyAsByteString(iter.key()))
+                        && !isEmpty(iter.value())) {
                     //This works due to latest version first comparator
-                    returnVal = iter.value();
+                    returnVal = ByteString.copyFrom(iter.value());
                 } else {
                     returnVal = null;
                 }
@@ -203,13 +198,13 @@ public class DatabaseHandler implements AutoCloseable {
     }
 
     /**
-     * This method performs {@link #get(byte[], UUID)} asynchronously.
+     * This method performs {@link #get(RemoteCorfuTableVersionedKey, UUID)} asynchronously.
      */
-    public CompletableFuture<byte[]> getAsync(byte[] encodedKey, @NonNull UUID streamID) {
-        CompletableFuture<byte[]> result = new CompletableFuture<>();
+    public CompletableFuture<ByteString> getAsync(@NonNull RemoteCorfuTableVersionedKey encodedKey, @NonNull UUID streamID) {
+        CompletableFuture<ByteString> result = new CompletableFuture<>();
         CompletableFuture.runAsync(()-> {
             try {
-                byte[] val = get(encodedKey,streamID);
+                ByteString val = get(encodedKey,streamID);
                 result.complete(val);
             } catch (RocksDBException|DatabaseOperationException e) {
                 log.error("Error in RocksDB get operation: ", e);
@@ -227,27 +222,25 @@ public class DatabaseHandler implements AutoCloseable {
      * @param streamID The stream backing the database that the key will be added to.
      * @throws RocksDBException A database error on put.
      */
-    public void update(byte[] encodedKey, byte[] value, @NonNull UUID streamID)
+    public void update(@NonNull RemoteCorfuTableVersionedKey encodedKey,
+                       @NonNull ByteString value, @NonNull UUID streamID)
             throws RocksDBException, DatabaseOperationException {
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("PUT", INVALID_STREAM_ID_MSG);
         }
-        if (!validateDatabaseKey(encodedKey)) {
-            throw new DatabaseOperationException("PUT", INVALID_DATABASE_KEY_MSG);
-        }
-        if (value == null) {
-            value = EMPTY_VALUE;
-        }
-        database.put(columnFamilies.get(streamID).getStreamTable(), encodedKey, value);
+        byte[] encodedKeyBytes = new byte[encodedKey.size()];
+        encodedKey.getEncodedVersionedKey().copyTo(encodedKeyBytes,0);
+        database.put(columnFamilies.get(streamID).getStreamTable(), encodedKeyBytes, value.toByteArray());
         database.put(columnFamilies.get(streamID).getMetadataTable(), LATEST_VERSION_READ,
-                KeyEncodingUtil.extractTimestampAsByteArray(encodedKey));
+                encodedKey.getTimestampAsByteArray());
 
     }
 
     /**
-     * This method performs {@link #update(byte[], byte[], UUID)} asynchronously.
+     * This method performs {@link #update(RemoteCorfuTableVersionedKey, ByteString, UUID)} asynchronously.
      */
-    public CompletableFuture<Void> updateAsync(byte[] encodedKey, byte[] value, @NonNull UUID streamID) {
+    public CompletableFuture<Void> updateAsync(@NonNull RemoteCorfuTableVersionedKey encodedKey,
+                                               @NonNull ByteString value, @NonNull UUID streamID) {
         CompletableFuture<Void> result = new CompletableFuture<>();
         CompletableFuture.runAsync(()-> {
             try {
@@ -267,7 +260,7 @@ public class DatabaseHandler implements AutoCloseable {
      * @param streamID The stream backing the table the updates are written to.
      * @throws RocksDBException An error in the batched write.
      */
-    public void updateAll(@NonNull List<byte[][]> encodedKeyValuePairs,@NonNull UUID streamID)
+    public void updateAll(@NonNull List<RemoteCorfuTableEntry> encodedKeyValuePairs,@NonNull UUID streamID)
             throws RocksDBException {
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("PUTALL", INVALID_STREAM_ID_MSG);
@@ -277,19 +270,19 @@ public class DatabaseHandler implements AutoCloseable {
         ColumnFamilyHandle metadataTable = columnFamilies.get(streamID).getMetadataTable();
         try (WriteBatch batchedWrite = new WriteBatch();
              WriteOptions writeOptions = new WriteOptions()) {
-            for (byte[][] encodedKeyValuePair : encodedKeyValuePairs) {
-                byte[] key = encodedKeyValuePair[0];
-                if (!validateDatabaseKey(key)) {
-                    throw new DatabaseOperationException("PUTALL", INVALID_DATABASE_KEY_MSG);
+            for (RemoteCorfuTableEntry encodedKeyValuePair : encodedKeyValuePairs) {
+                byte[] key = encodedKeyValuePair.getKey().getEncodedVersionedKey().toByteArray();
+                ByteString value = encodedKeyValuePair.getValue();
+                byte[] valueBytes;
+                if (value.isEmpty()) {
+                    valueBytes = EMPTY_VALUE;
+                } else {
+                    valueBytes = value.toByteArray();
                 }
-                byte[] value = encodedKeyValuePair[1];
-                if (value == null) {
-                    value = EMPTY_VALUE;
-                }
-                batchedWrite.put(currTable,key,value);
+                batchedWrite.put(currTable,key,valueBytes);
             }
             batchedWrite.put(metadataTable, LATEST_VERSION_READ,
-                    KeyEncodingUtil.extractTimestampAsByteArray(encodedKeyValuePairs.get(0)[0]));
+                    encodedKeyValuePairs.get(0).getKey().getTimestampAsByteArray());
             database.write(writeOptions,batchedWrite);
         }
     }
@@ -297,7 +290,7 @@ public class DatabaseHandler implements AutoCloseable {
     /**
      * This method performs {@link #updateAll(List, UUID)} asynchronously.
      */
-    public CompletableFuture<Void> updateAllAsync(@NonNull List<byte[][]> encodedKeyValuePairs,
+    public CompletableFuture<Void> updateAllAsync(@NonNull List<RemoteCorfuTableEntry> encodedKeyValuePairs,
                                                   @NonNull UUID streamID) {
         CompletableFuture<Void> result = new CompletableFuture<>();
         CompletableFuture.runAsync(()-> {
@@ -327,22 +320,24 @@ public class DatabaseHandler implements AutoCloseable {
         //if streamID is removed during write batch creation, write will fail, so no inconsistency
         ColumnFamilyHandle currTable = columnFamilies.get(streamID).getStreamTable();
         ColumnFamilyHandle metadataTable = columnFamilies.get(streamID).getMetadataTable();
-        byte[] keyPrefix;
-        byte[] prevPrefix = EMPTY_VALUE;
+        ByteString keyPrefix;
+        ByteString prevPrefix = null;
         try (RocksIterator iter = database.newIterator(currTable);
              WriteBatch batchedWrite = new WriteBatch();
              WriteOptions writeOptions = new WriteOptions()) {
             iter.seekToFirst();
             while (iter.isValid()) {
-                keyPrefix = KeyEncodingUtil.extractEncodedKey(iter.key());
-                if (Arrays.equals(keyPrefix, prevPrefix)) {
+                keyPrefix = ByteString.copyFrom(KeyEncodingUtil.extractEncodedKey(iter.key()));
+                if (keyPrefix.equals(prevPrefix)) {
                     iter.next();
                     continue;
                 }
                 //put empty "null" value at every key in the table
-                batchedWrite.put(currTable,KeyEncodingUtil.constructDatabaseKey(keyPrefix, timestamp), EMPTY_VALUE);
+                RemoteCorfuTableVersionedKey keyToWrite = new RemoteCorfuTableVersionedKey(keyPrefix, timestamp);
+                batchedWrite.put(currTable,keyToWrite.getEncodedVersionedKey().toByteArray(), EMPTY_VALUE);
                 //seek will move iterator to value after the "next key" if it does not exist
-                iter.seek(KeyEncodingUtil.constructDatabaseKey(keyPrefix, 0L));
+                keyToWrite = new RemoteCorfuTableVersionedKey(keyPrefix, 0L);
+                iter.seek(keyToWrite.getEncodedVersionedKey().toByteArray());
                 prevPrefix = keyPrefix;
             }
             iter.status();
@@ -378,31 +373,33 @@ public class DatabaseHandler implements AutoCloseable {
      * @param streamID The stream backing the database from which the keys are deleted.
      * @throws RocksDBException A database error on delete.
      */
-    public void delete(byte[] encodedKeyBegin, byte[] encodedKeyEnd,
+    public void delete(@NonNull RemoteCorfuTableVersionedKey encodedKeyBegin, @NonNull RemoteCorfuTableVersionedKey encodedKeyEnd,
                        boolean includeLastKey, @NonNull UUID streamID)
             throws RocksDBException, DatabaseOperationException {
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("DELETE", INVALID_STREAM_ID_MSG);
         }
-        if (!validateDatabaseKey(encodedKeyBegin) || !validateDatabaseKey(encodedKeyEnd)) {
-            throw new DatabaseOperationException("DELETE", INVALID_DATABASE_KEY_MSG);
-        }
+
         ColumnFamilyHandle currTable = columnFamilies.get(streamID).getStreamTable();
         try (WriteBatch batchedWrite = new WriteBatch();
              WriteOptions writeOptions = new WriteOptions()){
-            batchedWrite.deleteRange(currTable, encodedKeyBegin, encodedKeyEnd);
+            batchedWrite.deleteRange(currTable,
+                    encodedKeyBegin.getEncodedVersionedKey().toByteArray(),
+                    encodedKeyEnd.getEncodedVersionedKey().toByteArray());
             if (includeLastKey) {
-                batchedWrite.delete(currTable, encodedKeyEnd);
+                batchedWrite.delete(currTable, encodedKeyEnd.getEncodedVersionedKey().toByteArray());
             }
             database.write(writeOptions, batchedWrite);
         }
     }
 
     /**
-     * This method performs {@link #delete(byte[], byte[], boolean, UUID)} asynchronously.
+     * This method performs {@link #delete(RemoteCorfuTableVersionedKey, RemoteCorfuTableVersionedKey, boolean, UUID)}
+     * asynchronously.
      */
-    public CompletableFuture<Void> deleteAsync(byte[] encodedKeyBegin, byte[] encodedKeyEnd, boolean includeLastKey,
-                                               @NonNull UUID streamID) {
+    public CompletableFuture<Void> deleteAsync(@NonNull RemoteCorfuTableVersionedKey encodedKeyBegin,
+                                               @NonNull RemoteCorfuTableVersionedKey encodedKeyEnd,
+                                               boolean includeLastKey, @NonNull UUID streamID) {
         CompletableFuture<Void> result = new CompletableFuture<>();
         CompletableFuture.runAsync(()-> {
             try {
@@ -423,16 +420,9 @@ public class DatabaseHandler implements AutoCloseable {
      * @return A list of results from the scan.
      * @throws RocksDBException An error occuring in iteration.
      */
-    public List<byte[][]> scan(@NonNull UUID streamID, long timestamp)
+    public List<RemoteCorfuTableEntry> scan(@NonNull UUID streamID, long timestamp)
             throws RocksDBException, DatabaseOperationException {
         return scan(20,streamID, timestamp);
-    }
-
-    /**
-     * This method performs {@link #scan(UUID, long)} asynchronously.
-     */
-    public CompletableFuture<List<byte[][]>> scanAsync(@NonNull UUID streamID, long timestamp) {
-        return scanAsync(20, streamID, timestamp);
     }
 
     /**
@@ -443,7 +433,7 @@ public class DatabaseHandler implements AutoCloseable {
      * @return A list of results from the scan.
      * @throws RocksDBException An error occuring in iteration.
      */
-    public List<byte[][]> scan(@Positive int numEntries, @NonNull UUID streamID,
+    public List<RemoteCorfuTableEntry> scan(@Positive int numEntries, @NonNull UUID streamID,
                                long timestamp) throws RocksDBException, DatabaseOperationException {
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("SCAN", INVALID_STREAM_ID_MSG);
@@ -458,30 +448,13 @@ public class DatabaseHandler implements AutoCloseable {
                     return new LinkedList<>();
                 } else {
                     //begin at first value -> extract prefix and add timestamp to it
-                    byte[] startingPrefix = KeyEncodingUtil.extractEncodedKey(iter.key());
-                    byte[] startingKey = KeyEncodingUtil.constructDatabaseKey(startingPrefix, timestamp);
+                    ByteString startingPrefix = ByteString.copyFrom(KeyEncodingUtil.extractEncodedKey(iter.key()));
+                    RemoteCorfuTableVersionedKey startingKey =
+                            new RemoteCorfuTableVersionedKey(startingPrefix, timestamp);
                     return scanInternal(startingKey, numEntries, streamID, false);
                 }
             }
         }
-    }
-
-    /**
-     * This method performs {@link #scan(int, UUID, long)} asynchronously.
-     */
-    public CompletableFuture<List<byte[][]>> scanAsync(@Positive int numEntries,@NonNull UUID streamID,
-                                                       long timestamp) {
-        CompletableFuture<List<byte[][]>> result = new CompletableFuture<>();
-        CompletableFuture.runAsync(()-> {
-            try {
-                List<byte[][]> val = scan(numEntries, streamID, timestamp);
-                result.complete(val);
-            } catch (RocksDBException|DatabaseOperationException e) {
-                log.error("Error in RocksDB scan operation: ", e);
-                result.completeExceptionally(e);
-            }
-        }, threadPoolExecutor);
-        return result;
     }
 
     /**
@@ -491,19 +464,10 @@ public class DatabaseHandler implements AutoCloseable {
      * @return A list of results from the scan.
      * @throws RocksDBException An error occuring in iteration.
      */
-    public List<byte[][]> scan(byte[] encodedKeyBegin, @NonNull UUID streamID)
+    public List<RemoteCorfuTableEntry> scan(@NonNull RemoteCorfuTableVersionedKey encodedKeyBegin,
+                                            @NonNull UUID streamID)
             throws RocksDBException, DatabaseOperationException {
-        if (!validateDatabaseKey(encodedKeyBegin)) {
-            throw new DatabaseOperationException("SCAN", INVALID_DATABASE_KEY_MSG);
-        }
         return scan(encodedKeyBegin, 20, streamID);
-    }
-
-    /**
-     * This method performs {@link #scan(byte[], UUID)} asynchronously.
-     */
-    public CompletableFuture<List<byte[][]>> scanAsync(byte[] encodedKeyBegin, @NonNull UUID streamID) {
-        return scanAsync(encodedKeyBegin, 20, streamID);
     }
 
     /**
@@ -514,23 +478,28 @@ public class DatabaseHandler implements AutoCloseable {
      * @return A list of results from the scan.
      * @throws RocksDBException An error occuring in iteration.
      */
-    public List<byte[][]> scan(byte[] encodedKeyBegin, @Positive int numEntries, @NonNull UUID streamID)
+    public List<RemoteCorfuTableEntry> scan(@NonNull RemoteCorfuTableVersionedKey encodedKeyBegin,
+                                            @Positive int numEntries, @NonNull UUID streamID)
             throws RocksDBException, DatabaseOperationException {
-        if (!validateDatabaseKey(encodedKeyBegin)) {
-            throw new DatabaseOperationException("SCAN", INVALID_DATABASE_KEY_MSG);
-        }
         return scanInternal(encodedKeyBegin, numEntries, streamID, true);
     }
 
     /**
-     * This method performs {@link #scan(byte[], int, UUID)} asynchronously.
+     * This method performs {@link #scan(UUID, long)} asynchronously.
      */
-    public CompletableFuture<List<byte[][]>> scanAsync(byte[] encodedKeyBegin, @Positive int numEntries,
-                                                       @NonNull UUID streamID) {
-        CompletableFuture<List<byte[][]>> result = new CompletableFuture<>();
+    public CompletableFuture<List<RemoteCorfuTableEntry>> scanAsync(@NonNull UUID streamID, long timestamp) {
+        return scanAsync(20, streamID, timestamp);
+    }
+
+    /**
+     * This method performs {@link #scan(int, UUID, long)} asynchronously.
+     */
+    public CompletableFuture<List<RemoteCorfuTableEntry>> scanAsync(@Positive int numEntries,@NonNull UUID streamID,
+                                                       long timestamp) {
+        CompletableFuture<List<RemoteCorfuTableEntry>> result = new CompletableFuture<>();
         CompletableFuture.runAsync(()-> {
             try {
-                List<byte[][]> val = scan(encodedKeyBegin, numEntries, streamID);
+                List<RemoteCorfuTableEntry> val = scan(numEntries, streamID, timestamp);
                 result.complete(val);
             } catch (RocksDBException|DatabaseOperationException e) {
                 log.error("Error in RocksDB scan operation: ", e);
@@ -540,28 +509,56 @@ public class DatabaseHandler implements AutoCloseable {
         return result;
     }
 
-    private List<byte[][]> scanInternal(byte[] encodedKeyBegin, int numEntries, UUID streamID, boolean skipFirst)
+    /**
+     * This method performs {@link #scan(RemoteCorfuTableVersionedKey, UUID)} asynchronously.
+     */
+    public CompletableFuture<List<RemoteCorfuTableEntry>> scanAsync(@NonNull RemoteCorfuTableVersionedKey encodedKeyBegin,
+                                                                    @NonNull UUID streamID) {
+        return scanAsync(encodedKeyBegin, 20, streamID);
+    }
+
+    /**
+     * This method performs {@link #scan(RemoteCorfuTableVersionedKey, int, UUID)} asynchronously.
+     */
+    public CompletableFuture<List<RemoteCorfuTableEntry>>
+    scanAsync(@NonNull RemoteCorfuTableVersionedKey encodedKeyBegin,
+              @Positive int numEntries, @NonNull UUID streamID) {
+        CompletableFuture<List<RemoteCorfuTableEntry>> result = new CompletableFuture<>();
+        CompletableFuture.runAsync(()-> {
+            try {
+                List<RemoteCorfuTableEntry> val = scan(encodedKeyBegin, numEntries, streamID);
+                result.complete(val);
+            } catch (RocksDBException|DatabaseOperationException e) {
+                log.error("Error in RocksDB scan operation: ", e);
+                result.completeExceptionally(e);
+            }
+        }, threadPoolExecutor);
+        return result;
+    }
+
+    private List<RemoteCorfuTableEntry> scanInternal(@NonNull RemoteCorfuTableVersionedKey encodedKeyBegin,
+                                                     int numEntries, @NonNull UUID streamID, boolean skipFirst)
             throws RocksDBException, DatabaseOperationException {
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("SCAN", INVALID_STREAM_ID_MSG);
         }
-        KeyEncodingUtil.VersionedKey start = KeyEncodingUtil.extractVersionedKey(encodedKeyBegin);
-        long timestamp = start.getTimestamp();
-        byte[] prevPrefix = start.getEncodedRemoteCorfuTableKey();
+        long timestamp = encodedKeyBegin.getTimestamp();
+        byte[] prevPrefix = encodedKeyBegin.getEncodedKey().toByteArray();
         byte[] currPrefix;
         boolean encounteredPrefix = false;
-        List<byte[][]> results = new LinkedList<>();
+        List<RemoteCorfuTableEntry> results = new LinkedList<>();
         int elements = 0;
         try (ReadOptions iterOptions = new ReadOptions()){
             iterOptions.setTotalOrderSeek(true);
             try (RocksIterator iter = database.newIterator(columnFamilies.get(streamID).getStreamTable(),
                     iterOptions)) {
-                iter.seek(encodedKeyBegin);
+                iter.seek(encodedKeyBegin.getEncodedVersionedKey().toByteArray());
                 while (iter.isValid()) {
                     currPrefix = KeyEncodingUtil.extractEncodedKey(iter.key());
                     if (!Arrays.equals(currPrefix, prevPrefix)) {
-                        byte[] nextKey = KeyEncodingUtil.constructDatabaseKey(currPrefix, timestamp);
-                        iter.seek(nextKey);
+                        RemoteCorfuTableVersionedKey nextKey = new RemoteCorfuTableVersionedKey(
+                                ByteString.copyFrom(currPrefix), timestamp);
+                        iter.seek(nextKey.getEncodedVersionedKey().toByteArray());
                         prevPrefix = currPrefix;
                         encounteredPrefix = false;
                     } else if (encounteredPrefix) {
@@ -570,7 +567,8 @@ public class DatabaseHandler implements AutoCloseable {
                         encounteredPrefix = true;
                         iter.next();
                     } else {
-                        results.add(new byte[][]{iter.key(), iter.value()});
+                        results.add(new RemoteCorfuTableEntry(new RemoteCorfuTableVersionedKey(iter.key()),
+                                ByteString.copyFrom(iter.value())));
                         elements++;
                         encounteredPrefix = true;
                         iter.next();
@@ -601,16 +599,17 @@ public class DatabaseHandler implements AutoCloseable {
      * @return True, if a non-null value exists in the table for the given key and timestamp.
      * @throws RocksDBException An error occuring in the search.
      */
-    public boolean containsKey(byte[] encodedKey, @NonNull UUID streamID)
+    public boolean containsKey(@NonNull RemoteCorfuTableVersionedKey encodedKey, @NonNull UUID streamID)
             throws RocksDBException, DatabaseOperationException {
-        byte[] val = get(encodedKey, streamID);
+        ByteString val = get(encodedKey, streamID);
         return val != null;
     }
 
     /**
-     * This method performs {@link #containsKey(byte[], UUID)} asynchronously.
+     * This method performs {@link #containsKey(RemoteCorfuTableVersionedKey, UUID)} asynchronously.
      */
-    public CompletableFuture<Boolean> containsKeyAsync(byte[] encodedKey, @NonNull UUID streamID) {
+    public CompletableFuture<Boolean> containsKeyAsync(@NonNull RemoteCorfuTableVersionedKey encodedKey,
+                                                       @NonNull UUID streamID) {
         CompletableFuture<Boolean> result = new CompletableFuture<>();
         CompletableFuture.runAsync(()-> {
             try {
@@ -633,23 +632,23 @@ public class DatabaseHandler implements AutoCloseable {
      * @return True, if the given value exists in the table.
      * @throws RocksDBException An error occuring in the search.
      */
-    public boolean containsValue(byte[] encodedValue, @NonNull UUID streamID,
+    public boolean containsValue(@NonNull ByteString encodedValue, @NonNull UUID streamID,
                                  long timestamp, @Positive int scanSize)
             throws RocksDBException, DatabaseOperationException {
         boolean first = true;
-        byte[] lastKey = null;
-        List<byte[][]> scannedEntries = null;
+        RemoteCorfuTableVersionedKey lastKey;
+        List<RemoteCorfuTableEntry> scannedEntries = null;
         do {
             if (first) {
                 scannedEntries = scan(streamID, timestamp);
                 first = false;
             } else {
-                lastKey = scannedEntries.get(scannedEntries.size()-1)[0];
+                lastKey = scannedEntries.get(scannedEntries.size()-1).getKey();
                 scannedEntries = scan(lastKey,scanSize, streamID);
             }
 
-            for (byte[][] scannedEntry : scannedEntries) {
-                if (Arrays.equals(scannedEntry[1], encodedValue)) {
+            for (RemoteCorfuTableEntry scannedEntry : scannedEntries) {
+                if (scannedEntry.getValue().equals(encodedValue)) {
                     return true;
                 }
             }
@@ -658,9 +657,9 @@ public class DatabaseHandler implements AutoCloseable {
     }
 
     /**
-     * This method performs {@link #containsValue(byte[], UUID, long, int)} asynchronously.
+     * This method performs {@link #containsValue(ByteString, UUID, long, int)} asynchronously.
      */
-    public CompletableFuture<Boolean> containsValueAsync(byte[] encodedValue, @NonNull UUID streamID,
+    public CompletableFuture<Boolean> containsValueAsync(ByteString encodedValue, @NonNull UUID streamID,
                                                          long timestamp, @Positive int scanSize) {
         CompletableFuture<Boolean> result = new CompletableFuture<>();
         CompletableFuture.runAsync(()-> {
@@ -687,15 +686,15 @@ public class DatabaseHandler implements AutoCloseable {
     public int size(@NonNull UUID streamID, long timestamp, @Positive int scanSize)
             throws RocksDBException, DatabaseOperationException {
         boolean first = true;
-        byte[] lastKey = null;
+        RemoteCorfuTableVersionedKey lastKey;
         int count = 0;
-        List<byte[][]> scannedEntries = null;
+        List<RemoteCorfuTableEntry> scannedEntries = null;
         do {
             if (first) {
                 scannedEntries = scan(streamID, timestamp);
                 first = false;
             } else {
-                lastKey = scannedEntries.get(scannedEntries.size()-1)[0];
+                lastKey = scannedEntries.get(scannedEntries.size()-1).getKey();
                 scannedEntries = scan(lastKey,scanSize, streamID);
             }
             count += scannedEntries.size();
@@ -737,7 +736,7 @@ public class DatabaseHandler implements AutoCloseable {
     public void close() {
         threadPoolExecutor.shutdown();
         try {
-            threadPoolExecutor.awaitTermination(SHUTDOWN_TIMEOUT, TimeUnit.SECONDS);
+            threadPoolExecutor.awaitTermination(shutdownTimeout, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             log.debug("Database Handler executor awaitTermination interrupted.", e);
             throw new UnrecoverableCorfuInterruptedError(e);
@@ -757,12 +756,13 @@ public class DatabaseHandler implements AutoCloseable {
      */
     @DoNotCall
     @Deprecated
-    protected List<byte[][]> fullDatabaseScan(UUID streamID) {
-        List<byte[][]> allEntries = new LinkedList<>();
+    protected List<RemoteCorfuTableEntry> fullDatabaseScan(UUID streamID) {
+        List<RemoteCorfuTableEntry> allEntries = new LinkedList<>();
         try (RocksIterator iter = database.newIterator(columnFamilies.get(streamID).getStreamTable())) {
             iter.seekToFirst();
             while (iter.isValid()) {
-                allEntries.add(new byte[][]{iter.key(), iter.value()});
+                allEntries.add(new RemoteCorfuTableEntry(new RemoteCorfuTableVersionedKey(iter.key()),
+                        ByteString.copyFrom(iter.value())));
                 iter.next();
             }
         }
@@ -771,7 +771,7 @@ public class DatabaseHandler implements AutoCloseable {
 
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
     @Getter
-    private class ColumnFamilyHandlePair {
+    private static class ColumnFamilyHandlePair {
         private final ColumnFamilyHandle streamTable;
         private final ColumnFamilyHandle metadataTable;
     }
