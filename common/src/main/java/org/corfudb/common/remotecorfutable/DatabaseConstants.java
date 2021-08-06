@@ -1,4 +1,4 @@
-package org.corfudb.utils.remotecorfutable;
+package org.corfudb.common.remotecorfutable;
 
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;

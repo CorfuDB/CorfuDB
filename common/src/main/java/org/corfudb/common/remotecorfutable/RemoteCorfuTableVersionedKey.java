@@ -1,4 +1,4 @@
-package org.corfudb.utils.remotecorfutable;
+package org.corfudb.common.remotecorfutable;
 
 import com.google.common.primitives.Longs;
 import com.google.protobuf.ByteString;

@@ -1,4 +1,4 @@
-package org.corfudb.utils.remotecorfutable;
+package org.corfudb.common.remotecorfutable;
 
 import com.google.protobuf.ByteString;
 import lombok.AllArgsConstructor;
