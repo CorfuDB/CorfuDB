@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.remotecorfutable;
 
 import com.google.protobuf.ByteString;
+import com.google.protobuf.TextFormat;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -13,6 +14,7 @@ import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getGetResponse
 import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getScanResponseMsg;
 import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getSizeRequestMsg;
 import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getSizeResponseMsg;
+import static org.corfudb.protocols.CorfuProtocolServerErrors.getRemoteCorfuTableError;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
@@ -162,5 +164,10 @@ public class RemoteCorfuTableRequestHandler {
     }
 
     private void handleException(Throwable ex, ChannelHandlerContext ctx, RequestMsg req, IServerRouter r) {
+        if (log.isTraceEnabled()) {
+            log.trace("handleException: handling exception {} for {}", ex, TextFormat.shortDebugString(req));
+        }
+        ResponseMsg responseMsg = getResponseMsg(getHeaderMsg(req.getHeader()),
+                getRemoteCorfuTableError(ex.getMessage()));
     }
 }
