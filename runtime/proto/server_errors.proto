@@ -40,6 +40,10 @@ message BootstrappedErrorMsg {
 message NotBootstrappedErrorMsg {
 }
 
+message RemoteCorfuTableErrorMsg {
+  string cause = 1;
+}
+
 message UnknownErrorMsg {
   bytes throwable = 1;
 }
@@ -55,5 +59,6 @@ message ServerErrorMsg {
     DataCorruptionErrorMsg data_corruption_error = 7;
     BootstrappedErrorMsg bootstrapped_error = 8;
     NotBootstrappedErrorMsg not_bootstrapped_error = 9;
+    RemoteCorfuTableErrorMsg remote_corfu_table_error = 10;
   }
 }

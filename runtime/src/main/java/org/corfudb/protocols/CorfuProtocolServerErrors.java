@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.ObjectOutputStream;
 
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
+import org.corfudb.runtime.proto.ServerErrors.RemoteCorfuTableErrorMsg;
 import org.corfudb.runtime.proto.ServerErrors.BootstrappedErrorMsg;
 import org.corfudb.runtime.proto.ServerErrors.DataCorruptionErrorMsg;
 import org.corfudb.runtime.proto.ServerErrors.NotBootstrappedErrorMsg;
@@ -124,6 +125,14 @@ public final class CorfuProtocolServerErrors {
     public static ServerErrorMsg getNotBootstrappedErrorMsg() {
         return ServerErrorMsg.newBuilder()
                 .setNotBootstrappedError(NotBootstrappedErrorMsg.getDefaultInstance())
+                .build();
+    }
+
+    public static ServerErrorMsg getRemoteCorfuTableError(String message) {
+        return ServerErrorMsg.newBuilder()
+                .setRemoteCorfuTableError(RemoteCorfuTableErrorMsg.newBuilder()
+                    .setCause(message)
+                    .build())
                 .build();
     }
 
