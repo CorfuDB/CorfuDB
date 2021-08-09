@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
 
@@ -51,7 +52,7 @@ public class DatabaseHandlerTest {
     private Path mPath;
     private File mFile;
     private Options mOptions;
-    private ThreadPoolExecutor mThreadPoolExecutor;
+    private ExecutorService mExecutor;
 
     //constants
     private final UUID stream1 = UUID.nameUUIDFromBytes("stream1".getBytes(DATABASE_CHARSET));
@@ -63,10 +64,8 @@ public class DatabaseHandlerTest {
     @Before
     public void setup() {
         mPath = mock(Path.class);
-        mOptions = new Options();
-        mOptions.setCreateIfMissing(true);
-        mOptions.setComparator(BuiltinComparator.REVERSE_BYTEWISE_COMPARATOR);
-        mThreadPoolExecutor = mock(ThreadPoolExecutor.class);
+        mOptions = DatabaseHandler.getDefaultOptions();
+        mExecutor = mock(ExecutorService.class);
         mFile = mock(File.class);
 
         String TEST_TEMP_DIR = com.google.common.io.Files.createTempDir().getAbsolutePath();
@@ -74,7 +73,7 @@ public class DatabaseHandlerTest {
         when(mFile.getAbsolutePath()).thenReturn(TEST_TEMP_DIR);
         when(mPath.toFile()).thenReturn(mFile);
 
-        databaseHandler = new DatabaseHandler(mPath,mOptions,mThreadPoolExecutor, 5);
+        databaseHandler = new DatabaseHandler(mPath,mOptions,mExecutor, 5);
     }
 
     @After
