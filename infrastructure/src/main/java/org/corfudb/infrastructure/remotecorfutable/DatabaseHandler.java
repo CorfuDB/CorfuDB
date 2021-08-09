@@ -17,10 +17,10 @@ import static org.corfudb.common.remotecorfutable.DatabaseConstants.METADATA_COL
 import static org.corfudb.common.remotecorfutable.DatabaseConstants.METADATA_COLUMN_SUFFIX;
 import static org.corfudb.common.remotecorfutable.DatabaseConstants.isEmpty;
 import org.corfudb.common.remotecorfutable.KeyEncodingUtil;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableEntry;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.rocksdb.ColumnFamilyDescriptor;
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.ColumnFamilyOptions;
@@ -41,7 +41,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -59,8 +59,7 @@ public class DatabaseHandler implements AutoCloseable {
     }
 
     private final RocksDB database;
-    //instead of using this use completable future
-    private final ThreadPoolExecutor threadPoolExecutor;
+    private final ExecutorService executor;
     private final long shutdownTimeout;
     private final Map<UUID, ColumnFamilyHandlePair> columnFamilies;
 
@@ -69,11 +68,11 @@ public class DatabaseHandler implements AutoCloseable {
      * to the underlying database.
      * @param dataPath The filepath for the database files.
      * @param options The configuration options to start the database.
-     * @param threadPoolExecutor The thread pool to serve client requests.
-     * @param shutdownTimeout The amount of time to await termination of threadPoolExecutor
+     * @param executor The thread pool to serve client requests.
+     * @param shutdownTimeout The amount of time to await termination of executor
      */
     public DatabaseHandler(@NonNull Path dataPath, @NonNull Options options,
-                           @NonNull ThreadPoolExecutor threadPoolExecutor, long shutdownTimeout) {
+                           @NonNull ExecutorService executor, long shutdownTimeout) {
         try {
             RocksDB.destroyDB(dataPath.toFile().getAbsolutePath(), options);
             this.database = RocksDB.open(options, dataPath.toFile().getAbsolutePath());
@@ -81,11 +80,17 @@ public class DatabaseHandler implements AutoCloseable {
             throw new UnrecoverableCorfuError(e);
         }
 
-        this.threadPoolExecutor = threadPoolExecutor;
+        this.executor = executor;
 
         //Must be initialized as an empty map and updated through the add table function
         this.columnFamilies = new ConcurrentHashMap<>();
         this.shutdownTimeout = shutdownTimeout;
+    }
+
+    public static Options getDefaultOptions() {
+        Options options = new Options();
+        options.setCreateIfMissing(true);
+        return options;
     }
 
     /**
@@ -212,7 +217,7 @@ public class DatabaseHandler implements AutoCloseable {
                 log.error("Error in RocksDB get operation: ", e);
                 result.completeExceptionally(e);
             }
-        }, threadPoolExecutor);
+        }, executor);
         return result;
     }
 
@@ -252,7 +257,7 @@ public class DatabaseHandler implements AutoCloseable {
                 log.error("Error in RocksDB put operation: ", e);
                 result.completeExceptionally(e);
             }
-        }, threadPoolExecutor);
+        }, executor);
         return result;
     }
 
@@ -303,7 +308,7 @@ public class DatabaseHandler implements AutoCloseable {
                 log.error("Error in RocksDB put all operation: ", e);
                 result.completeExceptionally(e);
             }
-        }, threadPoolExecutor);
+        }, executor);
         return result;
     }
 
@@ -361,7 +366,7 @@ public class DatabaseHandler implements AutoCloseable {
                 log.error("Error in RocksDB clear operation: ", e);
                 result.completeExceptionally(e);
             }
-        }, threadPoolExecutor);
+        }, executor);
         return result;
     }
 
@@ -411,7 +416,7 @@ public class DatabaseHandler implements AutoCloseable {
                 log.error("Error in RocksDB delete operation: ", e);
                 result.completeExceptionally(e);
             }
-        }, threadPoolExecutor);
+        }, executor);
         return result;
     }
 
@@ -507,7 +512,7 @@ public class DatabaseHandler implements AutoCloseable {
                 log.error("Error in RocksDB scan operation: ", e);
                 result.completeExceptionally(e);
             }
-        }, threadPoolExecutor);
+        }, executor);
         return result;
     }
 
@@ -534,7 +539,7 @@ public class DatabaseHandler implements AutoCloseable {
                 log.error("Error in RocksDB scan operation: ", e);
                 result.completeExceptionally(e);
             }
-        }, threadPoolExecutor);
+        }, executor);
         return result;
     }
 
@@ -621,7 +626,7 @@ public class DatabaseHandler implements AutoCloseable {
                 log.error("Error in RocksDB scan operation: ", e);
                 result.completeExceptionally(e);
             }
-        }, threadPoolExecutor);
+        }, executor);
         return result;
     }
 
@@ -672,7 +677,7 @@ public class DatabaseHandler implements AutoCloseable {
                 log.error("Error in RocksDB scan operation: ", e);
                 result.completeExceptionally(e);
             }
-        }, threadPoolExecutor);
+        }, executor);
         return result;
     }
 
@@ -718,7 +723,7 @@ public class DatabaseHandler implements AutoCloseable {
                 log.error("Error in RocksDB scan operation: ", e);
                 result.completeExceptionally(e);
             }
-        }, threadPoolExecutor);
+        }, executor);
         return result;
     }
 
@@ -736,9 +741,9 @@ public class DatabaseHandler implements AutoCloseable {
      */
     @Override
     public void close() {
-        threadPoolExecutor.shutdown();
+        executor.shutdown();
         try {
-            threadPoolExecutor.awaitTermination(shutdownTimeout, TimeUnit.SECONDS);
+            executor.awaitTermination(shutdownTimeout, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             log.debug("Database Handler executor awaitTermination interrupted.", e);
             throw new UnrecoverableCorfuInterruptedError(e);
