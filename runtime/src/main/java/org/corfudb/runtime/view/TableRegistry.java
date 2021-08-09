@@ -317,12 +317,16 @@ public class TableRegistry {
         final CorfuRecord<ProtobufFileDescriptor, TableMetadata> oldProto = this.protobufDescriptorTable.get(protoName);
         if (oldProto == null) {
             this.protobufDescriptorTable.put(protoName, newProtoFd);
+            log.warn("protoName {} does not exist in the protobufDescriptorTable! Put!!", protoName.getFileName());
             return;
         }
         if (!oldProto.getPayload().getFileDescriptor().equals(newProtoFd.getPayload().getFileDescriptor())) {
             // protobuf files that start with google/protobuf are standard library files.
             // Even if there is a change in these library files (say due to a new protobuf version update)
             // it should not be flagged as a schema change since that file is not user created.
+            log.warn("oldProto's file descriptor {} does not equal to the newProto's {}",
+                    oldProto.getPayload().getFileDescriptor(),
+                    newProtoFd.getPayload().getFileDescriptor());
             if (!protoName.getFileName().startsWith("google/protobuf")) {
                 log.warn("registerTable: Schema update detected for table {}${} in schema file {}",
                         namespace, tableName, protoName);
@@ -338,6 +342,9 @@ public class TableRegistry {
             }
             this.protobufDescriptorTable.put(protoName, newProtoFd);
         } // else old file descriptors match no need to re-add the file descriptors
+        else {
+            log.warn("oldProto's file descriptor equals to the newProto's, no need to update!!!");
+        }
     }
 
     /**
