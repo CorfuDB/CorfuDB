@@ -169,5 +169,6 @@ public class RemoteCorfuTableRequestHandler {
         }
         ResponseMsg responseMsg = getResponseMsg(getHeaderMsg(req.getHeader()),
                 getRemoteCorfuTableError(ex.getMessage()));
+        r.sendResponse(responseMsg,ctx);
     }
 }
