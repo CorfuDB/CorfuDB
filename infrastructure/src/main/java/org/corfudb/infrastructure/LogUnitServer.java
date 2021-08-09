@@ -6,10 +6,13 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.codehaus.groovy.runtime.WritablePath;
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
 import org.corfudb.infrastructure.log.StreamLogFiles;
+import org.corfudb.infrastructure.remotecorfutable.DatabaseHandler;
+import org.corfudb.infrastructure.remotecorfutable.RemoteCorfuTableRequestHandler;
 import org.corfudb.protocols.CorfuProtocolLogData;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
@@ -32,6 +35,9 @@ import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +45,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -67,6 +74,7 @@ import static org.corfudb.protocols.service.CorfuProtocolMessage.getDefaultProto
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
+import org.rocksdb.Options;
 
 
 /**
@@ -96,6 +104,16 @@ public class LogUnitServer extends AbstractServer {
      * The server context of the node.
      */
     private final ServerContext serverContext;
+
+    /**
+     * Handler class for database supporting RemoteCorfuTable requests.
+     */
+    private final DatabaseHandler databaseHandler;
+
+    /**
+     * Reauest handler for all RemoteCorfuTable requests
+     */
+    private final RemoteCorfuTableRequestHandler remoteCorfuTableRequestHandler;
 
     /**
      * RequestHandlerMethods for the LogUnit server.
@@ -153,6 +171,16 @@ public class LogUnitServer extends AbstractServer {
         dataCache = serverInitializer.buildLogUnitServerCache(config, streamLog);
         batchWriter = serverInitializer.buildBatchProcessor(config, streamLog, serverContext);
         logCleaner = serverInitializer.buildStreamLogCompaction(streamLog);
+
+        //TODO: replace with appropriate locations and executors or add as options in server context
+        Path remoteCorfuTableDBPath = Paths.get("/var","remoteCorfuTableDatabase");
+        Options rocksDBOptions = DatabaseHandler.getDefaultOptions();
+        ExecutorService dbExecutor = serverContext.getExecutorService(
+                serverContext.getLogUnitThreadCount(),"RemoteCorfuTable-");
+        databaseHandler = serverInitializer.buildDatabaseHandler(remoteCorfuTableDBPath, rocksDBOptions, dbExecutor);
+        remoteCorfuTableRequestHandler = serverInitializer.buildRemoteCorfuTableRequestHandler(databaseHandler);
+
+
     }
 
     @Override
@@ -249,6 +277,15 @@ public class LogUnitServer extends AbstractServer {
         streamLog.updateCommittedTail(req.getPayload().getUpdateCommittedTailRequest().getCommittedTail());
         HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         router.sendResponse(getResponseMsg(responseHeader, getUpdateCommittedTailResponseMsg()), ctx);
+    }
+
+    @RequestHandler(type = PayloadCase.REMOTE_CORFU_TABLE_REQUEST)
+    private void handleRemoteCorfuTableRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        if (log.isTraceEnabled()) {
+            log.trace("handleRemoteCorfuTableRequest: received Remote Corfu Table request {}",
+                    TextFormat.shortDebugString(req));
+        }
+        remoteCorfuTableRequestHandler.handle(req, ctx, r);
     }
 
     /**
@@ -616,6 +653,15 @@ public class LogUnitServer extends AbstractServer {
 
         StreamLogCompaction buildStreamLogCompaction(@Nonnull StreamLog streamLog) {
             return new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER);
+        }
+
+        DatabaseHandler buildDatabaseHandler(@Nonnull Path path, @Nonnull Options options,
+                                             @Nonnull ExecutorService executor) {
+            return new DatabaseHandler(path,options, executor, ServerContext.SHUTDOWN_TIMER.get(ChronoUnit.SECONDS));
+        }
+
+        RemoteCorfuTableRequestHandler buildRemoteCorfuTableRequestHandler(@Nonnull DatabaseHandler dbhandler) {
+            return new RemoteCorfuTableRequestHandler(dbhandler);
         }
     }
 }
