@@ -9,6 +9,7 @@ import static org.corfudb.common.remotecorfutable.DatabaseConstants.EMPTY_VALUE;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableEntry;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
 import org.junit.After;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -154,6 +155,25 @@ public class DatabaseHandlerTest {
     }
 
     @Test
+    public void testMultiGetBasic() throws RocksDBException {
+        List<RemoteCorfuTableEntry> keyValuePairs = new LinkedList<>();
+        for (int i = 0; i < 1000; i++) {
+            byte[][] pair = new byte[2][];
+            RemoteCorfuTableVersionedKey pairKey = new RemoteCorfuTableVersionedKey(
+                    ByteString.copyFrom(Bytes.concat("key".getBytes(DATABASE_CHARSET), Longs.toByteArray(i))),
+                    0L);
+            ByteString pairValue = ByteString.copyFrom(("val" + i).getBytes(DATABASE_CHARSET));
+            keyValuePairs.add(new RemoteCorfuTableEntry(pairKey, pairValue));
+        }
+        databaseHandler.addTable(stream1);
+        databaseHandler.updateAll(keyValuePairs, stream1);
+        List<RemoteCorfuTableVersionedKey> keysToRead =
+                keyValuePairs.stream().map(RemoteCorfuTableEntry::getKey).collect(Collectors.toList());
+        List<RemoteCorfuTableEntry> readEntries = databaseHandler.multiGet(keysToRead, stream1);
+        assertEquals(keyValuePairs, readEntries);
+    }
+
+    @Test
     public void testStreamIDNotInDatabase() {
         RemoteCorfuTableVersionedKey dummyKey = new RemoteCorfuTableVersionedKey(key1, 0L);
         ByteString dummyVal = ByteString.copyFrom("dummy".getBytes(DATABASE_CHARSET));
@@ -280,6 +300,18 @@ public class DatabaseHandlerTest {
             log.error("Error in test full inclusive delete range: ", e);
             throw e;
         }
+    }
+
+    @Test
+    public void testDeleteFailsOnMultipleKeys() throws RocksDBException {
+        RemoteCorfuTableVersionedKey firstKey =
+                new RemoteCorfuTableVersionedKey(ByteString.copyFrom("First", DATABASE_CHARSET), 5L);
+        RemoteCorfuTableVersionedKey secondKey =
+                new RemoteCorfuTableVersionedKey(ByteString.copyFrom("Second", DATABASE_CHARSET), 0L);
+        databaseHandler.addTable(stream1);
+        assertThrows("Expected delete to throw DatabaseOperationException on invalid start/end keys",
+                DatabaseOperationException.class,
+                () -> databaseHandler.delete(firstKey, secondKey, true, stream1));
     }
 
     @Test
@@ -431,7 +463,7 @@ public class DatabaseHandlerTest {
             if (skip == 0) {
                 k++;
                 skip = k;
-                val = ByteString.copyFrom(EMPTY_VALUE);
+                val = ByteString.EMPTY;
             } else {
                 val = ByteString.copyFrom(("val" + i).getBytes(DATABASE_CHARSET));
             }
@@ -479,7 +511,7 @@ public class DatabaseHandlerTest {
                         k--;
                     }
                     skip = k;
-                    val = ByteString.copyFrom(EMPTY_VALUE);
+                    val = ByteString.EMPTY;
                 } else {
                     val = ByteString.copyFrom(("val" + i + "ver" + j).getBytes(DATABASE_CHARSET));
                 }
@@ -550,7 +582,7 @@ public class DatabaseHandlerTest {
                 assertEquals(
                         new RemoteCorfuTableEntry(
                                 new RemoteCorfuTableVersionedKey(entries[199-i][0].getKey().getEncodedKey(), 5L),
-                                ByteString.copyFrom(EMPTY_VALUE)
+                                ByteString.EMPTY
                         ),
                         allEntries.get(i*6));
                 for (int j = 0; j < 5; j++) {
@@ -583,7 +615,7 @@ public class DatabaseHandlerTest {
                         k--;
                     }
                     skip = k;
-                    val = ByteString.copyFrom(EMPTY_VALUE);
+                    val = ByteString.EMPTY;
                 } else {
                     val = ByteString.copyFrom(("val" + i + "ver" + j).getBytes(DATABASE_CHARSET));
                 }
@@ -634,7 +666,7 @@ public class DatabaseHandlerTest {
                         k--;
                     }
                     skip = k;
-                    val = ByteString.copyFrom(EMPTY_VALUE);
+                    val = ByteString.EMPTY;
                 } else {
                     val = ByteString.copyFrom(("val" + i + "ver" + j).getBytes(DATABASE_CHARSET));
                 }
@@ -683,7 +715,7 @@ public class DatabaseHandlerTest {
                         k--;
                     }
                     skip = k;
-                    val = ByteString.copyFrom(EMPTY_VALUE);
+                    val = ByteString.EMPTY;
                 } else {
                     val = ByteString.copyFrom(("val" + i + "ver" + j).getBytes(DATABASE_CHARSET));
                 }
