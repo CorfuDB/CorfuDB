@@ -689,6 +689,68 @@ public class DatabaseHandlerTest {
         assertEquals(0,failed);
     }
 
+    //Intermittently throws UnsupportedOperationException for ByteBuffer.array
+    // may be related to https://github.com/facebook/rocksdb/issues/6608, with C++ handling issues
+
+    @Test
+    public void testContainsValueFunctionalityAdvanced() throws RocksDBException {
+        List<List<RemoteCorfuTableEntry>> entries = new ArrayList<>(250);
+        List<List<ByteString>> values = new ArrayList<>(250);
+        for (int i = 0; i < 250; i++) {
+            entries.add(new ArrayList<>(4));
+            values.add(new ArrayList<>(4));
+        }
+        int k = 5;
+        int skip = k;
+        for (int j = 0; j < 4; j++) {
+            for (int i = 0; i < 250; i++) {
+                RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(
+                        ByteString.copyFrom(Bytes.concat("key".getBytes(DATABASE_CHARSET), Longs.toByteArray(i))), j);
+                ByteString val = ByteString.copyFrom(("val" + i + "ver" + j).getBytes(DATABASE_CHARSET));
+                values.get(i).add(val);
+                if (skip == 0) {
+                    if (k == 0) {
+                        k = 5;
+                    } else {
+                        k--;
+                    }
+                    skip = k;
+                    val = ByteString.EMPTY;
+                }
+                entries.get(i).add(new RemoteCorfuTableEntry(key, val));
+                skip--;
+            }
+        }
+        try {
+            databaseHandler.addTable(stream1);
+            for (int i = 0; i < 250; i++) {
+                databaseHandler.updateAll(entries.get(i), stream1);
+            }
+            List<String> failures = new LinkedList<>();
+            for (int i = 0; i < 250; i++) {
+                List<ByteString> addedVals = entries.get(i).stream()
+                        .map(RemoteCorfuTableEntry::getValue).collect(Collectors.toList());
+                List<ByteString> versionVals = values.get(i);
+                for (int j = 0; j < 4; j++) {
+                    if (addedVals.get(j).isEmpty()) {
+                        if (databaseHandler.containsValue(versionVals.get(j), stream1, j, 17)) {
+                            failures.add(String.format("Failed with TRUE value at i: %d, j: %d\n", i, j));
+                        }
+                    } else {
+                        if (!databaseHandler.containsValue(versionVals.get(j), stream1, j, 17)) {
+                            failures.add(String.format("Failed with FALSE value at i: %d, j: %d\n", i, j));
+                        }
+                    }
+                }
+            }
+            failures.forEach(System.out::println);
+            assertEquals(0, failures.size());
+        } catch (RocksDBException | DatabaseOperationException e) {
+            log.error("Error in contains value test: ", e);
+            throw e;
+        }
+    }
+
     @Test
     public void testSizeFunctionality() throws RocksDBException {
         List<List<RemoteCorfuTableEntry>> entries = new ArrayList<>(250);
