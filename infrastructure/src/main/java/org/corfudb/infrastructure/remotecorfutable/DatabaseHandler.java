@@ -43,6 +43,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * The DatabaseHandler provides an interface for the RocksDB instance storing data for server side
@@ -207,7 +208,8 @@ public class DatabaseHandler implements AutoCloseable {
     /**
      * This method performs {@link #get(RemoteCorfuTableVersionedKey, UUID)} asynchronously.
      */
-    public CompletableFuture<ByteString> getAsync(@NonNull RemoteCorfuTableVersionedKey encodedKey, @NonNull UUID streamID) {
+    public CompletableFuture<ByteString> getAsync(@NonNull RemoteCorfuTableVersionedKey encodedKey,
+                                                  @NonNull UUID streamID) {
         CompletableFuture<ByteString> result = new CompletableFuture<>();
         CompletableFuture.runAsync(()-> {
             try {
@@ -219,6 +221,56 @@ public class DatabaseHandler implements AutoCloseable {
             }
         }, executor);
         return result;
+    }
+
+    /**
+     * This function provides an interface to read multiple keys from the database.
+     * @param keys The keys to read.
+     * @param streamID The stream backing the database to read from.
+     * @return A list of RemoteCorfuTableEntries representing the requested key and its value in the database.
+     * @throws RocksDBException An error in reading a key.
+     */
+    public List<RemoteCorfuTableEntry> multiGet(@NonNull List<RemoteCorfuTableVersionedKey> keys,
+                                                @NonNull UUID streamID) throws RocksDBException {
+        List<RemoteCorfuTableEntry> results = new LinkedList<>();
+        for (RemoteCorfuTableVersionedKey key : keys) {
+            if (key == null) {
+                throw new DatabaseOperationException("MULTIGET", "Invalid argument - null key entered");
+            }
+            results.add(new RemoteCorfuTableEntry(key, get(key, streamID)));
+        }
+        return results;
+    }
+
+    /**
+     * This method performs {@link #multiGet(List, UUID)} asynchronously. Note that while the synchronous implementation
+     * of this method is guaranteed to return keys in the same order as requested, this method does not provide that
+     * guarantee.
+     */
+    public CompletableFuture<List<RemoteCorfuTableEntry>> multiGetAsync(
+            @NonNull List<RemoteCorfuTableVersionedKey> keys, @NonNull UUID streamID) {
+        CompletableFuture<List<RemoteCorfuTableEntry>> resultFuture = new CompletableFuture<>();
+        List<CompletableFuture<RemoteCorfuTableEntry>> results = new LinkedList<>();
+        CompletableFuture.runAsync(() -> {
+            for (RemoteCorfuTableVersionedKey key : keys) {
+                //TODO: verify
+                //no need to perform a null check since key param is null checked in getAsync
+                results.add(getAsync(key, streamID).thenApplyAsync(
+                        val -> new RemoteCorfuTableEntry(key, val), executor));
+            }
+            CompletableFuture<Void> allFutures = CompletableFuture.allOf(results.toArray(new CompletableFuture[0]));
+            allFutures.handleAsync((val, ex) -> {
+                if (ex != null) {
+                    log.error("Error in RocksDB multiGet operation: ", ex);
+                    resultFuture.completeExceptionally(ex);
+                    return null;
+                } else {
+                    resultFuture.complete(results.stream().map(CompletableFuture::join).collect(Collectors.toList()));
+                    return null;
+                }
+            }).join();
+        }, executor);
+        return resultFuture;
     }
 
     /**
@@ -278,15 +330,22 @@ public class DatabaseHandler implements AutoCloseable {
         try (WriteBatch batchedWrite = new WriteBatch();
              WriteOptions writeOptions = new WriteOptions()) {
             for (RemoteCorfuTableEntry encodedKeyValuePair : encodedKeyValuePairs) {
-                byte[] key = encodedKeyValuePair.getKey().getEncodedVersionedKey().toByteArray();
+                if (encodedKeyValuePair == null) {
+                    throw new DatabaseOperationException("MULTIPUT", "Invalid argument - null entry passed");
+                }
+                RemoteCorfuTableVersionedKey key = encodedKeyValuePair.getKey();
                 ByteString value = encodedKeyValuePair.getValue();
+                if (key == null || value == null) {
+                    throw new DatabaseOperationException("MULTIPUT", "Invalid argument - null key or value passed");
+                }
+                byte[] keyBytes = key.getEncodedVersionedKey().toByteArray();
                 byte[] valueBytes;
                 if (value.isEmpty()) {
                     valueBytes = EMPTY_VALUE;
                 } else {
                     valueBytes = value.toByteArray();
                 }
-                batchedWrite.put(currTable,key,valueBytes);
+                batchedWrite.put(currTable,keyBytes,valueBytes);
             }
             batchedWrite.put(metadataTable, LATEST_VERSION_READ,
                     encodedKeyValuePairs.get(0).getKey().getTimestampAsByteArray());
@@ -372,7 +431,8 @@ public class DatabaseHandler implements AutoCloseable {
 
     /**
      * This function provides an interface to delete a range of keys from the database.
-     * encodedKeyBegin must be less than encodedKeyEnd with the comparator used (reverse lexicographic)
+     * encodedKeyBegin must be less than encodedKeyEnd with the comparator used (reverse lexicographic).
+     * Note: this is a single key delete, so the prefixes of the begin and end keys must match
      *
      * @param encodedKeyBegin The start of the range.
      * @param encodedKeyEnd The end of the range.
@@ -385,6 +445,9 @@ public class DatabaseHandler implements AutoCloseable {
             throws RocksDBException, DatabaseOperationException {
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("DELETE", INVALID_STREAM_ID_MSG);
+        }
+        if (!encodedKeyBegin.getEncodedKey().equals(encodedKeyEnd.getEncodedKey())) {
+            throw new DatabaseOperationException("DELETE", "Start and End keys must have the same prefix");
         }
 
         ColumnFamilyHandle currTable = columnFamilies.get(streamID).getStreamTable();
@@ -666,7 +729,7 @@ public class DatabaseHandler implements AutoCloseable {
     /**
      * This method performs {@link #containsValue(ByteString, UUID, long, int)} asynchronously.
      */
-    public CompletableFuture<Boolean> containsValueAsync(ByteString encodedValue, @NonNull UUID streamID,
+    public CompletableFuture<Boolean> containsValueAsync(@NonNull ByteString encodedValue, @NonNull UUID streamID,
                                                          long timestamp, @Positive int scanSize) {
         CompletableFuture<Boolean> result = new CompletableFuture<>();
         CompletableFuture.runAsync(()-> {
