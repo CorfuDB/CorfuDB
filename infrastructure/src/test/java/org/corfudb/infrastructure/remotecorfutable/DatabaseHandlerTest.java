@@ -5,11 +5,9 @@ import com.google.common.primitives.Longs;
 import com.google.protobuf.ByteString;
 import lombok.extern.slf4j.Slf4j;
 import static org.corfudb.common.remotecorfutable.DatabaseConstants.DATABASE_CHARSET;
-import static org.corfudb.common.remotecorfutable.DatabaseConstants.EMPTY_VALUE;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableEntry;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
 import org.junit.After;
-import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -22,7 +20,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
-import org.rocksdb.BuiltinComparator;
 import org.rocksdb.Options;
 import org.rocksdb.RocksDBException;
 
@@ -33,8 +30,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * The DatabaseHandlerTest provides Unit tests for the DatabaseHandler object.
@@ -357,7 +354,8 @@ public class DatabaseHandlerTest {
                     currScan = databaseHandler.scan(20, stream1, 0);
                     first = false;
                 } else {
-                    currScan = databaseHandler.scan(currScan.get(currScan.size()-1).getKey(), 20, stream1);
+                    currScan = databaseHandler.scan(
+                            currScan.get(currScan.size()-1).getKey(), 20, stream1,0);
                 }
                 fullDB.addAll(currScan);
             } while (currScan.size() >= 20);
@@ -434,7 +432,7 @@ public class DatabaseHandlerTest {
                         currEntries = databaseHandler.scan(10,stream1,j);
                     } else {
                         currEntries = databaseHandler.scan(currEntries.get(currEntries.size()-1).getKey(),
-                                10, stream1);
+                                10, stream1, j);
                     }
                     allEntriesForVersion.addAll(currEntries);
                 } while (currEntries.size() >= 10);
@@ -643,56 +641,52 @@ public class DatabaseHandlerTest {
         }
     }
 
-    //Intermittently throws UnsupportedOperationException for ByteBuffer.array, does not seem to be affecting test performance
-    // may be related to https://github.com/facebook/rocksdb/issues/6608, with C++ handling issues
-
     @Test
     public void testContainsValueFunctionality() throws RocksDBException {
-        List<List<RemoteCorfuTableEntry>> entries = new ArrayList<>(250);
-        for (int i = 0; i < 250; i++) {
-            entries.add(new ArrayList<>(4));
+        List<List<RemoteCorfuTableEntry>> entries = new ArrayList<>(10);
+        for (int i = 0; i < 2; i++) {
+            entries.add(new ArrayList<>(2));
         }
-        int k = 5;
-        int skip = k;
-        for (int j = 0; j < 4; j++) {
-            for (int i = 0; i < 250; i++) {
-                RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(
-                        ByteString.copyFrom(Bytes.concat("key".getBytes(DATABASE_CHARSET), Longs.toByteArray(i))), j);
-                ByteString val;
-                if (skip == 0) {
-                    if (k == 0) {
-                        k = 5;
-                    } else {
-                        k--;
-                    }
-                    skip = k;
-                    val = ByteString.EMPTY;
-                } else {
-                    val = ByteString.copyFrom(("val" + i + "ver" + j).getBytes(DATABASE_CHARSET));
+        List<ByteString> vals = IntStream.range(0,10)
+                .mapToObj(j -> ByteString.copyFrom("val" + j, DATABASE_CHARSET)).collect(Collectors.toList());
+        RemoteCorfuTableVersionedKey key;
+        ByteString value;
+        for (int i = 0; i < 10; i++) {
+            if (i%2 == 1) {
+                key = new RemoteCorfuTableVersionedKey(
+                        ByteString.copyFrom("key" + i, DATABASE_CHARSET), 1L);
+                value = vals.get(i);
+                entries.get(1).add(new RemoteCorfuTableEntry(key, value));
+            } else {
+                key = new RemoteCorfuTableVersionedKey(
+                        ByteString.copyFrom("key" + i, DATABASE_CHARSET), 0L);
+                value = vals.get(i);
+                entries.get(0).add(new RemoteCorfuTableEntry(key, value));
+            }
+        }
+        databaseHandler.addTable(stream1);
+        databaseHandler.updateAll(entries.get(1), stream1);
+        databaseHandler.updateAll(entries.get(0), stream1);
+
+        List<List<Boolean>> resultsByVersion = new ArrayList<>(2);
+        for (int i = 0; i < 2; i++) {
+            resultsByVersion.add(new ArrayList<>(10));
+        }
+        for (ByteString val : vals) {
+            resultsByVersion.get(0).add(databaseHandler.containsValue(val, stream1, 0L, 3));
+            resultsByVersion.get(1).add(databaseHandler.containsValue(val, stream1, 1L, 3));
+        }
+        int failed = 0;
+        for (int i = 0; i < 10; i++) {
+            for (int j = 0; j < 2; j++) {
+                boolean val = resultsByVersion.get(j).get(i);
+                if ((!val && j == 1) || (!val && j == 0 && (i%2 == 0))) {
+                    failed++;
+                    System.out.println("Failed value at index " + i + ", " + j  + ": " + val);
                 }
-                entries.get(i).add(new RemoteCorfuTableEntry(key, val));
-                skip--;
             }
         }
-        try {
-            databaseHandler.addTable(stream1);
-            for (int i = 0; i < 250; i++) {
-                databaseHandler.updateAll(entries.get(i), stream1);
-            }
-            for (int i = 0; i < 250; i++) {
-                List<ByteString> versionVals = entries.get(i).stream()
-                        .map(RemoteCorfuTableEntry::getValue).collect(Collectors.toList());
-                for (int j = 0; j < 4; j++) {
-                    for (int l = 0; l < 4; l++) {
-                        assertTrue(versionVals.get(l).isEmpty() || (databaseHandler.containsValue(versionVals.get(l),
-                                stream1, j, 10) == (l == j)));
-                    }
-                }
-            }
-        } catch (RocksDBException | DatabaseOperationException e) {
-            log.error("Error in contains value test: ", e);
-            throw e;
-        }
+        assertEquals(0,failed);
     }
 
     @Test

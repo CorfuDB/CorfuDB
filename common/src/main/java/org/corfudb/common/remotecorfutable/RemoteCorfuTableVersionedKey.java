@@ -3,6 +3,7 @@ package org.corfudb.common.remotecorfutable;
 import com.google.common.primitives.Longs;
 import com.google.protobuf.ByteString;
 import lombok.NonNull;
+import static org.corfudb.common.remotecorfutable.DatabaseConstants.DATABASE_CHARSET;
 
 /**
  * The RemoteCorfuTableVersionedKey provides an interface for creating and reading
@@ -130,6 +131,10 @@ public class RemoteCorfuTableVersionedKey {
 
     @Override
     public String toString() {
-        return (encodedRemoteCorfuTableKey.toString() + timestamp);
+        if (timestamp != null && encodedRemoteCorfuTableKey != null) {
+            return encodedRemoteCorfuTableKey.toString(DATABASE_CHARSET) + timestamp;
+        } else {
+            return getEncodedKey().toString(DATABASE_CHARSET) + getTimestamp();
+        }
     }
 }

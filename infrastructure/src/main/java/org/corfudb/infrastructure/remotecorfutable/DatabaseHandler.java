@@ -253,7 +253,6 @@ public class DatabaseHandler implements AutoCloseable {
         List<CompletableFuture<RemoteCorfuTableEntry>> results = new LinkedList<>();
         CompletableFuture.runAsync(() -> {
             for (RemoteCorfuTableVersionedKey key : keys) {
-                //TODO: verify
                 //no need to perform a null check since key param is null checked in getAsync
                 results.add(getAsync(key, streamID).thenApplyAsync(
                         val -> new RemoteCorfuTableEntry(key, val), executor));
@@ -517,11 +516,10 @@ public class DatabaseHandler implements AutoCloseable {
                     //otherwise, the database is empty
                     return new LinkedList<>();
                 } else {
-                    //begin at first value -> extract prefix and add timestamp to it
-                    ByteString startingPrefix = ByteString.copyFrom(KeyEncodingUtil.extractEncodedKey(iter.key()));
+                    //begin at first value in db
                     RemoteCorfuTableVersionedKey startingKey =
-                            new RemoteCorfuTableVersionedKey(startingPrefix, timestamp);
-                    return scanInternal(startingKey, numEntries, streamID, false);
+                            new RemoteCorfuTableVersionedKey(iter.key());
+                    return scanInternal(startingKey, numEntries, streamID, timestamp,false);
                 }
             }
         }
@@ -531,13 +529,14 @@ public class DatabaseHandler implements AutoCloseable {
      * This function performs a cursor scan of the database, returning 20 entries (if possible).
      * @param encodedKeyBegin The starting point of the scan.
      * @param streamID The stream backing the database to scan.
+     * @param timestamp The version of the table to view.
      * @return A list of results from the scan.
      * @throws RocksDBException An error occuring in iteration.
      */
     public List<RemoteCorfuTableEntry> scan(@NonNull RemoteCorfuTableVersionedKey encodedKeyBegin,
-                                            @NonNull UUID streamID)
+                                            @NonNull UUID streamID, long timestamp)
             throws RocksDBException, DatabaseOperationException {
-        return scan(encodedKeyBegin, 20, streamID);
+        return scan(encodedKeyBegin, 20, streamID, timestamp);
     }
 
     /**
@@ -545,13 +544,14 @@ public class DatabaseHandler implements AutoCloseable {
      * @param encodedKeyBegin The starting point of the scan.
      * @param numEntries The number of results requested.
      * @param streamID The stream backing the database to scan.
+     * @param timestamp The version of the table to view.
      * @return A list of results from the scan.
      * @throws RocksDBException An error occuring in iteration.
      */
     public List<RemoteCorfuTableEntry> scan(@NonNull RemoteCorfuTableVersionedKey encodedKeyBegin,
-                                            @Positive int numEntries, @NonNull UUID streamID)
+                                            @Positive int numEntries, @NonNull UUID streamID, long timestamp)
             throws RocksDBException, DatabaseOperationException {
-        return scanInternal(encodedKeyBegin, numEntries, streamID, true);
+        return scanInternal(encodedKeyBegin, numEntries, streamID, timestamp, true);
     }
 
     /**
@@ -580,23 +580,23 @@ public class DatabaseHandler implements AutoCloseable {
     }
 
     /**
-     * This method performs {@link #scan(RemoteCorfuTableVersionedKey, UUID)} asynchronously.
+     * This method performs {@link #scan(RemoteCorfuTableVersionedKey, UUID, long)} asynchronously.
      */
     public CompletableFuture<List<RemoteCorfuTableEntry>> scanAsync(@NonNull RemoteCorfuTableVersionedKey encodedKeyBegin,
-                                                                    @NonNull UUID streamID) {
-        return scanAsync(encodedKeyBegin, 20, streamID);
+                                                                    @NonNull UUID streamID, long timestamp) {
+        return scanAsync(encodedKeyBegin, 20, streamID, timestamp);
     }
 
     /**
-     * This method performs {@link #scan(RemoteCorfuTableVersionedKey, int, UUID)} asynchronously.
+     * This method performs {@link #scan(RemoteCorfuTableVersionedKey, int, UUID, long)} asynchronously.
      */
     public CompletableFuture<List<RemoteCorfuTableEntry>>
     scanAsync(@NonNull RemoteCorfuTableVersionedKey encodedKeyBegin,
-              @Positive int numEntries, @NonNull UUID streamID) {
+              @Positive int numEntries, @NonNull UUID streamID, long timestamp) {
         CompletableFuture<List<RemoteCorfuTableEntry>> result = new CompletableFuture<>();
         CompletableFuture.runAsync(()-> {
             try {
-                List<RemoteCorfuTableEntry> val = scan(encodedKeyBegin, numEntries, streamID);
+                List<RemoteCorfuTableEntry> val = scan(encodedKeyBegin, numEntries, streamID, timestamp);
                 result.complete(val);
             } catch (RocksDBException|DatabaseOperationException e) {
                 log.error("Error in RocksDB scan operation: ", e);
@@ -607,44 +607,74 @@ public class DatabaseHandler implements AutoCloseable {
     }
 
     private List<RemoteCorfuTableEntry> scanInternal(@NonNull RemoteCorfuTableVersionedKey encodedKeyBegin,
-                                                     int numEntries, @NonNull UUID streamID, boolean skipFirst)
+                                                     int numEntries, @NonNull UUID streamID, long timestamp,
+                                                     boolean skipFirst)
             throws RocksDBException, DatabaseOperationException {
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("SCAN", INVALID_STREAM_ID_MSG);
         }
-        long timestamp = encodedKeyBegin.getTimestamp();
-        byte[] prevPrefix = encodedKeyBegin.getEncodedKey().toByteArray();
-        byte[] currPrefix;
-        boolean encounteredPrefix = false;
+        byte[] prevKeyspace;
+        byte[] currKeyspace;
+        RemoteCorfuTableVersionedKey keyToAdd;
+        ByteString valueToAdd;
+        RemoteCorfuTableEntry entryToAdd;
         List<RemoteCorfuTableEntry> results = new LinkedList<>();
         int elements = 0;
         try (ReadOptions iterOptions = new ReadOptions()){
             iterOptions.setTotalOrderSeek(true);
             try (RocksIterator iter = database.newIterator(columnFamilies.get(streamID).getStreamTable(),
                     iterOptions)) {
-                iter.seek(encodedKeyBegin.getEncodedVersionedKey().toByteArray());
+                byte[] beginKeyBytes = encodedKeyBegin.getEncodedVersionedKey().toByteArray();
+                iter.seek(beginKeyBytes);
                 while (iter.isValid()) {
-                    currPrefix = KeyEncodingUtil.extractEncodedKey(iter.key());
-                    if (!Arrays.equals(currPrefix, prevPrefix)) {
-                        RemoteCorfuTableVersionedKey nextKey = new RemoteCorfuTableVersionedKey(
-                                ByteString.copyFrom(currPrefix), timestamp);
-                        iter.seek(nextKey.getEncodedVersionedKey().toByteArray());
-                        prevPrefix = currPrefix;
-                        encounteredPrefix = false;
-                    } else if (encounteredPrefix) {
-                        iter.next();
-                    } else if (isEmpty(iter.value())) {
-                        encounteredPrefix = true;
-                        iter.next();
+                    //at this point we are guaranteed to be in a keyspace where we have not yet added a key
+                    long currTimestamp = KeyEncodingUtil.extractTimestamp(iter.key());
+                    if (currTimestamp <= timestamp) {
+                        //we need to check if the value exists
+                        if (!isEmpty(iter.value())) {
+                            //we have found a key that is the most recent value for the keyspace, add it
+                            keyToAdd = new RemoteCorfuTableVersionedKey(iter.key());
+                            valueToAdd = ByteString.copyFrom(iter.value());
+                            entryToAdd = new RemoteCorfuTableEntry(keyToAdd, valueToAdd);
+                            results.add(entryToAdd);
+                            elements++;
+                            if (elements > numEntries) {
+                                //end iteration if we have found the desired number of elements
+                                break;
+                            }
+                        }
+                        //we now need to discover a new keyspace
+                        if (currTimestamp == 0) {
+                            //we are at the final possible version in this keyspace, thus the next value must be in a
+                            //new keyspace
+                            iter.next();
+                        } else {
+                            //save current keyspace to check for new one
+                            prevKeyspace = KeyEncodingUtil.extractEncodedKey(iter.key());
+                            //we can seek explicitly to version 0
+                            byte[] finalVersionInKeyspace =
+                                    KeyEncodingUtil.composeKeyWithDifferentVersion(iter.key(), 0L);
+                            iter.seek(finalVersionInKeyspace);
+                            currKeyspace = KeyEncodingUtil.extractEncodedKey(iter.key());
+                            if (!iter.isValid()) {
+                                iter.status();
+                                break;
+                            } else if (Arrays.equals(prevKeyspace, currKeyspace)) {
+                                //we have not left the keyspace yet, but are at the final possible value
+                                iter.next();
+                            }
+                            //at this point we are guaranteed to be in a new keyspace, so we can continue the loop
+                        }
                     } else {
-                        results.add(new RemoteCorfuTableEntry(new RemoteCorfuTableVersionedKey(iter.key()),
-                                ByteString.copyFrom(iter.value())));
-                        elements++;
-                        encounteredPrefix = true;
-                        iter.next();
-                    }
-                    if (elements > numEntries) {
-                        break;
+                        //we have a timestamp that does not exists at the time of query, seek to appropriate timestamp
+                        byte[] appropriateTimestampKey =
+                                KeyEncodingUtil.composeKeyWithDifferentVersion(iter.key(), timestamp);
+                        iter.seek(appropriateTimestampKey);
+                        //two cases at this point:
+                        // seek resulted in a value for this keyspace that is the most recent value
+                        // seek resulted in a new keyspace
+                        //both cases fall under a keyspace where we have not yet added a key, so we can simply
+                        //continue iteration
                     }
                 }
                 if (!iter.isValid()) {
@@ -710,11 +740,11 @@ public class DatabaseHandler implements AutoCloseable {
         List<RemoteCorfuTableEntry> scannedEntries = null;
         do {
             if (first) {
-                scannedEntries = scan(streamID, timestamp);
+                scannedEntries = scan(scanSize, streamID, timestamp);
                 first = false;
             } else {
                 lastKey = scannedEntries.get(scannedEntries.size()-1).getKey();
-                scannedEntries = scan(lastKey,scanSize, streamID);
+                scannedEntries = scan(lastKey,scanSize, streamID, timestamp);
             }
 
             for (RemoteCorfuTableEntry scannedEntry : scannedEntries) {
@@ -761,11 +791,11 @@ public class DatabaseHandler implements AutoCloseable {
         List<RemoteCorfuTableEntry> scannedEntries = null;
         do {
             if (first) {
-                scannedEntries = scan(streamID, timestamp);
+                scannedEntries = scan(scanSize, streamID, timestamp);
                 first = false;
             } else {
                 lastKey = scannedEntries.get(scannedEntries.size()-1).getKey();
-                scannedEntries = scan(lastKey,scanSize, streamID);
+                scannedEntries = scan(lastKey,scanSize, streamID, timestamp);
             }
             count += scannedEntries.size();
         } while (scannedEntries.size() >= scanSize);
