@@ -233,19 +233,13 @@ public class TableRegistry {
             // Or no modification to the protobuf files.
             /**
              * Caller is opening a new table with a map of protobufFilename -> protobufFileDescriptor pairs
-             * Here are the cases that can happen:
-             * 1. No entry in TableRegistry -> New table
-             *  1.1: When inserting new protobufs into descriptor table, we find existing entries and they all match
-             *  1.2: When inserting new protobufs into descriptor table, we find mismatching [Schema Change!]
              *
-             * 2. Entry exists in TableRegistry -> Existing table re-opened:
-             *    2.1: Existing protobuf file list matches, newly inserted protobuf list
-             *    2.1.1: Each of Existing protobuf file descriptors match that in new file descriptor list
-             *    2.1.2: Existing protobuf file descriptor does not match that in new file descriptor![ SchemaChange!]
+             *  If no entry in TableRegistry, tt is a new table. Then we insert new protobufs into descriptor table.
+             *  Note: we do not replace existing descriptor, as table schema change should be handled by explicit APIs.
+             *  (assumption is that protobuf definitions do not change outside of an upgrade/migration scenario)
              *
-             *    2.2: Existing protobuf file list does not match, newly opened protobuf list [big Schema Change]
-             *    2.2.1: Existing protobuf file list matches existing proto files
-             *    2.2.3: Existing protobuf file's descriptor mismatches with the incoming descriptor
+             *  If entry exists in TableRegistry -> Existing table re-opened:
+             *  We won't check equality as the expectation is that schemas do not change outside of upgrade paths.
              */
             if (TransactionalContext.isInTransaction()) {
                 throw new IllegalThreadStateException("openTable: Called on an existing transaction");
@@ -253,37 +247,12 @@ public class TableRegistry {
             try {
                 this.runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
                 CorfuRecord<TableDescriptors, TableMetadata> oldRecord = this.registryTable.get(tableNameKey);
-                if (oldRecord == null) { // Case 1 above, new unseen table
+                if (oldRecord == null) {
                     this.registryTable.put(tableNameKey,
                         new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
-                } else {
-                    // Case 2 above, re-open of existing table
-                    // If the schema has changed and/or there is an upgrade
-                    // from a previous version which did not contain the Any
-                    // fields for key/value/metadata, we need to update the
-                    // existing record in registry table.
-                    boolean schemaChanged = false;
-                    boolean upgradeCase = false;
 
-                    if (!oldRecord.getPayload().getFileDescriptorsMap().keySet()
-                        .equals(tableDescriptors.getFileDescriptorsMap().keySet())) {
-                        log.warn("Protobuf file list changed for {} table {}. Prev list {}, new list {}",
-                            namespace, tableName, oldRecord.getPayload().getFileDescriptorsMap().keySet(),
-                            tableDescriptors.getFileDescriptorsMap().keySet());
-                        schemaChanged = true;
-                    }
-
-                    if (!oldRecord.getPayload().hasKey()) {
-                        upgradeCase = true;
-                    }
-
-                    if (schemaChanged || upgradeCase) {
-                        this.registryTable.put(tableNameKey,
-                            new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
-                    } // else no need to re-add the exact same entry into the table
+                    allDescriptors.forEach(this::recordNewSchema);
                 }
-                allDescriptors.forEach((protoName, protoDescriptor) ->
-                    recordNewSchema(protoName, protoDescriptor, namespace, tableName));
                 this.runtime.getObjectsView().TXEnd();
                 break;
             } catch (TransactionAbortedException txAbort) {
@@ -307,37 +276,26 @@ public class TableRegistry {
      *
      * @param protoName - name of the protobuf file
      * @param newProtoFd - descriptor of the protobuf file that is being inserted.
-     * @param namespace - namespace of the table
-     * @param tableName - tablename without the namespace
      */
     private void recordNewSchema(ProtobufFileName protoName,
-                                    CorfuRecord<ProtobufFileDescriptor, TableMetadata> newProtoFd,
-                                    String namespace,
-                                    String tableName) {
-        final CorfuRecord<ProtobufFileDescriptor, TableMetadata> oldProto = this.protobufDescriptorTable.get(protoName);
-        if (oldProto == null) {
+                                    CorfuRecord<ProtobufFileDescriptor, TableMetadata> newProtoFd) {
+        final CorfuRecord<ProtobufFileDescriptor, TableMetadata> currentSchema = this.protobufDescriptorTable.get(protoName);
+        if (currentSchema == null) {
+            // If schema is not present, add to protobufDescriptorTable, otherwise,
+            // we assume schema definitions only change between upgrades/migration for which
+            // dedicated APIs are available
             this.protobufDescriptorTable.put(protoName, newProtoFd);
-            return;
-        }
-        if (!oldProto.getPayload().getFileDescriptor().equals(newProtoFd.getPayload().getFileDescriptor())) {
-            // protobuf files that start with google/protobuf are standard library files.
-            // Even if there is a change in these library files (say due to a new protobuf version update)
-            // it should not be flagged as a schema change since that file is not user created.
-            if (!protoName.getFileName().startsWith("google/protobuf")) {
-                log.warn("registerTable: Schema update detected for table {}${} in schema file {}",
-                        namespace, tableName, protoName);
+        } else {
+            if (log.isTraceEnabled() && !protoName.getFileName().startsWith("google/protobuf")
+                    && !currentSchema.getPayload().getFileDescriptor()
+                    .equals(newProtoFd.getPayload().getFileDescriptor())) {
+                log.trace("registerTable: Schema update detected for table {}! " +
+                                "Old schema is {}, new schema is {}", protoName,
+                        currentSchema.getPayload().getFileDescriptor(),
+                        newProtoFd.getPayload().getFileDescriptor());
 
-                StringBuilder stackTraceStr = new StringBuilder();
-                for (StackTraceElement st : Thread.currentThread().getStackTrace()) {
-                    stackTraceStr.append(st);
-                    stackTraceStr.append("\n");
-                }
-                log.debug("{}", stackTraceStr);
-                log.debug("registerTable: old schema: {}", oldProto.getPayload().getFileDescriptor());
-                log.debug("registerTable: new schema: {}", newProtoFd.getPayload().getFileDescriptor());
             }
-            this.protobufDescriptorTable.put(protoName, newProtoFd);
-        } // else old file descriptors match no need to re-add the file descriptors
+        }
     }
 
     /**
