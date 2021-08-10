@@ -1,5 +1,6 @@
 package org.corfudb.common.remotecorfutable;
 
+import com.google.common.primitives.Longs;
 import com.google.protobuf.ByteString;
 
 /**
@@ -31,5 +32,24 @@ public final class KeyEncodingUtil {
     public static ByteString extractEncodedKeyAsByteString(byte[] rocksDBKey) {
         int keysize = rocksDBKey.length - 8;
         return ByteString.copyFrom(rocksDBKey,0,keysize);
+    }
+
+    /**
+     * Extracts the timestamp from a database key.
+     * @param rocksDBkey Encoded database key.
+     * @return Timestamp of the key.
+     */
+    public static long extractTimestamp(byte[] rocksDBkey) {
+        int offset = rocksDBkey.length - 8;
+        return Longs.fromBytes(rocksDBkey[offset], rocksDBkey[offset+1], rocksDBkey[offset+2], rocksDBkey[offset+3],
+                rocksDBkey[offset+4], rocksDBkey[offset+5], rocksDBkey[offset+6], rocksDBkey[offset+7]);
+    }
+
+    public static byte[] composeKeyWithDifferentVersion(byte[] rocksDBKey, long desiredTimestamp) {
+        byte[] newKey = new byte[rocksDBKey.length];
+        int prefixSize = newKey.length - 8;
+        System.arraycopy(rocksDBKey, 0, newKey, 0, prefixSize);
+        System.arraycopy(Longs.toByteArray(desiredTimestamp), 0, newKey, prefixSize, 8);
+        return newKey;
     }
 }
