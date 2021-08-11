@@ -660,7 +660,7 @@ public class LogUnitServer extends AbstractServer {
             return new DatabaseHandler(path,options, executor, ServerContext.SHUTDOWN_TIMER.get(ChronoUnit.SECONDS));
         }
 
-        RemoteCorfuTableRequestHandler buildRemoteCorfuTableRequestHandler(@Nonnull DatabaseHandler dbhandler) {
+        public RemoteCorfuTableRequestHandler buildRemoteCorfuTableRequestHandler(@Nonnull DatabaseHandler dbhandler) {
             return new RemoteCorfuTableRequestHandler(dbhandler);
         }
     }

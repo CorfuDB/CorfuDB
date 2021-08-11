@@ -17,6 +17,7 @@ import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getSizeRespons
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getRemoteCorfuTableError;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
@@ -26,8 +27,10 @@ import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableContai
 import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableContainsKeyRequestMsg;
 import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableGetRequestMsg;
 import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableRequestMsg;
+import org.rocksdb.RocksDBException;
 
 import javax.annotation.Nonnull;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -145,13 +148,31 @@ public class RemoteCorfuTableRequestHandler {
         UUID streamID = getUUID(getRequestMsg.getStreamID());
         RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(
                 getRequestMsg.getVersionedKey().toByteArray());
-        databaseHandler.getAsync(key, streamID).thenAccept(payloadValue -> {
-            ResponseMsg responseMsg = getResponseMsg(getHeaderMsg(req.getHeader()), getGetResponseMsg(payloadValue));
+//        databaseHandler.getAsync(key, streamID).thenAccept(payloadValue -> {
+//            System.out.println("Reached the lambda with payloadValue: " + payloadValue.toString(StandardCharsets.UTF_8));
+//            ResponseMsg responseMsg = null;
+//            try {
+//               responseMsg = getResponseMsg(getHeaderMsg(req.getHeader()), getGetResponseMsg(payloadValue));
+//            } catch (Exception e) {
+//                e.printStackTrace();
+//                System.out.println("Found error on creating response msg");
+//            }
+//            System.out.println("Created response msg");
+//            r.sendResponse(responseMsg, ctx);
+//        }).exceptionally(ex -> {
+//            handleException(ex, ctx, req, r);
+//            return null;
+//        });
+        //TODO: temporary sync version (remove after testing)
+        try {
+            ByteString payloadValue = databaseHandler.get(key, streamID);
+            CorfuMessage.HeaderMsg headerMsg = getHeaderMsg(req.getHeader());
+            ResponsePayloadMsg responsePayload = getGetResponseMsg(payloadValue);
+            ResponseMsg responseMsg = getResponseMsg(headerMsg, responsePayload);
             r.sendResponse(responseMsg, ctx);
-        }).exceptionally(ex -> {
-            handleException(ex, ctx, req, r);
-            return null;
-        });
+        } catch (RocksDBException e) {
+            e.printStackTrace();
+        }
     }
 
     private void handleException(Throwable ex, ChannelHandlerContext ctx, RequestMsg req, IServerRouter r) {

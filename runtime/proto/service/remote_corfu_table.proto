@@ -8,27 +8,6 @@ import "rpc_common.proto";
  * Protobuf definitions for the Remote Corfu Table server RPCs. These
  * include request and response payloads for: GET, SCAN, CONTAINS_KEY, CONTAINS_VALUE, and SIZE.
  */
-
-//message container holding all remote corfu table requests
-message RemoteCorfuTableRequestMsg {
-  oneof payload {
-    RemoteCorfuTableGetRequestMsg get = 1;
-    RemoteCorfuTableScanRequestMsg scan = 2;
-    RemoteCorfuTableContainsKeyRequestMsg contains_key = 3;
-    RemoteCorfuTableContainsValueRequestMsg contains_value = 4;
-    RemoteCorfuTableSizeRequestMsg size = 5;
-  }
-}
-
-message RemoteCorfuTableResponseMsg {
-  oneof payload {
-    RemoteCorfuTableGetResponseMsg get_response = 1;
-    RemoteCorfuTableScanResponseMsg scan_response = 2;
-    RemoteCorfuTableContainsResponseMsg contains_response = 3;
-    RemoteCorfuTableSizeResponseMsg size_response = 4;
-  }
-}
-
 message RemoteCorfuTableGetRequestMsg {
  UuidMsg streamID = 1;
  bytes versionedKey = 2;
@@ -78,4 +57,24 @@ message RemoteCorfuTableSizeResponseMsg {
 message RemoteCorfuTableEntryMsg {
   bytes versionedKey = 1;
   bytes payloadValue = 2;
+}
+
+//message container holding all remote corfu table requests
+message RemoteCorfuTableRequestMsg {
+  oneof payload {
+    RemoteCorfuTableGetRequestMsg get = 1;
+    RemoteCorfuTableScanRequestMsg scan = 2;
+    RemoteCorfuTableContainsKeyRequestMsg contains_key = 3;
+    RemoteCorfuTableContainsValueRequestMsg contains_value = 4;
+    RemoteCorfuTableSizeRequestMsg size = 5;
+  }
+}
+
+message RemoteCorfuTableResponseMsg {
+  oneof payload {
+    RemoteCorfuTableGetResponseMsg get_response = 1;
+    RemoteCorfuTableScanResponseMsg scan_response = 2;
+    RemoteCorfuTableContainsResponseMsg contains_response = 3;
+    RemoteCorfuTableSizeResponseMsg size_response = 4;
+  }
 }
