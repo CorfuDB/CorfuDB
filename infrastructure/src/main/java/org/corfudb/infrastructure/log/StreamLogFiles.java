@@ -392,7 +392,7 @@ public class StreamLogFiles implements StreamLog {
         long newStartingAddress = address + 1;
         dataStore.updateStartingAddress(newStartingAddress);
         syncTailSegment(address);
-        log.debug("Trimmed prefix, new starting address {}", newStartingAddress);
+        log.debug("Trimmed prefix, new address {}", newStartingAddress);
         currentTrimMark.ifPresent(counter -> counter.set(newStartingAddress));
         // Trim address space maps.
         logMetadata.prefixTrim(address);
@@ -559,7 +559,7 @@ public class StreamLogFiles implements StreamLog {
     private Metadata parseMetadata(FileChannel fileChannel, String segmentFile) throws IOException {
         long actualMetaDataSize = fileChannel.size() - fileChannel.position();
         if (actualMetaDataSize < METADATA_SIZE) {
-            log.error("Metadata has wrong size. Actual size: {}, expected: {}",
+            log.warn("Metadata has wrong size. Actual size: {}, expected: {}",
                     actualMetaDataSize, METADATA_SIZE
             );
             return null;

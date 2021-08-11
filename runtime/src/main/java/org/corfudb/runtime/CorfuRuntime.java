@@ -1136,11 +1136,9 @@ public class CorfuRuntime {
                         // If the layout we got has a smaller epoch than the latestLayout epoch,
                         // we discard it.
                         if (latestLayout != null && latestLayout.getEpoch() > l.getEpoch()) {
-                            log.warn("fetchLayout: Received a layout with epoch {} from server "
-                                            + "{}:{} smaller than latestLayout epoch {}, "
-                                            + "discarded.",
-                                    l.getEpoch(), router.getHost(), router.getPort(),
-                                    latestLayout.getEpoch());
+                            log.warn("fetchLayout: latest layout epoch {} > received {}" +
+                                    " from {}:{}, discarded.", latestLayout.getEpoch(), l.getEpoch(),
+                                    router.getHost(), router.getPort());
                             continue;
                         }
 

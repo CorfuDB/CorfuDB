@@ -86,12 +86,12 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object m) throws Exception {
         if (this.handshakeState.failed()) {
-            log.warn("channelRead: Dropping the message as the handshake was not completed. Message - {}", m);
+            log.warn("channelRead: Dropping {}, the handshake was not completed.", m);
             return;
         }
 
         if (!(m instanceof ResponseMsg)) {
-            log.error("channelRead: Message received is not a ResponseMsg type. Message - {}", m);
+            log.error("channelRead: {} is not ResponseMsg", m);
             return;
         }
 
@@ -100,7 +100,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         long corfuClientVersion = GitRepositoryState.getCorfuSourceCodeVersion();
 
         if (corfuServerVersion != corfuClientVersion) {
-            log.warn("channelRead: Version mismatch. Corfu client version: {}, Corfu server version: {}",
+            log.warn("channelRead: Version mismatch. Client: {}, Server: {}",
                     Long.toHexString(corfuClientVersion), Long.toHexString(corfuServerVersion));
         }
 
@@ -244,8 +244,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
             if (msg instanceof RequestMsg) {
                 this.requestMessages.add((RequestMsg) msg);
             } else {
-                log.warn("write: Invalid message received through the pipeline by Handshake handler, Dropping it." +
-                        " Message - {}", msg);
+                log.warn("write: Invalid message received: {}", msg);
             }
         }
     }
