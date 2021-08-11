@@ -635,28 +635,28 @@ public class LogUnitServer extends AbstractServer {
             return new InMemoryStreamLog();
         }
 
-        StreamLog buildStreamLog(@Nonnull LogUnitServerConfig config,
-                                 @Nonnull ServerContext serverContext) {
+        public StreamLog buildStreamLog(@Nonnull LogUnitServerConfig config,
+                                        @Nonnull ServerContext serverContext) {
             return new StreamLogFiles(serverContext, config.isNoVerify());
         }
 
-        LogUnitServerCache buildLogUnitServerCache(@Nonnull LogUnitServerConfig config,
-                                                   @Nonnull StreamLog streamLog) {
+        public LogUnitServerCache buildLogUnitServerCache(@Nonnull LogUnitServerConfig config,
+                                                          @Nonnull StreamLog streamLog) {
             return new LogUnitServerCache(config, streamLog);
         }
 
-        BatchProcessor buildBatchProcessor(@Nonnull LogUnitServerConfig config,
-                                           @Nonnull StreamLog streamLog,
-                                           @Nonnull ServerContext serverContext) {
+        public BatchProcessor buildBatchProcessor(@Nonnull LogUnitServerConfig config,
+                                                  @Nonnull StreamLog streamLog,
+                                                  @Nonnull ServerContext serverContext) {
             return new BatchProcessor(streamLog, serverContext.getServerEpoch(), !config.isNoSync());
         }
 
-        StreamLogCompaction buildStreamLogCompaction(@Nonnull StreamLog streamLog) {
+        public StreamLogCompaction buildStreamLogCompaction(@Nonnull StreamLog streamLog) {
             return new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER);
         }
 
-        DatabaseHandler buildDatabaseHandler(@Nonnull Path path, @Nonnull Options options,
-                                             @Nonnull ExecutorService executor) {
+        public DatabaseHandler buildDatabaseHandler(@Nonnull Path path, @Nonnull Options options,
+                                                    @Nonnull ExecutorService executor) {
             return new DatabaseHandler(path,options, executor, ServerContext.SHUTDOWN_TIMER.get(ChronoUnit.SECONDS));
         }
 
