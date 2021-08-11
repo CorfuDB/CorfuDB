@@ -41,10 +41,8 @@ message RemoteCorfuTableGetResponseMsg {
 message RemoteCorfuTableScanRequestMsg {
   UuidMsg streamID = 1;
   uint32 numEntriesToScan = 2;
-  oneof startPoint {
-    bytes versionedStartKey = 3;
-    uint64 timestamp = 4;
-  }
+  uint64 timestamp = 3;
+  bytes versionedStartKey = 4;
 }
 
 message RemoteCorfuTableScanResponseMsg {
