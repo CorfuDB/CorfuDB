@@ -64,13 +64,16 @@ public class CorfuProtocolRemoteCorfuTable {
      * @return GET response payload message to send to the client.
      */
     public static ResponsePayloadMsg getGetResponseMsg(@NonNull ByteString payloadValue) {
-        return ResponsePayloadMsg.newBuilder()
-                .setRemoteCorfuTableResponse(RemoteCorfuTableResponseMsg.newBuilder()
-                    .setGetResponse(RemoteCorfuTableGetResponseMsg.newBuilder()
-                        .setPayloadValue(payloadValue)
-                        .build())
-                    .build())
+        RemoteCorfuTableGetResponseMsg corfuGetMsg = RemoteCorfuTableGetResponseMsg.newBuilder()
+                .setPayloadValue(payloadValue)
                 .build();
+        RemoteCorfuTableResponseMsg.Builder corfuTableResponseBuilder = RemoteCorfuTableResponseMsg.newBuilder();
+        corfuTableResponseBuilder.setGetResponse(corfuGetMsg);
+        RemoteCorfuTableResponseMsg corfuTableResponse = corfuTableResponseBuilder.build();
+        ResponsePayloadMsg.Builder payloadBuilder = ResponsePayloadMsg.newBuilder();
+        payloadBuilder.setRemoteCorfuTableResponse(corfuTableResponse);
+        ResponsePayloadMsg responsePayloadMsg = payloadBuilder.build();
+        return responsePayloadMsg;
     }
 
     /**
