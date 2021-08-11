@@ -113,31 +113,22 @@ public class RemoteCorfuTableRequestHandler {
         RemoteCorfuTableScanRequestMsg scanRequestMsg = req.getPayload().getRemoteCorfuTableRequest().getScan();
         UUID streamID = getUUID(scanRequestMsg.getStreamID());
         int numEntries = scanRequestMsg.getNumEntriesToScan();
+        ByteString startKeyString = scanRequestMsg.getVersionedStartKey();
+        long timestamp = scanRequestMsg.getTimestamp();
         CompletableFuture<List<RemoteCorfuTableEntry>> scanFuture;
-        switch (scanRequestMsg.getStartPointCase()) {
-            case VERSIONEDSTARTKEY:
-                RemoteCorfuTableVersionedKey startKey = new RemoteCorfuTableVersionedKey(
-                        scanRequestMsg.getVersionedStartKey().toByteArray());
-                if (numEntries == 0) {
-                    scanFuture = databaseHandler.scanAsync(startKey, streamID);
-                } else {
-                    scanFuture = databaseHandler.scanAsync(startKey, numEntries, streamID);
-                }
-
-                break;
-            case TIMESTAMP:
-                long timestamp = scanRequestMsg.getTimestamp();
-                if (numEntries == 0) {
-                    scanFuture = databaseHandler.scanAsync(streamID, timestamp);
-                } else {
-                    scanFuture = databaseHandler.scanAsync(numEntries, streamID, timestamp);
-                }
-                break;
-            case STARTPOINT_NOT_SET:
-            default:
-                handleException(new IllegalStateException("Starting Key or timestamp must be given for SCAN request"),
-                        ctx, req, r);
-                return;
+        if (startKeyString.isEmpty()) {
+            if (numEntries == 0) {
+                scanFuture = databaseHandler.scanAsync(streamID, timestamp);
+            } else {
+                scanFuture = databaseHandler.scanAsync(numEntries, streamID, timestamp);
+            }
+        } else {
+            RemoteCorfuTableVersionedKey startKey = new RemoteCorfuTableVersionedKey(startKeyString.toByteArray());
+            if (numEntries == 0) {
+                scanFuture = databaseHandler.scanAsync(startKey, streamID, timestamp);
+            } else {
+                scanFuture = databaseHandler.scanAsync(startKey, numEntries, streamID, timestamp);
+            }
         }
         scanFuture.thenAccept(scannedEntries -> {
             ResponseMsg responseMsg = getResponseMsg(getHeaderMsg(req.getHeader()),
