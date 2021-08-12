@@ -153,7 +153,7 @@ public class RemoteCorfuTableServerRequestHandlerTest {
                 invocationOnMock.getArgument(1))).when(mDatabaseHandler).scanAsync(any(UUID.class), anyLong());
 
         doAnswer(invocationOnMock -> mDatabaseHandler.scanAsync(
-                new RemoteCorfuTableVersionedKey(database.keySet().iterator().next().toByteArray()),
+                new RemoteCorfuTableVersionedKey(database.keySet().iterator().next()),
                 invocationOnMock.getArgument(0), invocationOnMock.getArgument(1),
                 invocationOnMock.getArgument(2)))
                 .when(mDatabaseHandler).scanAsync(anyInt(),any(UUID.class), anyLong());
@@ -178,7 +178,7 @@ public class RemoteCorfuTableServerRequestHandlerTest {
                         removeFirst = false;
                         started = true;
                         results.add(new RemoteCorfuTableEntry(
-                                new RemoteCorfuTableVersionedKey(entry.getKey().toByteArray()), entry.getValue()));
+                                new RemoteCorfuTableVersionedKey(entry.getKey()), entry.getValue()));
                     }
                     first = false;
                 } else {
@@ -186,11 +186,11 @@ public class RemoteCorfuTableServerRequestHandlerTest {
                         if (entry.getKey().equals(startKey.getEncodedVersionedKey())) {
                             started = true;
                             results.add(new RemoteCorfuTableEntry(
-                                    new RemoteCorfuTableVersionedKey(entry.getKey().toByteArray()), entry.getValue()));
+                                    new RemoteCorfuTableVersionedKey(entry.getKey()), entry.getValue()));
                         }
                     } else {
                         results.add(new RemoteCorfuTableEntry(
-                                new RemoteCorfuTableVersionedKey(entry.getKey().toByteArray()), entry.getValue()));
+                                new RemoteCorfuTableVersionedKey(entry.getKey()), entry.getValue()));
                     }
                 }
             }
@@ -282,7 +282,7 @@ public class RemoteCorfuTableServerRequestHandlerTest {
 
         List<RemoteCorfuTableEntry> entries = database.entrySet().stream().map(
                 entry -> new RemoteCorfuTableEntry(
-                        new RemoteCorfuTableVersionedKey(entry.getKey().toByteArray()), entry.getValue()))
+                        new RemoteCorfuTableVersionedKey(entry.getKey()), entry.getValue()))
                 .collect(Collectors.toList());
         RemoteCorfuTableVersionedKey cursor = entries.get(4).getKey();
         CorfuMessage.RequestMsg request2 = getRequestMsg(
@@ -338,7 +338,7 @@ public class RemoteCorfuTableServerRequestHandlerTest {
 
         List<RemoteCorfuTableEntry> entries = database.entrySet().stream().map(
                 entry -> new RemoteCorfuTableEntry(
-                        new RemoteCorfuTableVersionedKey(entry.getKey().toByteArray()), entry.getValue()))
+                        new RemoteCorfuTableVersionedKey(entry.getKey()), entry.getValue()))
                 .collect(Collectors.toList());
         RemoteCorfuTableVersionedKey cursor = entries.get(6).getKey();
         CorfuMessage.RequestMsg request2 = getRequestMsg(

@@ -97,7 +97,7 @@ public class RemoteCorfuTableRequestHandler {
         RemoteCorfuTableContainsKeyRequestMsg containsKeyRequestMsg = req.getPayload().getRemoteCorfuTableRequest().getContainsKey();
         UUID streamID = getUUID(containsKeyRequestMsg.getStreamID());
         RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(
-                containsKeyRequestMsg.getVersionedKey().toByteArray());
+                containsKeyRequestMsg.getVersionedKey());
         databaseHandler.containsKeyAsync(key, streamID).thenAccept(contained -> {
             ResponseMsg response = getResponseMsg(getHeaderMsg(req.getHeader()), getContainsResponseMsg(contained));
             r.sendResponse(response, ctx);
@@ -121,7 +121,7 @@ public class RemoteCorfuTableRequestHandler {
                 scanFuture = databaseHandler.scanAsync(numEntries, streamID, timestamp);
             }
         } else {
-            RemoteCorfuTableVersionedKey startKey = new RemoteCorfuTableVersionedKey(startKeyString.toByteArray());
+            RemoteCorfuTableVersionedKey startKey = new RemoteCorfuTableVersionedKey(startKeyString);
             if (numEntries == 0) {
                 scanFuture = databaseHandler.scanAsync(startKey, streamID, timestamp);
             } else {
@@ -142,7 +142,7 @@ public class RemoteCorfuTableRequestHandler {
         RemoteCorfuTableGetRequestMsg getRequestMsg = req.getPayload().getRemoteCorfuTableRequest().getGet();
         UUID streamID = getUUID(getRequestMsg.getStreamID());
         RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(
-                getRequestMsg.getVersionedKey().toByteArray());
+                getRequestMsg.getVersionedKey());
         databaseHandler.getAsync(key, streamID).thenAccept(payloadValue -> {
             ResponseMsg responseMsg = getResponseMsg(getHeaderMsg(req.getHeader()), getGetResponseMsg(payloadValue));
             r.sendResponse(responseMsg, ctx);
