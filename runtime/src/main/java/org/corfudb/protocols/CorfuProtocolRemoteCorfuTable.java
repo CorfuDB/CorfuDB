@@ -7,6 +7,10 @@ import org.checkerframework.checker.index.qual.Positive;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableEntry;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
+import org.corfudb.protocols.wireprotocol.remotecorfutable.ContainsResponse;
+import org.corfudb.protocols.wireprotocol.remotecorfutable.GetResponse;
+import org.corfudb.protocols.wireprotocol.remotecorfutable.ScanResponse;
+import org.corfudb.protocols.wireprotocol.remotecorfutable.SizeResponse;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableEntryMsg;
@@ -238,8 +242,50 @@ public class CorfuProtocolRemoteCorfuTable {
                 .build();
     }
 
+    /**
+     * Creates a RemoteCorfuTableEntry from its protobuf representation.
+     * @param msg Protobuf representation of RemoteCorfuTableEntry
+     * @return The contained RemoteCorfuTableEntry
+     */
     public static RemoteCorfuTableEntry getEntryFromMsg(RemoteCorfuTableEntryMsg msg) {
         return new RemoteCorfuTableEntry(
                 new RemoteCorfuTableVersionedKey(msg.getVersionedKey().toByteArray()), msg.getPayloadValue());
+    }
+
+    /**
+     * Creates a ContainsResponse data object from its protobuf representation
+     * @param msg Contains Response Protobuf entry
+     * @return ContainsResponse object from protobuf
+     */
+    public static ContainsResponse getContainsResponse(RemoteCorfuTableContainsResponseMsg msg) {
+        return new ContainsResponse(msg.getContains());
+    }
+
+    /**
+     * Creates a GetResponse data object from its protobuf representation
+     * @param msg Get Response Protobuf entry
+     * @return GetResponse object from protobuf
+     */
+    public static GetResponse getGetResponse(RemoteCorfuTableGetResponseMsg msg) {
+        return new GetResponse(msg.getPayloadValue());
+    }
+
+    /**
+     * Creates a ScanResponse data object from its protobuf representation
+     * @param msg Scan Response Protobuf entry
+     * @return ScanResponse object from protobuf
+     */
+    public static ScanResponse getScanResponse(RemoteCorfuTableScanResponseMsg msg) {
+        return new ScanResponse(msg.getEntriesList().stream()
+                .map(CorfuProtocolRemoteCorfuTable::getEntryFromMsg).collect(Collectors.toList()));
+    }
+
+    /**
+     * Creates a SizeResponse data object from its protobuf representation
+     * @param msg Size Response Protobuf entry
+     * @return SizeResponse object from protobuf
+     */
+    public static SizeResponse getSizeResponse(RemoteCorfuTableSizeResponseMsg msg) {
+        return new SizeResponse(msg.getSize());
     }
 }

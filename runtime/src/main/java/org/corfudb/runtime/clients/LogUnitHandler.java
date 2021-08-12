@@ -5,6 +5,10 @@ import java.lang.invoke.MethodHandles;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
+import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getContainsResponse;
+import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getGetResponse;
+import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getScanResponse;
+import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getSizeResponse;
 import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
@@ -13,6 +17,7 @@ import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.proto.service.LogUnit.LogAddressSpaceResponseMsg;
@@ -23,6 +28,7 @@ import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getInspectAddre
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getKnownAddressResponse;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getReadResponse;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getTailsResponse;
+import org.corfudb.runtime.proto.service.RemoteCorfuTable;
 
 
 /**
@@ -235,6 +241,25 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
     @ResponseHandler(type = PayloadCase.RESET_LOG_UNIT_RESPONSE)
     private static Object handleResetLogUnitResponse(ResponseMsg msg, ChannelHandlerContext ctx, IClientRouter router) {
         return true;
+    }
+
+    @ResponseHandler(type = PayloadCase.REMOTE_CORFU_TABLE_RESPONSE)
+    private static Object handleRemoteCorfuTableResponse(ResponseMsg msg, ChannelHandlerContext ctx,
+                                                        IClientRouter r) {
+        RemoteCorfuTable.RemoteCorfuTableResponseMsg rctResponse = msg.getPayload().getRemoteCorfuTableResponse();
+        switch (rctResponse.getPayloadCase()) {
+            case GET_RESPONSE:
+                return getGetResponse(rctResponse.getGetResponse());
+            case SCAN_RESPONSE:
+                return getScanResponse(rctResponse.getScanResponse());
+            case SIZE_RESPONSE:
+                return getSizeResponse(rctResponse.getSizeResponse());
+            case CONTAINS_RESPONSE:
+                return getContainsResponse(rctResponse.getContainsResponse());
+            default:
+                throw new UnsupportedOperationException("Unsupported RemoteCorfuTable response type: " +
+                        rctResponse.getPayloadCase().toString());
+        }
     }
 
     /**
