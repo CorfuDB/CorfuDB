@@ -24,7 +24,7 @@ public class CorfuStoreBrowserEditorMain {
         infoTable,
         showTable,
         listenOnTable,
-        dropTable,
+        clearTable,
         listAllProtos,
         editTable,
         listTags,
@@ -42,12 +42,12 @@ public class CorfuStoreBrowserEditorMain {
         "[--numItems=<numItems>] "+
         "[--batchSize=<itemsPerTransaction>] "+
         "[--itemSize=<sizeOfEachRecordValue>] "
-        + "[--keyToEdit=<keyToEdit>] [--newRecord=<newRecord>]"
+        + "[--keyToEdit=<keyToEdit>] [--newRecord=<newRecord>] [--tag=<tag>]"
         + "[--tlsEnabled=<tls_enabled>]\n"
         + "Options:\n"
         + "--host=<host>   Hostname\n"
         + "--port=<port>   Port\n"
-        + "--operation=<listTables|infoTable|showTable|dropTable" +
+        + "--operation=<listTables|infoTable|showTable|clearTable" +
         "|editTable|loadTable|listenOnTable|listTags|listTagsMap" +
         "|listTablesForTag|listTagsForTable|listAllProtos> Operation\n"
         + "--namespace=<namespace>   Namespace\n"
@@ -135,12 +135,12 @@ public class CorfuStoreBrowserEditorMain {
                         "Table name is null or empty.");
                     browser.printTableInfo(namespace, tableName);
                     break;
-                case dropTable:
+                case clearTable:
                     Preconditions.checkArgument(isValid(namespace),
                         "Namespace is null or empty.");
                     Preconditions.checkArgument(isValid(tableName),
                         "Table name is null or empty.");
-                    browser.dropTable(namespace, tableName);
+                    browser.clearTable(namespace, tableName);
                     break;
                 case showTable:
                     Preconditions.checkArgument(isValid(namespace),
