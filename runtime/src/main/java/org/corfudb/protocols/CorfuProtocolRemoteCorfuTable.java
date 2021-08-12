@@ -249,7 +249,7 @@ public class CorfuProtocolRemoteCorfuTable {
      */
     public static RemoteCorfuTableEntry getEntryFromMsg(RemoteCorfuTableEntryMsg msg) {
         return new RemoteCorfuTableEntry(
-                new RemoteCorfuTableVersionedKey(msg.getVersionedKey().toByteArray()), msg.getPayloadValue());
+                new RemoteCorfuTableVersionedKey(msg.getVersionedKey()), msg.getPayloadValue());
     }
 
     /**
