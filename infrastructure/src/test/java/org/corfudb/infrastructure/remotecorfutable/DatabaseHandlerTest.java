@@ -647,11 +647,11 @@ public class DatabaseHandlerTest {
         for (int i = 0; i < 2; i++) {
             entries.add(new ArrayList<>(2));
         }
-        List<ByteString> vals = IntStream.range(0,10)
+        List<ByteString> vals = IntStream.range(0,5000)
                 .mapToObj(j -> ByteString.copyFrom("val" + j, DATABASE_CHARSET)).collect(Collectors.toList());
         RemoteCorfuTableVersionedKey key;
         ByteString value;
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 5000; i++) {
             if (i%2 == 1) {
                 key = new RemoteCorfuTableVersionedKey(
                         ByteString.copyFrom("key" + i, DATABASE_CHARSET), 1L);
@@ -677,7 +677,7 @@ public class DatabaseHandlerTest {
             resultsByVersion.get(1).add(databaseHandler.containsValue(val, stream1, 1L, 3));
         }
         int failed = 0;
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 5000; i++) {
             for (int j = 0; j < 2; j++) {
                 boolean val = resultsByVersion.get(j).get(i);
                 if ((!val && j == 1) || (!val && j == 0 && (i%2 == 0))) {

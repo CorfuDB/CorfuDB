@@ -216,7 +216,7 @@ public class DatabaseHandlerAsyncTest {
     @Test
     public void testContainsKeyAsyncFunctionality() throws RocksDBException {
         List<RemoteCorfuTableEntry> entriesToAdd = new ArrayList<>(1000);
-        for (int i = 999; i >= 0; i--) {
+        for (int i = 9999; i >= 0; i--) {
             entriesToAdd.add(new RemoteCorfuTableEntry(new RemoteCorfuTableVersionedKey(
                     ByteString.copyFrom(Longs.toByteArray(i)), 1L
             ), ByteString.copyFrom("val" + i, DATABASE_CHARSET)));
@@ -225,7 +225,7 @@ public class DatabaseHandlerAsyncTest {
         CompletableFuture<Void> updateFuture = databaseHandler.updateAllAsync(entriesToAdd, stream1);
         updateFuture.join();
         List<CompletableFuture<Boolean>> results = new LinkedList<>();
-        for (int i = 0; i < 1000; i++) {
+        for (int i = 0; i < 10000; i++) {
             int finalI = i;
             results.add(databaseHandler.containsKeyAsync(
                     new RemoteCorfuTableVersionedKey(entriesToAdd.get(finalI).getKey().getEncodedKey(),
@@ -245,11 +245,11 @@ public class DatabaseHandlerAsyncTest {
     }
 
     @Test
-    public void testContainsValueAsyncFunctionality() throws RocksDBException {
+    public void testContainsValueAsyncFunctionality() throws RocksDBException, InterruptedException {
         List<RemoteCorfuTableEntry> entriesToAdd = new ArrayList<>(1000);
         for (int i = 0; i < 400; i++) {
             entriesToAdd.add(new RemoteCorfuTableEntry(new RemoteCorfuTableVersionedKey(
-                    ByteString.copyFrom(Longs.toByteArray(i)), 1L
+                    ByteString.copyFrom(Longs.toByteArray(i)), 0L
             ), ByteString.copyFrom(Ints.toByteArray(i))));
         }
         databaseHandler.addTable(stream1);
@@ -259,8 +259,8 @@ public class DatabaseHandlerAsyncTest {
         for (int i = 0; i < 400; i++) {
             int finalI = i;
             results.add(databaseHandler.containsValueAsync(ByteString.copyFrom(Ints.toByteArray(i)),
-                    stream1, 1L, 12).handle((contains, ex) -> {
-                        System.out.println(finalI);
+                    stream1, i, Integer.MAX_VALUE).handle((contains, ex) -> {
+                        //System.out.println(finalI);
                         if (ex != null) {
                             fail(ex.getMessage());
                             return null;
