@@ -43,6 +43,20 @@ public class RemoteCorfuTableVersionedKey {
     }
 
     /**
+     * Constructs a RemoteCorfuTableVersionedKey from ByteString Key - used to
+     * read information from the key.
+     * @param encodedVersionedKey RocksDB key as ByteString
+     */
+    public RemoteCorfuTableVersionedKey(ByteString encodedVersionedKey) {
+        if (encodedVersionedKey == null || encodedVersionedKey.size() < 8) {
+            throw new RuntimeException("Invalid database key parameter");
+        }
+        this.encodedVersionedKey = encodedVersionedKey;
+        this.encodedRemoteCorfuTableKey = null;
+        this.timestamp = null;
+    }
+
+    /**
      * Lazily retrieves ByteString representation of rocksDB key.
      * @return ByteString representation of rocksDB key
      */
