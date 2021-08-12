@@ -4,8 +4,10 @@ import com.google.common.collect.ImmutableMultiset;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multiset;
 import com.google.common.primitives.Bytes;
+import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
 import com.google.protobuf.ByteString;
+import com.sun.xml.internal.ws.util.StreamUtils;
 import lombok.extern.slf4j.Slf4j;
 import static org.corfudb.common.remotecorfutable.DatabaseConstants.DATABASE_CHARSET;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableEntry;
@@ -25,6 +27,7 @@ import org.mockito.junit.MockitoRule;
 import org.rocksdb.Options;
 import org.rocksdb.RocksDBException;
 
+import javax.swing.*;
 import java.io.File;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -89,11 +92,11 @@ public class DatabaseHandlerAsyncTest {
         RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(key1, 0L);
         databaseHandler.addTable(stream1);
         CompletableFuture<Void> updateResults = databaseHandler.updateAsync(key, expectedValue, stream1);
-        CompletableFuture<ByteString> readFuture = databaseHandler.getAsync(key, stream1);
         updateResults.exceptionally(ex -> {
             fail(ex.getMessage());
             return null;
-        });
+        }).join();
+        CompletableFuture<ByteString> readFuture = databaseHandler.getAsync(key, stream1);
         ByteString readInValue = readFuture.handle((val, ex) -> {
             if (ex != null) {
                 fail(ex.getMessage());
@@ -213,7 +216,7 @@ public class DatabaseHandlerAsyncTest {
     @Test
     public void testContainsKeyAsyncFunctionality() throws RocksDBException {
         List<RemoteCorfuTableEntry> entriesToAdd = new ArrayList<>(1000);
-        for (int i = 999; i >= 0; i--) {
+        for (int i = 9999; i >= 0; i--) {
             entriesToAdd.add(new RemoteCorfuTableEntry(new RemoteCorfuTableVersionedKey(
                     ByteString.copyFrom(Longs.toByteArray(i)), 1L
             ), ByteString.copyFrom("val" + i, DATABASE_CHARSET)));
@@ -222,7 +225,7 @@ public class DatabaseHandlerAsyncTest {
         CompletableFuture<Void> updateFuture = databaseHandler.updateAllAsync(entriesToAdd, stream1);
         updateFuture.join();
         List<CompletableFuture<Boolean>> results = new LinkedList<>();
-        for (int i = 0; i < 1000; i++) {
+        for (int i = 0; i < 10000; i++) {
             int finalI = i;
             results.add(databaseHandler.containsKeyAsync(
                     new RemoteCorfuTableVersionedKey(entriesToAdd.get(finalI).getKey().getEncodedKey(),
@@ -242,31 +245,76 @@ public class DatabaseHandlerAsyncTest {
     }
 
     @Test
-    public void testContainsValueAsyncFunctionality() throws RocksDBException {
+    public void testContainsValueAsyncFunctionality() throws RocksDBException, InterruptedException {
         List<RemoteCorfuTableEntry> entriesToAdd = new ArrayList<>(1000);
-        for (int i = 999; i >= 0; i--) {
+        for (int i = 0; i < 400; i++) {
             entriesToAdd.add(new RemoteCorfuTableEntry(new RemoteCorfuTableVersionedKey(
-                    ByteString.copyFrom(Longs.toByteArray(i)), 1L
-            ),(i%2==1) ? ByteString.copyFrom("val" + i, DATABASE_CHARSET) : ByteString.EMPTY));
+                    ByteString.copyFrom(Longs.toByteArray(i)), 0L
+            ), ByteString.copyFrom(Ints.toByteArray(i))));
         }
         databaseHandler.addTable(stream1);
         CompletableFuture<Void> updateFuture = databaseHandler.updateAllAsync(entriesToAdd, stream1);
         updateFuture.join();
         List<CompletableFuture<Boolean>> results = new LinkedList<>();
-        for (int i = 0; i < 1000; i++) {
+        for (int i = 0; i < 400; i++) {
             int finalI = i;
-            results.add(databaseHandler.containsValueAsync(ByteString.copyFrom("val" + i, DATABASE_CHARSET),
-                    stream1, 1L, 12).handle((contains, ex) -> {
+            results.add(databaseHandler.containsValueAsync(ByteString.copyFrom(Ints.toByteArray(i)),
+                    stream1, i, Integer.MAX_VALUE).handle((contains, ex) -> {
+                        //System.out.println(finalI);
                         if (ex != null) {
                             fail(ex.getMessage());
                             return null;
                         } else {
-                            return contains == (finalI % 2 != 0);
+                            return contains;
                         }
                     })
             );
         }
-        CompletableFuture.allOf(results.toArray(new CompletableFuture[0])).join();
-        assertTrue(results.stream().allMatch(CompletableFuture::join));
+        List<Boolean> resultValues = results.stream().map(CompletableFuture::join).collect(Collectors.toList());
+        int failed = 0;
+        for (int i = 0; i < resultValues.size(); i++) {
+            boolean val = resultValues.get(i);
+            if (!val) {
+                failed++;
+                System.out.println("Failed value at index " + i + ": " + val);
+            }
+        }
+        assertEquals(0,failed);
+    }
+
+    @Test
+    public void testSizeAsyncFunctionality() throws RocksDBException {
+        List<RemoteCorfuTableEntry> entriesToAdd = new ArrayList<>(1000);
+        for (int i = 0; i < 500; i++) {
+            for (int j = 0; j < 1; j++) {
+                entriesToAdd.add(new RemoteCorfuTableEntry(new RemoteCorfuTableVersionedKey(
+                        ByteString.copyFrom(Longs.toByteArray(i*1 + j)), i
+                ), ByteString.copyFrom(Ints.toByteArray(i))));
+            }
+        }
+        databaseHandler.addTable(stream1);
+        CompletableFuture<Void> updateFuture = databaseHandler.updateAllAsync(entriesToAdd, stream1);
+        updateFuture.join();
+        List<Integer> resultValues = new LinkedList<>();
+        for (int i = 0; i < 500; i++) {
+            resultValues.add(databaseHandler.sizeAsync(stream1, i, 11).handle((size, ex) -> {
+                        if (ex != null) {
+                            fail(ex.getMessage());
+                            return null;
+                        } else {
+                            return size;
+                        }
+                    }).join()
+            );
+        }
+//        List<Integer> resultValues = results.stream().map(CompletableFuture::join).collect(Collectors.toList());
+        int failures = 0;
+        for (int i = 0; i < 500; i++) {
+            if (resultValues.get(i) != (i+1)*1) {
+                System.out.printf("Failed on iter %d with expected %d values. Found %d values", i, (i+1)*1, resultValues.get(i));
+                failures++;
+            }
+            assertEquals(0, failures);
+        }
     }
 }
