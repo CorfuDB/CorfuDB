@@ -37,8 +37,8 @@ public class MeterRegistryProvider {
     public static class MeterRegistryInitializer extends MeterRegistryProvider {
 
         /**
-         * Configure the meter registry of type LoggingMeterRegistry. All the metrics registered
-         * with this meter registry will be exported via provided logging sink with
+         * Configure the meter registry of type LoggingMeterRegistry for Corfu server.
+         * All the metrics registered with this meter registry will be exported via provided logging sink with
          * the provided loggingInterval frequency.
          *
          * @param logger          An instance of the logger to print metrics.
@@ -51,8 +51,8 @@ public class MeterRegistryProvider {
         }
 
         /**
-         * Configure the meter registry of type LoggingMeterRegistry. All the metrics registered
-         * with this meter registry will be exported via provided logging sink with
+         * Configure the meter registry of type LoggingMeterRegistry for Corfu client.
+         * All the metrics registered with this meter registry will be exported via provided logging sink with
          * the provided loggingInterval frequency.
          *
          * @param logger          An instance of the logger to print metrics.

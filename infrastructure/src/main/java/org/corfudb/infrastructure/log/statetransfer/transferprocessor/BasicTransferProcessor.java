@@ -33,9 +33,8 @@ public class BasicTransferProcessor {
         return CompletableFuture.supplyAsync(() -> {
             while (iterator.hasNext()) {
                 TransferBatchRequest request = iterator.next();
-                MeterRegistryProvider.getInstance().ifPresent(registry ->
-                        registry.counter("state-transfer.read.throughput", "type", "protocol")
-                                .increment(request.getAddresses().size()));
+                MicroMeterUtils.counterIncrement(request.getAddresses().size(),
+                        "state-transfer.read.throughput", "type", "protocol");
                 Optional<Timer.Sample> sample = MicroMeterUtils.startTimer();
                 CompletableFuture<TransferBatchResponse> transferFuture =
                         MicroMeterUtils.timeWhenCompletes(batchProcessor.transfer(request), sample,
