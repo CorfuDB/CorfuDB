@@ -1,5 +1,6 @@
 package org.corfudb.common.metrics.micrometer;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
@@ -136,6 +137,12 @@ public class MicroMeterUtils {
     }
 
     private static List<Tag> toTagIterable(String... tags) {
+        if (tags.length % 2 != 0) {
+            throw new IllegalArgumentException("Only key-value pairs allowed.");
+        }
+        if (tags.length == 0) {
+            return ImmutableList.of();
+        }
         return IntStream.range(1, tags.length)
                 .filter(i -> i % 2 != 0)
                 .mapToObj(i -> Tag.of(tags[i - 1], tags[i]))
@@ -143,30 +150,16 @@ public class MicroMeterUtils {
     }
 
     public static <T> Optional<T> gauge(String name, T state, ToDoubleFunction<T> valueFunction, String... tags) {
-        if (tags.length % 2 != 0) {
-            throw new IllegalArgumentException("Only key-value pairs allowed.");
-        }
         return filterGetInstance(name).map(registry -> {
-            if (tags.length != 0) {
-                List<Tag> tagsList = toTagIterable(tags);
-                return registry.gauge(name, tagsList, state, valueFunction);
-            }
-
-            return registry.gauge(name, state, valueFunction);
+            List<Tag> tagsList = toTagIterable(tags);
+            return registry.gauge(name, tagsList, state, valueFunction);
         });
     }
 
     public static <T extends Number> Optional<T> gauge(String name, T state, String... tags) {
-        if (tags.length % 2 != 0) {
-            throw new IllegalArgumentException("Only key-value pairs allowed.");
-        }
         return filterGetInstance(name).map(registry -> {
-            if (tags.length != 0) {
-                List<Tag> tagsList = toTagIterable(tags);
-                return registry.gauge(name, tagsList, state);
-            }
-
-            return registry.gauge(name, state);
+            List<Tag> tagsList = toTagIterable(tags);
+            return registry.gauge(name, tagsList, state);
         });
     }
 

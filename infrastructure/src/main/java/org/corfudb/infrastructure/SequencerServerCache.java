@@ -95,8 +95,8 @@ public class SequencerServerCache {
         maxConflictWildcard = maxConflictNewSequencer;
         this.maxConflictNewSequencer = maxConflictNewSequencer;
         Supplier<PriorityQueue<ConflictTxStream>> queueSupplier = () ->
-                new PriorityQueue<>(cacheSize, Comparator.comparingLong
-                        (conflict -> conflict.txVersion));
+                new PriorityQueue<>(cacheSize, Comparator.comparingLong(conflict ->
+                        conflict.txVersion));
         cacheEntries = MicroMeterUtils.gauge(windowSizeName, queueSupplier.get(), PriorityQueue::size)
                 .orElseGet(queueSupplier);
         conflictKeys = MicroMeterUtils
