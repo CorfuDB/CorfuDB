@@ -273,7 +273,7 @@ public class LogUnitClient extends AbstractClient {
      * table with default scan size.
      * @param streamID The stream backing the Remote Corfu Table.
      * @param timestamp The timestamp of the request.
-     * @return a completable future which returns the list of scannied table entries.
+     * @return a completable future which returns the list of scanned table entries.
      */
     public CompletableFuture<ScanResponse> scanRemoteCorfuTable(@NonNull UUID streamID, long timestamp) {
         return scanRemoteCorfuTable(0, streamID, timestamp);
