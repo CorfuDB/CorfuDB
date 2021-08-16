@@ -1,26 +1,15 @@
 package org.corfudb.runtime.clients;
 
+import com.google.protobuf.ByteString;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
-import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
-import org.corfudb.protocols.wireprotocol.DataType;
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
-import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
-import org.corfudb.protocols.wireprotocol.ReadResponse;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
-import org.corfudb.protocols.wireprotocol.TailsResponse;
-import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.proto.service.LogUnit.TailRequestMsg.Type;
-import org.corfudb.util.serializer.Serializers;
-
+import lombok.NonNull;
+import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
+import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getContainsKeyRequestMsg;
+import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getContainsValueRequestMsg;
+import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getGetRequestMsg;
+import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getScanRequestMsg;
+import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getSizeRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getCommittedTailRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getCompactRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getFlushCacheRequestMsg;
@@ -35,6 +24,30 @@ import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getTrimLogReque
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getTrimMarkRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getUpdateCommittedTailRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getWriteLogRequestMsg;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
+import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
+import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.remotecorfutable.ContainsResponse;
+import org.corfudb.protocols.wireprotocol.remotecorfutable.GetResponse;
+import org.corfudb.protocols.wireprotocol.remotecorfutable.ScanResponse;
+import org.corfudb.protocols.wireprotocol.remotecorfutable.SizeResponse;
+import org.corfudb.runtime.proto.service.LogUnit.TailRequestMsg.Type;
+import org.corfudb.util.serializer.Serializers;
+
+import javax.annotation.Nonnegative;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * A client to send messages to a LogUnit.
@@ -243,4 +256,106 @@ public class LogUnitClient extends AbstractClient {
     public CompletableFuture<Boolean> resetLogUnit(long epoch) {
         return sendRequestWithFuture(getResetLogUnitRequestMsg(epoch), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
+
+    /**
+     * Send a get request to specified Remote Corfu Table.
+     * @param key The key to request from the table.
+     * @param streamID The stream backing the Remote Corfu Table.
+     * @return a completable future which returns the value requested.
+     */
+    public CompletableFuture<GetResponse> getRemoteCorfuTableValue(@NonNull RemoteCorfuTableVersionedKey key,
+                                                                   @NonNull UUID streamID) {
+        return sendRequestWithFuture(getGetRequestMsg(streamID, key), ClusterIdCheck.CHECK, EpochCheck.CHECK);
+    }
+
+    /**
+     * Send a scan request to specified Remote Corfu Table, starting at the beginning of the
+     * table with default scan size.
+     * @param streamID The stream backing the Remote Corfu Table.
+     * @param timestamp The timestamp of the request.
+     * @return a completable future which returns the list of scanned table entries.
+     */
+    public CompletableFuture<ScanResponse> scanRemoteCorfuTable(@NonNull UUID streamID, long timestamp) {
+        return scanRemoteCorfuTable(0, streamID, timestamp);
+    }
+
+    /**
+     * Send a scan request to specified Remote Corfu Table, starting at the beginning of the table.
+     * @param scanSize The amount of entries to scan from the table.
+     * @param streamId The stream backing the Remote Corfu Table.
+     * @param timestamp The timestamp of the request.
+     * @return a completable future which returns the list of scanned table entries.
+     */
+    public CompletableFuture<ScanResponse> scanRemoteCorfuTable(@Nonnegative int scanSize, @NonNull UUID streamId,
+                                                                long timestamp) {
+        return sendRequestWithFuture(getScanRequestMsg(scanSize, streamId, timestamp),
+                ClusterIdCheck.CHECK, EpochCheck.CHECK);
+    }
+
+    /**
+     * Send a scan request to specified Remote Corfu Table, starting after the specified key, using the
+     * default amount of entries to scan.
+     * @param startPoint The start point of the scan (exclusive).
+     * @param streamID The stream backing the Remote Corfu Table.
+     * @param timestamp The timestamp of the request.
+     * @return a completable future which returns the list of scanned table entries.
+     */
+    public CompletableFuture<ScanResponse> scanRemoteCorfuTable(@NonNull RemoteCorfuTableVersionedKey startPoint,
+                                                                @NonNull UUID streamID, long timestamp) {
+        return scanRemoteCorfuTable(startPoint, 0, streamID, timestamp);
+    }
+
+    /**
+     * Send a scan request to specified Remote Corfu Table, starting after the specified key.
+     * @param startPoint The start point of the scan (exclusive).
+     * @param scanSize The amount of entries to scan from the table.
+     * @param streamId The stream backing the Remote Corfu Table.
+     * @param timestamp The timestamp of the request.
+     * @return a completable future which returns the list of scanned table entries.
+     */
+    public CompletableFuture<ScanResponse> scanRemoteCorfuTable(@NonNull RemoteCorfuTableVersionedKey startPoint,
+                                                                @Nonnegative int scanSize, @NonNull UUID streamId,
+                                                                long timestamp) {
+        return sendRequestWithFuture(getScanRequestMsg(startPoint, scanSize, streamId, timestamp),
+                ClusterIdCheck.CHECK, EpochCheck.CHECK);
+    }
+
+    /**
+     * Send a contains key request to specified Remote Corfu Table.
+     * @param key The key to query in the table.
+     * @param streamID The stream backing the Remote Corfu Table.
+     * @return a completable future which returns true if the key exists in the table
+     */
+    public CompletableFuture<ContainsResponse> containsKeyRemoteCorfuTable(@NonNull RemoteCorfuTableVersionedKey key,
+                                                                           @NonNull UUID streamID) {
+        return sendRequestWithFuture(getContainsKeyRequestMsg(streamID, key), ClusterIdCheck.CHECK, EpochCheck.CHECK);
+    }
+
+    /**
+     * Send a contains value request to specified Remote Corfu Table.
+     * @param value The value to query in the table.
+     * @param streamID The stream backing the Remote Corfu Table.
+     * @param timestamp The timestamp of the query.
+     * @param scanSize The size of each internal database scan during the full database scan.
+     * @return a completable future which returns true if the value exists in the table
+     */
+    public CompletableFuture<ContainsResponse> containsValueRemoteCorfuTable(@NonNull ByteString value,
+                                                                             @NonNull UUID streamID, long timestamp,
+                                                                             int scanSize) {
+        return sendRequestWithFuture(getContainsValueRequestMsg(value, streamID, timestamp, scanSize),
+                ClusterIdCheck.CHECK, EpochCheck.CHECK);
+    }
+
+    /**
+     * Send a size request to specified Remote Corfu Table
+     * @param streamID The stream backing the Remote Corfu Table.
+     * @param timestamp The timestamp of the query.
+     * @param scanSize The size of each internal database scan during the full database scan.
+     * @return a completable future which returns the size of the table at the given time
+     */
+    public CompletableFuture<SizeResponse> sizeRemoteCorfuTable(@NonNull UUID streamID, long timestamp, int scanSize) {
+        return sendRequestWithFuture(getSizeRequestMsg(streamID, timestamp, scanSize), ClusterIdCheck.CHECK,
+                EpochCheck.CHECK);
+    }
+
 }
