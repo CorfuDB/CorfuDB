@@ -141,7 +141,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         // Invoke tableInfo and verify size
         Assert.assertEquals(browser.printTableInfo(namespace, tableName), one);
         // Invoke dropTable and verify size
-        Assert.assertEquals(browser.dropTable(namespace, tableName), one);
+        Assert.assertEquals(browser.clearTable(namespace, tableName), one);
         // Invoke tableInfo and verify size
         Assert.assertEquals(browser.printTableInfo(namespace, tableName), 0);
         // TODO: Remove this once serializers move into the runtime
