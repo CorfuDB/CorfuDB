@@ -9,9 +9,9 @@ definitions or proto files to serialize/deserialize the data.
 --------
 Browser
 --------
-The browser supports read operations which reads and outputs all entries in a
-given table and namespace, list tables in a given namespace, list stream tags
-for a table or all known stream tags, etc.
+The browser allows to visualize/inspect corfu tables and metadata by reading
+entries in a given table and namespace, list tables in a given namespace, list
+stream tags for a table, display all known stream tags, etc.
 
 1. showTable to read and output all entries in a given table and namespace.
 It can be invoked like the below example-

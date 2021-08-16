@@ -16,7 +16,6 @@ import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.IsolationLevel;
 import org.corfudb.runtime.collections.StreamListener;
-import org.corfudb.runtime.collections.StreamManager;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableSchema;
@@ -35,11 +34,12 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -1003,6 +1003,7 @@ public class StreamingIT extends AbstractIT {
         Uuid firstKey = Uuid.newBuilder().setMsb(indexDefault).setLsb(indexDefault).build();
         SampleTableAMsg firstValue = SampleTableAMsg.newBuilder().setPayload(String.valueOf(indexDefault)).build();
 
+        // Full-Sync (one or more tables) read-only transaction
         try (TxnContext txn = store.txn(namespace)) {
             CorfuStoreEntry<Uuid, SampleTableAMsg, Uuid> entry = txn.getRecord(defaultTableName, firstKey);
             assertThat(entry.getPayload()).isEqualTo(firstValue);
@@ -1394,6 +1395,77 @@ public class StreamingIT extends AbstractIT {
         TimeUnit.MILLISECONDS.sleep(sleepTime);
         assertThat(listenerPreWrites.getUpdates().size()).isEqualTo(numUpdates*2);
         assertThat(listenerPostWrites.getUpdates().size()).isEqualTo(numUpdates);
+    }
+
+    /**
+     * Test that updates to the same key within a transaction boundary does not lead
+     * to multiple stream notifications, i.e., duplication.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testDeduplicationOfTxUpdates() throws Exception {
+        // Run a corfu server.
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        // Start a Corfu runtime.
+        runtime = createRuntime(singleNodeEndpoint);
+        runtime.setTransactionLogging(true);
+
+        CorfuStore store = new CorfuStore(runtime);
+
+        final String namespace = "test_namespace";
+        final String tableName = "table";
+        final int numUpdates = 20;
+        final int delta = 30;
+
+        // Create a table.
+        Table<Uuid, SampleTableAMsg, Uuid> tableA = store.openTable(
+                namespace, tableName,
+                Uuid.class, SampleTableAMsg.class, Uuid.class,
+                TableOptions.builder().build()
+        );
+
+        // Subscribe to streaming updates
+        StreamListenerImpl listener = new StreamListenerImpl("stream_listener");
+        store.subscribeListener(listener, namespace, "sample_streamer_1", Collections.singletonList(tableName));
+
+        // Update same key multiple times within the same transaction
+        try (TxnContext tx = store.txn(namespace)) {
+            Uuid key1 = Uuid.newBuilder().setMsb(0).setLsb(0).build();
+
+            // Update key 1 multiple times within the same transaction
+            for (int i = 0; i < numUpdates; i++) {
+                SampleTableAMsg msg = SampleTableAMsg.newBuilder().setPayload(String.valueOf(i)).build();
+                tx.putRecord(tableA, key1, msg, key1);
+            }
+
+            // Add another (unique) key to test the case when another key is present in the transaction
+            Uuid key2 = Uuid.newBuilder().setMsb(1).setLsb(1).build();
+            tx.putRecord(tableA, key2, SampleTableAMsg.newBuilder().setPayload(String.valueOf(numUpdates + delta)).build(), key2);
+
+            // Update key1 one last time so it interleaves with a unique key
+            tx.putRecord(tableA, key1, SampleTableAMsg.newBuilder().setPayload(String.valueOf(numUpdates)).build(), key1);
+
+            tx.commit();
+       }
+
+        // After a brief wait verify that the listener gets all the updates.
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
+
+        LinkedList<CorfuStreamEntries> updates = listener.getUpdates();
+        assertThat(updates.size()).isEqualTo(1);
+        // One accounts for key1 (the one duplicated) and the other accounts for the unique id (key2)
+        updates.getFirst().getEntries().forEach((k, v) -> assertThat(v.size()).isEqualTo(2));
+
+        // Confirm the update for the duplicated key is the last one in the transaction and the unique key is present as well
+        Set<String> readValues = new HashSet<>();
+        updates.getFirst().getEntries().forEach((k, v) -> v.forEach(entry -> readValues.add(((SampleTableAMsg)entry.getPayload()).getPayload())));
+        assertThat(readValues).containsOnlyOnce(String.valueOf(numUpdates));
+        assertThat(readValues).containsOnlyOnce(String.valueOf(numUpdates + delta));
+
+        store.unsubscribeListener(listener);
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 
     private void writeUpdatesToDefaultTable(int numUpdates, int offset) throws Exception {

@@ -60,12 +60,14 @@ import com.google.protobuf.util.JsonFormat;
 import javax.annotation.Nonnull;
 
 /**
- * This is the CorfuStore Browser Tool which prints data in a given namespace and table.
+ * This is the CorfuStore Browser/Editor Tool which prints data in a given
+ * namespace and table.
  *
  * - Created by pmajmudar on 10/16/2019.
  */
 @Slf4j
-public class CorfuStoreBrowser {
+@SuppressWarnings("checkstyle:printLine")
+public class CorfuStoreBrowserEditor {
     private final CorfuRuntime runtime;
     private final String diskPath;
     private final DynamicProtobufSerializer dynamicProtobufSerializer;
@@ -74,7 +76,7 @@ public class CorfuStoreBrowser {
      * Creates a CorfuBrowser which connects a runtime to the server.
      * @param runtime CorfuRuntime which has connected to the server
      */
-    public CorfuStoreBrowser(CorfuRuntime runtime) {
+    public CorfuStoreBrowserEditor(CorfuRuntime runtime) {
         this(runtime, null);
     }
 
@@ -84,7 +86,7 @@ public class CorfuStoreBrowser {
      * @param diskPath path to temp disk directory for loading large tables
      *                 that won't fit into memory
      */
-    public CorfuStoreBrowser(CorfuRuntime runtime, String diskPath) {
+    public CorfuStoreBrowserEditor(CorfuRuntime runtime, String diskPath) {
         this.runtime = runtime;
         this.diskPath = diskPath;
         dynamicProtobufSerializer =
@@ -100,8 +102,8 @@ public class CorfuStoreBrowser {
      */
     public CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> getTable(
         String namespace, String tableName) {
-        log.info("Namespace: {}", namespace);
-        log.info("TableName: {}", tableName);
+        System.out.println("Namespace: " + namespace);
+        System.out.println("TableName: " + tableName);
 
         String fullTableName = TableRegistry.getFullyQualifiedTableName(namespace, tableName);
 
@@ -151,7 +153,7 @@ public class CorfuStoreBrowser {
                             .append(entry.getValue() != null && entry.getValue().getMetadata() != null ?
                                     JsonFormat.printer().print(entry.getValue().getMetadata()): "")
                             .append("\n====================\n");
-                    log.info(builder.toString());
+                    System.out.println(builder.toString());
                 } catch (InvalidProtocolBufferException e) {
                     log.error("invalid protobuf: ", e);
                 }
@@ -168,13 +170,13 @@ public class CorfuStoreBrowser {
     public int listTables(String namespace)
     {
         int numTables = 0;
-        log.info("\n=====Tables=======\n");
+        System.out.println("\n=====Tables=======\n");
         for (TableName tableName : listTablesInNamespace(namespace)) {
-            log.info("Table: " + tableName.getTableName());
-            log.info("Namespace: " + tableName.getNamespace());
+            System.out.println("Table: " + tableName.getTableName());
+            System.out.println("Namespace: " + tableName.getNamespace());
             numTables++;
         }
-        log.info("\n======================\n");
+        System.out.println("\n======================\n");
         return numTables;
     }
 
@@ -192,15 +194,15 @@ public class CorfuStoreBrowser {
      * @return - number of entries in the table
      */
     public int printTableInfo(String namespace, String tablename) {
-        log.info("\n======================\n");
+        System.out.println("\n======================\n");
         String fullName = TableRegistry.getFullyQualifiedTableName(namespace, tablename);
         UUID streamUUID = UUID.nameUUIDFromBytes(fullName.getBytes());
         CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
             getTable(namespace, tablename);
         int tableSize = table.size();
-        log.info("Table {} in namespace {} with ID {} has {} entries",
-                tablename, namespace, streamUUID.toString(), tableSize);
-        log.info("\n======================\n");
+        System.out.println("Table " + tablename + " in namespace " + namespace +
+            " with ID " + streamUUID.toString() + " has " + tableSize + " entries");
+        System.out.println("\n======================\n");
         return tableSize;
     }
 
@@ -209,22 +211,22 @@ public class CorfuStoreBrowser {
      */
     public int printAllProtoDescriptors() {
         int numProtoFiles = -1;
-        log.info("=========PROTOBUF FILE NAMES===========");
+        System.out.println("=========PROTOBUF FILE NAMES===========");
         for (ProtobufFileName protoFileName :
             dynamicProtobufSerializer.getCachedProtobufDescriptorTable().keySet()) {
             try {
-                log.info("{}", JsonFormat.printer().print(protoFileName));
+                System.out.println(JsonFormat.printer().print(protoFileName));
             } catch (InvalidProtocolBufferException e) {
                 log.error("Unable to print protobuf for key {}", protoFileName, e);
             }
             numProtoFiles++;
         }
-        log.info("=========PROTOBUF FILE DESCRIPTORS ===========");
+        System.out.println("=========PROTOBUF FILE DESCRIPTORS ===========");
         for (ProtobufFileName protoFileName :
             dynamicProtobufSerializer.getCachedProtobufDescriptorTable().keySet()) {
             try {
-                log.info("{}", JsonFormat.printer().print(protoFileName));
-                log.info("{}", JsonFormat.printer().print(
+                System.out.println(JsonFormat.printer().print(protoFileName));
+                System.out.println(JsonFormat.printer().print(
                     dynamicProtobufSerializer.getCachedProtobufDescriptorTable()
                         .get(protoFileName).getPayload())
                 );
@@ -241,8 +243,8 @@ public class CorfuStoreBrowser {
      * @param tablename - table name without the namespace
      * @return - number of entries in the table before clearing the table
      */
-    public int dropTable(String namespace, String tablename) {
-        log.info("\n======================\n");
+    public int clearTable(String namespace, String tablename) {
+        System.out.println("\n======================\n");
         String fullName = TableRegistry.getFullyQualifiedTableName(namespace, tablename);
         UUID streamUUID = UUID.nameUUIDFromBytes(fullName.getBytes());
         try {
@@ -250,12 +252,13 @@ public class CorfuStoreBrowser {
             CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
                 getTable(namespace, tablename);
             int tableSize = table.size();
-            log.info("Table {} in namespace {} with ID {} with {} entries will be dropped...",
-                tablename, namespace, streamUUID.toString(), tableSize);
+            System.out.println("Table " + tablename + " in namespace " + namespace
+                + " with ID " + streamUUID.toString() + " with " + tableSize +
+                " entries will be dropped...");
             table.clear();
             runtime.getObjectsView().TXEnd();
-            log.info("Table cleared successfully");
-            log.info("\n======================\n");
+            System.out.println("Table cleared successfully");
+            System.out.println("\n======================\n");
             return tableSize;
         } catch (TransactionAbortedException e) {
             log.error("Drop Table Transaction Aborted");
@@ -280,7 +283,7 @@ public class CorfuStoreBrowser {
      */
     public CorfuDynamicRecord editRecord(String namespace, String tableName,
         String keyToEdit, String newRecord) {
-        log.info("\n======================\n");
+        System.out.println("\n======================\n");
         String fullName = TableRegistry.getFullyQualifiedTableName(namespace,
             tableName);
         UUID streamUUID = CorfuRuntime.getStreamID(fullName);
@@ -321,9 +324,10 @@ public class CorfuStoreBrowser {
                             "{} and namespace {}.  Stream Id {}", keyToEdit, tableName,
                         namespace, streamUUID);
                 } else {
-                    log.info("Editing record with Key {} in table {} and " +
-                            "namespace {} with new record {}.  Stream Id {}.",
-                        keyToEdit, tableName, namespace, newRecord, streamUUID);
+                    System.out.println("Editing record with Key " + keyToEdit +
+                        " in table " + tableName + " and namespace " + namespace +
+                        " with new record " + newRecord + ".  Stream Id " +
+                        streamUUID);
                     String payloadTypeUrl = oldRecord.getPayloadTypeUrl();
                     String metadataTypeUrl = oldRecord.getMetadataTypeUrl();
                     DynamicMessage metadata = oldRecord.getMetadata();
@@ -336,7 +340,7 @@ public class CorfuStoreBrowser {
                     " Stream Id {}.", keyToEdit, tableName, namespace, streamUUID);
             }
             runtime.getObjectsView().TXEnd();
-            log.info("\n======================\n");
+            System.out.println("\n======================\n");
             return editedRecord;
         } catch (TransactionAbortedException e) {
             log.error("Transaction to edit record aborted.", e);
@@ -381,8 +385,9 @@ public class CorfuStoreBrowser {
             new Random().nextBytes(array);
             ExampleTableName dummyVal = ExampleTableName.newBuilder().setNamespace(namespace+tablename)
                     .setTableName(new String(array, StandardCharsets.UTF_16)).build();
-            log.info("WARNING: Loading {} items of {} size in {} batchSized transactions into {}${}",
-                    numItems, itemSize, batchSize, namespace, tablename);
+            System.out.println("WARNING: Loading " + numItems + " items of " + itemSize +
+                " size in " + batchSize + " batchSized transactions into " +
+                namespace + "$" + tablename);
             int itemsRemaining = numItems;
             while (itemsRemaining > 0) {
                 ManagedTxnContext tx = store.tx(namespace);
@@ -393,8 +398,8 @@ public class CorfuStoreBrowser {
                     tx.putRecord(table, dummyKey, dummyVal, ManagedMetadata.getDefaultInstance());
                 }
                 Timestamp address = tx.commit();
-                log.info("loadTable: Txn at address {}. Items  now left {}", address.getSequence(),
-                        itemsRemaining);
+                System.out.println("loadTable: Txn at address "
+                    + address.getSequence() + " Items  now left " + itemsRemaining);
             }
         } catch (Exception e) {
             log.error("loadTable: {} {} {} {} failed.", namespace, tablename, numItems, batchSize, e);
@@ -429,8 +434,9 @@ public class CorfuStoreBrowser {
         }
 
         int tableSize = table.count();
-        log.info("Listening to updates on Table {} in namespace {} with size {} ID {}...",
-                tableName, namespace, tableSize, table.getStreamUUID().toString());
+        System.out.println("Listening to updates on Table " + tableName +
+            " in namespace " + namespace + " with size " + tableSize + " ID " +
+            table.getStreamUUID().toString());
 
         class StreamDumper implements StreamListener {
             @Getter
@@ -445,8 +451,8 @@ public class CorfuStoreBrowser {
 
             @Override
             public void onNext(CorfuStreamEntries results) {
-                log.info("onNext invoked with {}. Read so far {}", results.getEntries().size(),
-                        txnRead.get());
+                System.out.println("onNext invoked with " +
+                    results.getEntries().size() + " Read so far " + txnRead.get());
                 results.getEntries().forEach((schema, entries) -> {
                     if (!schema.getTableName().equals(tableName)) {
                         log.warn("Not my table {}", schema);
@@ -466,10 +472,11 @@ public class CorfuStoreBrowser {
                                     entry.getOperation().toString() +
                                     "\n====================\n"+
                                     "\n====================\n";
-                            log.info(builder);
+                            System.out.println(builder);
                             long now = System.currentTimeMillis();
                             long recordInsertedAt = ((ManagedMetadata)entry.getMetadata()).getLastModifiedTime();
-                            log.info("\n Time since insert: "+(now - recordInsertedAt)+"ms\n");
+                            System.out.println("\n Time since insert: " +
+                                (now - recordInsertedAt) + "ms\n");
                             txnRead.incrementAndGet();
                         } catch (InvalidProtocolBufferException e) {
                             log.error("invalid protobuf: ", e);
@@ -516,10 +523,10 @@ public class CorfuStoreBrowser {
             record -> streamTags.addAll(record.getMetadata()
                 .getTableOptions().getStreamTagList()));
 
-        log.info("\n======================\n");
-        log.info("Total unique stream tags: [{}]", streamTags.size());
-        streamTags.forEach(log::info);
-        log.info("\n======================\n");
+        System.out.println("\n======================\n");
+        System.out.println("Total unique stream tags: " + streamTags.size());
+        streamTags.forEach(tag -> System.out.println(tag));
+        System.out.println("\n======================\n");
 
         return streamTags;
     }
@@ -531,11 +538,12 @@ public class CorfuStoreBrowser {
      */
     public Map<String, List<TableName>> listTagToTableMap() {
         Map<String, List<TableName>> streamTagToTableNames = getTagToTableNamesMap();
-        log.info("\n======================\n");
-        log.info("Total unique stream tags: [{}]", streamTagToTableNames.keySet().size());
-        log.info("Stream tags: {}\n", streamTagToTableNames.keySet());
+        System.out.println("\n======================\n");
+        System.out.println("Total unique stream tags: " +
+            streamTagToTableNames.keySet().size());
+        System.out.println("Stream tags: " + streamTagToTableNames.keySet());
         streamTagToTableNames.forEach(this::printStreamTagMap);
-        log.info("\n======================\n");
+        System.out.println("\n======================\n");
         return streamTagToTableNames;
     }
 
@@ -553,14 +561,14 @@ public class CorfuStoreBrowser {
             dynamicProtobufSerializer.getCachedRegistryTable().get(tableName);
         if (record != null) {
             tags.addAll(record.getMetadata().getTableOptions().getStreamTagList());
-            log.info("\n======================\n");
-            log.info("table: <{}${}> --- Tags[total={}] :: {}", namespace, table, tags.size(), tags);
-            log.info("\n======================\n");
+            System.out.println("\n======================\n");
+            System.out.println("table: " + namespace + "$" + table +
+                " --- Total Tags = " + tags.size() + " Tags:: " + tags);
+            System.out.println("\n======================\n");
         } else {
             log.warn("Invalid namespace {} and table name {}. Review or run operation --listTagsMap" +
                     " for complete map (all tables).", namespace, tableName);
         }
-
         return tags;
     }
 
@@ -577,9 +585,9 @@ public class CorfuStoreBrowser {
         }
 
         Map<String, List<TableName>> streamTagToTableNames = getTagToTableNamesMap();
-        log.info("\n======================\n");
+        System.out.println("\n======================\n");
         printStreamTagMap(streamTag, streamTagToTableNames.get(streamTag));
-        log.info("\n======================\n");
+        System.out.println("\n======================\n");
         return streamTagToTableNames.get(streamTag);
     }
 
@@ -607,6 +615,7 @@ public class CorfuStoreBrowser {
         }
         // Remove last continuation characters for a clean output ', '
         formatMapping = formatMapping.substring(0, formatMapping.length() - 2);
-        log.info("tag: <'{}'> --- Tables[total={}] :: {{}}", tag, tables.size(), formatMapping);
+        System.out.println("Tag: " + tag + " --- Total Tables: " + tables.size()
+            + " TableNames: " + formatMapping);
     }
 }

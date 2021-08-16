@@ -103,9 +103,16 @@ public class DynamicProtobufSerializer implements ISerializer {
     public DynamicProtobufSerializer(CorfuRuntime corfuRuntime) {
         this.type = ProtobufSerializer.PROTOBUF_SERIALIZER_CODE;
 
-        // Create and register a protobuf serializer to read the table registry.
-        ISerializer protobufSerializer = createProtobufSerializer();
-        Serializers.registerSerializer(protobufSerializer);
+        // Create or get a protobuf serializer to read the table registry.
+        ISerializer protobufSerializer;
+        try {
+            protobufSerializer = Serializers.getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
+        } catch (SerializerException se) {
+            // This means the protobuf serializer had not been registered yet.
+            log.info("Protobuf Serializer not found. Create and register a new one.");
+            protobufSerializer = createProtobufSerializer();
+            Serializers.registerSerializer(protobufSerializer);
+        }
 
         // Open the Registry Table and cache its contents
         CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable =
@@ -308,8 +315,16 @@ public class DynamicProtobufSerializer implements ISerializer {
             Record record = Record.parseFrom(data);
             Any payload = record.getPayload();
 
+            String fullMessageName = getFullMessageName(payload);
+            if (!messagesFdProtoNameMap.containsKey(fullMessageName)) {
+                log.error("messagesFdProtoNameMap doesn't contain the message type {} of payload {}." +
+                                "Please check if the related table is properly opened with correct schema.",
+                        fullMessageName, payload);
+                log.error("messagesFdProtoNameMap keySet is {}", messagesFdProtoNameMap.keySet());
+            }
+
             FileDescriptor valueFileDescriptor
-                    = getDescriptor(messagesFdProtoNameMap.get(getFullMessageName(payload)));
+                    = getDescriptor(messagesFdProtoNameMap.get(fullMessageName));
             Descriptor valueDescriptor = valueFileDescriptor.findMessageTypeByName(getMessageName(payload));
             DynamicMessage value = DynamicMessage.parseFrom(valueDescriptor, payload.getValue());
 
@@ -323,8 +338,16 @@ public class DynamicProtobufSerializer implements ISerializer {
                 Any anyMetadata = record.getMetadata();
                 metadataTypeUrl = anyMetadata.getTypeUrl();
 
+                String fullMetadataMessageName = getFullMessageName(anyMetadata);
+                if (!messagesFdProtoNameMap.containsKey(fullMetadataMessageName)) {
+                    log.error("messagesFdProtoNameMap doesn't contain the message type {} of metadata {}." +
+                                    "Please check if the related table is properly opened with correct schema.",
+                            fullMetadataMessageName, anyMetadata);
+                    log.error("messagesFdProtoNameMap keySet is {}", messagesFdProtoNameMap.keySet());
+                }
+
                 FileDescriptor metaFileDescriptor
-                        = getDescriptor(messagesFdProtoNameMap.get(getFullMessageName(anyMetadata)));
+                        = getDescriptor(messagesFdProtoNameMap.get(fullMetadataMessageName));
                 Descriptor metaDescriptor = metaFileDescriptor.findMessageTypeByName(getMessageName(anyMetadata));
                 metadata = DynamicMessage.parseFrom(metaDescriptor, anyMetadata.getValue());
             }

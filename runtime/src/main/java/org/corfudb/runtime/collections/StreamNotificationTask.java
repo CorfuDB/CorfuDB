@@ -90,7 +90,7 @@ class StreamNotificationTask implements Runnable {
             // Send notification to client with the pre-registered callback.
             startTime = endTime;
 
-            MicroMeterUtils.time(() -> listener.onNext(nextUpdate),
+            MicroMeterUtils.time(() -> listener.onNextEntry(nextUpdate),
                     "stream.notify.duration",
                     "listener",
                     listenerId);

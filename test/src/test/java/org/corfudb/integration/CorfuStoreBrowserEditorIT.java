@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.corfudb.browser.CorfuStoreBrowserEditor;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.view.TableRegistry;
@@ -23,7 +24,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.corfudb.browser.CorfuStoreBrowser;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
@@ -34,7 +34,7 @@ import org.corfudb.test.SampleSchema;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class CorfuStoreBrowserIT extends AbstractIT {
+public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
     private static String corfuSingleNodeHost;
 
@@ -124,7 +124,7 @@ public class CorfuStoreBrowserIT extends AbstractIT {
 
         final int one = 1;
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
         // Invoke listTables and verify table count
         Assert.assertEquals(browser.listTables(namespace), one);
 
@@ -141,7 +141,7 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         // Invoke tableInfo and verify size
         Assert.assertEquals(browser.printTableInfo(namespace, tableName), one);
         // Invoke dropTable and verify size
-        Assert.assertEquals(browser.dropTable(namespace, tableName), one);
+        Assert.assertEquals(browser.clearTable(namespace, tableName), one);
         // Invoke tableInfo and verify size
         Assert.assertEquals(browser.printTableInfo(namespace, tableName), 0);
         // TODO: Remove this once serializers move into the runtime
@@ -165,7 +165,7 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         final int batchSize = 10;
         final int itemSize = 100;
 
-        CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
         Assert.assertEquals(browser.loadTable(namespace, tableName, numItems, batchSize, itemSize), batchSize);
         runtime.shutdown();
         // TODO: Remove this once serializers move into the runtime
@@ -203,7 +203,7 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         });
 
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
 
         // (1) List Stream Tags
         Set<String> tagsInRegistry = browser.listStreamTags();
@@ -281,7 +281,7 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         populateRegistryTable(namespace, tableBaseName);
 
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
         assertThat(browser.printAllProtoDescriptors()).isEqualTo(expectedFiles);
 
         runtime.shutdown();
@@ -342,7 +342,7 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
         CorfuTable table2 = browser.getTable(namespace, tableName);
         browser.printTable(namespace, tableName);
         Assert.assertEquals(1, table2.size());
@@ -408,7 +408,7 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
         // Invoke listTables and verify table count
         final int three = 3;
         Assert.assertEquals(three,
@@ -475,10 +475,9 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
-        final CorfuStoreBrowser badBrowser = new CorfuStoreBrowser(runtime);
         String tempDir = com.google.common.io.Files.createTempDir()
                 .getAbsolutePath();
-        final CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime, tempDir);
+        final CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, tempDir);
         // Verify table count
         Assert.assertEquals(1, browser.printTable(namespace, tableName));
 
@@ -492,8 +491,7 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         IllegalAccessException, InvocationTargetException {
         final String namespace = "namespace";
         final String tableName = "table";
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost,
-            corfuStringNodePort);
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
         runtime = createRuntime(singleNodeEndpoint);
@@ -530,7 +528,7 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
-        CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
         // Invoke listTables and verify table count
         Assert.assertEquals(browser.listTables(namespace), 1);
 
@@ -563,7 +561,7 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         keyString = "{\"msb\": \"2\", \"lsb\": \"2\"}";
         Assert.assertNull(browser.editRecord(namespace, tableName, keyString,
             newValString));
-        
+
         // TODO: Remove this once serializers move into the runtime
         Serializers.clearCustomSerializers();
         runtime.shutdown();

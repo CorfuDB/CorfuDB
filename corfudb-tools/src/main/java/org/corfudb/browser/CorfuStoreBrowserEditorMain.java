@@ -17,14 +17,14 @@ import org.docopt.Docopt;
  * - Created by pmajmudar on 10/16/2019
  */
 @Slf4j
-public class CorfuStoreBrowserMain {
+public class CorfuStoreBrowserEditorMain {
     private enum OperationType {
         listTables,
         loadTable,
         infoTable,
         showTable,
         listenOnTable,
-        dropTable,
+        clearTable,
         listAllProtos,
         editTable,
         listTags,
@@ -34,7 +34,7 @@ public class CorfuStoreBrowserMain {
     }
 
     private static final String USAGE = "Usage: corfu-browser --host=<host> " +
-        "--port=<port> --namespace=<namespace> --tablename=<tablename> " +
+        "--port=<port> [--namespace=<namespace>] [--tablename=<tablename>] " +
         "--operation=<operation> "+
         "[--keystore=<keystore_file>] [--ks_password=<keystore_password>] " +
         "[--truststore=<truststore_file>] [--truststore_password=<truststore_password>] " +
@@ -42,12 +42,12 @@ public class CorfuStoreBrowserMain {
         "[--numItems=<numItems>] "+
         "[--batchSize=<itemsPerTransaction>] "+
         "[--itemSize=<sizeOfEachRecordValue>] "
-        + "[--keyToEdit=<keyToEdit>] [--newRecord=<newRecord>]"
+        + "[--keyToEdit=<keyToEdit>] [--newRecord=<newRecord>] [--tag=<tag>]"
         + "[--tlsEnabled=<tls_enabled>]\n"
         + "Options:\n"
         + "--host=<host>   Hostname\n"
         + "--port=<port>   Port\n"
-        + "--operation=<listTables|infoTable|showTable|dropTable" +
+        + "--operation=<listTables|infoTable|showTable|clearTable" +
         "|editTable|loadTable|listenOnTable|listTags|listTagsMap" +
         "|listTablesForTag|listTagsForTable|listAllProtos> Operation\n"
         + "--namespace=<namespace>   Namespace\n"
@@ -108,11 +108,12 @@ public class CorfuStoreBrowserMain {
             runtime.connect();
             log.info("Successfully connected to {}", singleNodeEndpoint);
 
-            CorfuStoreBrowser browser;
+            CorfuStoreBrowserEditor browser;
             if (opts.get("--diskPath") != null) {
-                browser = new CorfuStoreBrowser(runtime, opts.get("--diskPath").toString());
+                browser = new CorfuStoreBrowserEditor(runtime, opts.get(
+                    "--diskPath").toString());
             } else {
-                browser = new CorfuStoreBrowser(runtime);
+                browser = new CorfuStoreBrowserEditor(runtime);
             }
             String namespace = Optional.ofNullable(opts.get("--namespace"))
                     .map(Object::toString)
@@ -134,12 +135,12 @@ public class CorfuStoreBrowserMain {
                         "Table name is null or empty.");
                     browser.printTableInfo(namespace, tableName);
                     break;
-                case dropTable:
+                case clearTable:
                     Preconditions.checkArgument(isValid(namespace),
                         "Namespace is null or empty.");
                     Preconditions.checkArgument(isValid(tableName),
                         "Table name is null or empty.");
-                    browser.dropTable(namespace, tableName);
+                    browser.clearTable(namespace, tableName);
                     break;
                 case showTable:
                     Preconditions.checkArgument(isValid(namespace),
