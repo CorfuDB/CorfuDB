@@ -57,8 +57,6 @@ public class Serializers {
             return customSerializers.get(type);
         }
 
-        log.error("Serializer with type code {} not found. Please check custom serializers " +
-                "for this client.", type.intValue());
         throw new SerializerException(type);
     }
 

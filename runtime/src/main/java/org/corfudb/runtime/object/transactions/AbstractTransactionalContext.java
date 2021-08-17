@@ -125,13 +125,6 @@ public abstract class AbstractTransactionalContext implements
     @Setter
     private TxnContext txnContext;
 
-    /**
-     * To help triage transactions that are started but not ended, track the stack trace of the caller.
-     */
-    @Setter
-    @Getter
-    private StackTraceElement[] beginTxnStackTrace;
-
     @Getter
     private final WriteSetInfo writeSetInfo = new WriteSetInfo();
 
