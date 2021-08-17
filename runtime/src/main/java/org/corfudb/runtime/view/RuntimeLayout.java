@@ -62,7 +62,7 @@ public class RuntimeLayout {
      */
     public void sealMinServerSet()
             throws WrongEpochException, QuorumUnreachableException {
-        log.debug("Requested move of servers to new epoch {} servers are {}", layout.getEpoch(),
+        log.debug("Requested move to new epoch {} servers: {}", layout.getEpoch(),
                 layout.getAllServers());
 
         // Set remote epoch on all servers in layout.
@@ -76,7 +76,7 @@ public class RuntimeLayout {
             layoutSegment.getReplicationMode().validateSegmentSeal(layoutSegment, resultMap);
         }
 
-        log.debug("Layout has been sealed successfully.");
+        log.debug("Layout has been sealed.");
     }
 
 

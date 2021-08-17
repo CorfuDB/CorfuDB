@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.Optional;
 import java.util.PriorityQueue;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * Sequencer server cache.
@@ -91,21 +92,16 @@ public class SequencerServerCache {
 
     public SequencerServerCache(int cacheSize, long maxConflictNewSequencer) {
         this.cacheSize = cacheSize;
-
-        cacheEntries = new PriorityQueue(cacheSize, Comparator.comparingLong
-                (conflict -> ((ConflictTxStream) conflict).txVersion));
         maxConflictWildcard = maxConflictNewSequencer;
         this.maxConflictNewSequencer = maxConflictNewSequencer;
-        conflictKeys = MeterRegistryProvider
-                .getInstance()
-                .map(registry ->
-                        registry.gauge(conflictKeysCounterName, Collections.emptyList(),
-                                new HashMap<ConflictTxStream, Long>(), HashMap::size))
-                .orElse(new HashMap<>());
-        MeterRegistryProvider.getInstance().map(registry ->
-                Gauge.builder(windowSizeName,
-                        conflictKeys, HashMap::size).register(registry));
-
+        Supplier<PriorityQueue<ConflictTxStream>> queueSupplier = () ->
+                new PriorityQueue<>(cacheSize, Comparator.comparingLong(conflict ->
+                        conflict.txVersion));
+        cacheEntries = MicroMeterUtils.gauge(windowSizeName, queueSupplier.get(), PriorityQueue::size)
+                .orElseGet(queueSupplier);
+        conflictKeys = MicroMeterUtils
+                .gauge(conflictKeysCounterName, new HashMap<ConflictTxStream, Long>(), HashMap::size)
+                .orElseGet(HashMap::new);
     }
 
     /**

@@ -35,7 +35,7 @@ public class RemoveNode extends WorkflowRequest {
         // Send an remove node request to an orchestrator that is not on the node
         // to be removed
         CreateWorkflowResponse resp = managementClient.removeNode(nodeForWorkflow);
-        log.info("sendRequest: requested to remove {} on orchestrator {}:{}",
+        log.info("sendRequest: requested to remove {} on {}:{}",
                 nodeForWorkflow, managementClient.getRouter().getHost(),
                 managementClient.getRouter().getPort());
         return resp.getWorkflowId();

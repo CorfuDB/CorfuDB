@@ -220,8 +220,8 @@ public class SequencerServer extends AbstractServer {
                 (!request.getPayload().getPayloadCase()
                         .equals(PayloadCase.BOOTSTRAP_SEQUENCER_REQUEST))) {
 
-            log.warn("Rejecting msg at sequencer : sequencerStateEpoch:{}, serverEpoch:{}, "
-                    + "header:{}", sequencerEpoch, serverContext.getServerEpoch(),
+            log.warn("isServerReadyToHandleMsg: sequencer epoch:{} != serverEpoch:{}, "
+                    + "{}", sequencerEpoch, serverContext.getServerEpoch(),
                     TextFormat.shortDebugString(request.getHeader()));
             return false;
         }
@@ -265,13 +265,13 @@ public class SequencerServer extends AbstractServer {
         // sure this sequencer is always the primary sequencer after this epoch.
         long txSnapshotEpoch = txSnapshotTimestamp.getEpoch();
         if (!isEpochInRange(txSnapshotEpoch)) {
-            log.debug("ABORT[{}] snapshot-ts[{}] current epoch[{}] lower bound[{}]",
+            log.debug("ABORT[{}] ts[{}] epoch[{}] lower bound[{}]",
                     txInfo, txSnapshotTimestamp, sequencerEpoch, epochRangeLowerBound);
             return new TxResolutionResponse(TokenType.TX_ABORT_NEWSEQ);
         }
 
         if (txSnapshotTimestamp.getSequence() < trimMark) {
-            log.debug("ABORT[{}] snapshot-ts[{}] trimMark-ts[{}]",
+            log.debug("ABORT[{}] ts[{}] trimMark-ts[{}]",
                     txInfo, txSnapshotTimestamp, trimMark);
             return new TxResolutionResponse(TokenType.TX_ABORT_SEQ_TRIM);
         }
@@ -286,7 +286,7 @@ public class SequencerServer extends AbstractServer {
                 UUID streamId = conflictStream.getKey();
                 Long sequence = streamTailToGlobalTailMap.get(streamId);
                 if (sequence != null && sequence > txSnapshotTimestamp.getSequence()) {
-                    log.debug("ABORT[{}] conflict-stream[{}](ts={})",
+                    log.debug("ABORT[{}] conflict-id[{}](ts={})",
                             txInfo, Utils.toReadableId(streamId), sequence);
                     return new TxResolutionResponse(TokenType.TX_ABORT_CONFLICT);
                 }
@@ -322,7 +322,7 @@ public class SequencerServer extends AbstractServer {
                 // a NEW_SEQUENCER (not able to hold these in its cache).
                 long maxConflictNewSequencer = cache.getMaxConflictNewSequencer();
                 if (txSnapshotTimestamp.getSequence() < maxConflictNewSequencer) {
-                    log.debug("ABORT[{}] snapshot-ts[{}] WILDCARD New Sequencer ts=[{}]",
+                    log.debug("ABORT[{}] ts[{}] WILDCARD New Sequencer ts=[{}]",
                             txInfo, txSnapshotTimestamp, maxConflictNewSequencer);
                     return new TxResolutionResponse(TokenType.TX_ABORT_NEWSEQ);
                 }
@@ -332,7 +332,7 @@ public class SequencerServer extends AbstractServer {
                 // abort as SEQUENCER_OVERFLOW
                 long maxConflictWildcard = cache.getMaxConflictWildcard();
                 if (txSnapshotTimestamp.getSequence() < maxConflictWildcard) {
-                    log.debug("ABORT[{}] snapshot-ts[{}] WILDCARD ts=[{}]",
+                    log.debug("ABORT[{}] ts[{}] WILDCARD ts=[{}]",
                             txInfo, txSnapshotTimestamp, maxConflictWildcard);
                     return new TxResolutionResponse(TokenType.TX_ABORT_SEQ_OVERFLOW);
                 }
@@ -408,7 +408,7 @@ public class SequencerServer extends AbstractServer {
             }
         }
 
-        log.debug("trimCache: global trim {}, streamsAddressSpace {}", trimMark, streamsAddressMap);
+        log.debug("trimCache: global trim {}, address space {}", trimMark, streamsAddressMap);
 
         HeaderMsg responseHeader = getHeaderMsg(req.getHeader(),
                 ClusterIdCheck.CHECK, EpochCheck.IGNORE);
