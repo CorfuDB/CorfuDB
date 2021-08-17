@@ -366,7 +366,7 @@ public class LogUnitClient extends AbstractClient {
      * @param streamID The stream backing the Remote Corfu Table.
      * @return A completable future which returns the results of reads for all keys in the table
      */
-    public CompletableFuture<List<RemoteCorfuTableEntry>> multiGetRemoteCorfuTable(
+    public CompletableFuture<EntriesResponse> multiGetRemoteCorfuTable(
             @NonNull List<RemoteCorfuTableVersionedKey> keys, @NonNull UUID streamID) {
         return sendRequestWithFuture(getMultiGetRequestMsg(keys, streamID), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }

@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.collect.ImmutableMultiset;
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.ByteString;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableEntry;
@@ -17,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 public class RemoteCorfuTableViewTest extends AbstractViewTest {
 
@@ -37,6 +39,39 @@ public class RemoteCorfuTableViewTest extends AbstractViewTest {
         dbHandler.update(dummyKey, dummyValue, tableUUID);
         ByteString readValue = r.getRemoteCorfuTableView().get(dummyKey, tableUUID);
         assertEquals(dummyValue, readValue);
+    }
+
+    @Test
+    public void canReadMultipleEntries() throws RocksDBException {
+        CorfuRuntime r = getDefaultRuntime();
+        DatabaseHandler dbHandler = getLogUnit(0).getDatabaseHandler();
+        CorfuTable<Integer, Integer> dummyTable = r.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {})
+                .setStreamName("dummy")
+                .open();
+        dummyTable.put(1,2);
+        UUID tableUUID = dummyTable.getCorfuStreamID();
+        long timestamp = r.getSequencerView().query(tableUUID);
+        List<RemoteCorfuTableEntry> entries = new ArrayList<>(5);
+        List<RemoteCorfuTableEntry> evenEntries = new ArrayList<>(3);
+        for (int i = 0; i < 5; i++) {
+            RemoteCorfuTableEntry newEntry = new RemoteCorfuTableEntry(
+                    new RemoteCorfuTableVersionedKey(ByteString.copyFrom("key" + i, StandardCharsets.UTF_8),
+                            timestamp),
+                    ByteString.copyFrom("val" + i, StandardCharsets.UTF_8));
+            entries.add(newEntry);
+            if (i % 2 == 0) {
+                evenEntries.add(newEntry);
+            }
+        }
+        dbHandler.addTable(tableUUID);
+        dbHandler.updateAll(entries, tableUUID);
+        List<RemoteCorfuTableVersionedKey> evenKeys = evenEntries.stream().map(RemoteCorfuTableEntry::getKey)
+                .collect(Collectors.toList());
+        List<RemoteCorfuTableEntry> readEntries = r.getRemoteCorfuTableView().multiGet(evenKeys, tableUUID);
+        ImmutableMultiset<RemoteCorfuTableEntry> expectedSet = ImmutableMultiset.copyOf(evenEntries);
+        ImmutableMultiset<RemoteCorfuTableEntry> readSet = ImmutableMultiset.copyOf(readEntries);
+        assertEquals(expectedSet, readSet);
     }
 
     @Test
