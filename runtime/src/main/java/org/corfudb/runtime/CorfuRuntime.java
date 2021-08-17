@@ -34,6 +34,7 @@ import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.remotecorfutable.RemoteCorfuTableView;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.NodeLocator;
@@ -686,6 +687,9 @@ public class CorfuRuntime {
      */
     @Getter(lazy = true)
     private final ManagementView managementView = new ManagementView(this);
+
+    @Getter(lazy = true)
+    private final RemoteCorfuTableView remoteCorfuTableView = new RemoteCorfuTableView(this);
 
     /**
      * CorfuStore's table registry cache for Table lifecycle management.
