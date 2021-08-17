@@ -10,8 +10,8 @@ import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
 import org.corfudb.infrastructure.IServerRouter;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getContainsResponseMsg;
+import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getEntriesResponseMsg;
 import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getGetResponseMsg;
-import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getScanResponseMsg;
 import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getSizeResponseMsg;
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getRemoteCorfuTableError;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
@@ -21,6 +21,7 @@ import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableContainsKeyRequestMsg;
 import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableContainsValueRequestMsg;
 import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableGetRequestMsg;
+import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableMultiGetRequestMsg;
 import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableRequestMsg;
 import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableScanRequestMsg;
 import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableSizeRequestMsg;
@@ -29,6 +30,7 @@ import javax.annotation.Nonnull;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 @Slf4j
 public class RemoteCorfuTableRequestHandler {
@@ -57,8 +59,11 @@ public class RemoteCorfuTableRequestHandler {
             case SIZE:
                 handleSize(req, ctx, r);
                 break;
+            case MULTIGET:
+                handleMultiGet(req, ctx, r);
+                break;
             default:
-                log.error("handle[{}]: Unknown orchestrator request type {}",
+                log.error("handle[{}]: Unknown Remote Corfu Table request type {}",
                         req.getHeader().getRequestId(), msg.getPayloadCase());
                 break;
         }
@@ -130,7 +135,7 @@ public class RemoteCorfuTableRequestHandler {
         }
         scanFuture.thenAccept(scannedEntries -> {
             ResponseMsg responseMsg = getResponseMsg(getHeaderMsg(req.getHeader()),
-                    getScanResponseMsg(scannedEntries));
+                    getEntriesResponseMsg(scannedEntries));
             r.sendResponse(responseMsg, ctx);
         }).exceptionally(ex -> {
             handleException(ex, ctx, req, r);
@@ -145,6 +150,20 @@ public class RemoteCorfuTableRequestHandler {
                 getRequestMsg.getVersionedKey());
         databaseHandler.getAsync(key, streamID).thenAccept(payloadValue -> {
             ResponseMsg responseMsg = getResponseMsg(getHeaderMsg(req.getHeader()), getGetResponseMsg(payloadValue));
+            r.sendResponse(responseMsg, ctx);
+        }).exceptionally(ex -> {
+            handleException(ex, ctx, req, r);
+            return null;
+        });
+    }
+
+    private void handleMultiGet(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        RemoteCorfuTableMultiGetRequestMsg multiGetRequestMsg = req.getPayload().getRemoteCorfuTableRequest().getMultiget();
+        List<RemoteCorfuTableVersionedKey> keys = multiGetRequestMsg.getVersionedKeysList()
+                .stream().map(RemoteCorfuTableVersionedKey::new).collect(Collectors.toList());
+        UUID streamId = getUUID(multiGetRequestMsg.getStreamID());
+        databaseHandler.multiGetAsync(keys, streamId).thenAccept(payloadEntries -> {
+            ResponseMsg responseMsg = getResponseMsg(getHeaderMsg(req.getHeader()), getEntriesResponseMsg(payloadEntries));
             r.sendResponse(responseMsg, ctx);
         }).exceptionally(ex -> {
             handleException(ex, ctx, req, r);

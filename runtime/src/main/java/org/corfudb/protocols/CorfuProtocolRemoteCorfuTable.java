@@ -9,10 +9,12 @@ import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import org.corfudb.protocols.wireprotocol.remotecorfutable.ContainsResponse;
 import org.corfudb.protocols.wireprotocol.remotecorfutable.GetResponse;
-import org.corfudb.protocols.wireprotocol.remotecorfutable.ScanResponse;
+import org.corfudb.protocols.wireprotocol.remotecorfutable.EntriesResponse;
 import org.corfudb.protocols.wireprotocol.remotecorfutable.SizeResponse;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
+import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableMultiGetRequestMsg;
+import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableEntriesResponseMsg;
 import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableEntryMsg;
 import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableResponseMsg;
 import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableContainsKeyRequestMsg;
@@ -21,7 +23,6 @@ import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableGetReq
 import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableGetResponseMsg;
 import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableContainsValueRequestMsg;
 import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableScanRequestMsg;
-import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableScanResponseMsg;
 import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableSizeRequestMsg;
 import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableSizeResponseMsg;
 import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableRequestMsg;
@@ -123,21 +124,36 @@ public class CorfuProtocolRemoteCorfuTable {
     }
 
     /**
-     * Returns a REMOTE CORFU TABLE response message containing a RemoteCorfuTableScanResponseMsg
+     * Returns a REMOTE CORFU TABLE response message containing a RemoteCorfuTableEntriesResponseMsg
      * that can be sent by the server. Used to return scanned values to the client from the server.
      * @param entriesScanned List of all entries found from the requested scan.
-     * @return SCAN response payload message to send to the client.
+     * @return ENTRIES response payload message to send to the client.
      */
-    public static ResponsePayloadMsg getScanResponseMsg(List<RemoteCorfuTableEntry> entriesScanned) {
+    public static ResponsePayloadMsg getEntriesResponseMsg(List<RemoteCorfuTableEntry> entriesScanned) {
         return ResponsePayloadMsg.newBuilder()
                 .setRemoteCorfuTableResponse(RemoteCorfuTableResponseMsg.newBuilder()
-                        .setScanResponse(RemoteCorfuTableScanResponseMsg.newBuilder()
+                        .setEntriesResponse(RemoteCorfuTableEntriesResponseMsg.newBuilder()
                                 .addAllEntries(entriesScanned
                                         .stream()
                                         .map(CorfuProtocolRemoteCorfuTable::getEntryMsg)
                                         .collect(Collectors.toList()))
                                 .build())
                         .build())
+                .build();
+    }
+
+    public static RequestPayloadMsg getMultiGetRequestMsg(@NonNull List<RemoteCorfuTableVersionedKey> keys,
+                                                          @NonNull UUID streamId) {
+        return RequestPayloadMsg.newBuilder()
+                .setRemoteCorfuTableRequest(RemoteCorfuTableRequestMsg.newBuilder()
+                    .setMultiget(RemoteCorfuTableMultiGetRequestMsg.newBuilder()
+                            .addAllVersionedKeys(keys
+                                    .stream()
+                                    .map(RemoteCorfuTableVersionedKey::getEncodedVersionedKey)
+                                    .collect(Collectors.toList()))
+                            .setStreamID(getUuidMsg(streamId))
+                            .build())
+                    .build())
                 .build();
     }
 
@@ -271,12 +287,12 @@ public class CorfuProtocolRemoteCorfuTable {
     }
 
     /**
-     * Creates a ScanResponse data object from its protobuf representation
-     * @param msg Scan Response Protobuf entry
-     * @return ScanResponse object from protobuf
+     * Creates a EntriesResponse data object from its protobuf representation
+     * @param msg Entries Response Protobuf entry
+     * @return EntriesResponse object from protobuf
      */
-    public static ScanResponse getScanResponse(RemoteCorfuTableScanResponseMsg msg) {
-        return new ScanResponse(msg.getEntriesList().stream()
+    public static EntriesResponse getEntriesResponse(RemoteCorfuTableEntriesResponseMsg msg) {
+        return new EntriesResponse(msg.getEntriesList().stream()
                 .map(CorfuProtocolRemoteCorfuTable::getEntryFromMsg).collect(Collectors.toList()));
     }
 

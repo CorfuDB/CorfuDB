@@ -11,7 +11,7 @@ import java.util.List;
  * Created by nvaishampayan517 on 08/12/21
  */
 @Data
-public class ScanResponse implements Response {
+public class EntriesResponse implements Response {
     private final List<RemoteCorfuTableEntry> entries;
 
     @Override
