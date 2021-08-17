@@ -1,8 +1,10 @@
 package org.corfudb.generator.operations;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.generator.Correctness;
-import org.corfudb.generator.State;
+import org.corfudb.generator.correctness.Correctness;
+import org.corfudb.generator.distributions.Keys;
+import org.corfudb.generator.state.State;
+import org.corfudb.generator.state.TxState;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Address;
@@ -16,13 +18,13 @@ import java.util.List;
 public class OptimisticTxOperation extends Operation {
 
     public OptimisticTxOperation(State state) {
-        super(state, "TxOpt");
+        super(state, Type.TX_OPTIMISTIC);
     }
 
     @Override
     public void execute() {
         try {
-            Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_START);
+            correctness.recordTransactionMarkers(opType, TxState.TxStatus.START, false);
             long timestamp;
             state.startOptimisticTx();
 
@@ -41,8 +43,7 @@ public class OptimisticTxOperation extends Operation {
 
             timestamp = state.stopTx();
 
-            Correctness.recordTransactionMarkers(true, shortName, Correctness.TX_END,
-                    Long.toString(timestamp));
+            correctness.recordTransactionMarkers(opType, TxState.TxStatus.END, Keys.Version.build(timestamp), true);
 
             if (Address.isAddress(timestamp)) {
                 state.getCtx().updateLastSuccessfulWriteOperationTimestamp();
@@ -54,7 +55,7 @@ public class OptimisticTxOperation extends Operation {
             if (tae.getAbortCause() == AbortCause.CONFLICT) {
                 state.getCtx().updateLastSuccessfulWriteOperationTimestamp();
             }
-            Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_ABORTED);
+            correctness.recordTransactionMarkers(opType, TxState.TxStatus.ABORTED,  false);
         }
     }
 }

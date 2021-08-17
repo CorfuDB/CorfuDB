@@ -2,6 +2,7 @@ package org.corfudb.generator;
 
 import org.corfudb.generator.operations.CheckpointOperation;
 import org.corfudb.generator.operations.Operation;
+import org.corfudb.generator.state.State;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.List;

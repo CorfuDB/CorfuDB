@@ -1,8 +1,10 @@
 package org.corfudb.generator.operations;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.generator.Correctness;
-import org.corfudb.generator.State;
+import org.corfudb.generator.correctness.Correctness;
+import org.corfudb.generator.distributions.Keys;
+import org.corfudb.generator.state.State;
+import org.corfudb.generator.state.TxState;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 
 import java.util.List;
@@ -16,12 +18,12 @@ public class NestedTxOperation extends Operation {
     private static final int MAX_NEST = 20;
 
     public NestedTxOperation(State state) {
-        super(state, "TxNest");
+        super(state, Type.TX_NESTED);
     }
 
     @Override
     public void execute() {
-        Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_START);
+        correctness.recordTransactionMarkers(opType, TxState.TxStatus.START, false);
         state.startOptimisticTx();
 
         int numNested = state.getOperationCount().sample();
@@ -53,10 +55,9 @@ public class NestedTxOperation extends Operation {
         long timestamp;
         try {
             timestamp = state.stopTx();
-            Correctness.recordTransactionMarkers(true, shortName, Correctness.TX_END,
-                    Long.toString(timestamp));
+            correctness.recordTransactionMarkers(opType, TxState.TxStatus.END, Keys.Version.build(timestamp), true);
         } catch (TransactionAbortedException tae) {
-            Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_ABORTED);
+            correctness.recordTransactionMarkers(opType, TxState.TxStatus.ABORTED, false);
         }
     }
 }

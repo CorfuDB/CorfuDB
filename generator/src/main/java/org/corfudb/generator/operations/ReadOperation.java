@@ -1,12 +1,15 @@
 package org.corfudb.generator.operations;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.generator.Correctness;
-import org.corfudb.generator.State;
+import org.corfudb.generator.distributions.Keys;
+import org.corfudb.generator.distributions.Keys.KeyId;
+import org.corfudb.generator.distributions.Streams.StreamId;
+import org.corfudb.generator.state.State;
 import org.corfudb.generator.util.StringIndexer;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+
+import java.util.Optional;
 
 /**
  * Created by maithem on 7/14/17.
@@ -15,20 +18,24 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 public class ReadOperation extends Operation {
 
     public ReadOperation(State state) {
-        super(state, "Read");
+        super(state, Type.READ);
     }
 
     @Override
     public void execute() {
-        String streamId = state.getStreams().sample();
-        String key = state.getKeys().sample();
-        String val = state.getMap(CorfuRuntime.getStreamID(streamId)).get(key);
+        StreamId streamId = state.getStreams().sample();
+        KeyId key = state.getKeys().sample();
+        String val = state.getMap(streamId.getStreamId()).get(key.getKey());
 
-        String correctnessRecord = String.format("%s, %s:%s=%s", shortName, streamId, key, val);
-        Correctness.recordOperation(correctnessRecord, TransactionalContext.isInTransaction());
+        OperationLogMessage logMessage = Context.builder()
+                .fqKey(new Keys.FullyQualifiedKey(key, streamId))
+                .val(Optional.of(val))
+                .build()
+                .getCorrectnessRecord(opType);
+        correctness.recordOperation(logMessage);
 
         // Accessing secondary objects
-        CorfuTable<String, String> corfuMap = state.getMap((CorfuRuntime.getStreamID(streamId)));
+        CorfuTable<String, String> corfuMap = state.getMap(streamId.getStreamId());
 
         corfuMap.getByIndex(StringIndexer.BY_FIRST_CHAR, "a");
         corfuMap.getByIndex(StringIndexer.BY_VALUE, val);

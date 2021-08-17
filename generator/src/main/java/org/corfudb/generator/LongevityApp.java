@@ -1,12 +1,17 @@
 package org.corfudb.generator;
 
+import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.generator.correctness.Correctness;
+import org.corfudb.generator.correctness.Correctness.OperationTxType;
 import org.corfudb.generator.operations.CheckpointOperation;
 import org.corfudb.generator.operations.Operation;
+import org.corfudb.generator.state.State;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 
+import java.time.Duration;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -24,7 +29,7 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 public class LongevityApp {
-    private final long durationMs;
+
     private final boolean checkPoint;
     private  final BlockingQueue<Operation> operationQueue;
     private final CorfuRuntime rt;
@@ -34,21 +39,25 @@ public class LongevityApp {
     private final ScheduledExecutorService checkpointer;
     private final ExecutorService workers;
 
+    private final Correctness correctness;
+
     // How much time we live the application hangs once the duration is finished
     // and the application is hanged
-    public static final int APPLICATION_TIMEOUT_IN_MS = 10000;
-    public static final long TIME_TO_WAIT_FOR_RUNTIME_TO_CONNECT = 60000;
+    public static final Duration APPLICATION_TIMEOUT = Duration.ofSeconds(10);
+    public static final Duration TIME_TO_WAIT_FOR_RUNTIME_TO_CONNECT = Duration.ofMinutes(1);
 
     private static final int QUEUE_CAPACITY = 1000;
 
     private long startTime;
+    private final Duration duration;
+
     private final int numberThreads;
 
-
-    public LongevityApp(long durationMs, int numberThreads, String configurationString, boolean checkPoint) {
-        this.durationMs = durationMs;
+    public LongevityApp(Duration duration, int numberThreads, String configurationString, boolean checkPoint) {
+        this.duration = duration;
         this.checkPoint = checkPoint;
         this.numberThreads = numberThreads;
+        this.correctness = new Correctness();
 
         operationQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
 
@@ -83,12 +92,12 @@ public class LongevityApp {
     private void waitForAppToFinish() {
         workers.shutdown();
         try {
-            boolean finishedInTime = workers.
-                    awaitTermination(durationMs + APPLICATION_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS);
+            long timeout = duration.plus(APPLICATION_TIMEOUT).toMillis();
+            boolean finishedInTime = workers.awaitTermination(timeout, TimeUnit.MILLISECONDS);
 
-            String livenessState = state.getCtx().livenessSuccess(finishedInTime) ? "Success" : "Fail";
+            boolean livenessState = state.getCtx().livenessSuccess(finishedInTime);
 
-            Correctness.recordOperation("Liveness, " + livenessState, false);
+            correctness.recordOperation(LivenessLogMessage.fromBool(livenessState), OperationTxType.NON_TX);
             if (!finishedInTime) {
                 System.exit(1);
             }
@@ -101,7 +110,8 @@ public class LongevityApp {
             boolean checkpointHasFinished = false;
             int exitStatus;
             try {
-                checkpointHasFinished = checkpointer.awaitTermination(APPLICATION_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS);
+                long timeout = APPLICATION_TIMEOUT.toMillis();
+                checkpointHasFinished = checkpointer.awaitTermination(timeout, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
                 throw new UnrecoverableCorfuInterruptedError(e);
             }
@@ -117,7 +127,7 @@ public class LongevityApp {
      * @return If we are still within the duration limit
      */
     private boolean withinDurationLimit() {
-        return System.currentTimeMillis() - startTime < durationMs;
+        return System.currentTimeMillis() - startTime < duration.toMillis();
     }
 
     /**
@@ -182,14 +192,14 @@ public class LongevityApp {
      * Try to connect the runtime and throws a SystemUnavailableError if cannot connect
      * within the timeout.
      *
-     * @param timeoutInMs timeout
+     * @param timeout timeout
      * @throws SystemUnavailableError error
      */
-    private void tryToConnectTimeout(long timeoutInMs) throws SystemUnavailableError {
+    private void tryToConnectTimeout(Duration timeout) throws SystemUnavailableError {
         try {
-            CompletableFuture.supplyAsync(rt::connect).get(timeoutInMs, TimeUnit.MILLISECONDS);
+            CompletableFuture.supplyAsync(rt::connect).get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (Exception e) {
-            Correctness.recordOperation("Liveness, " + false, false);
+            correctness.recordOperation(LivenessLogMessage.FAIL, OperationTxType.NON_TX);
             throw new SystemUnavailableError(e.getMessage());
         }
     }
@@ -206,5 +216,22 @@ public class LongevityApp {
         runTaskConsumers();
 
         waitForAppToFinish();
+    }
+
+    @AllArgsConstructor
+    private static class LivenessLogMessage implements Correctness.LogMessage {
+        private final boolean result;
+
+        public static final LivenessLogMessage OK = new LivenessLogMessage(true);
+        public static final LivenessLogMessage FAIL = new LivenessLogMessage(false);
+
+        public static LivenessLogMessage fromBool(boolean livenessState) {
+            return livenessState ? OK : FAIL;
+        }
+
+        @Override
+        public String getMessage() {
+            return String.format("Liveness, %s", result ? "Success" : "Fail");
+        }
     }
 }

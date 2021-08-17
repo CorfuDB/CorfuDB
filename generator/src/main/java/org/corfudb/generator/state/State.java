@@ -1,4 +1,4 @@
-package org.corfudb.generator;
+package org.corfudb.generator.state;
 
 import com.google.common.reflect.TypeToken;
 import lombok.Getter;
@@ -6,19 +6,21 @@ import org.corfudb.generator.distributions.Keys;
 import org.corfudb.generator.distributions.OperationCount;
 import org.corfudb.generator.distributions.Operations;
 import org.corfudb.generator.distributions.Streams;
+import org.corfudb.generator.distributions.Streams.StreamId;
 import org.corfudb.generator.util.StringIndexer;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.object.transactions.TransactionType;
 
+import java.time.Duration;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 
-import static org.corfudb.generator.LongevityApp.APPLICATION_TIMEOUT_IN_MS;
+import static org.corfudb.generator.LongevityApp.APPLICATION_TIMEOUT;
 
 /**
  * This object keeps state information of the different data distributions and runtime client.
@@ -75,8 +77,8 @@ public class State {
     }
 
     private void openObjects() {
-        for (String id : streams.getDataSet()) {
-            UUID uuid = CorfuRuntime.getStreamID(id);
+        for (StreamId id : streams.getDataSet()) {
+            UUID uuid = id.getStreamId();
             CorfuTable<String, String> map = runtime.getObjectsView()
                     .build()
                     .setStreamID(uuid)
@@ -157,13 +159,14 @@ public class State {
                 return false;
             }
 
-            long timeSinceSuccessfulReadOperation = System.currentTimeMillis()
-                    - lastSuccessfulReadOperationTimestamp;
-            long timeSinceSuccessfulWriteOperation = System.currentTimeMillis()
-                    - lastSuccessfulWriteOperationTimestamp;
+            long currentTime = System.currentTimeMillis();
 
-            return (timeSinceSuccessfulReadOperation < APPLICATION_TIMEOUT_IN_MS
-                    && timeSinceSuccessfulWriteOperation < APPLICATION_TIMEOUT_IN_MS);
+            Duration readOpDuration = Duration.ofMillis(currentTime - lastSuccessfulReadOperationTimestamp);
+            Duration writeOpDuration = Duration.ofMillis(currentTime - lastSuccessfulWriteOperationTimestamp);
+
+            long appTimeout = APPLICATION_TIMEOUT.toMillis();
+
+            return readOpDuration.toMillis() < appTimeout && writeOpDuration.toMillis() < appTimeout;
         }
     }
 
