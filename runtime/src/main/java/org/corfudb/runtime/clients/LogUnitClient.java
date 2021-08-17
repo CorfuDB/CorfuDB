@@ -4,10 +4,12 @@ import com.google.protobuf.ByteString;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.NonNull;
+import org.corfudb.common.remotecorfutable.RemoteCorfuTableEntry;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
 import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getContainsKeyRequestMsg;
 import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getContainsValueRequestMsg;
 import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getGetRequestMsg;
+import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getMultiGetRequestMsg;
 import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getScanRequestMsg;
 import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getSizeRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getCommittedTailRequestMsg;
@@ -37,7 +39,7 @@ import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.remotecorfutable.ContainsResponse;
 import org.corfudb.protocols.wireprotocol.remotecorfutable.GetResponse;
-import org.corfudb.protocols.wireprotocol.remotecorfutable.ScanResponse;
+import org.corfudb.protocols.wireprotocol.remotecorfutable.EntriesResponse;
 import org.corfudb.protocols.wireprotocol.remotecorfutable.SizeResponse;
 import org.corfudb.runtime.proto.service.LogUnit.TailRequestMsg.Type;
 import org.corfudb.util.serializer.Serializers;
@@ -275,7 +277,7 @@ public class LogUnitClient extends AbstractClient {
      * @param timestamp The timestamp of the request.
      * @return a completable future which returns the list of scanned table entries.
      */
-    public CompletableFuture<ScanResponse> scanRemoteCorfuTable(@NonNull UUID streamID, long timestamp) {
+    public CompletableFuture<EntriesResponse> scanRemoteCorfuTable(@NonNull UUID streamID, long timestamp) {
         return scanRemoteCorfuTable(0, streamID, timestamp);
     }
 
@@ -286,8 +288,8 @@ public class LogUnitClient extends AbstractClient {
      * @param timestamp The timestamp of the request.
      * @return a completable future which returns the list of scanned table entries.
      */
-    public CompletableFuture<ScanResponse> scanRemoteCorfuTable(@Nonnegative int scanSize, @NonNull UUID streamId,
-                                                                long timestamp) {
+    public CompletableFuture<EntriesResponse> scanRemoteCorfuTable(@Nonnegative int scanSize, @NonNull UUID streamId,
+                                                                   long timestamp) {
         return sendRequestWithFuture(getScanRequestMsg(scanSize, streamId, timestamp),
                 ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
@@ -300,8 +302,8 @@ public class LogUnitClient extends AbstractClient {
      * @param timestamp The timestamp of the request.
      * @return a completable future which returns the list of scanned table entries.
      */
-    public CompletableFuture<ScanResponse> scanRemoteCorfuTable(@NonNull RemoteCorfuTableVersionedKey startPoint,
-                                                                @NonNull UUID streamID, long timestamp) {
+    public CompletableFuture<EntriesResponse> scanRemoteCorfuTable(@NonNull RemoteCorfuTableVersionedKey startPoint,
+                                                                   @NonNull UUID streamID, long timestamp) {
         return scanRemoteCorfuTable(startPoint, 0, streamID, timestamp);
     }
 
@@ -313,9 +315,9 @@ public class LogUnitClient extends AbstractClient {
      * @param timestamp The timestamp of the request.
      * @return a completable future which returns the list of scanned table entries.
      */
-    public CompletableFuture<ScanResponse> scanRemoteCorfuTable(@NonNull RemoteCorfuTableVersionedKey startPoint,
-                                                                @Nonnegative int scanSize, @NonNull UUID streamId,
-                                                                long timestamp) {
+    public CompletableFuture<EntriesResponse> scanRemoteCorfuTable(@NonNull RemoteCorfuTableVersionedKey startPoint,
+                                                                   @Nonnegative int scanSize, @NonNull UUID streamId,
+                                                                   long timestamp) {
         return sendRequestWithFuture(getScanRequestMsg(startPoint, scanSize, streamId, timestamp),
                 ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
@@ -356,6 +358,17 @@ public class LogUnitClient extends AbstractClient {
     public CompletableFuture<SizeResponse> sizeRemoteCorfuTable(@NonNull UUID streamID, long timestamp, int scanSize) {
         return sendRequestWithFuture(getSizeRequestMsg(streamID, timestamp, scanSize), ClusterIdCheck.CHECK,
                 EpochCheck.CHECK);
+    }
+
+    /**
+     * Send a multi-key get request to specified Remote Corfu Table.
+     * @param keys The list of keys to read.
+     * @param streamID The stream backing the Remote Corfu Table.
+     * @return A completable future which returns the results of reads for all keys in the table
+     */
+    public CompletableFuture<EntriesResponse> multiGetRemoteCorfuTable(
+            @NonNull List<RemoteCorfuTableVersionedKey> keys, @NonNull UUID streamID) {
+        return sendRequestWithFuture(getMultiGetRequestMsg(keys, streamID), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
 }

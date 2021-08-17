@@ -23,6 +23,9 @@ import java.util.function.Supplier;
  * Created by nvaishampayan517 on 08/16/21
  */
 public class RemoteCorfuTableView extends AbstractView {
+
+    public static final String STREAM_ID_TAG = "streamId";
+
     /**
      * Constructs a RemoteCorfuTableView object.
      * @param runtime Runtime associated with the view.
@@ -40,7 +43,15 @@ public class RemoteCorfuTableView extends AbstractView {
                 layoutHelper(e ->
                         CFUtils.getUninterruptibly(getNodeWithCorrectStripe(e,streamId)
                                 .getRemoteCorfuTableValue(key, streamId)).getValue());
-        return MicroMeterUtils.time(getSupplier, "remotecorfutable.get", "streamId", streamId.toString());
+        return MicroMeterUtils.time(getSupplier, "remotecorfutable.get", STREAM_ID_TAG, streamId.toString());
+    }
+
+    public List<RemoteCorfuTableEntry> multiGet(@NonNull List<RemoteCorfuTableVersionedKey> keys, @NonNull UUID streamId) {
+        Supplier<List<RemoteCorfuTableEntry>> multiGetSupplier = () ->
+                layoutHelper(e ->
+                        CFUtils.getUninterruptibly(getNodeWithCorrectStripe(e, streamId)
+                                .multiGetRemoteCorfuTable(keys, streamId)).getEntries());
+        return MicroMeterUtils.time(multiGetSupplier, "remotecorfutable.multiget", STREAM_ID_TAG, streamId.toString());
     }
 
     /**
@@ -54,7 +65,7 @@ public class RemoteCorfuTableView extends AbstractView {
                 layoutHelper(e ->
                         CFUtils.getUninterruptibly(getNodeWithCorrectStripe(e, streamId)
                                 .scanRemoteCorfuTable(streamId,timestamp)).getEntries());
-        return MicroMeterUtils.time(scanSupplier, "remotecorfutable.scan", "streamId", streamId.toString(),
+        return MicroMeterUtils.time(scanSupplier, "remotecorfutable.scan", STREAM_ID_TAG, streamId.toString(),
                 "type", "start-defaultsize");
     }
 
@@ -70,7 +81,7 @@ public class RemoteCorfuTableView extends AbstractView {
                 layoutHelper(e ->
                         CFUtils.getUninterruptibly(getNodeWithCorrectStripe(e, streamId)
                                 .scanRemoteCorfuTable(scanSize,streamId,timestamp)).getEntries());
-        return MicroMeterUtils.time(scanSupplier, "remotecorfutable.scan", "streamId", streamId.toString(),
+        return MicroMeterUtils.time(scanSupplier, "remotecorfutable.scan", STREAM_ID_TAG, streamId.toString(),
                 "type", "start-customsize");
     }
 
@@ -88,7 +99,7 @@ public class RemoteCorfuTableView extends AbstractView {
                 layoutHelper(e ->
                         CFUtils.getUninterruptibly(getNodeWithCorrectStripe(e, streamId)
                                 .scanRemoteCorfuTable(startPoint,streamId,timestamp)).getEntries());
-        return MicroMeterUtils.time(scanSupplier, "remotecorfutable.scan", "streamId", streamId.toString(),
+        return MicroMeterUtils.time(scanSupplier, "remotecorfutable.scan", STREAM_ID_TAG, streamId.toString(),
                 "type", "continuation-defaultsize");
     }
 
@@ -106,7 +117,7 @@ public class RemoteCorfuTableView extends AbstractView {
                 layoutHelper(e ->
                         CFUtils.getUninterruptibly(getNodeWithCorrectStripe(e, streamId)
                                 .scanRemoteCorfuTable(startPoint, scanSize, streamId, timestamp)).getEntries());
-        return MicroMeterUtils.time(scanSupplier, "remotecorfutable.scan", "streamId", streamId.toString(),
+        return MicroMeterUtils.time(scanSupplier, "remotecorfutable.scan", STREAM_ID_TAG, streamId.toString(),
                 "type", "continuation-customsize");
     }
 
@@ -121,7 +132,7 @@ public class RemoteCorfuTableView extends AbstractView {
                 layoutHelper(e ->
                         CFUtils.getUninterruptibly(getNodeWithCorrectStripe(e, streamId)
                         .containsKeyRemoteCorfuTable(key, streamId)).isContained());
-        return MicroMeterUtils.time(containsKeySupplier, "remotecorfutable.containskey", "streamId",
+        return MicroMeterUtils.time(containsKeySupplier, "remotecorfutable.containskey", STREAM_ID_TAG,
                 streamId.toString());
     }
 
@@ -138,7 +149,7 @@ public class RemoteCorfuTableView extends AbstractView {
                 layoutHelper(e ->
                         CFUtils.getUninterruptibly(getNodeWithCorrectStripe(e, streamId)
                                 .containsValueRemoteCorfuTable(value, streamId, timestamp, scanSize)).isContained());
-        return MicroMeterUtils.time(containsValueSupplier, "remotecorfutable.containsvalue", "streamId",
+        return MicroMeterUtils.time(containsValueSupplier, "remotecorfutable.containsvalue", STREAM_ID_TAG,
                 streamId.toString());
     }
 
@@ -154,7 +165,7 @@ public class RemoteCorfuTableView extends AbstractView {
                 layoutHelper(e ->
                         CFUtils.getUninterruptibly(getNodeWithCorrectStripe(e, streamId)
                         .sizeRemoteCorfuTable(streamId, timestamp, scanSize)).getSize());
-        return MicroMeterUtils.time(sizeSupplier, "remotecorfutable.size", "streamId",
+        return MicroMeterUtils.time(sizeSupplier, "remotecorfutable.size", STREAM_ID_TAG,
                 streamId.toString());
     }
 
