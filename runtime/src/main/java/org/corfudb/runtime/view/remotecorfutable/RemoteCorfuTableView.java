@@ -5,7 +5,6 @@ import lombok.NonNull;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableEntry;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.view.AbstractView;
@@ -13,13 +12,22 @@ import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.util.CFUtils;
 
 import javax.annotation.Nonnegative;
-import javax.annotation.Nonnull;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
 
+/**
+ * This class contains wrappers around Remote Corfu Table RPCs, and contains the logic for routing these
+ * requests to the correct server nodes.
+ *
+ * Created by nvaishampayan517 on 08/16/21
+ */
 public class RemoteCorfuTableView extends AbstractView {
-    public RemoteCorfuTableView(@Nonnull CorfuRuntime runtime) { super(runtime); }
+    /**
+     * Constructs a RemoteCorfuTableView object.
+     * @param runtime Runtime associated with the view.
+     */
+    public RemoteCorfuTableView(@NonNull CorfuRuntime runtime) { super(runtime); }
 
     /**
      * Returns the value for the specified key from the Remote Corfu Table
