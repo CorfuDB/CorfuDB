@@ -13,7 +13,7 @@
         </encoder>
     </appender>
     <appender name="CORRECTNESS" class="ch.qos.logback.core.FileAppender">
-        <file>${user.home}/org.corfudb.generator.correctness.log</file>
+        <file>${user.home}/correctness.log</file>
         <append>false</append>
         <encoder>
             <pattern>%d{yyyy-MM-dd_HH:mm:ss.SSS}, [%thread], %msg %n</pattern>
