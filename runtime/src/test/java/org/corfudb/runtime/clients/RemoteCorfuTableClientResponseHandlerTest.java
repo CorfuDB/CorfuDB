@@ -8,21 +8,18 @@ import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
 import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getContainsResponseMsg;
+import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getEntriesResponseMsg;
 import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getGetResponseMsg;
-import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getScanResponseMsg;
 import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getSizeResponseMsg;
 import org.corfudb.protocols.service.CorfuProtocolMessage;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 import org.corfudb.protocols.wireprotocol.remotecorfutable.ContainsResponse;
+import org.corfudb.protocols.wireprotocol.remotecorfutable.EntriesResponse;
 import org.corfudb.protocols.wireprotocol.remotecorfutable.GetResponse;
-import org.corfudb.protocols.wireprotocol.remotecorfutable.ScanResponse;
 import org.corfudb.protocols.wireprotocol.remotecorfutable.SizeResponse;
-import org.corfudb.runtime.clients.IClientRouter;
-import org.corfudb.runtime.clients.LogUnitHandler;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import org.junit.Before;
 import org.junit.Rule;
@@ -93,7 +90,7 @@ public class RemoteCorfuTableClientResponseHandlerTest {
     }
 
     @Test
-    public void testHandleScanResponse() {
+    public void testEntriesResponse() {
         List<RemoteCorfuTableEntry> entries = new ArrayList<>(5);
         for (int i = 0; i < 5; i++) {
             entries.add(new RemoteCorfuTableEntry(
@@ -102,14 +99,14 @@ public class RemoteCorfuTableClientResponseHandlerTest {
         }
         CorfuMessage.ResponseMsg getResponseMsg = getResponseMsg(
                 getBasicHeader(CorfuProtocolMessage.ClusterIdCheck.CHECK, CorfuProtocolMessage.EpochCheck.CHECK),
-                getScanResponseMsg(entries));
+                getEntriesResponseMsg(entries));
 
-        ArgumentCaptor<ScanResponse> responseCaptor = ArgumentCaptor.forClass(ScanResponse.class);
+        ArgumentCaptor<EntriesResponse> responseCaptor = ArgumentCaptor.forClass(EntriesResponse.class);
         logUnitHandler.handleMessage(getResponseMsg, mChannelHandlerContext);
 
         //capture response
         verify(mClientRouter).completeRequest(anyLong(), responseCaptor.capture());
-        ScanResponse response = responseCaptor.getValue();
+        EntriesResponse response = responseCaptor.getValue();
         assertEquals(5, response.getEntries().size());
         for (int i = 0; i < 5; i++) {
             assertEquals(entries.get(i), response.getEntries().get(i));

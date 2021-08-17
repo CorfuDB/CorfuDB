@@ -1,34 +1,33 @@
 package org.corfudb.runtime.clients;
 
 import io.netty.channel.ChannelHandlerContext;
-import java.lang.invoke.MethodHandles;
-import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
-import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getContainsResponse;
-import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getGetResponse;
-import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getScanResponse;
-import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getSizeResponse;
-import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
-import org.corfudb.protocols.wireprotocol.ReadResponse;
-import org.corfudb.protocols.wireprotocol.TailsResponse;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
-import org.corfudb.runtime.exceptions.DataCorruptionException;
-import org.corfudb.runtime.exceptions.OverwriteCause;
-import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.TrimmedException;
-import org.corfudb.runtime.proto.service.CorfuMessage;
-import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
-import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
-import org.corfudb.runtime.proto.service.LogUnit.LogAddressSpaceResponseMsg;
-import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg.ErrorCase;
-
 import static org.corfudb.protocols.CorfuProtocolCommon.getStreamsAddressResponse;
+import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getContainsResponse;
+import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getEntriesResponse;
+import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getGetResponse;
+import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getSizeResponse;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getInspectAddressesResponse;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getKnownAddressResponse;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getReadResponse;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getTailsResponse;
+import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
+import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.runtime.exceptions.DataCorruptionException;
+import org.corfudb.runtime.exceptions.OverwriteCause;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg.ErrorCase;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
+import org.corfudb.runtime.proto.service.LogUnit.LogAddressSpaceResponseMsg;
 import org.corfudb.runtime.proto.service.RemoteCorfuTable;
+
+import java.lang.invoke.MethodHandles;
+import java.util.UUID;
 
 
 /**
@@ -250,15 +249,15 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
         switch (rctResponse.getPayloadCase()) {
             case GET_RESPONSE:
                 return getGetResponse(rctResponse.getGetResponse());
-            case SCAN_RESPONSE:
-                return getScanResponse(rctResponse.getScanResponse());
+            case ENTRIES_RESPONSE:
+                return getEntriesResponse(rctResponse.getEntriesResponse());
             case SIZE_RESPONSE:
                 return getSizeResponse(rctResponse.getSizeResponse());
             case CONTAINS_RESPONSE:
                 return getContainsResponse(rctResponse.getContainsResponse());
             default:
                 throw new UnsupportedOperationException("Unsupported RemoteCorfuTable response type: " +
-                        rctResponse.getPayloadCase().toString());
+                        rctResponse.getPayloadCase());
         }
     }
 

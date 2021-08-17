@@ -17,15 +17,20 @@ message RemoteCorfuTableGetResponseMsg {
   bytes payloadValue = 1;
 }
 
+message RemoteCorfuTableMultiGetRequestMsg {
+  UuidMsg streamID = 1;
+  repeated bytes versionedKeys = 2;
+}
+
+message RemoteCorfuTableEntriesResponseMsg {
+  repeated RemoteCorfuTableEntryMsg entries = 1;
+}
+
 message RemoteCorfuTableScanRequestMsg {
   UuidMsg streamID = 1;
   uint32 numEntriesToScan = 2;
   uint64 timestamp = 3;
   bytes versionedStartKey = 4;
-}
-
-message RemoteCorfuTableScanResponseMsg {
-  repeated RemoteCorfuTableEntryMsg entries = 1;
 }
 
 message RemoteCorfuTableContainsKeyRequestMsg {
@@ -67,13 +72,14 @@ message RemoteCorfuTableRequestMsg {
     RemoteCorfuTableContainsKeyRequestMsg contains_key = 3;
     RemoteCorfuTableContainsValueRequestMsg contains_value = 4;
     RemoteCorfuTableSizeRequestMsg size = 5;
+    RemoteCorfuTableMultiGetRequestMsg multiget = 6;
   }
 }
 
 message RemoteCorfuTableResponseMsg {
   oneof payload {
     RemoteCorfuTableGetResponseMsg get_response = 1;
-    RemoteCorfuTableScanResponseMsg scan_response = 2;
+    RemoteCorfuTableEntriesResponseMsg entries_response = 2;
     RemoteCorfuTableContainsResponseMsg contains_response = 3;
     RemoteCorfuTableSizeResponseMsg size_response = 4;
   }
