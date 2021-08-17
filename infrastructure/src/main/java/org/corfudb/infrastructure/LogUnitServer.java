@@ -6,6 +6,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.SystemUtils;
 import org.codehaus.groovy.runtime.WritablePath;
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
@@ -108,6 +109,8 @@ public class LogUnitServer extends AbstractServer {
     /**
      * Handler class for database supporting RemoteCorfuTable requests.
      */
+    @VisibleForTesting
+    @Getter
     private final DatabaseHandler databaseHandler;
 
     /**
@@ -173,7 +176,7 @@ public class LogUnitServer extends AbstractServer {
         logCleaner = serverInitializer.buildStreamLogCompaction(streamLog);
 
         //TODO: replace with appropriate locations and executors or add as options in server context
-        Path remoteCorfuTableDBPath = Paths.get("/var","remoteCorfuTableDatabase");
+        Path remoteCorfuTableDBPath = SystemUtils.getUserHome().toPath();
         Options rocksDBOptions = DatabaseHandler.getDefaultOptions();
         ExecutorService dbExecutor = serverContext.getExecutorService(
                 serverContext.getLogUnitThreadCount(),"RemoteCorfuTable-");
@@ -572,6 +575,7 @@ public class LogUnitServer extends AbstractServer {
         executor.shutdown();
         logCleaner.shutdown();
         batchWriter.close();
+        databaseHandler.close();
     }
 
     @VisibleForTesting
