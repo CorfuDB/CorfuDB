@@ -18,7 +18,6 @@ import org.junit.Test;
 import java.util.Collections;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.fail;
 
@@ -27,6 +26,7 @@ import static org.assertj.core.api.Assertions.fail;
  * <p>
  * Created by mwei on 4/11/17.
  */
+@SuppressWarnings("checkstyle:magicnumber")
 public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTest {
 
     /**
