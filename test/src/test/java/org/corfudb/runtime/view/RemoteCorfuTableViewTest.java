@@ -3,7 +3,7 @@ package org.corfudb.runtime.view;
 import com.google.common.collect.ImmutableMultiset;
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.ByteString;
-import org.corfudb.common.remotecorfutable.RemoteCorfuTableEntry;
+import org.corfudb.common.remotecorfutable.RemoteCorfuTableDatabaseEntry;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
 import org.corfudb.infrastructure.remotecorfutable.DatabaseHandler;
 import org.corfudb.runtime.CorfuRuntime;
@@ -52,10 +52,10 @@ public class RemoteCorfuTableViewTest extends AbstractViewTest {
         dummyTable.put(1,2);
         UUID tableUUID = dummyTable.getCorfuStreamID();
         long timestamp = r.getSequencerView().query(tableUUID);
-        List<RemoteCorfuTableEntry> entries = new ArrayList<>(5);
-        List<RemoteCorfuTableEntry> evenEntries = new ArrayList<>(3);
+        List<RemoteCorfuTableDatabaseEntry> entries = new ArrayList<>(5);
+        List<RemoteCorfuTableDatabaseEntry> evenEntries = new ArrayList<>(3);
         for (int i = 0; i < 5; i++) {
-            RemoteCorfuTableEntry newEntry = new RemoteCorfuTableEntry(
+            RemoteCorfuTableDatabaseEntry newEntry = new RemoteCorfuTableDatabaseEntry(
                     new RemoteCorfuTableVersionedKey(ByteString.copyFrom("key" + i, StandardCharsets.UTF_8),
                             timestamp),
                     ByteString.copyFrom("val" + i, StandardCharsets.UTF_8));
@@ -66,11 +66,11 @@ public class RemoteCorfuTableViewTest extends AbstractViewTest {
         }
         dbHandler.addTable(tableUUID);
         dbHandler.updateAll(entries, tableUUID);
-        List<RemoteCorfuTableVersionedKey> evenKeys = evenEntries.stream().map(RemoteCorfuTableEntry::getKey)
+        List<RemoteCorfuTableVersionedKey> evenKeys = evenEntries.stream().map(RemoteCorfuTableDatabaseEntry::getKey)
                 .collect(Collectors.toList());
-        List<RemoteCorfuTableEntry> readEntries = r.getRemoteCorfuTableView().multiGet(evenKeys, tableUUID);
-        ImmutableMultiset<RemoteCorfuTableEntry> expectedSet = ImmutableMultiset.copyOf(evenEntries);
-        ImmutableMultiset<RemoteCorfuTableEntry> readSet = ImmutableMultiset.copyOf(readEntries);
+        List<RemoteCorfuTableDatabaseEntry> readEntries = r.getRemoteCorfuTableView().multiGet(evenKeys, tableUUID);
+        ImmutableMultiset<RemoteCorfuTableDatabaseEntry> expectedSet = ImmutableMultiset.copyOf(evenEntries);
+        ImmutableMultiset<RemoteCorfuTableDatabaseEntry> readSet = ImmutableMultiset.copyOf(readEntries);
         assertEquals(expectedSet, readSet);
     }
 
@@ -78,7 +78,7 @@ public class RemoteCorfuTableViewTest extends AbstractViewTest {
     public void canScanTable() throws RocksDBException {
         CorfuRuntime r = getDefaultRuntime();
         DatabaseHandler dbHandler = getLogUnit(0).getDatabaseHandler();
-        List<RemoteCorfuTableEntry> entries = new ArrayList<>(5);
+        List<RemoteCorfuTableDatabaseEntry> entries = new ArrayList<>(5);
         CorfuTable<Integer, Integer> dummyTable = r.getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {})
                 .setStreamName("dummy")
@@ -87,7 +87,7 @@ public class RemoteCorfuTableViewTest extends AbstractViewTest {
         UUID tableUUID = dummyTable.getCorfuStreamID();
         long timestamp = r.getSequencerView().query(tableUUID);
         for (int i = 0; i < 5; i++) {
-            entries.add(new RemoteCorfuTableEntry(
+            entries.add(new RemoteCorfuTableDatabaseEntry(
                     new RemoteCorfuTableVersionedKey(ByteString.copyFrom("key" + i, StandardCharsets.UTF_8),
                             timestamp),
                     ByteString.copyFrom("val"+i, StandardCharsets.UTF_8)));
@@ -95,7 +95,7 @@ public class RemoteCorfuTableViewTest extends AbstractViewTest {
 
         dbHandler.addTable(tableUUID);
         dbHandler.updateAll(entries, tableUUID);
-        List<RemoteCorfuTableEntry> readEntries = r.getRemoteCorfuTableView().scan(tableUUID, timestamp);
+        List<RemoteCorfuTableDatabaseEntry> readEntries = r.getRemoteCorfuTableView().scan(tableUUID, timestamp);
         assertEquals(entries.size(), readEntries.size());
         for (int i = 0; i < entries.size(); i++) {
             assertEquals(entries.get(i), readEntries.get(4-i));
@@ -106,7 +106,7 @@ public class RemoteCorfuTableViewTest extends AbstractViewTest {
     public void canContainsKey() throws RocksDBException {
         CorfuRuntime r = getDefaultRuntime();
         DatabaseHandler dbHandler = getLogUnit(0).getDatabaseHandler();
-        List<RemoteCorfuTableEntry> entries = new ArrayList<>(10);
+        List<RemoteCorfuTableDatabaseEntry> entries = new ArrayList<>(10);
         CorfuTable<Integer, Integer> dummyTable = r.getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {})
                 .setStreamName("dummy")
@@ -114,9 +114,9 @@ public class RemoteCorfuTableViewTest extends AbstractViewTest {
         dummyTable.put(1,2);
         UUID tableUUID = dummyTable.getCorfuStreamID();
         long timestamp = r.getSequencerView().query(tableUUID);
-        List<RemoteCorfuTableEntry> writeSet = new ArrayList<>(5);
+        List<RemoteCorfuTableDatabaseEntry> writeSet = new ArrayList<>(5);
         for (int i = 0; i < 10; i++) {
-            RemoteCorfuTableEntry newEntry = new RemoteCorfuTableEntry(
+            RemoteCorfuTableDatabaseEntry newEntry = new RemoteCorfuTableDatabaseEntry(
                     new RemoteCorfuTableVersionedKey(ByteString.copyFrom("key" + i, StandardCharsets.UTF_8),
                             timestamp),
                     ByteString.copyFrom("val"+i, StandardCharsets.UTF_8));
@@ -142,7 +142,7 @@ public class RemoteCorfuTableViewTest extends AbstractViewTest {
     public void canContainsValue() throws RocksDBException {
         CorfuRuntime r = getDefaultRuntime();
         DatabaseHandler dbHandler = getLogUnit(0).getDatabaseHandler();
-        List<RemoteCorfuTableEntry> entries = new ArrayList<>(10);
+        List<RemoteCorfuTableDatabaseEntry> entries = new ArrayList<>(10);
         CorfuTable<Integer, Integer> dummyTable = r.getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {})
                 .setStreamName("dummy")
@@ -150,9 +150,9 @@ public class RemoteCorfuTableViewTest extends AbstractViewTest {
         dummyTable.put(1,2);
         UUID tableUUID = dummyTable.getCorfuStreamID();
         long timestamp = r.getSequencerView().query(tableUUID);
-        List<RemoteCorfuTableEntry> writeSet = new ArrayList<>(5);
+        List<RemoteCorfuTableDatabaseEntry> writeSet = new ArrayList<>(5);
         for (int i = 0; i < 10; i++) {
-            RemoteCorfuTableEntry newEntry = new RemoteCorfuTableEntry(
+            RemoteCorfuTableDatabaseEntry newEntry = new RemoteCorfuTableDatabaseEntry(
                     new RemoteCorfuTableVersionedKey(ByteString.copyFrom("key" + i, StandardCharsets.UTF_8),
                             timestamp),
                     ByteString.copyFrom("val"+i, StandardCharsets.UTF_8));
@@ -186,9 +186,9 @@ public class RemoteCorfuTableViewTest extends AbstractViewTest {
         dummyTable.put(1,2);
         UUID tableUUID = dummyTable.getCorfuStreamID();
         long timestamp = r.getSequencerView().query(tableUUID);
-        List<RemoteCorfuTableEntry> writeSet = new ArrayList<>(50);
+        List<RemoteCorfuTableDatabaseEntry> writeSet = new ArrayList<>(50);
         for (int i = 0; i < 50; i++) {
-            RemoteCorfuTableEntry newEntry = new RemoteCorfuTableEntry(
+            RemoteCorfuTableDatabaseEntry newEntry = new RemoteCorfuTableDatabaseEntry(
                     new RemoteCorfuTableVersionedKey(ByteString.copyFrom("key" + i, StandardCharsets.UTF_8),
                             timestamp),
                     ByteString.copyFrom("val"+i, StandardCharsets.UTF_8));
