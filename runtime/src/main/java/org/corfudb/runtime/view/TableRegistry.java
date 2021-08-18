@@ -29,6 +29,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.ObjectsView.StreamTagInfo;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -50,6 +51,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+
+import static org.corfudb.runtime.view.ObjectsView.LOG_REPLICATOR_STREAM_INFO;
 
 /**
  * Table Registry manages the lifecycle of all the tables in the system.
@@ -455,21 +458,29 @@ public class TableRegistry {
                     protobufSerializer, this.runtime);
         }
 
-        List<String> streamTagsStringList = defaultValueMessage.getDescriptorForType()
-                .getOptions().getExtension(CorfuOptions.tableSchema).getStreamTagList();
-
-        Set<UUID> streamTagsUUIDForTable = streamTagsStringList
+        Set<StreamTagInfo> streamTagInfoForTable = defaultValueMessage
+                .getDescriptorForType()
+                .getOptions()
+                .getExtension(CorfuOptions.tableSchema)
+                .getStreamTagList()
                 .stream()
-                .map(tag -> getStreamIdForStreamTag(namespace, tag))
+                .map(tag -> new StreamTagInfo(tag, getStreamIdForStreamTag(namespace, tag)))
                 .collect(Collectors.toSet());
 
         // If table is federated, add a new tagged stream (on which updates to federated tables will be appended for
         // streaming purposes)
-        boolean isFederated = defaultValueMessage.getDescriptorForType()
+        final boolean isFederated = defaultValueMessage.getDescriptorForType()
                 .getOptions().getExtension(CorfuOptions.tableSchema).getIsFederated();
         if (isFederated) {
-            streamTagsUUIDForTable.add(ObjectsView.LOG_REPLICATOR_STREAM_ID);
+            streamTagInfoForTable.add(LOG_REPLICATOR_STREAM_INFO);
         }
+
+        Set<UUID> streamTagIdsForTable = streamTagInfoForTable
+                .stream()
+                .map(StreamTagInfo::getStreamId)
+                .collect(Collectors.toSet());
+
+        log.info("openTable: opening {}${} with stream tags {}", namespace, tableName, streamTagInfoForTable);
 
         // Open and return table instance.
         Table<K, V, M> table = new Table<>(
@@ -485,7 +496,7 @@ public class TableRegistry {
                 this.protobufSerializer,
                 mapSupplier,
                 versionPolicy,
-                streamTagsUUIDForTable);
+                streamTagIdsForTable);
         tableMap.put(fullyQualifiedTableName, (Table<Message, Message, Message>) table);
 
         registerTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
