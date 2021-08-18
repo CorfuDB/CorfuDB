@@ -5,7 +5,7 @@ import com.google.common.primitives.Longs;
 import com.google.protobuf.ByteString;
 import lombok.extern.slf4j.Slf4j;
 import static org.corfudb.common.remotecorfutable.DatabaseConstants.DATABASE_CHARSET;
-import org.corfudb.common.remotecorfutable.RemoteCorfuTableEntry;
+import org.corfudb.common.remotecorfutable.RemoteCorfuTableDatabaseEntry;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
 import org.junit.After;
 import static org.junit.Assert.assertEquals;
@@ -134,18 +134,18 @@ public class DatabaseHandlerTest {
 
     @Test
     public void testUpdateAllBasic() throws RocksDBException {
-        List<RemoteCorfuTableEntry> keyValuePairs = new LinkedList<>();
+        List<RemoteCorfuTableDatabaseEntry> keyValuePairs = new LinkedList<>();
         for (int i = 0; i < 1000; i++) {
             byte[][] pair = new byte[2][];
             RemoteCorfuTableVersionedKey pairKey = new RemoteCorfuTableVersionedKey(
                     ByteString.copyFrom(Bytes.concat("key".getBytes(DATABASE_CHARSET), Longs.toByteArray(i))),
                     0L);
             ByteString pairValue = ByteString.copyFrom(("val" + i).getBytes(DATABASE_CHARSET));
-            keyValuePairs.add(new RemoteCorfuTableEntry(pairKey, pairValue));
+            keyValuePairs.add(new RemoteCorfuTableDatabaseEntry(pairKey, pairValue));
         }
         databaseHandler.addTable(stream1);
         databaseHandler.updateAll(keyValuePairs, stream1);
-        List<RemoteCorfuTableEntry> read = databaseHandler.fullDatabaseScan(stream1);
+        List<RemoteCorfuTableDatabaseEntry> read = databaseHandler.fullDatabaseScan(stream1);
         for (int i = 0; i < 1000; i++) {
             assertEquals(keyValuePairs.get(i),read.get(999-i));
         }
@@ -153,20 +153,20 @@ public class DatabaseHandlerTest {
 
     @Test
     public void testMultiGetBasic() throws RocksDBException {
-        List<RemoteCorfuTableEntry> keyValuePairs = new LinkedList<>();
+        List<RemoteCorfuTableDatabaseEntry> keyValuePairs = new LinkedList<>();
         for (int i = 0; i < 1000; i++) {
             byte[][] pair = new byte[2][];
             RemoteCorfuTableVersionedKey pairKey = new RemoteCorfuTableVersionedKey(
                     ByteString.copyFrom(Bytes.concat("key".getBytes(DATABASE_CHARSET), Longs.toByteArray(i))),
                     0L);
             ByteString pairValue = ByteString.copyFrom(("val" + i).getBytes(DATABASE_CHARSET));
-            keyValuePairs.add(new RemoteCorfuTableEntry(pairKey, pairValue));
+            keyValuePairs.add(new RemoteCorfuTableDatabaseEntry(pairKey, pairValue));
         }
         databaseHandler.addTable(stream1);
         databaseHandler.updateAll(keyValuePairs, stream1);
         List<RemoteCorfuTableVersionedKey> keysToRead =
-                keyValuePairs.stream().map(RemoteCorfuTableEntry::getKey).collect(Collectors.toList());
-        List<RemoteCorfuTableEntry> readEntries = databaseHandler.multiGet(keysToRead, stream1);
+                keyValuePairs.stream().map(RemoteCorfuTableDatabaseEntry::getKey).collect(Collectors.toList());
+        List<RemoteCorfuTableDatabaseEntry> readEntries = databaseHandler.multiGet(keysToRead, stream1);
         assertEquals(keyValuePairs, readEntries);
     }
 
@@ -206,15 +206,15 @@ public class DatabaseHandlerTest {
         keys[3] = new RemoteCorfuTableVersionedKey(ByteString.copyFrom(prefix1), 0x20 << 24);
         keys[4] = new RemoteCorfuTableVersionedKey(ByteString.copyFrom(prefix1), 0x01 << 24);
         keys[5] = new RemoteCorfuTableVersionedKey(ByteString.copyFrom(prefix1), 0L);
-        List<RemoteCorfuTableEntry> entriesToAdd = new LinkedList<>();
+        List<RemoteCorfuTableDatabaseEntry> entriesToAdd = new LinkedList<>();
         for (int i = 0; i < 6; i++) {
             entriesToAdd.add(
-                    new RemoteCorfuTableEntry(keys[i], ByteString.copyFrom(("val" + i).getBytes(DATABASE_CHARSET))));
+                    new RemoteCorfuTableDatabaseEntry(keys[i], ByteString.copyFrom(("val" + i).getBytes(DATABASE_CHARSET))));
         }
         try {
             databaseHandler.addTable(stream1);
             databaseHandler.updateAll(entriesToAdd, stream1);
-            List<RemoteCorfuTableEntry> allEntries = databaseHandler.fullDatabaseScan(stream1);
+            List<RemoteCorfuTableDatabaseEntry> allEntries = databaseHandler.fullDatabaseScan(stream1);
             assertEquals( 6, allEntries.size());
             for (int i = 0; i < allEntries.size(); i++) {
                 assertEquals(entriesToAdd.get(i), allEntries.get(i));
@@ -227,10 +227,10 @@ public class DatabaseHandlerTest {
 
     @Test
     public void testDeleteRangeAll() throws RocksDBException, DatabaseOperationException {
-        List<RemoteCorfuTableEntry> entriesToAdd = new LinkedList<>();
+        List<RemoteCorfuTableDatabaseEntry> entriesToAdd = new LinkedList<>();
         for (int i = 0; i < 6; i++) {
             entriesToAdd.add(
-                    new RemoteCorfuTableEntry(
+                    new RemoteCorfuTableDatabaseEntry(
                             new RemoteCorfuTableVersionedKey(key1,i),
                             ByteString.copyFrom(("ver" + i + "val").getBytes(DATABASE_CHARSET))));
         }
@@ -241,7 +241,7 @@ public class DatabaseHandlerTest {
             databaseHandler.delete(entriesToAdd.get(5).getKey(), entriesToAdd.get(0).getKey(),
                     true, stream1);
             //should be empty
-            List<RemoteCorfuTableEntry> allEntries = databaseHandler.fullDatabaseScan(stream1);
+            List<RemoteCorfuTableDatabaseEntry> allEntries = databaseHandler.fullDatabaseScan(stream1);
             assertEquals(0, allEntries.size());
         } catch (RocksDBException | DatabaseOperationException e) {
             log.error("Error in test full inclusive delete range: ", e);
@@ -251,10 +251,10 @@ public class DatabaseHandlerTest {
 
     @Test
     public void testExclusiveEndDeleteRange() throws RocksDBException, DatabaseOperationException {
-        List<RemoteCorfuTableEntry> entriesToAdd = new LinkedList<>();
+        List<RemoteCorfuTableDatabaseEntry> entriesToAdd = new LinkedList<>();
         for (int i = 0; i < 6; i++) {
             entriesToAdd.add(
-                    new RemoteCorfuTableEntry(
+                    new RemoteCorfuTableDatabaseEntry(
                             new RemoteCorfuTableVersionedKey(key1,i),
                             ByteString.copyFrom(("ver" + i + "val").getBytes(DATABASE_CHARSET))));
         }
@@ -265,7 +265,7 @@ public class DatabaseHandlerTest {
             databaseHandler.delete(entriesToAdd.get(5).getKey(), entriesToAdd.get(0).getKey(),
                     false, stream1);
             //should have 1 element
-            List<RemoteCorfuTableEntry> allEntries = databaseHandler.fullDatabaseScan(stream1);
+            List<RemoteCorfuTableDatabaseEntry> allEntries = databaseHandler.fullDatabaseScan(stream1);
             assertEquals(1, allEntries.size());
             assertEquals(entriesToAdd.get(0), allEntries.get(0));
         } catch (RocksDBException | DatabaseOperationException e) {
@@ -277,10 +277,10 @@ public class DatabaseHandlerTest {
     @Test
     public void testEndOfDataDeletion() throws RocksDBException {
         ByteString nullKeyPrefix = ByteString.copyFrom(new byte[]{0,0,0,0});
-        List<RemoteCorfuTableEntry> entriesToAdd = new LinkedList<>();
+        List<RemoteCorfuTableDatabaseEntry> entriesToAdd = new LinkedList<>();
         for (int i = 0; i < 6; i++) {
             entriesToAdd.add(
-                    new RemoteCorfuTableEntry(
+                    new RemoteCorfuTableDatabaseEntry(
                             new RemoteCorfuTableVersionedKey(nullKeyPrefix,i),
                             ByteString.copyFrom(("ver" + i + "val").getBytes(DATABASE_CHARSET))));
         }
@@ -291,7 +291,7 @@ public class DatabaseHandlerTest {
             databaseHandler.delete(entriesToAdd.get(5).getKey(), entriesToAdd.get(0).getKey(),
                     true, stream1);
             //should be empty
-            List<RemoteCorfuTableEntry> allEntries = databaseHandler.fullDatabaseScan(stream1);
+            List<RemoteCorfuTableDatabaseEntry> allEntries = databaseHandler.fullDatabaseScan(stream1);
             assertEquals(0, allEntries.size());
         } catch (RocksDBException | DatabaseOperationException e) {
             log.error("Error in test full inclusive delete range: ", e);
@@ -313,9 +313,9 @@ public class DatabaseHandlerTest {
 
     @Test
     public void testFullDBScanNoVersioning() throws RocksDBException, DatabaseOperationException {
-        List<RemoteCorfuTableEntry> entriesToAdd = new LinkedList<>();
+        List<RemoteCorfuTableDatabaseEntry> entriesToAdd = new LinkedList<>();
         for (int i = 0; i < 1000; i++) {
-            entriesToAdd.add(new RemoteCorfuTableEntry(
+            entriesToAdd.add(new RemoteCorfuTableDatabaseEntry(
                     new RemoteCorfuTableVersionedKey(ByteString.copyFrom(Bytes.concat("key".getBytes(DATABASE_CHARSET),
                             Longs.toByteArray(i))), 0L),
                     ByteString.copyFrom(("val" + i).getBytes(DATABASE_CHARSET))));
@@ -323,7 +323,7 @@ public class DatabaseHandlerTest {
         try {
             databaseHandler.addTable(stream1);
             databaseHandler.updateAll(entriesToAdd, stream1);
-            List<RemoteCorfuTableEntry> fullDB = databaseHandler.scan(1000,stream1, 0);
+            List<RemoteCorfuTableDatabaseEntry> fullDB = databaseHandler.scan(1000,stream1, 0);
             assertEquals(1000, fullDB.size());
             for (int i = 0; i < 1000; i++) {
                 assertEquals(entriesToAdd.get(999-i), fullDB.get(i));
@@ -336,9 +336,9 @@ public class DatabaseHandlerTest {
 
     @Test
     public void testFullDBCursorScanNoVersioning() throws RocksDBException, DatabaseOperationException {
-        List<RemoteCorfuTableEntry> entriesToAdd = new LinkedList<>();
+        List<RemoteCorfuTableDatabaseEntry> entriesToAdd = new LinkedList<>();
         for (int i = 0; i < 1000; i++) {
-            entriesToAdd.add(new RemoteCorfuTableEntry(
+            entriesToAdd.add(new RemoteCorfuTableDatabaseEntry(
                     new RemoteCorfuTableVersionedKey(ByteString.copyFrom(Bytes.concat("key".getBytes(DATABASE_CHARSET),
                             Longs.toByteArray(i))), 0L),
                     ByteString.copyFrom(("val" + i).getBytes(DATABASE_CHARSET))));
@@ -346,8 +346,8 @@ public class DatabaseHandlerTest {
         try {
             databaseHandler.addTable(stream1);
             databaseHandler.updateAll(entriesToAdd, stream1);
-            List<RemoteCorfuTableEntry> fullDB = new LinkedList<>();
-            List<RemoteCorfuTableEntry> currScan = null;
+            List<RemoteCorfuTableDatabaseEntry> fullDB = new LinkedList<>();
+            List<RemoteCorfuTableDatabaseEntry> currScan = null;
             boolean first = true;
             do {
                 if (first) {
@@ -371,10 +371,10 @@ public class DatabaseHandlerTest {
 
     @Test
     public void testFullDBScanWithVersion() throws RocksDBException, DatabaseOperationException {
-        RemoteCorfuTableEntry[][] entries = new RemoteCorfuTableEntry[200][5];
+        RemoteCorfuTableDatabaseEntry[][] entries = new RemoteCorfuTableDatabaseEntry[200][5];
         for (int i = 0; i < 200; i++) {
             for (int j = 0; j < 5; j++) {
-                entries[i][j] = new RemoteCorfuTableEntry(
+                entries[i][j] = new RemoteCorfuTableDatabaseEntry(
                         new RemoteCorfuTableVersionedKey(ByteString.copyFrom(Bytes.concat("key".getBytes(DATABASE_CHARSET),
                                 Longs.toByteArray(i))), j),
                         ByteString.copyFrom(("val" + i + "ver" + j).getBytes(DATABASE_CHARSET))
@@ -389,7 +389,7 @@ public class DatabaseHandlerTest {
                 }
             }
             for (int j = 0; j < 5; j++) {
-                List<RemoteCorfuTableEntry> allEntriesForVersion = databaseHandler.scan(200,stream1,j);
+                List<RemoteCorfuTableDatabaseEntry> allEntriesForVersion = databaseHandler.scan(200,stream1,j);
                 assertEquals(200, allEntriesForVersion.size());
                 for (int i = 0; i < 200; i++) {
                     assertEquals(entries[199-i][j], allEntriesForVersion.get(i));
@@ -403,18 +403,18 @@ public class DatabaseHandlerTest {
 
     @Test
     public void testFullDBCursorScanWithVersion() throws RocksDBException, DatabaseOperationException {
-        RemoteCorfuTableEntry[][] entries = new RemoteCorfuTableEntry[200][5];
+        RemoteCorfuTableDatabaseEntry[][] entries = new RemoteCorfuTableDatabaseEntry[200][5];
         for (int i = 0; i < 200; i++) {
             for (int j = 0; j < 5; j++) {
-                entries[i][j] = new RemoteCorfuTableEntry(
+                entries[i][j] = new RemoteCorfuTableDatabaseEntry(
                         new RemoteCorfuTableVersionedKey(ByteString.copyFrom(Bytes.concat("key".getBytes(DATABASE_CHARSET),
                                 Longs.toByteArray(i))), j),
                         ByteString.copyFrom(("val" + i + "ver" + j).getBytes(DATABASE_CHARSET))
                 );
             }
         }
-        List<RemoteCorfuTableEntry> allEntriesForVersion;
-        List<RemoteCorfuTableEntry> currEntries = null;
+        List<RemoteCorfuTableDatabaseEntry> allEntriesForVersion;
+        List<RemoteCorfuTableDatabaseEntry> currEntries = null;
         boolean first;
         try {
             databaseHandler.addTable(stream1);
@@ -449,7 +449,7 @@ public class DatabaseHandlerTest {
 
     @Test
     public void testScanWithNullValuesNoVersioning() throws RocksDBException, DatabaseOperationException {
-        List<RemoteCorfuTableEntry> entries = new ArrayList<>(1000);
+        List<RemoteCorfuTableDatabaseEntry> entries = new ArrayList<>(1000);
         int k = 1;
         int skip = k;
         for (int i = 0; i < 1000; i++) {
@@ -465,19 +465,19 @@ public class DatabaseHandlerTest {
             } else {
                 val = ByteString.copyFrom(("val" + i).getBytes(DATABASE_CHARSET));
             }
-            entries.add(new RemoteCorfuTableEntry(key, val));
+            entries.add(new RemoteCorfuTableDatabaseEntry(key, val));
             skip--;
         }
         try {
             databaseHandler.addTable(stream1);
             databaseHandler.updateAll(entries, stream1);
-            List<RemoteCorfuTableEntry> nonNullValueEntries = new LinkedList<>();
+            List<RemoteCorfuTableDatabaseEntry> nonNullValueEntries = new LinkedList<>();
             for (int i = 0; i < 1000; i++) {
                 if (!entries.get(i).getValue().isEmpty()) {
                     nonNullValueEntries.add(entries.get(i));
                 }
             }
-            List<RemoteCorfuTableEntry> allScannedEntries = databaseHandler.scan(1000, stream1, 0L);
+            List<RemoteCorfuTableDatabaseEntry> allScannedEntries = databaseHandler.scan(1000, stream1, 0L);
             assertEquals(nonNullValueEntries.size(), allScannedEntries.size());
             for (int i = 0; i < allScannedEntries.size(); i++) {
                 assertEquals(nonNullValueEntries.get(allScannedEntries.size()-1-i), allScannedEntries.get(i));
@@ -490,7 +490,7 @@ public class DatabaseHandlerTest {
 
     @Test
     public void testScanWithNullValuesVersioning() throws RocksDBException, DatabaseOperationException {
-        List<List<RemoteCorfuTableEntry>> entries = new ArrayList<>(250);
+        List<List<RemoteCorfuTableDatabaseEntry>> entries = new ArrayList<>(250);
         for (int i = 0; i < 250; i++) {
             entries.add(new ArrayList<>(4));
         }
@@ -513,7 +513,7 @@ public class DatabaseHandlerTest {
                 } else {
                     val = ByteString.copyFrom(("val" + i + "ver" + j).getBytes(DATABASE_CHARSET));
                 }
-                entries.get(i).add(new RemoteCorfuTableEntry(key, val));
+                entries.get(i).add(new RemoteCorfuTableDatabaseEntry(key, val));
                 skip--;
             }
         }
@@ -522,8 +522,8 @@ public class DatabaseHandlerTest {
             for (int i = 0; i < 250; i++) {
                 databaseHandler.updateAll(entries.get(i), stream1);
             }
-            List<RemoteCorfuTableEntry> nonNullValueEntriesByVersion;
-            List<RemoteCorfuTableEntry> scannedEntriesByVersion;
+            List<RemoteCorfuTableDatabaseEntry> nonNullValueEntriesByVersion;
+            List<RemoteCorfuTableDatabaseEntry> scannedEntriesByVersion;
             for (int j = 0; j < 4; j++) {
                 nonNullValueEntriesByVersion = new LinkedList<>();
                 for (int i = 0; i < 250; i++) {
@@ -546,10 +546,10 @@ public class DatabaseHandlerTest {
 
     @Test
     public void testClearFunctionality() throws RocksDBException {
-        RemoteCorfuTableEntry[][] entries = new RemoteCorfuTableEntry[200][5];
+        RemoteCorfuTableDatabaseEntry[][] entries = new RemoteCorfuTableDatabaseEntry[200][5];
         for (int i = 0; i < 200; i++) {
             for (int j = 0; j < 5; j++) {
-                entries[i][j] = new RemoteCorfuTableEntry(
+                entries[i][j] = new RemoteCorfuTableDatabaseEntry(
                         new RemoteCorfuTableVersionedKey(
                                 ByteString.copyFrom(Bytes.concat("key".getBytes(DATABASE_CHARSET),
                                 Longs.toByteArray(i))), j),
@@ -566,19 +566,19 @@ public class DatabaseHandlerTest {
             }
             databaseHandler.clear(stream1,5);
             for (int j = 0; j < 5; j++) {
-                List<RemoteCorfuTableEntry> allEntriesForVersion = databaseHandler.scan(200,stream1,j);
+                List<RemoteCorfuTableDatabaseEntry> allEntriesForVersion = databaseHandler.scan(200,stream1,j);
                 assertEquals(200, allEntriesForVersion.size());
                 for (int i = 0; i < 200; i++) {
                     assertEquals(entries[199-i][j], allEntriesForVersion.get(i));
                 }
             }
-            List<RemoteCorfuTableEntry> version5Entries = databaseHandler.scan(200, stream1, 5);
+            List<RemoteCorfuTableDatabaseEntry> version5Entries = databaseHandler.scan(200, stream1, 5);
             assertEquals(0, version5Entries.size());
-            List<RemoteCorfuTableEntry> allEntries = databaseHandler.fullDatabaseScan(stream1);
+            List<RemoteCorfuTableDatabaseEntry> allEntries = databaseHandler.fullDatabaseScan(stream1);
             assertEquals(1200, allEntries.size());
             for (int i = 0; i < 200; i++) {
                 assertEquals(
-                        new RemoteCorfuTableEntry(
+                        new RemoteCorfuTableDatabaseEntry(
                                 new RemoteCorfuTableVersionedKey(entries[199-i][0].getKey().getEncodedKey(), 5L),
                                 ByteString.EMPTY
                         ),
@@ -595,7 +595,7 @@ public class DatabaseHandlerTest {
 
     @Test
     public void testContainsKeyFunctionality() throws RocksDBException {
-        List<List<RemoteCorfuTableEntry>> entries = new ArrayList<>(250);
+        List<List<RemoteCorfuTableDatabaseEntry>> entries = new ArrayList<>(250);
         for (int i = 0; i < 250; i++) {
             entries.add(new ArrayList<>(4));
         }
@@ -617,7 +617,7 @@ public class DatabaseHandlerTest {
                 } else {
                     val = ByteString.copyFrom(("val" + i + "ver" + j).getBytes(DATABASE_CHARSET));
                 }
-                entries.get(i).add(new RemoteCorfuTableEntry(key, val));
+                entries.get(i).add(new RemoteCorfuTableDatabaseEntry(key, val));
                 skip--;
             }
         }
@@ -643,7 +643,7 @@ public class DatabaseHandlerTest {
 
     @Test
     public void testContainsValueFunctionality() throws RocksDBException {
-        List<List<RemoteCorfuTableEntry>> entries = new ArrayList<>(10);
+        List<List<RemoteCorfuTableDatabaseEntry>> entries = new ArrayList<>(10);
         for (int i = 0; i < 2; i++) {
             entries.add(new ArrayList<>(2));
         }
@@ -656,12 +656,12 @@ public class DatabaseHandlerTest {
                 key = new RemoteCorfuTableVersionedKey(
                         ByteString.copyFrom("key" + i, DATABASE_CHARSET), 1L);
                 value = vals.get(i);
-                entries.get(1).add(new RemoteCorfuTableEntry(key, value));
+                entries.get(1).add(new RemoteCorfuTableDatabaseEntry(key, value));
             } else {
                 key = new RemoteCorfuTableVersionedKey(
                         ByteString.copyFrom("key" + i, DATABASE_CHARSET), 0L);
                 value = vals.get(i);
-                entries.get(0).add(new RemoteCorfuTableEntry(key, value));
+                entries.get(0).add(new RemoteCorfuTableDatabaseEntry(key, value));
             }
         }
         databaseHandler.addTable(stream1);
@@ -694,7 +694,7 @@ public class DatabaseHandlerTest {
 
     @Test
     public void testContainsValueFunctionalityAdvanced() throws RocksDBException {
-        List<List<RemoteCorfuTableEntry>> entries = new ArrayList<>(250);
+        List<List<RemoteCorfuTableDatabaseEntry>> entries = new ArrayList<>(250);
         List<List<ByteString>> values = new ArrayList<>(250);
         for (int i = 0; i < 250; i++) {
             entries.add(new ArrayList<>(4));
@@ -717,7 +717,7 @@ public class DatabaseHandlerTest {
                     skip = k;
                     val = ByteString.EMPTY;
                 }
-                entries.get(i).add(new RemoteCorfuTableEntry(key, val));
+                entries.get(i).add(new RemoteCorfuTableDatabaseEntry(key, val));
                 skip--;
             }
         }
@@ -729,7 +729,7 @@ public class DatabaseHandlerTest {
             List<String> failures = new LinkedList<>();
             for (int i = 0; i < 250; i++) {
                 List<ByteString> addedVals = entries.get(i).stream()
-                        .map(RemoteCorfuTableEntry::getValue).collect(Collectors.toList());
+                        .map(RemoteCorfuTableDatabaseEntry::getValue).collect(Collectors.toList());
                 List<ByteString> versionVals = values.get(i);
                 for (int j = 0; j < 4; j++) {
                     if (addedVals.get(j).isEmpty()) {
@@ -753,7 +753,7 @@ public class DatabaseHandlerTest {
 
     @Test
     public void testSizeFunctionality() throws RocksDBException {
-        List<List<RemoteCorfuTableEntry>> entries = new ArrayList<>(250);
+        List<List<RemoteCorfuTableDatabaseEntry>> entries = new ArrayList<>(250);
         for (int i = 0; i < 250; i++) {
             entries.add(new ArrayList<>(4));
         }
@@ -775,7 +775,7 @@ public class DatabaseHandlerTest {
                 } else {
                     val = ByteString.copyFrom(("val" + i + "ver" + j).getBytes(DATABASE_CHARSET));
                 }
-                entries.get(i).add(new RemoteCorfuTableEntry(key, val));
+                entries.get(i).add(new RemoteCorfuTableDatabaseEntry(key, val));
                 skip--;
             }
         }
@@ -784,7 +784,7 @@ public class DatabaseHandlerTest {
             for (int i = 0; i < 250; i++) {
                 databaseHandler.updateAll(entries.get(i), stream1);
             }
-            List<RemoteCorfuTableEntry> nonNullValueEntriesByVersion;
+            List<RemoteCorfuTableDatabaseEntry> nonNullValueEntriesByVersion;
             for (int j = 0; j < 4; j++) {
                 nonNullValueEntriesByVersion = new LinkedList<>();
                 for (int i = 0; i < 250; i++) {
