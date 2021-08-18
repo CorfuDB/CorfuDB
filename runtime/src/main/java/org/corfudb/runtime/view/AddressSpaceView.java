@@ -115,13 +115,7 @@ public class AddressSpaceView extends AbstractView {
                 .build();
 
         Optional<MeterRegistry> metricsRegistry = MeterRegistryProvider.getInstance();
-
-        metricsRegistry.map(registry -> Gauge.builder("address_space.read_cache.hit_ratio",
-                readCache,
-                cache -> cache.stats().hitRate())
-                .strongReference(true)
-                .register(registry));
-
+        MicroMeterUtils.gauge("address_space.read_cache.hit_ratio", readCache, cache -> cache.stats().hitRate());
         metricsRegistry.map(registry -> GuavaCacheMetrics.monitor(registry, readCache, "address_space.read_cache"));
     }
 

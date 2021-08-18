@@ -151,7 +151,7 @@ public class AutoCommitService implements ManagementService {
                         i, MAX_COMMIT_RETRY, re);
 
                 if (i >= MAX_COMMIT_RETRY) {
-                    log.error("runAutoCommit: retry exhausted, abort and wait for next cycle.", re);
+                    log.error("runAutoCommit: retry exhausted.", re);
                     break;
                 }
 

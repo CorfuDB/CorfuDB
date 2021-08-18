@@ -39,6 +39,7 @@ import org.junit.Test;
  * Created by hisundar on 5/30/19.
  */
 @Slf4j
+@SuppressWarnings("checkstyle:magicnumber")
 public class CorfuQueueTxTest extends AbstractTransactionsTest {
     static int myTable = 0;
     @Override
@@ -362,4 +363,3 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
         queueOutOfOrderedByTransaction(TransactionType.OPTIMISTIC, false);
     }
 }
-

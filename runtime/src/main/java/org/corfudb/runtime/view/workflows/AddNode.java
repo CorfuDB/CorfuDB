@@ -52,7 +52,7 @@ public class AddNode extends WorkflowRequest {
         CFUtils.getUninterruptibly(runtime.getManagementView().bootstrapManagementServer(nodeForWorkflow, layout));
         // Send the add node request to the node's orchestrator.
         CreateWorkflowResponse resp = managementClient.addNodeRequest(nodeForWorkflow);
-        log.info("sendRequest: requested to add {} on orchestrator {}:{}",
+        log.info("sendRequest: requested to add {} on {}:{}",
                 nodeForWorkflow, managementClient.getRouter().getHost(),
                 managementClient.getRouter().getPort());
         return resp.getWorkflowId();
@@ -81,12 +81,12 @@ public class AddNode extends WorkflowRequest {
         // server router might not be immediately ready after the recent shutdown.
         for (int i = 0; i < pingRetries; i++) {
             if (baseClient.pingSync()) {
-                log.info("getOrchestrator: orchestrator selected {}", nodeForWorkflow);
+                log.info("getOrchestrator: selected {}", nodeForWorkflow);
                 return Optional.of(runtime.getLayoutView()
                         .getRuntimeLayout(layout).getManagementClient(nodeForWorkflow));
             }
             Sleep.sleepUninterruptibly(pingInterval);
-            log.info("Retrying to ping a current base server {} times.", i);
+            log.info("Retrying to ping {} times.", i);
         }
         log.warn("getOrchestrator: a server {} is not responding to pings", nodeForWorkflow);
         return Optional.empty();
