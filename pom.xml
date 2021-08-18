@@ -41,7 +41,15 @@
         <logback.classic.version>1.2.3</logback.classic.version>
 
         <!-- Dependency versions -->
+        <slf4j.version>1.7.32</slf4j.version>
+        <netty.version>4.1.67.Final</netty.version>
+        <netty.tcnative.version>2.0.40</netty.tcnative.version>
+        <lombok.version>1.18.18</lombok.version>
+        <guava.version>28.0-jre</guava.version>
         <junit.jupiter.version>5.7.1</junit.jupiter.version>
+        <mockito.version>1.10.19</mockito.version>
+        <assertj.version>3.20.2</assertj.version>
+        <zero.allocation.hashing.version>0.8</zero.allocation.hashing.version>
     </properties>
 
     <scm>
@@ -131,47 +139,47 @@
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-all</artifactId>
-            <version>1.10.19</version>
+            <version>${mockito.version}</version>
             <scope>test</scope>
         </dependency>
 
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
-            <version>3.19.0</version>
+            <version>${assertj.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>net.openhft</groupId>
             <artifactId>zero-allocation-hashing</artifactId>
-            <version>0.8</version>
+            <version>${zero.allocation.hashing.version}</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-            <version>1.7.30</version>
+            <version>${slf4j.version}</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>1.18.18</version>
+            <version>${lombok.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
-            <version>28.0-jre</version>
+            <version>${guava.version}</version>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>
-            <artifactId>netty-all</artifactId> <!-- Use 'netty-all' for 4.0 or above -->
-            <version>4.1.50.Final</version>
+            <artifactId>netty-all</artifactId>
+            <version>${netty.version}</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-tcnative</artifactId>
-            <version>2.0.28.Final</version>
+            <version>${netty.tcnative.version}</version>
             <classifier>${os.detected.classifier}</classifier>
         </dependency>
         <dependency>
