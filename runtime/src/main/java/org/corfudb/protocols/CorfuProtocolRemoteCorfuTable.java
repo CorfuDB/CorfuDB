@@ -4,7 +4,7 @@ import com.google.protobuf.ByteString;
 import lombok.NonNull;
 import org.checkerframework.checker.index.qual.NonNegative;
 import org.checkerframework.checker.index.qual.Positive;
-import org.corfudb.common.remotecorfutable.RemoteCorfuTableEntry;
+import org.corfudb.common.remotecorfutable.RemoteCorfuTableDatabaseEntry;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import org.corfudb.protocols.wireprotocol.remotecorfutable.ContainsResponse;
@@ -129,7 +129,7 @@ public class CorfuProtocolRemoteCorfuTable {
      * @param entriesScanned List of all entries found from the requested scan.
      * @return ENTRIES response payload message to send to the client.
      */
-    public static ResponsePayloadMsg getEntriesResponseMsg(List<RemoteCorfuTableEntry> entriesScanned) {
+    public static ResponsePayloadMsg getEntriesResponseMsg(List<RemoteCorfuTableDatabaseEntry> entriesScanned) {
         return ResponsePayloadMsg.newBuilder()
                 .setRemoteCorfuTableResponse(RemoteCorfuTableResponseMsg.newBuilder()
                         .setEntriesResponse(RemoteCorfuTableEntriesResponseMsg.newBuilder()
@@ -251,7 +251,7 @@ public class CorfuProtocolRemoteCorfuTable {
                 .build();
     }
 
-    private static RemoteCorfuTableEntryMsg getEntryMsg(RemoteCorfuTableEntry entry) {
+    private static RemoteCorfuTableEntryMsg getEntryMsg(RemoteCorfuTableDatabaseEntry entry) {
         return RemoteCorfuTableEntryMsg.newBuilder()
                 .setVersionedKey(entry.getKey().getEncodedVersionedKey())
                 .setPayloadValue(entry.getValue())
@@ -263,8 +263,8 @@ public class CorfuProtocolRemoteCorfuTable {
      * @param msg Protobuf representation of RemoteCorfuTableEntry
      * @return The contained RemoteCorfuTableEntry
      */
-    public static RemoteCorfuTableEntry getEntryFromMsg(RemoteCorfuTableEntryMsg msg) {
-        return new RemoteCorfuTableEntry(
+    public static RemoteCorfuTableDatabaseEntry getEntryFromMsg(RemoteCorfuTableEntryMsg msg) {
+        return new RemoteCorfuTableDatabaseEntry(
                 new RemoteCorfuTableVersionedKey(msg.getVersionedKey()), msg.getPayloadValue());
     }
 

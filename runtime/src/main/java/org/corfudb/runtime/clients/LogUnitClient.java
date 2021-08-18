@@ -4,7 +4,6 @@ import com.google.protobuf.ByteString;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.NonNull;
-import org.corfudb.common.remotecorfutable.RemoteCorfuTableEntry;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
 import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getContainsKeyRequestMsg;
 import static org.corfudb.protocols.CorfuProtocolRemoteCorfuTable.getContainsValueRequestMsg;
