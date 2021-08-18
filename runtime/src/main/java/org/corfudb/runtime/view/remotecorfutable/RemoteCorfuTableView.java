@@ -3,7 +3,7 @@ package org.corfudb.runtime.view.remotecorfutable;
 import com.google.protobuf.ByteString;
 import lombok.NonNull;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
-import org.corfudb.common.remotecorfutable.RemoteCorfuTableEntry;
+import org.corfudb.common.remotecorfutable.RemoteCorfuTableDatabaseEntry;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
@@ -46,8 +46,8 @@ public class RemoteCorfuTableView extends AbstractView {
         return MicroMeterUtils.time(getSupplier, "remotecorfutable.get", STREAM_ID_TAG, streamId.toString());
     }
 
-    public List<RemoteCorfuTableEntry> multiGet(@NonNull List<RemoteCorfuTableVersionedKey> keys, @NonNull UUID streamId) {
-        Supplier<List<RemoteCorfuTableEntry>> multiGetSupplier = () ->
+    public List<RemoteCorfuTableDatabaseEntry> multiGet(@NonNull List<RemoteCorfuTableVersionedKey> keys, @NonNull UUID streamId) {
+        Supplier<List<RemoteCorfuTableDatabaseEntry>> multiGetSupplier = () ->
                 layoutHelper(e ->
                         CFUtils.getUninterruptibly(getNodeWithCorrectStripe(e, streamId)
                                 .multiGetRemoteCorfuTable(keys, streamId)).getEntries());
@@ -60,8 +60,8 @@ public class RemoteCorfuTableView extends AbstractView {
      * @param timestamp The timestamp of the request.
      * @return The list of scanned table entries.
      */
-    public List<RemoteCorfuTableEntry> scan(@NonNull UUID streamId, long timestamp) {
-        Supplier<List<RemoteCorfuTableEntry>> scanSupplier = () ->
+    public List<RemoteCorfuTableDatabaseEntry> scan(@NonNull UUID streamId, long timestamp) {
+        Supplier<List<RemoteCorfuTableDatabaseEntry>> scanSupplier = () ->
                 layoutHelper(e ->
                         CFUtils.getUninterruptibly(getNodeWithCorrectStripe(e, streamId)
                                 .scanRemoteCorfuTable(streamId,timestamp)).getEntries());
@@ -76,8 +76,8 @@ public class RemoteCorfuTableView extends AbstractView {
      * @param timestamp The timestamp of the request.
      * @return The list of scanned table entries.
      */
-    public List<RemoteCorfuTableEntry> scan(@Nonnegative int scanSize, @NonNull UUID streamId, long timestamp) {
-        Supplier<List<RemoteCorfuTableEntry>> scanSupplier = () ->
+    public List<RemoteCorfuTableDatabaseEntry> scan(@Nonnegative int scanSize, @NonNull UUID streamId, long timestamp) {
+        Supplier<List<RemoteCorfuTableDatabaseEntry>> scanSupplier = () ->
                 layoutHelper(e ->
                         CFUtils.getUninterruptibly(getNodeWithCorrectStripe(e, streamId)
                                 .scanRemoteCorfuTable(scanSize,streamId,timestamp)).getEntries());
@@ -93,9 +93,9 @@ public class RemoteCorfuTableView extends AbstractView {
      * @param timestamp The timestamp of the request.
      * @return The list of scanned table entries.
      */
-    public List<RemoteCorfuTableEntry> scan(@NonNull RemoteCorfuTableVersionedKey startPoint, @NonNull UUID streamId,
-                                            long timestamp) {
-        Supplier<List<RemoteCorfuTableEntry>> scanSupplier = () ->
+    public List<RemoteCorfuTableDatabaseEntry> scan(@NonNull RemoteCorfuTableVersionedKey startPoint, @NonNull UUID streamId,
+                                                    long timestamp) {
+        Supplier<List<RemoteCorfuTableDatabaseEntry>> scanSupplier = () ->
                 layoutHelper(e ->
                         CFUtils.getUninterruptibly(getNodeWithCorrectStripe(e, streamId)
                                 .scanRemoteCorfuTable(startPoint,streamId,timestamp)).getEntries());
@@ -111,9 +111,9 @@ public class RemoteCorfuTableView extends AbstractView {
      * @param timestamp The timestamp of the request.
      * @return The list of scanned table entries.
      */
-    public List<RemoteCorfuTableEntry> scan(@NonNull RemoteCorfuTableVersionedKey startPoint, @Nonnegative int scanSize,
-                                            @NonNull UUID streamId, long timestamp) {
-        Supplier<List<RemoteCorfuTableEntry>> scanSupplier = () ->
+    public List<RemoteCorfuTableDatabaseEntry> scan(@NonNull RemoteCorfuTableVersionedKey startPoint, @Nonnegative int scanSize,
+                                                    @NonNull UUID streamId, long timestamp) {
+        Supplier<List<RemoteCorfuTableDatabaseEntry>> scanSupplier = () ->
                 layoutHelper(e ->
                         CFUtils.getUninterruptibly(getNodeWithCorrectStripe(e, streamId)
                                 .scanRemoteCorfuTable(startPoint, scanSize, streamId, timestamp)).getEntries());
