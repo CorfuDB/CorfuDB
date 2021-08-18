@@ -24,7 +24,7 @@ import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg.ErrorCase;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
 import org.corfudb.runtime.proto.service.LogUnit.LogAddressSpaceResponseMsg;
-import org.corfudb.runtime.proto.service.RemoteCorfuTable;
+import org.corfudb.runtime.proto.service.RemoteCorfuTableMessages;
 
 import java.lang.invoke.MethodHandles;
 import java.util.UUID;
@@ -245,7 +245,7 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
     @ResponseHandler(type = PayloadCase.REMOTE_CORFU_TABLE_RESPONSE)
     private static Object handleRemoteCorfuTableResponse(ResponseMsg msg, ChannelHandlerContext ctx,
                                                         IClientRouter r) {
-        RemoteCorfuTable.RemoteCorfuTableResponseMsg rctResponse = msg.getPayload().getRemoteCorfuTableResponse();
+        RemoteCorfuTableMessages.RemoteCorfuTableResponseMsg rctResponse = msg.getPayload().getRemoteCorfuTableResponse();
         switch (rctResponse.getPayloadCase()) {
             case GET_RESPONSE:
                 return getGetResponse(rctResponse.getGetResponse());

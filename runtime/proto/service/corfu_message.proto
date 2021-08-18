@@ -10,7 +10,7 @@ import "service/log_replication.proto";
 import "service/log_unit.proto";
 import "service/sequencer.proto";
 import "service/management.proto";
-import "service/remote_corfu_table.proto";
+import "service/remote_corfu_table_messages.proto";
 import "server_errors.proto";
 
 /**
