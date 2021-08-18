@@ -13,7 +13,7 @@ import java.util.Objects;
  */
 @AllArgsConstructor
 @Getter
-public class RemoteCorfuTableEntry {
+public class RemoteCorfuTableDatabaseEntry {
     private final RemoteCorfuTableVersionedKey key;
     private final ByteString value;
 
@@ -21,7 +21,7 @@ public class RemoteCorfuTableEntry {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        RemoteCorfuTableEntry that = (RemoteCorfuTableEntry) o;
+        RemoteCorfuTableDatabaseEntry that = (RemoteCorfuTableDatabaseEntry) o;
         return key.equals(that.key) && value.equals(that.value);
     }
 
