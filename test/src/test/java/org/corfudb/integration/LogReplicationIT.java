@@ -301,7 +301,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             long tail = Utils.getLogAddressSpace(rt
                     .getLayoutView().getRuntimeLayout())
                     .getAddressMap()
-                    .get(ObjectsView.LOG_REPLICATOR_STREAM_ID).getTail();
+                    .get(ObjectsView.getLogReplicatorStreamId()).getTail();
             expectedAckTimestamp = Math.max(tail, expectedAckTimestamp);
         }
 
@@ -700,7 +700,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         expectedAckMessages = Utils.getLogAddressSpace(srcDataRuntime
                 .getLayoutView().getRuntimeLayout())
                 .getAddressMap()
-                .get(ObjectsView.LOG_REPLICATOR_STREAM_ID).getTail();
+                .get(ObjectsView.getLogReplicatorStreamId()).getTail();
 
         LogReplicationFSM fsm = startLogEntrySync(replicateTables, WAIT.ON_ACK);
 
