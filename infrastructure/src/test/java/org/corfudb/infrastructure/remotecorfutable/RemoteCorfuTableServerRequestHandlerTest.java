@@ -29,7 +29,7 @@ import org.corfudb.protocols.service.CorfuProtocolMessage;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage;
-import org.corfudb.runtime.proto.service.RemoteCorfuTable;
+import org.corfudb.runtime.proto.service.RemoteCorfuTableMessages;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -268,10 +268,10 @@ public class RemoteCorfuTableServerRequestHandlerTest {
         assertTrue(responseMsg.getPayload().getRemoteCorfuTableResponse().hasGetResponse());
 
         //verify response contents
-        RemoteCorfuTable.RemoteCorfuTableGetResponseMsg getResponseMsg =
+        RemoteCorfuTableMessages.RemoteCorfuTableGetResponseMsg getResponseMsg =
                 responseMsg.getPayload().getRemoteCorfuTableResponse().getGetResponse();
-        RemoteCorfuTable.RemoteCorfuTableGetResponseMsg expectedResponse =
-                RemoteCorfuTable.RemoteCorfuTableGetResponseMsg.newBuilder().setPayloadValue(dummyValue).build();
+        RemoteCorfuTableMessages.RemoteCorfuTableGetResponseMsg expectedResponse =
+                RemoteCorfuTableMessages.RemoteCorfuTableGetResponseMsg.newBuilder().setPayloadValue(dummyValue).build();
         assertEquals(getResponseMsg.getPayloadValue(), expectedResponse.getPayloadValue());
     }
 
@@ -345,7 +345,7 @@ public class RemoteCorfuTableServerRequestHandlerTest {
         assertTrue(startingResponse.getPayload().hasRemoteCorfuTableResponse());
         assertTrue(startingResponse.getPayload().getRemoteCorfuTableResponse().hasEntriesResponse());
 
-        RemoteCorfuTable.RemoteCorfuTableEntriesResponseMsg startingScanresponse = startingResponse.getPayload()
+        RemoteCorfuTableMessages.RemoteCorfuTableEntriesResponseMsg startingScanresponse = startingResponse.getPayload()
                 .getRemoteCorfuTableResponse().getEntriesResponse();
         List<RemoteCorfuTableEntry> startingEntries = startingScanresponse.getEntriesList()
                 .stream().map(CorfuProtocolRemoteCorfuTable::getEntryFromMsg).collect(Collectors.toList());
@@ -358,7 +358,7 @@ public class RemoteCorfuTableServerRequestHandlerTest {
         assertTrue(compareBaseHeaderFields(request2.getHeader(), cursorResponse.getHeader()));
         assertTrue(cursorResponse.getPayload().hasRemoteCorfuTableResponse());
         assertTrue(cursorResponse.getPayload().getRemoteCorfuTableResponse().hasEntriesResponse());
-        RemoteCorfuTable.RemoteCorfuTableEntriesResponseMsg cursorScanResponse = cursorResponse.getPayload()
+        RemoteCorfuTableMessages.RemoteCorfuTableEntriesResponseMsg cursorScanResponse = cursorResponse.getPayload()
                 .getRemoteCorfuTableResponse().getEntriesResponse();
         List<RemoteCorfuTableEntry> cursorEntries = cursorScanResponse.getEntriesList()
                 .stream().map(CorfuProtocolRemoteCorfuTable::getEntryFromMsg).collect(Collectors.toList());
@@ -401,7 +401,7 @@ public class RemoteCorfuTableServerRequestHandlerTest {
         assertTrue(startingResponse.getPayload().hasRemoteCorfuTableResponse());
         assertTrue(startingResponse.getPayload().getRemoteCorfuTableResponse().hasEntriesResponse());
 
-        RemoteCorfuTable.RemoteCorfuTableEntriesResponseMsg startingScanresponse = startingResponse.getPayload()
+        RemoteCorfuTableMessages.RemoteCorfuTableEntriesResponseMsg startingScanresponse = startingResponse.getPayload()
                 .getRemoteCorfuTableResponse().getEntriesResponse();
         List<RemoteCorfuTableEntry> startingEntries = startingScanresponse.getEntriesList()
                 .stream().map(CorfuProtocolRemoteCorfuTable::getEntryFromMsg).collect(Collectors.toList());
@@ -414,7 +414,7 @@ public class RemoteCorfuTableServerRequestHandlerTest {
         assertTrue(compareBaseHeaderFields(request2.getHeader(), cursorResponse.getHeader()));
         assertTrue(cursorResponse.getPayload().hasRemoteCorfuTableResponse());
         assertTrue(cursorResponse.getPayload().getRemoteCorfuTableResponse().hasEntriesResponse());
-        RemoteCorfuTable.RemoteCorfuTableEntriesResponseMsg cursorScanResponse = cursorResponse.getPayload()
+        RemoteCorfuTableMessages.RemoteCorfuTableEntriesResponseMsg cursorScanResponse = cursorResponse.getPayload()
                 .getRemoteCorfuTableResponse().getEntriesResponse();
         List<RemoteCorfuTableEntry> cursorEntries = cursorScanResponse.getEntriesList()
                 .stream().map(CorfuProtocolRemoteCorfuTable::getEntryFromMsg).collect(Collectors.toList());

@@ -13,19 +13,19 @@ import org.corfudb.protocols.wireprotocol.remotecorfutable.EntriesResponse;
 import org.corfudb.protocols.wireprotocol.remotecorfutable.SizeResponse;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
-import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableMultiGetRequestMsg;
-import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableEntriesResponseMsg;
-import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableEntryMsg;
-import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableResponseMsg;
-import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableContainsKeyRequestMsg;
-import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableContainsResponseMsg;
-import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableGetRequestMsg;
-import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableGetResponseMsg;
-import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableContainsValueRequestMsg;
-import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableScanRequestMsg;
-import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableSizeRequestMsg;
-import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableSizeResponseMsg;
-import org.corfudb.runtime.proto.service.RemoteCorfuTable.RemoteCorfuTableRequestMsg;
+import org.corfudb.runtime.proto.service.RemoteCorfuTableMessages.RemoteCorfuTableMultiGetRequestMsg;
+import org.corfudb.runtime.proto.service.RemoteCorfuTableMessages.RemoteCorfuTableEntriesResponseMsg;
+import org.corfudb.runtime.proto.service.RemoteCorfuTableMessages.RemoteCorfuTableEntryMsg;
+import org.corfudb.runtime.proto.service.RemoteCorfuTableMessages.RemoteCorfuTableResponseMsg;
+import org.corfudb.runtime.proto.service.RemoteCorfuTableMessages.RemoteCorfuTableContainsKeyRequestMsg;
+import org.corfudb.runtime.proto.service.RemoteCorfuTableMessages.RemoteCorfuTableContainsResponseMsg;
+import org.corfudb.runtime.proto.service.RemoteCorfuTableMessages.RemoteCorfuTableGetRequestMsg;
+import org.corfudb.runtime.proto.service.RemoteCorfuTableMessages.RemoteCorfuTableGetResponseMsg;
+import org.corfudb.runtime.proto.service.RemoteCorfuTableMessages.RemoteCorfuTableContainsValueRequestMsg;
+import org.corfudb.runtime.proto.service.RemoteCorfuTableMessages.RemoteCorfuTableScanRequestMsg;
+import org.corfudb.runtime.proto.service.RemoteCorfuTableMessages.RemoteCorfuTableSizeRequestMsg;
+import org.corfudb.runtime.proto.service.RemoteCorfuTableMessages.RemoteCorfuTableSizeResponseMsg;
+import org.corfudb.runtime.proto.service.RemoteCorfuTableMessages.RemoteCorfuTableRequestMsg;
 
 import java.util.List;
 import java.util.UUID;
@@ -33,7 +33,7 @@ import java.util.stream.Collectors;
 
 /**
  * This class provides methods for creating the Protobuf objects defined
- * in remote_corfu_table.proto
+ * in remote_corfu_table_messages.proto
  *
  * <p>Created by nvaishampayan517 on 8/5/21.
  */
