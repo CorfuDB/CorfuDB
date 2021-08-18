@@ -1,7 +1,7 @@
 package org.corfudb.protocols.wireprotocol.remotecorfutable;
 
 import lombok.Data;
-import org.corfudb.common.remotecorfutable.RemoteCorfuTableEntry;
+import org.corfudb.common.remotecorfutable.RemoteCorfuTableDatabaseEntry;
 
 import java.util.List;
 
@@ -12,7 +12,7 @@ import java.util.List;
  */
 @Data
 public class EntriesResponse implements Response {
-    private final List<RemoteCorfuTableEntry> entries;
+    private final List<RemoteCorfuTableDatabaseEntry> entries;
 
     @Override
     public RemoteCorfuTableResponseType getType() {

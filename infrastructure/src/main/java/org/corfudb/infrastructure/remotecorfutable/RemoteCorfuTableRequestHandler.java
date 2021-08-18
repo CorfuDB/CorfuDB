@@ -5,7 +5,7 @@ import com.google.protobuf.TextFormat;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.remotecorfutable.RemoteCorfuTableEntry;
+import org.corfudb.common.remotecorfutable.RemoteCorfuTableDatabaseEntry;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
 import org.corfudb.infrastructure.IServerRouter;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
@@ -118,7 +118,7 @@ public class RemoteCorfuTableRequestHandler {
         int numEntries = scanRequestMsg.getNumEntriesToScan();
         ByteString startKeyString = scanRequestMsg.getVersionedStartKey();
         long timestamp = scanRequestMsg.getTimestamp();
-        CompletableFuture<List<RemoteCorfuTableEntry>> scanFuture;
+        CompletableFuture<List<RemoteCorfuTableDatabaseEntry>> scanFuture;
         if (startKeyString.isEmpty()) {
             if (numEntries == 0) {
                 scanFuture = databaseHandler.scanAsync(streamID, timestamp);

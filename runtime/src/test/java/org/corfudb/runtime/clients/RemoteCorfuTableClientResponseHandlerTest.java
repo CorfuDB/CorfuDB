@@ -3,7 +3,7 @@ package org.corfudb.runtime.clients;
 import com.google.protobuf.ByteString;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.remotecorfutable.RemoteCorfuTableEntry;
+import org.corfudb.common.remotecorfutable.RemoteCorfuTableDatabaseEntry;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
 import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
@@ -91,9 +91,9 @@ public class RemoteCorfuTableClientResponseHandlerTest {
 
     @Test
     public void testEntriesResponse() {
-        List<RemoteCorfuTableEntry> entries = new ArrayList<>(5);
+        List<RemoteCorfuTableDatabaseEntry> entries = new ArrayList<>(5);
         for (int i = 0; i < 5; i++) {
-            entries.add(new RemoteCorfuTableEntry(
+            entries.add(new RemoteCorfuTableDatabaseEntry(
                     new RemoteCorfuTableVersionedKey(ByteString.copyFrom("key" + i, StandardCharsets.UTF_8),i),
                     ByteString.copyFrom("val"+i, StandardCharsets.UTF_8)));
         }
