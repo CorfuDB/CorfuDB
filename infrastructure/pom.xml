@@ -14,9 +14,7 @@
     <properties>
         <maven.deploy.skip>false</maven.deploy.skip>
 
-        <protobuf.version>3.6.1</protobuf.version>
         <caffeine.version>2.9.2</caffeine.version>
-        <commonsio.version>2.7</commonsio.version>
         <mockito.inline.version>3.6.0</mockito.inline.version>
         <docopt.version>0.6.0.20150202</docopt.version>
     </properties>
@@ -256,19 +254,9 @@
         </dependency>
         <!-- External Dependencies-->
         <dependency>
-            <groupId>com.google.protobuf</groupId>
-            <artifactId>protobuf-java</artifactId>
-            <version>${protobuf.version}</version>
-        </dependency>
-        <dependency>
             <groupId>com.offbytwo</groupId>
             <artifactId>docopt</artifactId>
             <version>${docopt.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
-            <version>${commonsio.version}</version>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback</groupId>
