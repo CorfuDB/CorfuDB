@@ -56,7 +56,8 @@ public class RemoteCorfuTableAdapter<K,V> {
     }
 
     public void clear(long currentTimestamp) {
-        Object[] smrArgs = new Object[0];
+        Object[] smrArgs = new Object[1];
+        smrArgs[0] = currentTimestamp;
         SMREntry entry = new SMREntry(CLEAR.getSMRName(), smrArgs, serializer);
         ByteBuf serializedEntry = Unpooled.buffer();
         entry.serialize(serializedEntry);
@@ -66,11 +67,12 @@ public class RemoteCorfuTableAdapter<K,V> {
 
     public void updateAll(Collection<RemoteCorfuTable.RemoteCorfuTableEntry<K,V>> entries,
                           long timestamp) {
-        Object[] smrArgs = new Object[2*entries.size()];
-        int i = 0;
+        Object[] smrArgs = new Object[2*entries.size() + 1];
+        smrArgs[0] = timestamp;
+        int i = 1;
         for (RemoteCorfuTable.RemoteCorfuTableEntry<K,V> entry: entries) {
-            smrArgs[i] = entry.getKey();
-            smrArgs[i+1] = entry.getValue();
+            smrArgs[2*i -1] = entry.getKey();
+            smrArgs[2*i] = entry.getValue();
             i++;
         }
         SMREntry entry = new SMREntry(UPDATE.getSMRName(), smrArgs, serializer);
@@ -109,8 +111,9 @@ public class RemoteCorfuTableAdapter<K,V> {
 
 
     public void delete(K key, long timestamp) {
-        Object[] smrArgs = new Object[1];
-        smrArgs[0] = key;
+        Object[] smrArgs = new Object[2];
+        smrArgs[0] = timestamp;
+        smrArgs[1] = key;
         SMREntry entry = new SMREntry(DELETE.getSMRName(), smrArgs, serializer);
         ByteBuf serializedEntry = Unpooled.buffer();
         entry.serialize(serializedEntry);
@@ -119,7 +122,13 @@ public class RemoteCorfuTableAdapter<K,V> {
     }
 
     public void multiDelete(List<K> keys, long currentTimestamp) {
-        Object[] smrArgs = keys.toArray(new Object[0]);
+        Object[] smrArgs = new Object[keys.size()+1];
+        smrArgs[0] = currentTimestamp;
+        int i = 1;
+        for (K key : keys) {
+            smrArgs[i] = key;
+            i++;
+        }
         SMREntry entry = new SMREntry(DELETE.getSMRName(), smrArgs, serializer);
         ByteBuf serializedEntry = Unpooled.buffer();
         entry.serialize(serializedEntry);
@@ -127,10 +136,11 @@ public class RemoteCorfuTableAdapter<K,V> {
         streamView.append(serializedEntry);
     }
 
-    public void update(K key, V value) {
-        Object[] smrArgs = new Object[2];
-        smrArgs[0] = key;
-        smrArgs[1] = value;
+    public void update(K key, V value, long timestamp) {
+        Object[] smrArgs = new Object[3];
+        smrArgs[0] = timestamp;
+        smrArgs[1] = key;
+        smrArgs[2] = value;
         SMREntry entry = new SMREntry(UPDATE.getSMRName(), smrArgs, serializer);
         ByteBuf serializedEntry = Unpooled.buffer();
         entry.serialize(serializedEntry);
