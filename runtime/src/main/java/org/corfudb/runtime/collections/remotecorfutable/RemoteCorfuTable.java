@@ -28,7 +28,7 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
 
     @Override
     public void insert(K key, V value) {
-        adapter.update(key, value);
+        adapter.update(key, value, adapter.getCurrentTimestamp());
     }
 
     @Override
@@ -56,8 +56,6 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
         return adapter.scan(startPoint, numEntries, adapter.getCurrentTimestamp());
     }
 
-
-    //TODO: segment the fulldb scan
     @Override
     public List<V> scanAndFilter(Predicate<? super V> valuePredicate) {
         return scanAndFilterFromBeginning(valuePredicate);
@@ -165,7 +163,7 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
         long timestamp = adapter.getCurrentTimestamp();
         //synchronization guarantees unneeded as timestamp will define versioning
         V returnVal = adapter.get((K) key, timestamp);
-        adapter.update(key, value);
+        adapter.update(key, value, timestamp);
         return returnVal;
     }
 
