@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
@@ -235,11 +236,15 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
         adapter.close();
     }
 
-    @AllArgsConstructor
     public static class RemoteCorfuTableEntry<K,V> implements Map.Entry<K,V> {
 
         private final K key;
         private final V value;
+
+        public RemoteCorfuTableEntry(@NonNull K key, @NonNull V value) {
+            this.key = key;
+            this.value = value;
+        }
 
         @Override
         public K getKey() {
@@ -261,6 +266,19 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
         @Override
         public V setValue(V value) {
             throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            RemoteCorfuTableEntry<?, ?> entry = (RemoteCorfuTableEntry<?, ?>) o;
+            return key.equals(entry.key) && value.equals(entry.value);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(key, value);
         }
     }
 
