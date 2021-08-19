@@ -8,7 +8,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -22,7 +21,6 @@ import org.corfudb.runtime.view.remotecorfutable.RemoteCorfuTableView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -117,10 +115,9 @@ public class RemoteCorfuTableTest {
         SMREntry entry = (SMREntry) LogEntry.deserialize(serializedSMREntry, mRuntime);
 
         assertEquals(UPDATE.getSMRName(),entry.getSMRMethod());
-        assertEquals(3, entry.getSMRArguments().length);
-        assertEquals(1000L, entry.getSMRArguments()[0]);
-        assertEquals(testKey, entry.getSMRArguments()[1]);
-        assertEquals(testValue, entry.getSMRArguments()[2]);
+        assertEquals(2, entry.getSMRArguments().length);
+        assertEquals(testKey, entry.getSMRArguments()[0]);
+        assertEquals(testValue, entry.getSMRArguments()[1]);
     }
 
     @Test
@@ -139,9 +136,8 @@ public class RemoteCorfuTableTest {
         SMREntry entry = (SMREntry) LogEntry.deserialize(serializedSMREntry, mRuntime);
 
         assertEquals(DELETE.getSMRName(),entry.getSMRMethod());
-        assertEquals(2, entry.getSMRArguments().length);
-        assertEquals(1000L, entry.getSMRArguments()[0]);
-        assertEquals(testKey, entry.getSMRArguments()[1]);
+        assertEquals(1, entry.getSMRArguments().length);
+        assertEquals(testKey, entry.getSMRArguments()[0]);
     }
 
     @Test
@@ -164,10 +160,9 @@ public class RemoteCorfuTableTest {
         SMREntry entry = (SMREntry) LogEntry.deserialize(serializedSMREntry, mRuntime);
 
         assertEquals(DELETE.getSMRName(),entry.getSMRMethod());
-        assertEquals(6, entry.getSMRArguments().length);
-        assertEquals(1000L, entry.getSMRArguments()[0]);
+        assertEquals(5, entry.getSMRArguments().length);
         for (int i = 0; i < 5; i++) {
-            assertEquals(testKeys.get(i), entry.getSMRArguments()[i+1]);
+            assertEquals(testKeys.get(i), entry.getSMRArguments()[i]);
         }
     }
 
@@ -191,8 +186,7 @@ public class RemoteCorfuTableTest {
         SMREntry entry = (SMREntry) LogEntry.deserialize(serializedSMREntry, mRuntime);
 
         assertEquals(UPDATE.getSMRName(), entry.getSMRMethod());
-        assertEquals(11, entry.getSMRArguments().length);
-        assertEquals(1000L, entry.getSMRArguments()[0]);
+        assertEquals(10, entry.getSMRArguments().length);
 
         Multiset<RemoteCorfuTable.RemoteCorfuTableEntry<String,Integer>> expectedSet = ImmutableMultiset.copyOf(
                 testMap.entrySet().stream()
@@ -201,7 +195,7 @@ public class RemoteCorfuTableTest {
                         .collect(Collectors.toList()));
 
         List<RemoteCorfuTable.RemoteCorfuTableEntry<String , Integer>> readList = new LinkedList<>();
-        for (int i = 1; i < entry.getSMRArguments().length; i += 2) {
+        for (int i = 0; i < entry.getSMRArguments().length; i += 2) {
             readList.add(new RemoteCorfuTable.RemoteCorfuTableEntry<>(
                     (String) entry.getSMRArguments()[i],(Integer) entry.getSMRArguments()[i+1]));
         }
@@ -229,12 +223,11 @@ public class RemoteCorfuTableTest {
         SMREntry entry = (SMREntry) LogEntry.deserialize(serializedSMREntry, mRuntime);
 
         assertEquals(UPDATE.getSMRName(), entry.getSMRMethod());
-        assertEquals(11, entry.getSMRArguments().length);
-        assertEquals(1000L, entry.getSMRArguments()[0]);
+        assertEquals(10, entry.getSMRArguments().length);
         for (int i = 0; i < entries.size(); i++) {
             RemoteCorfuTable.RemoteCorfuTableEntry<String, Integer> readEntry =
                     new RemoteCorfuTable.RemoteCorfuTableEntry<>(
-                            (String) entry.getSMRArguments()[2*i+1], (Integer) entry.getSMRArguments()[2*i+2]);
+                            (String) entry.getSMRArguments()[2*i], (Integer) entry.getSMRArguments()[2*i+1]);
             assertEquals(entries.get(i), readEntry);
         }
     }
@@ -254,7 +247,6 @@ public class RemoteCorfuTableTest {
         SMREntry entry = (SMREntry) LogEntry.deserialize(serializedSMREntry, mRuntime);
 
         assertEquals(CLEAR.getSMRName(), entry.getSMRMethod());
-        assertEquals(1, entry.getSMRArguments().length);
-        assertEquals(1000L, entry.getSMRArguments()[0]);
+        assertEquals(0, entry.getSMRArguments().length);
     }
 }

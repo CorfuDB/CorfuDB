@@ -29,16 +29,16 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
 
     @Override
     public void insert(K key, V value) {
-        adapter.update(key, value, adapter.getCurrentTimestamp());
+        adapter.update(key, value);
     }
 
     @Override
     public void delete(K key) {
-        adapter.delete(key, adapter.getCurrentTimestamp());
+        adapter.delete(key);
     }
 
     public void multiDelete(List<K> keys) {
-        adapter.multiDelete(keys, adapter.getCurrentTimestamp());
+        adapter.multiDelete(keys);
     }
 
     public List<RemoteCorfuTableEntry<K,V>> scanFromBeginning() {
@@ -57,6 +57,8 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
         return adapter.scan(startPoint, numEntries, adapter.getCurrentTimestamp());
     }
 
+
+    //TODO: segment the fulldb scan
     @Override
     public List<V> scanAndFilter(Predicate<? super V> valuePredicate) {
         return scanAndFilterFromBeginning(valuePredicate);
@@ -164,7 +166,7 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
         long timestamp = adapter.getCurrentTimestamp();
         //synchronization guarantees unneeded as timestamp will define versioning
         V returnVal = adapter.get((K) key, timestamp);
-        adapter.update(key, value, timestamp);
+        adapter.update(key, value);
         return returnVal;
     }
 
@@ -173,7 +175,7 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
         long timestamp = adapter.getCurrentTimestamp();
         //synchronization guarantees unneeded as timestamp will define versioning
         V returnVal = adapter.get((K) key, timestamp);
-        adapter.delete((K) key, timestamp);
+        adapter.delete((K) key);
         return returnVal;
     }
 
@@ -181,17 +183,16 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
     public void putAll(Map<? extends K, ? extends V> m) {
         adapter.updateAll(m.entrySet().stream()
                 .map(entry -> new RemoteCorfuTableEntry<K,V>(entry.getKey(), entry.getValue()))
-                .collect(Collectors.toList()),
-                adapter.getCurrentTimestamp());
+                .collect(Collectors.toList()));
     }
 
     public void updateAll(Collection<RemoteCorfuTableEntry<K,V>> entries) {
-        adapter.updateAll(entries, adapter.getCurrentTimestamp());
+        adapter.updateAll(entries);
     }
 
     @Override
     public void clear() {
-        adapter.clear(adapter.getCurrentTimestamp());
+        adapter.clear();
     }
 
     /**

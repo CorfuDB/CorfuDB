@@ -8,11 +8,11 @@ import lombok.Getter;
  * Created by nvaishampayan517 on 08/18/21
  */
 public enum RemoteCorfuTableSMRMethods {
-    //Arg Format: Single Argument - timestsamp
+    //Arg Format: None
     CLEAR("clear"),
-    //Arg Format: Long timestamp followed by one or more contiguous Key-Value pairs to add
+    //Arg Format: Any amount of contiguous Key-Value pairs to add
     UPDATE("put"),
-    //Arg Format: Long timestamp followed by one or more of keys to delete
+    //Arg Format: Any amount of keys to delete
     DELETE("delete");
 
     @Getter

@@ -55,9 +55,8 @@ public class RemoteCorfuTableAdapter<K,V> {
         //TODO: add logic to deregister table
     }
 
-    public void clear(long currentTimestamp) {
-        Object[] smrArgs = new Object[1];
-        smrArgs[0] = currentTimestamp;
+    public void clear() {
+        Object[] smrArgs = new Object[0];
         SMREntry entry = new SMREntry(CLEAR.getSMRName(), smrArgs, serializer);
         ByteBuf serializedEntry = Unpooled.buffer();
         entry.serialize(serializedEntry);
@@ -65,15 +64,13 @@ public class RemoteCorfuTableAdapter<K,V> {
         streamView.append(serializedEntry);
     }
 
-    public void updateAll(Collection<RemoteCorfuTable.RemoteCorfuTableEntry<K,V>> entries,
-                          long timestamp) {
-        Object[] smrArgs = new Object[2*entries.size() + 1];
-        smrArgs[0] = timestamp;
-        int i = 1;
+    public void updateAll(Collection<RemoteCorfuTable.RemoteCorfuTableEntry<K,V>> entries) {
+        Object[] smrArgs = new Object[2*entries.size()];
+        int i = 0;
         for (RemoteCorfuTable.RemoteCorfuTableEntry<K,V> entry: entries) {
-            smrArgs[2*i -1] = entry.getKey();
-            smrArgs[2*i] = entry.getValue();
-            i++;
+            smrArgs[i] = entry.getKey();
+            smrArgs[i+1] = entry.getValue();
+            i += 2;
         }
         SMREntry entry = new SMREntry(UPDATE.getSMRName(), smrArgs, serializer);
         ByteBuf serializedEntry = Unpooled.buffer();
@@ -91,7 +88,7 @@ public class RemoteCorfuTableAdapter<K,V> {
         ByteString databaseKeyString = serializeObject(key);
         RemoteCorfuTableVersionedKey databaseKey = new RemoteCorfuTableVersionedKey(databaseKeyString, timestamp);
         ByteString databaseValueString = runtime.getRemoteCorfuTableView().get(databaseKey, streamId);
-        return (V) deserializeObject(databaseKeyString);
+        return (V) deserializeObject(databaseValueString);
     }
 
     private ByteString serializeObject(Object payload) {
@@ -110,37 +107,29 @@ public class RemoteCorfuTableAdapter<K,V> {
     }
 
 
-    public void delete(K key, long timestamp) {
+    public void delete(K key) {
+        Object[] smrArgs = new Object[1];
+        smrArgs[0] = key;
+        SMREntry entry = new SMREntry(DELETE.getSMRName(), smrArgs, serializer);
+        ByteBuf serializedEntry = Unpooled.buffer();
+        entry.serialize(serializedEntry);
+        //TODO: run unit tests to determine errors that can propogate
+        streamView.append(serializedEntry);
+    }
+
+    public void multiDelete(List<K> keys) {
+        Object[] smrArgs = keys.toArray(new Object[0]);
+        SMREntry entry = new SMREntry(DELETE.getSMRName(), smrArgs, serializer);
+        ByteBuf serializedEntry = Unpooled.buffer();
+        entry.serialize(serializedEntry);
+        //TODO: run unit tests to determine errors that can propogate
+        streamView.append(serializedEntry);
+    }
+
+    public void update(K key, V value) {
         Object[] smrArgs = new Object[2];
-        smrArgs[0] = timestamp;
-        smrArgs[1] = key;
-        SMREntry entry = new SMREntry(DELETE.getSMRName(), smrArgs, serializer);
-        ByteBuf serializedEntry = Unpooled.buffer();
-        entry.serialize(serializedEntry);
-        //TODO: run unit tests to determine errors that can propogate
-        streamView.append(serializedEntry);
-    }
-
-    public void multiDelete(List<K> keys, long currentTimestamp) {
-        Object[] smrArgs = new Object[keys.size()+1];
-        smrArgs[0] = currentTimestamp;
-        int i = 1;
-        for (K key : keys) {
-            smrArgs[i] = key;
-            i++;
-        }
-        SMREntry entry = new SMREntry(DELETE.getSMRName(), smrArgs, serializer);
-        ByteBuf serializedEntry = Unpooled.buffer();
-        entry.serialize(serializedEntry);
-        //TODO: run unit tests to determine errors that can propogate
-        streamView.append(serializedEntry);
-    }
-
-    public void update(K key, V value, long timestamp) {
-        Object[] smrArgs = new Object[3];
-        smrArgs[0] = timestamp;
-        smrArgs[1] = key;
-        smrArgs[2] = value;
+        smrArgs[0] = key;
+        smrArgs[1] = value;
         SMREntry entry = new SMREntry(UPDATE.getSMRName(), smrArgs, serializer);
         ByteBuf serializedEntry = Unpooled.buffer();
         entry.serialize(serializedEntry);
