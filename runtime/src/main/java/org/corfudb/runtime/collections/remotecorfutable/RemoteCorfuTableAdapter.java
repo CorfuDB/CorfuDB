@@ -4,6 +4,7 @@ import com.google.protobuf.ByteString;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.NonNull;
+import org.corfudb.common.remotecorfutable.RemoteCorfuTableDatabaseEntry;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
@@ -18,6 +19,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * This class connects the client API from the RemoteCorfuTable to the data stored on the server.
@@ -27,6 +29,7 @@ import java.util.UUID;
  * @param <V> The value type
  */
 public class RemoteCorfuTableAdapter<K,V> {
+    public static final int DEFAULT_SCAN_SIZE = 5;
     private final String tableName;
     private final UUID streamId;
     private final CorfuRuntime runtime;
@@ -83,18 +86,27 @@ public class RemoteCorfuTableAdapter<K,V> {
     }
 
     public V get(K key, long timestamp) {
-        ByteBuf serializationBuffer = Unpooled.buffer();
-        serializer.serialize(key, serializationBuffer);
-        byte[] intermediaryBuffer = new byte[serializationBuffer.readableBytes()];
-        serializationBuffer.readBytes(intermediaryBuffer);
-        ByteString databaseKeyString = ByteString.copyFrom(intermediaryBuffer);
+        ByteString databaseKeyString = serializeObject(key);
         RemoteCorfuTableVersionedKey databaseKey = new RemoteCorfuTableVersionedKey(databaseKeyString, timestamp);
         ByteString databaseValueString = runtime.getRemoteCorfuTableView().get(databaseKey, streamId);
-        byte[] deserializationWrapped = new byte[databaseValueString.size()];
-        databaseValueString.copyTo(deserializationWrapped, 0);
-        ByteBuf deserializationBuffer = Unpooled.wrappedBuffer(deserializationWrapped);
-        return (V) serializer.deserialize(deserializationBuffer, runtime);
+        return (V) deserializeObject(databaseKeyString);
     }
+
+    private ByteString serializeObject(Object payload) {
+        ByteBuf serializationBuffer = Unpooled.buffer();
+        serializer.serialize(payload, serializationBuffer);
+        byte[] intermediaryBuffer = new byte[serializationBuffer.readableBytes()];
+        serializationBuffer.readBytes(intermediaryBuffer);
+        return ByteString.copyFrom(intermediaryBuffer);
+    }
+
+    private Object deserializeObject(ByteString serialiaedOject) {
+        byte[] deserializationWrapped = new byte[serialiaedOject.size()];
+        serialiaedOject.copyTo(deserializationWrapped, 0);
+        ByteBuf deserializationBuffer = Unpooled.wrappedBuffer(deserializationWrapped);
+        return serializer.deserialize(deserializationBuffer, runtime);
+    }
+
 
     public void delete(K key, long timestamp) {
         Object[] smrArgs = new Object[1];
@@ -127,35 +139,60 @@ public class RemoteCorfuTableAdapter<K,V> {
     }
 
     public boolean containsValue(V value, long currentTimestamp) {
-        return false;
+        ByteString databaseValueString = serializeObject(value);
+        return runtime.getRemoteCorfuTableView()
+                .containsValue(databaseValueString,streamId,currentTimestamp, DEFAULT_SCAN_SIZE);
     }
 
     public boolean containsKey(K key, long currentTimestamp) {
-        return false;
+        ByteString databaseKeyString = serializeObject(key);
+        RemoteCorfuTableVersionedKey databaseKey =
+                new RemoteCorfuTableVersionedKey(databaseKeyString,currentTimestamp);
+        return runtime.getRemoteCorfuTableView().containsKey(databaseKey,streamId);
     }
 
     public int size(long currentTimestamp) {
-        return 0;
+        return runtime.getRemoteCorfuTableView().size(streamId, currentTimestamp, DEFAULT_SCAN_SIZE);
     }
 
-    public List<RemoteCorfuTable.RemoteCorfuTableEntry<K, V>> fullDatabaseScan(long currentTimestamp) {
-        return null;
-    }
 
     public List<RemoteCorfuTable.RemoteCorfuTableEntry<K, V>> scan(K startPoint, int numEntries, long currentTimestamp) {
-        return null;
+        ByteString databaseKeyString = serializeObject(startPoint);
+        RemoteCorfuTableVersionedKey databaseKey =
+                new RemoteCorfuTableVersionedKey(databaseKeyString,currentTimestamp);
+        List<RemoteCorfuTableDatabaseEntry> scannedEntries = runtime.getRemoteCorfuTableView().scan(databaseKey,
+                numEntries, streamId, currentTimestamp);
+        return getRemoteCorfuTableEntries(scannedEntries);
     }
 
     public List<RemoteCorfuTable.RemoteCorfuTableEntry<K, V>> scan(int numEntries, long currentTimestamp) {
-        return null;
+        List<RemoteCorfuTableDatabaseEntry> scannedEntries = runtime.getRemoteCorfuTableView().scan(numEntries,
+                streamId, currentTimestamp);
+        return getRemoteCorfuTableEntries(scannedEntries);
     }
     
     public List<RemoteCorfuTable.RemoteCorfuTableEntry<K, V>> scan(K startPoint, long currentTimestamp) {
-        return null;
+        ByteString databaseKeyString = serializeObject(startPoint);
+        RemoteCorfuTableVersionedKey databaseKey =
+                new RemoteCorfuTableVersionedKey(databaseKeyString,currentTimestamp);
+        List<RemoteCorfuTableDatabaseEntry> scannedEntries = runtime.getRemoteCorfuTableView().scan(databaseKey,
+                streamId, currentTimestamp);
+        return getRemoteCorfuTableEntries(scannedEntries);
     }
 
     public List<RemoteCorfuTable.RemoteCorfuTableEntry<K, V>> scan(long currentTimestamp) {
-        return null;
+        List<RemoteCorfuTableDatabaseEntry> scannedEntries = runtime.getRemoteCorfuTableView().scan(streamId,
+                currentTimestamp);
+        return getRemoteCorfuTableEntries(scannedEntries);
+    }
+
+    private List<RemoteCorfuTable.RemoteCorfuTableEntry<K, V>> getRemoteCorfuTableEntries(List<RemoteCorfuTableDatabaseEntry> scannedEntries) {
+        return scannedEntries.stream()
+                .map(dbEntry -> new RemoteCorfuTable.RemoteCorfuTableEntry<K,V>(
+                        (K) deserializeObject(dbEntry.getKey().getEncodedKey()),
+                        (V) deserializeObject(dbEntry.getValue())
+                ))
+                .collect(Collectors.toList());
     }
 
     @Override

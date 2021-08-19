@@ -60,8 +60,31 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
     //TODO: segment the fulldb scan
     @Override
     public List<V> scanAndFilter(Predicate<? super V> valuePredicate) {
-        List<RemoteCorfuTableEntry<K,V>> allEntries = adapter.fullDatabaseScan(adapter.getCurrentTimestamp());
-        return allEntries.stream()
+        return scanAndFilterFromBeginning(valuePredicate);
+    }
+
+    public List<V> scanAndFilterFromBeginning(Predicate<? super V> valuePredicate) {
+        List<RemoteCorfuTableEntry<K,V>> scannedEntries = adapter.scan(adapter.getCurrentTimestamp());
+        return filteredValues(valuePredicate, scannedEntries);
+    }
+
+    public List<V> scanAndFilterFromBeginning(int numEntries, Predicate<? super V> valuePredicate) {
+        List<RemoteCorfuTableEntry<K,V>> scannedEntries = adapter.scan(numEntries, adapter.getCurrentTimestamp());
+        return filteredValues(valuePredicate, scannedEntries);
+    }
+
+    public List<V> cursorScanAndFilter(K startPoint, Predicate<? super V> valuePredicate) {
+        List<RemoteCorfuTableEntry<K,V>> scannedEntries = adapter.scan(startPoint, adapter.getCurrentTimestamp());
+        return filteredValues(valuePredicate, scannedEntries);
+    }
+
+    public List<V> cursorScanAndFilter(K startPoint, int numEntries, Predicate<? super V> valuePredicate) {
+        List<RemoteCorfuTableEntry<K,V>> scannedEntries = adapter.scan(startPoint, numEntries, adapter.getCurrentTimestamp());
+        return filteredValues(valuePredicate, scannedEntries);
+    }
+
+    private List<V> filteredValues(Predicate<? super V> valuePredicate, List<RemoteCorfuTableEntry<K, V>> scannedEntries) {
+        return scannedEntries.stream()
                 .filter(entry -> valuePredicate.test(entry.getValue()))
                 .map(RemoteCorfuTableEntry::getValue)
                 .collect(Collectors.toList());
@@ -69,8 +92,32 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
 
     @Override
     public Collection<Entry<K, V>> scanAndFilterByEntry(Predicate<? super Entry<K, V>> entryPredicate) {
-        List<RemoteCorfuTableEntry<K,V>> allEntries = adapter.fullDatabaseScan(adapter.getCurrentTimestamp());
-        return allEntries.stream().filter(entryPredicate).collect(Collectors.toList());
+        return scanAndFilterByEntryFromBeginning(entryPredicate);
+    }
+
+    public Collection<Entry<K, V>> scanAndFilterByEntryFromBeginning(Predicate<? super Entry<K, V>> entryPredicate) {
+        List<RemoteCorfuTableEntry<K,V>> scannedEntries = adapter.scan(adapter.getCurrentTimestamp());
+        return filteredEntries(entryPredicate, scannedEntries);
+    }
+
+    public Collection<Entry<K, V>> scanAndFilterByEntryFromBeginning(int numEntries, Predicate<? super Entry<K, V>> entryPredicate) {
+        List<RemoteCorfuTableEntry<K,V>> scannedEntries = adapter.scan(numEntries, adapter.getCurrentTimestamp());
+        return filteredEntries(entryPredicate, scannedEntries);
+    }
+
+    public Collection<Entry<K, V>> cursorScanAndFilterByEntry(K startPoint, Predicate<? super Entry<K, V>> entryPredicate) {
+        List<RemoteCorfuTableEntry<K,V>> scannedEntries = adapter.scan(startPoint, adapter.getCurrentTimestamp());
+        return filteredEntries(entryPredicate, scannedEntries);
+    }
+
+    public Collection<Entry<K, V>> cursorScanAndFilterByEntry(K startPoint, int numEntries, Predicate<? super Entry<K, V>> entryPredicate) {
+        List<RemoteCorfuTableEntry<K,V>> scannedEntries = adapter.scan(startPoint, numEntries, adapter.getCurrentTimestamp());
+        return filteredEntries(entryPredicate, scannedEntries);
+    }
+
+    private List<Entry<K, V>> filteredEntries(Predicate<? super Entry<K, V>> entryPredicate,
+                                              List<RemoteCorfuTableEntry<K, V>> scannedEntries) {
+        return scannedEntries.stream().filter(entryPredicate).collect(Collectors.toList());
     }
 
     /**
