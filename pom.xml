@@ -6,6 +6,7 @@
     <artifactId>corfu</artifactId>
     <version>${revision}</version>
 
+    <!-- 111 -->
     <modules>
         <module>infrastructure</module>
         <module>runtime</module>
