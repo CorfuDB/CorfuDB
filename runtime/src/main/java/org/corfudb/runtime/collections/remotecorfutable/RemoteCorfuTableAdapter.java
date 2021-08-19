@@ -1,8 +1,10 @@
 package org.corfudb.runtime.collections.remotecorfutable;
 
+import com.google.protobuf.ByteString;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.NonNull;
+import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import static org.corfudb.runtime.collections.remotecorfutable.RemoteCorfuTableSMRMethods.CLEAR;
@@ -81,7 +83,17 @@ public class RemoteCorfuTableAdapter<K,V> {
     }
 
     public V get(K key, long timestamp) {
-        return null;
+        ByteBuf serializationBuffer = Unpooled.buffer();
+        serializer.serialize(key, serializationBuffer);
+        byte[] intermediaryBuffer = new byte[serializationBuffer.readableBytes()];
+        serializationBuffer.readBytes(intermediaryBuffer);
+        ByteString databaseKeyString = ByteString.copyFrom(intermediaryBuffer);
+        RemoteCorfuTableVersionedKey databaseKey = new RemoteCorfuTableVersionedKey(databaseKeyString, timestamp);
+        ByteString databaseValueString = runtime.getRemoteCorfuTableView().get(databaseKey, streamId);
+        byte[] deserializationWrapped = new byte[databaseValueString.size()];
+        databaseValueString.copyTo(deserializationWrapped, 0);
+        ByteBuf deserializationBuffer = Unpooled.wrappedBuffer(deserializationWrapped);
+        return (V) serializer.deserialize(deserializationBuffer, runtime);
     }
 
     public void delete(K key, long timestamp) {
