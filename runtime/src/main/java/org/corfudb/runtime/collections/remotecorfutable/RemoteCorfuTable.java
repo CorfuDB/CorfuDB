@@ -1,10 +1,14 @@
-package org.corfudb.runtime.collections;
+package org.corfudb.runtime.collections.remotecorfutable;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.object.RemoteCorfuTableAdapter;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.view.stream.AddressMapStreamView;
+import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.Serializers;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Collection;
@@ -30,6 +34,10 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
     @Override
     public void delete(K key) {
         adapter.delete(key, adapter.getCurrentTimestamp());
+    }
+
+    public void multiDelete(List<K> keys) {
+        adapter.multiDelete(keys, adapter.getCurrentTimestamp());
     }
 
     public List<RemoteCorfuTableEntry<K,V>> scanFromBeginning() {
@@ -125,7 +133,14 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
 
     @Override
     public void putAll(Map<? extends K, ? extends V> m) {
-        adapter.updateAll(m, adapter.getCurrentTimestamp());
+        adapter.updateAll(m.entrySet().stream()
+                .map(entry -> new RemoteCorfuTableEntry<K,V>(entry.getKey(), entry.getValue()))
+                .collect(Collectors.toList()),
+                adapter.getCurrentTimestamp());
+    }
+
+    public void updateAll(Collection<RemoteCorfuTableEntry<K,V>> entries) {
+        adapter.updateAll(entries, adapter.getCurrentTimestamp());
     }
 
     @Override
@@ -207,7 +222,10 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
     public static class RemoteCorfuTableFactory<I, J> {
         public RemoteCorfuTable<I,J> openTable(@NonNull CorfuRuntime runtime, @NonNull String tableName) {
             UUID streamID = UUID.nameUUIDFromBytes(tableName.getBytes(StandardCharsets.UTF_8));
-            RemoteCorfuTableAdapter<I,J> adapter = new RemoteCorfuTableAdapter<>(tableName, streamID, runtime);
+            ISerializer serializer = Serializers.getDefaultSerializer();
+            IStreamView streamView = new AddressMapStreamView(runtime, streamID);
+            RemoteCorfuTableAdapter<I,J> adapter = new RemoteCorfuTableAdapter<>(tableName, streamID, runtime,
+                    serializer, streamView);
             return new RemoteCorfuTable<>(adapter, tableName, streamID);
         }
     }
