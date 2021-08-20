@@ -1,6 +1,13 @@
 package org.corfudb.runtime.collections.remotecorfutable;
 
+import com.google.common.collect.ImmutableMap;
 import lombok.Getter;
+import org.corfudb.protocols.logprotocol.LogEntry;
+
+import java.util.Arrays;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * This enum contains the string values of the SMR methods for the RemoteCorfuTable.
@@ -18,7 +25,15 @@ public enum RemoteCorfuTableSMRMethods {
     @Getter
     private final String SMRName;
 
-    private RemoteCorfuTableSMRMethods(String SMRName) {
+    RemoteCorfuTableSMRMethods(String SMRName) {
         this.SMRName = SMRName;
+    }
+
+    private static final Map<String, RemoteCorfuTableSMRMethods> typeMap =
+            ImmutableMap.copyOf(Arrays.stream(RemoteCorfuTableSMRMethods.values())
+                    .collect(Collectors.toMap(RemoteCorfuTableSMRMethods::getSMRName, Function.identity())));
+
+    public RemoteCorfuTableSMRMethods getMethodFromName(String name) {
+        return typeMap.get(name);
     }
 }
