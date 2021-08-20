@@ -188,7 +188,7 @@ public class DatabaseHandler implements AutoCloseable {
      * This function provides an interface to read a key from the database.
      * @param encodedKey The key to read.
      * @param streamID The stream backing the database to read from.
-     * @return A byte[] containing the value mapped to the key, or null if the key is associated to a null value.
+     * @return A ByteString containing the value mapped to the key, or an empty value if no value is present.
      * @throws RocksDBException An error raised in scan.
      */
     public ByteString get(@NonNull RemoteCorfuTableVersionedKey encodedKey, @NonNull UUID streamID)
@@ -204,14 +204,14 @@ public class DatabaseHandler implements AutoCloseable {
             if (!iter.isValid()) {
                 iter.status();
                 //We've reached the end of the data
-                returnVal = null;
+                returnVal = ByteString.EMPTY;
             } else {
                 if (encodedKey.getEncodedKey().equals(KeyEncodingUtil.extractEncodedKeyAsByteString(iter.key()))
                         && !isEmpty(iter.value())) {
                     //This works due to latest version first comparator
                     returnVal = ByteString.copyFrom(iter.value());
                 } else {
-                    returnVal = null;
+                    returnVal = ByteString.EMPTY;
                 }
             }
         }
@@ -385,7 +385,7 @@ public class DatabaseHandler implements AutoCloseable {
 
     /**
      * This function provides an interface to clear the entire table at a specific version,
-     * which is performed by atomically inputting null values at every key in the table.
+     * which is performed by atomically inputting empty values at every key in the table.
      * @param streamID The stream backing the table to clear.
      * @param timestamp The timestamp at which the clear was requested.
      * @throws RocksDBException An error in writing all updates.
@@ -410,7 +410,7 @@ public class DatabaseHandler implements AutoCloseable {
                     iter.next();
                     continue;
                 }
-                //put empty "null" value at every key in the table
+                //put empty value at every key in the table
                 RemoteCorfuTableVersionedKey keyToWrite = new RemoteCorfuTableVersionedKey(keyPrefix, timestamp);
                 batchedWrite.put(currTable,keyToWrite.getEncodedVersionedKey().toByteArray(), EMPTY_VALUE);
                 //seek will move iterator to value after the "next key" if it does not exist
@@ -706,16 +706,16 @@ public class DatabaseHandler implements AutoCloseable {
 
     /**
      * This function provides an interface to check if a key is present in the table.
-     * Equivalent to (get(encodedKey, streamID) != null)
+     * Equivalent to !get(encodedKey, streamID).isEmpty()
      * @param encodedKey The key to check.
      * @param streamID The stream backing the table to check.
-     * @return True, if a non-null value exists in the table for the given key and timestamp.
+     * @return True, if a non-empty value exists in the table for the given key and timestamp.
      * @throws RocksDBException An error occuring in the search.
      */
     public boolean containsKey(@NonNull RemoteCorfuTableVersionedKey encodedKey, @NonNull UUID streamID)
             throws RocksDBException, DatabaseOperationException {
         ByteString val = get(encodedKey, streamID);
-        return val != null;
+        return !val.isEmpty();
     }
 
     /**
@@ -792,7 +792,7 @@ public class DatabaseHandler implements AutoCloseable {
      * @param streamID The stream backing the table to check.
      * @param timestamp The timestamp of the requested table version.
      * @param scanSize The size of each cursor scan to the database.
-     * @return The amount of non-null keys present in the database with version earlier than given timestamp.
+     * @return The amount of non-empty keys present in the database with version earlier than given timestamp.
      * @throws RocksDBException An error occuring in the search.
      * @throws DatabaseOperationException An error occuring with requested stream.
      */

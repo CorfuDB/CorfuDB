@@ -123,7 +123,7 @@ public class DatabaseHandlerTest {
                         assertEquals(v1Val, readinVal);
                         break;
                     default:
-                        assertNull(readinVal);
+                        assertTrue(readinVal.isEmpty());
                 }
             }
         } catch (RocksDBException | DatabaseOperationException e) {
