@@ -2,7 +2,6 @@ package org.corfudb.runtime.collections.remotecorfutable;
 
 import com.google.common.collect.ImmutableMap;
 import lombok.Getter;
-import org.corfudb.protocols.logprotocol.LogEntry;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -33,7 +32,7 @@ public enum RemoteCorfuTableSMRMethods {
             ImmutableMap.copyOf(Arrays.stream(RemoteCorfuTableSMRMethods.values())
                     .collect(Collectors.toMap(RemoteCorfuTableSMRMethods::getSMRName, Function.identity())));
 
-    public RemoteCorfuTableSMRMethods getMethodFromName(String name) {
+    public static RemoteCorfuTableSMRMethods getMethodFromName(String name) {
         return typeMap.get(name);
     }
 }

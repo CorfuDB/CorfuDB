@@ -21,7 +21,7 @@ import java.util.UUID;
 @AllArgsConstructor
 public class DeleteOperation implements SMROperation {
     @NonNull
-    private final List<ByteString> args;
+    private final ByteString[] args;
 
     private final long timestamp;
     @NonNull
@@ -35,9 +35,9 @@ public class DeleteOperation implements SMROperation {
      */
     @Override
     public void applySMRMethod(@NonNull DatabaseHandler dbHandler) throws RocksDBException {
-        if (args.size() == 1) {
+        if (args.length == 1) {
             //single delete case
-            RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(args.get(0), timestamp);
+            RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(args[0], timestamp);
             dbHandler.update(key, ByteString.EMPTY, streamId);
         } else {
             List<RemoteCorfuTableDatabaseEntry> entries = new LinkedList<>();

@@ -21,7 +21,7 @@ import java.util.UUID;
 @AllArgsConstructor
 public class UpdateOperation implements SMROperation {
     @NonNull
-    private final List<ByteString> args;
+    private final ByteString[] args;
 
     private final long timestamp;
     @NonNull
@@ -35,18 +35,18 @@ public class UpdateOperation implements SMROperation {
      */
     @Override
     public void applySMRMethod(@NonNull DatabaseHandler dbHandler) throws RocksDBException {
-        int size = args.size();
+        int size = args.length;
         if (size % 2 == 1) {
             throw new IllegalArgumentException("args must consist of key-value pairs");
         } else if (size == 2) {
             //single update case
-            RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(args.get(0), timestamp);
-            dbHandler.update(key, args.get(1), streamId);
+            RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(args[0], timestamp);
+            dbHandler.update(key, args[1], streamId);
         } else {
             List<RemoteCorfuTableDatabaseEntry> entries = new LinkedList<>();
-            for (int i = 0; i < args.size(); i += 2) {
-                RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(args.get(2*i), timestamp);
-                RemoteCorfuTableDatabaseEntry entry = new RemoteCorfuTableDatabaseEntry(key, args.get(2*i+1));
+            for (int i = 0; i < args.length; i += 2) {
+                RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(args[2*i], timestamp);
+                RemoteCorfuTableDatabaseEntry entry = new RemoteCorfuTableDatabaseEntry(key, args[2*i+1]);
                 entries.add(entry);
             }
             dbHandler.updateAll(entries, streamId);
