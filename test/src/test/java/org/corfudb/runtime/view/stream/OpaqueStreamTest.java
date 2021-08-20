@@ -34,7 +34,7 @@ public class OpaqueStreamTest extends AbstractViewTest {
         CorfuRuntime rt = getDefaultRuntime();
 
         ISerializer customSerializer = new CustomSerializer((byte) (Serializers.SYSTEM_SERIALIZERS_COUNT + 2));
-        Serializers.registerSerializer(customSerializer);
+        rt.getSerializers().registerSerializer(customSerializer);
 
         UUID streamId = CorfuRuntime.getStreamID("stream1");
 
@@ -56,7 +56,7 @@ public class OpaqueStreamTest extends AbstractViewTest {
         rt.getObjectsView().TXEnd();
 
 
-        Serializers.removeSerializer(customSerializer);
+        rt.getSerializers().removeSerializer(customSerializer);
 
         CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
 
@@ -79,7 +79,7 @@ public class OpaqueStreamTest extends AbstractViewTest {
     public void extractAndGenerate() {
         CorfuRuntime runtime = getDefaultRuntime();
         ISerializer customSerializer = new CustomSerializer((byte) (Serializers.SYSTEM_SERIALIZERS_COUNT + 2));
-        Serializers.registerSerializer(customSerializer);
+        runtime.getSerializers().registerSerializer(customSerializer);
 
         UUID streamId = UUID.randomUUID();
 
@@ -97,7 +97,7 @@ public class OpaqueStreamTest extends AbstractViewTest {
         }
         runtime.getObjectsView().TXEnd();
 
-        Serializers.removeSerializer(customSerializer);
+        runtime.getSerializers().removeSerializer(customSerializer);
 
         CorfuRuntime newRuntime = getNewRuntime(getDefaultNode()).connect();
 
@@ -112,7 +112,7 @@ public class OpaqueStreamTest extends AbstractViewTest {
         CorfuRuntime rt = getDefaultRuntime();
 
         ISerializer customSerializer = new CustomSerializer((byte) (Serializers.SYSTEM_SERIALIZERS_COUNT + 2));
-        Serializers.registerSerializer(customSerializer);
+        rt.getSerializers().registerSerializer(customSerializer);
 
         UUID streamId = CorfuRuntime.getStreamID("stream1");
 
@@ -137,7 +137,7 @@ public class OpaqueStreamTest extends AbstractViewTest {
 
         rt.getAddressSpaceView().prefixTrim(token);
 
-        Serializers.removeSerializer(customSerializer);
+        rt.getSerializers().removeSerializer(customSerializer);
 
         CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
 
