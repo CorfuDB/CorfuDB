@@ -13,6 +13,10 @@
 
     <properties>
         <maven.deploy.skip>false</maven.deploy.skip>
+
+        <caffeine.version>2.8.5</caffeine.version>
+        <mockito.inline.version>3.6.0</mockito.inline.version>
+        <docopt.version>0.6.0.20150202</docopt.version>
     </properties>
 
     <profiles>
@@ -250,19 +254,9 @@
         </dependency>
         <!-- External Dependencies-->
         <dependency>
-            <groupId>com.google.protobuf</groupId>
-            <artifactId>protobuf-java</artifactId>
-            <version>3.6.1</version>
-        </dependency>
-        <dependency>
             <groupId>com.offbytwo</groupId>
             <artifactId>docopt</artifactId>
-            <version>0.6.0.20150202</version>
-        </dependency>
-        <dependency>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
-            <version>2.7</version>
+            <version>${docopt.version}</version>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback</groupId>
@@ -272,12 +266,12 @@
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>
             <artifactId>caffeine</artifactId>
-            <version>2.8.5</version>
+            <version>${caffeine.version}</version>
         </dependency>
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-inline</artifactId>
-            <version>3.6.0</version>
+            <version>${mockito.inline.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
