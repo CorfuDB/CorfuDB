@@ -108,8 +108,7 @@ public class TxnContext implements AutoCloseable {
             return;
         }
 
-        // Consider moving this to trace after stability improves.
-        log.debug("TxnContext: begin transaction in namespace {}", namespace);
+        log.trace("TxnContext: begin transaction in namespace {}", namespace);
         this.startTxSample = MeterRegistryProvider.getInstance().map(Timer::start);
         Transaction.TransactionBuilder transactionBuilder = this.objectsView
                 .TXBuild()
@@ -793,8 +792,10 @@ public class TxnContext implements AutoCloseable {
             throw new IllegalStateException("commit() called without a transaction!");
         }
 
-        // Apply any buffered up operations.
-        operations.forEach(Runnable::run);
+        if (operations.size() > 0) {
+            // Apply any buffered up operations.
+            operations.forEach(Runnable::run);
+        }
 
         // CorfuStore should have only one transactional context since nesting is prohibited.
         AbstractTransactionalContext rootContext = TransactionalContext.getRootContext();
@@ -830,19 +831,21 @@ public class TxnContext implements AutoCloseable {
         }
 
         // These can be moved to trace once stability improves.
-        log.debug("Txn committed on namespace {}", namespace);
+        log.trace("Txn committed on namespace {}", namespace);
 
-        // If we are here this means commit was successful, now invoke the callback with
-        // the final versions of all the mutated objects.
-        MultiObjectSMREntry writeSet = rootContext.getWriteSetInfo().getWriteSet();
-        final Map<String, List<CorfuStreamEntry>> mutations = new HashMap<>();
-        tablesInTxn.forEach((uuid, table) -> {
-            List<CorfuStreamEntry> writesInTable = writeSet.getSMRUpdates(uuid).stream().map(entry ->
-                    CorfuStreamEntry.fromSMREntry(entry, 0)).collect(Collectors.toList());
-            mutations.put(table.getFullyQualifiedTableName(), writesInTable);
-        });
-        commitCallbacks.forEach(cb -> cb.onCommit(mutations));
-        operations.clear();
+        if (txnType != READ_ONLY) {
+            // If we are here this means commit was successful, now invoke the callback with
+            // the final versions of all the mutated objects.
+            MultiObjectSMREntry writeSet = rootContext.getWriteSetInfo().getWriteSet();
+            final Map<String, List<CorfuStreamEntry>> mutations = new HashMap<>();
+            tablesInTxn.forEach((uuid, table) -> {
+                List<CorfuStreamEntry> writesInTable = writeSet.getSMRUpdates(uuid).stream().map(entry ->
+                        CorfuStreamEntry.fromSMREntry(entry, 0)).collect(Collectors.toList());
+                mutations.put(table.getFullyQualifiedTableName(), writesInTable);
+            });
+            commitCallbacks.forEach(cb -> cb.onCommit(mutations));
+            operations.clear();
+        }
 
         return Timestamp.newBuilder()
                 .setEpoch(getEpoch())
@@ -857,7 +860,7 @@ public class TxnContext implements AutoCloseable {
      * @param commitCallback
      */
     public void addCommitCallback(@Nonnull CommitCallback commitCallback) {
-        log.debug("TxnContext:addCommitCallback in transaction on namespace {}", namespace);
+        log.trace("TxnContext:addCommitCallback in transaction on namespace {}", namespace);
         this.commitCallbacks.add(commitCallback);
     }
 
