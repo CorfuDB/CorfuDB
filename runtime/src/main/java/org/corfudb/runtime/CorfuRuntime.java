@@ -38,6 +38,7 @@ import org.corfudb.util.CFUtils;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
+import org.corfudb.util.serializer.Serializers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,576 +68,6 @@ import java.util.stream.Collectors;
 @Slf4j
 @Accessors(chain = true)
 public class CorfuRuntime {
-
-    /**
-     * A class which holds parameters and settings for the {@link CorfuRuntime}.
-     */
-    @Data
-    @ToString
-    public static class CorfuRuntimeParameters extends RuntimeParameters {
-
-        /*
-         * Max size for a write request.
-         */
-        int maxWriteSize = Integer.MAX_VALUE;
-
-        /*
-         * Set the bulk read size.
-         */
-        int bulkReadSize = 10;
-
-        // region Address Space Parameters
-        /*
-         * Number of times to attempt to read before hole filling.
-         * @deprecated This is a no-op. Use holeFillWait
-         */
-        @Deprecated
-        int holeFillRetry = 10;
-
-        /* Time to wait between read requests reattempts before hole filling. */
-        Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
-
-        /*
-         * Time limit after which the reader gives up and fills the hole.
-         */
-        Duration holeFillTimeout = Duration.ofSeconds(10);
-
-        /*
-         * Whether or not to disable the cache.
-         */
-        boolean cacheDisabled = false;
-
-        /*
-         * The maximum number of entries in the cache.
-         */
-        long maxCacheEntries;
-
-        /*
-         * The max in-memory size of the cache in bytes
-         */
-        long maxCacheWeight;
-
-        /*
-         * This is a hint to size the AddressSpaceView cache, a higher concurrency
-         * level allows for less lock contention at the cost of more memory overhead.
-         * The default value of zero will result in using the cache's internal default
-         * concurrency level (i.e. 4).
-         */
-        int cacheConcurrencyLevel = 0;
-
-        /*
-         * Sets expireAfterAccess and expireAfterWrite in seconds.
-         */
-        long cacheExpiryTime = Long.MAX_VALUE;
-        // endregion
-
-        // region Stream Parameters
-        /*
-
-         */
-        /*
-         * Whether or not hole filling should be disabled.
-         */
-        boolean holeFillingDisabled = false;
-
-        /*
-         * Number of times to retry on an
-         * {@link org.corfudb.runtime.exceptions.OverwriteException} before giving up.
-         */
-        int writeRetry = 5;
-
-        /*
-         * The number of times to retry on a retriable
-         * {@link org.corfudb.runtime.exceptions.TrimmedException} during a transaction.
-         */
-        int trimRetry = 2;
-
-        /*
-         * The total number of retries the checkpointer will attempt on sequencer failover to
-         * prevent epoch regressions. This is independent of the number of streams to be checkpointed.
-         */
-        int checkpointRetries = 5;
-
-        /*
-         * Stream Batch Size: number of addresses to fetch in advance when stream address discovery mechanism
-         * relies on address maps instead of follow backpointers, i.e., followBackpointersEnabled = false;
-         */
-        int streamBatchSize = 10;
-
-        /*
-         * Checkpoint read Batch Size: number of checkpoint addresses to fetch in batch when stream
-         * address discovery mechanism relies on address maps instead of follow backpointers;
-         */
-        int checkpointReadBatchSize = 5;
-        // endregion
-
-        /*
-         * The period at which the runtime will run garbage collection
-         */
-        Duration runtimeGCPeriod = Duration.ofMinutes(20);
-
-        /*
-         * The {@link UUID} for the cluster this client is connecting to, or
-         * {@code null} if the client should adopt the {@link UUID} of the first
-         * server it connects to.
-         */
-        UUID clusterId = null;
-
-        /*
-         * Number of retries to reconnect to an unresponsive system before invoking the
-         * systemDownHandler. This is mainly required to allow the fault detection mechanism
-         * to detect and reconfigure the cluster.
-         * The fault detection takes at least 3 seconds to recognize a failure.
-         * Each retry is attempted after a sleep of {@literal connectionRetryRate}
-         * invoking the systemDownHandler after a minimum of
-         * (systemDownHandlerTriggerLimit * connectionRetryRate) seconds. Default: 20 seconds.
-         */
-        int systemDownHandlerTriggerLimit = 20;
-
-        /*
-         * The initial list of layout servers.
-         */
-        List<NodeLocator> layoutServers = new ArrayList<>();
-        //endregion
-
-        /*
-         * The number of times to retry invalidate when a layout change is expected.
-         */
-        int invalidateRetry = 5;
-
-
-        /*
-         * The default priority of the requests made by this client.
-         * Under resource constraints non-high priority requests
-         * are dropped.
-         */
-        private PriorityLevel priorityLevel = PriorityLevel.NORMAL;
-
-        /*
-         * The compression codec to use to encode a write's payload
-         */
-        private Codec.Type codecType = Codec.Type.ZSTD;
-
-        /*
-         * Enable runtime metrics.
-         */
-        private boolean metricsEnabled = true;
-
-        /*
-         * Number of entries read in a single batch to compute highest sequence number (based on data entries and not holes)
-         */
-        int highestSequenceNumberBatchSize = 4;
-
-        /*
-         * Total time in milliseconds for polling task to block until buffer space is available.
-         */
-        private long streamingPollingBlockingTimeMs = 5;
-
-        /*
-         * Period of time in ms to sleep before next cycle, when poller gets no new data changes.
-         */
-        private int streamingPollingIdleWaitTimeMs = 50;
-
-        /*
-         * Capacity of queue shared by by streaming polling and notification tasks.
-         */
-        private int streamingQueueSize = 100;
-
-        /*
-         * Total number of threads in Polling Executor Pool (shared across all listeners)
-         */
-        private int streamingPollingThreadPoolSize = 2;
-
-        /*
-         * Total number of threads in Notification Executor Pool (shared across all listeners)
-         */
-        private int streamingNotificationThreadPoolSize = 4;
-
-        /*
-         * Total time in milliseconds to block for new updates to appear in the queue, if empty.
-         */
-        private long streamingNotificationBlockingTimeMs = 5;
-
-        /*
-         * Notification batch size (should be lower or equal to streamingQueueSize)
-         */
-        private int streamingNotificationBatchSize = 50;
-        // TODO: make it a function of the streaming Queue Size
-
-        public static CorfuRuntimeParametersBuilder builder() {
-            return new CorfuRuntimeParametersBuilder();
-        }
-
-        public static class CorfuRuntimeParametersBuilder extends RuntimeParametersBuilder {
-            private int maxWriteSize = Integer.MAX_VALUE;
-            private int bulkReadSize = 10;
-            private int holeFillRetry = 10;
-            private Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
-            private Duration holeFillTimeout = Duration.ofSeconds(10);
-            private boolean cacheDisabled = false;
-            private long maxCacheEntries;
-            private long maxCacheWeight;
-            private int cacheConcurrencyLevel = 0;
-            private long cacheExpiryTime = Long.MAX_VALUE;
-            private boolean holeFillingDisabled = false;
-            private int writeRetry = 5;
-            private int trimRetry = 2;
-            private int checkpointRetries = 5;
-            private int streamBatchSize = 10;
-            private int checkpointReadBatchSize = 5;
-            private Duration runtimeGCPeriod = Duration.ofMinutes(20);
-            private UUID clusterId = null;
-            private int systemDownHandlerTriggerLimit = 20;
-            private List<NodeLocator> layoutServers = new ArrayList<>();
-            private int invalidateRetry = 5;
-            private PriorityLevel priorityLevel = PriorityLevel.NORMAL;
-            private Codec.Type codecType = Codec.Type.ZSTD;
-            private boolean metricsEnabled = true;
-            private long streamingPollingBlockingTimeMs = 5;
-            private int streamingQueueSize = 100;
-            private int streamingPollingThreadPoolSize = 2;
-            private int streamingPollingIdleWaitTimeMs = 50;
-            private int streamingNotificationThreadPoolSize = 4;
-            private long streamingNotificationBlockingTimeMs = 5;
-            private int streamingNotificationBatchSize = 50;
-
-            public CorfuRuntimeParametersBuilder tlsEnabled(boolean tlsEnabled) {
-                super.tlsEnabled(tlsEnabled);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder keyStore(String keyStore) {
-                super.keyStore(keyStore);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder ksPasswordFile(String ksPasswordFile) {
-                super.ksPasswordFile(ksPasswordFile);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder trustStore(String trustStore) {
-                super.trustStore(trustStore);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder tsPasswordFile(String tsPasswordFile) {
-                super.tsPasswordFile(tsPasswordFile);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder saslPlainTextEnabled(boolean saslPlainTextEnabled) {
-                super.saslPlainTextEnabled(saslPlainTextEnabled);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder usernameFile(String usernameFile) {
-                super.usernameFile(usernameFile);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder passwordFile(String passwordFile) {
-                super.passwordFile(passwordFile);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder handshakeTimeout(int handshakeTimeout) {
-                super.handshakeTimeout(handshakeTimeout);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder requestTimeout(Duration requestTimeout) {
-                super.requestTimeout(requestTimeout);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder idleConnectionTimeout(int idleConnectionTimeout) {
-                super.idleConnectionTimeout(idleConnectionTimeout);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder keepAlivePeriod(int keepAlivePeriod) {
-                super.keepAlivePeriod(keepAlivePeriod);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder connectionTimeout(Duration connectionTimeout) {
-                super.connectionTimeout(connectionTimeout);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder connectionRetryRate(Duration connectionRetryRate) {
-                super.connectionRetryRate(connectionRetryRate);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder clientId(UUID clientId) {
-                super.clientId(clientId);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder socketType(ChannelImplementation socketType) {
-                super.socketType(socketType);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder nettyEventLoop(EventLoopGroup nettyEventLoop) {
-                super.nettyEventLoop(nettyEventLoop);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder nettyEventLoopThreadFormat(String nettyEventLoopThreadFormat) {
-                super.nettyEventLoopThreadFormat(nettyEventLoopThreadFormat);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder nettyEventLoopThreads(int nettyEventLoopThreads) {
-                super.nettyEventLoopThreads(nettyEventLoopThreads);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder shutdownNettyEventLoop(boolean shutdownNettyEventLoop) {
-                super.shutdownNettyEventLoop(shutdownNettyEventLoop);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder customNettyChannelOptions(Map<ChannelOption, Object> customNettyChannelOptions) {
-                super.customNettyChannelOptions(customNettyChannelOptions);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder uncaughtExceptionHandler(Thread.UncaughtExceptionHandler uncaughtExceptionHandler) {
-                super.uncaughtExceptionHandler(uncaughtExceptionHandler);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder systemDownHandler(Runnable systemDownHandler) {
-                super.systemDownHandler(systemDownHandler);
-                return this;
-            }
-
-            public CorfuRuntimeParametersBuilder beforeRpcHandler(Runnable beforeRpcHandler) {
-                super.beforeRpcHandler(beforeRpcHandler);
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder maxWriteSize(int maxWriteSize) {
-                this.maxWriteSize = maxWriteSize;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder bulkReadSize(int bulkReadSize) {
-                this.bulkReadSize = bulkReadSize;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder holeFillRetry(int holeFillRetry) {
-                this.holeFillRetry = holeFillRetry;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder holeFillRetryThreshold(Duration holeFillRetryThreshold) {
-                this.holeFillRetryThreshold = holeFillRetryThreshold;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder holeFillTimeout(Duration holeFillTimeout) {
-                this.holeFillTimeout = holeFillTimeout;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder cacheDisabled(boolean cacheDisabled) {
-                this.cacheDisabled = cacheDisabled;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder maxCacheEntries(long maxCacheEntries) {
-                this.maxCacheEntries = maxCacheEntries;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder maxCacheWeight(long maxCacheWeight) {
-                this.maxCacheWeight = maxCacheWeight;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder cacheConcurrencyLevel(int cacheConcurrencyLevel) {
-                this.cacheConcurrencyLevel = cacheConcurrencyLevel;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder cacheExpiryTime(long cacheExpiryTime) {
-                this.cacheExpiryTime = cacheExpiryTime;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder holeFillingDisabled(boolean holeFillingDisabled) {
-                this.holeFillingDisabled = holeFillingDisabled;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder writeRetry(int writeRetry) {
-                this.writeRetry = writeRetry;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder trimRetry(int trimRetry) {
-                this.trimRetry = trimRetry;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder checkpointRetries(int checkpointRetries) {
-                this.checkpointRetries = checkpointRetries;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamBatchSize(int streamBatchSize) {
-                this.streamBatchSize = streamBatchSize;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder checkpointReadBatchSize(int checkpointReadBatchSize) {
-                this.checkpointReadBatchSize = checkpointReadBatchSize;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder runtimeGCPeriod(Duration runtimeGCPeriod) {
-                this.runtimeGCPeriod = runtimeGCPeriod;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder clusterId(UUID clusterId) {
-                this.clusterId = clusterId;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder systemDownHandlerTriggerLimit(int systemDownHandlerTriggerLimit) {
-                this.systemDownHandlerTriggerLimit = systemDownHandlerTriggerLimit;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder layoutServers(List<NodeLocator> layoutServers) {
-                this.layoutServers = layoutServers;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder invalidateRetry(int invalidateRetry) {
-                this.invalidateRetry = invalidateRetry;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder priorityLevel(PriorityLevel priorityLevel) {
-                this.priorityLevel = priorityLevel;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder codecType(Codec.Type codecType) {
-                this.codecType = codecType;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder metricsEnabled(boolean enabled) {
-                this.metricsEnabled = enabled;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingPollingBlockingTimeMs(long streamingPollingBlockingTimeMs) {
-                this.streamingPollingBlockingTimeMs = streamingPollingBlockingTimeMs;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingQueueSize(int streamingQueueSize) {
-                this.streamingQueueSize = streamingQueueSize;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingPollingThreadPoolSize(int streamingPollingThreadPoolSize) {
-                this.streamingPollingThreadPoolSize = streamingPollingThreadPoolSize;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingPollingIdleWaitTimeMs(int streamingPollingIdleWaitTimeMs) {
-                this.streamingPollingIdleWaitTimeMs = streamingPollingIdleWaitTimeMs;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingNotificationThreadPoolSize(int streamingNotificationThreadPoolSize) {
-                this.streamingNotificationThreadPoolSize = streamingNotificationThreadPoolSize;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingNotificationBlockingTimeMs(long streamingNotificationBlockingTimeMs) {
-                this.streamingNotificationBlockingTimeMs = streamingNotificationBlockingTimeMs;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingNotificationBatchSize(int streamingNotificationBatchSize) {
-                this.streamingNotificationBatchSize = streamingNotificationBatchSize;
-                return this;
-            }
-
-            public CorfuRuntimeParameters build() {
-                CorfuRuntimeParameters corfuRuntimeParameters = new CorfuRuntimeParameters();
-                corfuRuntimeParameters.setTlsEnabled(tlsEnabled);
-                corfuRuntimeParameters.setKeyStore(keyStore);
-                corfuRuntimeParameters.setKsPasswordFile(ksPasswordFile);
-                corfuRuntimeParameters.setTrustStore(trustStore);
-                corfuRuntimeParameters.setTsPasswordFile(tsPasswordFile);
-                corfuRuntimeParameters.setSaslPlainTextEnabled(saslPlainTextEnabled);
-                corfuRuntimeParameters.setUsernameFile(usernameFile);
-                corfuRuntimeParameters.setPasswordFile(passwordFile);
-                corfuRuntimeParameters.setHandshakeTimeout(handshakeTimeout);
-                corfuRuntimeParameters.setRequestTimeout(requestTimeout);
-                corfuRuntimeParameters.setIdleConnectionTimeout(idleConnectionTimeout);
-                corfuRuntimeParameters.setKeepAlivePeriod(keepAlivePeriod);
-                corfuRuntimeParameters.setConnectionTimeout(connectionTimeout);
-                corfuRuntimeParameters.setConnectionRetryRate(connectionRetryRate);
-                corfuRuntimeParameters.setClientId(clientId);
-                corfuRuntimeParameters.setSocketType(socketType);
-                corfuRuntimeParameters.setNettyEventLoop(nettyEventLoop);
-                corfuRuntimeParameters.setNettyEventLoopThreadFormat(nettyEventLoopThreadFormat);
-                corfuRuntimeParameters.setNettyEventLoopThreads(nettyEventLoopThreads);
-                corfuRuntimeParameters.setShutdownNettyEventLoop(shutdownNettyEventLoop);
-                corfuRuntimeParameters.setCustomNettyChannelOptions(customNettyChannelOptions);
-                corfuRuntimeParameters.setUncaughtExceptionHandler(uncaughtExceptionHandler);
-                corfuRuntimeParameters.setSystemDownHandler(systemDownHandler);
-                corfuRuntimeParameters.setBeforeRpcHandler(beforeRpcHandler);
-                corfuRuntimeParameters.setMaxWriteSize(maxWriteSize);
-                corfuRuntimeParameters.setBulkReadSize(bulkReadSize);
-                corfuRuntimeParameters.setHoleFillRetry(holeFillRetry);
-                corfuRuntimeParameters.setHoleFillRetryThreshold(holeFillRetryThreshold);
-                corfuRuntimeParameters.setHoleFillTimeout(holeFillTimeout);
-                corfuRuntimeParameters.setCacheDisabled(cacheDisabled);
-                corfuRuntimeParameters.setMaxCacheEntries(maxCacheEntries);
-                corfuRuntimeParameters.setMaxCacheWeight(maxCacheWeight);
-                corfuRuntimeParameters.setCacheConcurrencyLevel(cacheConcurrencyLevel);
-                corfuRuntimeParameters.setCacheExpiryTime(cacheExpiryTime);
-                corfuRuntimeParameters.setHoleFillingDisabled(holeFillingDisabled);
-                corfuRuntimeParameters.setWriteRetry(writeRetry);
-                corfuRuntimeParameters.setTrimRetry(trimRetry);
-                corfuRuntimeParameters.setCheckpointRetries(checkpointRetries);
-                corfuRuntimeParameters.setStreamBatchSize(streamBatchSize);
-                corfuRuntimeParameters.setCheckpointReadBatchSize(checkpointReadBatchSize);
-                corfuRuntimeParameters.setRuntimeGCPeriod(runtimeGCPeriod);
-                corfuRuntimeParameters.setClusterId(clusterId);
-                corfuRuntimeParameters.setSystemDownHandlerTriggerLimit(systemDownHandlerTriggerLimit);
-                corfuRuntimeParameters.setLayoutServers(layoutServers);
-                corfuRuntimeParameters.setInvalidateRetry(invalidateRetry);
-                corfuRuntimeParameters.setPriorityLevel(priorityLevel);
-                corfuRuntimeParameters.setCodecType(codecType);
-                corfuRuntimeParameters.setMetricsEnabled(metricsEnabled);
-                corfuRuntimeParameters.setStreamingPollingBlockingTimeMs(streamingPollingBlockingTimeMs);
-                corfuRuntimeParameters.setStreamingPollingIdleWaitTimeMs(streamingPollingIdleWaitTimeMs);
-                corfuRuntimeParameters.setStreamingQueueSize(streamingQueueSize);
-                corfuRuntimeParameters.setStreamingPollingThreadPoolSize(streamingPollingThreadPoolSize);
-                corfuRuntimeParameters.setStreamingNotificationThreadPoolSize(streamingNotificationThreadPoolSize);
-                corfuRuntimeParameters.setStreamingNotificationBlockingTimeMs(streamingNotificationBlockingTimeMs);
-                corfuRuntimeParameters.setStreamingNotificationBatchSize(streamingNotificationBatchSize);
-
-                return corfuRuntimeParameters;
-            }
-        }
-    }
 
     /**
      * The parameters used to configure this {@link CorfuRuntime}.
@@ -746,6 +177,12 @@ public class CorfuRuntime {
      * Latest layout seen by the runtime.
      */
     private volatile Layout latestLayout = null;
+
+    /**
+     * A set of serializers used to serialize/deserialize data
+     */
+    @Getter
+    private final Serializers serializers = new Serializers();
 
     /**
      * Register SystemDownHandler.
@@ -1376,5 +813,573 @@ public class CorfuRuntime {
         return this;
     }
 
-    // endregion
+    /**
+     * A class which holds parameters and settings for the {@link CorfuRuntime}.
+     */
+    @Data
+    @ToString
+    public static class CorfuRuntimeParameters extends RuntimeParameters {
+
+        /*
+         * Max size for a write request.
+         */
+        int maxWriteSize = Integer.MAX_VALUE;
+
+        /*
+         * Set the bulk read size.
+         */
+        int bulkReadSize = 10;
+
+        // region Address Space Parameters
+        /*
+         * Number of times to attempt to read before hole filling.
+         * @deprecated This is a no-op. Use holeFillWait
+         */
+        @Deprecated
+        int holeFillRetry = 10;
+
+        /* Time to wait between read requests reattempts before hole filling. */
+        Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
+
+        /*
+         * Time limit after which the reader gives up and fills the hole.
+         */
+        Duration holeFillTimeout = Duration.ofSeconds(10);
+
+        /*
+         * Whether or not to disable the cache.
+         */
+        boolean cacheDisabled = false;
+
+        /*
+         * The maximum number of entries in the cache.
+         */
+        long maxCacheEntries;
+
+        /*
+         * The max in-memory size of the cache in bytes
+         */
+        long maxCacheWeight;
+
+        /*
+         * This is a hint to size the AddressSpaceView cache, a higher concurrency
+         * level allows for less lock contention at the cost of more memory overhead.
+         * The default value of zero will result in using the cache's internal default
+         * concurrency level (i.e. 4).
+         */
+        int cacheConcurrencyLevel = 0;
+
+        /*
+         * Sets expireAfterAccess and expireAfterWrite in seconds.
+         */
+        long cacheExpiryTime = Long.MAX_VALUE;
+        // endregion
+
+        // region Stream Parameters
+        /*
+
+         */
+        /*
+         * Whether or not hole filling should be disabled.
+         */
+        boolean holeFillingDisabled = false;
+
+        /*
+         * Number of times to retry on an
+         * {@link org.corfudb.runtime.exceptions.OverwriteException} before giving up.
+         */
+        int writeRetry = 5;
+
+        /*
+         * The number of times to retry on a retriable
+         * {@link org.corfudb.runtime.exceptions.TrimmedException} during a transaction.
+         */
+        int trimRetry = 2;
+
+        /*
+         * The total number of retries the checkpointer will attempt on sequencer failover to
+         * prevent epoch regressions. This is independent of the number of streams to be checkpointed.
+         */
+        int checkpointRetries = 5;
+
+        /*
+         * Stream Batch Size: number of addresses to fetch in advance when stream address discovery mechanism
+         * relies on address maps instead of follow backpointers, i.e., followBackpointersEnabled = false;
+         */
+        int streamBatchSize = 10;
+
+        /*
+         * Checkpoint read Batch Size: number of checkpoint addresses to fetch in batch when stream
+         * address discovery mechanism relies on address maps instead of follow backpointers;
+         */
+        int checkpointReadBatchSize = 5;
+        // endregion
+
+        /*
+         * The period at which the runtime will run garbage collection
+         */
+        Duration runtimeGCPeriod = Duration.ofMinutes(20);
+
+        /*
+         * The {@link UUID} for the cluster this client is connecting to, or
+         * {@code null} if the client should adopt the {@link UUID} of the first
+         * server it connects to.
+         */
+        UUID clusterId = null;
+
+        /*
+         * Number of retries to reconnect to an unresponsive system before invoking the
+         * systemDownHandler. This is mainly required to allow the fault detection mechanism
+         * to detect and reconfigure the cluster.
+         * The fault detection takes at least 3 seconds to recognize a failure.
+         * Each retry is attempted after a sleep of {@literal connectionRetryRate}
+         * invoking the systemDownHandler after a minimum of
+         * (systemDownHandlerTriggerLimit * connectionRetryRate) seconds. Default: 20 seconds.
+         */
+        int systemDownHandlerTriggerLimit = 20;
+
+        /*
+         * The initial list of layout servers.
+         */
+        List<NodeLocator> layoutServers = new ArrayList<>();
+        //endregion
+
+        /*
+         * The number of times to retry invalidate when a layout change is expected.
+         */
+        int invalidateRetry = 5;
+
+
+        /*
+         * The default priority of the requests made by this client.
+         * Under resource constraints non-high priority requests
+         * are dropped.
+         */
+        private PriorityLevel priorityLevel = PriorityLevel.NORMAL;
+
+        /*
+         * The compression codec to use to encode a write's payload
+         */
+        private Codec.Type codecType = Codec.Type.ZSTD;
+
+        /*
+         * Enable runtime metrics.
+         */
+        private boolean metricsEnabled = true;
+
+        /*
+         * Number of entries read in a single batch to compute highest sequence number (based on data entries and not holes)
+         */
+        int highestSequenceNumberBatchSize = 4;
+
+        /*
+         * Total time in milliseconds for polling task to block until buffer space is available.
+         */
+        private long streamingPollingBlockingTimeMs = 5;
+
+        /*
+         * Period of time in ms to sleep before next cycle, when poller gets no new data changes.
+         */
+        private int streamingPollingIdleWaitTimeMs = 50;
+
+        /*
+         * Capacity of queue shared by by streaming polling and notification tasks.
+         */
+        private int streamingQueueSize = 100;
+
+        /*
+         * Total number of threads in Polling Executor Pool (shared across all listeners)
+         */
+        private int streamingPollingThreadPoolSize = 2;
+
+        /*
+         * Total number of threads in Notification Executor Pool (shared across all listeners)
+         */
+        private int streamingNotificationThreadPoolSize = 4;
+
+        /*
+         * Total time in milliseconds to block for new updates to appear in the queue, if empty.
+         */
+        private long streamingNotificationBlockingTimeMs = 5;
+
+        /*
+         * Notification batch size (should be lower or equal to streamingQueueSize)
+         */
+        private int streamingNotificationBatchSize = 50;
+        // TODO: make it a function of the streaming Queue Size
+
+        public static CorfuRuntimeParametersBuilder builder() {
+            return new CorfuRuntimeParametersBuilder();
+        }
+
+        public static class CorfuRuntimeParametersBuilder extends RuntimeParametersBuilder {
+            private int maxWriteSize = Integer.MAX_VALUE;
+            private int bulkReadSize = 10;
+            private int holeFillRetry = 10;
+            private Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
+            private Duration holeFillTimeout = Duration.ofSeconds(10);
+            private boolean cacheDisabled = false;
+            private long maxCacheEntries;
+            private long maxCacheWeight;
+            private int cacheConcurrencyLevel = 0;
+            private long cacheExpiryTime = Long.MAX_VALUE;
+            private boolean holeFillingDisabled = false;
+            private int writeRetry = 5;
+            private int trimRetry = 2;
+            private int checkpointRetries = 5;
+            private int streamBatchSize = 10;
+            private int checkpointReadBatchSize = 5;
+            private Duration runtimeGCPeriod = Duration.ofMinutes(20);
+            private UUID clusterId = null;
+            private int systemDownHandlerTriggerLimit = 20;
+            private List<NodeLocator> layoutServers = new ArrayList<>();
+            private int invalidateRetry = 5;
+            private PriorityLevel priorityLevel = PriorityLevel.NORMAL;
+            private Codec.Type codecType = Codec.Type.ZSTD;
+            private boolean metricsEnabled = true;
+            private long streamingPollingBlockingTimeMs = 5;
+            private int streamingQueueSize = 100;
+            private int streamingPollingThreadPoolSize = 2;
+            private int streamingPollingIdleWaitTimeMs = 50;
+            private int streamingNotificationThreadPoolSize = 4;
+            private long streamingNotificationBlockingTimeMs = 5;
+            private int streamingNotificationBatchSize = 50;
+
+            public CorfuRuntimeParametersBuilder tlsEnabled(boolean tlsEnabled) {
+                super.tlsEnabled(tlsEnabled);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder keyStore(String keyStore) {
+                super.keyStore(keyStore);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder ksPasswordFile(String ksPasswordFile) {
+                super.ksPasswordFile(ksPasswordFile);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder trustStore(String trustStore) {
+                super.trustStore(trustStore);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder tsPasswordFile(String tsPasswordFile) {
+                super.tsPasswordFile(tsPasswordFile);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder saslPlainTextEnabled(boolean saslPlainTextEnabled) {
+                super.saslPlainTextEnabled(saslPlainTextEnabled);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder usernameFile(String usernameFile) {
+                super.usernameFile(usernameFile);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder passwordFile(String passwordFile) {
+                super.passwordFile(passwordFile);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder handshakeTimeout(int handshakeTimeout) {
+                super.handshakeTimeout(handshakeTimeout);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder requestTimeout(Duration requestTimeout) {
+                super.requestTimeout(requestTimeout);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder idleConnectionTimeout(int idleConnectionTimeout) {
+                super.idleConnectionTimeout(idleConnectionTimeout);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder keepAlivePeriod(int keepAlivePeriod) {
+                super.keepAlivePeriod(keepAlivePeriod);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder connectionTimeout(Duration connectionTimeout) {
+                super.connectionTimeout(connectionTimeout);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder connectionRetryRate(Duration connectionRetryRate) {
+                super.connectionRetryRate(connectionRetryRate);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder clientId(UUID clientId) {
+                super.clientId(clientId);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder socketType(ChannelImplementation socketType) {
+                super.socketType(socketType);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder nettyEventLoop(EventLoopGroup nettyEventLoop) {
+                super.nettyEventLoop(nettyEventLoop);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder nettyEventLoopThreadFormat(String nettyEventLoopThreadFormat) {
+                super.nettyEventLoopThreadFormat(nettyEventLoopThreadFormat);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder nettyEventLoopThreads(int nettyEventLoopThreads) {
+                super.nettyEventLoopThreads(nettyEventLoopThreads);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder shutdownNettyEventLoop(boolean shutdownNettyEventLoop) {
+                super.shutdownNettyEventLoop(shutdownNettyEventLoop);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder customNettyChannelOptions(Map<ChannelOption, Object> customNettyChannelOptions) {
+                super.customNettyChannelOptions(customNettyChannelOptions);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder uncaughtExceptionHandler(Thread.UncaughtExceptionHandler uncaughtExceptionHandler) {
+                super.uncaughtExceptionHandler(uncaughtExceptionHandler);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder systemDownHandler(Runnable systemDownHandler) {
+                super.systemDownHandler(systemDownHandler);
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder beforeRpcHandler(Runnable beforeRpcHandler) {
+                super.beforeRpcHandler(beforeRpcHandler);
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder maxWriteSize(int maxWriteSize) {
+                this.maxWriteSize = maxWriteSize;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder bulkReadSize(int bulkReadSize) {
+                this.bulkReadSize = bulkReadSize;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder holeFillRetry(int holeFillRetry) {
+                this.holeFillRetry = holeFillRetry;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder holeFillRetryThreshold(Duration holeFillRetryThreshold) {
+                this.holeFillRetryThreshold = holeFillRetryThreshold;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder holeFillTimeout(Duration holeFillTimeout) {
+                this.holeFillTimeout = holeFillTimeout;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder cacheDisabled(boolean cacheDisabled) {
+                this.cacheDisabled = cacheDisabled;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder maxCacheEntries(long maxCacheEntries) {
+                this.maxCacheEntries = maxCacheEntries;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder maxCacheWeight(long maxCacheWeight) {
+                this.maxCacheWeight = maxCacheWeight;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder cacheConcurrencyLevel(int cacheConcurrencyLevel) {
+                this.cacheConcurrencyLevel = cacheConcurrencyLevel;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder cacheExpiryTime(long cacheExpiryTime) {
+                this.cacheExpiryTime = cacheExpiryTime;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder holeFillingDisabled(boolean holeFillingDisabled) {
+                this.holeFillingDisabled = holeFillingDisabled;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder writeRetry(int writeRetry) {
+                this.writeRetry = writeRetry;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder trimRetry(int trimRetry) {
+                this.trimRetry = trimRetry;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder checkpointRetries(int checkpointRetries) {
+                this.checkpointRetries = checkpointRetries;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamBatchSize(int streamBatchSize) {
+                this.streamBatchSize = streamBatchSize;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder checkpointReadBatchSize(int checkpointReadBatchSize) {
+                this.checkpointReadBatchSize = checkpointReadBatchSize;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder runtimeGCPeriod(Duration runtimeGCPeriod) {
+                this.runtimeGCPeriod = runtimeGCPeriod;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder clusterId(UUID clusterId) {
+                this.clusterId = clusterId;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder systemDownHandlerTriggerLimit(int systemDownHandlerTriggerLimit) {
+                this.systemDownHandlerTriggerLimit = systemDownHandlerTriggerLimit;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder layoutServers(List<NodeLocator> layoutServers) {
+                this.layoutServers = layoutServers;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder invalidateRetry(int invalidateRetry) {
+                this.invalidateRetry = invalidateRetry;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder priorityLevel(PriorityLevel priorityLevel) {
+                this.priorityLevel = priorityLevel;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder codecType(Codec.Type codecType) {
+                this.codecType = codecType;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder metricsEnabled(boolean enabled) {
+                this.metricsEnabled = enabled;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingPollingBlockingTimeMs(long streamingPollingBlockingTimeMs) {
+                this.streamingPollingBlockingTimeMs = streamingPollingBlockingTimeMs;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingQueueSize(int streamingQueueSize) {
+                this.streamingQueueSize = streamingQueueSize;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingPollingThreadPoolSize(int streamingPollingThreadPoolSize) {
+                this.streamingPollingThreadPoolSize = streamingPollingThreadPoolSize;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingPollingIdleWaitTimeMs(int streamingPollingIdleWaitTimeMs) {
+                this.streamingPollingIdleWaitTimeMs = streamingPollingIdleWaitTimeMs;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingNotificationThreadPoolSize(int streamingNotificationThreadPoolSize) {
+                this.streamingNotificationThreadPoolSize = streamingNotificationThreadPoolSize;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingNotificationBlockingTimeMs(long streamingNotificationBlockingTimeMs) {
+                this.streamingNotificationBlockingTimeMs = streamingNotificationBlockingTimeMs;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingNotificationBatchSize(int streamingNotificationBatchSize) {
+                this.streamingNotificationBatchSize = streamingNotificationBatchSize;
+                return this;
+            }
+
+            public CorfuRuntimeParameters build() {
+                CorfuRuntimeParameters corfuRuntimeParameters = new CorfuRuntimeParameters();
+                corfuRuntimeParameters.setTlsEnabled(tlsEnabled);
+                corfuRuntimeParameters.setKeyStore(keyStore);
+                corfuRuntimeParameters.setKsPasswordFile(ksPasswordFile);
+                corfuRuntimeParameters.setTrustStore(trustStore);
+                corfuRuntimeParameters.setTsPasswordFile(tsPasswordFile);
+                corfuRuntimeParameters.setSaslPlainTextEnabled(saslPlainTextEnabled);
+                corfuRuntimeParameters.setUsernameFile(usernameFile);
+                corfuRuntimeParameters.setPasswordFile(passwordFile);
+                corfuRuntimeParameters.setHandshakeTimeout(handshakeTimeout);
+                corfuRuntimeParameters.setRequestTimeout(requestTimeout);
+                corfuRuntimeParameters.setIdleConnectionTimeout(idleConnectionTimeout);
+                corfuRuntimeParameters.setKeepAlivePeriod(keepAlivePeriod);
+                corfuRuntimeParameters.setConnectionTimeout(connectionTimeout);
+                corfuRuntimeParameters.setConnectionRetryRate(connectionRetryRate);
+                corfuRuntimeParameters.setClientId(clientId);
+                corfuRuntimeParameters.setSocketType(socketType);
+                corfuRuntimeParameters.setNettyEventLoop(nettyEventLoop);
+                corfuRuntimeParameters.setNettyEventLoopThreadFormat(nettyEventLoopThreadFormat);
+                corfuRuntimeParameters.setNettyEventLoopThreads(nettyEventLoopThreads);
+                corfuRuntimeParameters.setShutdownNettyEventLoop(shutdownNettyEventLoop);
+                corfuRuntimeParameters.setCustomNettyChannelOptions(customNettyChannelOptions);
+                corfuRuntimeParameters.setUncaughtExceptionHandler(uncaughtExceptionHandler);
+                corfuRuntimeParameters.setSystemDownHandler(systemDownHandler);
+                corfuRuntimeParameters.setBeforeRpcHandler(beforeRpcHandler);
+                corfuRuntimeParameters.setMaxWriteSize(maxWriteSize);
+                corfuRuntimeParameters.setBulkReadSize(bulkReadSize);
+                corfuRuntimeParameters.setHoleFillRetry(holeFillRetry);
+                corfuRuntimeParameters.setHoleFillRetryThreshold(holeFillRetryThreshold);
+                corfuRuntimeParameters.setHoleFillTimeout(holeFillTimeout);
+                corfuRuntimeParameters.setCacheDisabled(cacheDisabled);
+                corfuRuntimeParameters.setMaxCacheEntries(maxCacheEntries);
+                corfuRuntimeParameters.setMaxCacheWeight(maxCacheWeight);
+                corfuRuntimeParameters.setCacheConcurrencyLevel(cacheConcurrencyLevel);
+                corfuRuntimeParameters.setCacheExpiryTime(cacheExpiryTime);
+                corfuRuntimeParameters.setHoleFillingDisabled(holeFillingDisabled);
+                corfuRuntimeParameters.setWriteRetry(writeRetry);
+                corfuRuntimeParameters.setTrimRetry(trimRetry);
+                corfuRuntimeParameters.setCheckpointRetries(checkpointRetries);
+                corfuRuntimeParameters.setStreamBatchSize(streamBatchSize);
+                corfuRuntimeParameters.setCheckpointReadBatchSize(checkpointReadBatchSize);
+                corfuRuntimeParameters.setRuntimeGCPeriod(runtimeGCPeriod);
+                corfuRuntimeParameters.setClusterId(clusterId);
+                corfuRuntimeParameters.setSystemDownHandlerTriggerLimit(systemDownHandlerTriggerLimit);
+                corfuRuntimeParameters.setLayoutServers(layoutServers);
+                corfuRuntimeParameters.setInvalidateRetry(invalidateRetry);
+                corfuRuntimeParameters.setPriorityLevel(priorityLevel);
+                corfuRuntimeParameters.setCodecType(codecType);
+                corfuRuntimeParameters.setMetricsEnabled(metricsEnabled);
+                corfuRuntimeParameters.setStreamingPollingBlockingTimeMs(streamingPollingBlockingTimeMs);
+                corfuRuntimeParameters.setStreamingPollingIdleWaitTimeMs(streamingPollingIdleWaitTimeMs);
+                corfuRuntimeParameters.setStreamingQueueSize(streamingQueueSize);
+                corfuRuntimeParameters.setStreamingPollingThreadPoolSize(streamingPollingThreadPoolSize);
+                corfuRuntimeParameters.setStreamingNotificationThreadPoolSize(streamingNotificationThreadPoolSize);
+                corfuRuntimeParameters.setStreamingNotificationBlockingTimeMs(streamingNotificationBlockingTimeMs);
+                corfuRuntimeParameters.setStreamingNotificationBatchSize(streamingNotificationBatchSize);
+
+                return corfuRuntimeParameters;
+            }
+        }
+    }
 }

@@ -697,9 +697,8 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         //verify data with hashtable
         openStreams(dstTables, dstDataRuntime, NUM_STREAMS, serializer);
 
-        Serializers.registerSerializer(serializer);
+        dstDataRuntime.getSerializers().registerSerializer(serializer);
         verifyData("after log writing at dst", dstTables, srcHashMap);
-        Serializers.removeSerializer(serializer);
 
         cleanUp();
     }

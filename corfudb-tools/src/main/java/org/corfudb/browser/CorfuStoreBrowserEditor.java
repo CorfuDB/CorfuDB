@@ -91,7 +91,7 @@ public class CorfuStoreBrowserEditor {
         this.diskPath = diskPath;
         dynamicProtobufSerializer =
             new DynamicProtobufSerializer(runtime);
-        Serializers.registerSerializer(dynamicProtobufSerializer);
+        runtime.getSerializers().registerSerializer(dynamicProtobufSerializer);
     }
 
     /**
