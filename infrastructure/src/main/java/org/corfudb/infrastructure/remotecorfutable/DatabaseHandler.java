@@ -148,14 +148,29 @@ public class DatabaseHandler implements AutoCloseable {
             throw e;
         }
         ColumnFamilyHandlePair addedTables = new ColumnFamilyHandlePair(tableHandle, metadataHandle);
-        columnFamilies.put(streamID, addedTables);
+
+        //necessary if 2 threads enter this function concurrently
+        ColumnFamilyHandlePair readValue = columnFamilies.putIfAbsent(streamID, addedTables);
+        if (readValue != null) {
+            tableHandle.close();
+            comparatorOptions.close();
+            tableOptions.close();
+            metadataHandle.close();
+            metadataOptions.close();
+        }
     }
 
     public void removeTable(@NonNull UUID streamID) throws RocksDBException {
         if (!columnFamilies.containsKey(streamID)) {
             throw new DatabaseOperationException("REMOVETABLE", INVALID_STREAM_ID_MSG);
         }
-        ColumnFamilyHandlePair tablesToClose = columnFamilies.get(streamID);
+        ColumnFamilyHandlePair tablesToClose = columnFamilies.remove(streamID);
+
+        //if another thread executing this function removed column, it will close it
+        if (tablesToClose == null) {
+            return;
+        }
+
         tablesToClose.getMetadataTable().close();
         tablesToClose.getStreamTable().close();
         //possible half delete inconsistencies can be addressed in GC
@@ -167,8 +182,6 @@ public class DatabaseHandler implements AutoCloseable {
             log.error("Cause of error: ", e);
             throw e;
         }
-
-        columnFamilies.remove(streamID);
     }
 
     /**
