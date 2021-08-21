@@ -2,6 +2,7 @@ package org.corfudb.runtime.collections.remotecorfutable;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.NonNull;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.ICorfuTable;
@@ -24,7 +25,10 @@ import java.util.stream.Stream;
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
     private final RemoteCorfuTableAdapter<K,V> adapter;
+
+    @Getter
     private final String tableName;
+    @Getter
     private final UUID streamId;
 
     @Override
@@ -57,8 +61,6 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
         return adapter.scan(startPoint, numEntries, adapter.getCurrentTimestamp());
     }
 
-
-    //TODO: segment the fulldb scan
     @Override
     public List<V> scanAndFilter(Predicate<? super V> valuePredicate) {
         return scanAndFilterFromBeginning(valuePredicate);
@@ -161,20 +163,22 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
         return adapter.get((K) key, adapter.getCurrentTimestamp());
     }
 
+    public List<RemoteCorfuTableEntry<K,V>> multiGet(List<K> keys) {
+        return adapter.multiGet(keys, adapter.getCurrentTimestamp());
+    }
+
     @Override
     public V put(K key, V value) {
-        long timestamp = adapter.getCurrentTimestamp();
         //synchronization guarantees unneeded as timestamp will define versioning
-        V returnVal = adapter.get((K) key, timestamp);
+        V returnVal = adapter.get(key, adapter.getCurrentTimestamp());
         adapter.update(key, value);
         return returnVal;
     }
 
     @Override
     public V remove(Object key) {
-        long timestamp = adapter.getCurrentTimestamp();
         //synchronization guarantees unneeded as timestamp will define versioning
-        V returnVal = adapter.get((K) key, timestamp);
+        V returnVal = adapter.get((K) key, adapter.getCurrentTimestamp());
         adapter.delete((K) key);
         return returnVal;
     }
@@ -237,15 +241,11 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
         adapter.close();
     }
 
+    @AllArgsConstructor
     public static class RemoteCorfuTableEntry<K,V> implements Map.Entry<K,V> {
 
         private final K key;
         private final V value;
-
-        public RemoteCorfuTableEntry(@NonNull K key, @NonNull V value) {
-            this.key = key;
-            this.value = value;
-        }
 
         @Override
         public K getKey() {
@@ -274,7 +274,7 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             RemoteCorfuTableEntry<?, ?> entry = (RemoteCorfuTableEntry<?, ?>) o;
-            return key.equals(entry.key) && value.equals(entry.value);
+            return Objects.equals(key, entry.key) && Objects.equals(value, entry.value);
         }
 
         @Override
@@ -283,8 +283,10 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
         }
     }
 
-    public static class RemoteCorfuTableFactory<I, J> {
-        public RemoteCorfuTable<I,J> openTable(@NonNull CorfuRuntime runtime, @NonNull String tableName) {
+    public static class RemoteCorfuTableFactory {
+        private RemoteCorfuTableFactory() {}
+
+        public static <I,J> RemoteCorfuTable<I,J> openTable(@NonNull CorfuRuntime runtime, @NonNull String tableName) {
             UUID streamID = UUID.nameUUIDFromBytes(tableName.getBytes(StandardCharsets.UTF_8));
             ISerializer serializer = Serializers.getDefaultSerializer();
             IStreamView streamView = new AddressMapStreamView(runtime, streamID);
