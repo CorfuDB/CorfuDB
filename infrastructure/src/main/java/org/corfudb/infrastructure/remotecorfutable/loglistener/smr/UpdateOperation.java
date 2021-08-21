@@ -43,14 +43,25 @@ public class UpdateOperation implements SMROperation {
             RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(args[0], timestamp);
             dbHandler.update(key, args[1], streamId);
         } else {
-            List<RemoteCorfuTableDatabaseEntry> entries = new LinkedList<>();
-            for (int i = 0; i < args.length; i += 2) {
-                RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(args[i], timestamp);
-                RemoteCorfuTableDatabaseEntry entry = new RemoteCorfuTableDatabaseEntry(key, args[i+1]);
-                entries.add(entry);
-            }
-            dbHandler.updateAll(entries, streamId);
+            dbHandler.updateAll(getEntryBatch(), streamId);
         }
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     *     Returns the key-value pairs to be inserted to the database.
+     * </p>
+     */
+    @Override
+    public List<RemoteCorfuTableDatabaseEntry> getEntryBatch() {
+        List<RemoteCorfuTableDatabaseEntry> entries = new LinkedList<>();
+        for (int i = 0; i < args.length; i += 2) {
+            RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(args[i], timestamp);
+            RemoteCorfuTableDatabaseEntry entry = new RemoteCorfuTableDatabaseEntry(key, args[i+1]);
+            entries.add(entry);
+        }
+        return entries;
     }
 
     /**

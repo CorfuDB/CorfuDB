@@ -40,15 +40,27 @@ public class DeleteOperation implements SMROperation {
             RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(args[0], timestamp);
             dbHandler.update(key, ByteString.EMPTY, streamId);
         } else {
-            List<RemoteCorfuTableDatabaseEntry> entries = new LinkedList<>();
-            for (ByteString arg : args) {
-                RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(arg, timestamp);
-                RemoteCorfuTableDatabaseEntry entry = new RemoteCorfuTableDatabaseEntry(key, ByteString.EMPTY);
-                entries.add(entry);
-            }
-            dbHandler.updateAll(entries, streamId);
+            dbHandler.updateAll(getEntryBatch(), streamId);
         }
     }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     *     Returns the given keys with empty values.
+     * </p>
+     */
+    @Override
+    public List<RemoteCorfuTableDatabaseEntry> getEntryBatch() {
+        List<RemoteCorfuTableDatabaseEntry> entries = new LinkedList<>();
+        for (ByteString arg : args) {
+            RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(arg, timestamp);
+            RemoteCorfuTableDatabaseEntry entry = new RemoteCorfuTableDatabaseEntry(key, ByteString.EMPTY);
+            entries.add(entry);
+        }
+        return entries;
+    }
+
 
     /**
      * {@inheritDoc}
