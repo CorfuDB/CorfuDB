@@ -92,9 +92,7 @@ public class RemoteCorfuTableTest {
 
         when(mToken.getSequence()).thenReturn(2000L);
 
-        RemoteCorfuTable.RemoteCorfuTableFactory<String, Integer> tableFactory =
-                new RemoteCorfuTable.RemoteCorfuTableFactory<>();
-        table = tableFactory.openTable(mRuntime, "testTable");
+        table = RemoteCorfuTable.RemoteCorfuTableFactory.openTable(mRuntime, "testTable");
     }
 
     @Test
