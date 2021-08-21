@@ -2,10 +2,13 @@ package org.corfudb.infrastructure.remotecorfutable.loglistener.smr;
 
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
+import org.corfudb.common.remotecorfutable.RemoteCorfuTableDatabaseEntry;
 import org.corfudb.infrastructure.remotecorfutable.DatabaseHandler;
 import org.corfudb.runtime.collections.remotecorfutable.RemoteCorfuTableSMRMethods;
 import org.rocksdb.RocksDBException;
 
+import java.util.LinkedList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -29,6 +32,17 @@ public class ClearOperation implements SMROperation {
     @Override
     public void applySMRMethod(@NonNull DatabaseHandler dbHandler) throws RocksDBException {
         dbHandler.clear(streamId, timestamp);
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     *     Always returns empty list.
+     * </p>
+     */
+    @Override
+    public List<RemoteCorfuTableDatabaseEntry> getEntryBatch() {
+        return new LinkedList<>();
     }
 
     /**

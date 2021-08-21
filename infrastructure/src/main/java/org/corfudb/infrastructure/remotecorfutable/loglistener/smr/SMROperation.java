@@ -1,9 +1,12 @@
 package org.corfudb.infrastructure.remotecorfutable.loglistener.smr;
 
 import lombok.NonNull;
+import org.corfudb.common.remotecorfutable.RemoteCorfuTableDatabaseEntry;
 import org.corfudb.infrastructure.remotecorfutable.DatabaseHandler;
 import org.corfudb.runtime.collections.remotecorfutable.RemoteCorfuTableSMRMethods;
 import org.rocksdb.RocksDBException;
+
+import java.util.List;
 
 /**
  * This interface defines the behavior of all SMR operations read from the log.
@@ -17,6 +20,13 @@ public interface SMROperation {
      * @throws RocksDBException An error in database operation.
      */
     void applySMRMethod(@NonNull DatabaseHandler dbHandler) throws RocksDBException;
+
+    /**
+     * Creates the database entry batch for writing to the database.
+     * Used to compose operations in CompositeOperation.
+     * @return The batch of entries to be written by this operation.
+     */
+    List<RemoteCorfuTableDatabaseEntry> getEntryBatch();
 
     /**
      * Returns the type of SMR Method contained in the operation.
