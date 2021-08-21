@@ -19,7 +19,9 @@ public enum RemoteCorfuTableSMRMethods {
     //Arg Format: Any amount of contiguous Key-Value pairs to add
     UPDATE("put"),
     //Arg Format: Any amount of keys to delete
-    DELETE("delete");
+    DELETE("delete"),
+    //Should not be written to log
+    COMPOSITE("composite");
 
     @Getter
     private final String SMRName;
