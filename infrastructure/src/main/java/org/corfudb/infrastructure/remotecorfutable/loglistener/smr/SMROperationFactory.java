@@ -8,6 +8,8 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.collections.remotecorfutable.RemoteCorfuTableSMRMethods;
 
 import java.nio.ByteBuffer;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -20,49 +22,62 @@ public final class SMROperationFactory {
     private SMROperationFactory() {}
 
     public static SMROperation getSMROperation(LogData data, UUID streamId) {
-        int startPoint = 0;
         if (data.getType() == DataType.DATA) {
             ByteBuffer dataBuffer = ByteBuffer.wrap(data.getData());
             long timestamp = data.getGlobalAddress();
-            LogEntry.LogEntryType dataType = LogEntryPeekUtils.getType(dataBuffer, startPoint);
-            startPoint+=1;
-            ByteString[] smrArgs;
+            LogEntry.LogEntryType dataType = LogEntryPeekUtils.getType(dataBuffer);
+
             switch (dataType) {
                 case SMR:
-                    byte[] methodBytes = LogEntryPeekUtils.getSMRNameFromSMREntry(dataBuffer,startPoint);
-                    RemoteCorfuTableSMRMethods methodType =
-                        RemoteCorfuTableSMRMethods.getMethodFromName(new String(methodBytes));
-                    switch (methodType) {
-                        case CLEAR:
-                            return new ClearOperation(timestamp, streamId);
-                        case DELETE:
-                            //moving past method name and length
-                            startPoint+=methodBytes.length + Short.BYTES;
-                            //skipping the serializer ID
-                            startPoint+=1;
-                            smrArgs = LogEntryPeekUtils.getArgsFromSMREntry(dataBuffer, startPoint);
-                            return new DeleteOperation(smrArgs, timestamp, streamId);
-                        case UPDATE:
-                            //moving past method name and length
-                            startPoint+=methodBytes.length + Short.BYTES;
-                            //skipping the serializer ID
-                            startPoint+=1;
-                            smrArgs = LogEntryPeekUtils.getArgsFromSMREntry(dataBuffer, startPoint);
-                            return new UpdateOperation(smrArgs, timestamp, streamId);
-                        default:
-                            throw new IllegalArgumentException("Unknown method for RemoteCorfuTable");
-                    }
-                    //switch over the method types
-                case NOP:
+                    return handleSMREntry(streamId, dataBuffer, timestamp);
                 case MULTISMR:
-                case CHECKPOINT:
-                case MULTIOBJSMR:
+                    return handleMultiSMREntry(streamId, dataBuffer, timestamp);
+                case NOP: case CHECKPOINT: case MULTIOBJSMR:
                     throw new UnsupportedOperationException("These types will be supported in the future.");
                 default:
                     throw new IllegalArgumentException("Unknown Log Entry Type");
             }
         } else {
             throw new IllegalArgumentException("SMR operation can only be created from DATA type");
+        }
+    }
+
+    private static SMROperation handleMultiSMREntry(UUID streamId, ByteBuffer dataBuffer, long timestamp) {
+        List<SMROperation> subOperations = new LinkedList<>();
+        int numSubOps = dataBuffer.getInt();
+        for (int i = 0; i < numSubOps; i++) {
+            //remove magic byte
+            dataBuffer.get();
+            //verify entry type is SMR
+            LogEntry.LogEntryType dataType = LogEntryPeekUtils.getType(dataBuffer);
+            if (dataType != LogEntry.LogEntryType.SMR) {
+                throw new IllegalArgumentException("MultiSMR should only contain SMR Entries");
+            }
+            SMROperation subOp = handleSMREntry(streamId, dataBuffer, timestamp);
+            subOperations.add(subOp);
+        }
+
+        return new CompositeOperation(subOperations, streamId);
+    }
+
+    private static SMROperation handleSMREntry(UUID streamId, ByteBuffer dataBuffer, long timestamp) {
+        byte[] methodBytes = LogEntryPeekUtils.getSMRNameFromSMREntry(dataBuffer);
+        RemoteCorfuTableSMRMethods methodType =
+            RemoteCorfuTableSMRMethods.getMethodFromName(new String(methodBytes));
+        //consume serializer ID
+        dataBuffer.get();
+        //required even in CLEAR case to consume the numArgs value
+        ByteString[] smrArgs = LogEntryPeekUtils.getArgsFromSMREntry(dataBuffer);
+        switch (methodType) {
+            case CLEAR:
+                return new ClearOperation(timestamp, streamId);
+            case DELETE:
+                return new DeleteOperation(smrArgs, timestamp, streamId);
+            case UPDATE:
+                return new UpdateOperation(smrArgs, timestamp, streamId);
+            default:
+                throw new IllegalArgumentException(String.format("Improper Method stored for RemoteCorfuTable: %s",
+                        methodType.getSMRName()));
         }
     }
 }
