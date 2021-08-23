@@ -24,7 +24,9 @@ import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Scanner;
 import java.util.UUID;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -307,15 +309,16 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
                 ImmutableMultiset.copyOf(intTable.multiGet(keys));
         assertEquals(expectedEntries, readEntries);
 
-        List<RemoteCorfuTable.TableEntry<Integer, String>> scannedEntries = intTable.scanFromBeginning();
+        RemoteCorfuTable<Integer, String>.Scanner scanner = intTable.getScanner();
+        scanner.getNextResults();
+        List<RemoteCorfuTable.TableEntry<Integer, String>> scannedEntries = scanner.getCurrentResultsEntries();
         int startPos = 0;
         int endPos = scannedEntries.size();
         assertEquals(entries.subList(startPos, endPos), scannedEntries);
         startPos = endPos;
-        RemoteCorfuTable.TableEntry<Integer, String> prevEntry;
-        while (!scannedEntries.isEmpty()) {
-            prevEntry = scannedEntries.get(scannedEntries.size()-1);
-            scannedEntries = intTable.cursorScan(prevEntry.getKey());
+        while (!scanner.isFinished()) {
+            scanner.getNextResults();
+            scannedEntries = scanner.getCurrentResultsEntries();
             endPos += scannedEntries.size();
             assertEquals(entries.subList(startPos, endPos), scannedEntries);
             startPos = endPos;
@@ -346,16 +349,18 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
         assertEquals(expectedEntries, readEntries);
 
         int scanSize = 1;
-        List<RemoteCorfuTable.TableEntry<Integer, String>> scannedEntries = intTable.scanFromBeginning(scanSize);
+
+        RemoteCorfuTable<Integer, String>.Scanner scanner = intTable.getScanner();
+        scanner.getNextResults(scanSize);
+        List<RemoteCorfuTable.TableEntry<Integer, String>> scannedEntries = scanner.getCurrentResultsEntries();
         scanSize += 2;
         int startPos = 0;
         int endPos = scannedEntries.size();
         assertEquals(entries.subList(startPos, endPos), scannedEntries);
         startPos = endPos;
-        RemoteCorfuTable.TableEntry<Integer, String> prevEntry;
-        while (!scannedEntries.isEmpty()) {
-            prevEntry = scannedEntries.get(scannedEntries.size()-1);
-            scannedEntries = intTable.cursorScan(prevEntry.getKey(), scanSize);
+        while (!scanner.isFinished()) {
+            scanner.getNextResults(scanSize);
+            scannedEntries = scanner.getCurrentResultsEntries();
             scanSize += 2;
             endPos += scannedEntries.size();
             assertEquals(entries.subList(startPos, endPos), scannedEntries);
@@ -363,16 +368,225 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
         }
     }
 
-//    @Test
-//    public void testFixedSizeFilterScan() throws RocksDBException {
-//        List<RemoteCorfuTable.TableEntry<String, String>> entries = new ArrayList<>(500);
-//        for (int i = 0; i < 500; i++) {
-//            RemoteCorfuTable.TableEntry<String, String> entry = new RemoteCorfuTable.TableEntry<>(
-//                    "TestKey" + i,
-//                    "TestValue" + i
-//            );
-//            entries.add(entry);
-//        }
-//        updateAll(dbHandler, table, entries);
-//    }
+    @Test
+    public void testFixedSizeEntryFilterScan() throws RocksDBException {
+        //using an int->string table for sorting convenience
+        dbHandler.removeTable(table.getStreamId());
+        RemoteCorfuTable<Integer, String> intTable =
+                RemoteCorfuTable.RemoteCorfuTableFactory.openTable(runtime, "test2");
+        dbHandler.addTable(intTable.getStreamId());
+        tableStream = runtime.getStreamsView().get(intTable.getStreamId());
+
+        List<Integer> keys = IntStream.range(0,500).boxed().sorted((a, b) -> b.toString().compareTo(a.toString()))
+                .collect(Collectors.toList());
+        List<RemoteCorfuTable.TableEntry<Integer, String>> entries = keys.stream()
+                .map(i -> new RemoteCorfuTable.TableEntry<>(i, "Val" + i))
+                .collect(Collectors.toList());
+
+        updateAll(dbHandler, intTable, entries);
+
+        ImmutableMultiset<RemoteCorfuTable.TableEntry<Integer, String>> expectedEntries =
+                ImmutableMultiset.copyOf(entries);
+        ImmutableMultiset<RemoteCorfuTable.TableEntry<Integer, String>> readEntries =
+                ImmutableMultiset.copyOf(intTable.multiGet(keys));
+        assertEquals(expectedEntries, readEntries);
+        final Predicate<Map.Entry<Integer, String>> entryPredicate = entry -> entry.getKey() % 9 == 0;
+        RemoteCorfuTable<Integer, String>.Scanner scanner = intTable.getEntryFilterScanner(entryPredicate);
+        scanner.getNextResults();
+        List<RemoteCorfuTable.TableEntry<Integer, String>> scannedEntries = scanner.getCurrentResultsEntries();
+        int startPos = 0;
+        int endPos = 20;
+        List<RemoteCorfuTable.TableEntry<Integer, String>> expectedFilteredEntries
+                = filterSublistByEntry(entries, entryPredicate, startPos, endPos);
+        assertEquals(expectedFilteredEntries, scannedEntries);
+        startPos = endPos;
+        while (!scanner.isFinished()) {
+            scanner.getNextResults();
+            scannedEntries = scanner.getCurrentResultsEntries();
+            endPos += 20;
+            if (endPos > entries.size()) {
+                endPos = entries.size();
+            }
+            expectedFilteredEntries = filterSublistByEntry(entries, entryPredicate, startPos, endPos);
+            assertEquals(expectedFilteredEntries, scannedEntries);
+            startPos = endPos;
+        }
+    }
+
+    @Test
+    public void testEntryFilterScanVariableSize() throws RocksDBException {
+        //using an int->string table for sorting convenience
+        dbHandler.removeTable(table.getStreamId());
+        RemoteCorfuTable<Integer, String> intTable =
+                RemoteCorfuTable.RemoteCorfuTableFactory.openTable(runtime, "test2");
+        dbHandler.addTable(intTable.getStreamId());
+        tableStream = runtime.getStreamsView().get(intTable.getStreamId());
+
+        List<Integer> keys = IntStream.range(0,500).boxed().sorted((a, b) -> b.toString().compareTo(a.toString()))
+                .collect(Collectors.toList());
+        List<RemoteCorfuTable.TableEntry<Integer, String>> entries = keys.stream()
+                .map(i -> new RemoteCorfuTable.TableEntry<>(i, "Val" + i))
+                .collect(Collectors.toList());
+
+        updateAll(dbHandler, intTable, entries);
+
+        ImmutableMultiset<RemoteCorfuTable.TableEntry<Integer, String>> expectedEntries =
+                ImmutableMultiset.copyOf(entries);
+        ImmutableMultiset<RemoteCorfuTable.TableEntry<Integer, String>> readEntries =
+                ImmutableMultiset.copyOf(intTable.multiGet(keys));
+        assertEquals(expectedEntries, readEntries);
+
+        int scanSize = 1;
+
+        final Predicate<Map.Entry<Integer, String>> entryPredicate = entry -> entry.getKey() % 9 == 0;
+        RemoteCorfuTable<Integer, String>.Scanner scanner = intTable.getEntryFilterScanner(entryPredicate);
+        scanner.getNextResults(scanSize);
+        List<RemoteCorfuTable.TableEntry<Integer, String>> scannedEntries = scanner.getCurrentResultsEntries();
+        int startPos = 0;
+        int endPos = 1;
+        scanSize += 2;
+        List<RemoteCorfuTable.TableEntry<Integer, String>> expectedFilteredEntries
+                = filterSublistByEntry(entries, entryPredicate, startPos, endPos);
+        assertEquals(expectedFilteredEntries, scannedEntries);
+        startPos = endPos;
+        while (!scanner.isFinished()) {
+            scanner.getNextResults(scanSize);
+            scannedEntries = scanner.getCurrentResultsEntries();
+            endPos += scanSize;
+            if (endPos > entries.size()) {
+                endPos = entries.size();
+            }
+            scanSize += 2;
+            expectedFilteredEntries
+                    = filterSublistByEntry(entries, entryPredicate, startPos, endPos);
+            assertEquals(expectedFilteredEntries, scannedEntries);
+            startPos = endPos;
+        }
+    }
+
+    private List<RemoteCorfuTable.TableEntry<Integer, String>> filterSublistByEntry(
+            List<RemoteCorfuTable.TableEntry<Integer, String>> entries,
+            Predicate<Map.Entry<Integer, String>> entryPredicate, int startPos, int endPos) {
+        return entries.subList(startPos, endPos).stream().filter(entryPredicate).collect(Collectors.toList());
+    }
+
+    @Test
+    public void testFixedSizeValueFilterScan() throws RocksDBException {
+        //using an int->string table for sorting convenience
+        dbHandler.removeTable(table.getStreamId());
+        RemoteCorfuTable<Integer, String> intTable =
+                RemoteCorfuTable.RemoteCorfuTableFactory.openTable(runtime, "test2");
+        dbHandler.addTable(intTable.getStreamId());
+        tableStream = runtime.getStreamsView().get(intTable.getStreamId());
+
+        List<Integer> keys = IntStream.range(0,500).boxed().sorted((a, b) -> b.toString().compareTo(a.toString()))
+                .collect(Collectors.toList());
+        List<RemoteCorfuTable.TableEntry<Integer, String>> entries = keys.stream()
+                .map(i -> new RemoteCorfuTable.TableEntry<>(i, "Val" + i))
+                .collect(Collectors.toList());
+
+        updateAll(dbHandler, intTable, entries);
+
+        ImmutableMultiset<RemoteCorfuTable.TableEntry<Integer, String>> expectedEntries =
+                ImmutableMultiset.copyOf(entries);
+        ImmutableMultiset<RemoteCorfuTable.TableEntry<Integer, String>> readEntries =
+                ImmutableMultiset.copyOf(intTable.multiGet(keys));
+        assertEquals(expectedEntries, readEntries);
+        final Predicate<String> valuePredicate = val -> val.endsWith("9");
+        RemoteCorfuTable<Integer, String>.Scanner scanner = intTable.getValueFilterScanner(valuePredicate);
+        scanner.getNextResults();
+        List<RemoteCorfuTable.TableEntry<Integer, String>> scannedEntries = scanner.getCurrentResultsEntries();
+        int startPos = 0;
+        int endPos = 20;
+        List<RemoteCorfuTable.TableEntry<Integer, String>> expectedFilteredEntries
+                = filterSublistByValue(entries, valuePredicate, startPos, endPos);
+        assertEquals(expectedFilteredEntries, scannedEntries);
+        List<String> expectedFilteredValues = getValuesFromList(expectedFilteredEntries);
+        List<String> scannedValues = scanner.getCurrentResultsValues();
+        assertEquals(expectedFilteredValues, scannedValues);
+        startPos = endPos;
+        while (!scanner.isFinished()) {
+            scanner.getNextResults();
+            scannedEntries = scanner.getCurrentResultsEntries();
+            endPos += 20;
+            if (endPos > entries.size()) {
+                endPos = entries.size();
+            }
+            expectedFilteredEntries = filterSublistByValue(entries, valuePredicate, startPos, endPos);
+            assertEquals(expectedFilteredEntries, scannedEntries);
+            expectedFilteredValues = getValuesFromList(expectedFilteredEntries);
+            scannedValues = scanner.getCurrentResultsValues();
+            assertEquals(expectedFilteredValues, scannedValues);
+            startPos = endPos;
+        }
+    }
+
+    @Test
+    public void testValueFilterScanVariableSize() throws RocksDBException {
+        //using an int->string table for sorting convenience
+        dbHandler.removeTable(table.getStreamId());
+        RemoteCorfuTable<Integer, String> intTable =
+                RemoteCorfuTable.RemoteCorfuTableFactory.openTable(runtime, "test2");
+        dbHandler.addTable(intTable.getStreamId());
+        tableStream = runtime.getStreamsView().get(intTable.getStreamId());
+
+        List<Integer> keys = IntStream.range(0,500).boxed().sorted((a, b) -> b.toString().compareTo(a.toString()))
+                .collect(Collectors.toList());
+        List<RemoteCorfuTable.TableEntry<Integer, String>> entries = keys.stream()
+                .map(i -> new RemoteCorfuTable.TableEntry<>(i, "Val" + i))
+                .collect(Collectors.toList());
+
+        updateAll(dbHandler, intTable, entries);
+
+        ImmutableMultiset<RemoteCorfuTable.TableEntry<Integer, String>> expectedEntries =
+                ImmutableMultiset.copyOf(entries);
+        ImmutableMultiset<RemoteCorfuTable.TableEntry<Integer, String>> readEntries =
+                ImmutableMultiset.copyOf(intTable.multiGet(keys));
+        assertEquals(expectedEntries, readEntries);
+
+        int scanSize = 1;
+
+        final Predicate<String> valuePredicate = val -> val.endsWith("9");
+        RemoteCorfuTable<Integer, String>.Scanner scanner = intTable.getValueFilterScanner(valuePredicate);
+        scanner.getNextResults(scanSize);
+        List<RemoteCorfuTable.TableEntry<Integer, String>> scannedEntries = scanner.getCurrentResultsEntries();
+        int startPos = 0;
+        int endPos = 1;
+        scanSize += 2;
+        List<RemoteCorfuTable.TableEntry<Integer, String>> expectedFilteredEntries
+                = filterSublistByValue(entries, valuePredicate, startPos, endPos);
+        assertEquals(expectedFilteredEntries, scannedEntries);
+        List<String> expectedFilteredValues = getValuesFromList(expectedFilteredEntries);
+        List<String> scannedValues = scanner.getCurrentResultsValues();
+        assertEquals(expectedFilteredValues, scannedValues);
+        startPos = endPos;
+        while (!scanner.isFinished()) {
+            scanner.getNextResults(scanSize);
+            scannedEntries = scanner.getCurrentResultsEntries();
+            endPos += scanSize;
+            if (endPos > entries.size()) {
+                endPos = entries.size();
+            }
+            scanSize += 2;
+            expectedFilteredEntries = filterSublistByValue(entries, valuePredicate, startPos, endPos);
+            assertEquals(expectedFilteredEntries, scannedEntries);
+            expectedFilteredValues = getValuesFromList(expectedFilteredEntries);
+            scannedValues = scanner.getCurrentResultsValues();
+            assertEquals(expectedFilteredValues, scannedValues);
+            startPos = endPos;
+        }
+    }
+
+    private List<RemoteCorfuTable.TableEntry<Integer, String>> filterSublistByValue(
+            List<RemoteCorfuTable.TableEntry<Integer, String>> entries,
+            Predicate<String> valuePredicate, int startPos, int endPos) {
+        return entries.subList(startPos, endPos).stream().filter(entry -> valuePredicate.test(entry.getValue()))
+                .collect(Collectors.toList());
+    }
+
+    private List<String> getValuesFromList(
+            List<RemoteCorfuTable.TableEntry<Integer, String>> entries) {
+        return entries.stream().map(RemoteCorfuTable.TableEntry::getValue)
+                .collect(Collectors.toList());
+    }
 }

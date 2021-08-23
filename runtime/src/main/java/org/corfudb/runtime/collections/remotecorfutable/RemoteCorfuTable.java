@@ -4,6 +4,7 @@ import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.view.stream.AddressMapStreamView;
@@ -13,6 +14,7 @@ import org.corfudb.util.serializer.Serializers;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Collection;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -22,6 +24,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+@Slf4j
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
     private final RemoteCorfuTableAdapter<K,V> adapter;
@@ -45,89 +48,58 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
         adapter.multiDelete(keys);
     }
 
-    public List<TableEntry<K,V>> scanFromBeginning() {
-        return adapter.scan(adapter.getCurrentTimestamp());
-    }
-
-    public List<TableEntry<K,V>> scanFromBeginning(int numEntries) {
-        return adapter.scan(numEntries, adapter.getCurrentTimestamp());
-    }
-
-    public List<TableEntry<K,V>> cursorScan(K startPoint) {
-        return adapter.scan(startPoint, adapter.getCurrentTimestamp());
-    }
-
-    public List<TableEntry<K,V>> cursorScan(K startPoint, int numEntries) {
-        return adapter.scan(startPoint, numEntries, adapter.getCurrentTimestamp());
-    }
-
-    @Override
-    public List<V> scanAndFilter(Predicate<? super V> valuePredicate) {
-        return scanAndFilterFromBeginning(valuePredicate);
-    }
-
-    public List<V> scanAndFilterFromBeginning(Predicate<? super V> valuePredicate) {
-        List<TableEntry<K,V>> scannedEntries = adapter.scan(adapter.getCurrentTimestamp());
-        return filteredValues(valuePredicate, scannedEntries);
-    }
-
-    public List<V> scanAndFilterFromBeginning(int numEntries, Predicate<? super V> valuePredicate) {
-        List<TableEntry<K,V>> scannedEntries = adapter.scan(numEntries, adapter.getCurrentTimestamp());
-        return filteredValues(valuePredicate, scannedEntries);
-    }
-
-    public List<V> cursorScanAndFilter(K startPoint, Predicate<? super V> valuePredicate) {
-        List<TableEntry<K,V>> scannedEntries = adapter.scan(startPoint, adapter.getCurrentTimestamp());
-        return filteredValues(valuePredicate, scannedEntries);
-    }
-
-    public List<V> cursorScanAndFilter(K startPoint, int numEntries, Predicate<? super V> valuePredicate) {
-        List<TableEntry<K,V>> scannedEntries = adapter.scan(startPoint, numEntries, adapter.getCurrentTimestamp());
-        return filteredValues(valuePredicate, scannedEntries);
-    }
-
-    private List<V> filteredValues(Predicate<? super V> valuePredicate, List<TableEntry<K, V>> scannedEntries) {
-        return scannedEntries.stream()
-                .filter(entry -> valuePredicate.test(entry.getValue()))
-                .map(TableEntry::getValue)
-                .collect(Collectors.toList());
-    }
-
-    @Override
-    public Collection<Entry<K, V>> scanAndFilterByEntry(Predicate<? super Entry<K, V>> entryPredicate) {
-        return scanAndFilterByEntryFromBeginning(entryPredicate);
-    }
-
-    public Collection<Entry<K, V>> scanAndFilterByEntryFromBeginning(Predicate<? super Entry<K, V>> entryPredicate) {
-        List<TableEntry<K,V>> scannedEntries = adapter.scan(adapter.getCurrentTimestamp());
-        return filteredEntries(entryPredicate, scannedEntries);
-    }
-
-    public Collection<Entry<K, V>> scanAndFilterByEntryFromBeginning(int numEntries, Predicate<? super Entry<K, V>> entryPredicate) {
-        List<TableEntry<K,V>> scannedEntries = adapter.scan(numEntries, adapter.getCurrentTimestamp());
-        return filteredEntries(entryPredicate, scannedEntries);
-    }
-
-    public Collection<Entry<K, V>> cursorScanAndFilterByEntry(K startPoint, Predicate<? super Entry<K, V>> entryPredicate) {
-        List<TableEntry<K,V>> scannedEntries = adapter.scan(startPoint, adapter.getCurrentTimestamp());
-        return filteredEntries(entryPredicate, scannedEntries);
-    }
-
-    public Collection<Entry<K, V>> cursorScanAndFilterByEntry(K startPoint, int numEntries, Predicate<? super Entry<K, V>> entryPredicate) {
-        List<TableEntry<K,V>> scannedEntries = adapter.scan(startPoint, numEntries, adapter.getCurrentTimestamp());
-        return filteredEntries(entryPredicate, scannedEntries);
-    }
-
-    private List<Entry<K, V>> filteredEntries(Predicate<? super Entry<K, V>> entryPredicate,
-                                              List<TableEntry<K, V>> scannedEntries) {
-        return scannedEntries.stream().filter(entryPredicate).collect(Collectors.toList());
+    /**
+     * Returns a table scanner with no result filters.
+     * @return No filter table scanner.
+     */
+    public Scanner getScanner() {
+        return new Scanner();
     }
 
     /**
      * {@inheritDoc}
      * <p>
-     *     TODO: link scan impl
-     *     Please use scan instead.
+     *     Please use {@link #getValueFilterScanner(Predicate)} instead.
+     * </p>
+     */
+    @Override
+    public List<V> scanAndFilter(Predicate<? super V> valuePredicate) {
+        throw new UnsupportedOperationException();
+    }
+
+    /**
+     * Returns a table scanner that filters results over the given value predicate.
+     * @param valuePredicate Predicate with which to filter scanned values.
+     * @return Value filter table scanner.
+     */
+    public Scanner getValueFilterScanner(Predicate<? super V> valuePredicate) {
+        return new Scanner(valuePredicate, false);
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     *     Please use {@link #getEntryFilterScanner(Predicate)} instead.
+     * </p>
+     */
+    @Override
+    public Collection<Entry<K, V>> scanAndFilterByEntry(Predicate<? super Entry<K, V>> entryPredicate) {
+        throw new UnsupportedOperationException();
+    }
+
+    /**
+     * Returns a table scanner that filters results over the given entry predicate.
+     * @param entryPredicate Predicate with which to filter scanned entries.
+     * @return Entry filter table scanner.
+     */
+    public Scanner getEntryFilterScanner(Predicate<? super Entry<K, V>> entryPredicate) {
+        return new Scanner(entryPredicate, true);
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     *     Please use {@link #getScanner()} instead.
      * </p>
      */
     @Override
@@ -202,8 +174,7 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
     /**
      * {@inheritDoc}
      * <p>
-     *     TODO: link scan impl
-     *     Please use scan instead.
+     *     Please use {@link #getScanner()} instead.
      * </p>
      */
     @Override
@@ -214,8 +185,7 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
     /**
      * {@inheritDoc}
      * <p>
-     *     TODO: link scan impl
-     *     Please use scan instead.
+     *     Please use {@link #getScanner()} instead.
      * </p>
      */
     @Override
@@ -226,8 +196,7 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
     /**
      * {@inheritDoc}
      * <p>
-     *     TODO: link scan impl
-     *     Please use scan instead.
+     *     Please use {@link #getScanner()} instead.
      * </p>
      */
     @Override
@@ -280,6 +249,133 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
         @Override
         public int hashCode() {
             return Objects.hash(key, value);
+        }
+    }
+
+    /**
+     * This class is used to perform cursor scans of the RemoteCorfuTable.
+     */
+    public class Scanner {
+        @Getter
+        private boolean finished = false;
+
+        //Invariant: scanner can not have both predicates
+        private final Predicate<? super Entry<K, V>> entryPredicate;
+        private final Predicate<? super V> valuePredicate;
+
+        private List<TableEntry<K,V>> currentResultsEntries = null;
+        private List<V> currentResultsValues = null;
+        private K cursor = null;
+
+        /**
+         * Creates scanner with no filters.
+         */
+        private Scanner() {
+            entryPredicate = null;
+            valuePredicate = null;
+        }
+
+        /**
+         * Creates scanner with specified predicate.
+         * @param predicate Predicate with which to filter results.
+         * @param isEntryPredicate True, if given predicate filters over entries.
+         */
+        private Scanner(Predicate predicate, boolean isEntryPredicate) {
+            if (isEntryPredicate) {
+                entryPredicate = predicate;
+                valuePredicate = null;
+            } else {
+                entryPredicate = null;
+                valuePredicate = predicate;
+            }
+        }
+
+        /**
+         * Get the entries read from the previous scan.
+         * @return List of TableEntries from the previous scan.
+         */
+        public List<TableEntry<K,V>> getCurrentResultsEntries() {
+            if (currentResultsEntries == null) {
+                log.warn("Attempted to get results from unstarted scan");
+                return new LinkedList<>();
+            } else {
+                return currentResultsEntries;
+            }
+        }
+
+        /**
+         * Get the values read from the previous scan.
+         * @return List of Values from the previous scan.
+         */
+        public List<V> getCurrentResultsValues() {
+            if (currentResultsValues != null) {
+                return currentResultsValues;
+            } else if (currentResultsEntries != null) {
+                currentResultsValues = currentResultsEntries.stream()
+                        .map(TableEntry::getValue).collect(Collectors.toList());
+                return currentResultsValues;
+            } else {
+                log.warn("Attempted to get results from unstarted scan");
+                return new LinkedList<>();
+            }
+        }
+
+        /**
+         * Perform a scan. If the Scanner is finished, this method will not modify any results.
+         */
+        public void getNextResults() {
+            if (finished) {
+                log.warn("Attempted to scan on a finished scanner instance");
+                return;
+            }
+            List<TableEntry<K,V>> scannedEntries;
+            if (cursor != null) {
+                scannedEntries = adapter.scan(cursor, adapter.getCurrentTimestamp());
+            } else {
+                scannedEntries = adapter.scan(adapter.getCurrentTimestamp());
+            }
+            handleResults((List<TableEntry<K, V>>) scannedEntries);
+        }
+
+        /**
+         * Perform a scan requesting the specified amount of results.
+         * @param numResults The desired amount of results from the scan.
+         */
+        public void getNextResults(int numResults) {
+            if (finished) {
+                log.warn("Attempted to scan on a finished scanner instance");
+                return;
+            }
+            List<TableEntry<K,V>> scannedEntries;
+            if (cursor != null) {
+                scannedEntries = adapter.scan(cursor, numResults, adapter.getCurrentTimestamp());
+            } else {
+                scannedEntries = adapter.scan(numResults, adapter.getCurrentTimestamp());
+            }
+            handleResults(scannedEntries);
+        }
+
+        private void handleResults(List<TableEntry<K, V>> scannedEntries) {
+            if (scannedEntries.isEmpty()) {
+                finished = true;
+                currentResultsEntries = scannedEntries;
+            } else {
+                cursor = scannedEntries.get(scannedEntries.size() - 1).getKey();
+                currentResultsEntries = filter(scannedEntries);
+            }
+            currentResultsValues = null;
+        }
+
+        private List<TableEntry<K,V>> filter(List<TableEntry<K,V>> scannedEntries) {
+            if (entryPredicate != null) {
+                return scannedEntries.stream().filter(entryPredicate).collect(Collectors.toList());
+            } else if (valuePredicate != null) {
+                return scannedEntries.stream()
+                        .filter(entry -> valuePredicate.test(entry.getValue()))
+                        .collect(Collectors.toList());
+            } else {
+                return scannedEntries;
+            }
         }
     }
 
