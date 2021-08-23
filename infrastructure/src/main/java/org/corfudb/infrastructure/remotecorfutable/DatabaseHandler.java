@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.remotecorfutable;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.primitives.Bytes;
 import com.google.common.primitives.Longs;
 import com.google.errorprone.annotations.DoNotCall;
@@ -53,6 +54,9 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 public class DatabaseHandler implements AutoCloseable {
+
+    public static final String CAUSE_OF_ERROR = "Cause of error: ";
+    public static final String SCAN_ERROR_MSG = "Error in RocksDB scan operation: ";
 
     //Loads the C++ library backing RocksDB
     static {
@@ -115,7 +119,7 @@ public class DatabaseHandler implements AutoCloseable {
             tableHandle = database.createColumnFamily(tableDescriptor);
         } catch (RocksDBException e) {
             log.error("Error in creating column family for table {}.", streamID);
-            log.error("Cause of error: ", e);
+            log.error(CAUSE_OF_ERROR, e);
             tableOptions.close();
             comparatorOptions.close();
             comparator.close();
@@ -132,7 +136,7 @@ public class DatabaseHandler implements AutoCloseable {
              metadataHandle = database.createColumnFamily(metadataDescriptor);
         } catch (RocksDBException e) {
             log.error("Error in creating metadata column family for table {}.", streamID);
-            log.error("Cause of error: ", e);
+            log.error(CAUSE_OF_ERROR, e);
             tableHandle.close();
             comparatorOptions.close();
             comparator.close();
@@ -140,7 +144,7 @@ public class DatabaseHandler implements AutoCloseable {
                 database.dropColumnFamily(tableHandle);
             } catch (RocksDBException r) {
                 log.error("Error in dropping column family for table {}.", streamID);
-                log.error("Cause of error: ", r);
+                log.error(CAUSE_OF_ERROR, r);
                 throw e;
             } finally {
                 metadataOptions.close();
@@ -171,16 +175,17 @@ public class DatabaseHandler implements AutoCloseable {
             return;
         }
 
-        tablesToClose.getMetadataTable().close();
-        tablesToClose.getStreamTable().close();
         //possible half delete inconsistencies can be addressed in GC
         try {
             database.dropColumnFamily(tablesToClose.getStreamTable());
             database.dropColumnFamily(tablesToClose.getMetadataTable());
         } catch (RocksDBException e) {
             log.error("Error in dropping column families for table {}.", streamID);
-            log.error("Cause of error: ", e);
+            log.error(CAUSE_OF_ERROR, e);
             throw e;
+        } finally {
+            tablesToClose.getMetadataTable().close();
+            tablesToClose.getStreamTable().close();
         }
     }
 
@@ -275,11 +280,10 @@ public class DatabaseHandler implements AutoCloseable {
                 if (ex != null) {
                     log.error("Error in RocksDB multiGet operation: ", ex);
                     resultFuture.completeExceptionally(ex);
-                    return null;
                 } else {
                     resultFuture.complete(results.stream().map(CompletableFuture::join).collect(Collectors.toList()));
-                    return null;
                 }
+                return null;
             }).join();
         }, executor);
         return resultFuture;
@@ -585,7 +589,7 @@ public class DatabaseHandler implements AutoCloseable {
                 List<RemoteCorfuTableDatabaseEntry> val = scan(numEntries, streamID, timestamp);
                 result.complete(val);
             } catch (RocksDBException|DatabaseOperationException e) {
-                log.error("Error in RocksDB scan operation: ", e);
+                log.error(SCAN_ERROR_MSG, e);
                 result.completeExceptionally(e);
             }
         }, executor);
@@ -612,7 +616,7 @@ public class DatabaseHandler implements AutoCloseable {
                 List<RemoteCorfuTableDatabaseEntry> val = scan(encodedKeyBegin, numEntries, streamID, timestamp);
                 result.complete(val);
             } catch (RocksDBException|DatabaseOperationException e) {
-                log.error("Error in RocksDB scan operation: ", e);
+                log.error(SCAN_ERROR_MSG, e);
                 result.completeExceptionally(e);
             }
         }, executor);
@@ -729,7 +733,7 @@ public class DatabaseHandler implements AutoCloseable {
                 boolean val = containsKey(encodedKey, streamID);
                 result.complete(val);
             } catch (RocksDBException|DatabaseOperationException e) {
-                log.error("Error in RocksDB scan operation: ", e);
+                log.error(SCAN_ERROR_MSG, e);
                 result.completeExceptionally(e);
             }
         }, executor);
@@ -780,7 +784,7 @@ public class DatabaseHandler implements AutoCloseable {
                 boolean val = containsValue(encodedValue, streamID, timestamp, scanSize);
                 result.complete(val);
             } catch (RocksDBException|DatabaseOperationException e) {
-                log.error("Error in RocksDB scan operation: ", e);
+                log.error(SCAN_ERROR_MSG, e);
                 result.completeExceptionally(e);
             }
         }, executor);
@@ -826,7 +830,7 @@ public class DatabaseHandler implements AutoCloseable {
                 int val = size(streamID, timestamp, scanSize);
                 result.complete(val);
             } catch (RocksDBException|DatabaseOperationException e) {
-                log.error("Error in RocksDB scan operation: ", e);
+                log.error(SCAN_ERROR_MSG, e);
                 result.completeExceptionally(e);
             }
         }, executor);
@@ -865,10 +869,8 @@ public class DatabaseHandler implements AutoCloseable {
      * FOR DEBUG USE ONLY - WILL SCAN EVERY KEY IN THE DATABASE
      * @param streamID The stream to scan.
      * @return Every key in the database with the specified streamID.
-     * @deprecated Use only for debug.
      */
-    @DoNotCall
-    @Deprecated
+    @VisibleForTesting
     protected List<RemoteCorfuTableDatabaseEntry> fullDatabaseScan(UUID streamID) {
         List<RemoteCorfuTableDatabaseEntry> allEntries = new LinkedList<>();
         try (RocksIterator iter = database.newIterator(columnFamilies.get(streamID).getStreamTable())) {
