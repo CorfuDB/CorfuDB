@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 @Slf4j
 public class RemoteCorfuTableTest extends AbstractViewTest {
@@ -56,7 +57,7 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
     }
 
     private <K,V> void updateAll(DatabaseHandler dbHandler, RemoteCorfuTable<K,V> table,
-                                 Collection<RemoteCorfuTable.RemoteCorfuTableEntry<K,V>> entries) throws RocksDBException {
+                                 Collection<RemoteCorfuTable.TableEntry<K,V>> entries) throws RocksDBException {
         table.updateAll(entries);
         applyToDatabase(dbHandler, table.getStreamId());
     }
@@ -112,9 +113,9 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
 
     @Test
     public void testMultiGet() throws RocksDBException {
-        List<RemoteCorfuTable.RemoteCorfuTableEntry<String, String>> entries = new LinkedList<>();
+        List<RemoteCorfuTable.TableEntry<String, String>> entries = new LinkedList<>();
         for (int i = 0; i < 5; i++) {
-            RemoteCorfuTable.RemoteCorfuTableEntry<String, String> entry = new RemoteCorfuTable.RemoteCorfuTableEntry<>(
+            RemoteCorfuTable.TableEntry<String, String> entry = new RemoteCorfuTable.TableEntry<>(
                     "TestKey" + i,
                     "TestValue" + i
             );
@@ -122,16 +123,16 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
         }
         updateAll(dbHandler, table, entries);
         List<String> readBackKeys = entries.stream()
-                .map(RemoteCorfuTable.RemoteCorfuTableEntry::getKey)
+                .map(RemoteCorfuTable.TableEntry::getKey)
                 .collect(Collectors.toList());
-        List<RemoteCorfuTable.RemoteCorfuTableEntry<String, String>> readBackEntries = table.multiGet(readBackKeys);
-        ImmutableMultiset<RemoteCorfuTable.RemoteCorfuTableEntry<String, String>> expectedWriteSet =
+        List<RemoteCorfuTable.TableEntry<String, String>> readBackEntries = table.multiGet(readBackKeys);
+        ImmutableMultiset<RemoteCorfuTable.TableEntry<String, String>> expectedWriteSet =
                 ImmutableMultiset.copyOf(entries);
-        ImmutableMultiset<RemoteCorfuTable.RemoteCorfuTableEntry<String, String>> readBackSet =
+        ImmutableMultiset<RemoteCorfuTable.TableEntry<String, String>> readBackSet =
                 ImmutableMultiset.copyOf(readBackEntries);
         assertEquals(expectedWriteSet, readBackSet);
 
-        List<RemoteCorfuTable.RemoteCorfuTableEntry<String, String>> evenEntries = new LinkedList<>();
+        List<RemoteCorfuTable.TableEntry<String, String>> evenEntries = new LinkedList<>();
         for (int i = 0; i < 10; i += 2) {
             String key = "TestKey" + i;
             String val;
@@ -140,18 +141,18 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
             } else {
                 val = null;
             }
-            RemoteCorfuTable.RemoteCorfuTableEntry<String, String> entry = new RemoteCorfuTable.RemoteCorfuTableEntry<>(
+            RemoteCorfuTable.TableEntry<String, String> entry = new RemoteCorfuTable.TableEntry<>(
                     key, val
             );
             evenEntries.add(entry);
         }
         List<String> evenEntryKeys = evenEntries.stream()
-                .map(RemoteCorfuTable.RemoteCorfuTableEntry::getKey)
+                .map(RemoteCorfuTable.TableEntry::getKey)
                 .collect(Collectors.toList());
-        List<RemoteCorfuTable.RemoteCorfuTableEntry<String, String>> readEvenEntries = table.multiGet(evenEntryKeys);
-        ImmutableMultiset<RemoteCorfuTable.RemoteCorfuTableEntry<String, String>> expectedEvenSet =
+        List<RemoteCorfuTable.TableEntry<String, String>> readEvenEntries = table.multiGet(evenEntryKeys);
+        ImmutableMultiset<RemoteCorfuTable.TableEntry<String, String>> expectedEvenSet =
                 ImmutableMultiset.copyOf(evenEntries);
-        ImmutableMultiset<RemoteCorfuTable.RemoteCorfuTableEntry<String, String>> readEvenSet =
+        ImmutableMultiset<RemoteCorfuTable.TableEntry<String, String>> readEvenSet =
                 ImmutableMultiset.copyOf(readEvenEntries);
         assertEquals(expectedEvenSet, readEvenSet);
     }
@@ -188,9 +189,9 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
 
     @Test
     public void testMultiDelete() throws RocksDBException {
-        List<RemoteCorfuTable.RemoteCorfuTableEntry<String, String>> entries = new LinkedList<>();
+        List<RemoteCorfuTable.TableEntry<String, String>> entries = new LinkedList<>();
         for (int i = 0; i < 5; i++) {
-            RemoteCorfuTable.RemoteCorfuTableEntry<String, String> entry = new RemoteCorfuTable.RemoteCorfuTableEntry<>(
+            RemoteCorfuTable.TableEntry<String, String> entry = new RemoteCorfuTable.TableEntry<>(
                     "TestKey" + i,
                     "TestValue" + i
             );
@@ -198,37 +199,37 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
         }
         updateAll(dbHandler, table, entries);
         List<String> deletionKeys = entries.subList(0,3).stream()
-                .map(RemoteCorfuTable.RemoteCorfuTableEntry::getKey)
+                .map(RemoteCorfuTable.TableEntry::getKey)
                 .collect(Collectors.toList());
         multiDelete(dbHandler, table, deletionKeys);
-        ImmutableMultiset<RemoteCorfuTable.RemoteCorfuTableEntry<String, String>> expectedViewSet =
+        ImmutableMultiset<RemoteCorfuTable.TableEntry<String, String>> expectedViewSet =
                 Streams.concat(deletionKeys.stream()
-                        .map(key -> new RemoteCorfuTable.RemoteCorfuTableEntry<String,String>(key, null)),
+                        .map(key -> new RemoteCorfuTable.TableEntry<String,String>(key, null)),
                         entries.subList(3,5).stream()
                         ).collect(ImmutableMultiset.toImmutableMultiset());
 
         List<String> keys = entries.stream()
-                .map(RemoteCorfuTable.RemoteCorfuTableEntry::getKey).collect(Collectors.toList());
-        List<RemoteCorfuTable.RemoteCorfuTableEntry<String, String>> readView = table.multiGet(keys);
-        ImmutableMultiset<RemoteCorfuTable.RemoteCorfuTableEntry<String, String>> readViewSet =
+                .map(RemoteCorfuTable.TableEntry::getKey).collect(Collectors.toList());
+        List<RemoteCorfuTable.TableEntry<String, String>> readView = table.multiGet(keys);
+        ImmutableMultiset<RemoteCorfuTable.TableEntry<String, String>> readViewSet =
                 ImmutableMultiset.copyOf(readView);
         assertEquals(expectedViewSet, readViewSet);
 
         deletionKeys = entries.subList(3,5).stream()
-                .map(RemoteCorfuTable.RemoteCorfuTableEntry::getKey)
+                .map(RemoteCorfuTable.TableEntry::getKey)
                 .collect(Collectors.toList());
         multiDelete(dbHandler, table, deletionKeys);
-        List<RemoteCorfuTable.RemoteCorfuTableEntry<String, String>> emptyView = table.multiGet(keys);
-        for (RemoteCorfuTable.RemoteCorfuTableEntry<String, String> emptyEntry : emptyView) {
+        List<RemoteCorfuTable.TableEntry<String, String>> emptyView = table.multiGet(keys);
+        for (RemoteCorfuTable.TableEntry<String, String> emptyEntry : emptyView) {
             assertNull(emptyEntry.getValue());
         }
     }
 
     @Test
     public void testClear() throws RocksDBException {
-        List<RemoteCorfuTable.RemoteCorfuTableEntry<String, String>> entries = new LinkedList<>();
+        List<RemoteCorfuTable.TableEntry<String, String>> entries = new LinkedList<>();
         for (int i = 0; i < 500; i++) {
-            RemoteCorfuTable.RemoteCorfuTableEntry<String, String> entry = new RemoteCorfuTable.RemoteCorfuTableEntry<>(
+            RemoteCorfuTable.TableEntry<String, String> entry = new RemoteCorfuTable.TableEntry<>(
                     "TestKey" + i,
                     "TestValue" + i
             );
@@ -237,22 +238,22 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
         updateAll(dbHandler, table, entries);
         clear(dbHandler, table);
         List<String> keys = entries.stream()
-                .map(RemoteCorfuTable.RemoteCorfuTableEntry::getKey)
+                .map(RemoteCorfuTable.TableEntry::getKey)
                 .collect(Collectors.toList());
-        ImmutableMultiset<RemoteCorfuTable.RemoteCorfuTableEntry<String, String>> expectedEntrySet = keys.stream()
-                .map(key -> new RemoteCorfuTable.RemoteCorfuTableEntry<String, String>(key, null))
+        ImmutableMultiset<RemoteCorfuTable.TableEntry<String, String>> expectedEntrySet = keys.stream()
+                .map(key -> new RemoteCorfuTable.TableEntry<String, String>(key, null))
                 .collect(ImmutableMultiset.toImmutableMultiset());
-        List<RemoteCorfuTable.RemoteCorfuTableEntry<String, String>> readEntries = table.multiGet(keys);
-        ImmutableMultiset<RemoteCorfuTable.RemoteCorfuTableEntry<String, String>> readSet =
+        List<RemoteCorfuTable.TableEntry<String, String>> readEntries = table.multiGet(keys);
+        ImmutableMultiset<RemoteCorfuTable.TableEntry<String, String>> readSet =
                 ImmutableMultiset.copyOf(readEntries);
         assertEquals(expectedEntrySet, readSet);
     }
 
     @Test
     public void testLargeScaleDelete() throws RocksDBException {
-        List<RemoteCorfuTable.RemoteCorfuTableEntry<String, String>> entries = new ArrayList<>(500);
+        List<RemoteCorfuTable.TableEntry<String, String>> entries = new ArrayList<>(500);
         for (int i = 0; i < 500; i++) {
-            RemoteCorfuTable.RemoteCorfuTableEntry<String, String> entry = new RemoteCorfuTable.RemoteCorfuTableEntry<>(
+            RemoteCorfuTable.TableEntry<String, String> entry = new RemoteCorfuTable.TableEntry<>(
                     "TestKey" + i,
                     "TestValue" + i
             );
@@ -260,26 +261,118 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
         }
         updateAll(dbHandler, table, entries);
         List<String> keysToDelete = new LinkedList<>();
-        List<RemoteCorfuTable.RemoteCorfuTableEntry<String, String>> expected = new LinkedList<>();
+        List<RemoteCorfuTable.TableEntry<String, String>> expected = new LinkedList<>();
         for (int i = 0; i < 500; i++) {
             if (i % 2 == 0) {
                 expected.add(entries.get(i));
             } else {
-                RemoteCorfuTable.RemoteCorfuTableEntry<String, String> deletion =
-                        new RemoteCorfuTable.RemoteCorfuTableEntry<>(entries.get(i).getKey(), null);
+                RemoteCorfuTable.TableEntry<String, String> deletion =
+                        new RemoteCorfuTable.TableEntry<>(entries.get(i).getKey(), null);
                 keysToDelete.add(deletion.getKey());
                 expected.add(deletion);
             }
         }
         multiDelete(dbHandler, table, keysToDelete);
-        ImmutableMultiset<RemoteCorfuTable.RemoteCorfuTableEntry<String, String>> expectedEntrySet =
+        ImmutableMultiset<RemoteCorfuTable.TableEntry<String, String>> expectedEntrySet =
                 ImmutableMultiset.copyOf(expected);
         List<String> keys = entries.stream()
-                .map(RemoteCorfuTable.RemoteCorfuTableEntry::getKey)
+                .map(RemoteCorfuTable.TableEntry::getKey)
                 .collect(Collectors.toList());
-        List<RemoteCorfuTable.RemoteCorfuTableEntry<String, String>> readEntries = table.multiGet(keys);
-        ImmutableMultiset<RemoteCorfuTable.RemoteCorfuTableEntry<String, String>> readSet =
+        List<RemoteCorfuTable.TableEntry<String, String>> readEntries = table.multiGet(keys);
+        ImmutableMultiset<RemoteCorfuTable.TableEntry<String, String>> readSet =
                 ImmutableMultiset.copyOf(readEntries);
         assertEquals(expectedEntrySet, readSet);
     }
+
+    @Test
+    public void testScanDefaultSize() throws RocksDBException {
+        //using an int->string table for sorting convenience
+        dbHandler.removeTable(table.getStreamId());
+        RemoteCorfuTable<Integer, String> intTable =
+                RemoteCorfuTable.RemoteCorfuTableFactory.openTable(runtime, "test2");
+        dbHandler.addTable(intTable.getStreamId());
+        tableStream = runtime.getStreamsView().get(intTable.getStreamId());
+
+        List<Integer> keys = IntStream.range(0,500).boxed().sorted((a, b) -> b.toString().compareTo(a.toString()))
+                .collect(Collectors.toList());
+        List<RemoteCorfuTable.TableEntry<Integer, String>> entries = keys.stream()
+                .map(i -> new RemoteCorfuTable.TableEntry<>(i, "Val" + i))
+                .collect(Collectors.toList());
+
+        updateAll(dbHandler, intTable, entries);
+
+        ImmutableMultiset<RemoteCorfuTable.TableEntry<Integer, String>> expectedEntries =
+                ImmutableMultiset.copyOf(entries);
+        ImmutableMultiset<RemoteCorfuTable.TableEntry<Integer, String>> readEntries =
+                ImmutableMultiset.copyOf(intTable.multiGet(keys));
+        assertEquals(expectedEntries, readEntries);
+
+        List<RemoteCorfuTable.TableEntry<Integer, String>> scannedEntries = intTable.scanFromBeginning();
+        int startPos = 0;
+        int endPos = scannedEntries.size();
+        assertEquals(entries.subList(startPos, endPos), scannedEntries);
+        startPos = endPos;
+        RemoteCorfuTable.TableEntry<Integer, String> prevEntry;
+        while (!scannedEntries.isEmpty()) {
+            prevEntry = scannedEntries.get(scannedEntries.size()-1);
+            scannedEntries = intTable.cursorScan(prevEntry.getKey());
+            endPos += scannedEntries.size();
+            assertEquals(entries.subList(startPos, endPos), scannedEntries);
+            startPos = endPos;
+        }
+    }
+
+    @Test
+    public void testScanVariableSize() throws RocksDBException {
+        //using an int->string table for sorting convenience
+        dbHandler.removeTable(table.getStreamId());
+        RemoteCorfuTable<Integer, String> intTable =
+                RemoteCorfuTable.RemoteCorfuTableFactory.openTable(runtime, "test2");
+        dbHandler.addTable(intTable.getStreamId());
+        tableStream = runtime.getStreamsView().get(intTable.getStreamId());
+
+        List<Integer> keys = IntStream.range(0,500).boxed().sorted((a, b) -> b.toString().compareTo(a.toString()))
+                .collect(Collectors.toList());
+        List<RemoteCorfuTable.TableEntry<Integer, String>> entries = keys.stream()
+                .map(i -> new RemoteCorfuTable.TableEntry<>(i, "Val" + i))
+                .collect(Collectors.toList());
+
+        updateAll(dbHandler, intTable, entries);
+
+        ImmutableMultiset<RemoteCorfuTable.TableEntry<Integer, String>> expectedEntries =
+                ImmutableMultiset.copyOf(entries);
+        ImmutableMultiset<RemoteCorfuTable.TableEntry<Integer, String>> readEntries =
+                ImmutableMultiset.copyOf(intTable.multiGet(keys));
+        assertEquals(expectedEntries, readEntries);
+
+        int scanSize = 1;
+        List<RemoteCorfuTable.TableEntry<Integer, String>> scannedEntries = intTable.scanFromBeginning(scanSize);
+        scanSize += 2;
+        int startPos = 0;
+        int endPos = scannedEntries.size();
+        assertEquals(entries.subList(startPos, endPos), scannedEntries);
+        startPos = endPos;
+        RemoteCorfuTable.TableEntry<Integer, String> prevEntry;
+        while (!scannedEntries.isEmpty()) {
+            prevEntry = scannedEntries.get(scannedEntries.size()-1);
+            scannedEntries = intTable.cursorScan(prevEntry.getKey(), scanSize);
+            scanSize += 2;
+            endPos += scannedEntries.size();
+            assertEquals(entries.subList(startPos, endPos), scannedEntries);
+            startPos = endPos;
+        }
+    }
+
+//    @Test
+//    public void testFixedSizeFilterScan() throws RocksDBException {
+//        List<RemoteCorfuTable.TableEntry<String, String>> entries = new ArrayList<>(500);
+//        for (int i = 0; i < 500; i++) {
+//            RemoteCorfuTable.TableEntry<String, String> entry = new RemoteCorfuTable.TableEntry<>(
+//                    "TestKey" + i,
+//                    "TestValue" + i
+//            );
+//            entries.add(entry);
+//        }
+//        updateAll(dbHandler, table, entries);
+//    }
 }

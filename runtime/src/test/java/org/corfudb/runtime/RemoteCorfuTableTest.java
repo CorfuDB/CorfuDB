@@ -186,26 +186,26 @@ public class RemoteCorfuTableTest {
         assertEquals(UPDATE.getSMRName(), entry.getSMRMethod());
         assertEquals(10, entry.getSMRArguments().length);
 
-        Multiset<RemoteCorfuTable.RemoteCorfuTableEntry<String,Integer>> expectedSet = ImmutableMultiset.copyOf(
+        Multiset<RemoteCorfuTable.TableEntry<String,Integer>> expectedSet = ImmutableMultiset.copyOf(
                 testMap.entrySet().stream()
                         .map(mapEntry ->
-                                new RemoteCorfuTable.RemoteCorfuTableEntry<>(mapEntry.getKey(), mapEntry.getValue()))
+                                new RemoteCorfuTable.TableEntry<>(mapEntry.getKey(), mapEntry.getValue()))
                         .collect(Collectors.toList()));
 
-        List<RemoteCorfuTable.RemoteCorfuTableEntry<String , Integer>> readList = new LinkedList<>();
+        List<RemoteCorfuTable.TableEntry<String , Integer>> readList = new LinkedList<>();
         for (int i = 0; i < entry.getSMRArguments().length; i += 2) {
-            readList.add(new RemoteCorfuTable.RemoteCorfuTableEntry<>(
+            readList.add(new RemoteCorfuTable.TableEntry<>(
                     (String) entry.getSMRArguments()[i],(Integer) entry.getSMRArguments()[i+1]));
         }
-        Multiset<RemoteCorfuTable.RemoteCorfuTableEntry<String,Integer>> readSet = ImmutableMultiset.copyOf(readList);
+        Multiset<RemoteCorfuTable.TableEntry<String,Integer>> readSet = ImmutableMultiset.copyOf(readList);
         assertEquals(expectedSet, readSet);
     }
 
     @Test
     public void testUpdateAll() {
-        List<RemoteCorfuTable.RemoteCorfuTableEntry<String, Integer>> entries = new ArrayList<>(5);
+        List<RemoteCorfuTable.TableEntry<String, Integer>> entries = new ArrayList<>(5);
         for (int i = 0; i < 5; i++) {
-            entries.add(new RemoteCorfuTable.RemoteCorfuTableEntry<>("key" + i, i));
+            entries.add(new RemoteCorfuTable.TableEntry<>("key" + i, i));
         }
 
         ArgumentCaptor<LogData> logDataCaptor = ArgumentCaptor.forClass(LogData.class);
@@ -223,8 +223,8 @@ public class RemoteCorfuTableTest {
         assertEquals(UPDATE.getSMRName(), entry.getSMRMethod());
         assertEquals(10, entry.getSMRArguments().length);
         for (int i = 0; i < entries.size(); i++) {
-            RemoteCorfuTable.RemoteCorfuTableEntry<String, Integer> readEntry =
-                    new RemoteCorfuTable.RemoteCorfuTableEntry<>(
+            RemoteCorfuTable.TableEntry<String, Integer> readEntry =
+                    new RemoteCorfuTable.TableEntry<>(
                             (String) entry.getSMRArguments()[2*i], (Integer) entry.getSMRArguments()[2*i+1]);
             assertEquals(entries.get(i), readEntry);
         }
