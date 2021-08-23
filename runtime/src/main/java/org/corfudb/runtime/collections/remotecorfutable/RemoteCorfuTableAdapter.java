@@ -19,10 +19,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * This class connects the client API from the RemoteCorfuTable to the data stored on the server.
@@ -67,7 +65,7 @@ public class RemoteCorfuTableAdapter<K,V> {
         streamView.append(serializedEntry);
     }
 
-    public void updateAll(Collection<RemoteCorfuTable.RemoteCorfuTableEntry<K,V>> entries) {
+    public void updateAll(Collection<RemoteCorfuTable.TableEntry<K,V>> entries) {
         int amount = 2 * entries.size();
         if (amount < 0) {
             //integer overflow
@@ -79,7 +77,7 @@ public class RemoteCorfuTableAdapter<K,V> {
             //update will fit in a single SMR entry
             Object[] smrArgs = new Object[2 * entries.size()];
             int i = 0;
-            for (RemoteCorfuTable.RemoteCorfuTableEntry<K, V> entry : entries) {
+            for (RemoteCorfuTable.TableEntry<K, V> entry : entries) {
                 smrArgs[i] = entry.getKey();
                 smrArgs[i + 1] = entry.getValue();
                 i += 2;
@@ -96,7 +94,7 @@ public class RemoteCorfuTableAdapter<K,V> {
             int batchPosition = 0;
             List<SMREntry> updateEntries = new LinkedList<>();
             Object[] currArgs = new Object[batchSize];
-            for (RemoteCorfuTable.RemoteCorfuTableEntry<K, V> entry : entries) {
+            for (RemoteCorfuTable.TableEntry<K, V> entry : entries) {
                 //since batch and amount are guaranteed to be even, key-value pair cannot be split
                 currArgs[batchPosition] = entry.getKey();
                 currArgs[batchPosition + 1] = entry.getValue();
@@ -143,7 +141,7 @@ public class RemoteCorfuTableAdapter<K,V> {
         return (V) deserializeObject(databaseValueString);
     }
 
-    public List<RemoteCorfuTable.RemoteCorfuTableEntry<K,V>> multiGet(List<K> keys, long timestamp) {
+    public List<RemoteCorfuTable.TableEntry<K,V>> multiGet(List<K> keys, long timestamp) {
         List<RemoteCorfuTableVersionedKey> versionedKeys = keys.stream()
                 .map(this::serializeObject)
                 .map(serializedBytes -> new RemoteCorfuTableVersionedKey(serializedBytes, timestamp))
@@ -262,7 +260,7 @@ public class RemoteCorfuTableAdapter<K,V> {
     }
 
 
-    public List<RemoteCorfuTable.RemoteCorfuTableEntry<K, V>> scan(K startPoint, int numEntries, long currentTimestamp) {
+    public List<RemoteCorfuTable.TableEntry<K, V>> scan(K startPoint, int numEntries, long currentTimestamp) {
         ByteString databaseKeyString = serializeObject(startPoint);
         RemoteCorfuTableVersionedKey databaseKey =
                 new RemoteCorfuTableVersionedKey(databaseKeyString,currentTimestamp);
@@ -271,13 +269,13 @@ public class RemoteCorfuTableAdapter<K,V> {
         return getRemoteCorfuTableEntries(scannedEntries);
     }
 
-    public List<RemoteCorfuTable.RemoteCorfuTableEntry<K, V>> scan(int numEntries, long currentTimestamp) {
+    public List<RemoteCorfuTable.TableEntry<K, V>> scan(int numEntries, long currentTimestamp) {
         List<RemoteCorfuTableDatabaseEntry> scannedEntries = runtime.getRemoteCorfuTableView().scan(numEntries,
                 streamId, currentTimestamp);
         return getRemoteCorfuTableEntries(scannedEntries);
     }
     
-    public List<RemoteCorfuTable.RemoteCorfuTableEntry<K, V>> scan(K startPoint, long currentTimestamp) {
+    public List<RemoteCorfuTable.TableEntry<K, V>> scan(K startPoint, long currentTimestamp) {
         ByteString databaseKeyString = serializeObject(startPoint);
         RemoteCorfuTableVersionedKey databaseKey =
                 new RemoteCorfuTableVersionedKey(databaseKeyString,currentTimestamp);
@@ -286,15 +284,15 @@ public class RemoteCorfuTableAdapter<K,V> {
         return getRemoteCorfuTableEntries(scannedEntries);
     }
 
-    public List<RemoteCorfuTable.RemoteCorfuTableEntry<K, V>> scan(long currentTimestamp) {
+    public List<RemoteCorfuTable.TableEntry<K, V>> scan(long currentTimestamp) {
         List<RemoteCorfuTableDatabaseEntry> scannedEntries = runtime.getRemoteCorfuTableView().scan(streamId,
                 currentTimestamp);
         return getRemoteCorfuTableEntries(scannedEntries);
     }
 
-    private List<RemoteCorfuTable.RemoteCorfuTableEntry<K, V>> getRemoteCorfuTableEntries(List<RemoteCorfuTableDatabaseEntry> scannedEntries) {
+    private List<RemoteCorfuTable.TableEntry<K, V>> getRemoteCorfuTableEntries(List<RemoteCorfuTableDatabaseEntry> scannedEntries) {
         return scannedEntries.stream()
-                .map(dbEntry -> new RemoteCorfuTable.RemoteCorfuTableEntry<K,V>(
+                .map(dbEntry -> new RemoteCorfuTable.TableEntry<K,V>(
                         (K) deserializeObject(dbEntry.getKey().getEncodedKey()),
                         (V) deserializeObject(dbEntry.getValue())
                 ))

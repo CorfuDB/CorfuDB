@@ -45,19 +45,19 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
         adapter.multiDelete(keys);
     }
 
-    public List<RemoteCorfuTableEntry<K,V>> scanFromBeginning() {
+    public List<TableEntry<K,V>> scanFromBeginning() {
         return adapter.scan(adapter.getCurrentTimestamp());
     }
 
-    public List<RemoteCorfuTableEntry<K,V>> scanFromBeginning(int numEntries) {
+    public List<TableEntry<K,V>> scanFromBeginning(int numEntries) {
         return adapter.scan(numEntries, adapter.getCurrentTimestamp());
     }
 
-    public List<RemoteCorfuTableEntry<K,V>> cursorScan(K startPoint) {
+    public List<TableEntry<K,V>> cursorScan(K startPoint) {
         return adapter.scan(startPoint, adapter.getCurrentTimestamp());
     }
 
-    public List<RemoteCorfuTableEntry<K,V>> cursorScan(K startPoint, int numEntries) {
+    public List<TableEntry<K,V>> cursorScan(K startPoint, int numEntries) {
         return adapter.scan(startPoint, numEntries, adapter.getCurrentTimestamp());
     }
 
@@ -67,29 +67,29 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
     }
 
     public List<V> scanAndFilterFromBeginning(Predicate<? super V> valuePredicate) {
-        List<RemoteCorfuTableEntry<K,V>> scannedEntries = adapter.scan(adapter.getCurrentTimestamp());
+        List<TableEntry<K,V>> scannedEntries = adapter.scan(adapter.getCurrentTimestamp());
         return filteredValues(valuePredicate, scannedEntries);
     }
 
     public List<V> scanAndFilterFromBeginning(int numEntries, Predicate<? super V> valuePredicate) {
-        List<RemoteCorfuTableEntry<K,V>> scannedEntries = adapter.scan(numEntries, adapter.getCurrentTimestamp());
+        List<TableEntry<K,V>> scannedEntries = adapter.scan(numEntries, adapter.getCurrentTimestamp());
         return filteredValues(valuePredicate, scannedEntries);
     }
 
     public List<V> cursorScanAndFilter(K startPoint, Predicate<? super V> valuePredicate) {
-        List<RemoteCorfuTableEntry<K,V>> scannedEntries = adapter.scan(startPoint, adapter.getCurrentTimestamp());
+        List<TableEntry<K,V>> scannedEntries = adapter.scan(startPoint, adapter.getCurrentTimestamp());
         return filteredValues(valuePredicate, scannedEntries);
     }
 
     public List<V> cursorScanAndFilter(K startPoint, int numEntries, Predicate<? super V> valuePredicate) {
-        List<RemoteCorfuTableEntry<K,V>> scannedEntries = adapter.scan(startPoint, numEntries, adapter.getCurrentTimestamp());
+        List<TableEntry<K,V>> scannedEntries = adapter.scan(startPoint, numEntries, adapter.getCurrentTimestamp());
         return filteredValues(valuePredicate, scannedEntries);
     }
 
-    private List<V> filteredValues(Predicate<? super V> valuePredicate, List<RemoteCorfuTableEntry<K, V>> scannedEntries) {
+    private List<V> filteredValues(Predicate<? super V> valuePredicate, List<TableEntry<K, V>> scannedEntries) {
         return scannedEntries.stream()
                 .filter(entry -> valuePredicate.test(entry.getValue()))
-                .map(RemoteCorfuTableEntry::getValue)
+                .map(TableEntry::getValue)
                 .collect(Collectors.toList());
     }
 
@@ -99,27 +99,27 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
     }
 
     public Collection<Entry<K, V>> scanAndFilterByEntryFromBeginning(Predicate<? super Entry<K, V>> entryPredicate) {
-        List<RemoteCorfuTableEntry<K,V>> scannedEntries = adapter.scan(adapter.getCurrentTimestamp());
+        List<TableEntry<K,V>> scannedEntries = adapter.scan(adapter.getCurrentTimestamp());
         return filteredEntries(entryPredicate, scannedEntries);
     }
 
     public Collection<Entry<K, V>> scanAndFilterByEntryFromBeginning(int numEntries, Predicate<? super Entry<K, V>> entryPredicate) {
-        List<RemoteCorfuTableEntry<K,V>> scannedEntries = adapter.scan(numEntries, adapter.getCurrentTimestamp());
+        List<TableEntry<K,V>> scannedEntries = adapter.scan(numEntries, adapter.getCurrentTimestamp());
         return filteredEntries(entryPredicate, scannedEntries);
     }
 
     public Collection<Entry<K, V>> cursorScanAndFilterByEntry(K startPoint, Predicate<? super Entry<K, V>> entryPredicate) {
-        List<RemoteCorfuTableEntry<K,V>> scannedEntries = adapter.scan(startPoint, adapter.getCurrentTimestamp());
+        List<TableEntry<K,V>> scannedEntries = adapter.scan(startPoint, adapter.getCurrentTimestamp());
         return filteredEntries(entryPredicate, scannedEntries);
     }
 
     public Collection<Entry<K, V>> cursorScanAndFilterByEntry(K startPoint, int numEntries, Predicate<? super Entry<K, V>> entryPredicate) {
-        List<RemoteCorfuTableEntry<K,V>> scannedEntries = adapter.scan(startPoint, numEntries, adapter.getCurrentTimestamp());
+        List<TableEntry<K,V>> scannedEntries = adapter.scan(startPoint, numEntries, adapter.getCurrentTimestamp());
         return filteredEntries(entryPredicate, scannedEntries);
     }
 
     private List<Entry<K, V>> filteredEntries(Predicate<? super Entry<K, V>> entryPredicate,
-                                              List<RemoteCorfuTableEntry<K, V>> scannedEntries) {
+                                              List<TableEntry<K, V>> scannedEntries) {
         return scannedEntries.stream().filter(entryPredicate).collect(Collectors.toList());
     }
 
@@ -163,7 +163,7 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
         return adapter.get((K) key, adapter.getCurrentTimestamp());
     }
 
-    public List<RemoteCorfuTableEntry<K,V>> multiGet(List<K> keys) {
+    public List<TableEntry<K,V>> multiGet(List<K> keys) {
         return adapter.multiGet(keys, adapter.getCurrentTimestamp());
     }
 
@@ -186,11 +186,11 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
     @Override
     public void putAll(Map<? extends K, ? extends V> m) {
         adapter.updateAll(m.entrySet().stream()
-                .map(entry -> new RemoteCorfuTableEntry<K,V>(entry.getKey(), entry.getValue()))
+                .map(entry -> new TableEntry<K,V>(entry.getKey(), entry.getValue()))
                 .collect(Collectors.toList()));
     }
 
-    public void updateAll(Collection<RemoteCorfuTableEntry<K,V>> entries) {
+    public void updateAll(Collection<TableEntry<K,V>> entries) {
         adapter.updateAll(entries);
     }
 
@@ -242,7 +242,7 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
     }
 
     @AllArgsConstructor
-    public static class RemoteCorfuTableEntry<K,V> implements Map.Entry<K,V> {
+    public static class TableEntry<K,V> implements Map.Entry<K,V> {
 
         private final K key;
         private final V value;
@@ -273,7 +273,7 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
         public boolean equals(Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
-            RemoteCorfuTableEntry<?, ?> entry = (RemoteCorfuTableEntry<?, ?>) o;
+            TableEntry<?, ?> entry = (TableEntry<?, ?>) o;
             return Objects.equals(key, entry.key) && Objects.equals(value, entry.value);
         }
 
