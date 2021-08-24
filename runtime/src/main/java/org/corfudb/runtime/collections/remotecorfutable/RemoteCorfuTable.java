@@ -34,16 +34,26 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
     @Getter
     private final UUID streamId;
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void insert(K key, V value) {
         adapter.update(key, value);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void delete(K key) {
         adapter.delete(key);
     }
 
+    /**
+     * Atomically removes a set of keys from the table.
+     * @param keys The keys to remove from the table.
+     */
     public void multiDelete(List<K> keys) {
         adapter.multiDelete(keys);
     }
@@ -107,6 +117,9 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
         throw new UnsupportedOperationException();
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int size() {
         return adapter.size(adapter.getCurrentTimestamp());
@@ -120,25 +133,42 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
         return size() == 0;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean containsKey(Object key) {
         return adapter.containsKey((K) key, adapter.getCurrentTimestamp());
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean containsValue(Object value) {
         return adapter.containsValue((V) value, adapter.getCurrentTimestamp());
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public V get(Object key) {
         return adapter.get((K) key, adapter.getCurrentTimestamp());
     }
 
+    /**
+     * Reads the current value of all requested keys. Entries may not be returned in the same order as the keys.
+     * @param keys The keys to get from the table.
+     * @return List of entries, each entry corresponds to one requested key.
+     */
     public List<TableEntry<K,V>> multiGet(List<K> keys) {
         return adapter.multiGet(keys, adapter.getCurrentTimestamp());
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public V put(K key, V value) {
         //synchronization guarantees unneeded as timestamp will define versioning
@@ -147,6 +177,9 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
         return returnVal;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public V remove(Object key) {
         //synchronization guarantees unneeded as timestamp will define versioning
@@ -155,6 +188,9 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
         return returnVal;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void putAll(Map<? extends K, ? extends V> m) {
         adapter.updateAll(m.entrySet().stream()
@@ -162,10 +198,17 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
                 .collect(Collectors.toList()));
     }
 
+    /**
+     * Atomically updates table with all given entries.
+     * @param entries The entries to add to the table.
+     */
     public void updateAll(Collection<TableEntry<K,V>> entries) {
         adapter.updateAll(entries);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void clear() {
         adapter.clear();
@@ -206,7 +249,7 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
 
     @Override
     public void close() throws Exception {
-        //TODO: close adapter and deregister table
+        //TODO: deregister table
         adapter.close();
     }
 
@@ -379,6 +422,9 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
         }
     }
 
+    /**
+     * Factory class to create instances of RemoteCorfuTables.
+     */
     public static class RemoteCorfuTableFactory {
         private RemoteCorfuTableFactory() {}
 
