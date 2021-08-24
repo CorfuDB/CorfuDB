@@ -13,18 +13,22 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.After;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import org.junit.Before;
 import org.junit.Test;
 import org.rocksdb.RocksDBException;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -588,5 +592,65 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
             List<RemoteCorfuTable.TableEntry<Integer, String>> entries) {
         return entries.stream().map(RemoteCorfuTable.TableEntry::getValue)
                 .collect(Collectors.toList());
+    }
+
+    @Test
+    public void testSize() throws RocksDBException {
+        assertTrue(table.isEmpty());
+        List<RemoteCorfuTable.TableEntry<String, String>> entries;
+        for (int start = 0, increment = 1, end = 1; end < 1000; start = end, increment++, end = start + increment) {
+            entries = IntStream.range(start, end).mapToObj(i -> new RemoteCorfuTable.TableEntry<>(
+                    "Key" + i,
+                    "Val" + i
+            )).collect(Collectors.toList());
+            updateAll(dbHandler, table, entries);
+            int readSize = table.size();
+            assertEquals(end, readSize);
+        }
+    }
+
+    @Test
+    public void testContainsKey() throws RocksDBException {
+        List<RemoteCorfuTable.TableEntry<String, String>> entries = new ArrayList<>(500);
+        for (int i = 0; i < 500; i++) {
+            RemoteCorfuTable.TableEntry<String, String> entry = new RemoteCorfuTable.TableEntry<>(
+                    "TestKey" + i,
+                    "TestValue" + i
+            );
+            entries.add(entry);
+        }
+        updateAll(dbHandler, table, entries);
+        List<String> deletionList = IntStream.range(0, 500).filter(i -> i % 2 == 0)
+                .mapToObj(entries::get).map(RemoteCorfuTable.TableEntry::getKey).collect(Collectors.toList());
+        multiDelete(dbHandler, table, deletionList);
+        Set<String> deletedSet = new HashSet<>(deletionList);
+        for (RemoteCorfuTable.TableEntry<String, String> entry : entries) {
+            String key = entry.getKey();
+            boolean deleted = deletedSet.contains(key);
+            boolean contained = table.containsKey(key);
+            assertNotEquals(deleted, contained);
+        }
+    }
+
+    @Test
+    public void testContainsValue() throws RocksDBException {
+        List<RemoteCorfuTable.TableEntry<String, String>> entries = new ArrayList<>(500);
+        for (int i = 0; i < 500; i++) {
+            RemoteCorfuTable.TableEntry<String, String> entry = new RemoteCorfuTable.TableEntry<>(
+                    "TestKey" + i,
+                    "TestValue" + i
+            );
+            entries.add(entry);
+        }
+        updateAll(dbHandler, table, entries);
+        List<String> deletionList = IntStream.range(0, 500).filter(i -> i % 2 == 0)
+                .mapToObj(entries::get).map(RemoteCorfuTable.TableEntry::getKey).collect(Collectors.toList());
+        multiDelete(dbHandler, table, deletionList);
+        Set<String> deletedSet = new HashSet<>(deletionList);
+        for (RemoteCorfuTable.TableEntry<String, String> entry : entries) {
+            boolean deleted = deletedSet.contains(entry.getKey());
+            boolean contained = table.containsValue(entry.getValue());
+            assertNotEquals(deleted, contained);
+        }
     }
 }
