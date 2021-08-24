@@ -1,10 +1,16 @@
 package org.corfudb.infrastructure.logreplication;
 
+import com.google.common.collect.ImmutableSet;
 import lombok.Data;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationStreamNameTableManager;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.utils.LogReplicationStreams.TableInfo;
 
+import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * This class represents any Log Replication Configuration,
@@ -14,6 +20,56 @@ import java.util.Set;
 @Data
 @ToString
 public class LogReplicationConfig {
+
+
+    /**
+     * This class represents Log Replication Stream Info.
+     */
+    public static class StreamInfo {
+        private final Set<UUID> streamIds;
+        private final LogReplicationStreamNameTableManager streamInfoManager;
+
+        public StreamInfo(Set<TableInfo> streamsToReplicate,
+                          LogReplicationStreamNameTableManager streamInfoManager) {
+            this.streamInfoManager = streamInfoManager;
+            this.streamIds = new HashSet<>();
+
+            refreshStreamIds(streamsToReplicate);
+        }
+
+        private void refreshStreamIds(Set<TableInfo> infoSet) {
+            for (TableInfo info : infoSet) {
+                if (info.getName() != null) {
+                    streamIds.add(CorfuRuntime.getStreamID(info.getName()));
+                } else if (info.getId() != null) {
+                    streamIds.add(UUID.fromString(info.getId()));
+                }
+            }
+        }
+
+        public synchronized void syncWithInfoTable() {
+            if (streamInfoManager == null) {
+                log.warn("streamInfoManager is null! skipping sync!");
+                return;
+            }
+
+            Set<TableInfo> fetched = streamInfoManager.getStreamsToReplicate();
+            refreshStreamIds(fetched);
+        }
+
+        public synchronized Set<UUID> getStreamIds() {
+            return ImmutableSet.copyOf(streamIds);
+        }
+
+        public synchronized void addStreams(Set<UUID> streamIdSet) {
+            streamIds.addAll(streamIdSet);
+            if (streamInfoManager != null) {
+                streamInfoManager.addStreamsToInfoTable(streamIdSet);
+            } else {
+                log.warn("streamInfoManager is null! Failed to update info in metadata table.");
+            }
+        }
+    }
 
     // Log Replication message timeout time in milliseconds.
     public static final int DEFAULT_TIMEOUT_MS = 5000;
@@ -29,17 +85,17 @@ public class LogReplicationConfig {
      */
     public static final int DATA_FRACTION_PER_MSG = 90;
 
-    /*
-     * Unique identifiers for all streams to be replicated across sites.
+    /**
+     * Info for all streams to be replicated across sites.
      */
-    private Set<String> streamsToReplicate;
+    private final StreamInfo streamInfo;
 
-    /*
+    /**
      * Snapshot Sync Batch Size(number of messages)
      */
     private int maxNumMsgPerBatch;
 
-    /*
+    /**
      * The Max Size of Log Replication Data Message.
      */
     private int maxMsgSize;
@@ -55,8 +111,8 @@ public class LogReplicationConfig {
      *
      * @param streamsToReplicate Unique identifiers for all streams to be replicated across sites.
      */
-    public LogReplicationConfig(Set<String> streamsToReplicate) {
-        this(streamsToReplicate, DEFAULT_MAX_NUM_MSG_PER_BATCH, MAX_DATA_MSG_SIZE_SUPPORTED);
+    public LogReplicationConfig(Set<TableInfo> streamsToReplicate) {
+        this(streamsToReplicate, DEFAULT_MAX_NUM_MSG_PER_BATCH, MAX_DATA_MSG_SIZE_SUPPORTED, null);
     }
 
     /**
@@ -65,10 +121,12 @@ public class LogReplicationConfig {
      * @param streamsToReplicate Unique identifiers for all streams to be replicated across sites.
      * @param maxNumMsgPerBatch snapshot sync batch size (number of entries per batch)
      */
-    public LogReplicationConfig(Set<String> streamsToReplicate, int maxNumMsgPerBatch, int maxMsgSize) {
-        this.streamsToReplicate = streamsToReplicate;
+    public LogReplicationConfig(Set<TableInfo> streamsToReplicate,
+                                int maxNumMsgPerBatch, int maxMsgSize,
+                                LogReplicationStreamNameTableManager streamInfoManager) {
         this.maxNumMsgPerBatch = maxNumMsgPerBatch;
         this.maxMsgSize = maxMsgSize;
         this.maxDataSizePerMsg = maxMsgSize * DATA_FRACTION_PER_MSG / 100;
+        this.streamInfo = new StreamInfo(streamsToReplicate, streamInfoManager);
     }
 }

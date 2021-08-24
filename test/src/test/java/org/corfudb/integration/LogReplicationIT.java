@@ -24,6 +24,7 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.Serializers;
+import org.corfudb.utils.LogReplicationStreams;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -1200,7 +1201,14 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private LogReplicationSourceManager setupSourceManagerAndObservedValues(Set<String> tablesToReplicate,
                                                                             Set<WAIT> waitConditions) throws InterruptedException {
 
-        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, BATCH_SIZE, SMALL_MSG_SIZE);
+        Set<LogReplicationStreams.TableInfo> infoSet = new HashSet<>();
+        for (String streamName : tablesToReplicate) {
+            LogReplicationStreams.TableInfo info = LogReplicationStreams.TableInfo.newBuilder()
+                    .setName(streamName)
+                    .build();
+            infoSet.add(info);
+        }
+        LogReplicationConfig config = new LogReplicationConfig(infoSet, BATCH_SIZE, SMALL_MSG_SIZE, null);
 
         // Data Sender
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig,

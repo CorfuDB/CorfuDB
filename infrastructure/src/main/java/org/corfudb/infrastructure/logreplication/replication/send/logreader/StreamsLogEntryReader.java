@@ -88,14 +88,11 @@ public class StreamsLogEntryReader implements LogEntryReader {
         this.deltaCounter = configureDeltaCounter();
         this.validDeltaCounter = configureValidDeltaCounter();
         this.opaqueEntryCounter = configureOpaqueEntryCounter();
-        Set<String> streams = config.getStreamsToReplicate();
+        Set<UUID> streams = config.getStreamInfo().getStreamIds();
 
-        streamUUIDs = new HashSet<>();
-        for (String s : streams) {
-            streamUUIDs.add(CorfuRuntime.getStreamID(s));
-        }
+        streamUUIDs = new HashSet<>(streams);
 
-        log.debug("Streams to replicate total={}, stream_names={}, stream_ids={}", streamUUIDs.size(), streams, streamUUIDs);
+        log.debug("Streams to replicate total={}, stream_ids={}", streamUUIDs.size(), streamUUIDs);
 
         //create an opaque stream for transaction stream
         txOpaqueStream = new TxOpaqueStream(runtime);

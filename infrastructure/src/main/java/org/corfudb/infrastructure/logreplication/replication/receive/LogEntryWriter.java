@@ -5,18 +5,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType;
 
 import javax.annotation.concurrent.NotThreadSafe;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -32,7 +29,7 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.extractO
 @Slf4j
 public class LogEntryWriter {
     private final LogReplicationMetadataManager logReplicationMetadataManager;
-    private final HashMap<UUID, String> streamMap; //the set of streams that log entry writer will work on.
+    private final HashSet<UUID> streamSet; //the set of streams that log entry writer will work on.
     private long srcGlobalSnapshot; //the source snapshot that the transaction logs are based
     private long lastMsgTs; //the timestamp of the last message processed.
 
@@ -40,12 +37,8 @@ public class LogEntryWriter {
                           LogReplicationMetadataManager logReplicationMetadataManager) {
         this.logReplicationMetadataManager = logReplicationMetadataManager;
 
-        Set<String> streams = config.getStreamsToReplicate();
-        streamMap = new HashMap<>();
-
-        for (String s : streams) {
-            streamMap.put(CorfuRuntime.getStreamID(s), s);
-        }
+        Set<UUID> streams = config.getStreamInfo().getStreamIds();
+        streamSet = new HashSet<>(streams);
 
         srcGlobalSnapshot = Address.NON_ADDRESS;
         lastMsgTs = Address.NON_ADDRESS;
@@ -102,8 +95,8 @@ public class LogEntryWriter {
 
             // Check that all opaque entries contain the correct streams
             for (OpaqueEntry opaqueEntry : newOpaqueEntryList) {
-                if (!streamMap.keySet().containsAll(opaqueEntry.getEntries().keySet())) {
-                    log.error("txMessage contains noisy streams {}, expecting {}", opaqueEntry.getEntries().keySet(), streamMap);
+                if (!streamSet.containsAll(opaqueEntry.getEntries().keySet())) {
+                    log.error("txMessage contains noisy streams {}, expecting {}", opaqueEntry.getEntries().keySet(), streamSet);
                     throw new ReplicationWriterException("Wrong streams set");
                 }
             }

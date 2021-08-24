@@ -5,6 +5,7 @@ option java_package = "org.corfudb.utils";
 
 message TableInfo {
     string name = 1;
+    string id = 2;
 }
 
 message Namespace {

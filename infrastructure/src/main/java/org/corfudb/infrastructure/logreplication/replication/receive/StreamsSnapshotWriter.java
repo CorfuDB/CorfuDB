@@ -45,7 +45,6 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     private static final String SHADOW_STREAM_SUFFIX = "_SHADOW";
 
     // Mapping from regular stream Id to stream Name
-    private final HashMap<UUID, String> streamViewMap;
     private final CorfuRuntime rt;
 
     private long topologyConfigId;
@@ -64,7 +63,6 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager) {
         this.rt = rt;
         this.logReplicationMetadataManager = logReplicationMetadataManager;
-        this.streamViewMap = new HashMap<>();
         this.regularToShadowStreamId = new HashMap<>();
         this.phase = Phase.TRANSFER_PHASE;
         this.snapshotSyncStartMarker = Optional.empty();
@@ -88,15 +86,12 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     private void initializeShadowStreams(LogReplicationConfig config) {
         // For every stream create a shadow stream which name is unique based
         // on the original stream and a suffix.
-        for (String streamName : config.getStreamsToReplicate()) {
-            String shadowStreamName = streamName + SHADOW_STREAM_SUFFIX;
-            UUID streamId = CorfuRuntime.getStreamID(streamName);
+        for (UUID streamId : config.getStreamInfo().getStreamIds()) {
+            String shadowStreamName = streamId + SHADOW_STREAM_SUFFIX;
             UUID shadowStreamId = CorfuRuntime.getStreamID(shadowStreamName);
             regularToShadowStreamId.put(streamId, shadowStreamId);
-            regularToShadowStreamId.put(shadowStreamId, streamId);
-            streamViewMap.put(streamId, streamName);
 
-            log.trace("Shadow stream=[{}] for regular stream=[{}] name=({})", shadowStreamId, streamId, streamName);
+            log.trace("Shadow stream=[{}] for regular stream=[{}]", shadowStreamId, streamId);
         }
     }
 
@@ -131,15 +126,15 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         }
 
         if (phase == Phase.APPLY_PHASE) {
-            log.debug("Clear regular streams, count={}", streamViewMap.size());
+            log.debug("Clear regular streams, count={}", regularToShadowStreamId.size());
         } else {
-            log.debug("Clear shadow streams, count={}", streamViewMap.size());
+            log.debug("Clear shadow streams, count={}", regularToShadowStreamId.size());
         }
 
         try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
             logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
 
-            for (UUID streamID : streamViewMap.keySet()) {
+            for (UUID streamID : regularToShadowStreamId.keySet()) {
                 UUID streamToClear = streamID;
                 if (phase == Phase.TRANSFER_PHASE) {
                     streamToClear = regularToShadowStreamId.get(streamID);
@@ -344,8 +339,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     public void applyShadowStreams() {
         long snapshot = rt.getAddressSpaceView().getLogTail();
         clearTables();
-        log.debug("Apply Shadow Streams, total={}", streamViewMap.size());
-        for (UUID uuid : streamViewMap.keySet()) {
+        log.debug("Apply Shadow Streams, total={}", regularToShadowStreamId.size());
+        for (UUID uuid : regularToShadowStreamId.keySet()) {
             applyShadowStream(uuid, snapshot);
         }
     }

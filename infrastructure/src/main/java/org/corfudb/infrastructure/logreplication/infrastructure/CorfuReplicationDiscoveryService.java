@@ -30,6 +30,7 @@ import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
+import org.corfudb.utils.LogReplicationStreams.TableInfo;
 import org.corfudb.utils.lock.Lock;
 import org.corfudb.utils.lock.LockClient;
 import org.corfudb.utils.lock.LockListener;
@@ -413,7 +414,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             LogReplicationStreamNameTableManager replicationStreamNameTableManager =
                 new LogReplicationStreamNameTableManager(runtime, serverContext.getPluginConfigFilePath());
 
-            Set<String> streamsToReplicate = replicationStreamNameTableManager.getStreamsToReplicate();
+            Set<TableInfo> streamsToReplicate = replicationStreamNameTableManager.getStreamsToReplicate();
 
             // TODO pankti: Check if version does not match. If it does not, create an event for site discovery to
             //  do a snapshot sync.
@@ -424,7 +425,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 input(new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.UPGRADE));
             }
 
-            return new LogReplicationConfig(streamsToReplicate, serverContext.getLogReplicationMaxNumMsgPerBatch(), serverContext.getLogReplicationMaxDataMessageSize());
+            return new LogReplicationConfig(streamsToReplicate,
+                    serverContext.getLogReplicationMaxNumMsgPerBatch(),
+                    serverContext.getLogReplicationMaxDataMessageSize(),
+                    replicationStreamNameTableManager);
         } catch (Throwable t) {
             log.error("Exception when fetching the Replication Config", t);
             throw t;

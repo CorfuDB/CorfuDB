@@ -24,6 +24,7 @@ import org.corfudb.runtime.view.stream.OpaqueStream;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -55,9 +56,9 @@ public class StreamsSnapshotReader implements SnapshotReader {
     private final int maxDataSizePerMsg;
     private final Optional<DistributionSummary> messageSizeDistributionSummary;
     private long snapshotTimestamp;
-    private Set<String> streams;
-    private PriorityQueue<String> streamsToSend;
-    private CorfuRuntime rt;
+    private final Set<UUID> streams;
+    private PriorityQueue<UUID> streamsToSend;
+    private final CorfuRuntime rt;
     private long preMsgTs;
     private long currentMsgTs;
     private OpaqueStreamIterator currentStreamInfo;
@@ -77,7 +78,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         this.rt = runtime;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
-        this.streams = config.getStreamsToReplicate();
+        this.streams = new HashSet<>(config.getStreamInfo().getStreamIds());
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
     }
 
@@ -171,7 +172,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
                 }
 
                 if (stream.iterator.hasNext()) {
-                    lastEntry = (OpaqueEntry) stream.iterator.next();
+                    lastEntry = stream.iterator.next();
                 }
 
                 if (lastEntry == null) {
@@ -223,10 +224,9 @@ public class StreamsSnapshotReader implements SnapshotReader {
         if (currentStreamInfo == null) {
             while (!streamsToSend.isEmpty()) {
                 // Setup a new stream
-                String streamToReplicate = streamsToSend.poll();
+                UUID streamToReplicate = streamsToSend.poll();
                 currentStreamInfo = new OpaqueStreamIterator(streamToReplicate, rt, snapshotTimestamp);
-                log.info("Start Snapshot Sync replication for stream name={}, id={}", streamToReplicate,
-                        CorfuRuntime.getStreamID(streamToReplicate));
+                log.info("Start Snapshot Sync replication for stream id={}", streamToReplicate);
 
                 // If the new stream has entries to be processed, go to the next step
                 if (currentStreamInfo.iterator.hasNext()) {
@@ -241,9 +241,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
 
         if (currentStreamHasNext()) {
             msg = read(currentStreamInfo, syncRequestId);
-            if (msg != null) {
-                messages.add(msg);
-            }
+            messages.add(msg);
         }
 
         if (!currentStreamHasNext()) {
@@ -278,19 +276,19 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * Used to bookkeeping the stream information for the current processing stream
      */
     public static class OpaqueStreamIterator {
-        private String name;
-        private UUID uuid;
-        private Iterator iterator;
+        private final String name;
+        private final UUID uuid;
+        private final Iterator<OpaqueEntry> iterator;
         private long maxVersion; // the max address of the log entries processed for this stream.
 
-        OpaqueStreamIterator(String name, CorfuRuntime rt, long snapshot) {
-            this.name = name;
-            uuid = CorfuRuntime.getStreamID(name);
+        OpaqueStreamIterator(UUID id, CorfuRuntime rt, long snapshot) {
+            this.name = id.toString();
+            uuid = id;
             StreamOptions options = StreamOptions.builder()
                     .ignoreTrimmed(false)
                     .cacheEntries(false)
                     .build();
-            Stream stream = (new OpaqueStream(rt.getStreamsView().get(uuid, options))).streamUpTo(snapshot);
+            Stream<OpaqueEntry> stream = (new OpaqueStream(rt.getStreamsView().get(uuid, options))).streamUpTo(snapshot);
             iterator = stream.iterator();
             maxVersion = 0;
          }
@@ -312,14 +310,14 @@ public class StreamsSnapshotReader implements SnapshotReader {
     /**
      * Record a list of SMR entries
      */
-    static private class SMREntryList {
+    private static class SMREntryList {
 
         // The total sizeInBytes of smrEntries in bytes.
         @Getter
-        private int sizeInBytes;
+        private final int sizeInBytes;
 
         @Getter
-        private List<SMREntry> smrEntries;
+        private final List<SMREntry> smrEntries;
 
         public SMREntryList (int size, List<SMREntry> smrEntries) {
             this.sizeInBytes = size;

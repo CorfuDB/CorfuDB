@@ -7,7 +7,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -48,6 +47,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.utils.LogReplicationStreams.TableInfo;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -68,6 +68,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private static final int CORFU_PORT = 9000;
     private static final int TEST_TOPOLOGY_CONFIG_ID = 1;
     private static final String TEST_LOCAL_CLUSTER_ID = "local_cluster";
+    private static final TableInfo TEST_TABLE_INFO = TableInfo.newBuilder()
+            .setName(TEST_STREAM_NAME)
+            .build();
 
     // This semaphore is used to block until the triggering event causes the transition to a new state
     private final Semaphore transitionAvailable = new Semaphore(1, true);
@@ -489,7 +492,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 break;
             case STREAMS:
                 // Default implementation used for Log Replication (stream-based)
-                LogReplicationConfig logReplicationConfig = new LogReplicationConfig(Collections.singleton(TEST_STREAM_NAME));
+                LogReplicationConfig logReplicationConfig = new LogReplicationConfig(Collections.singleton(TEST_TABLE_INFO));
                 snapshotReader = new StreamsSnapshotReader(getNewRuntime(getDefaultNode()).connect(),
                         logReplicationConfig);
                 dataSender = new TestDataSender();
@@ -500,7 +503,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, TEST_TOPOLOGY_CONFIG_ID,
                 TEST_LOCAL_CLUSTER_ID);
-        LogReplicationConfig config = new LogReplicationConfig(new HashSet<>(Arrays.asList(TEST_STREAM_NAME)));
+        LogReplicationConfig config = new LogReplicationConfig(new HashSet<>(Collections.singleton(TEST_TABLE_INFO)));
         ackReader = new LogReplicationAckReader(metadataManager, config, runtime, TEST_LOCAL_CLUSTER_ID);
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
                 new DefaultReadProcessor(runtime), config, new ClusterDescriptor("Cluster-Local",
