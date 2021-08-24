@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.remotecorfutable;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.primitives.Bytes;
 import com.google.common.primitives.Longs;
-import com.google.errorprone.annotations.DoNotCall;
 import com.google.protobuf.ByteString;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -175,10 +174,9 @@ public class DatabaseHandler implements AutoCloseable {
             return;
         }
 
-        //possible half delete inconsistencies can be addressed in GC
+        List<ColumnFamilyHandle> toRemove = Arrays.asList(tablesToClose.getStreamTable(),tablesToClose.getMetadataTable());
         try {
-            database.dropColumnFamily(tablesToClose.getStreamTable());
-            database.dropColumnFamily(tablesToClose.getMetadataTable());
+            database.dropColumnFamilies(toRemove);
         } catch (RocksDBException e) {
             log.error("Error in dropping column families for table {}.", streamID);
             log.error(CAUSE_OF_ERROR, e);
