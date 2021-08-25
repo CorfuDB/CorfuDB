@@ -135,6 +135,7 @@ public class LogReplicationConfig {
 
         public synchronized void addStreams(Set<UUID> streamIdSet) {
             streamIds.addAll(streamIdSet);
+            log.debug("Added new streams {} to streamIds in config", streamIdSet);
             if (streamInfoManager != null) {
                 streamInfoManager.addStreamsToInfoTable(streamIdSet);
             } else {

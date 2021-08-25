@@ -755,8 +755,11 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         log.debug("****** Verify Data on Destination");
         // Verify Destination
         verifyData(dstCorfuTables, srcDataForVerification);
+        // Verify Log tail is greater or equal than LastProcessedLogEntryTimestamp
+        // As we will create the table registry now
         expectedAckTimestamp = srcDataRuntime.getAddressSpaceView().getLogTail();
-        assertThat(expectedAckTimestamp).isEqualTo(logReplicationMetadataManager.getLastProcessedLogEntryTimestamp());
+        assertThat(expectedAckTimestamp).isGreaterThanOrEqualTo(
+                logReplicationMetadataManager.getLastProcessedLogEntryTimestamp());
         verifyPersistedSnapshotMetadata();
         verifyPersistedLogEntryMetadata();
 
@@ -1339,7 +1342,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         long lastLogProcessed = logReplicationMetadataManager.getLastProcessedLogEntryTimestamp();
 
         log.debug("\nlastLogProcessed " + lastLogProcessed + " expectedTimestamp " + expectedAckTimestamp);
-        assertThat(expectedAckTimestamp == lastLogProcessed).isTrue();
+        assertThat(expectedAckTimestamp).isGreaterThanOrEqualTo(lastLogProcessed);
     }
 
     public enum WAIT {

@@ -175,19 +175,22 @@ public class StreamsLogEntryReader implements LogEntryReader {
     }
 
     private void checkStreams(Set<UUID> txEntryStreamIds) {
-        Set<UUID> checkSet = txEntryStreamIds.stream()
+        Set<UUID> checkIdSet = txEntryStreamIds.stream()
                 .filter(id -> !streamUUIDs.contains(id) && !confirmedNoisyStreams.contains(id))
                 .collect(Collectors.toSet());
+
+        if (checkIdSet.isEmpty()) {
+            return;
+        }
 
         CorfuTable<CorfuStoreMetadata.TableName, CorfuRecord<CorfuStoreMetadata.TableDescriptors,
                 CorfuStoreMetadata.TableMetadata>>
                 registryTable = runtime.getTableRegistry().getRegistryTable();
 
-        Set<CorfuStoreMetadata.TableName> tableNameSet = registryTable.keySet();
-        Set<CorfuStoreMetadata.TableName> checkNameSet = tableNameSet.stream()
+        Set<CorfuStoreMetadata.TableName> checkNameSet = registryTable.keySet().stream()
                 .filter(tableName -> {
                     UUID id = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(tableName));
-                    return checkSet.contains(id);
+                    return checkIdSet.contains(id);
                 })
                 .collect(Collectors.toSet());
 
@@ -205,8 +208,9 @@ public class StreamsLogEntryReader implements LogEntryReader {
                 confirmedNoisyStreams.add(id);
             }
         }
-
-        config.getStreamInfo().addStreams(discoveredNewStreams);
+        if (!discoveredNewStreams.isEmpty()) {
+            config.getStreamInfo().addStreams(discoveredNewStreams);
+        }
     }
 
     private boolean checkValidSize(int currentMsgSize, int currentEntrySize) {
