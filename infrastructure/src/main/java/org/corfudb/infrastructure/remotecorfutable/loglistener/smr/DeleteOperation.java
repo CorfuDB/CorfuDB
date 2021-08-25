@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.remotecorfutable.loglistener.smr;
 
 import com.google.protobuf.ByteString;
-import lombok.AllArgsConstructor;
 import lombok.NonNull;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableDatabaseEntry;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
@@ -18,14 +17,19 @@ import java.util.UUID;
  *
  * Created by nvaishampayan517 on 08/19/21
  */
-@AllArgsConstructor
 public class DeleteOperation implements SMROperation {
-    @NonNull
-    private final ByteString[] args;
-
+    private final List<ByteString> keys;
     private final long timestamp;
-    @NonNull
     private final UUID streamId;
+
+    public DeleteOperation(@NonNull List<ByteString> keys, long timestamp, @NonNull UUID streamId) {
+        if (keys.isEmpty()) {
+            throw new IllegalArgumentException("Cannot have delete operation with no keys to delete");
+        }
+        this.keys = keys;
+        this.timestamp = timestamp;
+        this.streamId = streamId;
+    }
 
     /**
      * {@inheritDoc}
@@ -35,9 +39,10 @@ public class DeleteOperation implements SMROperation {
      */
     @Override
     public void applySMRMethod(@NonNull DatabaseHandler dbHandler) throws RocksDBException {
-        if (args.length == 1) {
-            //single delete case
-            RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(args[0], timestamp);
+        //optimization in case of only one key being deleted
+        if (keys.size() == 1) {
+            //single delete case - take first key in the list and delete it
+            RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(keys.get(0), timestamp);
             dbHandler.update(key, ByteString.EMPTY, streamId);
         } else {
             dbHandler.updateAll(getEntryBatch(), streamId);
@@ -53,8 +58,8 @@ public class DeleteOperation implements SMROperation {
     @Override
     public List<RemoteCorfuTableDatabaseEntry> getEntryBatch() {
         List<RemoteCorfuTableDatabaseEntry> entries = new LinkedList<>();
-        for (ByteString arg : args) {
-            RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(arg, timestamp);
+        for (ByteString unencodedKey : keys) {
+            RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(unencodedKey, timestamp);
             RemoteCorfuTableDatabaseEntry entry = new RemoteCorfuTableDatabaseEntry(key, ByteString.EMPTY);
             entries.add(entry);
         }

@@ -1,11 +1,15 @@
 package org.corfudb.infrastructure.remotecorfutable.loglistener;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.ByteString;
 import org.corfudb.protocols.logprotocol.LogEntry;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -55,15 +59,15 @@ public final class LogEntryPeekUtils {
      * This method will move the position of the buffer.
      * @param buffer The buffer containing the SMR arguments. If position is not set to the start of the arguments
      *               section, undefined behavior.
-     * @return The ByteString[] containing the encoded arguments
+     * @return The ByteString list containing the encoded arguments
      */
-    public static ByteString[] getArgsFromSMREntry(ByteBuffer buffer) {
+    public static List<ByteString> getArgsFromSMREntry(ByteBuffer buffer) {
         byte numArgs = buffer.get();
-        ByteString[] argsList = new ByteString[numArgs];
+        List<ByteString> argsList = new ArrayList<>(numArgs);
         for (byte i = 0; i < numArgs; i++) {
             int len = buffer.getInt();
-            argsList[i] = ByteString.copyFrom(buffer, len);
+            argsList.add(ByteString.copyFrom(buffer, len));
         }
-        return argsList;
+        return Collections.unmodifiableList(argsList);
     }
 }
