@@ -124,28 +124,33 @@ public class LogReplicationStreamNameTableManager {
         }
     }
 
+    private void addStreamsToInfoTable(Set<UUID> streamIdSet,
+                                       Table<TableInfo, Namespace, CommonTypes.Uuid> streamsInfoTable)
+            throws RetryNeededException{
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            for (UUID id : streamIdSet) {
+                LogReplicationStreams.TableInfo tableInfo =
+                        LogReplicationStreams.TableInfo.newBuilder()
+                                .setId(id.toString())
+                                .build();
+
+                LogReplicationStreams.Namespace namespace =
+                        LogReplicationStreams.Namespace.newBuilder()
+                                .setName(EMPTY_STR)
+                                .build();
+                txn.putRecord(streamsInfoTable, tableInfo, namespace, defaultMetadata);
+            }
+            txn.commit();
+        } catch (TransactionAbortedException tae) {
+            throw new RetryNeededException();
+        }
+    }
+
     private void addStreamsToInfoTableWithRetry(Set<UUID> streamIdSet,
                                                 Table<TableInfo, Namespace, CommonTypes.Uuid> streamsInfoTable) {
         try {
             IRetry.build(IntervalRetry.class, () -> {
-                try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                    for (UUID id : streamIdSet) {
-                        LogReplicationStreams.TableInfo tableInfo =
-                                LogReplicationStreams.TableInfo.newBuilder()
-                                        .setId(id.toString())
-                                        .build();
-
-                        LogReplicationStreams.Namespace namespace =
-                                LogReplicationStreams.Namespace.newBuilder()
-                                        .setName(EMPTY_STR)
-                                        .build();
-                        txn.putRecord(streamsInfoTable, tableInfo, namespace, defaultMetadata);
-                    }
-                    txn.commit();
-                } catch (TransactionAbortedException tae) {
-                    throw new RetryNeededException();
-                }
-
+                addStreamsToInfoTable(streamIdSet, streamsInfoTable);
                 log.debug("Successfully added streams {} to the info table.", streamIdSet);
                 return null;
             }).run();
@@ -298,9 +303,9 @@ public class LogReplicationStreamNameTableManager {
         Set<CorfuStoreMetadata.TableName> tableNameSet = registryTable.keySet();
         for (CorfuStoreMetadata.TableName tableName : tableNameSet) {
             CorfuRecord<CorfuStoreMetadata.TableDescriptors,
-                    CorfuStoreMetadata.TableMetadata> record = registryTable.get(tableName);
+                    CorfuStoreMetadata.TableMetadata> tableRecord = registryTable.get(tableName);
 
-            if (record.getMetadata().getTableOptions().getIsFederated()) {
+            if (tableRecord.getMetadata().getTableOptions().getIsFederated()) {
                 TableInfo info = TableInfo.newBuilder()
                         .setName(tableName.getTableName())
                         .build();

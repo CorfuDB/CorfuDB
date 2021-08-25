@@ -29,7 +29,7 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.extractO
 @Slf4j
 public class LogEntryWriter {
     private final LogReplicationMetadataManager logReplicationMetadataManager;
-    private final HashSet<UUID> streamSet; //the set of streams that log entry writer will work on.
+    private final Set<UUID> streamSet; //the set of streams that log entry writer will work on.
     private long srcGlobalSnapshot; //the source snapshot that the transaction logs are based
     private long lastMsgTs; //the timestamp of the last message processed.
 

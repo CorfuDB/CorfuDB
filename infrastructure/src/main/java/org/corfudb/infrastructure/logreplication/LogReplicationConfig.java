@@ -21,6 +21,64 @@ import java.util.UUID;
 @ToString
 public class LogReplicationConfig {
 
+    // Log Replication message timeout time in milliseconds.
+    public static final int DEFAULT_TIMEOUT_MS = 5000;
+
+    // Log Replication default max number of messages generated at the active cluster for each batch.
+    public static final int DEFAULT_MAX_NUM_MSG_PER_BATCH = 10;
+
+    // Log Replication default max data message size is 64MB.
+    public static final int MAX_DATA_MSG_SIZE_SUPPORTED = (64 << 20);
+
+    /**
+     * percentage of log data per log replication message
+     */
+    public static final int DATA_FRACTION_PER_MSG = 90;
+
+    /**
+     * Info for all streams to be replicated across sites.
+     */
+    private final StreamInfo streamInfo;
+
+    /**
+     * Snapshot Sync Batch Size(number of messages)
+     */
+    private int maxNumMsgPerBatch;
+
+    /**
+     * The Max Size of Log Replication Data Message.
+     */
+    private int maxMsgSize;
+
+
+    /**
+     * The max size of data payload for the log replication message.
+     */
+    private int maxDataSizePerMsg;
+
+    /**
+     * Constructor
+     *
+     * @param streamsToReplicate Unique identifiers for all streams to be replicated across sites.
+     */
+    public LogReplicationConfig(Set<TableInfo> streamsToReplicate) {
+        this(streamsToReplicate, DEFAULT_MAX_NUM_MSG_PER_BATCH, MAX_DATA_MSG_SIZE_SUPPORTED, null);
+    }
+
+    /**
+     * Constructor
+     *
+     * @param streamsToReplicate Unique identifiers for all streams to be replicated across sites.
+     * @param maxNumMsgPerBatch snapshot sync batch size (number of entries per batch)
+     */
+    public LogReplicationConfig(Set<TableInfo> streamsToReplicate,
+                                int maxNumMsgPerBatch, int maxMsgSize,
+                                LogReplicationStreamNameTableManager streamInfoManager) {
+        this.maxNumMsgPerBatch = maxNumMsgPerBatch;
+        this.maxMsgSize = maxMsgSize;
+        this.maxDataSizePerMsg = maxMsgSize * DATA_FRACTION_PER_MSG / 100;
+        this.streamInfo = new StreamInfo(streamsToReplicate, streamInfoManager);
+    }
 
     /**
      * This class represents Log Replication Stream Info.
@@ -83,64 +141,5 @@ public class LogReplicationConfig {
                 log.warn("streamInfoManager is null! Failed to update info in metadata table.");
             }
         }
-    }
-
-    // Log Replication message timeout time in milliseconds.
-    public static final int DEFAULT_TIMEOUT_MS = 5000;
-
-    // Log Replication default max number of messages generated at the active cluster for each batch.
-    public static final int DEFAULT_MAX_NUM_MSG_PER_BATCH = 10;
-
-    // Log Replication default max data message size is 64MB.
-    public static final int MAX_DATA_MSG_SIZE_SUPPORTED = (64 << 20);
-
-    /**
-     * percentage of log data per log replication message
-     */
-    public static final int DATA_FRACTION_PER_MSG = 90;
-
-    /**
-     * Info for all streams to be replicated across sites.
-     */
-    private final StreamInfo streamInfo;
-
-    /**
-     * Snapshot Sync Batch Size(number of messages)
-     */
-    private int maxNumMsgPerBatch;
-
-    /**
-     * The Max Size of Log Replication Data Message.
-     */
-    private int maxMsgSize;
-
-
-    /**
-     * The max size of data payload for the log replication message.
-     */
-    private int maxDataSizePerMsg;
-
-    /**
-     * Constructor
-     *
-     * @param streamsToReplicate Unique identifiers for all streams to be replicated across sites.
-     */
-    public LogReplicationConfig(Set<TableInfo> streamsToReplicate) {
-        this(streamsToReplicate, DEFAULT_MAX_NUM_MSG_PER_BATCH, MAX_DATA_MSG_SIZE_SUPPORTED, null);
-    }
-
-    /**
-     * Constructor
-     *
-     * @param streamsToReplicate Unique identifiers for all streams to be replicated across sites.
-     * @param maxNumMsgPerBatch snapshot sync batch size (number of entries per batch)
-     */
-    public LogReplicationConfig(Set<TableInfo> streamsToReplicate,
-                                int maxNumMsgPerBatch, int maxMsgSize,
-                                LogReplicationStreamNameTableManager streamInfoManager) {
-        this.maxNumMsgPerBatch = maxNumMsgPerBatch;
-        this.maxMsgSize = maxMsgSize;
-        this.maxDataSizePerMsg = maxMsgSize * DATA_FRACTION_PER_MSG / 100;
-        this.streamInfo = new StreamInfo(streamsToReplicate, streamInfoManager);
     }
 }
