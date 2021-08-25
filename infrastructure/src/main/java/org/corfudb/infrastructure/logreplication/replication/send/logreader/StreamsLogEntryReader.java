@@ -12,12 +12,16 @@ import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 
 import javax.annotation.concurrent.NotThreadSafe;
@@ -48,7 +52,13 @@ public class StreamsLogEntryReader implements LogEntryReader {
     private final LogReplicationEntryType MSG_TYPE = LogReplicationEntryType.LOG_ENTRY_MESSAGE;
 
     // Set of UUIDs for the corresponding streams
-    private Set<UUID> streamUUIDs;
+    private final Set<UUID> streamUUIDs;
+
+    private final Set<UUID> confirmedNoisyStreams;
+
+    private final CorfuRuntime runtime;
+
+    private final LogReplicationConfig config;
 
     // Opaque Stream wrapper for the transaction stream
     private TxOpaqueStream txOpaqueStream;
@@ -82,6 +92,8 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
         runtime.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
+        this.runtime = runtime;
+        this.config = config;
         this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
@@ -90,7 +102,8 @@ public class StreamsLogEntryReader implements LogEntryReader {
         this.opaqueEntryCounter = configureOpaqueEntryCounter();
         Set<UUID> streams = config.getStreamInfo().getStreamIds();
 
-        streamUUIDs = new HashSet<>(streams);
+        this.streamUUIDs = new HashSet<>(streams);
+        this.confirmedNoisyStreams = new HashSet<>();
 
         log.debug("Streams to replicate total={}, stream_ids={}", streamUUIDs.size(), streamUUIDs);
 
@@ -144,6 +157,9 @@ public class StreamsLogEntryReader implements LogEntryReader {
             return false;
         }
 
+        // handle unconfirmed streams
+        checkStreams(txEntryStreamIds);
+
         // If none of the streams in the transaction entry are specified to be replicated, this is an invalid entry, skip
         if (Collections.disjoint(streamUUIDs, txEntryStreamIds)) {
             log.trace("TX Stream entry[{}] :: contains none of the streams of interest, streams={} [ignored]", entry.getVersion(), txEntryStreamIds);
@@ -156,6 +172,41 @@ public class StreamsLogEntryReader implements LogEntryReader {
                     txEntryStreamIds.size(), txEntryStreamIds, ignoredTxStreams.size(), ignoredTxStreams);
             return true;
         }
+    }
+
+    private void checkStreams(Set<UUID> txEntryStreamIds) {
+        Set<UUID> checkSet = txEntryStreamIds.stream()
+                .filter(id -> !streamUUIDs.contains(id) && !confirmedNoisyStreams.contains(id))
+                .collect(Collectors.toSet());
+
+        CorfuTable<CorfuStoreMetadata.TableName, CorfuRecord<CorfuStoreMetadata.TableDescriptors,
+                CorfuStoreMetadata.TableMetadata>>
+                registryTable = runtime.getTableRegistry().getRegistryTable();
+
+        Set<CorfuStoreMetadata.TableName> tableNameSet = registryTable.keySet();
+        Set<CorfuStoreMetadata.TableName> checkNameSet = tableNameSet.stream()
+                .filter(tableName -> {
+                    UUID id = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(tableName));
+                    return checkSet.contains(id);
+                })
+                .collect(Collectors.toSet());
+
+        Set<UUID> discoveredNewStreams = new HashSet<>();
+        for (CorfuStoreMetadata.TableName tableName : checkNameSet) {
+            CorfuRecord<CorfuStoreMetadata.TableDescriptors,
+                    CorfuStoreMetadata.TableMetadata> tableRecord = registryTable.get(tableName);
+
+            UUID id = CorfuRuntime.getStreamID(
+                    TableRegistry.getFullyQualifiedTableName(tableName));
+            if (tableRecord.getMetadata().getTableOptions().getIsFederated()) {
+                streamUUIDs.add(id);
+                discoveredNewStreams.add(id);
+            } else {
+                confirmedNoisyStreams.add(id);
+            }
+        }
+
+        config.getStreamInfo().addStreams(discoveredNewStreams);
     }
 
     private boolean checkValidSize(int currentMsgSize, int currentEntrySize) {
