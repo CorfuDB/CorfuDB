@@ -55,8 +55,9 @@ public class StreamsSnapshotReader implements SnapshotReader {
      */
     private final int maxDataSizePerMsg;
     private final Optional<DistributionSummary> messageSizeDistributionSummary;
+    private final LogReplicationConfig config;
     private long snapshotTimestamp;
-    private final Set<UUID> streams;
+    private Set<UUID> streams;
     private PriorityQueue<UUID> streamsToSend;
     private final CorfuRuntime rt;
     private long preMsgTs;
@@ -76,6 +77,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
      */
     public StreamsSnapshotReader(CorfuRuntime runtime, LogReplicationConfig config) {
         this.rt = runtime;
+        this.config = config;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
         this.streams = new HashSet<>(config.getStreamInfo().getStreamIds());
@@ -263,6 +265,9 @@ public class StreamsSnapshotReader implements SnapshotReader {
 
     @Override
     public void reset(long ts) {
+        config.getStreamInfo().syncWithInfoTable();
+        config.getStreamInfo().syncWithTableRegistry(ts);
+        streams = config.getStreamInfo().getStreamIds();
         streamsToSend = new PriorityQueue<>(streams);
         preMsgTs = Address.NON_ADDRESS;
         currentMsgTs = Address.NON_ADDRESS;

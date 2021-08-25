@@ -34,10 +34,13 @@ public class LogReplicationConfig {
             this.streamInfoManager = streamInfoManager;
             this.streamIds = new HashSet<>();
 
-            refreshStreamIds(streamsToReplicate);
+            refreshStreamIds(streamsToReplicate, true);
         }
 
-        private void refreshStreamIds(Set<TableInfo> infoSet) {
+        private synchronized void refreshStreamIds(Set<TableInfo> infoSet, boolean clear) {
+            if (clear) {
+                this.streamIds.clear();
+            }
             for (TableInfo info : infoSet) {
                 if (info.getName() != null) {
                     streamIds.add(CorfuRuntime.getStreamID(info.getName()));
@@ -47,14 +50,25 @@ public class LogReplicationConfig {
             }
         }
 
-        public synchronized void syncWithInfoTable() {
+        public void syncWithInfoTable() {
             if (streamInfoManager == null) {
                 log.warn("streamInfoManager is null! skipping sync!");
                 return;
             }
 
             Set<TableInfo> fetched = streamInfoManager.getStreamsToReplicate();
-            refreshStreamIds(fetched);
+            refreshStreamIds(fetched, true);
+        }
+
+        // sync with table registry then union two sets
+        public void syncWithTableRegistry(long ts) {
+            if (streamInfoManager == null) {
+                log.warn("streamInfoManager is null! skipping sync!");
+                return;
+            }
+
+            Set<TableInfo> registryInfo = streamInfoManager.readStreamsToReplicatedFromRegistry(ts);
+            refreshStreamIds(registryInfo, false);
         }
 
         public synchronized Set<UUID> getStreamIds() {

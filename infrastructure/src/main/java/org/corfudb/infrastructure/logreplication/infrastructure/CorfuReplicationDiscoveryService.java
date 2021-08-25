@@ -485,6 +485,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                             localNodeDescriptor, logReplicationMetadataManager, serverContext.getPluginConfigFilePath(),
                             getCorfuRuntime());
                 }
+                // Always sync stream list with metadata table
+                replicationContext.getConfig().getStreamInfo().syncWithInfoTable();
                 replicationManager.setTopology(topologyDescriptor);
                 replicationManager.start();
                 updateReplicationStatus();

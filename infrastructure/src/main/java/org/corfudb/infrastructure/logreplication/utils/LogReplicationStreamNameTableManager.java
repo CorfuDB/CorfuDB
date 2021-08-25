@@ -1,20 +1,32 @@
 package org.corfudb.infrastructure.logreplication.utils;
 
+import com.google.common.reflect.TypeToken;
+import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ILogReplicationConfigAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
+import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.ProtobufSerializer;
+import org.corfudb.util.serializer.Serializers;
 import org.corfudb.utils.CommonTypes;
 import org.corfudb.utils.LogReplicationStreams;
 import org.corfudb.utils.LogReplicationStreams.VersionString;
@@ -31,8 +43,13 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.corfudb.runtime.view.TableRegistry.REGISTRY_TABLE_NAME;
+import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
+import static org.corfudb.runtime.view.TableRegistry.getTypeUrl;
 
 /**
  * Handle creation and maintenance of the Corfu table/s containing names of tables
@@ -47,9 +64,15 @@ public class LogReplicationStreamNameTableManager {
 
     private ILogReplicationConfigAdapter logReplicationConfigAdapter;
 
-    private String pluginConfigFilePath;
+    private final String pluginConfigFilePath;
 
-    private CorfuStore corfuStore;
+    private final CorfuStore corfuStore;
+
+    private final CorfuRuntime runtime;
+
+    private CorfuTable<CorfuStoreMetadata.TableName,
+            CorfuRecord<CorfuStoreMetadata.TableDescriptors,
+                    CorfuStoreMetadata.TableMetadata>> registryTable;
 
     private static final String EMPTY_STR = "";
 
@@ -59,7 +82,9 @@ public class LogReplicationStreamNameTableManager {
     public LogReplicationStreamNameTableManager(CorfuRuntime runtime, String pluginConfigFilePath) {
         this.pluginConfigFilePath = pluginConfigFilePath;
         this.corfuStore = new CorfuStore(runtime);
+        this.runtime = runtime;
 
+        openRegistryTable();
         initStreamNameFetcherPlugin();
     }
 
@@ -207,13 +232,13 @@ public class LogReplicationStreamNameTableManager {
         try {
             Table<TableInfo, Namespace, CommonTypes.Uuid> streamsInfoTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
                     LOG_REPLICATION_STREAMS_INFO_TABLE,
-                TableInfo.class, Namespace.class, CommonTypes.Uuid.class,
-                TableOptions.builder().build());
+                    TableInfo.class, Namespace.class, CommonTypes.Uuid.class,
+                    TableOptions.builder().build());
 
             Table<VersionString, Version, CommonTypes.Uuid> pluginVersionTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                LOG_REPLICATION_PLUGIN_VERSION_TABLE,
-                VersionString.class, Version.class, CommonTypes.Uuid.class,
-                TableOptions.builder().build());
+                    LOG_REPLICATION_PLUGIN_VERSION_TABLE,
+                    VersionString.class, Version.class, CommonTypes.Uuid.class,
+                    TableOptions.builder().build());
 
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                 // Populate the plugin version in the version table
@@ -258,5 +283,73 @@ public class LogReplicationStreamNameTableManager {
             txn.commit();
         }
         return tableInfoSet;
+    }
+
+    public Set<TableInfo> readStreamsToReplicatedFromRegistry(long ts) {
+
+        Set<TableInfo> tableInfoSet = new HashSet<>();
+
+        Token snapshotToken = Token.of(0L, ts);
+        runtime.getObjectsView().TXBuild()
+                .type(TransactionType.SNAPSHOT)
+                .snapshot(snapshotToken)
+                .build()
+                .begin();
+        Set<CorfuStoreMetadata.TableName> tableNameSet = registryTable.keySet();
+        for (CorfuStoreMetadata.TableName tableName : tableNameSet) {
+            CorfuRecord<CorfuStoreMetadata.TableDescriptors,
+                    CorfuStoreMetadata.TableMetadata> record = registryTable.get(tableName);
+
+            if (record.getMetadata().getTableOptions().getIsFederated()) {
+                TableInfo info = TableInfo.newBuilder()
+                        .setName(tableName.getTableName())
+                        .build();
+                tableInfoSet.add(info);
+            }
+        }
+        runtime.getObjectsView().TXEnd();
+
+        return tableInfoSet;
+    }
+
+    private void openRegistryTable() {
+        ISerializer protobufSerializer;
+        try {
+            protobufSerializer = Serializers.getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
+        } catch (SerializerException se) {
+            // This means the protobuf serializer had not been registered yet.
+            log.info("Protobuf Serializer not found. Create and register a new one.");
+            protobufSerializer = createProtobufSerializer();
+            Serializers.registerSerializer(protobufSerializer);
+        }
+
+        registryTable = runtime.getObjectsView()
+                        .build()
+                        .setTypeToken(new TypeToken<CorfuTable<CorfuStoreMetadata.TableName,
+                                CorfuRecord<CorfuStoreMetadata.TableDescriptors, CorfuStoreMetadata.TableMetadata>>>() {
+                        })
+                        .setStreamName(
+                                getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+                                        REGISTRY_TABLE_NAME))
+                        .setSerializer(protobufSerializer)
+                        .addOpenOption(ObjectOpenOption.NO_CACHE)
+                        .open();
+    }
+
+    private ISerializer createProtobufSerializer() {
+        ConcurrentMap<String, Class<? extends Message>> classMap = new ConcurrentHashMap<>();
+
+        // Register the schemas of TableName, TableDescriptors, TableMetadata, ProtobufFilename/Descriptor
+        // to be able to understand registry table.
+        classMap.put(getTypeUrl(CorfuStoreMetadata.TableName.getDescriptor()), CorfuStoreMetadata.TableName.class);
+        classMap.put(getTypeUrl(CorfuStoreMetadata.TableDescriptors.getDescriptor()),
+                CorfuStoreMetadata.TableDescriptors.class);
+        classMap.put(getTypeUrl(CorfuStoreMetadata.TableMetadata.getDescriptor()),
+                CorfuStoreMetadata.TableMetadata.class);
+        classMap.put(getTypeUrl(CorfuStoreMetadata.ProtobufFileName.getDescriptor()),
+                CorfuStoreMetadata.ProtobufFileName.class);
+        classMap.put(getTypeUrl(CorfuStoreMetadata.ProtobufFileDescriptor.getDescriptor()),
+                CorfuStoreMetadata.ProtobufFileDescriptor.class);
+        return new ProtobufSerializer(classMap);
     }
 }
