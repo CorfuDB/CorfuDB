@@ -65,7 +65,8 @@ public class DatabaseHandler implements AutoCloseable {
     private final RocksDB database;
     private final ExecutorService executor;
     private final long shutdownTimeout;
-    private final Map<UUID, ColumnFamilyHandlePair> columnFamilies;
+    private final DatabaseTableHandler tableHandler;
+    private final ConcurrentHashMap<UUID, Long> latestTimestampRead;
 
     /**
      * Constructor for the database handler. Each server should have a single database handler to serve all requests
@@ -85,10 +86,9 @@ public class DatabaseHandler implements AutoCloseable {
         }
 
         this.executor = executor;
-
-        //Must be initialized as an empty map and updated through the add table function
-        this.columnFamilies = new ConcurrentHashMap<>();
         this.shutdownTimeout = shutdownTimeout;
+        tableHandler = new DatabaseTableHandler(database, new ConcurrentHashMap<>());
+        latestTimestampRead = new ConcurrentHashMap<>();
     }
 
     public static Options getDefaultOptions() {
@@ -104,87 +104,11 @@ public class DatabaseHandler implements AutoCloseable {
      * @throws RocksDBException An error in adding the database table.
      */
     public void addTable(@NonNull UUID streamID) throws RocksDBException {
-        if (columnFamilies.containsKey(streamID)) {
-            return;
-        }
-        ColumnFamilyOptions tableOptions = new ColumnFamilyOptions();
-        tableOptions.optimizeUniversalStyleCompaction();
-        ComparatorOptions comparatorOptions = new ComparatorOptions();
-        ReversedVersionedKeyComparator comparator = new ReversedVersionedKeyComparator(comparatorOptions);
-        tableOptions.setComparator(comparator);
-        ColumnFamilyDescriptor tableDescriptor = new ColumnFamilyDescriptor(getBytes(streamID), tableOptions);
-        ColumnFamilyHandle tableHandle;
-        try {
-            tableHandle = database.createColumnFamily(tableDescriptor);
-        } catch (RocksDBException e) {
-            log.error("Error in creating column family for table {}.", streamID);
-            log.error(CAUSE_OF_ERROR, e);
-            tableOptions.close();
-            comparatorOptions.close();
-            comparator.close();
-            throw e;
-        }
-
-        ColumnFamilyOptions metadataOptions = new ColumnFamilyOptions();
-        metadataOptions.optimizeForPointLookup(METADATA_COLUMN_CACHE_SIZE);
-        ColumnFamilyDescriptor metadataDescriptor = new ColumnFamilyDescriptor(
-                getMetadataColumnName(getBytes(streamID)), metadataOptions);
-
-        ColumnFamilyHandle metadataHandle;
-        try {
-             metadataHandle = database.createColumnFamily(metadataDescriptor);
-        } catch (RocksDBException e) {
-            log.error("Error in creating metadata column family for table {}.", streamID);
-            log.error(CAUSE_OF_ERROR, e);
-            tableHandle.close();
-            comparatorOptions.close();
-            comparator.close();
-            try {
-                database.dropColumnFamily(tableHandle);
-            } catch (RocksDBException r) {
-                log.error("Error in dropping column family for table {}.", streamID);
-                log.error(CAUSE_OF_ERROR, r);
-                throw e;
-            } finally {
-                metadataOptions.close();
-            }
-            throw e;
-        }
-        ColumnFamilyHandlePair addedTables = new ColumnFamilyHandlePair(tableHandle, metadataHandle);
-
-        //necessary if 2 threads enter this function concurrently
-        ColumnFamilyHandlePair readValue = columnFamilies.putIfAbsent(streamID, addedTables);
-        if (readValue != null) {
-            tableHandle.close();
-            comparatorOptions.close();
-            tableOptions.close();
-            metadataHandle.close();
-            metadataOptions.close();
-        }
+        tableHandler.addTable(streamID);
     }
 
     public void removeTable(@NonNull UUID streamID) throws RocksDBException {
-        if (!columnFamilies.containsKey(streamID)) {
-            throw new DatabaseOperationException("REMOVETABLE", INVALID_STREAM_ID_MSG);
-        }
-        ColumnFamilyHandlePair tablesToClose = columnFamilies.remove(streamID);
-
-        //if another thread executing this function removed column, it will close it
-        if (tablesToClose == null) {
-            return;
-        }
-
-        List<ColumnFamilyHandle> toRemove = Arrays.asList(tablesToClose.getStreamTable(),tablesToClose.getMetadataTable());
-        try {
-            database.dropColumnFamilies(toRemove);
-        } catch (RocksDBException e) {
-            log.error("Error in dropping column families for table {}.", streamID);
-            log.error(CAUSE_OF_ERROR, e);
-            throw e;
-        } finally {
-            tablesToClose.getMetadataTable().close();
-            tablesToClose.getStreamTable().close();
-        }
+        tableHandler.removeTable(streamID);
     }
 
     /**
@@ -195,30 +119,35 @@ public class DatabaseHandler implements AutoCloseable {
      * @throws RocksDBException An error raised in scan.
      */
     public ByteString get(@NonNull RemoteCorfuTableVersionedKey encodedKey, @NonNull UUID streamID)
-            throws RocksDBException, DatabaseOperationException {
-        final ByteString returnVal;
-        if (!columnFamilies.containsKey(streamID)) {
-            throw new DatabaseOperationException("GET", INVALID_STREAM_ID_MSG);
-        }
-        byte[] searchKey = new byte[encodedKey.size()];
-        encodedKey.getEncodedVersionedKey().copyTo(searchKey, 0);
-        try (RocksIterator iter = database.newIterator(columnFamilies.get(streamID).getStreamTable())) {
-            iter.seek(searchKey);
-            if (!iter.isValid()) {
-                iter.status();
-                //We've reached the end of the data
-                returnVal = ByteString.EMPTY;
-            } else {
-                if (encodedKey.getEncodedKey().equals(KeyEncodingUtil.extractEncodedKeyAsByteString(iter.key()))
-                        && !isEmpty(iter.value())) {
-                    //This works due to latest version first comparator
-                    returnVal = ByteString.copyFrom(iter.value());
-                } else {
-                    returnVal = ByteString.EMPTY;
+            throws RocksDBException {
+        try {
+            return tableHandler.executeOnTable(streamID, handle -> {
+                final ByteString returnVal;
+                byte[] searchKey = new byte[encodedKey.size()];
+                encodedKey.getEncodedVersionedKey().copyTo(searchKey, 0);
+                try (RocksIterator iter = database.newIterator(handle)) {
+                    iter.seek(searchKey);
+                    if (!iter.isValid()) {
+                        iter.status();
+                        //We've reached the end of the data
+                        returnVal = ByteString.EMPTY;
+                    } else {
+                        if (encodedKey.getEncodedKey().equals(KeyEncodingUtil.extractEncodedKeyAsByteString(iter.key()))
+                                && !isEmpty(iter.value())) {
+                            //This works due to latest version first comparator
+                            returnVal = ByteString.copyFrom(iter.value());
+                        } else {
+                            returnVal = ByteString.EMPTY;
+                        }
+                    }
                 }
-            }
+                return returnVal;
+            });
+        } catch (RocksDBException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new DatabaseOperationException("GET", e.getMessage());
         }
-        return returnVal;
     }
 
     /**
@@ -297,15 +226,20 @@ public class DatabaseHandler implements AutoCloseable {
      */
     public void update(@NonNull RemoteCorfuTableVersionedKey encodedKey,
                        @NonNull ByteString value, @NonNull UUID streamID)
-            throws RocksDBException, DatabaseOperationException {
-        if (!columnFamilies.containsKey(streamID)) {
-            throw new DatabaseOperationException("PUT", INVALID_STREAM_ID_MSG);
+            throws RocksDBException {
+        try {
+            tableHandler.executeOnTable(streamID, handle -> {
+                byte[] encodedKeyBytes = new byte[encodedKey.size()];
+                encodedKey.getEncodedVersionedKey().copyTo(encodedKeyBytes, 0);
+                database.put(handle, encodedKeyBytes, value.toByteArray());
+                updateLatestReadTime(streamID, encodedKey.getTimestamp());
+                return null;
+            });
+        } catch (RocksDBException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new DatabaseOperationException("UPDATE", e.getMessage());
         }
-        byte[] encodedKeyBytes = new byte[encodedKey.size()];
-        encodedKey.getEncodedVersionedKey().copyTo(encodedKeyBytes,0);
-        database.put(columnFamilies.get(streamID).getStreamTable(), encodedKeyBytes, value.toByteArray());
-        database.put(columnFamilies.get(streamID).getMetadataTable(), LATEST_VERSION_READ,
-                encodedKey.getTimestampAsByteArray());
 
     }
 
@@ -335,35 +269,38 @@ public class DatabaseHandler implements AutoCloseable {
      */
     public void updateAll(@NonNull List<RemoteCorfuTableDatabaseEntry> encodedKeyValuePairs, @NonNull UUID streamID)
             throws RocksDBException {
-        if (!columnFamilies.containsKey(streamID)) {
-            throw new DatabaseOperationException("PUTALL", INVALID_STREAM_ID_MSG);
-        }
-        //encodedKeyValuePairs must be non-empty
-        ColumnFamilyHandle currTable = columnFamilies.get(streamID).getStreamTable();
-        ColumnFamilyHandle metadataTable = columnFamilies.get(streamID).getMetadataTable();
-        try (WriteBatch batchedWrite = new WriteBatch();
-             WriteOptions writeOptions = new WriteOptions()) {
-            for (RemoteCorfuTableDatabaseEntry encodedKeyValuePair : encodedKeyValuePairs) {
-                if (encodedKeyValuePair == null) {
-                    throw new DatabaseOperationException("MULTIPUT", "Invalid argument - null entry passed");
+        try {
+            tableHandler.executeOnTable(streamID, handle -> {
+                //encodedKeyValuePairs must be non-empty
+                try (WriteBatch batchedWrite = new WriteBatch();
+                     WriteOptions writeOptions = new WriteOptions()) {
+                    for (RemoteCorfuTableDatabaseEntry encodedKeyValuePair : encodedKeyValuePairs) {
+                        if (encodedKeyValuePair == null) {
+                            throw new IllegalArgumentException("Invalid argument - null entry passed");
+                        }
+                        RemoteCorfuTableVersionedKey key = encodedKeyValuePair.getKey();
+                        ByteString value = encodedKeyValuePair.getValue();
+                        if (key == null || value == null) {
+                            throw new IllegalArgumentException("Invalid argument - null key or value passed");
+                        }
+                        byte[] keyBytes = key.getEncodedVersionedKey().toByteArray();
+                        byte[] valueBytes;
+                        if (value.isEmpty()) {
+                            valueBytes = EMPTY_VALUE;
+                        } else {
+                            valueBytes = value.toByteArray();
+                        }
+                        batchedWrite.put(handle, keyBytes, valueBytes);
+                    }
+                    database.write(writeOptions, batchedWrite);
+                    updateLatestReadTime(streamID, encodedKeyValuePairs.get(0).getKey().getTimestamp());
                 }
-                RemoteCorfuTableVersionedKey key = encodedKeyValuePair.getKey();
-                ByteString value = encodedKeyValuePair.getValue();
-                if (key == null || value == null) {
-                    throw new DatabaseOperationException("MULTIPUT", "Invalid argument - null key or value passed");
-                }
-                byte[] keyBytes = key.getEncodedVersionedKey().toByteArray();
-                byte[] valueBytes;
-                if (value.isEmpty()) {
-                    valueBytes = EMPTY_VALUE;
-                } else {
-                    valueBytes = value.toByteArray();
-                }
-                batchedWrite.put(currTable,keyBytes,valueBytes);
-            }
-            batchedWrite.put(metadataTable, LATEST_VERSION_READ,
-                    encodedKeyValuePairs.get(0).getKey().getTimestampAsByteArray());
-            database.write(writeOptions,batchedWrite);
+                return null;
+            });
+        } catch (RocksDBException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new DatabaseOperationException("UPDATEALL", e.getMessage());
         }
     }
 
@@ -393,36 +330,38 @@ public class DatabaseHandler implements AutoCloseable {
      * @throws RocksDBException An error in writing all updates.
      */
     public void clear(@NonNull UUID streamID, long timestamp) throws RocksDBException {
-        if (!columnFamilies.containsKey(streamID)) {
-            throw new DatabaseOperationException("CLEAR", INVALID_STREAM_ID_MSG);
-        }
-        //no data race on cached value since only mutates allowed are add/remove to columnFamilies
-        //if streamID is removed during write batch creation, write will fail, so no inconsistency
-        ColumnFamilyHandle currTable = columnFamilies.get(streamID).getStreamTable();
-        ColumnFamilyHandle metadataTable = columnFamilies.get(streamID).getMetadataTable();
-        ByteString keyPrefix;
-        ByteString prevPrefix = null;
-        try (RocksIterator iter = database.newIterator(currTable);
-             WriteBatch batchedWrite = new WriteBatch();
-             WriteOptions writeOptions = new WriteOptions()) {
-            iter.seekToFirst();
-            while (iter.isValid()) {
-                keyPrefix = ByteString.copyFrom(KeyEncodingUtil.extractEncodedKey(iter.key()));
-                if (keyPrefix.equals(prevPrefix)) {
-                    iter.next();
-                    continue;
+        try {
+            tableHandler.executeOnTable(streamID, handle -> {
+                ByteString keyPrefix;
+                ByteString prevPrefix = null;
+                try (RocksIterator iter = database.newIterator(handle);
+                     WriteBatch batchedWrite = new WriteBatch();
+                     WriteOptions writeOptions = new WriteOptions()) {
+                    iter.seekToFirst();
+                    while (iter.isValid()) {
+                        keyPrefix = ByteString.copyFrom(KeyEncodingUtil.extractEncodedKey(iter.key()));
+                        if (keyPrefix.equals(prevPrefix)) {
+                            iter.next();
+                            continue;
+                        }
+                        //put empty value at every key in the table
+                        RemoteCorfuTableVersionedKey keyToWrite = new RemoteCorfuTableVersionedKey(keyPrefix, timestamp);
+                        batchedWrite.put(handle, keyToWrite.getEncodedVersionedKey().toByteArray(), EMPTY_VALUE);
+                        //seek will move iterator to value after the "next key" if it does not exist
+                        keyToWrite = new RemoteCorfuTableVersionedKey(keyPrefix, 0L);
+                        iter.seek(keyToWrite.getEncodedVersionedKey().toByteArray());
+                        prevPrefix = keyPrefix;
+                    }
+                    iter.status();
+                    database.write(writeOptions, batchedWrite);
+                    updateLatestReadTime(streamID, timestamp);
                 }
-                //put empty value at every key in the table
-                RemoteCorfuTableVersionedKey keyToWrite = new RemoteCorfuTableVersionedKey(keyPrefix, timestamp);
-                batchedWrite.put(currTable,keyToWrite.getEncodedVersionedKey().toByteArray(), EMPTY_VALUE);
-                //seek will move iterator to value after the "next key" if it does not exist
-                keyToWrite = new RemoteCorfuTableVersionedKey(keyPrefix, 0L);
-                iter.seek(keyToWrite.getEncodedVersionedKey().toByteArray());
-                prevPrefix = keyPrefix;
-            }
-            iter.status();
-            batchedWrite.put(metadataTable,LATEST_VERSION_READ, Longs.toByteArray(timestamp));
-            database.write(writeOptions,batchedWrite);
+                return null;
+            });
+        } catch (RocksDBException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new DatabaseOperationException("CLEAR", e.getMessage());
         }
     }
 
@@ -456,24 +395,28 @@ public class DatabaseHandler implements AutoCloseable {
      */
     public void delete(@NonNull RemoteCorfuTableVersionedKey encodedKeyBegin, @NonNull RemoteCorfuTableVersionedKey encodedKeyEnd,
                        boolean includeLastKey, @NonNull UUID streamID)
-            throws RocksDBException, DatabaseOperationException {
-        if (!columnFamilies.containsKey(streamID)) {
-            throw new DatabaseOperationException("DELETE", INVALID_STREAM_ID_MSG);
-        }
-        if (!encodedKeyBegin.getEncodedKey().equals(encodedKeyEnd.getEncodedKey())) {
-            throw new DatabaseOperationException("DELETE", "Start and End keys must have the same prefix");
-        }
-
-        ColumnFamilyHandle currTable = columnFamilies.get(streamID).getStreamTable();
-        try (WriteBatch batchedWrite = new WriteBatch();
-             WriteOptions writeOptions = new WriteOptions()){
-            batchedWrite.deleteRange(currTable,
-                    encodedKeyBegin.getEncodedVersionedKey().toByteArray(),
-                    encodedKeyEnd.getEncodedVersionedKey().toByteArray());
-            if (includeLastKey) {
-                batchedWrite.delete(currTable, encodedKeyEnd.getEncodedVersionedKey().toByteArray());
-            }
-            database.write(writeOptions, batchedWrite);
+            throws RocksDBException {
+        try {
+            tableHandler.executeOnTable(streamID, handle -> {
+                if (!encodedKeyBegin.getEncodedKey().equals(encodedKeyEnd.getEncodedKey())) {
+                    throw new IllegalArgumentException("Start and End keys must have the same prefix");
+                }
+                try (WriteBatch batchedWrite = new WriteBatch();
+                     WriteOptions writeOptions = new WriteOptions()) {
+                    batchedWrite.deleteRange(handle,
+                            encodedKeyBegin.getEncodedVersionedKey().toByteArray(),
+                            encodedKeyEnd.getEncodedVersionedKey().toByteArray());
+                    if (includeLastKey) {
+                        batchedWrite.delete(handle, encodedKeyEnd.getEncodedVersionedKey().toByteArray());
+                    }
+                    database.write(writeOptions, batchedWrite);
+                }
+                return null;
+            });
+        } catch (RocksDBException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new DatabaseOperationException("DELETE", e.getMessage());
         }
     }
 
@@ -505,7 +448,7 @@ public class DatabaseHandler implements AutoCloseable {
      * @throws RocksDBException An error occuring in iteration.
      */
     public List<RemoteCorfuTableDatabaseEntry> scan(@NonNull UUID streamID, long timestamp)
-            throws RocksDBException, DatabaseOperationException {
+            throws RocksDBException {
         return scan(20,streamID, timestamp);
     }
 
@@ -518,25 +461,30 @@ public class DatabaseHandler implements AutoCloseable {
      * @throws RocksDBException An error occuring in iteration.
      */
     public List<RemoteCorfuTableDatabaseEntry> scan(@Positive int numEntries, @NonNull UUID streamID,
-                                                    long timestamp) throws RocksDBException, DatabaseOperationException {
-        if (!columnFamilies.containsKey(streamID)) {
-            throw new DatabaseOperationException("SCAN", INVALID_STREAM_ID_MSG);
-        }
-        try (ReadOptions iterOptions = new ReadOptions()){
-            iterOptions.setTotalOrderSeek(true);
-            try (RocksIterator iter = database.newIterator(columnFamilies.get(streamID).getStreamTable(), iterOptions)) {
-                iter.seekToFirst();
-                if (!iter.isValid()) {
-                    iter.status();
-                    //otherwise, the database is empty
-                    return new LinkedList<>();
-                } else {
-                    //begin at first value in db
-                    RemoteCorfuTableVersionedKey startingKey =
-                            new RemoteCorfuTableVersionedKey(iter.key());
-                    return scanInternal(startingKey, numEntries, streamID, timestamp,false);
+                                                    long timestamp) throws RocksDBException {
+        try {
+            return tableHandler.executeOnTable(streamID, handle -> {
+                try (ReadOptions iterOptions = new ReadOptions()) {
+                    iterOptions.setTotalOrderSeek(true);
+                    try (RocksIterator iter = database.newIterator(handle, iterOptions)) {
+                        iter.seekToFirst();
+                        if (!iter.isValid()) {
+                            iter.status();
+                            //otherwise, the database is empty
+                            return new LinkedList<>();
+                        } else {
+                            //begin at first value in db
+                            RemoteCorfuTableVersionedKey startingKey =
+                                    new RemoteCorfuTableVersionedKey(iter.key());
+                            return scanInternal(startingKey, numEntries, streamID, timestamp, false);
+                        }
+                    }
                 }
-            }
+            });
+        } catch (RocksDBException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new DatabaseOperationException("SCAN", e.getMessage());
         }
     }
 
@@ -550,7 +498,7 @@ public class DatabaseHandler implements AutoCloseable {
      */
     public List<RemoteCorfuTableDatabaseEntry> scan(@NonNull RemoteCorfuTableVersionedKey encodedKeyBegin,
                                                     @NonNull UUID streamID, long timestamp)
-            throws RocksDBException, DatabaseOperationException {
+            throws RocksDBException {
         return scan(encodedKeyBegin, 20, streamID, timestamp);
     }
 
@@ -565,7 +513,7 @@ public class DatabaseHandler implements AutoCloseable {
      */
     public List<RemoteCorfuTableDatabaseEntry> scan(@NonNull RemoteCorfuTableVersionedKey encodedKeyBegin,
                                                     @Positive int numEntries, @NonNull UUID streamID, long timestamp)
-            throws RocksDBException, DatabaseOperationException {
+            throws RocksDBException {
         return scanInternal(encodedKeyBegin, numEntries, streamID, timestamp, true);
     }
 
@@ -624,86 +572,91 @@ public class DatabaseHandler implements AutoCloseable {
     private List<RemoteCorfuTableDatabaseEntry> scanInternal(@NonNull RemoteCorfuTableVersionedKey encodedKeyBegin,
                                                              int numEntries, @NonNull UUID streamID, long timestamp,
                                                              boolean skipFirst)
-            throws RocksDBException, DatabaseOperationException {
-        if (!columnFamilies.containsKey(streamID)) {
-            throw new DatabaseOperationException("SCAN", INVALID_STREAM_ID_MSG);
-        }
-        byte[] prevKeyspace;
-        byte[] currKeyspace;
-        RemoteCorfuTableVersionedKey keyToAdd;
-        ByteString valueToAdd;
-        RemoteCorfuTableDatabaseEntry entryToAdd;
-        List<RemoteCorfuTableDatabaseEntry> results = new LinkedList<>();
-        int elements = 0;
-        try (ReadOptions iterOptions = new ReadOptions()){
-            iterOptions.setTotalOrderSeek(true);
-            try (RocksIterator iter = database.newIterator(columnFamilies.get(streamID).getStreamTable(),
-                    iterOptions)) {
-                byte[] beginKeyBytes = encodedKeyBegin.getEncodedVersionedKey().toByteArray();
-                iter.seek(beginKeyBytes);
-                while (iter.isValid()) {
-                    //at this point we are guaranteed to be in a keyspace where we have not yet added a key
-                    long currTimestamp = KeyEncodingUtil.extractTimestamp(iter.key());
-                    if (currTimestamp <= timestamp) {
-                        //we need to check if the value exists
-                        if (!isEmpty(iter.value())) {
-                            //we have found a key that is the most recent value for the keyspace, add it
-                            keyToAdd = new RemoteCorfuTableVersionedKey(iter.key());
-                            valueToAdd = ByteString.copyFrom(iter.value());
-                            entryToAdd = new RemoteCorfuTableDatabaseEntry(keyToAdd, valueToAdd);
-                            results.add(entryToAdd);
-                            elements++;
-                            if (elements > numEntries) {
-                                //end iteration if we have found the desired number of elements
-                                break;
+            throws RocksDBException {
+        try {
+            return tableHandler.executeOnTable(streamID, handle -> {
+                byte[] prevKeyspace;
+                byte[] currKeyspace;
+                RemoteCorfuTableVersionedKey keyToAdd;
+                ByteString valueToAdd;
+                RemoteCorfuTableDatabaseEntry entryToAdd;
+                List<RemoteCorfuTableDatabaseEntry> results = new LinkedList<>();
+                int elements = 0;
+                try (ReadOptions iterOptions = new ReadOptions()) {
+                    iterOptions.setTotalOrderSeek(true);
+                    try (RocksIterator iter = database.newIterator(handle,
+                            iterOptions)) {
+                        byte[] beginKeyBytes = encodedKeyBegin.getEncodedVersionedKey().toByteArray();
+                        iter.seek(beginKeyBytes);
+                        while (iter.isValid()) {
+                            //at this point we are guaranteed to be in a keyspace where we have not yet added a key
+                            long currTimestamp = KeyEncodingUtil.extractTimestamp(iter.key());
+                            if (currTimestamp <= timestamp) {
+                                //we need to check if the value exists
+                                if (!isEmpty(iter.value())) {
+                                    //we have found a key that is the most recent value for the keyspace, add it
+                                    keyToAdd = new RemoteCorfuTableVersionedKey(iter.key());
+                                    valueToAdd = ByteString.copyFrom(iter.value());
+                                    entryToAdd = new RemoteCorfuTableDatabaseEntry(keyToAdd, valueToAdd);
+                                    results.add(entryToAdd);
+                                    elements++;
+                                    if (elements > numEntries) {
+                                        //end iteration if we have found the desired number of elements
+                                        break;
+                                    }
+                                }
+                                //we now need to discover a new keyspace
+                                if (currTimestamp == 0) {
+                                    //we are at the final possible version in this keyspace, thus the next value must be in a
+                                    //new keyspace
+                                    iter.next();
+                                } else {
+                                    //save current keyspace to check for new one
+                                    prevKeyspace = KeyEncodingUtil.extractEncodedKey(iter.key());
+                                    //we can seek explicitly to version 0
+                                    byte[] finalVersionInKeyspace =
+                                            KeyEncodingUtil.composeKeyWithDifferentVersion(iter.key(), 0L);
+                                    iter.seek(finalVersionInKeyspace);
+                                    currKeyspace = KeyEncodingUtil.extractEncodedKey(iter.key());
+                                    if (!iter.isValid()) {
+                                        iter.status();
+                                        break;
+                                    } else if (Arrays.equals(prevKeyspace, currKeyspace)) {
+                                        //we have not left the keyspace yet, but are at the final possible value
+                                        iter.next();
+                                    }
+                                    //at this point we are guaranteed to be in a new keyspace, so we can continue the loop
+                                }
+                            } else {
+                                //we have a timestamp that does not exists at the time of query, seek to appropriate timestamp
+                                byte[] appropriateTimestampKey =
+                                        KeyEncodingUtil.composeKeyWithDifferentVersion(iter.key(), timestamp);
+                                iter.seek(appropriateTimestampKey);
+                                //two cases at this point:
+                                // seek resulted in a value for this keyspace that is the most recent value
+                                // seek resulted in a new keyspace
+                                //both cases fall under a keyspace where we have not yet added a key, so we can simply
+                                //continue iteration
                             }
                         }
-                        //we now need to discover a new keyspace
-                        if (currTimestamp == 0) {
-                            //we are at the final possible version in this keyspace, thus the next value must be in a
-                            //new keyspace
-                            iter.next();
-                        } else {
-                            //save current keyspace to check for new one
-                            prevKeyspace = KeyEncodingUtil.extractEncodedKey(iter.key());
-                            //we can seek explicitly to version 0
-                            byte[] finalVersionInKeyspace =
-                                    KeyEncodingUtil.composeKeyWithDifferentVersion(iter.key(), 0L);
-                            iter.seek(finalVersionInKeyspace);
-                            currKeyspace = KeyEncodingUtil.extractEncodedKey(iter.key());
-                            if (!iter.isValid()) {
-                                iter.status();
-                                break;
-                            } else if (Arrays.equals(prevKeyspace, currKeyspace)) {
-                                //we have not left the keyspace yet, but are at the final possible value
-                                iter.next();
-                            }
-                            //at this point we are guaranteed to be in a new keyspace, so we can continue the loop
+                        if (!iter.isValid()) {
+                            iter.status();
+                            //Otherwise, we have simply hit the end of the database
                         }
-                    } else {
-                        //we have a timestamp that does not exists at the time of query, seek to appropriate timestamp
-                        byte[] appropriateTimestampKey =
-                                KeyEncodingUtil.composeKeyWithDifferentVersion(iter.key(), timestamp);
-                        iter.seek(appropriateTimestampKey);
-                        //two cases at this point:
-                        // seek resulted in a value for this keyspace that is the most recent value
-                        // seek resulted in a new keyspace
-                        //both cases fall under a keyspace where we have not yet added a key, so we can simply
-                        //continue iteration
+                        if (skipFirst) {
+                            results.remove(0);
+                        } else if (results.size() == numEntries + 1) {
+                            results.remove(results.size() - 1);
+                        }
                     }
                 }
-                if (!iter.isValid()) {
-                    iter.status();
-                    //Otherwise, we have simply hit the end of the database
-                }
-                if (skipFirst) {
-                    results.remove(0);
-                } else if (results.size() == numEntries + 1) {
-                    results.remove(results.size() - 1);
-                }
-            }
+                return results;
+            });
+        } catch (RocksDBException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new DatabaseOperationException("SCAN", e.getMessage());
         }
-        return results;
     }
 
     /**
@@ -715,7 +668,7 @@ public class DatabaseHandler implements AutoCloseable {
      * @throws RocksDBException An error occuring in the search.
      */
     public boolean containsKey(@NonNull RemoteCorfuTableVersionedKey encodedKey, @NonNull UUID streamID)
-            throws RocksDBException, DatabaseOperationException {
+            throws RocksDBException {
         ByteString val = get(encodedKey, streamID);
         return !val.isEmpty();
     }
@@ -799,7 +752,7 @@ public class DatabaseHandler implements AutoCloseable {
      * @throws DatabaseOperationException An error occuring with requested stream.
      */
     public int size(@NonNull UUID streamID, long timestamp, @Positive int scanSize)
-            throws RocksDBException, DatabaseOperationException {
+            throws RocksDBException {
         boolean first = true;
         RemoteCorfuTableVersionedKey lastKey;
         int count = 0;
@@ -835,15 +788,6 @@ public class DatabaseHandler implements AutoCloseable {
         return result;
     }
 
-    private byte[] getBytes(UUID id) {
-        return Bytes.concat(Longs.toByteArray(id.getMostSignificantBits()),
-                Longs.toByteArray(id.getLeastSignificantBits()));
-    }
-
-    private byte[] getMetadataColumnName(byte[] streamTable) {
-        return Bytes.concat(streamTable, METADATA_COLUMN_SUFFIX);
-    }
-
     /**
      * This function releases all resources held by C++ objects backing the RocksDB objects.
      */
@@ -856,10 +800,7 @@ public class DatabaseHandler implements AutoCloseable {
             log.debug("Database Handler executor awaitTermination interrupted.", e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
-        for (ColumnFamilyHandlePair handle : columnFamilies.values()) {
-            handle.getStreamTable().close();
-            handle.getMetadataTable().close();
-        }
+        tableHandler.shutdown();
         database.close();
     }
 
@@ -870,22 +811,32 @@ public class DatabaseHandler implements AutoCloseable {
      */
     @VisibleForTesting
     protected List<RemoteCorfuTableDatabaseEntry> fullDatabaseScan(UUID streamID) {
-        List<RemoteCorfuTableDatabaseEntry> allEntries = new LinkedList<>();
-        try (RocksIterator iter = database.newIterator(columnFamilies.get(streamID).getStreamTable())) {
-            iter.seekToFirst();
-            while (iter.isValid()) {
-                allEntries.add(new RemoteCorfuTableDatabaseEntry(new RemoteCorfuTableVersionedKey(iter.key()),
-                        ByteString.copyFrom(iter.value())));
-                iter.next();
-            }
+        try {
+            return tableHandler.executeOnTable(streamID, handle -> {
+                List<RemoteCorfuTableDatabaseEntry> allEntries = new LinkedList<>();
+                try (RocksIterator iter = database.newIterator(handle)) {
+                    iter.seekToFirst();
+                    while (iter.isValid()) {
+                        allEntries.add(new RemoteCorfuTableDatabaseEntry(new RemoteCorfuTableVersionedKey(iter.key()),
+                                ByteString.copyFrom(iter.value())));
+                        iter.next();
+                    }
+                }
+                return allEntries;
+            });
+        } catch (Exception e) {
+            //unsafe method will return null on error
+            return null;
         }
-        return allEntries;
     }
 
-    @AllArgsConstructor(access = AccessLevel.PRIVATE)
-    @Getter
-    private static class ColumnFamilyHandlePair {
-        private final ColumnFamilyHandle streamTable;
-        private final ColumnFamilyHandle metadataTable;
+    private void updateLatestReadTime(UUID streamID, long timestamp) {
+        latestTimestampRead.merge(streamID, timestamp, (prev, curr) -> {
+            if (prev < curr) {
+                return curr;
+            } else {
+                return prev;
+            }
+        });
     }
 }
