@@ -10,7 +10,6 @@ import org.corfudb.runtime.view.stream.IStreamView;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -46,8 +45,6 @@ class StreamPollingTask implements Runnable {
     // A period of time in ms to sleep before next cycle when poller gets no new data changes.
     private final int pollingIdleWaitTime;
 
-    private final Random randomGenerator;
-
     StreamPollingTask(StreamingManager streamingManager, long lastAddress,
                       StreamSubscription subscription, ScheduledExecutorService executor, CorfuRuntimeParameters params) {
         this.streamingManager = streamingManager;
@@ -57,7 +54,6 @@ class StreamPollingTask implements Runnable {
         this.txnStream = subscription.getTxnStream();
         this.pollingBlockingTime = params.getStreamingPollingBlockingTimeMs();
         this.pollingIdleWaitTime = params.getStreamingPollingIdleWaitTimeMs();
-        this.randomGenerator = new Random();
     }
 
     @Override
@@ -104,7 +100,7 @@ class StreamPollingTask implements Runnable {
         if (updates.isEmpty()) {
             log.trace("pollTxStream :: no updates for {} from {}, listenerId={}", txnStream.getId(),
                     lastReadAddress + 1L, subscription.getListener().getClass().getSimpleName());
-            pollingExecutor.schedule(this, randomGenerator.nextInt(pollingIdleWaitTime), TimeUnit.MILLISECONDS);
+            pollingExecutor.schedule(this, pollingIdleWaitTime, TimeUnit.MILLISECONDS);
             return;
         }
 

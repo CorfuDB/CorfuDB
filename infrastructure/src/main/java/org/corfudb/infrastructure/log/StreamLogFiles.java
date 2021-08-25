@@ -9,9 +9,7 @@ import com.google.common.util.concurrent.AtomicDouble;
 import com.google.protobuf.AbstractMessage;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
-import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Meter;
-import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
 import io.netty.buffer.Unpooled;
@@ -107,10 +105,7 @@ public class StreamLogFiles implements StreamLog {
     private final Optional<AtomicDouble> logUnitSizeBytes;
     private final Optional<AtomicLong> logUnitSizeEntries;
     private final Optional<AtomicLong> currentTrimMark;
-    private final Optional<DistributionSummary> writeDistributionSummary;
-    private final Optional<DistributionSummary> readDistributionSummary;
     private final Optional<AtomicLong> openSegments;
-    private final Optional<Timer> fsyncTimer;
     //=================Log Metadata=================
     // TODO(Maithem) this should effectively be final, but it is used
     // by a reset API that clears the state of this class, on reset
@@ -168,30 +163,11 @@ public class StreamLogFiles implements StreamLog {
         logSizeLimit = (long) (fileSystemCapacity * logSizeLimitPercentage / 100.0);
 
         String baseUnits = "bytes";
-        logUnitSizeBytes = MeterRegistryProvider.getInstance().map(registry ->
-                registry.gauge(logUnitSizeMetricName,
-                        ImmutableList.of(Tag.of("unit", baseUnits)), new AtomicDouble(0)));
-        logUnitSizeEntries = MeterRegistryProvider.getInstance().map(registry ->
-                registry.gauge(logUnitSizeMetricName,
-                        ImmutableList.of(Tag.of("unit", "entries")), new AtomicLong(0L)));
-        openSegments = MeterRegistryProvider.getInstance().map(registry ->
-                registry.gauge(logUnitSizeMetricName,
-                        ImmutableList.of(Tag.of("unit", "segments")), new AtomicLong(0L)));
-        currentTrimMark = MeterRegistryProvider.getInstance().map(registry ->
-                registry.gauge(logUnitTrimMarkMetricName,
-                        new AtomicLong(getTrimMark())));
-        writeDistributionSummary = MeterRegistryProvider.getInstance()
-                .map(registry -> DistributionSummary.builder("logunit.write.throughput")
-                        .baseUnit(baseUnits).register(registry));
-        readDistributionSummary = MeterRegistryProvider.getInstance()
-                .map(registry -> DistributionSummary.builder("logunit.read.throughput")
-                        .baseUnit(baseUnits).register(registry));
 
-        fsyncTimer = MeterRegistryProvider.getInstance()
-                .map(registry -> Timer.builder("logunit.fsync.timer")
-                        .publishPercentiles(0.50, 0.99)
-                        .publishPercentileHistogram(true)
-                        .register(registry));
+        logUnitSizeBytes = MicroMeterUtils.gauge(logUnitSizeMetricName, new AtomicDouble(0));
+        logUnitSizeEntries = MicroMeterUtils.gauge(logUnitSizeMetricName, new AtomicLong(0L));
+        openSegments = MicroMeterUtils.gauge(logUnitSizeMetricName, new AtomicLong(0L));
+        currentTrimMark = MicroMeterUtils.gauge(logUnitTrimMarkMetricName, new AtomicLong(getTrimMark()));
         long initialLogSize = estimateSize(logDir);
         log.info("StreamLogFiles: {} size is {} bytes, limit {}", logDir, initialLogSize, logSizeLimit);
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
@@ -401,7 +377,7 @@ public class StreamLogFiles implements StreamLog {
         long newStartingAddress = address + 1;
         dataStore.updateStartingAddress(newStartingAddress);
         syncTailSegment(address);
-        log.debug("Trimmed prefix, new starting address {}", newStartingAddress);
+        log.debug("Trimmed prefix, new address {}", newStartingAddress);
         currentTrimMark.ifPresent(counter -> counter.set(newStartingAddress));
         // Trim address space maps.
         logMetadata.prefixTrim(address);
@@ -568,7 +544,7 @@ public class StreamLogFiles implements StreamLog {
     private Metadata parseMetadata(FileChannel fileChannel, String segmentFile) throws IOException {
         long actualMetaDataSize = fileChannel.size() - fileChannel.position();
         if (actualMetaDataSize < METADATA_SIZE) {
-            log.error("Metadata has wrong size. Actual size: {}, expected: {}",
+            log.warn("Metadata has wrong size. Actual size: {}, expected: {}",
                     actualMetaDataSize, METADATA_SIZE
             );
             return null;
@@ -787,7 +763,7 @@ public class StreamLogFiles implements StreamLog {
             ByteBuffer entryBuf = ByteBuffer.allocate(metaData.length);
             fileChannel.read(entryBuf, metaData.offset);
             LogData logData = getLogData(LogEntry.parseFrom(entryBuf.array()));
-            readDistributionSummary.ifPresent(summary -> summary.record(metaData.length));
+            MicroMeterUtils.measure(metaData.length, "logunit.read.throughput");
             return logData;
         } catch (InvalidProtocolBufferException e) {
             String errorMessage = getDataCorruptionErrorMessage("Invalid entry",
@@ -996,7 +972,7 @@ public class StreamLogFiles implements StreamLog {
         logMetadata.update(entries);
 
         logUnitSizeBytes.ifPresent(counter -> counter.addAndGet(size));
-        writeDistributionSummary.ifPresent(summary -> summary.record(size));
+        MicroMeterUtils.measure(size, "logunit.write.throughput");
         logUnitSizeEntries.ifPresent(counter -> counter.addAndGet(entries.size()));
         return recordsMap;
     }
@@ -1044,7 +1020,7 @@ public class StreamLogFiles implements StreamLog {
         logMetadata.update(entry, false);
 
         logUnitSizeBytes.ifPresent(counter -> counter.addAndGet(size));
-        writeDistributionSummary.ifPresent(summary -> summary.record(size));
+        MicroMeterUtils.measure(size, "logunit.write.throughput");
         logUnitSizeEntries.ifPresent(counter -> counter.incrementAndGet());
         return new AddressMetaData(metadata.getPayloadChecksum(), metadata.getLength(), channelOffset);
     }

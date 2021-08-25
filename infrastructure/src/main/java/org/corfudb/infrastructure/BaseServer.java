@@ -120,7 +120,7 @@ public class BaseServer extends AbstractServer {
      */
     @RequestHandler(type = RequestPayloadMsg.PayloadCase.RESET_REQUEST)
     private void handleReset(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
-        log.warn("handleReset[{}]: Remote reset requested from client {}",
+        log.warn("handleReset[{}]: Remote reset requested from {}",
                 req.getHeader().getRequestId(), req.getHeader().getClientId());
 
         HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
@@ -140,7 +140,7 @@ public class BaseServer extends AbstractServer {
      */
     @RequestHandler(type = RequestPayloadMsg.PayloadCase.RESTART_REQUEST)
     private void handleRestart(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
-        log.warn("handleRestart[{}]: Remote restart requested from client {}",
+        log.warn("handleRestart[{}]: Remote restart requested from {}",
                 req.getHeader().getRequestId(), req.getHeader().getClientId());
 
         HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);

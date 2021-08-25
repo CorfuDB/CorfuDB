@@ -4,7 +4,6 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.annotations.VisibleForTesting;
-import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
@@ -55,17 +54,9 @@ public class LogUnitServerCache {
 
         MeterRegistryProvider.getInstance().ifPresent(registry ->
                 CaffeineCacheMetrics.monitor(registry, dataCache, "logunit.read_cache"));
-        MeterRegistryProvider.getInstance().map(registry ->
-                Gauge.builder(hitRatioName,
-                dataCache, cache -> cache.stats().hitRate()).register(registry));
-        MeterRegistryProvider.getInstance().map(registry ->
-                Gauge.builder(loadTimeName,
-                        dataCache, cache -> cache.stats().totalLoadTime())
-                        .register(registry));
-        MeterRegistryProvider.getInstance().map(registry ->
-                Gauge.builder(weightName,
-                        dataCache, cache -> cache.stats().evictionWeight())
-                        .register(registry));
+        MicroMeterUtils.gauge(hitRatioName, dataCache, cache -> cache.stats().hitRate());
+        MicroMeterUtils.gauge(loadTimeName, dataCache, cache -> cache.stats().totalLoadTime());
+        MicroMeterUtils.gauge(weightName, dataCache, cache -> cache.stats().evictionWeight());
     }
 
     private int getLogDataTotalSize(ILogData logData) {

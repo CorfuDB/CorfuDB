@@ -31,7 +31,7 @@ public class HealNode extends WorkflowRequest {
     protected UUID sendRequest(@NonNull ManagementClient managementClient) throws TimeoutException {
         CreateWorkflowResponse resp = managementClient.healNodeRequest(nodeForWorkflow,
                 true, true, true, 0);
-        log.info("sendRequest: requested to heal {} on orchestrator {}:{}",
+        log.info("sendRequest: requested to heal {} on {}:{}",
                 nodeForWorkflow, managementClient.getRouter().getHost(),
                 managementClient.getRouter().getPort());
         return resp.getWorkflowId();
@@ -56,7 +56,7 @@ public class HealNode extends WorkflowRequest {
         Layout layout = new Layout(runtime.getLayoutView().getLayout());
         BaseClient baseClient = runtime.getLayoutView().getRuntimeLayout(layout).getBaseClient(nodeForWorkflow);
         if (baseClient.pingSync()) {
-            log.info("getOrchestrator: orchestrator selected {}", nodeForWorkflow);
+            log.info("getOrchestrator: selected {}", nodeForWorkflow);
             return Optional.of(runtime.getLayoutView()
                     .getRuntimeLayout(layout).getManagementClient(nodeForWorkflow));
         } else {

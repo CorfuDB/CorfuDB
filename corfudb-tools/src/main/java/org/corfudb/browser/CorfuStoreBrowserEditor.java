@@ -201,8 +201,7 @@ public class CorfuStoreBrowserEditor {
             getTable(namespace, tablename);
         int tableSize = table.size();
         System.out.println("Table " + tablename + " in namespace " + namespace +
-            "with ID " + streamUUID.toString() + " has " + tableSize + " " +
-                "entries");
+            " with ID " + streamUUID.toString() + " has " + tableSize + " entries");
         System.out.println("\n======================\n");
         return tableSize;
     }
@@ -244,7 +243,7 @@ public class CorfuStoreBrowserEditor {
      * @param tablename - table name without the namespace
      * @return - number of entries in the table before clearing the table
      */
-    public int dropTable(String namespace, String tablename) {
+    public int clearTable(String namespace, String tablename) {
         System.out.println("\n======================\n");
         String fullName = TableRegistry.getFullyQualifiedTableName(namespace, tablename);
         UUID streamUUID = UUID.nameUUIDFromBytes(fullName.getBytes());
@@ -254,8 +253,8 @@ public class CorfuStoreBrowserEditor {
                 getTable(namespace, tablename);
             int tableSize = table.size();
             System.out.println("Table " + tablename + " in namespace " + namespace
-                + "with ID " + streamUUID.toString() + " with " + tableSize +
-                "entries will be dropped...");
+                + " with ID " + streamUUID.toString() + " with " + tableSize +
+                " entries will be dropped...");
             table.clear();
             runtime.getObjectsView().TXEnd();
             System.out.println("Table cleared successfully");
@@ -617,6 +616,6 @@ public class CorfuStoreBrowserEditor {
         // Remove last continuation characters for a clean output ', '
         formatMapping = formatMapping.substring(0, formatMapping.length() - 2);
         System.out.println("Tag: " + tag + " --- Total Tables: " + tables.size()
-            + "TableNames: " + formatMapping);
+            + " TableNames: " + formatMapping);
     }
 }

@@ -286,7 +286,7 @@ public class LogUnitServer extends AbstractServer {
     private void handleWrite(RequestMsg req, ChannelHandlerContext ctx, IServerRouter router) {
         LogData logData = getLogData(req.getPayload().getWriteLogRequest().getLogData());
 
-        log.debug("handleWrite: type: {}, address: {}, streams: {}",
+        log.debug("handleWrite: {}, at: {}, ids: {}",
                 logData.getType(), logData.getToken(), logData.getBackpointerMap());
 
         // Its not clear that making all holes high priority is the right thing to do, but since
@@ -317,7 +317,7 @@ public class LogUnitServer extends AbstractServer {
         List<LogData> range = req.getPayload().getRangeWriteLogRequest().getLogDataList()
                 .stream().map(CorfuProtocolLogData::getLogData).collect(Collectors.toList());
 
-        log.debug("handleRangeWrite: Writing {} entries [{}-{}]", range.size(),
+        log.debug("handleRangeWrite: {} size [{}-{}]", range.size(),
                 range.get(0).getGlobalAddress(), range.get(range.size() - 1).getGlobalAddress());
 
         batchWriter.addTask(BatchWriterOperation.Type.RANGE_WRITE, req)
@@ -339,7 +339,7 @@ public class LogUnitServer extends AbstractServer {
     @RequestHandler(type = PayloadCase.TRIM_LOG_REQUEST)
     private void handleTrimLog(RequestMsg req, ChannelHandlerContext ctx, IServerRouter router) {
         if (log.isDebugEnabled()) {
-            log.debug("handleTrimLog[{}]: trimming prefix to {}", req.getHeader().getRequestId(),
+            log.debug("handleTrimLog[{}]: trim to {}", req.getHeader().getRequestId(),
                     TextFormat.shortDebugString(req.getPayload().getTrimLogRequest().getAddress()));
         }
 
@@ -436,7 +436,7 @@ public class LogUnitServer extends AbstractServer {
     @RequestHandler(type = PayloadCase.COMPACT_REQUEST)
     private void handleCompactLogRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter router) {
         if (log.isDebugEnabled()) {
-            log.debug("handleCompactLogRequest: received a compact request {}", TextFormat.shortDebugString(req));
+            log.debug("handleCompactLogRequest: {}", TextFormat.shortDebugString(req));
         }
 
         streamLog.compact();
@@ -449,7 +449,7 @@ public class LogUnitServer extends AbstractServer {
     @RequestHandler(type = PayloadCase.FLUSH_CACHE_REQUEST)
     private void handleFlushCacheRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter router) {
         if (log.isDebugEnabled()) {
-            log.debug("handleFlushCacheRequest: received a cache flush request {}", TextFormat.shortDebugString(req));
+            log.debug("handleFlushCacheRequest: {}", TextFormat.shortDebugString(req));
         }
 
         dataCache.invalidateAll();

@@ -20,9 +20,15 @@ import java.util.function.Supplier;
 public class MeterRegistryProvider {
     private static Optional<MeterRegistry> meterRegistry = Optional.empty();
     private static Optional<String> id = Optional.empty();
+    private static Optional<MetricType> metricType = Optional.empty();
 
     private MeterRegistryProvider() {
 
+    }
+
+    static enum MetricType {
+        SERVER,
+        CLIENT
     }
 
     /**
@@ -31,15 +37,35 @@ public class MeterRegistryProvider {
     public static class MeterRegistryInitializer extends MeterRegistryProvider {
 
         /**
-         * Configure the meter registry of type LoggingMeterRegistry. All the metrics registered
-         * with this meter registry will be exported via provided logging sink with
+         * Configure the meter registry of type LoggingMeterRegistry for Corfu server.
+         * All the metrics registered with this meter registry will be exported via provided logging sink with
          * the provided loggingInterval frequency.
          *
          * @param logger          An instance of the logger to print metrics.
          * @param loggingInterval A duration between log appends for every metric.
          * @param identifier      A global identifier to tag every metric with.
          */
-        public static synchronized void init(Logger logger, Duration loggingInterval, String identifier) {
+        public static void initServerMetrics(Logger logger, Duration loggingInterval, String identifier) {
+            metricType = Optional.of(MetricType.SERVER);
+            init(logger, loggingInterval, identifier);
+        }
+
+        /**
+         * Configure the meter registry of type LoggingMeterRegistry for Corfu client.
+         * All the metrics registered with this meter registry will be exported via provided logging sink with
+         * the provided loggingInterval frequency.
+         *
+         * @param logger          An instance of the logger to print metrics.
+         * @param loggingInterval A duration between log appends for every metric.
+         * @param identifier      A global identifier to tag every metric with.
+         */
+        public static void initClientMetrics(Logger logger, Duration loggingInterval, String identifier) {
+            metricType = Optional.of(MetricType.CLIENT);
+            init(logger, loggingInterval, identifier);
+        }
+
+
+        private static synchronized void init(Logger logger, Duration loggingInterval, String identifier) {
             Supplier<Optional<MeterRegistry>> supplier = () -> {
                 LoggingRegistryConfig config = new IntervalLoggingConfig(loggingInterval);
                 LoggingMeterRegistryWithHistogramSupport registry =
@@ -56,11 +82,12 @@ public class MeterRegistryProvider {
 
         private static void init(Supplier<Optional<MeterRegistry>> meterRegistrySupplier) {
             if (meterRegistry.isPresent()) {
-               log.warn("Registry has already been initialized.");
+                log.warn("Registry has already been initialized.");
             }
             meterRegistry = meterRegistrySupplier.get();
         }
     }
+
     /**
      * Get the previously configured meter registry.
      * If the registry has not been previously configured, return an empty option.
@@ -69,6 +96,15 @@ public class MeterRegistryProvider {
      */
     public static synchronized Optional<MeterRegistry> getInstance() {
         return meterRegistry;
+    }
+
+    /**
+     * Get the metric type of this registry.
+     *
+     * @return An optional metric type.
+     */
+    public static synchronized Optional<MetricType> getMetricType() {
+        return metricType;
     }
 
     /**

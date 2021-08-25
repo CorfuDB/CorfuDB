@@ -6,6 +6,7 @@ import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 
 import java.util.Optional;
 
@@ -49,8 +50,8 @@ public class CorfuStoreMetrics {
                         .publishPercentiles(0.5, 0.99)
                         .description("Number of addresses read in batches before finding highest DATA sequence number")
                         .register(registry));
-        this.openTableCounter = registryProvider.map(registry ->
-                registry.counter("open_tables.count"));
+
+        this.openTableCounter = MicroMeterUtils.counter("open_tables.count");
 
         this.highestSequenceNumberDuration = new TimingHistogram("highestSequenceNumberDuration", "CorfuStore");
     }

@@ -95,7 +95,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
             return;
         }
 
-        log.debug("channelRead: Handshake message received. Removing {} from pipeline.", READ_TIMEOUT_HANDLER);
+        log.debug("channelRead: Handshake received. Removing {}.", READ_TIMEOUT_HANDLER);
 
         // Remove the handler from the pipeline. Also remove the reference of the context from
         // the handler so that it does not disconnect the channel.
@@ -118,9 +118,8 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
 
         // Store clientID as a channel attribute.
         ctx.channel().attr(clientIdAttrKey).set(clientId);
-        log.info("channelRead: Handshake validated by Server.");
-        log.debug("channelRead: Sending handshake response: Node Id: {}, Corfu client version:" +
-                " {}, Corfu server version: {}", this.nodeId, Long.toHexString(corfuClientVersion),
+        log.debug("channelRead: Sending handshake response: Node Id: {}, client version:" +
+                " {}, server version: {}", this.nodeId, Long.toHexString(corfuClientVersion),
                 Long.toHexString(corfuServerVersion));
 
 

@@ -76,7 +76,7 @@ public abstract class WorkflowRequest {
             BaseClient client = runtime.getLayoutView().getRuntimeLayout(layout)
                     .getBaseClient(endpoint);
             if (client.pingSync()) {
-                log.info("getOrchestrator: orchestrator selected {}, layout {}", endpoint, layout);
+                log.info("getOrchestrator: selected {}, layout {}", endpoint, layout);
                 managementClient = Optional.of(runtime.getLayoutView().getRuntimeLayout(layout)
                         .getManagementClient(endpoint));
                 break;
@@ -162,7 +162,7 @@ public abstract class WorkflowRequest {
                 runtime.invalidateLayout();
                 Layout layoutToVerify = new Layout(runtime.getLayoutView().getLayout());
                 if (verifyRequest(layoutToVerify)) {
-                    log.info("WorkflowRequest: Successfully completed {}", this);
+                    log.info("WorkflowRequest: completed {}", this);
                     return;
                 }
             }

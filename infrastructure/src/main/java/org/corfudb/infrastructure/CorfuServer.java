@@ -232,7 +232,7 @@ public class CorfuServer {
             try {
                 LoggerContext context =  (LoggerContext) LoggerFactory.getILoggerFactory();
                 Optional.ofNullable(context.exists(DEFAULT_METRICS_LOGGER_NAME))
-                        .ifPresent(logger -> MeterRegistryProvider.MeterRegistryInitializer.init(logger,
+                        .ifPresent(logger -> MeterRegistryProvider.MeterRegistryInitializer.initServerMetrics(logger,
                                 DEFAULT_METRICS_LOGGING_INTERVAL, localEndpoint));
             }
             catch (IllegalStateException ise) {

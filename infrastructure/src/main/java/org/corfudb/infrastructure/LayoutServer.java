@@ -154,7 +154,7 @@ public class LayoutServer extends AbstractServer {
             ResponseMsg response = getResponseMsg(responseHeader, getLayoutResponseMsg(getCurrentLayout()));
             r.sendResponse(response, ctx);
         } else {
-            log.warn("handleLayoutRequest[{}]: Payload epoch {} ahead of Server epoch {}",
+            log.warn("handleLayoutRequest[{}]: Payload epoch {} > Server epoch {}",
                     req.getHeader().getRequestId(), payloadEpoch, serverEpoch);
 
             HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
@@ -179,8 +179,7 @@ public class LayoutServer extends AbstractServer {
         ResponseMsg response;
 
         if (getCurrentLayout() != null) {
-            log.warn("handleBootstrapLayoutRequest[{}]: Got a request to bootstrap a server which is "
-                    + "already bootstrapped, rejecting!", requestHeader.getRequestId());
+            log.warn("handleBootstrapLayoutRequest[{}]: Server is already bootstrapped!", requestHeader.getRequestId());
 
             responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
             response = getResponseMsg(responseHeader, getBootstrappedErrorMsg());
