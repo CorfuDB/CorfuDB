@@ -179,6 +179,6 @@ public class LoggingMeterRegistryWithHistogramSupport extends StepMeterRegistry 
 
     @Override
     protected TimeUnit getBaseTimeUnit() {
-        return TimeUnit.MILLISECONDS;
+        return TimeUnit.MICROSECONDS;
     }
 }
