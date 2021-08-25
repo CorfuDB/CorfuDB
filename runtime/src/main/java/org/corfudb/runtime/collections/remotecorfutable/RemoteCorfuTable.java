@@ -1,5 +1,6 @@
 package org.corfudb.runtime.collections.remotecorfutable;
 
+import com.google.common.collect.ImmutableList;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -18,6 +19,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
@@ -63,7 +65,8 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
      * @return No filter table scanner.
      */
     public Scanner getScanner() {
-        return new Scanner();
+        return new Scanner(false, Optional.empty(), Optional.empty(), Optional.empty(),
+                adapter.getCurrentTimestamp());
     }
 
     /**
@@ -83,7 +86,8 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
      * @return Value filter table scanner.
      */
     public Scanner getValueFilterScanner(Predicate<? super V> valuePredicate) {
-        return new Scanner(valuePredicate, false);
+        return new ValueFilteringScanner(false, Optional.empty(), Optional.empty(), Optional.empty(),
+                adapter.getCurrentTimestamp(), valuePredicate);
     }
 
     /**
@@ -103,7 +107,8 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
      * @return Entry filter table scanner.
      */
     public Scanner getEntryFilterScanner(Predicate<? super Entry<K, V>> entryPredicate) {
-        return new Scanner(entryPredicate, true);
+        return new EntryFilteringScanner(false, Optional.empty(), Optional.empty(), Optional.empty(),
+                adapter.getCurrentTimestamp(), entryPredicate);
     }
 
     /**
@@ -295,54 +300,34 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
         }
     }
 
+    /*--------------------------------------------Scanners------------------------------------------------*/
+
     /**
-     * This class is used to perform cursor scans of the RemoteCorfuTable.
+     * This class is the superclass for all cursor scans of the RemoteCorfuTable.
+     * Performs the scan operation with no filters.
      */
+    @AllArgsConstructor(access = AccessLevel.PRIVATE)
     public class Scanner {
         @Getter
-        private boolean finished = false;
-
-        //Invariant: scanner can not have both predicates
-        private final Predicate<? super Entry<K, V>> entryPredicate;
-        private final Predicate<? super V> valuePredicate;
-
-        private List<TableEntry<K,V>> currentResultsEntries = null;
-        private List<V> currentResultsValues = null;
-        private K cursor = null;
-
-        /**
-         * Creates scanner with no filters.
-         */
-        private Scanner() {
-            entryPredicate = null;
-            valuePredicate = null;
-        }
-
-        /**
-         * Creates scanner with specified predicate.
-         * @param predicate Predicate with which to filter results.
-         * @param isEntryPredicate True, if given predicate filters over entries.
-         */
-        private Scanner(Predicate predicate, boolean isEntryPredicate) {
-            if (isEntryPredicate) {
-                entryPredicate = predicate;
-                valuePredicate = null;
-            } else {
-                entryPredicate = null;
-                valuePredicate = predicate;
-            }
-        }
+        private final boolean finished;
+        private final Optional<ImmutableList<TableEntry<K,V>>> currentResultsEntries;
+        private final Optional<ImmutableList<V>> currentResultsValues;
+        private final Optional<K> cursor;
+        protected final long timestamp;
 
         /**
          * Get the entries read from the previous scan.
          * @return List of TableEntries from the previous scan.
          */
-        public List<TableEntry<K,V>> getCurrentResultsEntries() {
-            if (currentResultsEntries == null) {
+        public List<RemoteCorfuTable.TableEntry<K,V>> getCurrentResultsEntries() {
+            if (isFinished()) {
+                log.warn("Attempted to get results from finished scan.");
+                return ImmutableList.copyOf(new LinkedList<>());
+            } else if (!currentResultsEntries.isPresent()) {
                 log.warn("Attempted to get results from unstarted scan");
-                return new LinkedList<>();
+                return ImmutableList.copyOf(new LinkedList<>());
             } else {
-                return currentResultsEntries;
+                return currentResultsEntries.get();
             }
         }
 
@@ -351,76 +336,131 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
          * @return List of Values from the previous scan.
          */
         public List<V> getCurrentResultsValues() {
-            if (currentResultsValues != null) {
-                return currentResultsValues;
-            } else if (currentResultsEntries != null) {
-                currentResultsValues = currentResultsEntries.stream()
-                        .map(TableEntry::getValue).collect(Collectors.toList());
-                return currentResultsValues;
+            if (isFinished()) {
+                log.warn("Attempted to get results from finished scan.");
+                return ImmutableList.copyOf(new LinkedList<>());
+            } else if (currentResultsValues.isPresent()) {
+                return currentResultsValues.get();
             } else {
                 log.warn("Attempted to get results from unstarted scan");
-                return new LinkedList<>();
+                return ImmutableList.copyOf(new LinkedList<>());
             }
         }
 
         /**
-         * Perform a scan. If the Scanner is finished, this method will not modify any results.
+         * Perform a scan.
+         * @return A scanner object containing the results of the current scan.
          */
-        public void getNextResults() {
+        public Scanner getNextResults() {
             if (finished) {
-                log.warn("Attempted to scan on a finished scanner instance");
-                return;
+                log.error("Attempted to scan on a finished scanner instance");
+                throw new IllegalStateException("Cannot get more results from finished scanner.");
             }
-            List<TableEntry<K,V>> scannedEntries;
-            if (cursor != null) {
-                scannedEntries = adapter.scan(cursor, adapter.getCurrentTimestamp());
+            List<RemoteCorfuTable.TableEntry<K,V>> scannedEntries;
+            if (cursor.isPresent()) {
+                scannedEntries = adapter.scan(cursor.get(), timestamp);
             } else {
-                scannedEntries = adapter.scan(adapter.getCurrentTimestamp());
+                scannedEntries = adapter.scan(timestamp);
             }
-            handleResults((List<TableEntry<K, V>>) scannedEntries);
+            return handleResults(scannedEntries);
         }
 
         /**
          * Perform a scan requesting the specified amount of results.
          * @param numResults The desired amount of results from the scan.
+         * @return A scanner object containing the results of the current scan.
          */
-        public void getNextResults(int numResults) {
+        public Scanner getNextResults(int numResults) {
             if (finished) {
-                log.warn("Attempted to scan on a finished scanner instance");
-                return;
+                log.error("Attempted to scan on a finished scanner instance");
+                throw new IllegalStateException("Cannot get more results from finished scanner.");
             }
-            List<TableEntry<K,V>> scannedEntries;
-            if (cursor != null) {
-                scannedEntries = adapter.scan(cursor, numResults, adapter.getCurrentTimestamp());
+            List<RemoteCorfuTable.TableEntry<K,V>> scannedEntries;
+            if (cursor.isPresent()) {
+                scannedEntries = adapter.scan(cursor.get(), numResults, timestamp);
             } else {
-                scannedEntries = adapter.scan(numResults, adapter.getCurrentTimestamp());
+                scannedEntries = adapter.scan(numResults, timestamp);
             }
-            handleResults(scannedEntries);
+            return handleResults(scannedEntries);
         }
 
-        private void handleResults(List<TableEntry<K, V>> scannedEntries) {
+        protected Scanner handleResults(@NonNull List<RemoteCorfuTable.TableEntry<K, V>> scannedEntries) {
             if (scannedEntries.isEmpty()) {
-                finished = true;
-                currentResultsEntries = scannedEntries;
+                return new Scanner(true, Optional.empty(), Optional.empty(), Optional.empty(), timestamp);
             } else {
-                cursor = scannedEntries.get(scannedEntries.size() - 1).getKey();
-                currentResultsEntries = filter(scannedEntries);
+                Optional<ImmutableList<TableEntry<K,V>>> wrappedEntries = Optional.of(ImmutableList.copyOf(scannedEntries));
+                Optional<ImmutableList<V>> wrappedValues = Optional.of(getValuesFromEntries(scannedEntries));
+                Optional<K> wrappedCursor = Optional.of(scannedEntries.get(scannedEntries.size() - 1).getKey());
+                return new Scanner(false, wrappedEntries, wrappedValues, wrappedCursor, timestamp);
             }
-            currentResultsValues = null;
         }
 
-        private List<TableEntry<K,V>> filter(List<TableEntry<K,V>> scannedEntries) {
-            if (entryPredicate != null) {
-                return scannedEntries.stream().filter(entryPredicate).collect(Collectors.toList());
-            } else if (valuePredicate != null) {
-                return scannedEntries.stream()
-                        .filter(entry -> valuePredicate.test(entry.getValue()))
-                        .collect(Collectors.toList());
-            } else {
-                return scannedEntries;
-            }
+        protected ImmutableList<V> getValuesFromEntries(@NonNull List<RemoteCorfuTable.TableEntry<K, V>> scannedEntries) {
+            return scannedEntries.stream().map(TableEntry::getValue).collect(ImmutableList.toImmutableList());
         }
     }
+
+    public class ValueFilteringScanner extends Scanner {
+        private final Predicate<? super V> valuePredicate;
+        private ValueFilteringScanner(boolean finished, Optional<ImmutableList<TableEntry<K, V>>> currentResultsEntries,
+                                      Optional<ImmutableList<V>> currentResultsValues, Optional<K> cursor,
+                                      long timestamp, Predicate<? super V> valuePredicate) {
+            super(finished, currentResultsEntries, currentResultsValues, cursor, timestamp);
+            this.valuePredicate = valuePredicate;
+        }
+
+        @Override
+        protected Scanner handleResults(@NonNull List<TableEntry<K, V>> scannedEntries) {
+            if (scannedEntries.isEmpty()) {
+                return new ValueFilteringScanner(true,
+                        Optional.empty(), Optional.empty(), Optional.empty(), timestamp, valuePredicate);
+            } else {
+                ImmutableList<TableEntry<K,V>> filteredEntries = filter(scannedEntries);
+                Optional<ImmutableList<TableEntry<K,V>>> wrappedEntries = Optional.of(filteredEntries);
+                Optional<ImmutableList<V>> wrappedValues = Optional.of(getValuesFromEntries(filteredEntries));
+                Optional<K> wrappedCursor = Optional.of(scannedEntries.get(scannedEntries.size() - 1).getKey());
+                return new ValueFilteringScanner(false, wrappedEntries, wrappedValues, wrappedCursor, timestamp,
+                        valuePredicate);
+            }
+        }
+
+        private ImmutableList<TableEntry<K,V>> filter(List<TableEntry<K,V>> scannedEntries) {
+            return scannedEntries.stream().filter(entry -> valuePredicate.test(entry.getValue()))
+                    .collect(ImmutableList.toImmutableList());
+        }
+    }
+
+    public class EntryFilteringScanner extends Scanner {
+        private final Predicate<? super Entry<K, V>> entryPredicate;
+        private EntryFilteringScanner(boolean finished, Optional<ImmutableList<TableEntry<K, V>>> currentResultsEntries,
+                                      Optional<ImmutableList<V>> currentResultsValues, Optional<K> cursor,
+                                      long timestamp, Predicate<? super Entry<K, V>> entryPredicate) {
+            super(finished, currentResultsEntries, currentResultsValues, cursor, timestamp);
+            this.entryPredicate = entryPredicate;
+        }
+
+        @Override
+        protected Scanner handleResults(@NonNull List<TableEntry<K, V>> scannedEntries) {
+            if (scannedEntries.isEmpty()) {
+                return new EntryFilteringScanner(true,
+                        Optional.empty(), Optional.empty(), Optional.empty(), timestamp, entryPredicate);
+            } else {
+                ImmutableList<TableEntry<K,V>> filteredEntries = filter(scannedEntries);
+                Optional<ImmutableList<TableEntry<K,V>>> wrappedEntries = Optional.of(filteredEntries);
+                Optional<ImmutableList<V>> wrappedValues = Optional.of(getValuesFromEntries(filteredEntries));
+                Optional<K> wrappedCursor = Optional.of(scannedEntries.get(scannedEntries.size() - 1).getKey());
+                return new EntryFilteringScanner(false, wrappedEntries, wrappedValues, wrappedCursor, timestamp,
+                        entryPredicate);
+            }
+        }
+
+        private ImmutableList<TableEntry<K,V>> filter(List<TableEntry<K,V>> scannedEntries) {
+            return scannedEntries.stream().filter(entryPredicate)
+                    .collect(ImmutableList.toImmutableList());
+        }
+    }
+
+    /*----------------------------------------End Scanners------------------------------------------------*/
 
     /**
      * Factory class to create instances of RemoteCorfuTables.
