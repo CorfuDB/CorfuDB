@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.remotecorfutable.loglistener.smr;
 
 import com.google.protobuf.ByteString;
-import lombok.AllArgsConstructor;
 import lombok.NonNull;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableDatabaseEntry;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
@@ -18,14 +17,26 @@ import java.util.UUID;
  *
  * Created by nvaishampayan517 on 08/19/21
  */
-@AllArgsConstructor
 public class UpdateOperation implements SMROperation {
-    @NonNull
-    private final ByteString[] args;
-
-    private final long timestamp;
-    @NonNull
+    private final List<RemoteCorfuTableDatabaseEntry> entries;
     private final UUID streamId;
+
+    public UpdateOperation(@NonNull List<ByteString> args, long timestamp, @NonNull UUID streamId) {
+        if (args.isEmpty()) {
+            throw new IllegalArgumentException("Cannot have update operation with no keys to delete");
+        }
+        //if there is an odd number of arguments input, there is a key that is missing a value
+        if (args.size() % 2 == 1) {
+            throw new IllegalArgumentException("args must consist of key-value pairs");
+        }
+        entries = new LinkedList<>();
+        for (int i = 0; i < args.size(); i += 2) {
+            RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(args.get(i), timestamp);
+            RemoteCorfuTableDatabaseEntry entry = new RemoteCorfuTableDatabaseEntry(key, args.get(i+1));
+            entries.add(entry);
+        }
+        this.streamId = streamId;
+    }
 
     /**
      * {@inheritDoc}
@@ -35,15 +46,13 @@ public class UpdateOperation implements SMROperation {
      */
     @Override
     public void applySMRMethod(@NonNull DatabaseHandler dbHandler) throws RocksDBException {
-        int size = args.length;
-        if (size % 2 == 1) {
-            throw new IllegalArgumentException("args must consist of key-value pairs");
-        } else if (size == 2) {
+        //optimization in case of only one key being added
+        if (entries.size() == 1) {
             //single update case
-            RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(args[0], timestamp);
-            dbHandler.update(key, args[1], streamId);
+            RemoteCorfuTableDatabaseEntry entry = entries.get(0);
+            dbHandler.update(entry.getKey(), entry.getValue(), streamId);
         } else {
-            dbHandler.updateAll(getEntryBatch(), streamId);
+            dbHandler.updateAll(entries, streamId);
         }
     }
 
@@ -55,12 +64,6 @@ public class UpdateOperation implements SMROperation {
      */
     @Override
     public List<RemoteCorfuTableDatabaseEntry> getEntryBatch() {
-        List<RemoteCorfuTableDatabaseEntry> entries = new LinkedList<>();
-        for (int i = 0; i < args.length; i += 2) {
-            RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(args[i], timestamp);
-            RemoteCorfuTableDatabaseEntry entry = new RemoteCorfuTableDatabaseEntry(key, args[i+1]);
-            entries.add(entry);
-        }
         return entries;
     }
 

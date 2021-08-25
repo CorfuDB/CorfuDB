@@ -32,7 +32,9 @@ public final class SMROperationFactory {
                     return handleSMREntry(streamId, dataBuffer, timestamp);
                 case MULTISMR:
                     return handleMultiSMREntry(streamId, dataBuffer, timestamp);
-                case NOP: case CHECKPOINT: case MULTIOBJSMR:
+                case NOP:
+                case CHECKPOINT:
+                case MULTIOBJSMR:
                     throw new UnsupportedOperationException("These types will be supported in the future.");
                 default:
                     throw new IllegalArgumentException("Unknown Log Entry Type");
@@ -67,7 +69,7 @@ public final class SMROperationFactory {
         //consume serializer ID
         dataBuffer.get();
         //required even in CLEAR case to consume the numArgs value
-        ByteString[] smrArgs = LogEntryPeekUtils.getArgsFromSMREntry(dataBuffer);
+        List<ByteString> smrArgs = LogEntryPeekUtils.getArgsFromSMREntry(dataBuffer);
         switch (methodType) {
             case CLEAR:
                 return new ClearOperation(timestamp, streamId);
