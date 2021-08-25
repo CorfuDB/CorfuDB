@@ -27,7 +27,6 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Scanner;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
@@ -314,14 +313,14 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
         assertEquals(expectedEntries, readEntries);
 
         RemoteCorfuTable<Integer, String>.Scanner scanner = intTable.getScanner();
-        scanner.getNextResults();
+        scanner = scanner.getNextResults();
         List<RemoteCorfuTable.TableEntry<Integer, String>> scannedEntries = scanner.getCurrentResultsEntries();
         int startPos = 0;
         int endPos = scannedEntries.size();
         assertEquals(entries.subList(startPos, endPos), scannedEntries);
         startPos = endPos;
         while (!scanner.isFinished()) {
-            scanner.getNextResults();
+            scanner = scanner.getNextResults();
             scannedEntries = scanner.getCurrentResultsEntries();
             endPos += scannedEntries.size();
             assertEquals(entries.subList(startPos, endPos), scannedEntries);
@@ -355,7 +354,7 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
         int scanSize = 1;
 
         RemoteCorfuTable<Integer, String>.Scanner scanner = intTable.getScanner();
-        scanner.getNextResults(scanSize);
+        scanner = scanner.getNextResults(scanSize);
         List<RemoteCorfuTable.TableEntry<Integer, String>> scannedEntries = scanner.getCurrentResultsEntries();
         scanSize += 2;
         int startPos = 0;
@@ -363,7 +362,7 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
         assertEquals(entries.subList(startPos, endPos), scannedEntries);
         startPos = endPos;
         while (!scanner.isFinished()) {
-            scanner.getNextResults(scanSize);
+            scanner = scanner.getNextResults(scanSize);
             scannedEntries = scanner.getCurrentResultsEntries();
             scanSize += 2;
             endPos += scannedEntries.size();
@@ -396,7 +395,7 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
         assertEquals(expectedEntries, readEntries);
         final Predicate<Map.Entry<Integer, String>> entryPredicate = entry -> entry.getKey() % 9 == 0;
         RemoteCorfuTable<Integer, String>.Scanner scanner = intTable.getEntryFilterScanner(entryPredicate);
-        scanner.getNextResults();
+        scanner = scanner.getNextResults();
         List<RemoteCorfuTable.TableEntry<Integer, String>> scannedEntries = scanner.getCurrentResultsEntries();
         int startPos = 0;
         int endPos = 20;
@@ -405,7 +404,7 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
         assertEquals(expectedFilteredEntries, scannedEntries);
         startPos = endPos;
         while (!scanner.isFinished()) {
-            scanner.getNextResults();
+            scanner = scanner.getNextResults();
             scannedEntries = scanner.getCurrentResultsEntries();
             endPos += 20;
             if (endPos > entries.size()) {
@@ -444,7 +443,7 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
 
         final Predicate<Map.Entry<Integer, String>> entryPredicate = entry -> entry.getKey() % 9 == 0;
         RemoteCorfuTable<Integer, String>.Scanner scanner = intTable.getEntryFilterScanner(entryPredicate);
-        scanner.getNextResults(scanSize);
+        scanner = scanner.getNextResults(scanSize);
         List<RemoteCorfuTable.TableEntry<Integer, String>> scannedEntries = scanner.getCurrentResultsEntries();
         int startPos = 0;
         int endPos = 1;
@@ -454,7 +453,7 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
         assertEquals(expectedFilteredEntries, scannedEntries);
         startPos = endPos;
         while (!scanner.isFinished()) {
-            scanner.getNextResults(scanSize);
+            scanner = scanner.getNextResults(scanSize);
             scannedEntries = scanner.getCurrentResultsEntries();
             endPos += scanSize;
             if (endPos > entries.size()) {
@@ -498,7 +497,7 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
         assertEquals(expectedEntries, readEntries);
         final Predicate<String> valuePredicate = val -> val.endsWith("9");
         RemoteCorfuTable<Integer, String>.Scanner scanner = intTable.getValueFilterScanner(valuePredicate);
-        scanner.getNextResults();
+        scanner = scanner.getNextResults();
         List<RemoteCorfuTable.TableEntry<Integer, String>> scannedEntries = scanner.getCurrentResultsEntries();
         int startPos = 0;
         int endPos = 20;
@@ -510,7 +509,7 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
         assertEquals(expectedFilteredValues, scannedValues);
         startPos = endPos;
         while (!scanner.isFinished()) {
-            scanner.getNextResults();
+            scanner = scanner.getNextResults();
             scannedEntries = scanner.getCurrentResultsEntries();
             endPos += 20;
             if (endPos > entries.size()) {
@@ -552,7 +551,7 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
 
         final Predicate<String> valuePredicate = val -> val.endsWith("9");
         RemoteCorfuTable<Integer, String>.Scanner scanner = intTable.getValueFilterScanner(valuePredicate);
-        scanner.getNextResults(scanSize);
+        scanner = scanner.getNextResults(scanSize);
         List<RemoteCorfuTable.TableEntry<Integer, String>> scannedEntries = scanner.getCurrentResultsEntries();
         int startPos = 0;
         int endPos = 1;
@@ -565,7 +564,7 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
         assertEquals(expectedFilteredValues, scannedValues);
         startPos = endPos;
         while (!scanner.isFinished()) {
-            scanner.getNextResults(scanSize);
+            scanner = scanner.getNextResults(scanSize);
             scannedEntries = scanner.getCurrentResultsEntries();
             endPos += scanSize;
             if (endPos > entries.size()) {
@@ -628,6 +627,7 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
             String key = entry.getKey();
             boolean deleted = deletedSet.contains(key);
             boolean contained = table.containsKey(key);
+            System.out.printf("Testing pair %s -> %s\n", entry.getKey(), entry.getValue());
             assertNotEquals(deleted, contained);
         }
     }
