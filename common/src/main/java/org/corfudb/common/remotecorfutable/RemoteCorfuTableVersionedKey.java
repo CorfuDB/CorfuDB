@@ -2,6 +2,7 @@ package org.corfudb.common.remotecorfutable;
 
 import com.google.common.primitives.Longs;
 import com.google.protobuf.ByteString;
+import lombok.EqualsAndHashCode;
 import lombok.NonNull;
 import static org.corfudb.common.remotecorfutable.DatabaseConstants.DATABASE_CHARSET;
 
@@ -11,7 +12,9 @@ import static org.corfudb.common.remotecorfutable.DatabaseConstants.DATABASE_CHA
  *
  * <p>Created by nvaishampayan517 on 8/5/21.
  */
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class RemoteCorfuTableVersionedKey {
+    @EqualsAndHashCode.Include
     private ByteString encodedVersionedKey;
     private ByteString encodedRemoteCorfuTableKey;
     private Long timestamp;
@@ -128,19 +131,6 @@ public class RemoteCorfuTableVersionedKey {
 
     private void constructVersionedKey() {
         encodedVersionedKey = encodedRemoteCorfuTableKey.concat(ByteString.copyFrom(Longs.toByteArray(timestamp)));
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        RemoteCorfuTableVersionedKey that = (RemoteCorfuTableVersionedKey) o;
-        return getEncodedVersionedKey().equals(that.getEncodedVersionedKey());
-    }
-
-    @Override
-    public int hashCode() {
-        return getEncodedVersionedKey().hashCode();
     }
 
     @Override

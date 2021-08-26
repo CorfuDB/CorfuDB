@@ -1,30 +1,17 @@
 package org.corfudb.infrastructure.remotecorfutable;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.primitives.Bytes;
-import com.google.common.primitives.Longs;
 import com.google.protobuf.ByteString;
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.index.qual.Positive;
 import static org.corfudb.common.remotecorfutable.DatabaseConstants.EMPTY_VALUE;
-import static org.corfudb.common.remotecorfutable.DatabaseConstants.INVALID_STREAM_ID_MSG;
-import static org.corfudb.common.remotecorfutable.DatabaseConstants.LATEST_VERSION_READ;
-import static org.corfudb.common.remotecorfutable.DatabaseConstants.METADATA_COLUMN_CACHE_SIZE;
-import static org.corfudb.common.remotecorfutable.DatabaseConstants.METADATA_COLUMN_SUFFIX;
 import static org.corfudb.common.remotecorfutable.DatabaseConstants.isEmpty;
 import org.corfudb.common.remotecorfutable.KeyEncodingUtil;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableDatabaseEntry;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.rocksdb.ColumnFamilyDescriptor;
-import org.rocksdb.ColumnFamilyHandle;
-import org.rocksdb.ColumnFamilyOptions;
-import org.rocksdb.ComparatorOptions;
 import org.rocksdb.Options;
 import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDB;
@@ -37,7 +24,6 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -65,7 +51,7 @@ public class DatabaseHandler implements AutoCloseable {
     private final RocksDB database;
     private final ExecutorService executor;
     private final long shutdownTimeout;
-    private final DatabaseTableHandler tableHandler;
+    private final ColumnFamiliesHandler tableHandler;
     private final ConcurrentHashMap<UUID, Long> latestTimestampRead;
 
     /**
@@ -87,7 +73,7 @@ public class DatabaseHandler implements AutoCloseable {
 
         this.executor = executor;
         this.shutdownTimeout = shutdownTimeout;
-        tableHandler = new DatabaseTableHandler(database, new ConcurrentHashMap<>());
+        tableHandler = new ColumnFamiliesHandler(database, new ConcurrentHashMap<>());
         latestTimestampRead = new ConcurrentHashMap<>();
     }
 
@@ -105,10 +91,6 @@ public class DatabaseHandler implements AutoCloseable {
      */
     public void addTable(@NonNull UUID streamID) throws RocksDBException {
         tableHandler.addTable(streamID);
-    }
-
-    public void removeTable(@NonNull UUID streamID) throws RocksDBException {
-        tableHandler.removeTable(streamID);
     }
 
     /**

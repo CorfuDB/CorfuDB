@@ -10,7 +10,6 @@ import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
 import org.junit.After;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import org.junit.Before;
@@ -171,27 +170,11 @@ public class DatabaseHandlerTest {
     }
 
     @Test
-    public void testStreamIDNotInDatabase() {
+    public void testStreamIDNotInDatabase() throws RocksDBException {
         RemoteCorfuTableVersionedKey dummyKey = new RemoteCorfuTableVersionedKey(key1, 0L);
         ByteString dummyVal = ByteString.copyFrom("dummy".getBytes(DATABASE_CHARSET));
-        assertThrows("Expected PUT to throw StreamID not found error",
-                DatabaseOperationException.class,() -> databaseHandler.update(dummyKey,dummyVal,stream1));
-        assertThrows("Expected GET to throw StreamID not found error",
-                DatabaseOperationException.class,() -> databaseHandler.get(dummyKey,stream1));
-        assertThrows("Expected DELETE to throw StreamID not found error",
-                DatabaseOperationException.class,
-                () -> databaseHandler.delete(dummyKey,dummyKey, true, stream1));
-        assertThrows("Expected PUT to throw StreamID not found error",
-                DatabaseOperationException.class,() -> databaseHandler.update(dummyKey,dummyVal,stream1));
-        assertThrows("Expected SCAN to throw StreamID not found error",
-                DatabaseOperationException.class,() -> databaseHandler.scan(stream1,0L));
-        assertThrows("Expected CONTAINSKEY to throw StreamID not found error",
-                DatabaseOperationException.class,() -> databaseHandler.containsKey(dummyKey,stream1));
-        assertThrows("Expected CONTAINSVALUE to throw StreamID not found error",
-                DatabaseOperationException.class,
-                () -> databaseHandler.containsValue(dummyVal,stream1,0L,10));
-        assertThrows("Expected SIZE to throw StreamID not found error",
-                DatabaseOperationException.class,() -> databaseHandler.size(stream1,0L,10));
+        databaseHandler.update(dummyKey,dummyVal,stream1);
+        assertEquals(dummyVal, databaseHandler.get(dummyKey, stream1));
     }
 
     @Test
