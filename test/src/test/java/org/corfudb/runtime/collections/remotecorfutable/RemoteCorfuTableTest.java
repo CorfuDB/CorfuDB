@@ -1,4 +1,4 @@
-package org.corfudb.runtime.collections;
+package org.corfudb.runtime.collections.remotecorfutable;
 
 import com.google.common.collect.ImmutableMultiset;
 import com.google.common.collect.Streams;
@@ -292,7 +292,6 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
     @Test
     public void testScanDefaultSize() throws RocksDBException {
         //using an int->string table for sorting convenience
-        dbHandler.removeTable(table.getStreamId());
         RemoteCorfuTable<Integer, String> intTable =
                 RemoteCorfuTable.RemoteCorfuTableFactory.openTable(runtime, "test2");
         dbHandler.addTable(intTable.getStreamId());
@@ -331,7 +330,6 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
     @Test
     public void testScanVariableSize() throws RocksDBException {
         //using an int->string table for sorting convenience
-        dbHandler.removeTable(table.getStreamId());
         RemoteCorfuTable<Integer, String> intTable =
                 RemoteCorfuTable.RemoteCorfuTableFactory.openTable(runtime, "test2");
         dbHandler.addTable(intTable.getStreamId());
@@ -374,7 +372,6 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
     @Test
     public void testFixedSizeEntryFilterScan() throws RocksDBException {
         //using an int->string table for sorting convenience
-        dbHandler.removeTable(table.getStreamId());
         RemoteCorfuTable<Integer, String> intTable =
                 RemoteCorfuTable.RemoteCorfuTableFactory.openTable(runtime, "test2");
         dbHandler.addTable(intTable.getStreamId());
@@ -419,7 +416,6 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
     @Test
     public void testEntryFilterScanVariableSize() throws RocksDBException {
         //using an int->string table for sorting convenience
-        dbHandler.removeTable(table.getStreamId());
         RemoteCorfuTable<Integer, String> intTable =
                 RemoteCorfuTable.RemoteCorfuTableFactory.openTable(runtime, "test2");
         dbHandler.addTable(intTable.getStreamId());
@@ -476,7 +472,6 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
     @Test
     public void testFixedSizeValueFilterScan() throws RocksDBException {
         //using an int->string table for sorting convenience
-        dbHandler.removeTable(table.getStreamId());
         RemoteCorfuTable<Integer, String> intTable =
                 RemoteCorfuTable.RemoteCorfuTableFactory.openTable(runtime, "test2");
         dbHandler.addTable(intTable.getStreamId());
@@ -527,7 +522,6 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
     @Test
     public void testValueFilterScanVariableSize() throws RocksDBException {
         //using an int->string table for sorting convenience
-        dbHandler.removeTable(table.getStreamId());
         RemoteCorfuTable<Integer, String> intTable =
                 RemoteCorfuTable.RemoteCorfuTableFactory.openTable(runtime, "test2");
         dbHandler.addTable(intTable.getStreamId());
