@@ -6,6 +6,8 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.FailureDetector;
+import org.corfudb.infrastructure.management.monitoring.LocalMonitoringService;
+import org.corfudb.infrastructure.management.monitoring.RemoteMonitoringService;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;

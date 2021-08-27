@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure;
+package org.corfudb.infrastructure.management.monitoring;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
@@ -9,6 +9,8 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.result.Result;
+import org.corfudb.infrastructure.ManagementService;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.management.ClusterAdvisor;
 import org.corfudb.infrastructure.management.ClusterAdvisorFactory;
 import org.corfudb.infrastructure.management.ClusterStateContext;
@@ -45,6 +47,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -136,22 +139,24 @@ public class RemoteMonitoringService implements ManagementService {
     @Getter
     @Setter
     @AllArgsConstructor
-    private class SequencerNotReadyCounter {
+    private static class SequencerNotReadyCounter {
         private final long epoch;
-        private int counter;
+        private final int counter;
 
-        public void increment() {
-            counter += 1;
+        public SequencerNotReadyCounter increment() {
+            return new SequencerNotReadyCounter(epoch, counter + 1);
         }
     }
 
-    private volatile SequencerNotReadyCounter sequencerNotReadyCounter = new SequencerNotReadyCounter(0, 0);
+    private final AtomicReference<SequencerNotReadyCounter> sequencerNotReadyCounter = new AtomicReference<>(
+            new SequencerNotReadyCounter(0, 0)
+    );
 
-    RemoteMonitoringService(@NonNull ServerContext serverContext,
-                            @NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
-                            @NonNull ClusterStateContext clusterContext,
-                            @NonNull FailureDetector failureDetector,
-                            @NonNull LocalMonitoringService localMonitoringService) {
+    public RemoteMonitoringService(@NonNull ServerContext serverContext,
+                                   @NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
+                                   @NonNull ClusterStateContext clusterContext,
+                                   @NonNull FailureDetector failureDetector,
+                                   @NonNull LocalMonitoringService localMonitoringService) {
         this.serverContext = serverContext;
         this.runtimeSingletonResource = runtimeSingletonResource;
         this.clusterContext = clusterContext;
@@ -416,13 +421,12 @@ public class RemoteMonitoringService implements ManagementService {
      * Spawns a new asynchronous task to restore redundancy and merge segments.
      * A new task is not spawned if a task is already in progress.
      * This method does not wait on the completion of the restore redundancy and merge segments task.
-     *
      */
     private void restoreRedundancyAndMergeSegments(Layout layout) {
         String localEndpoint = serverContext.getLocalEndpoint();
 
         // Check that the task is not currently running.
-        if (!mergeSegmentsTask.isDone()){
+        if (!mergeSegmentsTask.isDone()) {
             log.trace("Merge segments task already in progress. Skipping spawning another task.");
             return;
         }
@@ -593,20 +597,15 @@ public class RemoteMonitoringService implements ManagementService {
             return DETECTOR_TASK_SKIPPED;
         }
 
-        // If failures are not present we can check if the primary sequencer has been
-        // bootstrapped from the heartbeat responses received.
-        if (sequencerNotReadyCounter.getEpoch() != layout.getEpoch()) {
-            // If the epoch is different than the poll epoch, we reset the timeout state.
-            log.trace("Current epoch is different to layout epoch. Update current epoch to: {}", layout.getEpoch());
-            sequencerNotReadyCounter = new SequencerNotReadyCounter(layout.getEpoch(), 1);
+        SequencerNotReadyCounter previousCounter = sequencerNotReadyCounter.get();
+        SequencerNotReadyCounter currentCounter = updateCurrentCounter(layout);
+        sequencerNotReadyCounter.set(currentCounter);
+
+        if (previousCounter.getEpoch() != layout.getEpoch()) {
             return DETECTOR_TASK_SKIPPED;
         }
 
-        // If the epoch is same as the epoch being tracked in the tuple, we need to
-        // increment the count and attempt to bootstrap the sequencer if the count has
-        // crossed the threshold.
-        sequencerNotReadyCounter.increment();
-        if (sequencerNotReadyCounter.getCounter() < SEQUENCER_NOT_READY_THRESHOLD) {
+        if (currentCounter.getCounter() < SEQUENCER_NOT_READY_THRESHOLD) {
             return DETECTOR_TASK_SKIPPED;
         }
 
@@ -618,6 +617,20 @@ public class RemoteMonitoringService implements ManagementService {
                 .getLayoutManagementView()
                 .asyncSequencerBootstrap(layout, failureDetectorWorker)
                 .thenApply(DetectorTask::fromBool);
+    }
+
+    private SequencerNotReadyCounter updateCurrentCounter(Layout layout) {
+        // If failures are not present we can check if the primary sequencer has been
+        // bootstrapped from the heartbeat responses received.
+        SequencerNotReadyCounter currentCounter = sequencerNotReadyCounter.get();
+        if (currentCounter.getEpoch() != layout.getEpoch()) {
+            // If the epoch is different than the poll epoch, we reset the timeout state.
+            log.trace("Current epoch is different to layout epoch. Update current epoch to: {}", layout.getEpoch());
+            currentCounter = new SequencerNotReadyCounter(layout.getEpoch(), 1);
+        } else {
+            currentCounter = currentCounter.increment();
+        }
+        return currentCounter;
     }
 
     /**
