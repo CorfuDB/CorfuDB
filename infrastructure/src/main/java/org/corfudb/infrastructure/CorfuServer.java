@@ -1,14 +1,13 @@
 package org.corfudb.infrastructure;
 
-import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
-
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
-import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.infrastructure.configuration.CLIArgumentOptionsMappingUtil;
+import org.corfudb.infrastructure.configuration.ServerConfiguration;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
@@ -61,6 +60,7 @@ public class CorfuServer {
                     + "[--metrics]"
                     + "[--snapshot-batch=<batch-size>] [--lock-lease=<lease-duration>]"
                     + "[-P <prefix>] [-R <retention>] <port>\n"
+                    + "\tcorfu_server (--config-file=<config-file-path>)\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <path>, --log-path=<path>                                             "
@@ -101,8 +101,6 @@ public class CorfuServer {
                     + "                evicted entries will be auto-trimmed. [default: 0.5].\n"
                     + " -H <seconds>, --HandshakeTimeout=<seconds>                               "
                     + "              Handshake timeout in seconds [default: 10].\n               "
-                    + "                                                                          "
-                    + "              from the log. [default: -1].\n                              "
                     + "                                                                          "
                     + " -k <seqcache>, --sequencer-cache-size=<seqcache>                         "
                     + "               The size of the sequencer's cache. [default: 250000].\n    "
@@ -159,22 +157,22 @@ public class CorfuServer {
                     + "              Number of threads dedicated for the base server [default: 1].\n"
                     + " --log-size-quota-percentage=<max_log_size_percentage>                    "
                     + "              The max size as percentage of underlying file-store size.\n "
-                    + "              If this limit is exceeded "
-                    + "              write requests will be rejected [default: 100.0].\n         "
                     + "                                                                          "
+                    + "              If this limit is exceeded write requests will be rejected [default: 100.0].\n"
                     + " --management-server-threads=<management_server_threads>                  "
                     + "              Number of threads dedicated for the management server [default: 4].\n"
-                    + "                                                                          "
-                    + " --logunit-threads=<logunit_threads>                  "
+                    + " --logunit-threads=<logunit_threads>                                      "
                     + "              Number of threads dedicated for the logunit server [default: 4].\n"
                     + " --metrics                                                                "
-                    + "              Enable metrics provider.\n                                  "
+                    + "              Enable metrics provider.\n"
                     + " --snapshot-batch=<batch-size>                                            "
-                    + "              Snapshot (Full) Sync batch size (number of entries)\n       "
-                    + " --max-replication-data-message-size=<msg-size>                                       "
-                    + "              The max size of replication data message in bytes.\n   "
+                    + "              Snapshot (Full) Sync batch size (number of entries)\n"
+                    + " --max-replication-data-message-size=<msg-size>                           "
+                    + "              The max size of replication data message in bytes.\n"
                     + " --lock-lease=<lease-duration>                                            "
-                    + "              Lock lease duration in seconds\n                            "
+                    + "              Lock lease duration in seconds\n"
+                    + " --config-file=<config-file-path>                                         "
+                    + "              Location of configuration options file. Will override command line options.\n"
                     + " -h, --help                                                               "
                     + "              Show this screen\n"
                     + " --version                                                                "
@@ -204,6 +202,12 @@ public class CorfuServer {
             Map<String, Object> opts = new Docopt(USAGE)
                     .withVersion(GitRepositoryState.getRepositoryState().describe)
                     .parse(args);
+            ServerConfiguration conf;
+            if (opts.containsKey("--config-file") && opts.get("--config-file") != null) {
+                conf = ServerConfiguration.getServerConfigFromFile((String) opts.get("--config-file"));
+            } else {
+                conf = ServerConfiguration.getServerConfigFromMap(opts, CLIArgumentOptionsMappingUtil.getOptionsToPropertiesMapping());
+            }
 
             // Note: this is a temporal solution for license reuse.
 
@@ -212,10 +216,10 @@ public class CorfuServer {
             // In the future, log replication will not run as a separate process
             // but it will be an aggregated functionality of Corfu's Server so this will
             // be removed.
-            if (opts.containsKey("--plugin") && opts.get("--plugin") != null) {
+            if (conf.getPluginConfigFilePath() != null) {
                 CorfuInterClusterReplicationServer.main(args);
             } else {
-                startServer(opts);
+                startServer(conf);
             }
         } catch (Throwable err) {
             log.error("Exit. Unrecoverable error", err);
@@ -223,8 +227,8 @@ public class CorfuServer {
         }
     }
 
-    public static void configureMetrics(Map<String, Object> opts, String localEndpoint) {
-        if ((boolean) opts.get("--metrics")) {
+    public static void configureMetrics(ServerConfiguration conf, String localEndpoint) {
+        if (conf.isMetricsEnabled()) {
             try {
                 LoggerContext context =  (LoggerContext) LoggerFactory.getILoggerFactory();
                 Optional.ofNullable(context.exists(DEFAULT_METRICS_LOGGER_NAME))
@@ -238,33 +242,18 @@ public class CorfuServer {
         }
     }
 
-    private static void startServer(Map<String, Object> opts) {
+    private static void startServer(ServerConfiguration conf) {
 
         // Print a nice welcome message.
-        printStartupMsg(opts);
-        configureLogger(opts);
+        printStartupMsg(conf);
+        configureLogger(conf);
 
-        log.debug("Started with arguments: {}", opts);
+        log.debug("Started with arguments: {}", conf);
 
-        // Bind to all interfaces only if no address or interface specified by the user.
-        // Fetch the address if given a network interface.
-        if (opts.get("--network-interface") != null) {
-            opts.put("--address", getAddressFromInterfaceName((String) opts.get("--network-interface")));
-            opts.put("--bind-to-all-interfaces", false);
-        } else if (opts.get("--address") == null) {
-            // Default the address to localhost and set the bind to all interfaces flag to true,
-            // if the address and interface is not specified.
-            opts.put("--bind-to-all-interfaces", true);
-            opts.put("--address", "localhost");
-        } else {
-            // Address is specified by the user.
-            opts.put("--bind-to-all-interfaces", false);
-        }
-
-        createServiceDirectory(opts);
+        createServiceDirectory(conf);
 
         // Check the specified number of datastore files to retain
-        if (Integer.parseInt((String) opts.get("--metadata-retention")) < 1) {
+        if (conf.getMetadataRetention() < 1) {
             throw new IllegalArgumentException("Max number of metadata files to retain must be greater than 0.");
         }
 
@@ -275,9 +264,9 @@ public class CorfuServer {
 
         // Manages the lifecycle of the Corfu Server.
         while (!shutdownServer) {
-            final ServerContext serverContext = new ServerContext(opts);
+            final ServerContext serverContext = new ServerContext(conf);
             try {
-                configureMetrics(opts, serverContext.getLocalEndpoint());
+                configureMetrics(conf, serverContext.getLocalEndpoint());
                 activeServer = new CorfuServerNode(serverContext);
                 activeServer.startAndListen();
             } catch (Throwable th) {
@@ -303,42 +292,42 @@ public class CorfuServer {
      * - pick the correct logging level before outputting error messages
      * - add serverEndpoint information
      *
-     * @param opts command line parameters
-     * @throws JoranException logback exception
+     * @param conf Server Configuration parameters
      */
-    private static void configureLogger(Map<String, Object> opts) {
+    private static void configureLogger(ServerConfiguration conf) {
         final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
-        final Level level = Level.toLevel(((String) opts.get("--log-level")).toUpperCase());
+        final Level level = conf.getLogLevel();
         root.setLevel(level);
     }
 
     /**
      * Create the service directory if it does not exist.
      *
-     * @param opts Server options map.
+     * @param conf Server Configurations.
      */
-    private static void createServiceDirectory(Map<String, Object> opts) {
-        if ((Boolean) opts.get("--memory")) {
+    private static void createServiceDirectory(ServerConfiguration conf) {
+        if (conf.isInMemoryMode()) {
             return;
         }
 
-        File serviceDir = new File((String) opts.get("--log-path"));
-
-        if (!serviceDir.isDirectory()) {
+        File parentDir = new File(conf.getServerDir());
+        if (!parentDir.isDirectory()) {
             log.error("Service directory {} does not point to a directory. Aborting.",
-                    serviceDir);
-            throw new UnrecoverableCorfuError("Service directory must be a directory!");
+                    parentDir);
+            throw new UnrecoverableCorfuError("Service path " + conf.getServerDir() + " must be a directory!");
         }
-
-        String corfuServiceDirPath = serviceDir.getAbsolutePath()
+        String corfuServiceDirPath = parentDir.getAbsolutePath()
                 + File.separator
                 + "corfu";
         File corfuServiceDir = new File(corfuServiceDirPath);
-        // Update the new path with the dedicated child service directory.
-        opts.put("--log-path", corfuServiceDirPath);
-        if (!corfuServiceDir.exists() && corfuServiceDir.mkdirs()) {
-            log.info("Created new service directory at {}.", corfuServiceDir);
+
+        if (!corfuServiceDir.exists() && !corfuServiceDir.mkdirs()) {
+            throw new UnrecoverableCorfuError("Couldn't create " + corfuServiceDir);
         }
+        log.info("Created new service directory at {}.", corfuServiceDir);
+        // Update the new path with the dedicated child service directory.
+        conf.setServerDirectory(corfuServiceDirPath);
+
     }
 
     /**
@@ -348,8 +337,8 @@ public class CorfuServer {
      */
     private static void clearDataFiles(ServerContext serverContext) {
         log.warn("main: cleanup requested, DELETE server data files");
-        if (!serverContext.getServerConfig(Boolean.class, "--memory")) {
-            File serviceDir = new File(serverContext.getServerConfig(String.class, "--log-path"));
+        if (!serverContext.getConfiguration().isInMemoryMode()) {
+            File serviceDir = new File(serverContext.getConfiguration().getServerDir());
             try {
                 FileUtils.cleanDirectory(serviceDir);
             } catch (IOException ioe) {
@@ -425,16 +414,20 @@ public class CorfuServer {
     /**
      * Print the welcome message, logo and the arguments.
      *
-     * @param opts Arguments.
+     * @param conf Server Configuration.
      */
-    private static void printStartupMsg(Map<String, Object> opts) {
+    private static void printStartupMsg(ServerConfiguration conf) {
         printLogo();
         println("Welcome to CORFU SERVER");
         println("Version (" + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")");
 
-        final int port = Integer.parseInt((String) opts.get("<port>"));
-        final String dataLocation = (Boolean) opts.get("--memory") ? "MEMORY mode" :
-                opts.get("--log-path").toString();
+        final int port = conf.getServerPort();
+        final String dataLocation;
+        if (conf.isInMemoryMode()) {
+            dataLocation = "MEMORY mode";
+        } else {
+            dataLocation = conf.getServerDir();
+        }
 
         println("Serving on port " + port);
         println("Data location: " + dataLocation);

@@ -117,11 +117,11 @@ public class LogReplicationSinkManager implements DataReceiver {
                                      ServerContext context, long topologyConfigId) {
 
         this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
-                .trustStore((String) context.getServerConfig().get("--truststore"))
-                .tsPasswordFile((String) context.getServerConfig().get("--truststore-password-file"))
-                .keyStore((String) context.getServerConfig().get("--keystore"))
-                .ksPasswordFile((String) context.getServerConfig().get("--keystore-password-file"))
-                .tlsEnabled((Boolean) context.getServerConfig().get("--enable-tls"))
+                .trustStore(context.getConfiguration().getTruststore())
+                .tsPasswordFile(context.getConfiguration().getTruststorePasswordFile())
+                .keyStore(context.getConfiguration().getKeystore())
+                .ksPasswordFile(context.getConfiguration().getKeystorePasswordFile())
+                .tlsEnabled(context.getConfiguration().isTlsEnabled())
                 .build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.pluginConfigFilePath = context.getPluginConfigFilePath();

@@ -42,7 +42,7 @@ public class BaseServer extends AbstractServer {
 
     public BaseServer(@Nonnull ServerContext context) {
         serverContext = context;
-        executor = serverContext.getExecutorService(serverContext.getBaseServerThreadCount(), "baseServer-");
+        executor = serverContext.getExecutorService(serverContext.getConfiguration().getNumBaseServerThreads(), "baseServer-");
     }
 
     @Override

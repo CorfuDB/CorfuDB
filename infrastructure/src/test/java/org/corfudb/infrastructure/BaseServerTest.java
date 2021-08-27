@@ -4,6 +4,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import io.netty.channel.ChannelHandlerContext;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.configuration.ServerConfiguration;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -92,11 +93,13 @@ public class BaseServerTest {
         mockServerContext = mock(ServerContext.class);
         mockServerRouter = mock(IServerRouter.class);
         mockChannelHandlerContext = mock(ChannelHandlerContext.class);
+        ServerConfiguration mockServerConfig = mock(ServerConfiguration.class);
 
         // Initialize with newDirectExecutorService to execute the server RPC
         // handler methods on the calling thread
         when(mockServerContext.getExecutorService(anyInt(), anyString()))
                 .thenReturn(MoreExecutors.newDirectExecutorService());
+        when(mockServerContext.getConfiguration()).thenReturn(mockServerConfig);
 
         baseServer = new BaseServer(mockServerContext);
     }

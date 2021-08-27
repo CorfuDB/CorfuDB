@@ -15,6 +15,7 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.configuration.ServerConfiguration;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -26,7 +27,6 @@ import javax.annotation.Nonnull;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -101,8 +101,8 @@ public class CorfuServerNode implements AutoCloseable {
                 this::configureBootstrapOptions,
                 serverContext,
                 router,
-                (String) serverContext.getServerConfig().get("--address"),
-                Integer.parseInt((String) serverContext.getServerConfig().get("<port>")));
+                serverContext.getConfiguration().getHostAddress(),
+                serverContext.getConfiguration().getServerPort());
 
         return bindFuture.syncUninterruptibly();
     }
@@ -198,13 +198,11 @@ public class CorfuServerNode implements AutoCloseable {
         try {
             ServerBootstrap bootstrap = new ServerBootstrap();
             bootstrap.group(workerGroup)
-                    .channel(context.getChannelImplementation().getServerChannelClass());
+                    .channel(context.getConfiguration().getChannelImplementation().getServerChannelClass());
             bootstrapConfigurer.configure(bootstrap);
 
             bootstrap.childHandler(getServerChannelInitializer(context, router));
-            boolean bindToAllInterfaces =
-                    Optional.ofNullable(context.getServerConfig(Boolean.class, "--bind-to-all-interfaces"))
-                            .orElse(false);
+            boolean bindToAllInterfaces = context.getConfiguration().getBindToAllInterfaces();
             if (bindToAllInterfaces) {
                 log.info("Corfu Server listening on all interfaces on port:{}", port);
                 return bootstrap.bind(port).sync();
@@ -253,12 +251,13 @@ public class CorfuServerNode implements AutoCloseable {
                 final String[] enabledTlsCipherSuites;
 
                 // Security Initialization
-                Boolean tlsEnabled = context.getServerConfig(Boolean.class, "--enable-tls");
-                Boolean tlsMutualAuthEnabled = context.getServerConfig(Boolean.class,
-                        "--enable-tls-mutual-auth");
+                ServerConfiguration conf = context.getConfiguration();
+                boolean tlsEnabled = conf.isTlsEnabled();
+                boolean tlsMutualAuthEnabled = conf.getEnableTlsMutualAuth();
+
                 if (tlsEnabled) {
                     // Get the TLS cipher suites to enable
-                    String ciphs = context.getServerConfig(String.class, "--tls-ciphers");
+                    String ciphs = conf.getTlsCiphers();
                     if (ciphs != null) {
                         enabledTlsCipherSuites = Pattern.compile(",")
                                 .splitAsStream(ciphs)
@@ -269,7 +268,7 @@ public class CorfuServerNode implements AutoCloseable {
                     }
 
                     // Get the TLS protocols to enable
-                    String protos = context.getServerConfig(String.class, "--tls-protocols");
+                    String protos = conf.getTlsProtocols();
                     if (protos != null) {
                         enabledTlsProtocols = Pattern.compile(",")
                                 .splitAsStream(protos)
@@ -281,11 +280,10 @@ public class CorfuServerNode implements AutoCloseable {
 
                     try {
                         sslContext = SslContextConstructor.constructSslContext(true,
-                                context.getServerConfig(String.class, "--keystore"),
-                                context.getServerConfig(String.class, "--keystore-password-file"),
-                                context.getServerConfig(String.class, "--truststore"),
-                                context.getServerConfig(String.class,
-                                        "--truststore-password-file"));
+                                conf.getKeystore(),
+                                conf.getKeystorePasswordFile(),
+                                conf.getTruststore(),
+                                conf.getTruststorePasswordFile());
                     } catch (SSLException e) {
                         log.error("Could not build the SSL context", e);
                         throw new RuntimeException("Couldn't build the SSL context", e);
@@ -296,8 +294,7 @@ public class CorfuServerNode implements AutoCloseable {
                     sslContext = null;
                 }
 
-                Boolean saslPlainTextAuth = context.getServerConfig(Boolean.class,
-                        "--enable-sasl-plain-text-auth");
+
 
                 // If TLS is enabled, setup the encryption pipeline.
                 if (tlsEnabled) {
@@ -314,6 +311,8 @@ public class CorfuServerNode implements AutoCloseable {
                 ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer
                         .MAX_VALUE, 0, 4,
                         0, 4));
+
+                boolean saslPlainTextAuth = conf.getEnableSaslPlainTextAuth();
                 // If SASL authentication is requested, perform a SASL plain-text auth.
                 if (saslPlainTextAuth) {
                     ch.pipeline().addLast("sasl/plain-text", new
@@ -324,7 +323,7 @@ public class CorfuServerNode implements AutoCloseable {
                 ch.pipeline().addLast(new NettyCorfuMessageEncoder());
                 ch.pipeline().addLast(new ServerHandshakeHandler(context.getNodeId(),
                         GitRepositoryState.getCorfuSourceCodeVersion(),
-                        context.getServerConfig(String.class, "--HandshakeTimeout")));
+                        conf.getHandshakeTimeout()));
                 // Route the message to the server class.
                 ch.pipeline().addLast(router);
             }

@@ -8,6 +8,8 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.configuration.CLIArgumentOptionsMappingUtil;
+import org.corfudb.infrastructure.configuration.ServerConfiguration;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -22,8 +24,6 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-
-import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 
 /**
  * This class represents the Corfu Replication Server. This Server will be running on both ends
@@ -42,11 +42,12 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      * <p>Note that the java implementation of docopt has a strange requirement
      * that each option must be preceded with a space.
      */
+    //TODO(NEIL): consolidate if possible
     private static final String USAGE =
             "Corfu Log Replication Server, the server for replication across clusters.\n"
                     + "\n"
                     + "Usage:\n"
-                    + "\tlog_replication_server (-l <path>|-m) [-nsN] [-a <address>|-q <interface-name>] "
+                    + "\tcorfu_replication_server (-l <path>|-m) [-nsN] [-a <address>|-q <interface-name>] "
                     + "[--snapshot-batch=<batch-size>] "
                     + "[--max-replication-data-message-size=<msg-size>] "
                     + "[--lock-lease=<lease-duration>]"
@@ -61,6 +62,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
                     + "[--metrics]"
                     + "[-P <prefix>] [-R <retention>] <port>\n"
+                    + "\tcorfu_replication_server (--config-file=<config-file-path>)\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <path>, --log-path=<path>                                             "
@@ -157,25 +159,22 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "              Number of threads dedicated for the base server [default: 1].\n"
                     + " --log-size-quota-percentage=<max_log_size_percentage>                    "
                     + "              The max size as percentage of underlying file-store size.\n "
-                    + "              If this limit is exceeded "
-                    + "              write requests will be rejected [default: 100.0].\n         "
                     + "                                                                          "
+                    + "              If this limit is exceeded write requests will be rejected [default: 100.0].\n"
                     + " --management-server-threads=<management_server_threads>                  "
                     + "              Number of threads dedicated for the management server [default: 4].\n"
-                    + "                                                                          "
-                    + " --logunit-threads=<logunit_threads>                  "
+                    + " --logunit-threads=<logunit_threads>                                      "
                     + "              Number of threads dedicated for the logunit server [default: 4].\n"
                     + " --metrics                                                                "
-                    + "              Enable metrics provider.\n                                  "
+                    + "              Enable metrics provider.\n"
                     + " --snapshot-batch=<batch-size>                                            "
-                    + "              Snapshot (Full) Sync batch size.\n                          "
-                    + "              The max number of messages per batch)\n                      "
-                    + "                                                                          "
-                    + " --max-replication-data-message-size=<msg-size>                                       "
-                    + "              The max size of replication data message in bytes.\n   "
-                    + "                                                                          "
+                    + "              Snapshot (Full) Sync batch size (number of entries)\n"
+                    + " --max-replication-data-message-size=<msg-size>                           "
+                    + "              The max size of replication data message in bytes.\n"
                     + " --lock-lease=<lease-duration>                                            "
-                    + "              Lock lease duration in seconds\n                            "
+                    + "              Lock lease duration in seconds\n"
+                    + " --config-file=<config-file-path>                                         "
+                    + "              Location of configuration options file. Will override command line options.\n"
                     + " -h, --help                                                               "
                     + "              Show this screen\n"
                     + " --version                                                                "
@@ -231,14 +230,21 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                 .withVersion(GitRepositoryState.getRepositoryState().describe)
                 .parse(args);
 
-        printStartupMsg(opts);
-        configureLogger(opts);
+        ServerConfiguration conf;
+        if (opts.containsKey("--config-file") && opts.get("--config-file") != null) {
+            conf = ServerConfiguration.getServerConfigFromFile((String) opts.get("--config-file"));
+        } else {
+            conf = ServerConfiguration.getServerConfigFromMap(opts, CLIArgumentOptionsMappingUtil.getOptionsToPropertiesMapping());
+        }
 
-        log.info("Started with arguments: {}", opts);
+        printStartupMsg(conf);
+        configureLogger(conf);
 
-        ServerContext serverContext = getServerContext(opts);
+        log.info("Started with arguments: {}", conf);
 
-        configureMetrics(opts, serverContext.getLocalEndpoint());
+        ServerContext serverContext = getServerContext(conf);
+
+        configureMetrics(conf, serverContext.getLocalEndpoint());
 
         // Register shutdown handler
         Thread shutdownThread = new Thread(this::cleanShutdown);
@@ -276,23 +282,8 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         flushAsyncLogAppender();
     }
 
-    private ServerContext getServerContext(Map<String, Object> opts ) {
-        // Bind to all interfaces only if no address or interface specified by the user.
-        // Fetch the address if given a network interface.
-        if (opts.get("--network-interface") != null) {
-            opts.put("--address", getAddressFromInterfaceName((String) opts.get("--network-interface")));
-            opts.put("--bind-to-all-interfaces", false);
-        } else if (opts.get("--address") == null) {
-            // Default the address to localhost and set the bind to all interfaces flag to true,
-            // if the address and interface is not specified.
-            opts.put("--bind-to-all-interfaces", true);
-            opts.put("--address", "localhost");
-        } else {
-            // Address is specified by the user.
-            opts.put("--bind-to-all-interfaces", false);
-        }
-
-        return new ServerContext(opts);
+    private ServerContext getServerContext(ServerConfiguration conf) {
+        return new ServerContext(conf);
     }
 
     /**
@@ -325,17 +316,17 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      * - pick the correct logging level before outputting error messages
      * - add serverEndpoint information
      *
-     * @param opts command line parameters
+     * @param conf Server Configuration Options
      * @throws JoranException logback exception
      */
-    private static void configureLogger(Map<String, Object> opts) {
+    private static void configureLogger(ServerConfiguration conf) {
         final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
-        final Level level = Level.toLevel(((String) opts.get("--log-level")).toUpperCase());
+        final Level level = conf.getLogLevel();
         root.setLevel(level);
     }
 
-    public static void configureMetrics(Map<String, Object> opts, String localEndpoint) {
-        if ((boolean) opts.get("--metrics")) {
+    public static void configureMetrics(ServerConfiguration conf, String localEndpoint) {
+        if (conf.isMetricsEnabled()) {
             try {
                 LoggerContext context =  (LoggerContext) LoggerFactory.getILoggerFactory();
                 Optional.ofNullable(context.exists(DEFAULT_METRICS_LOGGER_NAME))
@@ -399,15 +390,15 @@ public class CorfuInterClusterReplicationServer implements Runnable {
     /**
      * Print the welcome message, logo and the arguments for Log Replication Server
      *
-     * @param opts Arguments.
+     * @param conf Server Configuration.
      */
-    private static void printStartupMsg(Map<String, Object> opts) {
+    private static void printStartupMsg(ServerConfiguration conf) {
             printLogo();
             println("");
             println("------------------------------------");
             println("Initializing LOG REPLICATION SERVER");
             println("Version (" + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")");
-            final int port = Integer.parseInt((String) opts.get("<port>"));
+            final int port = conf.getServerPort();
             println("Serving on port " + port);
             println("------------------------------------");
             println("");

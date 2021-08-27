@@ -6,6 +6,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.configuration.ServerConfiguration;
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
@@ -34,7 +35,6 @@ import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletionException;
@@ -86,7 +86,6 @@ import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
  */
 @Slf4j
 public class LogUnitServer extends AbstractServer {
-
     /**
      * The options map.
      */
@@ -135,23 +134,24 @@ public class LogUnitServer extends AbstractServer {
      */
     public LogUnitServer(ServerContext serverContext, LogUnitServerInitializer serverInitializer) {
         this.serverContext = serverContext;
-        config = LogUnitServerConfig.parse(serverContext.getServerConfig());
-        executor = serverContext.getExecutorService(serverContext.getLogUnitThreadCount(), "LogUnit-");
+        config = LogUnitServerConfig.parse(serverContext.getConfiguration());
+        executor = serverContext.getExecutorService(serverContext.getConfiguration().getNumLogUnitWorkerThreads(),
+                "LogUnit-");
 
-        if (config.isMemoryMode()) {
+        if (serverContext.getConfiguration().isInMemoryMode()) {
             log.warn("Log unit opened in-memory mode (Maximum size={}). "
                     + "This should be run for testing purposes only. "
                     + "If you exceed the maximum size of the unit, old entries will be "
                     + "AUTOMATICALLY trimmed. "
                     + "The unit WILL LOSE ALL DATA if it exits.", Utils
-                    .convertToByteStringRepresentation(config.getMaxCacheSize()));
+                    .convertToByteStringRepresentation(serverContext.getConfiguration().getMaxLogUnitCacheSize()));
             streamLog = serverInitializer.buildInMemoryStreamLog();
         } else {
-            streamLog = serverInitializer.buildStreamLog(config, serverContext);
+            streamLog = serverInitializer.buildStreamLog(serverContext);
         }
 
-        dataCache = serverInitializer.buildLogUnitServerCache(config, streamLog);
-        batchWriter = serverInitializer.buildBatchProcessor(config, streamLog, serverContext);
+        dataCache = serverInitializer.buildLogUnitServerCache(streamLog, serverContext);
+        batchWriter = serverInitializer.buildBatchProcessor(streamLog, serverContext);
         logCleaner = serverInitializer.buildStreamLogCompaction(streamLog);
     }
 
@@ -544,7 +544,7 @@ public class LogUnitServer extends AbstractServer {
 
     @VisibleForTesting
     long getMaxCacheSize() {
-        return config.getMaxCacheSize();
+        return serverContext.getConfiguration().getMaxLogUnitCacheSize();
     }
 
     @VisibleForTesting
@@ -559,6 +559,9 @@ public class LogUnitServer extends AbstractServer {
 
     /**
      * Log unit server parameters.
+     *
+     * This class is currently unused, but is available for future changes to remove the heavy ServerContext
+     * from LogUnit component initialization.
      */
     @Builder
     @Getter
@@ -572,18 +575,18 @@ public class LogUnitServer extends AbstractServer {
         /**
          * Parse legacy configuration options
          *
-         * @param opts legacy config
+         * @param conf Server Configuration options
          * @return log unit configuration
          */
-        public static LogUnitServerConfig parse(Map<String, Object> opts) {
-            double cacheSizeHeapRatio = Double.parseDouble((String) opts.get("--cache-heap-ratio"));
+        public static LogUnitServerConfig parse(ServerConfiguration conf) {
+            double cacheSizeHeapRatio = conf.getLogUnitCacheRatio();
 
             return LogUnitServerConfig.builder()
                     .cacheSizeHeapRatio(cacheSizeHeapRatio)
                     .maxCacheSize((long) (Runtime.getRuntime().maxMemory() * cacheSizeHeapRatio))
-                    .memoryMode(Boolean.parseBoolean(opts.get("--memory").toString()))
-                    .noVerify((Boolean) opts.get("--no-verify"))
-                    .noSync((Boolean) opts.get("--no-sync"))
+                    .memoryMode(conf.isInMemoryMode())
+                    .noVerify(!conf.getVerifyChecksum())
+                    .noSync(!conf.getSyncData())
                     .build();
         }
     }
@@ -594,27 +597,25 @@ public class LogUnitServer extends AbstractServer {
      * This facilitates the injection of mocked objects during unit tests.
      */
     public static class LogUnitServerInitializer {
-        StreamLog buildInMemoryStreamLog() {
+        protected StreamLog buildInMemoryStreamLog() {
             return new InMemoryStreamLog();
         }
 
-        StreamLog buildStreamLog(@Nonnull LogUnitServerConfig config,
-                                 @Nonnull ServerContext serverContext) {
-            return new StreamLogFiles(serverContext, config.isNoVerify());
+        protected StreamLog buildStreamLog(@Nonnull ServerContext serverContext) {
+            return new StreamLogFiles(serverContext);
         }
 
-        LogUnitServerCache buildLogUnitServerCache(@Nonnull LogUnitServerConfig config,
-                                                   @Nonnull StreamLog streamLog) {
-            return new LogUnitServerCache(config, streamLog);
+        protected LogUnitServerCache buildLogUnitServerCache(@Nonnull StreamLog streamLog,
+                                                   @Nonnull ServerContext serverContext) {
+            return new LogUnitServerCache(streamLog, serverContext.getConfiguration().getMaxLogUnitCacheSize());
         }
 
-        BatchProcessor buildBatchProcessor(@Nonnull LogUnitServerConfig config,
-                                           @Nonnull StreamLog streamLog,
+        protected BatchProcessor buildBatchProcessor(@Nonnull StreamLog streamLog,
                                            @Nonnull ServerContext serverContext) {
-            return new BatchProcessor(streamLog, serverContext.getServerEpoch(), !config.isNoSync());
+            return new BatchProcessor(streamLog, serverContext.getServerEpoch(), serverContext.getConfiguration().getSyncData());
         }
 
-        StreamLogCompaction buildStreamLogCompaction(@Nonnull StreamLog streamLog) {
+        protected StreamLogCompaction buildStreamLogCompaction(@Nonnull StreamLog streamLog) {
             return new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER);
         }
     }

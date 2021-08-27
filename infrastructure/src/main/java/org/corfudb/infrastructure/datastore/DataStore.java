@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.datastore;
 
+
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.CacheWriter;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -12,6 +13,7 @@ import io.netty.buffer.Unpooled;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
+import org.corfudb.infrastructure.configuration.ServerConfiguration;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.util.JsonUtils;
 
@@ -25,7 +27,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.util.Map;
 import java.util.function.Consumer;
 
 import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
@@ -56,6 +57,8 @@ public class DataStore implements KvDataStore {
 
     @Getter
     private final Cache<String, Object> cache;
+
+    @Getter
     private final String logDirPath;
 
     @Getter
@@ -68,19 +71,19 @@ public class DataStore implements KvDataStore {
     /**
      * Return a new DataStore object.
      *
-     * @param opts        map of option strings
+     * @param conf        Server configuration object
      * @param cleanupTask method to cleanup DataStore files
      */
-    public DataStore(@Nonnull Map<String, Object> opts,
+    public DataStore(@Nonnull ServerConfiguration conf,
                      @Nonnull Consumer<String> cleanupTask) {
 
-        if ((opts.containsKey("--memory") && (Boolean) opts.get("--memory")) || !opts.containsKey("--log-path")) {
+        if (conf.isInMemoryMode()) {
             this.logDirPath = null;
             this.cleanupTask = fileName -> {};
             cache = buildMemoryDs();
             inMem = true;
         } else {
-            this.logDirPath = (String) opts.get("--log-path");
+            this.logDirPath = conf.getServerDir();
             this.cleanupTask = cleanupTask;
             cache = buildPersistentDs();
             inMem = false;

@@ -16,9 +16,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.configuration.ServerConfiguration;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
-import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -154,6 +154,13 @@ public class LogUnitServerTest {
         mBatchProcessor = mock(BatchProcessor.class);
         mStreamLog = mock(StreamLog.class);
         mCache = mock(LogUnitServerCache.class);
+        ServerConfiguration mServerConfig = mock(ServerConfiguration.class);
+
+        //Mock Config Options
+        when(mServerConfig.getLogUnitCacheRatio()).thenReturn(0.5);
+        when(mServerConfig.isInMemoryMode()).thenReturn(false);
+        when(mServerConfig.getVerifyChecksum()).thenReturn(true);
+        when(mServerConfig.getSyncData()).thenReturn(true);
 
         // Initialize with newDirectExecutorService to execute the server RPC
         // handler methods on the calling thread.
@@ -161,20 +168,15 @@ public class LogUnitServerTest {
                 .thenReturn(MoreExecutors.newDirectExecutorService());
 
         // Initialize basic LogUnit server parameters.
-        when(mServerContext.getServerConfig())
-                .thenReturn(ImmutableMap.of(
-                        "--cache-heap-ratio", "0.5",
-                        "--memory", false,
-                        "--no-verify", false,
-                        "--no-sync", false));
+        when(mServerContext.getConfiguration())
+                .thenReturn(mServerConfig);
 
         // Prepare the LogUnitServerInitializer.
         LogUnitServer.LogUnitServerInitializer mLUSI = mock(LogUnitServer.LogUnitServerInitializer.class);
-        when(mLUSI.buildStreamLog(any(LogUnitServerConfig.class), eq(mServerContext))).thenReturn(mStreamLog);
-        when(mLUSI.buildLogUnitServerCache(any(LogUnitServerConfig.class), eq(mStreamLog))).thenReturn(mCache);
-        when(mLUSI.buildStreamLogCompaction(mStreamLog)).thenReturn(mock(StreamLogCompaction.class));
-        when(mLUSI.buildBatchProcessor(any(LogUnitServerConfig.class),
-                eq(mStreamLog), eq(mServerContext))).thenReturn(mBatchProcessor);
+        when(mLUSI.buildStreamLog(eq(mServerContext))).thenReturn(mStreamLog);
+        when(mLUSI.buildLogUnitServerCache(eq(mStreamLog), eq(mServerContext))).thenReturn(mCache);
+        when(mLUSI.buildStreamLogCompaction(eq(mStreamLog))).thenReturn(mock(StreamLogCompaction.class));
+        when(mLUSI.buildBatchProcessor(eq(mStreamLog), eq(mServerContext))).thenReturn(mBatchProcessor);
 
         logUnitServer = new LogUnitServer(mServerContext, mLUSI);
     }

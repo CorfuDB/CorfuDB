@@ -17,6 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.configuration.ServerConfiguration;
 import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.orchestrator.Orchestrator;
@@ -169,6 +170,7 @@ public class ManagementServerTest {
         mOrchestrator = mock(Orchestrator.class);
         mFailureHandlerPolicy = mock(IReconfigurationHandlerPolicy.class);
         mCorfuRuntime = mock(CorfuRuntime.class);
+        ServerConfiguration mServerConfig = mock(ServerConfiguration.class);
 
         // Initialize with newDirectExecutorService to execute the server RPC
         // handler methods on the calling thread.
@@ -177,6 +179,7 @@ public class ManagementServerTest {
 
         when(mServerContext.getLocalEndpoint()).thenReturn(NODES.get(0));
         when(mServerContext.getFailureHandlerPolicy()).thenReturn(mFailureHandlerPolicy);
+        when(mServerContext.getConfiguration()).thenReturn(mServerConfig);
 
         ClusterStateContext mClusterContext = mock(ClusterStateContext.class);
         when(mClusterContext.getClusterView()).thenReturn(mClusterState);

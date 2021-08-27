@@ -46,10 +46,10 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
      *
      * @param nodeId Current Server Node Identifier.
      */
-    public ServerHandshakeHandler(UUID nodeId, long corfuServerVersion, String timeoutInSeconds) {
+    public ServerHandshakeHandler(UUID nodeId, long corfuServerVersion, int timeoutInSeconds) {
         this.nodeId = nodeId;
         this.corfuServerVersion = corfuServerVersion;
-        this.timeoutInSeconds = Integer.parseInt(timeoutInSeconds);
+        this.timeoutInSeconds = timeoutInSeconds;
         this.handshakeState = new HandshakeState();
     }
 

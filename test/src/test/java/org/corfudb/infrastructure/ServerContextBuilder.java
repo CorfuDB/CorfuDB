@@ -1,8 +1,9 @@
 package org.corfudb.infrastructure;
 
-import com.google.common.collect.ImmutableMap;
 import lombok.Data;
 import lombok.experimental.Accessors;
+import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.infrastructure.configuration.ServerConfiguration;
 import org.corfudb.test.concurrent.TestThreadGroups;
 
 /**
@@ -13,93 +14,82 @@ import org.corfudb.test.concurrent.TestThreadGroups;
 // Disable magic number check to make defaults readable
 @SuppressWarnings("checkstyle:magicnumber")
 public class ServerContextBuilder {
-    boolean single = true;
-    boolean memory = true;
-    String logPath = null;
-    boolean noVerify = false;
-    boolean noSync = false;
-    boolean noAutoCommit = true;
+    private boolean single = true;
+    private boolean memory = true;
+    private String logPath = null;
+    private boolean verifyChecksum = true;
+    private boolean syncData = true;
 
-    boolean tlsEnabled = false;
-    boolean tlsMutualAuthEnabled = false;
-    String tlsProtocols = "";
-    String tlsCiphers = "";
-    String keystore = "";
-    String keystorePasswordFile = "";
-    boolean saslPlainTextAuth = false;
-    String truststore = "";
-    String truststorePasswordFile = "";
+    private boolean noAutoCommit = true;
 
-    String implementation = "local";
+    private boolean tlsEnabled = false;
+    private boolean tlsMutualAuthEnabled = false;
+    private String tlsProtocols = "";
+    private String tlsCiphers = "";
+    private String keystore = "";
+    private String keystorePasswordFile = "";
+    private boolean saslPlainTextAuth = false;
+    private String truststore = "";
+    private String truststorePasswordFile = "";
 
-    String cacheSizeHeapRatio = "0.5";
-    String address = "test";
-    int port = 9000;
-    String seqCache = "1000";
-    String logSizeLimitPercentage = "100.0";
-    String batchSize = "100";
-    String managementBootstrapEndpoint = null;
-    IServerRouter serverRouter;
-    String numThreads = "0";
-    String handshakeTimeout = "10";
-    String prefix = "";
-    String retention = "1000";
+    private ChannelImplementation implementation = ChannelImplementation.LOCAL;
 
-    String clusterId = "00000000-0000-0000-0000-000000000000";
-    boolean isTest = true;
+    private double cacheSizeHeapRatio = 0.5;
+    private String address = "test";
+    private int port = 9000;
+    private int seqCache = 1000;
+    private double logSizeLimitPercentage = 100.0;
+    private int batchSize = 100;
+    private String managementBootstrapEndpoint = null;
+    private IServerRouter serverRouter;
+
+    private int handshakeTimeout = 10;
+    private String prefix = "";
+    private int retention = 1000;
+
+    private String clusterId = "00000000-0000-0000-0000-000000000000";
+    private boolean isTest = true;
 
     public ServerContextBuilder() {
 
     }
 
     public ServerContext build() {
-        ImmutableMap.Builder<String,Object> builder =
-                new ImmutableMap.Builder<String, Object>()
-                .put("--single", single)
-                .put("--memory", memory)
-                .put("--Threads", numThreads)
-                .put("--HandshakeTimeout", handshakeTimeout)
-                .put("--sequencer-cache-size", seqCache)
-                .put("--log-size-quota-percentage", logSizeLimitPercentage)
-                .put("--batch-size", batchSize)
-                .put("--metadata-retention", retention);
+        ServerConfiguration conf = new ServerConfiguration()
+                .setSingleMode(single)
+                .setInMemoryMode(memory)
+                .setHandshakeTimeout(handshakeTimeout)
+                .setSequencerCacheSize(seqCache)
+                .setLogSizeQuota(logSizeLimitPercentage)
+                .setStateTransferBatchSize(batchSize)
+                .setMetadataRetention(retention);
         if (logPath != null) {
-         builder.put("--log-path", logPath);
+            conf.setServerDirectory(logPath);
         }
-        if (managementBootstrapEndpoint != null) {
-            builder.put("--management-server", managementBootstrapEndpoint);
-        }
-         builder
-                 .put("--no-verify", noVerify)
-                 .put("--no-sync", noSync)
-                 .put("--no-auto-commit", true)
-                 .put("--address", address)
-                 .put("--cache-heap-ratio", cacheSizeHeapRatio)
-                 .put("--enable-tls", tlsEnabled)
-                 .put("--enable-tls-mutual-auth", tlsMutualAuthEnabled)
-                 .put("--tls-protocols", tlsProtocols)
-                 .put("--tls-ciphers", tlsCiphers)
-                 .put("--keystore", keystore)
-                 .put("--keystore-password-file", keystorePasswordFile)
-                 .put("--truststore", truststore)
-                 .put("--truststore-password-file", truststorePasswordFile)
-                 .put("--enable-sasl-plain-text-auth", saslPlainTextAuth)
-                 .put("--cluster-id", clusterId)
-                 .put("--implementation", implementation)
-                 .put("<port>", Integer.toString(port));
 
-        // Set the prefix to the port number
-        if (prefix.equals("")) {
-            prefix = "test:" + port;
-        }
-        builder.put("--Prefix", prefix);
+        conf.setVerifyChecksum(verifyChecksum)
+                .setSyncData(syncData)
+                .setHostAddress(address)
+                .setServerPort(port)
+                .setLogUnitCacheRatio(cacheSizeHeapRatio)
+                .setEnableTls(tlsEnabled)
+                .setEnableTlsMutualAuth(tlsMutualAuthEnabled)
+                .setTlsProtocols(tlsProtocols)
+                .setTlsCiphers(tlsCiphers)
+                .setKeystore(keystore)
+                .setKeystorePasswordFile(keystorePasswordFile)
+                .setTruststore(truststore)
+                .setTruststorePasswordFile(truststorePasswordFile)
+                .setEnableSaslPlainTextAuth(saslPlainTextAuth)
+                .setClusterId(clusterId)
+                .setChannelImplementation(implementation);
 
         // Provide the server with event loop groups
-        if (implementation.equals("local")) {
-            builder.put("client", TestThreadGroups.NETTY_CLIENT_GROUP.get());
-            builder.put("worker", TestThreadGroups.NETTY_CLIENT_GROUP.get());
+        if (implementation == ChannelImplementation.LOCAL) {
+            conf.setTestClientEventLoop(TestThreadGroups.NETTY_CLIENT_GROUP.get())
+                    .setTestWorkerEventLoop(TestThreadGroups.NETTY_WORKER_GROUP.get());
         }
-        ServerContext sc = new ServerContext(builder.build());
+        ServerContext sc = new ServerContext(conf);
         sc.setServerRouter(serverRouter);
         return sc;
     }
@@ -124,7 +114,7 @@ public class ServerContextBuilder {
     public static ServerContext defaultContext(int port) {
         ServerContext sc = new ServerContextBuilder()
             .setPort(port)
-            .setImplementation("auto")
+            .setImplementation(ChannelImplementation.AUTO)
             .build();
         return sc;
     }

@@ -6,8 +6,6 @@ import com.google.protobuf.TextFormat;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.Tags;
 import io.netty.channel.ChannelHandlerContext;
-import lombok.Builder;
-import lombok.Builder.Default;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
@@ -49,9 +47,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+
 import static org.corfudb.protocols.CorfuProtocolCommon.getStreamAddressRange;
-import static org.corfudb.protocols.CorfuProtocolCommon.getStreamAddressSpace;
 import static org.corfudb.protocols.CorfuProtocolCommon.getStreamsAddressResponseMsg;
+import static org.corfudb.protocols.CorfuProtocolCommon.getStreamAddressSpace;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.CorfuProtocolTxResolution.getTxResolutionInfo;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
@@ -185,14 +184,13 @@ public class SequencerServer extends AbstractServer {
                            SequencerServerInitializer sequencerFactoryHelper) {
         this.serverContext = serverContext;
         this.sequencerFactoryHelper = sequencerFactoryHelper;
-        Config config = Config.parse(serverContext.getServerConfig());
 
         // Sequencer server is single threaded by current design
         executor = serverContext.getExecutorService(1, "sequencer-");
 
         globalLogTail = sequencerFactoryHelper.getGlobalLogTail();
         cache = sequencerFactoryHelper.getSequencerServerCache(
-                config.getCacheSize(),
+                serverContext.getConfiguration().getSequencerCacheSize(),
                 globalLogTail - 1
         );
         streamsAddressMap = sequencerFactoryHelper.getStreamAddressSpaceMap();
@@ -811,27 +809,6 @@ public class SequencerServer extends AbstractServer {
         }
 
         return requestedAddressSpaces;
-    }
-
-    /**
-     * Sequencer server configuration
-     */
-    @Builder
-    @Getter
-    public static class Config {
-        private static final int DEFAULT_CACHE_SIZE = 250_000;
-
-        @Default
-        private final int cacheSize = DEFAULT_CACHE_SIZE;
-
-        public static Config parse(Map<String, Object> opts) {
-            int cacheSize = opts.containsKey("--sequencer-cache-size") ?
-                    Integer.parseInt((String) opts.get("--sequencer-cache-size")) :
-                    DEFAULT_CACHE_SIZE;
-            return Config.builder()
-                    .cacheSize(cacheSize)
-                    .build();
-        }
     }
 
 
