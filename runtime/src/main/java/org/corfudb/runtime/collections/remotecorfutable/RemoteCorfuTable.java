@@ -1,12 +1,15 @@
 package org.corfudb.runtime.collections.remotecorfutable;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.reflect.TypeToken;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import static org.corfudb.runtime.CorfuRuntime.getCheckpointStreamIdFromId;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.view.stream.AddressMapStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
@@ -474,6 +477,12 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
             IStreamView streamView = new AddressMapStreamView(runtime, streamID);
             RemoteCorfuTableAdapter<I,J> adapter = new RemoteCorfuTableAdapter<>(tableName, streamID, runtime,
                     serializer, streamView);
+            UUID checkpointStreamId = getCheckpointStreamIdFromId(streamID);
+            CorfuTable<UUID, UUID> globalRCTRegistry = runtime.getObjectsView().build()
+                    .setTypeToken(new TypeToken<CorfuTable<UUID, UUID>>() {})
+                    .setStreamName("remotecorfutable.globalrctregistry")
+                    .open();
+            globalRCTRegistry.putIfAbsent(streamID, checkpointStreamId);
             return new RemoteCorfuTable<>(adapter, tableName, streamID);
         }
     }
