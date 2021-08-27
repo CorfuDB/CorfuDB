@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.remotecorfutable.loglistener.smr;
 
 import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
 import lombok.NonNull;
 import org.apache.commons.collections.iterators.ReverseListIterator;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableDatabaseEntry;
@@ -20,6 +21,7 @@ import java.util.UUID;
  *
  * Created by nvaishampayan517 on 08/20/21
  */
+@EqualsAndHashCode
 @AllArgsConstructor
 public class CompositeOperation implements SMROperation {
     @NonNull

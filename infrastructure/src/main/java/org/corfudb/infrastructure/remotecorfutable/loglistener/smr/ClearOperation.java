@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.remotecorfutable.loglistener.smr;
 
 import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
 import lombok.NonNull;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableDatabaseEntry;
 import org.corfudb.infrastructure.remotecorfutable.DatabaseHandler;
@@ -16,6 +17,7 @@ import java.util.UUID;
  *
  * Created by nvaishampayan517 on 08/19/21
  */
+@EqualsAndHashCode
 @AllArgsConstructor
 public class ClearOperation implements SMROperation {
 
