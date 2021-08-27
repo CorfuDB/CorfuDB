@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.remotecorfutable.loglistener.smr;
 
 import com.google.protobuf.ByteString;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.NonNull;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableDatabaseEntry;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
@@ -22,6 +23,7 @@ import java.util.UUID;
 public class DeleteOperation implements SMROperation {
     private final List<ByteString> keys;
     private final long timestamp;
+    @Getter
     private final UUID streamId;
 
     public DeleteOperation(@NonNull List<ByteString> keys, long timestamp, @NonNull UUID streamId) {

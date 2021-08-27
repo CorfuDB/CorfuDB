@@ -7,6 +7,7 @@ import org.corfudb.runtime.collections.remotecorfutable.RemoteCorfuTableSMRMetho
 import org.rocksdb.RocksDBException;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * This interface defines the behavior of all SMR operations read from the log.
@@ -33,4 +34,10 @@ public interface SMROperation {
      * @return Enum representing type of SMR method.
      */
     RemoteCorfuTableSMRMethods getType();
+
+    /**
+     * Returns the stream ID associated with this operation.
+     * @return The stream ID associated with this operation.
+     */
+    UUID getStreamId();
 }

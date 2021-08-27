@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.remotecorfutable.loglistener.smr;
 
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.NonNull;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableDatabaseEntry;
 import org.corfudb.infrastructure.remotecorfutable.DatabaseHandler;
@@ -20,8 +21,8 @@ import java.util.UUID;
 @EqualsAndHashCode
 @AllArgsConstructor
 public class ClearOperation implements SMROperation {
-
     private final long timestamp;
+    @Getter
     @NonNull
     private final UUID streamId;
 
