@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.remotecorfutable.loglistener.smr;
 
 import com.google.protobuf.ByteString;
+import lombok.EqualsAndHashCode;
 import lombok.NonNull;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableDatabaseEntry;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
@@ -17,6 +18,7 @@ import java.util.UUID;
  *
  * Created by nvaishampayan517 on 08/19/21
  */
+@EqualsAndHashCode
 public class DeleteOperation implements SMROperation {
     private final List<ByteString> keys;
     private final long timestamp;
