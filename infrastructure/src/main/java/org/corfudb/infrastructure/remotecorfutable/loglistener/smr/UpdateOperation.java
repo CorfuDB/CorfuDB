@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.remotecorfutable.loglistener.smr;
 
 import com.google.protobuf.ByteString;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.NonNull;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableDatabaseEntry;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
@@ -21,6 +22,7 @@ import java.util.UUID;
 @EqualsAndHashCode
 public class UpdateOperation implements SMROperation {
     private final List<RemoteCorfuTableDatabaseEntry> entries;
+    @Getter
     private final UUID streamId;
 
     public UpdateOperation(@NonNull List<ByteString> args, long timestamp, @NonNull UUID streamId) {

@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.remotecorfutable.loglistener.smr;
 
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.NonNull;
 import org.apache.commons.collections.iterators.ReverseListIterator;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableDatabaseEntry;
@@ -26,6 +27,7 @@ import java.util.UUID;
 public class CompositeOperation implements SMROperation {
     @NonNull
     private final List<SMROperation> subOperations;
+    @Getter
     @NonNull
     private final UUID streamId;
 
