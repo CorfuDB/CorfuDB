@@ -25,7 +25,6 @@ import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
-import org.corfudb.infrastructure.log.StreamLogFiles.Checksum;
 import org.corfudb.infrastructure.log.LogFormat.Metadata;
 import org.corfudb.infrastructure.log.LogFormat.LogHeader;
 import org.corfudb.protocols.wireprotocol.DataType;

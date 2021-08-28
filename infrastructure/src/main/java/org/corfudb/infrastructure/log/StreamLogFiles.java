@@ -3,8 +3,7 @@ package org.corfudb.infrastructure.log;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
-import com.google.common.hash.Hasher;
-import com.google.common.hash.Hashing;
+
 import com.google.common.util.concurrent.AtomicDouble;
 import com.google.protobuf.AbstractMessage;
 import com.google.protobuf.ByteString;
@@ -46,7 +45,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.FileAlreadyExistsException;
-import java.nio.file.FileStore;
 import java.nio.file.FileSystems;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -150,10 +148,9 @@ public class StreamLogFiles implements StreamLog {
             throw new LogUnitException(msg);
         }
 
-        long fileSystemCapacity = initStreamLogDirectory();
+        initStreamLogDirectory();
+        long fileSystemCapacity = getFileSystemCapacity();
         logSizeLimit = (long) (fileSystemCapacity * logSizeLimitPercentage / 100.0);
-
-        String baseUnits = "bytes";
 
         logUnitSizeBytes = MicroMeterUtils.gauge(logUnitSizeMetricName, new AtomicDouble(0));
         logUnitSizeEntries = MicroMeterUtils.gauge(logUnitSizeMetricName, new AtomicLong(0L));
@@ -184,22 +181,16 @@ public class StreamLogFiles implements StreamLog {
 
     /**
      * Create stream log directory if not exists
-     *
-     * @return total capacity of the file system that owns the log files.
      */
-    private long initStreamLogDirectory() {
-        long fileSystemCapacity;
-
+    private void initStreamLogDirectory() {
         try {
             if (!logDir.toFile().exists()) {
                 Files.createDirectories(logDir);
             }
 
-            String corfuDir = logDir.getParent().toString();
-            FileStore corfuDirBackend = Files.getFileStore(Paths.get(corfuDir));
+            Path corfuDir = logDir.getParent();
 
-            File corfuDirFile = new File(corfuDir);
-            if (!corfuDirFile.canWrite()) {
+            if (!Files.isWritable(corfuDir)) {
                 throw new LogUnitException("Corfu directory is not writable " + corfuDir);
             }
 
@@ -207,14 +198,25 @@ public class StreamLogFiles implements StreamLog {
             if (!logDirectory.canWrite()) {
                 throw new LogUnitException("Stream log directory not writable in " + corfuDir);
             }
-
-            fileSystemCapacity = corfuDirBackend.getTotalSpace();
         } catch (IOException ioe) {
             throw new LogUnitException(ioe);
         }
 
         log.info("initStreamLogDirectory: initialized {}", logDir);
-        return fileSystemCapacity;
+    }
+
+    /**
+     * Get corfu log dir partition size
+     *
+     * @return total capacity of the file system that owns the log files.
+     */
+    private long getFileSystemCapacity() {
+        Path corfuDir = logDir.getParent();
+        try {
+            return Files.getFileStore(corfuDir).getTotalSpace();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed reading corfu log directory, path: " + corfuDir, e);
+        }
     }
 
     /**
@@ -1380,33 +1382,6 @@ public class StreamLogFiles implements StreamLog {
     @VisibleForTesting
     Collection<SegmentHandle> getOpenSegmentHandles() {
         return writeChannels.values();
-    }
-
-    public static class Checksum {
-
-        private Checksum() {
-            //prevent creating instances
-        }
-
-        /**
-         * Returns checksum used for log.
-         *
-         * @param bytes data over which to compute the checksum
-         * @return checksum of bytes
-         */
-        public static int getChecksum(byte[] bytes) {
-            Hasher hasher = Hashing.crc32c().newHasher();
-            for (byte a : bytes) {
-                hasher.putByte(a);
-            }
-
-            return hasher.hash().asInt();
-        }
-
-        public static int getChecksum(int num) {
-            Hasher hasher = Hashing.crc32c().newHasher();
-            return hasher.putInt(num).hash().asInt();
-        }
     }
 
     /**
