@@ -266,45 +266,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     }
 
     /**
-     * Fail delete operation if called on a non-existent key.
-     *
-     * @throws Exception
-     */
-    @Test
-    public void failDeleteOnNonExistentKey() throws Exception {
-        // Get a Corfu Runtime instance.
-        CorfuRuntime corfuRuntime = getDefaultRuntime();
-
-        // Creating Corfu Store using a connected corfu client.
-        CorfuStoreShim corfuStore = new CorfuStoreShim(corfuRuntime);
-
-        // Define a namespace for the table.
-        final String nsxManager = "nsx-manager";
-        // Define table name.
-        final String tableName = "EventInfo";
-
-        // Create & Register the table.
-        // This is required to initialize the table for the current corfu client.
-        Table<SampleSchema.Uuid, SampleSchema.EventInfo, ManagedResources> table = corfuStore.openTable(
-                nsxManager,
-                tableName,
-                SampleSchema.Uuid.class,
-                SampleSchema.EventInfo.class,
-                ManagedResources.class,
-                // TableOptions includes option to choose - Memory/Disk based corfu table.
-                TableOptions.builder().build());
-
-        UUID uuid1 = UUID.nameUUIDFromBytes("1".getBytes());
-        SampleSchema.Uuid key1 = SampleSchema.Uuid.newBuilder()
-                .setMsb(uuid1.getMostSignificantBits()).setLsb(uuid1.getLeastSignificantBits())
-                .build();
-        try (ManagedTxnContext txn = corfuStore.tx(nsxManager)) {
-            txn.delete(table, key1);
-            assertThatThrownBy(txn::commit).isExactlyInstanceOf(NoSuchElementException.class);
-        }
-    }
-
-    /**
      * Demonstrates that opening same table from multiple threads will retry internal transactions
      *
      * @throws Exception
