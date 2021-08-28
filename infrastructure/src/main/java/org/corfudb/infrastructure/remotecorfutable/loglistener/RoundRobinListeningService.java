@@ -14,7 +14,6 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @RequiredArgsConstructor
 public class RoundRobinListeningService implements RemoteCorfuTableListeningService {
@@ -22,6 +21,7 @@ public class RoundRobinListeningService implements RemoteCorfuTableListeningServ
     private final ConcurrentMap<UUID, ScheduledFuture<?>> trackingStreams = new ConcurrentHashMap<>();
     private final CorfuRuntime runtime;
     private final ConcurrentLinkedQueue<SMROperation> taskQueue = new ConcurrentLinkedQueue<>();
+    private final long listeningDelay;
 
     @Override
     public void addStream(UUID streamId) {
@@ -33,14 +33,14 @@ public class RoundRobinListeningService implements RemoteCorfuTableListeningServ
                     taskQueue.offer(SMROperationFactory.getSMROperation(data, streamId));
                 }
                 //TODO: configure delay from ServerContext
-            }, 0L,10L , TimeUnit.MILLISECONDS);
+            }, 0L,listeningDelay , TimeUnit.MILLISECONDS);
         });
     }
 
     @Override
     public void removeStream(UUID streamId) {
         ScheduledFuture<?> scheduledTasks = trackingStreams.remove(streamId);
-        scheduledTasks.cancel(true);
+        scheduledTasks.cancel(false);
     }
 
     @Override

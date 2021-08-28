@@ -29,8 +29,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -40,12 +40,11 @@ public class RoundRobinListeningTest extends AbstractViewTest {
     private RemoteCorfuTableListeningService logListener;
     private LogObserver observer;
     private final ISerializer serializer = Serializers.getDefaultSerializer();
-    private final Object lock = new Object();
+    private CountDownLatch lock;
 
     private class LogObserver {
         @Getter
         private final List<SMROperation> receivedUpdates = new LinkedList<>();
-        private Predicate<List<SMROperation>> notificationPred = list -> false;
 
         public void start() {
             CompletableFuture.runAsync(this::pollTask);
@@ -55,21 +54,9 @@ public class RoundRobinListeningTest extends AbstractViewTest {
             SMROperation op = logListener.getTask();
             if (op != null) {
                 receivedUpdates.add(op);
-                notifyIfPred();
+                lock.countDown();
             }
             CompletableFuture.runAsync(this::pollTask);
-        }
-
-        private void notifyIfPred() {
-            if (notificationPred.test(receivedUpdates)) {
-                synchronized (lock) {
-                    lock.notifyAll();
-                }
-            }
-        }
-
-        public void registerNotifyCond(Predicate<List<SMROperation>> pred) {
-            this.notificationPred = pred;
         }
     }
 
@@ -77,7 +64,7 @@ public class RoundRobinListeningTest extends AbstractViewTest {
     public void setupTable() throws RocksDBException {
         runtime = getDefaultRuntime();
         table = RemoteCorfuTable.RemoteCorfuTableFactory.openTable(runtime, "test1");
-        logListener = new RoundRobinListeningService(Executors.newScheduledThreadPool(4), runtime);
+        logListener = new RoundRobinListeningService(Executors.newScheduledThreadPool(4), runtime, 10);
         observer = new LogObserver();
         observer.start();
     }
@@ -88,21 +75,12 @@ public class RoundRobinListeningTest extends AbstractViewTest {
         logListener.shutdown();
     }
 
-    private void waitForAllUpdatesToPropogate(int desiredNumUpdates) throws InterruptedException {
-        final Predicate<List<SMROperation>> endPred = list -> list.size() >= desiredNumUpdates;
-        observer.registerNotifyCond(endPred);
-        synchronized (lock) {
-            while (!endPred.test(observer.getReceivedUpdates())) {
-                lock.wait();
-            }
-        }
-    }
-
     @Test
     public void listenBeforePut() throws InterruptedException {
+        lock = new CountDownLatch(1);
         logListener.addStream(table.getStreamId());
         table.insert("Key", "Value");
-        waitForAllUpdatesToPropogate(1);
+        lock.await();
         List<SMROperation> updatesSeen = observer.getReceivedUpdates();
         assertEquals(1, updatesSeen.size());
         SMROperation insertOp = updatesSeen.get(0);
@@ -122,9 +100,10 @@ public class RoundRobinListeningTest extends AbstractViewTest {
 
     @Test
     public void listenAfterPut() throws InterruptedException {
+        lock = new CountDownLatch(1);
         table.insert("Key", "Value");
         logListener.addStream(table.getStreamId());
-        waitForAllUpdatesToPropogate(1);
+        lock.await();
         List<SMROperation> updatesSeen = observer.getReceivedUpdates();
         assertEquals(1, updatesSeen.size());
         SMROperation insertOp = updatesSeen.get(0);
@@ -142,6 +121,7 @@ public class RoundRobinListeningTest extends AbstractViewTest {
 
     @Test
     public void testStrictOrderingOfSingleStreamUpdates() throws InterruptedException {
+        lock = new CountDownLatch(1000);
         //if we perform an updateAll, all entries go into a single update
         //desired test is to test sequence of update entries, so we use multiple insert calls
         logListener.addStream(table.getStreamId());
@@ -154,7 +134,7 @@ public class RoundRobinListeningTest extends AbstractViewTest {
             pairs.put(key, val);
             table.insert(key, val);
         }
-        waitForAllUpdatesToPropogate(1000);
+        lock.await();
         List<SMROperation> updatesSeen = observer.getReceivedUpdates();
         assertEquals(keys.size(), updatesSeen.size());
         for (int i = 0; i < 1000; i++) {
@@ -174,6 +154,7 @@ public class RoundRobinListeningTest extends AbstractViewTest {
 
     @Test
     public void testOrderingOfStreamsInMultiStreamEnv() throws InterruptedException {
+        lock = new CountDownLatch(10000);
         List<RemoteCorfuTable<String, String>> tables = new ArrayList<>(100);
         List<List<String>> tableKeys = new ArrayList<>(100);
         List<Map<String, String>> tablePairs = new ArrayList<>(100);
@@ -193,7 +174,7 @@ public class RoundRobinListeningTest extends AbstractViewTest {
                 tables.get(i).insert(key, val);
             }
         }
-        waitForAllUpdatesToPropogate(10000);
+        lock.await();
         List<SMROperation> updatesSeen = observer.getReceivedUpdates();
         Map<UUID, List<SMROperation>> groupedSMRops = updatesSeen.stream()
                 .collect(Collectors.groupingBy(SMROperation::getStreamId));
