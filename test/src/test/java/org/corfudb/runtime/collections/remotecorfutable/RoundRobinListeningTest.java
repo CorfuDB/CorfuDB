@@ -15,6 +15,7 @@ import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.After;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import org.junit.Before;
@@ -26,12 +27,10 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Observable;
-import java.util.Observer;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -41,32 +40,23 @@ public class RoundRobinListeningTest extends AbstractViewTest {
     private RemoteCorfuTableListeningService logListener;
     private LogObserver observer;
     private final ISerializer serializer = Serializers.getDefaultSerializer();
-    private final Object lock = new Object();
+    private CountDownLatch lock;
 
-    private class LogObserver implements Observer {
+    private class LogObserver {
         @Getter
-        private final ConcurrentLinkedQueue<SMROperation> receivedUpdates = new ConcurrentLinkedQueue<>();
-        private Predicate<ConcurrentLinkedQueue<SMROperation>> notificationPred = list -> false;
+        private final List<SMROperation> receivedUpdates = new LinkedList<>();
 
-        @Override
-        public void update(Observable o, Object arg) {
-            assertTrue(o instanceof RoundRobinListeningService);
-            assertTrue(arg instanceof SMROperation);
-            receivedUpdates.add((SMROperation) arg);
-            //System.out.println(receivedUpdates.size());
-            notifyIfPred();
+        public void start() {
+            CompletableFuture.runAsync(this::pollTask);
         }
 
-        private void notifyIfPred() {
-            if (notificationPred.test(receivedUpdates)) {
-                synchronized (lock) {
-                    lock.notifyAll();
-                }
+        private void pollTask() {
+            SMROperation op = logListener.getTask();
+            if (op != null) {
+                receivedUpdates.add(op);
+                lock.countDown();
             }
-        }
-
-        public void registerNotifyCond(Predicate<ConcurrentLinkedQueue<SMROperation>> pred) {
-            this.notificationPred = pred;
+            CompletableFuture.runAsync(this::pollTask);
         }
     }
 
@@ -74,9 +64,9 @@ public class RoundRobinListeningTest extends AbstractViewTest {
     public void setupTable() throws RocksDBException {
         runtime = getDefaultRuntime();
         table = RemoteCorfuTable.RemoteCorfuTableFactory.openTable(runtime, "test1");
-        logListener = new RoundRobinListeningService(Executors.newFixedThreadPool(4), runtime);
+        logListener = new RoundRobinListeningService(Executors.newScheduledThreadPool(4), runtime, 10);
         observer = new LogObserver();
-        logListener.addObserver(observer);
+        observer.start();
     }
 
     @After
@@ -85,24 +75,15 @@ public class RoundRobinListeningTest extends AbstractViewTest {
         logListener.shutdown();
     }
 
-    private void waitForAllUpdatesToPropogate(int desiredNumUpdates) throws InterruptedException {
-        final Predicate<ConcurrentLinkedQueue<SMROperation>> endPred = list -> list.size() >= desiredNumUpdates;
-        observer.registerNotifyCond(endPred);
-        synchronized (lock) {
-            while (!endPred.test(observer.getReceivedUpdates())) {
-                lock.wait();
-            }
-        }
-    }
-
     @Test
     public void listenBeforePut() throws InterruptedException {
+        lock = new CountDownLatch(1);
         logListener.addStream(table.getStreamId());
         table.insert("Key", "Value");
-        waitForAllUpdatesToPropogate(1);
-        ConcurrentLinkedQueue<SMROperation> updatesSeen = observer.getReceivedUpdates();
+        lock.await();
+        List<SMROperation> updatesSeen = observer.getReceivedUpdates();
         assertEquals(1, updatesSeen.size());
-        SMROperation insertOp = updatesSeen.poll();
+        SMROperation insertOp = updatesSeen.get(0);
         assertEquals(RemoteCorfuTableSMRMethods.UPDATE, insertOp.getType());
         List<RemoteCorfuTableDatabaseEntry> dbEntries = insertOp.getEntryBatch();
         assertEquals(1, dbEntries.size());
@@ -119,12 +100,13 @@ public class RoundRobinListeningTest extends AbstractViewTest {
 
     @Test
     public void listenAfterPut() throws InterruptedException {
+        lock = new CountDownLatch(1);
         table.insert("Key", "Value");
         logListener.addStream(table.getStreamId());
-        waitForAllUpdatesToPropogate(1);
-        ConcurrentLinkedQueue<SMROperation> updatesSeen = observer.getReceivedUpdates();
+        lock.await();
+        List<SMROperation> updatesSeen = observer.getReceivedUpdates();
         assertEquals(1, updatesSeen.size());
-        SMROperation insertOp = updatesSeen.poll();
+        SMROperation insertOp = updatesSeen.get(0);
         assertEquals(RemoteCorfuTableSMRMethods.UPDATE, insertOp.getType());
         List<RemoteCorfuTableDatabaseEntry> dbEntries = insertOp.getEntryBatch();
         assertEquals(1, dbEntries.size());
@@ -139,6 +121,7 @@ public class RoundRobinListeningTest extends AbstractViewTest {
 
     @Test
     public void testStrictOrderingOfSingleStreamUpdates() throws InterruptedException {
+        lock = new CountDownLatch(1000);
         //if we perform an updateAll, all entries go into a single update
         //desired test is to test sequence of update entries, so we use multiple insert calls
         logListener.addStream(table.getStreamId());
@@ -151,11 +134,11 @@ public class RoundRobinListeningTest extends AbstractViewTest {
             pairs.put(key, val);
             table.insert(key, val);
         }
-        waitForAllUpdatesToPropogate(1000);
-        ConcurrentLinkedQueue<SMROperation> updatesSeen = observer.getReceivedUpdates();
+        lock.await();
+        List<SMROperation> updatesSeen = observer.getReceivedUpdates();
         assertEquals(keys.size(), updatesSeen.size());
         for (int i = 0; i < 1000; i++) {
-            SMROperation insertOp = updatesSeen.poll();
+            SMROperation insertOp = updatesSeen.get(i);
             assertEquals(RemoteCorfuTableSMRMethods.UPDATE, insertOp.getType());
             List<RemoteCorfuTableDatabaseEntry> dbEntries = insertOp.getEntryBatch();
             assertEquals(1, dbEntries.size());
@@ -171,6 +154,7 @@ public class RoundRobinListeningTest extends AbstractViewTest {
 
     @Test
     public void testOrderingOfStreamsInMultiStreamEnv() throws InterruptedException {
+        lock = new CountDownLatch(10000);
         List<RemoteCorfuTable<String, String>> tables = new ArrayList<>(100);
         List<List<String>> tableKeys = new ArrayList<>(100);
         List<Map<String, String>> tablePairs = new ArrayList<>(100);
@@ -183,42 +167,17 @@ public class RoundRobinListeningTest extends AbstractViewTest {
 
         for (int j = 0; j < 100; j++) {
             for (int i = 0; i < 100; i++) {
-                String key = "Table" + i + "Key";
+                String key = "Table" + i + "Key" + j;
                 String val = "Table" + i + "Val" + j;
                 tableKeys.get(i).add(key);
                 tablePairs.get(i).put(key, val);
                 tables.get(i).insert(key, val);
             }
         }
-        //waitForAllUpdatesToPropogate(10000);
-        Thread.sleep(5000);
-        ConcurrentLinkedQueue<SMROperation> updatesSeen = observer.getReceivedUpdates();
+        lock.await();
+        List<SMROperation> updatesSeen = observer.getReceivedUpdates();
         Map<UUID, List<SMROperation>> groupedSMRops = updatesSeen.stream()
                 .collect(Collectors.groupingBy(SMROperation::getStreamId));
-        for (List<SMROperation> tableGrouped: groupedSMRops.values()) {
-            if (tableGrouped.size() < 100) {
-                List<String> values = tableGrouped.stream()
-                        .map(SMROperation::getEntryBatch)
-                        .map(entry -> entry.get(0))
-                        .map(RemoteCorfuTableDatabaseEntry::getValue)
-                        .map(this::deserializeObject)
-                        .map(str -> (String) str)
-                        .collect(Collectors.toList());
-                int label = 0;
-                int pos = 0;
-                while (pos < values.size()) {
-                    if (!values.get(pos).endsWith("Val" + label)) {
-                        System.out.println("Missing label " + label);
-                        pos--;
-                    }
-                    label++;
-                    pos++;
-                }
-                if (label != 100) {
-                    System.out.println("Missing all labels " + label + " and above");
-                }
-            }
-        }
         for (int i = 0; i < 100; i++) {
             List<SMROperation> tableOps = groupedSMRops.get(tables.get(i).getStreamId());
             assertNotNull(tableOps);
@@ -237,6 +196,18 @@ public class RoundRobinListeningTest extends AbstractViewTest {
                 assertEquals(tablePairs.get(i).get(tableKeys.get(i).get(j)), deserializedVal);
             }
         }
+    }
+
+    @Test
+    public void testRemoveStream() throws InterruptedException {
+        logListener.addStream(table.getStreamId());
+        for (int i = 0; i < 10000; i++) {
+            table.insert("Key" + i, "Val" + i);
+        }
+        logListener.removeStream(table.getStreamId());
+        Thread.sleep(10000);
+        List<SMROperation> ops = observer.getReceivedUpdates();
+        assertNotEquals(10000, ops.size());
     }
 
     //taken from RemoteCorfuTableAdapater
