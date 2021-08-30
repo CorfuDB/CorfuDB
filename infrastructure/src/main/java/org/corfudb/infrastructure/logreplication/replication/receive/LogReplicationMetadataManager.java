@@ -444,7 +444,7 @@ public class LogReplicationMetadataManager {
 
             CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, Message> record = txn.getRecord(replicationStatusTable, key);
 
-            if (record != null) {
+            if (record.getPayload() != null) {
                 ReplicationStatusVal previous = record.getPayload();
                 SnapshotSyncInfo previousSyncInfo = previous.getSnapshotSyncInfo();
 
@@ -637,7 +637,7 @@ public class LogReplicationMetadataManager {
         }
 
         // Initially, snapshot sync is pending so the data is not consistent.
-        if (record == null) {
+        if (record.getPayload() == null) {
             log.warn("No Key for Data Consistent found.  DataConsistent Status is not set.");
             statusVal = ReplicationStatusVal.newBuilder().setDataConsistent(false).build();
         } else {
