@@ -59,6 +59,14 @@ public class CheckpointWriter<T extends StreamingMap> {
     private double batchThresholdPercentage = 0.95;
     private static final int DEFAULT_CP_MAX_WRITE_SIZE = 25 * (1 << 20);
 
+    private static final double MEMORY_USAGE_WARNING_THRESHOLD = 0.95;
+
+    /** Batch size: number of SMREntry in a single CONTINUATION.
+     */
+    @Getter
+    @Setter
+    private int batchSize = 50;
+
     @SuppressWarnings("checkstyle:abbreviation")
     private final UUID checkpointStreamID;
     private final Map<CheckpointEntry.CheckpointDictKey, String> mdkv = new HashMap<>();
@@ -100,6 +108,8 @@ public class CheckpointWriter<T extends StreamingMap> {
     @Setter
     ISerializer serializer = Serializers.getDefaultSerializer();
 
+    private final Runtime javaRuntime = Runtime.getRuntime();
+
     /** Constructor for Checkpoint Writer for Corfu Maps.
      * @param rt object's runtime
      * @param streamId unique identifier of stream to checkpoint
@@ -114,6 +124,7 @@ public class CheckpointWriter<T extends StreamingMap> {
         checkpointId = UUID.randomUUID();
         checkpointStreamID = CorfuRuntime.getCheckpointStreamIdFromId(streamId);
         sv = rt.getStreamsView();
+        batchSize = rt.getParameters().getCheckpointBatchSize();
     }
 
     /**
@@ -288,7 +299,7 @@ public class CheckpointWriter<T extends StreamingMap> {
              * of SMR entries. Its a safeguard against the smr entries amounting to the actual
              * boundary limit.
              */
-            if (numBytesPerCheckpointEntry > maxWriteSizeLimit) {
+            if (numBytesPerCheckpointEntry > maxWriteSizeLimit || smrEntries.getUpdates().size() >= batchSize) {
                 convertAndAppendCheckpointEntry(smrEntries, kvCopy);
                 log.trace("Batched size of checkpoint log entry consists {} smr entries",
                         smrEntries.getUpdates().size());
@@ -301,6 +312,13 @@ public class CheckpointWriter<T extends StreamingMap> {
             // maintain current batch size only for test purposes.
             totalEntryCount++;
             inputBuffer.clear();
+
+            // Remove this warning in production. It's only for the purpose of experiments
+            // Calculation of usedMemPercentage is based on https://stackoverflow.com/questions/12807797/java-get-available-memory
+            double usedMemPercentage = ((double) javaRuntime.totalMemory() - javaRuntime.freeMemory()) / javaRuntime.maxMemory();
+            if (usedMemPercentage >= MEMORY_USAGE_WARNING_THRESHOLD) {
+                log.warn("Checkpointer detected high memory usage {}!", usedMemPercentage);
+            }
         }
 
         // the entries which are left behind for a final flush.
