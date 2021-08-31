@@ -19,7 +19,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -164,7 +163,8 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     @Nullable
     CorfuRecord<V, M> deleteRecord(@Nonnull final K key) {
         if (!corfuTable.containsKey(key)) {
-            throw new NoSuchElementException("deleteRecord failed as key "+key.toString()+" does not exist");
+            log.warn("Deleting a non-existent key {}", key);
+            return null;
         }
         return corfuTable.remove(key);
     }

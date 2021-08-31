@@ -211,6 +211,7 @@ public class StreamingIT extends AbstractIT {
      * 1. Streaming subscriptions with different timestamps get the right set of updates.
      * 2. The operation type, key, payload and metadata values are as expected.
      * 3. A listener does not get stream updates after it has been unsubscribed.
+     * 3. Delete operations are indeed idempotent.
      */
     @Test
     public void testStreamingSingleTable() throws Exception {
@@ -275,11 +276,17 @@ public class StreamingIT extends AbstractIT {
 
         TxnContext tx = store.txn("test_namespace");
         Uuid uuid0 = Uuid.newBuilder().setMsb(0).setLsb(0).build();
-        tx.delete(tableA, uuid0).commit();
+        tx.delete(tableA, uuid0);
+        tx.delete(tableA, uuid0);
+        tx.commit();
 
+        // Now repeat the delete operation to check for idempotency
+        tx = store.txn("test_namespace");
+        tx.delete(tableA, uuid0);
+        tx.commit();
         TimeUnit.MILLISECONDS.sleep(sleepTime);
 
-        // Both the listener should see the deletion.
+        // Both the listeners should see ONLY 1 delete operation.
         updates = listener1.getUpdates();
         CorfuStreamEntries update = updates.getLast();
         assertThat(update.getEntries()).hasSize(1);
