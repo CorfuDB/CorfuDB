@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections.remotecorfutable;
 
 import com.google.protobuf.ByteString;
+import groovy.lang.Singleton;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.Getter;
@@ -11,6 +12,7 @@ import org.corfudb.infrastructure.remotecorfutable.loglistener.RoundRobinListeni
 import org.corfudb.infrastructure.remotecorfutable.loglistener.smr.SMROperation;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.util.concurrent.SingletonResource;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.After;
@@ -35,7 +37,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 public class RoundRobinListeningTest extends AbstractViewTest {
-    private CorfuRuntime runtime;
+    private SingletonResource<CorfuRuntime> singletonRuntime;
     private RemoteCorfuTable<String, String> table;
     private RemoteCorfuTableListeningService logListener;
     private LogObserver observer;
@@ -62,9 +64,9 @@ public class RoundRobinListeningTest extends AbstractViewTest {
 
     @Before
     public void setupTable() throws RocksDBException {
-        runtime = getDefaultRuntime();
-        table = RemoteCorfuTable.RemoteCorfuTableFactory.openTable(runtime, "test1");
-        logListener = new RoundRobinListeningService(Executors.newScheduledThreadPool(4), runtime, 10);
+        singletonRuntime = SingletonResource.withInitial(this::getDefaultRuntime);
+        table = RemoteCorfuTable.RemoteCorfuTableFactory.openTable(singletonRuntime.get(), "test1");
+        logListener = new RoundRobinListeningService(Executors.newScheduledThreadPool(4), singletonRuntime, 10);
         observer = new LogObserver();
         observer.start();
     }
@@ -73,6 +75,7 @@ public class RoundRobinListeningTest extends AbstractViewTest {
     public void shutdownTable() throws Exception {
         table.close();
         logListener.shutdown();
+        singletonRuntime.cleanup(CorfuRuntime::shutdown);
     }
 
     @Test
@@ -159,7 +162,7 @@ public class RoundRobinListeningTest extends AbstractViewTest {
         List<List<String>> tableKeys = new ArrayList<>(100);
         List<Map<String, String>> tablePairs = new ArrayList<>(100);
         for (int i = 0; i < 100; i++) {
-            tables.add(RemoteCorfuTable.RemoteCorfuTableFactory.openTable(runtime, "table" + i));
+            tables.add(RemoteCorfuTable.RemoteCorfuTableFactory.openTable(singletonRuntime.get(), "table" + i));
             logListener.addStream(tables.get(i).getStreamId());
             tableKeys.add(new ArrayList<>(100));
             tablePairs.add(new HashMap<>(100));
@@ -218,7 +221,7 @@ public class RoundRobinListeningTest extends AbstractViewTest {
         byte[] deserializationWrapped = new byte[serializedObject.size()];
         serializedObject.copyTo(deserializationWrapped, 0);
         ByteBuf deserializationBuffer = Unpooled.wrappedBuffer(deserializationWrapped);
-        return serializer.deserialize(deserializationBuffer, runtime);
+        return serializer.deserialize(deserializationBuffer, singletonRuntime.get());
     }
 
 }

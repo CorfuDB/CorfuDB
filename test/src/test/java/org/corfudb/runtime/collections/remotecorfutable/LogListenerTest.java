@@ -11,6 +11,7 @@ import org.corfudb.infrastructure.remotecorfutable.loglistener.RemoteCorfuTableL
 import org.corfudb.infrastructure.remotecorfutable.loglistener.RoundRobinListeningService;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.util.concurrent.SingletonResource;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.After;
@@ -41,7 +42,7 @@ public class LogListenerTest extends AbstractViewTest {
     @Rule
     public MockitoRule mockito = MockitoJUnit.rule();
 
-    private CorfuRuntime runtime;
+    private SingletonResource<CorfuRuntime> runtime;
     private RemoteCorfuTable<String, String> table;
     private RemoteCorfuTableListeningService listeningService;
     private LogListener logListener;
@@ -54,8 +55,8 @@ public class LogListenerTest extends AbstractViewTest {
 
     @Before
     public void setupTable() throws RocksDBException {
-        runtime = getDefaultRuntime();
-        table = RemoteCorfuTable.RemoteCorfuTableFactory.openTable(runtime, "test1");
+        runtime = SingletonResource.withInitial(this::getDefaultRuntime);
+        table = RemoteCorfuTable.RemoteCorfuTableFactory.openTable(runtime.get(), "test1");
         listeningService = new RoundRobinListeningService(Executors.newScheduledThreadPool(4),
                 runtime, 10);
         mHandler = mock(DatabaseHandler.class);
@@ -100,6 +101,7 @@ public class LogListenerTest extends AbstractViewTest {
     public void shutdown() throws Exception {
         table.close();
         logListener.close();
+        runtime.cleanup(CorfuRuntime::shutdown);
     }
 
     //taken from RemoteCorfuTableAdapater
@@ -110,7 +112,7 @@ public class LogListenerTest extends AbstractViewTest {
         byte[] deserializationWrapped = new byte[serializedObject.size()];
         serializedObject.copyTo(deserializationWrapped, 0);
         ByteBuf deserializationBuffer = Unpooled.wrappedBuffer(deserializationWrapped);
-        return serializer.deserialize(deserializationBuffer, runtime);
+        return serializer.deserialize(deserializationBuffer, runtime.get());
     }
 
     @Test
@@ -147,7 +149,7 @@ public class LogListenerTest extends AbstractViewTest {
         Map<String, String> expectedMap = new HashMap<>();
         List<RemoteCorfuTable<String, String>> tableList = new ArrayList<>(4);
         for (int i = 0; i < 4; i++) {
-            tableList.add(RemoteCorfuTable.RemoteCorfuTableFactory.openTable(runtime, "test" + i));
+            tableList.add(RemoteCorfuTable.RemoteCorfuTableFactory.openTable(runtime.get(), "test" + i));
         }
         for (int j = 0; j < 2500; j++) {
             for (int i = 0; i < 4; i++) {
