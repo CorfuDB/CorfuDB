@@ -6,6 +6,7 @@ import org.corfudb.infrastructure.remotecorfutable.loglistener.smr.SMROperationF
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.concurrent.SingletonResource;
 
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -19,14 +20,14 @@ import java.util.concurrent.TimeUnit;
 public class RoundRobinListeningService implements RemoteCorfuTableListeningService {
     private final ScheduledExecutorService executor;
     private final ConcurrentMap<UUID, ScheduledFuture<?>> trackingStreams = new ConcurrentHashMap<>();
-    private final CorfuRuntime runtime;
+    private final SingletonResource<CorfuRuntime> singletonRuntime;
     private final ConcurrentLinkedQueue<SMROperation> taskQueue = new ConcurrentLinkedQueue<>();
     private final long listeningDelay;
 
     @Override
     public void addStream(UUID streamId) {
         trackingStreams.computeIfAbsent(streamId, id -> {
-            IStreamView stream = runtime.getStreamsView().get(id);
+            IStreamView stream = singletonRuntime.get().getStreamsView().get(id);
             return executor.scheduleWithFixedDelay(() -> {
                 LogData data = (LogData) stream.next();
                 if (data != null) {
