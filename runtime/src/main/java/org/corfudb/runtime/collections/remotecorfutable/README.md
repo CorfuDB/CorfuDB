@@ -1,12 +1,13 @@
 #Remote Corfu Table Action Items
 
 ##Remaining Tasks
-1. Global RCT Registry to track streams 
-2. Log Listener Stream Scheduler
-3. Non-Optimistic Request Routing 
-4. Request Failure Handling on Client
-5. RCT Param configuration on server 
-6. Create Transcation Support without VLO 
+1. Wait for access until the listener has read up to the 
+   appropriate position in the stream
+1. Non-Optimistic Request Routing 
+1. Request Failure Handling on Client
+1. RCT Param configuration on server 
+1. Garbage Collection for RCT
+1. Create Transcation Support without VLO 
 
 ##Known Issues
 1. Internal JNI exception in rocksIterator seek

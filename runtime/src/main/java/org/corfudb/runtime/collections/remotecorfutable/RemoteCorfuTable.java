@@ -478,11 +478,19 @@ public class RemoteCorfuTable<K,V> implements ICorfuTable<K,V>, AutoCloseable {
             RemoteCorfuTableAdapter<I,J> adapter = new RemoteCorfuTableAdapter<>(tableName, streamID, runtime,
                     serializer, streamView);
             UUID checkpointStreamId = getCheckpointStreamIdFromId(streamID);
-            CorfuTable<UUID, UUID> globalRCTRegistry = runtime.getObjectsView().build()
+
+
+
+
+            try (CorfuTable<UUID, UUID> globalRCTRegistry = runtime.getObjectsView().build()
                     .setTypeToken(new TypeToken<CorfuTable<UUID, UUID>>() {})
                     .setStreamName("remotecorfutable.globalrctregistry")
-                    .open();
-            globalRCTRegistry.putIfAbsent(streamID, checkpointStreamId);
+                    .open()) {
+                globalRCTRegistry.putIfAbsent(streamID, checkpointStreamId);
+            }
+
+
+
             return new RemoteCorfuTable<>(adapter, tableName, streamID);
         }
     }
