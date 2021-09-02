@@ -6,11 +6,10 @@ option java_package = "org.corfudb.runtime.proto.service";
 import "rpc_common.proto";
 /**
  * Protobuf definitions for the Remote Corfu Table server RPCs. These
- * include request and response payloads for: GET, SCAN, CONTAINS_KEY, CONTAINS_VALUE, and SIZE.
+ * include request and response payloads for: GET, MULTIGET, SCAN, CONTAINS_KEY, CONTAINS_VALUE, and SIZE.
  */
 message RemoteCorfuTableGetRequestMsg {
- UuidMsg streamID = 1;
- bytes versionedKey = 2;
+ bytes versionedKey = 1;
 }
 
 message RemoteCorfuTableGetResponseMsg {
@@ -18,8 +17,7 @@ message RemoteCorfuTableGetResponseMsg {
 }
 
 message RemoteCorfuTableMultiGetRequestMsg {
-  UuidMsg streamID = 1;
-  repeated bytes versionedKeys = 2;
+  repeated bytes versionedKeys = 1;
 }
 
 message RemoteCorfuTableEntriesResponseMsg {
@@ -27,15 +25,12 @@ message RemoteCorfuTableEntriesResponseMsg {
 }
 
 message RemoteCorfuTableScanRequestMsg {
-  UuidMsg streamID = 1;
-  uint32 numEntriesToScan = 2;
-  uint64 timestamp = 3;
-  bytes versionedStartKey = 4;
+  uint32 numEntriesToScan = 1;
+  bytes versionedStartKey = 2;
 }
 
 message RemoteCorfuTableContainsKeyRequestMsg {
-  UuidMsg streamID = 1;
-  bytes versionedKey = 2;
+  bytes versionedKey = 1;
 }
 
 message RemoteCorfuTableContainsResponseMsg {
@@ -44,15 +39,11 @@ message RemoteCorfuTableContainsResponseMsg {
 
 message RemoteCorfuTableContainsValueRequestMsg {
   bytes payloadValue = 1;
-  UuidMsg streamID = 2;
-  uint64 timestamp = 3;
-  uint32 internalScanSize = 4;
+  uint32 internalScanSize = 2;
 }
 
 message RemoteCorfuTableSizeRequestMsg {
-  UuidMsg streamID = 1;
-  uint64 timestamp = 2;
-  uint32 internalScanSize = 3;
+  uint32 internalScanSize = 1;
 }
 
 message RemoteCorfuTableSizeResponseMsg {
@@ -66,13 +57,15 @@ message RemoteCorfuTableEntryMsg {
 
 //message container holding all remote corfu table requests
 message RemoteCorfuTableRequestMsg {
+  UuidMsg streamId = 1;
+  uint64 timestamp = 2;
   oneof payload {
-    RemoteCorfuTableGetRequestMsg get = 1;
-    RemoteCorfuTableScanRequestMsg scan = 2;
-    RemoteCorfuTableContainsKeyRequestMsg contains_key = 3;
-    RemoteCorfuTableContainsValueRequestMsg contains_value = 4;
-    RemoteCorfuTableSizeRequestMsg size = 5;
-    RemoteCorfuTableMultiGetRequestMsg multiget = 6;
+    RemoteCorfuTableGetRequestMsg get = 3;
+    RemoteCorfuTableScanRequestMsg scan = 4;
+    RemoteCorfuTableContainsKeyRequestMsg contains_key = 5;
+    RemoteCorfuTableContainsValueRequestMsg contains_value = 6;
+    RemoteCorfuTableSizeRequestMsg size = 7;
+    RemoteCorfuTableMultiGetRequestMsg multiget = 8;
   }
 }
 

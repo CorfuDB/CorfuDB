@@ -70,10 +70,10 @@ public class RemoteCorfuTableRequestHandler {
     }
 
     private void handleSize(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
-        RemoteCorfuTableSizeRequestMsg sizeRequestMsg = req.getPayload().getRemoteCorfuTableRequest().getSize();
-        UUID streamID = getUUID(sizeRequestMsg.getStreamID());
-        long timestamp = sizeRequestMsg.getTimestamp();
-        int scanSize = sizeRequestMsg.getInternalScanSize();
+        RemoteCorfuTableRequestMsg rctRequestMsg = req.getPayload().getRemoteCorfuTableRequest();
+        UUID streamID = getUUID(rctRequestMsg.getStreamId());
+        long timestamp = rctRequestMsg.getTimestamp();
+        int scanSize = rctRequestMsg.getSize().getInternalScanSize();
         databaseHandler.sizeAsync(streamID, timestamp, scanSize).thenAccept(resultSize -> {
             ResponseMsg response = getResponseMsg(getHeaderMsg(req.getHeader()), getSizeResponseMsg(resultSize));
             r.sendResponse(response, ctx);
@@ -84,11 +84,11 @@ public class RemoteCorfuTableRequestHandler {
     }
 
     private void handleContainsValue(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
-        RemoteCorfuTableContainsValueRequestMsg containsValueRequestMsg = req.getPayload().getRemoteCorfuTableRequest().getContainsValue();
-        ByteString payloadValue = containsValueRequestMsg.getPayloadValue();
-        UUID streamID = getUUID(containsValueRequestMsg.getStreamID());
-        long timestamp = containsValueRequestMsg.getTimestamp();
-        int scanSize = containsValueRequestMsg.getInternalScanSize();
+        RemoteCorfuTableRequestMsg rctRequestMsg = req.getPayload().getRemoteCorfuTableRequest();
+        ByteString payloadValue = rctRequestMsg.getContainsValue().getPayloadValue();
+        UUID streamID = getUUID(rctRequestMsg.getStreamId());
+        long timestamp = rctRequestMsg.getTimestamp();
+        int scanSize = rctRequestMsg.getContainsValue().getInternalScanSize();
         databaseHandler.containsValueAsync(payloadValue, streamID, timestamp, scanSize).thenAccept(contained -> {
             ResponseMsg response = getResponseMsg(getHeaderMsg(req.getHeader()), getContainsResponseMsg(contained));
             r.sendResponse(response, ctx);
@@ -99,10 +99,10 @@ public class RemoteCorfuTableRequestHandler {
     }
 
     private void handleContainsKey(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
-        RemoteCorfuTableContainsKeyRequestMsg containsKeyRequestMsg = req.getPayload().getRemoteCorfuTableRequest().getContainsKey();
-        UUID streamID = getUUID(containsKeyRequestMsg.getStreamID());
+        RemoteCorfuTableRequestMsg rctRequestMsg = req.getPayload().getRemoteCorfuTableRequest();
+        UUID streamID = getUUID(rctRequestMsg.getStreamId());
         RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(
-                containsKeyRequestMsg.getVersionedKey());
+                rctRequestMsg.getContainsKey().getVersionedKey());
         databaseHandler.containsKeyAsync(key, streamID).thenAccept(contained -> {
             ResponseMsg response = getResponseMsg(getHeaderMsg(req.getHeader()), getContainsResponseMsg(contained));
             r.sendResponse(response, ctx);
@@ -113,11 +113,11 @@ public class RemoteCorfuTableRequestHandler {
     }
 
     private void handleScan(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
-        RemoteCorfuTableScanRequestMsg scanRequestMsg = req.getPayload().getRemoteCorfuTableRequest().getScan();
-        UUID streamID = getUUID(scanRequestMsg.getStreamID());
-        int numEntries = scanRequestMsg.getNumEntriesToScan();
-        ByteString startKeyString = scanRequestMsg.getVersionedStartKey();
-        long timestamp = scanRequestMsg.getTimestamp();
+        RemoteCorfuTableRequestMsg rctRequestMsg = req.getPayload().getRemoteCorfuTableRequest();
+        UUID streamID = getUUID(rctRequestMsg.getStreamId());
+        int numEntries = rctRequestMsg.getScan().getNumEntriesToScan();
+        ByteString startKeyString = rctRequestMsg.getScan().getVersionedStartKey();
+        long timestamp = rctRequestMsg.getTimestamp();
         CompletableFuture<List<RemoteCorfuTableDatabaseEntry>> scanFuture;
         if (startKeyString.isEmpty()) {
             if (numEntries == 0) {
@@ -144,10 +144,10 @@ public class RemoteCorfuTableRequestHandler {
     }
 
     private void handleGet(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
-        RemoteCorfuTableGetRequestMsg getRequestMsg = req.getPayload().getRemoteCorfuTableRequest().getGet();
-        UUID streamID = getUUID(getRequestMsg.getStreamID());
+        RemoteCorfuTableRequestMsg rctRequestMsg = req.getPayload().getRemoteCorfuTableRequest();
+        UUID streamID = getUUID(rctRequestMsg.getStreamId());
         RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(
-                getRequestMsg.getVersionedKey());
+                rctRequestMsg.getGet().getVersionedKey());
         databaseHandler.getAsync(key, streamID).thenAccept(payloadValue -> {
             ResponseMsg responseMsg = getResponseMsg(getHeaderMsg(req.getHeader()), getGetResponseMsg(payloadValue));
             r.sendResponse(responseMsg, ctx);
@@ -158,10 +158,10 @@ public class RemoteCorfuTableRequestHandler {
     }
 
     private void handleMultiGet(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
-        RemoteCorfuTableMultiGetRequestMsg multiGetRequestMsg = req.getPayload().getRemoteCorfuTableRequest().getMultiget();
-        List<RemoteCorfuTableVersionedKey> keys = multiGetRequestMsg.getVersionedKeysList()
+        RemoteCorfuTableRequestMsg rctRequestMsg = req.getPayload().getRemoteCorfuTableRequest();
+        List<RemoteCorfuTableVersionedKey> keys = rctRequestMsg.getMultiget().getVersionedKeysList()
                 .stream().map(RemoteCorfuTableVersionedKey::new).collect(Collectors.toList());
-        UUID streamId = getUUID(multiGetRequestMsg.getStreamID());
+        UUID streamId = getUUID(rctRequestMsg.getStreamId());
         databaseHandler.multiGetAsync(keys, streamId).thenAccept(payloadEntries -> {
             ResponseMsg responseMsg = getResponseMsg(getHeaderMsg(req.getHeader()), getEntriesResponseMsg(payloadEntries));
             r.sendResponse(responseMsg, ctx);
