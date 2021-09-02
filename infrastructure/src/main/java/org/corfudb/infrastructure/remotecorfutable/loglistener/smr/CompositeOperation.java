@@ -37,7 +37,7 @@ public class CompositeOperation implements SMROperation {
     public CompositeOperation(@NonNull List<SMROperation> subOperations, @NonNull UUID streamId, long timestamp) {
         if (subOperations.isEmpty()) {
             throw new IllegalArgumentException("Cannot have composite operation with no suboperations");
-        } else if (!subOperations.stream().map(SMROperation::getTimestamp).allMatch(subOperations.get(0)::equals)) {
+        } else if (subOperations.stream().map(SMROperation::getTimestamp).distinct().count() > 1) {
             throw new IllegalArgumentException("Cannot create composite operation with suboperations of different timestamps");
         }
         this.subOperations = subOperations;
