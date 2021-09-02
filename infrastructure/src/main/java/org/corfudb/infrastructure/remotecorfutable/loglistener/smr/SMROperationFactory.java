@@ -59,7 +59,7 @@ public final class SMROperationFactory {
             subOperations.add(subOp);
         }
 
-        return new CompositeOperation(subOperations, streamId);
+        return new CompositeOperation(subOperations, streamId, timestamp);
     }
 
     private static SMROperation handleSMREntry(UUID streamId, ByteBuffer dataBuffer, long timestamp) {
