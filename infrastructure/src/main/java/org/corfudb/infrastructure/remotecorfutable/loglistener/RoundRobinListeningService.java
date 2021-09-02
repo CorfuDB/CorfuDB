@@ -15,6 +15,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 import java.util.LinkedList;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
@@ -28,7 +29,7 @@ public class RoundRobinListeningService implements RemoteCorfuTableListeningServ
     private final ScheduledExecutorService executor;
     private final ConcurrentMap<UUID, ListeningTaskFuture> trackingStreams = new ConcurrentHashMap<>();
     private final SingletonResource<CorfuRuntime> singletonRuntime;
-    private final ConcurrentLinkedQueue<SMROperation> taskQueue = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedDeque<SMROperation> taskQueue = new ConcurrentLinkedDeque<>();
     private final long listeningDelay;
 
     @Override
@@ -115,7 +116,7 @@ public class RoundRobinListeningService implements RemoteCorfuTableListeningServ
     }
 
     @Override
-    public void awaitEndOfStreamCheck(UUID streamId, long timestamp) throws InterruptedException {
+    public SMROperation awaitEndOfStreamCheck(UUID streamId, long timestamp) throws InterruptedException {
         ListeningTaskFuture taskFuture = trackingStreams.get(streamId);
         if (taskFuture == null) {
             throw new IllegalArgumentException("Specified stream ID is not being tracked");
@@ -124,14 +125,15 @@ public class RoundRobinListeningService implements RemoteCorfuTableListeningServ
             throw new IllegalStateException("Specified stream has been removed");
         }
         if (taskFuture.task.lastReadPos >= timestamp) {
-            //we've already read the state at the timestamp, no reason to wait
-            return;
+            //we've already read the state at the timestamp, no reason to wait for log read
+            return taskQueue.peekLast();
         }
         CountDownLatch streamPosLatch = taskFuture.task.addReadRequest(timestamp);
         streamPosLatch.await();
         if (taskFuture.future.isCancelled()) {
             throw new IllegalStateException("Specified stream has been removed");
         }
+        return taskQueue.peekLast();
     }
 
     @Override
