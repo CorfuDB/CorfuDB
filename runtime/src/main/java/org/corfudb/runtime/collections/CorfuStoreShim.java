@@ -26,16 +26,6 @@ public class CorfuStoreShim {
     }
 
     /**
-     * Fetches the latest logical timestamp (global tail) in Corfu's distributed log.
-     *
-     * @return Timestamp.
-     */
-    @Nonnull
-    public CorfuStoreMetadata.Timestamp getTimestamp() {
-        return corfuStore.getTimestamp();
-    }
-
-    /**
      * Creates and registers a table.
      * A table needs to be registered before it is used.
      *
@@ -163,21 +153,24 @@ public class CorfuStoreShim {
     }
 
     /**
-     * Subscribe to transaction updates on specific tables in the namespace.
+     * Subscribe to transaction updates on specific tables with the streamTag in the namespace.
      * Objects returned will honor transactional boundaries.
+     * <p>
+     * This will subscribe to transaction updates starting from the latest state of the log.
+     * <p>
+     * Note: if memory is a consideration consider use the other version of subscribe that is
+     * able to specify the size of buffered transactions entries.
      *
      * @param streamListener   callback context
      * @param namespace        the CorfuStore namespace to subscribe to
+     * @param streamTag        only updates of tables with the stream tag will be polled
      * @param tablesOfInterest only updates from these tables of interest will be sent to listener
-     * @param timestamp        if specified, all stream updates from this timestamp will be returned
      */
-    @Deprecated
-    public <K extends Message, V extends Message, M extends Message>
-    void subscribe(@Nonnull StreamListener streamListener,
-                   @Nonnull String namespace,
-                   @Nonnull List<TableSchema<K, V, M>> tablesOfInterest,
-                   @Nullable CorfuStoreMetadata.Timestamp timestamp) {
-        corfuStore.subscribe(streamListener, namespace, tablesOfInterest, timestamp);
+    public void subscribeListener(@Nonnull StreamListener streamListener,
+                                  @Nonnull String namespace,
+                                  @Nonnull String streamTag,
+                                  @Nonnull List<String> tablesOfInterest) {
+        corfuStore.subscribeListener(streamListener, namespace, streamTag, tablesOfInterest);
     }
 
     /**
@@ -218,17 +211,6 @@ public class CorfuStoreShim {
                                   @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
                                   @Nullable CorfuStoreMetadata.Timestamp timestamp, int bufferSize) {
         corfuStore.subscribeListener(streamListener, namespace, streamTag, tablesOfInterest, timestamp, bufferSize);
-    }
-
-    /**
-     * Gracefully shutdown a streamer.
-     * Once this call returns no further stream updates will be returned.
-     *
-     * @param streamListener - callback context.
-     */
-    @Deprecated
-    public void unsubscribe(@Nonnull StreamListener streamListener) {
-        corfuStore.unsubscribe(streamListener);
     }
 
     /**

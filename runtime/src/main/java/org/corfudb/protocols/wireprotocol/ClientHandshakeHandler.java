@@ -19,6 +19,7 @@ import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+import org.corfudb.util.GitRepositoryState;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
@@ -85,16 +86,23 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object m) throws Exception {
         if (this.handshakeState.failed()) {
-            log.warn("channelRead: Dropping the message as the handshake was not completed. Message - {}", m);
+            log.warn("channelRead: Dropping {}, the handshake was not completed.", m);
             return;
         }
 
         if (!(m instanceof ResponseMsg)) {
-            log.error("channelRead: Message received is not a ResponseMsg type. Message - {}", m);
+            log.error("channelRead: {} is not ResponseMsg", m);
             return;
         }
 
         ResponseMsg response = ((ResponseMsg) m);
+        long corfuServerVersion = response.getHeader().getVersion().getCorfuSourceCodeVersion();
+        long corfuClientVersion = GitRepositoryState.getCorfuSourceCodeVersion();
+
+        if (corfuServerVersion != corfuClientVersion) {
+            log.warn("channelRead: Version mismatch. Client: {}, Server: {}",
+                    Long.toHexString(corfuClientVersion), Long.toHexString(corfuServerVersion));
+        }
 
         if (!response.getPayload().hasHandshakeResponse()) {
             log.warn("channelRead: Non-Handshake Response received. Message - {}", TextFormat.shortDebugString(response));
@@ -112,7 +120,6 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         // the handler so that it does not disconnect the channel.
         ctx.pipeline().remove(READ_TIMEOUT_HANDLER).handlerRemoved(ctx);
         HandshakeResponseMsg handshakeResponse = response.getPayload().getHandshakeResponse();
-        String corfuVersion = handshakeResponse.getCorfuVersion();
         UUID serverId = getUUID(handshakeResponse.getServerId());
 
         // Validate handshake, but first verify if node identifier is set to default (all 0's)
@@ -129,7 +136,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
             return;
         }
 
-        log.info("channelRead: Handshake succeeded. Server Corfu Version: [{}]", corfuVersion);
+        log.info("channelRead: Handshake succeeded. Corfu Server Version: [{}]", Long.toHexString(corfuServerVersion));
 
         requestMessages.forEach(ctx::writeAndFlush);
         requestMessages.clear();
@@ -237,8 +244,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
             if (msg instanceof RequestMsg) {
                 this.requestMessages.add((RequestMsg) msg);
             } else {
-                log.warn("write: Invalid message received through the pipeline by Handshake handler, Dropping it." +
-                        " Message - {}", msg);
+                log.warn("write: Invalid message received: {}", msg);
             }
         }
     }

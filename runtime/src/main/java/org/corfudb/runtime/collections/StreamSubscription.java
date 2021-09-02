@@ -55,22 +55,21 @@ public class StreamSubscription<K extends Message, V extends Message, M extends 
     @Getter
     private final int streamBufferSize;
 
-    // The streaming metrics to report to.
+    // The listener id to tag metrics with.
     @Getter
-    private final StreamSubscriptionMetrics streamingMetrics;
+    private final String listenerId;
 
     // Whether the subscription is stopped because of error or is unsubscribed.
     private volatile boolean stopped = false;
 
     public StreamSubscription(CorfuRuntime runtime, StreamListener listener, String namespace,
-                       String streamTag, List<String> tablesOfInterest, int bufferSize,
-                       StreamSubscriptionMetrics streamingMetrics) {
+                       String streamTag, List<String> tablesOfInterest, int bufferSize) {
         this.runtime = runtime;
         this.listener = listener;
         this.namespace = namespace;
         this.streamBuffer = new ArrayBlockingQueue<>(bufferSize);
         this.streamBufferSize = bufferSize;
-        this.streamingMetrics = streamingMetrics;
+        this.listenerId = String.format("listener_%s_%s_%s", listener, namespace, streamTag);
 
         // Generate table name to table schema mapping.
         TableRegistry registry = runtime.getTableRegistry();
@@ -128,8 +127,13 @@ public class StreamSubscription<K extends Message, V extends Message, M extends 
                     .stream()
                     .map(entry -> CorfuStreamEntry.fromSMREntry(entry, epoch))
                     .collect(Collectors.toList());
+
+            // Deduplicate entries per stream Id, ordering within a transaction is not guaranteed
+            Map<Message, CorfuStreamEntry> observedKeys = new HashMap<>();
+            entryList.forEach(entry -> observedKeys.put(entry.getKey(), entry));
+
             if (!entryList.isEmpty()) {
-                streamEntries.put(schema, entryList);
+                streamEntries.put(schema, observedKeys.values().stream().collect(Collectors.toList()));
             }
         });
 

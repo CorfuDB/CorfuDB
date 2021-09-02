@@ -128,7 +128,7 @@ public class CommittedBatchProcessor implements StateTransferBatchProcessor {
                     log.warn("Read exception for node {} occurred. " +
                             "Retry transfer for the next available node.", destinationNode, re);
                 } catch (Exception e) {
-                    log.error("Exception during batch transfer occurred. Failing the transfer.", e);
+                    log.error("Exception during batch transfer occurred. Failing the transfer.");
                     throw e;
                 }
             }

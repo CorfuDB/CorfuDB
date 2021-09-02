@@ -11,9 +11,10 @@ import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.common.compression.Codec;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer;
-import org.corfudb.protocols.wireprotocol.VersionInfo;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
+import org.corfudb.common.metrics.micrometer.initializers.LoggingRegistryInitializer;
+import org.corfudb.common.metrics.micrometer.initializers.RegistryInitializer;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
@@ -22,7 +23,6 @@ import org.corfudb.runtime.clients.LogUnitHandler;
 import org.corfudb.runtime.clients.ManagementHandler;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.clients.SequencerHandler;
-import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -40,8 +40,6 @@ import org.corfudb.util.CFUtils;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
-import org.corfudb.util.UuidUtils;
-import org.corfudb.util.Version;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,6 +60,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -79,10 +78,6 @@ public class CorfuRuntime {
     @ToString
     public static class CorfuRuntimeParameters extends RuntimeParameters {
 
-        public static CorfuRuntimeParametersBuilder builder() {
-            return new CorfuRuntimeParametersBuilder();
-        }
-
         /*
          * Max size for a write request.
          */
@@ -92,15 +87,6 @@ public class CorfuRuntime {
          * Set the bulk read size.
          */
         int bulkReadSize = 10;
-
-        /*
-         * How much time the Fast Loader has to get the maps up to date.
-         *
-         * <p>Once the timeout is reached, the Fast Loader gives up. Every map that is
-         * not up to date will be loaded through normal path.
-         */
-        Duration fastLoaderTimeout = Duration.ofMinutes(30);
-        // endregion
 
         // region Address Space Parameters
         /*
@@ -240,6 +226,11 @@ public class CorfuRuntime {
         private boolean metricsEnabled = true;
 
         /*
+         * Number of entries read in a single batch to compute highest sequence number (based on data entries and not holes)
+         */
+        int highestSequenceNumberBatchSize = 4;
+
+        /*
          * Total time in milliseconds for polling task to block until buffer space is available.
          */
         private long streamingPollingBlockingTimeMs = 5;
@@ -247,7 +238,7 @@ public class CorfuRuntime {
         /*
          * Period of time in ms to sleep before next cycle, when poller gets no new data changes.
          */
-        private int streamingPollingIdleWaitTimeMs = 5;
+        private int streamingPollingIdleWaitTimeMs = 50;
 
         /*
          * Capacity of queue shared by by streaming polling and notification tasks.
@@ -275,10 +266,18 @@ public class CorfuRuntime {
         private int streamingNotificationBatchSize = 50;
         // TODO: make it a function of the streaming Queue Size
 
+        /**
+         * List of the configuration classes for the metric registries.
+         */
+        private List<RegistryInitializer> metricRegistryConfigs = new ArrayList<>();
+
+        public static CorfuRuntimeParametersBuilder builder() {
+            return new CorfuRuntimeParametersBuilder();
+        }
+
         public static class CorfuRuntimeParametersBuilder extends RuntimeParametersBuilder {
             private int maxWriteSize = Integer.MAX_VALUE;
             private int bulkReadSize = 10;
-            private Duration fastLoaderTimeout = Duration.ofMinutes(30);
             private int holeFillRetry = 10;
             private Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
             private Duration holeFillTimeout = Duration.ofSeconds(10);
@@ -304,10 +303,23 @@ public class CorfuRuntime {
             private long streamingPollingBlockingTimeMs = 5;
             private int streamingQueueSize = 100;
             private int streamingPollingThreadPoolSize = 2;
-            private int streamingPollingIdleWaitTimeMs = 5;
+            private int streamingPollingIdleWaitTimeMs = 50;
             private int streamingNotificationThreadPoolSize = 4;
             private long streamingNotificationBlockingTimeMs = 5;
             private int streamingNotificationBatchSize = 50;
+            private Supplier<List<RegistryInitializer>> metricRegistryConfigs = () -> {
+                List<RegistryInitializer> list = new ArrayList<>();
+                Logger logger = LoggerFactory.getLogger("org.corfudb.client.metricsdata");
+                if (logger.isDebugEnabled()) {
+                    LoggingRegistryInitializer loggingConfig =
+                            LoggingRegistryInitializer
+                                    .builder()
+                                    .logger(logger)
+                                    .build();
+                    list.add(loggingConfig);
+                }
+                return list;
+            };
 
             public CorfuRuntimeParametersBuilder tlsEnabled(boolean tlsEnabled) {
                 super.tlsEnabled(tlsEnabled);
@@ -439,11 +451,6 @@ public class CorfuRuntime {
                 return this;
             }
 
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder fastLoaderTimeout(Duration fastLoaderTimeout) {
-                this.fastLoaderTimeout = fastLoaderTimeout;
-                return this;
-            }
-
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder holeFillRetry(int holeFillRetry) {
                 this.holeFillRetry = holeFillRetry;
                 return this;
@@ -534,6 +541,11 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder metricRegistryConfigs(Supplier<List<RegistryInitializer>> metricRegistryConfigs) {
+                this.metricRegistryConfigs = metricRegistryConfigs;
+                return this;
+            }
+
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder invalidateRetry(int invalidateRetry) {
                 this.invalidateRetry = invalidateRetry;
                 return this;
@@ -617,7 +629,6 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setBeforeRpcHandler(beforeRpcHandler);
                 corfuRuntimeParameters.setMaxWriteSize(maxWriteSize);
                 corfuRuntimeParameters.setBulkReadSize(bulkReadSize);
-                corfuRuntimeParameters.setFastLoaderTimeout(fastLoaderTimeout);
                 corfuRuntimeParameters.setHoleFillRetry(holeFillRetry);
                 corfuRuntimeParameters.setHoleFillRetryThreshold(holeFillRetryThreshold);
                 corfuRuntimeParameters.setHoleFillTimeout(holeFillTimeout);
@@ -636,6 +647,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setClusterId(clusterId);
                 corfuRuntimeParameters.setSystemDownHandlerTriggerLimit(systemDownHandlerTriggerLimit);
                 corfuRuntimeParameters.setLayoutServers(layoutServers);
+                corfuRuntimeParameters.setMetricRegistryConfigs(metricRegistryConfigs.get());
                 corfuRuntimeParameters.setInvalidateRetry(invalidateRetry);
                 corfuRuntimeParameters.setPriorityLevel(priorityLevel);
                 corfuRuntimeParameters.setCodecType(codecType);
@@ -762,8 +774,6 @@ public class CorfuRuntime {
      */
     private volatile Layout latestLayout = null;
 
-    private final Optional<Timer> fetchLayoutTimer;
-
     /**
      * Register SystemDownHandler.
      * Please use CorfuRuntimeParameters builder to register this.
@@ -879,22 +889,14 @@ public class CorfuRuntime {
         nodeRouterPool = new NodeRouterPool(getRouterFunction);
 
         if (parameters.metricsEnabled) {
-            Logger logger = LoggerFactory.getLogger("org.corfudb.client.metricsdata");
-            if (logger.isDebugEnabled()) {
-                MeterRegistryInitializer.initLoggingRegistry(logger,
-                        Duration.ofMinutes(1),
-                        parameters.clientId.toString());
-            } else {
-                log.warn("No registered metrics logger provided.");
-            }
-
+            MeterRegistryInitializer.initClientMetrics(parameters.metricRegistryConfigs,
+                    parameters.clientId.toString());
         } else {
             log.warn("Runtime metrics are disabled.");
         }
 
-        fetchLayoutTimer = MeterRegistryProvider.getInstance().map(r -> Timer.builder("runtime.fetch_layout.timer")
-                .publishPercentileHistogram(true).publishPercentiles(0.50, 0.95, 0.99).register(r));
-        log.info("Corfu runtime version {} initialized.", getVersionString());
+        log.info("Corfu runtime version {} initialized.",
+                Long.toHexString(GitRepositoryState.getCorfuSourceCodeVersion()));
     }
 
     /**
@@ -1000,18 +1002,6 @@ public class CorfuRuntime {
     }
 
     /**
-     * Get corfu runtime version.
-     **/
-    public static String getVersionString() {
-        if (Version.getVersionString().contains("SNAPSHOT")
-                || Version.getVersionString().contains("source")) {
-            return Version.getVersionString() + "("
-                    + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")";
-        }
-        return Version.getVersionString();
-    }
-
-    /**
      * If enabled, successful transactions will be written to a special transaction stream
      * (i.e. TRANSACTION_STREAM_ID)
      *
@@ -1095,7 +1085,7 @@ public class CorfuRuntime {
         if (clusterId == null) {
             clusterId = layout.getClusterId();
             if (clusterId != null) {
-                log.info("Connected to new cluster {}", UuidUtils.asBase64(clusterId));
+                log.info("Connected to new cluster {}", clusterId);
             }
         } else if (!clusterId.equals(layout.getClusterId())) {
             // We connected but got a cluster id we didn't expect.
@@ -1148,8 +1138,7 @@ public class CorfuRuntime {
             List<String> layoutServersCopy = new ArrayList<>(servers);
             parameters.getBeforeRpcHandler().run();
             int systemDownTriggerCounter = 0;
-            Optional<Timer.Sample> fetchSample =
-                    MeterRegistryProvider.getInstance().map(Timer::start);
+            Optional<Timer.Sample> fetchSample = MicroMeterUtils.startTimer();
             while (true) {
 
                 Collections.shuffle(layoutServersCopy);
@@ -1167,11 +1156,9 @@ public class CorfuRuntime {
                         // If the layout we got has a smaller epoch than the latestLayout epoch,
                         // we discard it.
                         if (latestLayout != null && latestLayout.getEpoch() > l.getEpoch()) {
-                            log.warn("fetchLayout: Received a layout with epoch {} from server "
-                                            + "{}:{} smaller than latestLayout epoch {}, "
-                                            + "discarded.",
-                                    l.getEpoch(), router.getHost(), router.getPort(),
-                                    latestLayout.getEpoch());
+                            log.warn("fetchLayout: latest layout epoch {} > received {}" +
+                                            " from {}:{}, discarded.", latestLayout.getEpoch(), l.getEpoch(),
+                                    router.getHost(), router.getPort());
                             continue;
                         }
 
@@ -1186,9 +1173,7 @@ public class CorfuRuntime {
 
                         // Prune away removed node routers from the nodeRouterPool.
                         pruneRemovedRouters(l);
-                        fetchLayoutTimer.ifPresent(flt ->
-                                fetchSample
-                                        .ifPresent(sample -> sample.stop(flt)));
+                        MicroMeterUtils.time(fetchSample, "runtime.fetch_layout.timer");
                         return l;
                     } catch (InterruptedException ie) {
                         throw new UnrecoverableCorfuInterruptedError(
@@ -1228,40 +1213,6 @@ public class CorfuRuntime {
         }, runtimeExecutor);
     }
 
-    @SuppressWarnings("unchecked")
-    private void checkVersion() {
-        try {
-            Layout currentLayout = CFUtils.getUninterruptibly(layout);
-            List<CompletableFuture<VersionInfo>> versions =
-                    currentLayout.getLayoutServers()
-                            .stream().map(s -> getLayoutView().getRuntimeLayout().getBaseClient(s))
-                            .map(BaseClient::getVersionInfo)
-                            .collect(Collectors.toList());
-
-            for (CompletableFuture<VersionInfo> versionCf : versions) {
-                final VersionInfo version = CFUtils.getUninterruptibly(versionCf,
-                        TimeoutException.class, NetworkException.class);
-                if (version.getVersion() == null) {
-                    log.error("Unexpected server version, server is too old to return"
-                            + " version information");
-                } else if (!version.getVersion().equals(getVersionString())) {
-                    log.error("connect: expected version {}, but server version is {}",
-                            getVersionString(), version.getVersion());
-                } else {
-                    log.info("connect: client version {}, server version is {}",
-                            getVersionString(), version.getVersion());
-                }
-            }
-        } catch (TimeoutException | NetworkException e) {
-            log.error("connect: failed to get version. Couldn't connect to server.", e);
-        } catch (Exception ex) {
-            // Because checkVersion is just an informational step (log purpose), we don't need to retry
-            // and we can actually ignore any exception while trying to fetch the server corfu version.
-            // If at any point we decide to abort upon server mismatch this logic must change.
-            log.error("connect: failed to get version.", ex);
-        }
-    }
-
     /**
      * Connect to the Corfu server instance.
      * When this function returns, the Corfu server is ready to be accessed.
@@ -1283,7 +1234,20 @@ public class CorfuRuntime {
             }
         }
 
-        checkVersion();
+        // Build nodeRouterPool and connect with each endpoint
+        Layout currentLayout = CFUtils.getUninterruptibly(layout);
+        List<CompletableFuture<Boolean>> pingEndpoints =
+                currentLayout.getLayoutServers()
+                        .stream().map(s -> getLayoutView().getRuntimeLayout().getBaseClient(s))
+                        .map(BaseClient::ping)
+                        .collect(Collectors.toList());
+        for (CompletableFuture<Boolean> ping : pingEndpoints) {
+            try {
+                CFUtils.getUninterruptibly(ping, Exception.class);
+            } catch (Exception ex) {
+                log.error("connect: Couldn't connect to server.", ex);
+            }
+        }
 
         garbageCollector.start();
 
@@ -1429,19 +1393,6 @@ public class CorfuRuntime {
     public CorfuRuntime setTrimRetry(int trimRetry) {
         log.warn("setTrimRetry: Deprecated, please set parameters instead");
         parameters.setWriteRetry(trimRetry);
-        return this;
-    }
-
-    /**
-     * Set the timeout of the fast loader, in minutes.
-     *
-     * @param timeout The number of minutes to wait.
-     * @deprecated Deprecated, set using {@link CorfuRuntimeParameters} instead.
-     */
-    @Deprecated
-    public CorfuRuntime setTimeoutInMinutesForFastLoading(int timeout) {
-        log.warn("setTrimRetry: Deprecated, please set parameters instead");
-        parameters.setFastLoaderTimeout(Duration.ofMinutes(timeout));
         return this;
     }
 

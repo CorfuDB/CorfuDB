@@ -1,31 +1,32 @@
 package org.corfudb.common.metrics.micrometer;
 
-import io.micrometer.core.instrument.Clock;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.Tags;
-import io.micrometer.core.instrument.logging.LoggingRegistryConfig;
-import io.micrometer.wavefront.WavefrontConfig;
-import io.micrometer.wavefront.WavefrontMeterRegistry;
+import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.registries.LoggingMeterRegistryWithHistogramSupport;
-import org.slf4j.Logger;
+import org.corfudb.common.metrics.micrometer.initializers.RegistryInitializer;
 
-import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
-import java.util.function.Supplier;
 
 /**
  * A configuration class for a meter (metrics) registry.
  */
 @Slf4j
 public class MeterRegistryProvider {
-    private static Optional<MeterRegistry> meterRegistry = Optional.empty();
+    private static final CompositeMeterRegistry meterRegistry = new CompositeMeterRegistry();
     private static Optional<String> id = Optional.empty();
+    private static Optional<MetricType> metricType = Optional.empty();
 
     private MeterRegistryProvider() {
 
+    }
+
+    static enum MetricType {
+        SERVER,
+        CLIENT
     }
 
     /**
@@ -34,86 +35,75 @@ public class MeterRegistryProvider {
     public static class MeterRegistryInitializer extends MeterRegistryProvider {
 
         /**
-         * Configure the meter registry of type LoggingMeterRegistry. All the metrics registered
-         * with this meter registry will be exported via provided logging sink with
-         * the provided loggingInterval frequency.
+         * Configure the registries for the corfu server.
          *
-         * @param logger          An instance of the logger to print metrics.
-         * @param loggingInterval A duration between log appends for every metric.
-         * @param identifier      A global identifier to tag every metric with.
+         * @param inits      A list of registry initializers.
+         * @param identifier A global identifier to tag every metric with.
          */
-        public static synchronized void initLoggingRegistry(Logger logger, Duration loggingInterval,
-                                                            String identifier) {
-            Supplier<Optional<MeterRegistry>> supplier = () -> {
-                LoggingRegistryConfig config = new IntervalLoggingConfig(loggingInterval);
-                LoggingMeterRegistryWithHistogramSupport registry =
-                        new LoggingMeterRegistryWithHistogramSupport(config, logger::debug);
-                return Optional.of(registry);
-            };
-
-            init(supplier, identifier);
+        public static void initServerMetrics(List<RegistryInitializer> inits, String identifier) {
+            metricType = Optional.of(MetricType.SERVER);
+            id = Optional.of(identifier);
+            populateCompositeRegistry(inits);
         }
 
         /**
-         * Configure the meter registry of type WavefrontMeterRegistry. All the metrics registered
-         * with this meter registry will be exported to the configured Wavefront proxy.
+         * Configure the registries for the corfu client.
          *
-         * @param config     A config for Wavefront proxy.
+         * @param inits      A list of registry initializers.
          * @param identifier A global identifier to tag every metric with.
          */
-        public static synchronized void initWavefrontRegistry(WavefrontProxyConfig config,
-                                                              String identifier) {
-            Supplier<WavefrontConfig> wavefrontConfigSupplier = () -> new WavefrontConfig() {
-                @Override
-                public String uri() {
-                    return String.format("proxy://%s:%s", config.getHost(), config.getPort());
-                }
-
-                @Override
-                public String get(String key) {
-                    return null;
-                }
-
-                @Override
-                public String apiToken() {
-                    return config.getApiToken();
-                }
-
-                @Override
-                public Duration step() {
-                    return config.getExportDuration();
-                }
-            };
-            Supplier<Optional<MeterRegistry>> supplier = () -> {
-                MeterRegistry registry =
-                        new WavefrontMeterRegistry(wavefrontConfigSupplier.get(), Clock.SYSTEM);
-                return Optional.of(registry);
-            };
-
-            init(supplier, identifier);
+        public static void initClientMetrics(List<RegistryInitializer> inits, String identifier) {
+            metricType = Optional.of(MetricType.CLIENT);
+            id = Optional.of(identifier);
+            populateCompositeRegistry(inits);
         }
 
-        private static void init(Supplier<Optional<MeterRegistry>> meterRegistrySupplier,
-                                 String identifier) {
-            if (meterRegistry.isPresent()) {
-                log.warn("Registry has already been initialized.");
-            } else {
-                meterRegistry = meterRegistrySupplier.get();
-                meterRegistry.ifPresent(registry -> registry.config().commonTags("id", identifier));
-                JVMMetrics.register(meterRegistry);
-                id = Optional.of(identifier);
+        private static void populateCompositeRegistry(List<RegistryInitializer> inits) {
+            inits.forEach(init -> {
+                try {
+                    MeterRegistry registry = init.createRegistry();
+                    addToCompositeRegistry(registry);
+                } catch (RuntimeException re) {
+                    log.error("Issue initializing this registry. Skipping.", re);
+                }
+            });
+        }
+
+        private static void addToCompositeRegistry(MeterRegistry registry) {
+            if (containsRegistry(registry)) {
+                log.warn("This registry has already been initialized.");
+                removeRegistry(registry);
             }
+            addRegistry(registry);
+        }
+
+        private static void addRegistry(MeterRegistry componentRegistry) {
+            meterRegistry.add(componentRegistry);
+        }
+
+        private static void removeRegistry(MeterRegistry componentRegistry) {
+            meterRegistry.remove(componentRegistry);
         }
     }
 
+
     /**
-     * Register timer if needed.
+     * Returns true if the composite contains component.
      *
-     * @param name Name of a timer.
-     * @param tags Tags for a timer.
+     * @return Returns true if this registry is present.
      */
-    public static void timer(String name, String... tags) {
-        MeterRegistryProvider.getInstance().ifPresent(registry -> registry.timer(name, tags));
+    public static boolean containsRegistry(MeterRegistry componentRegistry) {
+        return meterRegistry.getRegistries().contains(componentRegistry);
+    }
+
+
+    /**
+     * Returns true if no registries were registered with the composite registry.
+     *
+     * @return Returns true if 0 registries, false otherwise.
+     */
+    public static boolean isEmpty() {
+        return meterRegistry.getRegistries().isEmpty();
     }
 
     /**
@@ -123,7 +113,16 @@ public class MeterRegistryProvider {
      * @return An optional configured meter registry.
      */
     public static synchronized Optional<MeterRegistry> getInstance() {
-        return meterRegistry;
+        return Optional.of(meterRegistry);
+    }
+
+    /**
+     * Get the metric type of this registry.
+     *
+     * @return An optional metric type.
+     */
+    public static synchronized Optional<MetricType> getMetricType() {
+        return metricType;
     }
 
     /**
@@ -134,15 +133,13 @@ public class MeterRegistryProvider {
      * @param type Type of a meter.
      */
     public static synchronized void deregisterServerMeter(String name, Tags tags, Meter.Type type) {
-        if (!meterRegistry.isPresent()) {
-            return;
-        }
         if (!id.isPresent()) {
-            throw new IllegalStateException("Id must be present to deregister meters.");
+            log.warn("Id must be present to deregister meters.");
+            return;
         }
         String server = id.get();
         Tags tagsToLookFor = tags.and(Tag.of("id", server));
-        Meter.Id id = new Meter.Id(name, tagsToLookFor, null, null, type);
-        meterRegistry.ifPresent(registry -> registry.remove(id));
+        Meter.Id meterId = new Meter.Id(name, tagsToLookFor, null, null, type);
+        meterRegistry.remove(meterId);
     }
 }

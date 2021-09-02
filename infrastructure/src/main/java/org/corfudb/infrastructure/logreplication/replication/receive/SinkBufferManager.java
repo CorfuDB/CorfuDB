@@ -133,7 +133,7 @@ public abstract class SinkBufferManager {
 
         // This message contains entries that haven't been applied yet
         if (preTs <= lastProcessedSeq && currentTs > lastProcessedSeq) {
-            log.trace("Received in order message={}, lastProcessed={}", currentTs, lastProcessedSeq);
+            log.debug("Received in order message={}, lastProcessed={}", currentTs, lastProcessedSeq);
             sinkManager.processMessage(dataMessage);
             ackCnt++;
             lastProcessedSeq = getCurrentSeq(dataMessage);

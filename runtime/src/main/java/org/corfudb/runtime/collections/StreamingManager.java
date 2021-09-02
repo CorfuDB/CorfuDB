@@ -2,13 +2,20 @@ package org.corfudb.runtime.collections;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.StreamingException;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -83,6 +90,10 @@ public class StreamingManager {
             throw new IllegalArgumentException("subscribe: Buffer size cannot be less than 1.");
         }
 
+        // Before starting, validate that the address to seek to is not already behind the trim mark,
+        // otherwise, throw a TrimmedException (wrapped in Streaming Exception)
+        validateSyncAddress(namespace, streamTag, lastAddress);
+
         if (subscriptions.containsKey(streamListener)) {
             // Multiple subscribers subscribing to same namespace and table is allowed
             // as long as the hashcode() and equals() method of the listeners are different.
@@ -90,18 +101,32 @@ public class StreamingManager {
                     "StreamingManager::subscribe: listener already registered " + streamListener);
         }
 
-        StreamSubscriptionMetrics metrics = new StreamSubscriptionMetrics(streamListener, namespace, streamTag);
         StreamSubscription subscription = new StreamSubscription(
-                runtime, streamListener, namespace, streamTag, tablesOfInterest, bufferSize, metrics);
+                runtime, streamListener, namespace, streamTag, tablesOfInterest, bufferSize);
         subscriptions.put(streamListener, subscription);
 
         pollingExecutor.submit(new StreamPollingTask(this, lastAddress, subscription, pollingExecutor,
                 runtime.getParameters()));
         notificationExecutor.submit(new StreamNotificationTask(this, subscription, notificationExecutor, runtime.getParameters()));
 
-        log.info("Subscribed stream listener {}, numSubscribers: {}, streamTag: {}, lastAddress: {}, " +
-                "namespace {}, tables {}", streamListener, subscriptions.size(), streamTag, lastAddress,
+        log.info("Subscribed stream listener [{}], numSubscribers: {}, streamTag: {}, lastAddress: {}, " +
+                        "namespace: {}, tables: {}", streamListener, subscriptions.size(), streamTag, lastAddress,
                 namespace, tablesOfInterest);
+    }
+
+    private void validateSyncAddress(String namespace, String streamTag, long lastAddress) {
+        long syncAddress = lastAddress + 1;
+
+        UUID txnStreamId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
+        StreamAddressSpace streamAddressSpace = runtime.getSequencerView()
+                .getStreamAddressSpace(new StreamAddressRange(txnStreamId, Address.MAX, syncAddress));
+
+        if (syncAddress <= streamAddressSpace.getTrimMark()) {
+            TrimmedException te = new TrimmedException(String.format("Subscription Stream[%s$tag:%s][%s] :: sync start address falls " +
+                    "behind trim mark. This will incur in data loss for data in the space [%s, %s] (inclusive)",
+                    namespace, streamTag, Utils.toReadableId(txnStreamId), syncAddress, streamAddressSpace.getTrimMark()));
+            throw new StreamingException(te);
+        }
     }
 
     /**

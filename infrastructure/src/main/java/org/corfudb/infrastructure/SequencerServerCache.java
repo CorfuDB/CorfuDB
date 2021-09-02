@@ -6,6 +6,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.common.util.Memory;
 import org.corfudb.runtime.view.Address;
 
@@ -16,6 +17,7 @@ import java.util.HashMap;
 import java.util.Optional;
 import java.util.PriorityQueue;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * Sequencer server cache.
@@ -87,34 +89,19 @@ public class SequencerServerCache {
      *
      * @param cacheSize cache size
      */
-    private final Optional<DistributionSummary> evictionsPerTrimCall;
-    private final Optional<Gauge> windowSize;
 
     public SequencerServerCache(int cacheSize, long maxConflictNewSequencer) {
         this.cacheSize = cacheSize;
-
-        cacheEntries = new PriorityQueue(cacheSize, Comparator.comparingLong
-                (conflict -> ((ConflictTxStream) conflict).txVersion));
         maxConflictWildcard = maxConflictNewSequencer;
         this.maxConflictNewSequencer = maxConflictNewSequencer;
-        conflictKeys = MeterRegistryProvider
-                .getInstance()
-                .map(registry ->
-                        registry.gauge(conflictKeysCounterName, Collections.emptyList(),
-                                new HashMap<ConflictTxStream, Long>(), HashMap::size))
-                .orElse(new HashMap<>());
-        double [] percentiles = new double[] {0.50, 0.95, 0.99};
-        evictionsPerTrimCall = MeterRegistryProvider.getInstance().map(registry ->
-                DistributionSummary
-                        .builder("sequencer.cache.evictions")
-                        .publishPercentiles(percentiles)
-                        .publishPercentileHistogram()
-                        .baseUnit("eviction")
-                        .register(registry));
-        windowSize = MeterRegistryProvider.getInstance().map(registry ->
-                Gauge.builder(windowSizeName,
-                        conflictKeys, HashMap::size).register(registry));
-
+        Supplier<PriorityQueue<ConflictTxStream>> queueSupplier = () ->
+                new PriorityQueue<>(cacheSize, Comparator.comparingLong(conflict ->
+                        conflict.txVersion));
+        cacheEntries = MicroMeterUtils.gauge(windowSizeName, queueSupplier.get(), PriorityQueue::size)
+                .orElseGet(queueSupplier);
+        conflictKeys = MicroMeterUtils
+                .gauge(conflictKeysCounterName, new HashMap<ConflictTxStream, Long>(), HashMap::size)
+                .orElseGet(HashMap::new);
     }
 
     /**
@@ -181,7 +168,7 @@ public class SequencerServerCache {
             entries++;
         }
         final int numPqEntries = pqEntries;
-        evictionsPerTrimCall.ifPresent(ws -> ws.record(numPqEntries));
+        MicroMeterUtils.measure(numPqEntries, "sequencer.cache.evictions");
         log.info("Invalidated entries {} addresses {}", pqEntries, entries);
     }
 

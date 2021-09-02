@@ -1,9 +1,8 @@
 package org.corfudb.runtime.view.replication;
 
 import com.google.common.collect.Iterables;
-import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -24,7 +23,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -37,42 +35,19 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         super(holeFillPolicy);
     }
 
-    private final ConcurrentHashMap<String, Timer> perNodeWriteTimer =
-            new ConcurrentHashMap<>();
-
     /**
      * {@inheritDoc}
      */
 
-    private void registerTimerPerNode(RuntimeLayout runtimeLayout) {
-        double[] percentiles = new double[]{0.50, 0.95, 0.99};
-        MeterRegistryProvider.getInstance().ifPresent(registry -> {
-            for (String server : runtimeLayout.getLayout().getAllLogServers()) {
-                perNodeWriteTimer.putIfAbsent(server,
-                        Timer.builder("chain_replication.write")
-                                .tag("node", server)
-                                .publishPercentiles(percentiles)
-                                .publishPercentileHistogram(true)
-                                .register(registry));
-            }
-        });
-    }
-
     private void doWrite(RuntimeLayout runtimeLayout, long address, int index, Runnable writeRunnable) {
         String server = runtimeLayout.getLayout().getStripe(address).getLogServers().get(index);
-        if (perNodeWriteTimer.containsKey(server)) {
-            perNodeWriteTimer.get(server).record(writeRunnable);
-        } else {
-            writeRunnable.run();
-        }
+        MicroMeterUtils.time(writeRunnable, "chain_replication.write", "node", server);
     }
 
     @Override
     public void write(RuntimeLayout runtimeLayout, ILogData data) throws OverwriteException {
         final long globalAddress = data.getGlobalAddress();
         int numUnits = runtimeLayout.getLayout().getSegmentLength(globalAddress);
-
-        registerTimerPerNode(runtimeLayout);
         // To reduce the overhead of serialization, we serialize only the
         // first time we write, saving when we go down the chain.
         try (ILogData.SerializationHandle sh = data.getSerializedForm(true)) {
@@ -344,7 +319,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         }
         // now we go down the chain and write, ignoring any overwrite exception we get.
         for (int i = 1; i < numUnits; i++) {
-            log.debug("Recover[{}]: write chain {}/{}", layout, i + 1, numUnits);
+            log.debug("Recover[{}]: write {}/{}", layout, i + 1, numUnits);
             final int writableIndex = i;
             // In chain replication, we write synchronously to every unit in the chain.
             try {
@@ -353,11 +328,11 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
                         OverwriteException.class);
                 doWrite(runtimeLayout, globalAddress, writableIndex, writable);
                 // We successfully recovered a write to this member of the chain
-                log.debug("Recover[{}]: recovered write at chain {}/{}", layout, i + 1, numUnits);
+                log.debug("Recover[{}]: recovered write at {}/{}", layout, i + 1, numUnits);
             } catch (OverwriteException oe) {
                 // This member already had this data (in some cases, the write might have
                 // been committed to all members, so this is normal).
-                log.debug("Recover[{}]: overwritten at chain {}/{}", layout, i + 1, numUnits);
+                log.debug("Recover[{}]: overwritten at {}/{}", layout, i + 1, numUnits);
             }
         }
     }

@@ -30,7 +30,7 @@ public class ForceRemoveNode extends RemoveNode {
     protected UUID sendRequest(@NonNull ManagementClient managementClient) throws TimeoutException {
         // Select the current tail node and send an add node request to the orchestrator
         CreateWorkflowResponse resp = managementClient.forceRemoveNode(nodeForWorkflow);
-        log.info("sendRequest: requested to force remove {} on orchestrator {}:{}",
+        log.info("sendRequest: requested to force remove {} on {}:{}",
                 nodeForWorkflow, managementClient.getRouter().getHost(),
                 managementClient.getRouter().getPort());
         return resp.getWorkflowId();

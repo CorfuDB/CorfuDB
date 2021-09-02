@@ -5,12 +5,17 @@ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ILogRepl
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.Query;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.collections.TxBuilder;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.utils.CommonTypes;
 import org.corfudb.utils.LogReplicationStreams;
+import org.corfudb.utils.LogReplicationStreams.VersionString;
+import org.corfudb.utils.LogReplicationStreams.Version;
+import org.corfudb.utils.LogReplicationStreams.TableInfo;
+import org.corfudb.utils.LogReplicationStreams.Namespace;
 
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
@@ -36,8 +41,6 @@ public class LogReplicationStreamNameTableManager {
 
     private ILogReplicationConfigAdapter logReplicationConfigAdapter;
 
-    private final CorfuRuntime corfuRuntime;
-
     private String pluginConfigFilePath;
 
     private CorfuStore corfuStore;
@@ -49,8 +52,7 @@ public class LogReplicationStreamNameTableManager {
 
     public LogReplicationStreamNameTableManager(CorfuRuntime runtime, String pluginConfigFilePath) {
         this.pluginConfigFilePath = pluginConfigFilePath;
-        this.corfuRuntime = runtime;
-        corfuStore = new CorfuStore(corfuRuntime);
+        this.corfuStore = new CorfuStore(runtime);
 
         initStreamNameFetcherPlugin();
     }
@@ -126,17 +128,18 @@ public class LogReplicationStreamNameTableManager {
     }
 
     private boolean tableVersionMatchesPlugin() {
-        corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_PLUGIN_VERSION_TABLE);
-        LogReplicationStreams.VersionString versionString = LogReplicationStreams.VersionString.newBuilder().setName("VERSION").build();
-        Query q = corfuStore.query(CORFU_SYSTEM_NAMESPACE);
+        VersionString versionString = LogReplicationStreams.VersionString.newBuilder().setName("VERSION").build();
+        CorfuStoreEntry<VersionString, Version, CommonTypes.Uuid> record;
 
-        // If the version table is dropped using the CorfuStoreBrowser(UFO) for testing, it will be empty.
-        // In this case, it should be re-created
-        if (q.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE, versionString) == null) {
-            return false;
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            // If the version table is dropped using the CorfuStoreBrowser(UFO) for testing, it will be empty.
+            // In this case, it should be re-created
+            record = txn.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE, versionString);
+            txn.commit();
         }
-        LogReplicationStreams.Version version = (LogReplicationStreams.Version) q.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE, versionString).getPayload();
-        return (Objects.equals(version.getVersion(), logReplicationConfigAdapter.getVersion()));
+
+        return record == null ? false : (Objects.equals(record.getPayload().getVersion(),
+                logReplicationConfigAdapter.getVersion()));
     }
 
     private void deleteExistingStreamNameAndVersionTables() {
@@ -151,64 +154,58 @@ public class LogReplicationStreamNameTableManager {
 
     private void createStreamNameAndVersionTables(Set<String> streams) {
         try {
-            corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+            Table<TableInfo, Namespace, CommonTypes.Uuid> streamsNameTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
                 LOG_REPLICATION_STREAMS_NAME_TABLE,
-                LogReplicationStreams.TableInfo.class,
-                LogReplicationStreams.Namespace.class, CommonTypes.Uuid.class,
+                TableInfo.class, Namespace.class, CommonTypes.Uuid.class,
                 TableOptions.builder().build());
 
-            corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+            Table<VersionString, Version, CommonTypes.Uuid> pluginVersionTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
                 LOG_REPLICATION_PLUGIN_VERSION_TABLE,
-                LogReplicationStreams.VersionString.class,
-                LogReplicationStreams.Version.class, CommonTypes.Uuid.class,
+                VersionString.class, Version.class, CommonTypes.Uuid.class,
                 TableOptions.builder().build());
 
-            TxBuilder tx = corfuStore.tx(CORFU_SYSTEM_NAMESPACE);
+            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                // Populate the plugin version in the version table
+                LogReplicationStreams.VersionString versionString =
+                        LogReplicationStreams.VersionString.newBuilder()
+                                .setName("VERSION").build();
+                LogReplicationStreams.Version version =
+                        LogReplicationStreams.Version.newBuilder()
+                                .setVersion(logReplicationConfigAdapter.getVersion()).build();
+                txn.putRecord(pluginVersionTable, versionString, version, defaultMetadata);
 
-            // Populate the plugin version in the version table
-            LogReplicationStreams.VersionString versionString =
-                LogReplicationStreams.VersionString.newBuilder()
-                    .setName("VERSION").build();
-            LogReplicationStreams.Version version =
-                LogReplicationStreams.Version.newBuilder()
-                    .setVersion(logReplicationConfigAdapter.getVersion()).build();
-            tx.create(LOG_REPLICATION_PLUGIN_VERSION_TABLE, versionString,
-                version, defaultMetadata);
+                // Copy all stream names to the stream names table.  Each name is
+                // a fully qualified stream name
+                for (String entry : streams) {
+                    LogReplicationStreams.TableInfo tableInfo =
+                            LogReplicationStreams.TableInfo.newBuilder().setName(entry)
+                                    .build();
 
-            // Copy all stream names to the stream names table.  Each name is
-            // a fully qualified stream name
-            for (String entry : streams) {
-                LogReplicationStreams.TableInfo tableInfo =
-                    LogReplicationStreams.TableInfo.newBuilder().setName(entry)
-                        .build();
-
-                // As each name is fully qualified, no need to insert the
-                // namespace.  Simply insert an empty string there.
-                // TODO: Ideally the Namespace protobuf can be removed but it
-                //  will involve data migration on upgrade as it is a schema
-                //  change
-                LogReplicationStreams.Namespace namespace =
-                    LogReplicationStreams.Namespace.newBuilder().setName(
-                        EMPTY_STR)
-                        .build();
-                tx.create(LOG_REPLICATION_STREAMS_NAME_TABLE, tableInfo,
-                    namespace, defaultMetadata);
+                    // As each name is fully qualified, no need to insert the
+                    // namespace.  Simply insert an empty string there.
+                    // TODO: Ideally the Namespace protobuf can be removed but it
+                    //  will involve data migration on upgrade as it is a schema
+                    //  change
+                    LogReplicationStreams.Namespace namespace =
+                            LogReplicationStreams.Namespace.newBuilder().setName(
+                                    EMPTY_STR)
+                                    .build();
+                    txn.putRecord(streamsNameTable, tableInfo, namespace, defaultMetadata);
+                }
+                txn.commit();
             }
-            tx.commit();
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             log.warn("Exception when opening the table {}", e);
         }
     }
 
     private Set<String> readStreamsToReplicateFromTable() {
-        corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_STREAMS_NAME_TABLE);
-        Query q = corfuStore.query(CORFU_SYSTEM_NAMESPACE);
-        Set<LogReplicationStreams.TableInfo> tables =
-            q.keySet(LOG_REPLICATION_STREAMS_NAME_TABLE, null);
         Set<String> tableNames = new HashSet<>();
-        tables.forEach(table -> {
-            tableNames.add(table.getName());
-        });
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            Set<TableInfo> tables = txn.keySet(LOG_REPLICATION_STREAMS_NAME_TABLE);
+            tables.forEach(table -> tableNames.add(table.getName()));
+            txn.commit();
+        }
         return tableNames;
     }
 }

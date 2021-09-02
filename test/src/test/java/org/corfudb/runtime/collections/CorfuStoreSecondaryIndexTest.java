@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.ExampleSchemas.ExampleValue;
+import org.corfudb.runtime.ExampleSchemas.ActivitySchedule;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.ExampleSchemas.Adult;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
@@ -105,6 +106,91 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
     }
 
     /**
+     * Test secondary indexes set on Enum type
+     */
+    @Test
+    public void testSecondaryIndexesOnEnum() throws Exception {
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getTestRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace & table name
+        final String someNamespace = "some-namespace";
+        final String tableName = "EnumTable";
+        final String[] activities = new String[] {"basket", "football", "soccer"};
+
+        // Create & Register the table, this table has an Enum field marked as secondary key
+        Table<UuidMsg, ActivitySchedule, ManagedMetadata> activitiesTable = shimStore.openTable(
+                someNamespace,
+                tableName,
+                UuidMsg.class,
+                ActivitySchedule.class,
+                ManagedMetadata.class,
+                TableOptions.builder().build());
+
+        // Populate table with X records
+        final int numRecords = 42;
+        final int daysInAWeek = 7;
+        final ManagedMetadata metadata = ManagedMetadata.newBuilder().setCreateUser("user_UT").build();
+
+        for (int i = 0; i < numRecords; i++) {
+            UUID uuid = UUID.randomUUID();
+            UuidMsg key = UuidMsg.newBuilder()
+                    .setMsb(uuid.getMostSignificantBits()).setLsb(uuid.getLeastSignificantBits())
+                    .build();
+
+            try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
+                ActivitySchedule activity = ActivitySchedule.newBuilder()
+                        .setActivity(activities[i % 3])
+                        .setTime(ExampleSchemas.Time.newBuilder().setDayValue(i % daysInAWeek).build())
+                        .setFreeDay(ExampleSchemas.Day.SUNDAY)
+                        .setOptionalDay(ExampleSchemas.Day.WEDNESDAY)
+                        .build();
+                txn.putRecord(tableName, key, activity, metadata);
+                txn.commit();
+            }
+        }
+
+        // Get by secondary index, retrieve from database all activities programmed for Monday
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
+
+            // Root Enum secondary index
+            List<CorfuStoreEntry<UuidMsg, ActivitySchedule, ManagedMetadata>> sundayOptionalActivities = readWriteTxn
+                    .getByIndex(activitiesTable, "free", ExampleSchemas.Day.SUNDAY.getValueDescriptor());
+            assertThat(sundayOptionalActivities.size()).isEqualTo(numRecords);
+            Iterator<CorfuStoreEntry<UuidMsg, ActivitySchedule, ManagedMetadata>> it = sundayOptionalActivities.iterator();
+            while (it.hasNext()) {
+                CorfuStoreEntry<UuidMsg, ActivitySchedule, ManagedMetadata> entry = it.next();
+                assertThat(entry.getPayload().getFreeDay()).isEqualTo(ExampleSchemas.Day.SUNDAY);
+            }
+
+            // Second Level Enum secondary index
+            List<CorfuStoreEntry<UuidMsg, ActivitySchedule, ManagedMetadata>> mondayActivities = readWriteTxn
+                    .getByIndex(activitiesTable, "day", ExampleSchemas.Day.MONDAY.getValueDescriptor());
+            assertThat(mondayActivities.size()).isEqualTo(numRecords/daysInAWeek);
+            Iterator<CorfuStoreEntry<UuidMsg, ActivitySchedule, ManagedMetadata>> itMonday = mondayActivities.iterator();
+            while (itMonday.hasNext()) {
+                CorfuStoreEntry<UuidMsg, ActivitySchedule, ManagedMetadata> entry = itMonday.next();
+                assertThat(entry.getPayload().getTime().getDay()).isEqualTo(ExampleSchemas.Day.MONDAY);
+            }
+
+            // Root Enum secondary index declared with direct secondary_key keyword (instead of nested)
+            List<CorfuStoreEntry<UuidMsg, ActivitySchedule, ManagedMetadata>> optionalDayActivities = readWriteTxn
+                    .getByIndex(activitiesTable, "optionalDay", ExampleSchemas.Day.WEDNESDAY.getValueDescriptor());
+            assertThat(optionalDayActivities.size()).isEqualTo(numRecords);
+            Iterator<CorfuStoreEntry<UuidMsg, ActivitySchedule, ManagedMetadata>> itOptional = optionalDayActivities.iterator();
+            while (itOptional.hasNext()) {
+                CorfuStoreEntry<UuidMsg, ActivitySchedule, ManagedMetadata> entry = itOptional.next();
+                assertThat(entry.getPayload().getOptionalDay()).isEqualTo(ExampleSchemas.Day.WEDNESDAY);
+            }
+
+            readWriteTxn.commit();
+        }
+    }
+
+    /**
      * Simple example to see how nested secondary indexes work. Please see example_schemas.proto.
      *
      * @throws Exception exception
@@ -149,7 +235,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                     .setMsb(uuid.getMostSignificantBits()).setLsb(uuid.getLeastSignificantBits())
                     .build();
 
-            try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+            try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
                 txn.putRecord(tableName, key,
                         ExampleValue.newBuilder()
                                 .setPayload("payload_" + i)
@@ -168,7 +254,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
         }
 
         // Get by secondary index, retrieve from database all even entries
-        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
             List<CorfuStoreEntry<UuidMsg, ExampleValue, ManagedMetadata>> entries = readWriteTxn
                     .getByIndex(table, "non_primitive_field_level_0.key_1_level_1", even);
             assertThat(entries.size()).isEqualTo(totalRecords/2);
@@ -184,7 +270,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
         }
 
         // Get by secondary index from second level (nested), retrieve from database 'upper half'
-        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
             List<CorfuStoreEntry<UuidMsg, ExampleValue, ManagedMetadata>> entries = readWriteTxn
                     .getByIndex(table, "non_primitive_field_level_0.key_2_level_1.key_1_level_2", "upper half");
             assertThat(entries.size()).isEqualTo(totalRecords/2);
@@ -241,7 +327,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                     .setMsb(uuid.getMostSignificantBits()).setLsb(uuid.getLeastSignificantBits())
                     .build();
 
-            try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+            try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
                 txn.putRecord(tableName, key,
                         ExampleSchemas.ClassRoom.newBuilder()
                                 // Student 1 per ClassRoom
@@ -259,7 +345,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
         }
 
         // Get by secondary index, retrieve from database all classRooms that have young students
-        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
             List<CorfuStoreEntry<UuidMsg, ExampleSchemas.ClassRoom, ManagedMetadata>> classRooms = readWriteTxn
                     .getByIndex(table, "students.age", youngStudent);
             // Since only even indexed classRooms have youngStudents, we expect half of them to appear
@@ -324,7 +410,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                     .setMsb(id.getMostSignificantBits()).setLsb(id.getLeastSignificantBits())
                     .build();
 
-            try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+            try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
                 txn.putRecord(tableName, networkId,
                         ExampleSchemas.Network.newBuilder()
                                 // Device 1
@@ -342,7 +428,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
         }
 
         // Get by secondary index, retrieve from database all networks which have RouterA
-        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
             List<CorfuStoreEntry<UuidMsg, ExampleSchemas.Network, ManagedMetadata>> networks = readWriteTxn
                     .getByIndex(table, "devices.router", routerA);
             assertThat(networks.size()).isEqualTo(totalNetworks/2);
@@ -350,7 +436,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
         }
 
         // Get by secondary index, retrieve from database all networks which have RouterC
-        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
             List<CorfuStoreEntry<UuidMsg, ExampleSchemas.Network, ManagedMetadata>> networks = readWriteTxn
                     .getByIndex(table, "devices.router", routerC);
             assertThat(networks.size()).isEqualTo(totalNetworks);
@@ -393,7 +479,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
         createOffices(departments, totalCompanies, shimStore, someNamespace, tableName);
 
         // Get by secondary index, retrieve from database all Companies that have Department of type 1
-        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
             List<CorfuStoreEntry<UuidMsg, ExampleSchemas.Company, ManagedMetadata>> companiesDepartmentType1 = readWriteTxn
                     .getByIndex(table, "office.departments", departments.get(0));
             assertThat(companiesDepartmentType1.size()).isEqualTo(totalCompanies/2);
@@ -401,7 +487,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
         }
 
         // Get by secondary index, retrieve from database all Companies that have Department of Type 4 (all)
-        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
             List<CorfuStoreEntry<UuidMsg, ExampleSchemas.Company, ManagedMetadata>> companiesDepartmentType4 = readWriteTxn
                     .getByIndex(table, "office.departments", departments.get(3));
             assertThat(companiesDepartmentType4.size()).isEqualTo(totalCompanies);
@@ -474,7 +560,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                     .setMsb(id.getMostSignificantBits()).setLsb(id.getLeastSignificantBits())
                     .build();
 
-            try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+            try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
                 if (i % 2 == 0) {
                     txn.putRecord(tableName, networkId,
                             ExampleSchemas.Company.newBuilder()
@@ -537,7 +623,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                     .setMsb(uuid.getMostSignificantBits()).setLsb(uuid.getLeastSignificantBits())
                     .build();
 
-            try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+            try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
                 txn.putRecord(tableName, key,
                         ExampleSchemas.Person.newBuilder()
                                 .setName("Name_" + i)
@@ -554,7 +640,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
         }
 
         // Get by secondary index, retrieve from database all even entries
-        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
             List<CorfuStoreEntry<UuidMsg, ExampleSchemas.Person, ManagedMetadata>> entries = readWriteTxn
                     .getByIndex(table, "phoneNumber.mobile", mobileForEvens);
             assertThat(entries.size()).isEqualTo(people/2);
@@ -562,7 +648,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
         }
 
         // Get by secondary index, retrieve from database all entries with common mobile number
-        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
             List<CorfuStoreEntry<UuidMsg, ExampleSchemas.Person, ManagedMetadata>> entries = readWriteTxn
                     .getByIndex(table, "phoneNumber.mobile", mobileCommonBoth);
             assertThat(entries.size()).isEqualTo(people);
@@ -618,7 +704,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                     .setMsb(id.getMostSignificantBits()).setLsb(id.getLeastSignificantBits())
                     .build();
 
-            try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+            try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
                 txn.putRecord(tableName, officeId,
                         ExampleSchemas.Office.newBuilder()
                                 // Department 1 per Office
@@ -651,7 +737,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
         }
 
         // Get by secondary index, retrieve from database all offices which have an evenPhoneNumber
-        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
             List<CorfuStoreEntry<UuidMsg, ExampleSchemas.Office, ManagedMetadata>> offices = readWriteTxn
                     .getByIndex(table, "departments.members.phoneNumbers", evenPhoneNumber);
             assertThat(offices.size()).isEqualTo(numOffices/2);
@@ -659,7 +745,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
         }
 
         // Get by secondary index, retrieve from database all entries with common mobile number
-        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
             List<CorfuStoreEntry<UuidMsg, ExampleSchemas.Office, ManagedMetadata>> offices = readWriteTxn
                     .getByIndex(table, "departments.members.phoneNumbers", commonPhoneNumber);
             assertThat(offices.size()).isEqualTo(numOffices);
@@ -705,7 +791,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
         createSchools(shimStore, someNamespace, tableName, numSchools, oddNumDesks, noDesks, others);
 
         // Get by secondary index, retrieve number of schools that have classrooms with odd number of desks
-        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
             List<CorfuStoreEntry<UuidMsg, ExampleSchemas.School, ManagedMetadata>> schools = readWriteTxn
                     .getByIndex(table, "classRooms.classInfra.numberDesks", oddNumDesks);
             assertThat(schools.size()).isEqualTo(numSchools/2);
@@ -713,7 +799,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
         }
 
         // Get by secondary index, retrieve number of schools that have classrooms with no desks
-        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
             List<CorfuStoreEntry<UuidMsg, ExampleSchemas.School, ManagedMetadata>> schools = readWriteTxn
                     .getByIndex(table, "classRooms.classInfra.numberDesks", noDesks);
             assertThat(schools.size()).isEqualTo(1);
@@ -721,7 +807,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
         }
 
         // Get by secondary index, retrieve number of schools that have classrooms with computers (repeated primitive field)
-        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
             List<CorfuStoreEntry<UuidMsg, ExampleSchemas.School, ManagedMetadata>> schools = readWriteTxn
                     .getByIndex(table, "classRooms.classInfra.others", "computers");
             assertThat(schools.size()).isEqualTo(numSchools/others.length);
@@ -743,7 +829,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                     .setMsb(id.getMostSignificantBits()).setLsb(id.getLeastSignificantBits())
                     .build();
 
-            try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+            try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
                 txn.putRecord(tableName, schoolId,
                         ExampleSchemas.School.newBuilder()
                                 // ClassRoom 1
@@ -772,7 +858,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                 .setMsb(id.getMostSignificantBits()).setLsb(id.getLeastSignificantBits())
                 .build();
 
-        try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
             txn.putRecord(tableName, schoolId,
                     ExampleSchemas.School.newBuilder()
                             // ClassRoom 1
@@ -1085,7 +1171,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                     .setMsb(adultId.getMostSignificantBits()).setLsb(adultId.getLeastSignificantBits())
                     .build();
 
-            try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+            try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
                 long adultAge = i % 2 == 0 ? adultBaseAge : adultBaseAge*2;
                 long kidsAge = i % 2 == 0 ? kidsBaseAge : kidsBaseAge*2;
                 txn.putRecord(tableName, adultKey,
@@ -1106,7 +1192,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
 
 
         // Get by secondary index (default alias), retrieve from database all adults with adultsBaseAge
-        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
             List<CorfuStoreEntry<UuidMsg, ExampleSchemas.Adult, ManagedMetadata>> entries = readWriteTxn
                     .getByIndex(adultsTable, "age", adultBaseAge);
             assertThat(entries.size()).isEqualTo(adultCount/2);
@@ -1114,7 +1200,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
         }
 
         // Get by secondary index (using fully qualified name), retrieve from database all adults with adultsBaseAge
-        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
             List<CorfuStoreEntry<UuidMsg, ExampleSchemas.Adult, ManagedMetadata>> entries = readWriteTxn
                     .getByIndex(adultsTable, "person.age", adultBaseAge);
             assertThat(entries.size()).isEqualTo(adultCount/2);
@@ -1122,7 +1208,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
         }
 
         // Get by secondary index (custom alias), retrieve from database all adults with kids on age 'kidsBaseAge'
-        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
             List<CorfuStoreEntry<UuidMsg, ExampleSchemas.Adult, ManagedMetadata>> entries = readWriteTxn
                     .getByIndex(adultsTable, "kidsAge", kidsBaseAge);
             assertThat(entries.size()).isEqualTo(adultCount/2);
@@ -1130,7 +1216,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
         }
 
         // Get by secondary index (fully qualified name), retrieve from database all adults with kids on age 'kidsBaseAge'
-        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
             List<CorfuStoreEntry<UuidMsg, ExampleSchemas.Adult, ManagedMetadata>> entries = readWriteTxn
                     .getByIndex(adultsTable, "person.children.child.age", kidsBaseAge);
             assertThat(entries.size()).isEqualTo(adultCount/2);
@@ -1138,7 +1224,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
         }
 
         // Get by secondary index (custom alias), retrieve from database all adults with kids on age '2' (non existent)
-        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
             List<CorfuStoreEntry<UuidMsg, ExampleSchemas.Adult, ManagedMetadata>> entries = readWriteTxn
                     .getByIndex(adultsTable, "kidsAge", 2);
             assertThat(entries.size()).isZero();
@@ -1237,7 +1323,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                 .build();
         ManagedMetadata user = ManagedMetadata.newBuilder().setCreateUser("user_UT").build();
 
-        try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
             txn.putRecord(tableName, key1,
                     ExampleSchemas.NotNestedSecondaryIndex.newBuilder()
                             .setField1("record_1")
@@ -1253,7 +1339,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
             txn.commit();
         }
 
-        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
             List<CorfuStoreEntry<UuidMsg, ExampleSchemas.NotNestedSecondaryIndex, ManagedMetadata>> entries = readWriteTxn
                     .getByIndex(table, "field3", 1L);
             assertThat(entries.size()).isEqualTo(1);
@@ -1368,6 +1454,103 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                 ageChild, Arrays.asList(idRicky, idMary, idKate));
     }
 
+    /**
+     * Test indexing of 'NULL' (i.e., unset non-primitive sub-fields) for the following sub-field patterns (from
+     * the root):
+     *
+     * Refer to SportsProfessional proto, in 'example_schemas.proto' for definitions.
+     *
+     * (1) Repeated field followed by oneOf field (e.g., hobby.sport)
+     * (2) Non-repeated field followed by oneOf field (e.g., profession.sport)
+     * (3) Repeated field followed by repeated field (e.g., training.exercises)
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testNestedIndexesWithNullValues() throws Exception {
+
+        final String someNamespace = "major-league";
+        final String tableName = "ProPlayers";
+
+        // Get a Corfu Runtime instance and create Corfu Store
+        CorfuRuntime corfuRuntime = getTestRuntime();
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Create & Register the table.
+        shimStore.openTable(
+                someNamespace,
+                tableName,
+                UuidMsg.class,
+                ExampleSchemas.SportsProfessional.class,
+                ManagedMetadata.class,
+                TableOptions.builder().build());
+
+        // Define a player and set only (1) oneOf type, then query for the unset field to confirm this
+        // is indexed as NULL (i.e., not set)
+        ExampleSchemas.SportsProfessional player1 = ExampleSchemas.SportsProfessional.newBuilder()
+                .setPerson(ExampleSchemas.Person.newBuilder().setName("Michael Jordan").build())
+                // Set Basket as profession (oneOf field) so query for Baseball as profession
+                .setProfession(ExampleSchemas.Hobby.newBuilder().setBasket(ExampleSchemas.Basketball.newBuilder().setTeam("Chicago Bulls").build()).build())
+                // Set Baseball as hobby (oneOf field) so query for Basket as hobby
+                .addHobby(ExampleSchemas.Hobby.newBuilder().setBaseball(ExampleSchemas.Baseball.newBuilder().build()).build())
+                // Do not define any sub-field of repeated type (Exercises) and confirmed its indexed as NULL
+                .addTraining(ExampleSchemas.TrainingPlan.newBuilder().build())
+                .build();
+
+        // Define a player which does not have any indexed sub-field set (therefore, it should be indexed as NULL)
+        ExampleSchemas.SportsProfessional playerUndefined = ExampleSchemas.SportsProfessional.newBuilder()
+                .setPerson(ExampleSchemas.Person.newBuilder().setName("Undefined").build())
+                // Don't set any 'oneOf' sport for profession (sub-field)
+                .setProfession(ExampleSchemas.Hobby.newBuilder().build())
+                // Don't set any 'oneOf' sport for Hobby (sub-field)
+                .addHobby(ExampleSchemas.Hobby.newBuilder().setBaseball(ExampleSchemas.Baseball.newBuilder().build()).build())
+                // Do not define any sub-field of repeated type (Exercises) and confirmed its indexed as NULL
+                .addTraining(ExampleSchemas.TrainingPlan.newBuilder().build())
+                .build();
+
+        // Add players to Table
+        UUID id1 = UUID.randomUUID();
+        UuidMsg idPlayer1 = UuidMsg.newBuilder()
+                .setMsb(id1.getMostSignificantBits()).setLsb(id1.getLeastSignificantBits())
+                .build();
+
+        UUID id2 = UUID.randomUUID();
+        UuidMsg idPlayerUndefined = UuidMsg.newBuilder()
+                .setMsb(id2.getMostSignificantBits()).setLsb(id2.getLeastSignificantBits())
+                .build();
+
+        try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
+            txn.putRecord(tableName, idPlayer1, player1, ManagedMetadata.newBuilder().setCreateUser("user_UT").build());
+            txn.putRecord(tableName, idPlayerUndefined, playerUndefined, ManagedMetadata.newBuilder().setCreateUser("user_UT").build());
+            txn.commit();
+        }
+
+        // Query secondary indexes
+        // (1) Repeated field followed by oneOf field (e.g., hobby.sport)
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
+            List<CorfuStoreEntry<UuidMsg, ExampleSchemas.SportsProfessional, ManagedMetadata>> entries = readWriteTxn
+                    .getByIndex(tableName, "basketAsHobby", null);
+            assertThat(entries.size()).isEqualTo(2);
+            readWriteTxn.commit();
+        }
+
+        // (2) Non-repeated field followed by oneOf field (e.g., profession.sport)
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
+            List<CorfuStoreEntry<UuidMsg, ExampleSchemas.SportsProfessional, ManagedMetadata>> entries = readWriteTxn
+                    .getByIndex(tableName, "baseballPlayers", null);
+            assertThat(entries.size()).isEqualTo(2);
+            readWriteTxn.commit();
+        }
+
+        // (3) Repeated field followed by repeated field (e.g., training.exercises)
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
+            List<CorfuStoreEntry<UuidMsg, ExampleSchemas.SportsProfessional, ManagedMetadata>> entries = readWriteTxn
+                    .getByIndex(tableName, "exercises", null);
+            assertThat(entries.size()).isEqualTo(2);
+            readWriteTxn.commit();
+        }
+    }
+
     // ****** Utility Functions *******
 
     private UuidMsg getUuid() {
@@ -1465,7 +1648,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
         UuidMsg key = UuidMsg.newBuilder()
                 .setMsb(id.getMostSignificantBits()).setLsb(id.getLeastSignificantBits())
                 .build();
-        try (ManagedTxnContext txn = shimStore.txn(namespace)) {
+        try (ManagedTxnContext txn = shimStore.tx(namespace)) {
             txn.putRecord(tableName, key, adult,
                     ManagedMetadata.newBuilder().setCreateUser("user_UT").build());
             txn.commit();
@@ -1477,7 +1660,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
     private void verifySecondaryIndex(CorfuStoreShim shimStore, String someNamespace, String tableName,
                                       Map<UuidMsg, Adult> adults, List<String> adults45y, long ageAdult,
                                       long ageChild, List<UuidMsg> adultsId) {
-        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
 
             // Verify index by age for a known value
             List<CorfuStoreEntry<UuidMsg, ExampleSchemas.Adult, ManagedMetadata>> entries = readWriteTxn

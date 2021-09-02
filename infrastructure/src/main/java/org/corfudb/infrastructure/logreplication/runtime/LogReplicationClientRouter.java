@@ -44,6 +44,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getDefaultProtocolVersionMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 
 /**
@@ -179,6 +180,7 @@ public class LogReplicationClientRouter implements IClientRouter {
             @Nonnull String nodeId) {
 
         HeaderMsg.Builder header = HeaderMsg.newBuilder()
+                .setVersion(getDefaultProtocolVersionMsg())
                 .setIgnoreClusterId(true)
                 .setIgnoreEpoch(true);
 

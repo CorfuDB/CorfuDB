@@ -1,7 +1,10 @@
 package org.corfudb.runtime.view;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -38,7 +41,21 @@ public class ObjectsView extends AbstractView {
      * The Transaction stream is used to log/write successful transactions from different clients.
      * Transaction data and meta data can be obtained by reading this stream.
      */
+    @Deprecated
     public static final UUID TRANSACTION_STREAM_ID = CorfuRuntime.getStreamID("Transaction_Stream");
+
+    // We are temporarily naming this stream with the same name as TRANSACTION_STREAM_ID to avoid breaking LR code
+    // while transition to UFO is completed (once migration is complete to UFO this stream can be renamed)
+    // add a prefix to the name: e.g., org.corfudb.logreplication.transactionstream
+    static final StreamTagInfo LOG_REPLICATOR_STREAM_INFO =
+            new StreamTagInfo("Transaction_Stream", CorfuRuntime.getStreamID("Transaction_Stream"));
+
+    /**
+     * @return the ID of the log replicator stream.
+     */
+    public static UUID getLogReplicatorStreamId() {
+        return LOG_REPLICATOR_STREAM_INFO.getStreamId();
+    }
 
     @Getter
     @Setter
@@ -210,6 +227,21 @@ public class ObjectsView extends AbstractView {
 
         public String toString() {
             return "[" + streamID + ", " + type.getSimpleName() + "]";
+        }
+    }
+
+    @AllArgsConstructor
+    @Getter
+    @EqualsAndHashCode
+    static final class StreamTagInfo {
+        @NonNull
+        private final String tagName;
+        @NonNull
+        private final UUID streamId;
+
+        @Override
+        public String toString() {
+            return "[" + tagName + ", " + streamId.toString() + "]";
         }
     }
 }

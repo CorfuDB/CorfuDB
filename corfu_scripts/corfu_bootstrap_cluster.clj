@@ -5,7 +5,8 @@
 (require 'clojure.pprint)
 (require 'clojure.java.shell)
 (import org.corfudb.runtime.view.Layout)
-(def usage "corfu_bootstrap_cluster, setup the Corfu cluster where all nodes are NOT bootstrapped.
+(import java.util.UUID)
+(def usage "corfu_bootstrap_cluster, setup the Corfu cluster from nodes that have NOT been previously bootstrapped.
 Usage:
   corfu_bootstrap_cluster -l <layout> [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] [-g -o <username_file> -j <password_file>]]
 Options:
@@ -26,16 +27,27 @@ Options:
 
 (defn bootstrap-cluster [layout-file]
                (do ; read in the new layout
-                 (let [new-layout (Layout/fromJSONString (str (slurp layout-file)))]
-
+                 (let [unvalidated-layout (Layout/fromJSONString (str (slurp layout-file)))]
+                   (let [new-layout
+                         (if
+                           (nil? (.getClusterId unvalidated-layout))
+                           (new Layout
+                             (.getLayoutServers unvalidated-layout)
+                             (.getSequencers unvalidated-layout)
+                             (.getSegments unvalidated-layout)
+                             (.getUnresponsiveServers unvalidated-layout)
+                             (.getEpoch unvalidated-layout)
+                             (UUID/randomUUID))
+                           unvalidated-layout)]
                       (do
                         (doseq [server (.getLayoutServers new-layout)]
-                           (do (let [router (get-router server localcmd)]
+                           (do
+                             (let [router (get-router server localcmd)]
                                (.get (.bootstrapLayout (get-layout-client router (.getEpoch new-layout) (.getClusterId new-layout)) new-layout))
                                (.get (.bootstrapManagement (get-management-client router (.getEpoch new-layout) (.getClusterId new-layout)) new-layout))
                             )))
                         (println "New layout installed!")
-                        ))))
+                        )))))
 
 ; determine whether to read or write
 (cond (.. localcmd (get "--layout")) (bootstrap-cluster (.. localcmd (get "--layout")))

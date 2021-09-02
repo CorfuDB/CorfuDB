@@ -2,10 +2,9 @@ package org.corfudb.infrastructure;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.protobuf.TextFormat;
-import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.BatchWriterOperation.Type;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.CorfuProtocolLogData;
@@ -46,10 +45,6 @@ public class BatchProcessor implements AutoCloseable {
     private final BlockingQueue<BatchWriterOperation> operationsQueue;
     private final ExecutorService processorService;
 
-    private final Optional<Timer> writeRecordTimer;
-    private final Optional<Timer> writeRecordsTimer;
-    private final Optional<DistributionSummary> queueSizeDist;
-
     /**
      * The sealEpoch is the epoch up to which all operations have been sealed. Any
      * BatchWriterOperation arriving after the sealEpoch with an epoch less than the sealEpoch
@@ -72,24 +67,6 @@ public class BatchProcessor implements AutoCloseable {
 
         BATCH_SIZE = 50;
         operationsQueue = new LinkedBlockingQueue<>();
-        writeRecordTimer = MeterRegistryProvider.getInstance().map(registry ->
-                Timer.builder("logunit.write.timer")
-                        .publishPercentiles(0.50, 0.95, 0.99)
-                        .publishPercentileHistogram()
-                        .tags("type", "single").register(registry));
-        writeRecordsTimer = MeterRegistryProvider.getInstance().map(registry ->
-                Timer.builder("logunit.write.timer")
-                        .publishPercentiles(0.50, 0.95, 0.99)
-                        .publishPercentileHistogram()
-                        .tags("type", "multiple").register(registry));
-        queueSizeDist = MeterRegistryProvider.getInstance().map(registry ->
-                DistributionSummary
-                        .builder("logunit.queue.size")
-                        .publishPercentiles(0.50, 0.95, 0.99)
-                        .publishPercentileHistogram()
-                        .baseUnit("op")
-                        .register(registry));
-
         processorService = Executors
                 .newSingleThreadExecutor(new ThreadFactoryBuilder()
                         .setDaemon(false)
@@ -131,8 +108,7 @@ public class BatchProcessor implements AutoCloseable {
 
             while (true) {
                 BatchWriterOperation currentOp;
-                queueSizeDist.ifPresent(dist -> dist.record(operationsQueue.size()));
-
+                MicroMeterUtils.measure(operationsQueue.size(), "logunit.queue.size");
                 if (lastOp == null) {
                     currentOp = operationsQueue.take();
                 } else {
@@ -193,14 +169,14 @@ public class BatchProcessor implements AutoCloseable {
                                 break;
                             case WRITE:
                                 LogData logData = getLogData(payload.getWriteLogRequest().getLogData());
-                                Runnable append = () -> streamLog.append(logData.getGlobalAddress(), logData);
-                                recordRunnable(append, writeRecordTimer);
+                                MicroMeterUtils.time(() -> streamLog.append(logData.getGlobalAddress(), logData),
+                                        "logunit.write.timer", "type", "single");
                                 break;
                             case RANGE_WRITE:
                                 List<LogData> range = payload.getRangeWriteLogRequest().getLogDataList()
                                         .stream().map(CorfuProtocolLogData::getLogData).collect(Collectors.toList());
-                                Runnable appendMultiple = () -> streamLog.append(range);
-                                recordRunnable(appendMultiple, writeRecordsTimer);
+                                MicroMeterUtils.time(() -> streamLog.append(range),
+                                        "logunit.write.timer", "type", "range");
                                 break;
                             case RESET:
                                 streamLog.reset();

@@ -8,6 +8,7 @@ import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.Serializers;
 
 import java.io.File;
@@ -17,6 +18,8 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.reflect.Array;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -41,11 +44,15 @@ public class Restore {
     // The path of a temporary directory under which the unpacked table's backup files are stored
     private final String restoreTempDirPath;
 
-    // The stream IDs of tables which are restored
-    private List<UUID> streamIDs;
+    // The filename of each table's backup file, format: uuid.namespace$tableName.
+    private final List<String> tableBackups;
 
     // The Corfu Store associated with the runtime
     private CorfuStore corfuStore;
+
+    // If FULL, will clean up all tables before restore;
+    // If PARTIAL, will only clean up tables that are to be restored
+    private RestoreMode restoreMode;
 
     /**
      * Unpacked files from backup tar file are stored under RESTORE_TEMP_DIR. They are deleted after restore finishes.
@@ -57,11 +64,12 @@ public class Restore {
      * @param runtime       - the runtime which is performing the restore
      * @throws IOException when failed to create the temp directory
      */
-    public Restore(String filePath, CorfuRuntime runtime) throws IOException {
+    public Restore(String filePath, CorfuRuntime runtime, RestoreMode restoreMode) throws IOException {
         this.filePath = filePath;
         this.restoreTempDirPath = Files.createTempDirectory(RESTORE_TEMP_DIR_PREFIX).toString();
-        this.streamIDs = new ArrayList<>();
+        this.tableBackups = new ArrayList<>();
         this.corfuStore = new CorfuStore(runtime);
+        this.restoreMode = restoreMode;
     }
 
     /**
@@ -84,30 +92,44 @@ public class Restore {
     }
 
     private void restore() throws IOException {
-        for (UUID streamId : streamIDs) {
-            String fileName = restoreTempDirPath + File.separator + streamId;
+        if (restoreMode == RestoreMode.FULL) {
+            clearAllTables();
+        }
+
+        long startTime = System.currentTimeMillis();
+        for (String tableBackup : tableBackups) {
+            UUID streamId = UUID.fromString(tableBackup.substring(0, tableBackup.indexOf(".")));
             try {
-                restoreTable(fileName, streamId);
+                Path tableBackupPath = Paths.get(restoreTempDirPath).resolve(tableBackup);
+                restoreTable(tableBackupPath, streamId);
             } catch (IOException e) {
-                log.error("failed to restore table {} from temp file {}", streamId, fileName);
+                log.error("failed to restore table {} from temp file {}", streamId, tableBackup);
                 throw e;
             }
         }
+        long elapsedTime = System.currentTimeMillis() - startTime;
+        log.info("successfully restored {} tables to, elapsed time {}ms",
+                tableBackups.size(), elapsedTime);
     }
 
     /**
      * Restore a single table
      *
-     * @param fileName   - the name of the temp backup file
+     * @param filePath   - the path of the temp backup file
      * @param streamId   - the stream ID of the table which is to be restored
      * @throws IOException
      */
-    private void restoreTable(String fileName, UUID streamId) throws IOException {
-        try (FileInputStream fileInput = new FileInputStream(fileName)) {
-            // Clear table before restore
+    private void restoreTable(Path filePath, UUID streamId) throws IOException {
+        long startTime = System.currentTimeMillis();
+
+        try (FileInputStream fileInput = new FileInputStream(filePath.toString())) {
             TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE);
-            SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
-            txn.logUpdate(streamId, entry);
+
+            // Clear table before restore
+            if (restoreMode == RestoreMode.PARTIAL) {
+                SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
+                txn.logUpdate(streamId, entry);
+            }
 
             long numEntries = 0;
             while (fileInput.available() > 0) {
@@ -121,9 +143,13 @@ public class Restore {
                 numEntries += smrEntries.size();
             }
             txn.commit();
-            log.info("completed restore of table {} with {} numEntries", streamId, numEntries);
+
+            long elapsedTime = System.currentTimeMillis() - startTime;
+
+            log.info("completed restore of table {} with {} numEntries, elapsed time {}ms",
+                    streamId, numEntries, elapsedTime);
         } catch (FileNotFoundException e) {
-            log.error("restoreTable can not find file {}", fileName);
+            log.error("restoreTable can not find file {}", filePath);
             throw e;
         }
     }
@@ -146,7 +172,8 @@ public class Restore {
         byte[] buf = new byte[1024];
         TarArchiveEntry entry;
         while ((entry = tarInput.getNextTarEntry()) != null) {
-            streamIDs.add(UUID.fromString(entry.getName()));
+            tableBackups.add(entry.getName());
+
             String tablePath = restoreTempDirPath + File.separator + entry.getName();
             try (FileOutputStream fos = new FileOutputStream(tablePath)) {
                 while ((count = tarInput.read(buf, 0, 1024)) != -1) {
@@ -170,5 +197,23 @@ public class Restore {
      */
     private void cleanup() throws IOException {
         FileUtils.deleteDirectory(new File(restoreTempDirPath));
+    }
+
+    private void clearAllTables() {
+        TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE);
+
+        corfuStore.getRuntime().getTableRegistry().listTables().forEach(tableName -> {
+            String name = TableRegistry.getFullyQualifiedTableName(tableName);
+            UUID streamId = CorfuRuntime.getStreamID(name);
+            SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
+            txn.logUpdate(streamId, entry);
+        });
+
+        txn.commit();
+    }
+
+    public enum RestoreMode {
+        FULL,   // Clean up ALL tables before restore
+        PARTIAL // Clean up ONLY tables that are to be restored
     }
 }

@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.StreamingException;
@@ -9,7 +10,6 @@ import org.corfudb.runtime.view.stream.IStreamView;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -45,8 +45,6 @@ class StreamPollingTask implements Runnable {
     // A period of time in ms to sleep before next cycle when poller gets no new data changes.
     private final int pollingIdleWaitTime;
 
-    private final Random randomGenerator;
-
     StreamPollingTask(StreamingManager streamingManager, long lastAddress,
                       StreamSubscription subscription, ScheduledExecutorService executor, CorfuRuntimeParameters params) {
         this.streamingManager = streamingManager;
@@ -56,7 +54,6 @@ class StreamPollingTask implements Runnable {
         this.txnStream = subscription.getTxnStream();
         this.pollingBlockingTime = params.getStreamingPollingBlockingTimeMs();
         this.pollingIdleWaitTime = params.getStreamingPollingIdleWaitTimeMs();
-        this.randomGenerator = new Random();
     }
 
     @Override
@@ -95,14 +92,15 @@ class StreamPollingTask implements Runnable {
 
         // Seek to next address and poll transaction updates.
         txnStream.seek(lastReadAddress + 1L);
-        List<ILogData> updates = subscription.getStreamingMetrics().recordPollingDuration(
-                () -> txnStream.remainingAtMost(subscription.getStreamBufferSize()));
-
+        String listenerId = subscription.getListenerId();
+        List<ILogData> updates =  MicroMeterUtils
+                .time(() -> txnStream.remainingAtMost(subscription.getStreamBufferSize()),
+                        "stream.poll.duration", "listener", listenerId);
         // No new updates, take a short break and poll again.
         if (updates.isEmpty()) {
             log.trace("pollTxStream :: no updates for {} from {}, listenerId={}", txnStream.getId(),
                     lastReadAddress + 1L, subscription.getListener().getClass().getSimpleName());
-            pollingExecutor.schedule(this, randomGenerator.nextInt(pollingIdleWaitTime), TimeUnit.MILLISECONDS);
+            pollingExecutor.schedule(this, pollingIdleWaitTime, TimeUnit.MILLISECONDS);
             return;
         }
 

@@ -195,11 +195,6 @@ public class LogReplicationFSM {
     private final SnapshotSender snapshotSender;
 
     /**
-     * Remote Cluster Descriptor to which this FSM drives the log replication
-     */
-    private final ClusterDescriptor remoteCluster;
-
-    /**
      * Ack Reader for Snapshot and Log Entry Syncs
      */
     @Getter
@@ -232,7 +227,7 @@ public class LogReplicationFSM {
      * @param dataSender application callback for snapshot and log entry sync messages
      * @param logEntryReader log entry logreader implementation
      * @param readProcessor read processor (for data transformation)
-     * @param remoteCluster remote cluster descriptor
+     * @param remoteCluster Remote Cluster Descriptor to which this FSM drives the log replication
      * @param workers FSM executor service for state tasks
      */
     @VisibleForTesting
@@ -242,7 +237,6 @@ public class LogReplicationFSM {
 
         this.snapshotReader = snapshotReader;
         this.logEntryReader = logEntryReader;
-        this.remoteCluster = remoteCluster;
         this.ackReader = ackReader;
 
         // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and send data

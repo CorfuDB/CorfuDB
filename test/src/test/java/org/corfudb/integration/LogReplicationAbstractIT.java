@@ -8,7 +8,6 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.StringJoiner;
@@ -28,6 +27,7 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
@@ -81,8 +81,8 @@ public class LogReplicationAbstractIT extends AbstractIT {
     public CorfuTable<String, Integer> mapA;
     public CorfuTable<String, Integer> mapAStandby;
 
-    public Map<String, Table<Sample.StringKey, Sample.IntValue, Sample.Metadata>> mapNameToMapActive;
-    public Map<String, Table<Sample.StringKey, Sample.IntValue, Sample.Metadata>> mapNameToMapStandby;
+    public Map<String, Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata>> mapNameToMapActive;
+    public Map<String, Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata>> mapNameToMapStandby;
 
     public CorfuStore corfuStoreActive;
     public CorfuStore corfuStoreStandby;
@@ -138,6 +138,10 @@ public class LogReplicationAbstractIT extends AbstractIT {
     }
 
     public void testEndToEndSnapshotAndLogEntrySyncUFO() throws Exception {
+        // TODO: when ObjectsView.TRANSACTION_STREAM_ID is removed or LOG_REPLICATOR_STREAM_ID name is changed,
+        //  change these tests such that UFO tables used in the tests have the is_federated tag set,
+        //  as these will determine which tables will be written to the LOG_REPLICATOR_STREAM_ID
+        //  (for now, it is not required as they're written to the same TRANSACTION_STREAM_ID from legacy impl.)
         testEndToEndSnapshotAndLogEntrySyncUFO(1);
     }
 
@@ -154,12 +158,12 @@ public class LogReplicationAbstractIT extends AbstractIT {
             writeToActive(0, numWrites);
 
             // Confirm data does exist on Active Cluster
-            for(Table<Sample.StringKey, Sample.IntValue, Sample.Metadata> map : mapNameToMapActive.values()) {
+            for(Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapActive.values()) {
                 assertThat(map.count()).isEqualTo(numWrites);
             }
 
             // Confirm data does not exist on Standby Cluster
-            for(Table<Sample.StringKey, Sample.IntValue, Sample.Metadata> map : mapNameToMapStandby.values()) {
+            for(Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapStandby.values()) {
                 assertThat(map.count()).isEqualTo(0);
             }
 
@@ -228,12 +232,12 @@ public class LogReplicationAbstractIT extends AbstractIT {
         for(int i=1; i<=mapCount; i++) {
             String mapName = TABLE_PREFIX + i;
 
-            Table<Sample.StringKey, Sample.IntValue, Sample.Metadata> mapActive = corfuStoreActive.openTable(
-                    NAMESPACE, mapName, Sample.StringKey.class, Sample.IntValue.class, Sample.Metadata.class,
+            Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapActive = corfuStoreActive.openTable(
+                    NAMESPACE, mapName, Sample.StringKey.class, Sample.IntValueTag.class, Sample.Metadata.class,
                     TableOptions.builder().build());
 
-            Table<Sample.StringKey, Sample.IntValue, Sample.Metadata> mapStandby = corfuStoreStandby.openTable(
-                    NAMESPACE, mapName, Sample.StringKey.class, Sample.IntValue.class, Sample.Metadata.class,
+            Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapStandby = corfuStoreStandby.openTable(
+                    NAMESPACE, mapName, Sample.StringKey.class, Sample.IntValueTag.class, Sample.Metadata.class,
                     TableOptions.builder().build());
 
             mapNameToMapActive.put(mapName, mapActive);
@@ -275,18 +279,19 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     public void writeToActive(int startIndex, int totalEntries) {
         int maxIndex = totalEntries + startIndex;
-        for(Map.Entry<String, Table<Sample.StringKey, Sample.IntValue, Sample.Metadata>> entry : mapNameToMapActive.entrySet()) {
+        for(Map.Entry<String, Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata>> entry : mapNameToMapActive.entrySet()) {
 
             log.debug(">>> Write to active cluster, map={}", entry.getKey());
 
-            String mapName = entry.getKey();
+            Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map = entry.getValue();
             for (int i = startIndex; i < maxIndex; i++) {
                 Sample.StringKey stringKey = Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build();
-                Sample.IntValue intValue = Sample.IntValue.newBuilder().setValue(i).build();
+                Sample.IntValueTag IntValueTag = Sample.IntValueTag.newBuilder().setValue(i).build();
                 Sample.Metadata metadata = Sample.Metadata.newBuilder().setMetadata("Metadata_" + i).build();
-                corfuStoreActive.tx(NAMESPACE)
-                        .update(mapName, stringKey, intValue, metadata)
-                        .commit();
+                try (TxnContext txn = corfuStoreActive.txn(NAMESPACE)) {
+                    txn.putRecord(map, stringKey, IntValueTag, metadata);
+                    txn.commit();
+                }
             }
         }
     }
@@ -458,7 +463,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
     }
 
     public void verifyDataOnStandby(int expectedConsecutiveWrites) {
-        for(Map.Entry<String, Table<Sample.StringKey, Sample.IntValue, Sample.Metadata>> entry : mapNameToMapStandby.entrySet()) {
+        for(Map.Entry<String, Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata>> entry : mapNameToMapStandby.entrySet()) {
 
             log.debug("Verify Data on Standby's Table {}", entry.getKey());
 
@@ -473,7 +478,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
             assertThat(entry.getValue().count()).isEqualTo(expectedConsecutiveWrites);
 
             for (int i = 0; i < (expectedConsecutiveWrites); i++) {
-                assertThat(entry.getValue().get(Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build()).getPayload()).isNotNull();
+                try (TxnContext tx = corfuStoreStandby.txn(entry.getValue().getNamespace())) {
+                    assertThat(tx.getRecord(entry.getValue(),
+                            Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build()).getPayload()).isNotNull();
+                    tx.commit();
+                }
             }
         }
     }
@@ -600,31 +609,5 @@ public class LogReplicationAbstractIT extends AbstractIT {
         cpRuntime.getAddressSpaceView().invalidateClientCache();
         cpRuntime.getAddressSpaceView().invalidateServerCaches();
         cpRuntime.getAddressSpaceView().gc();
-    }
-
-    /**
-     * Return the first map on active cluster (typical for cases where the number of map is set to 1)
-     * @return first map on active cluster
-     */
-    public Table<Sample.StringKey, Sample.IntValue, Sample.Metadata> getActiveMap() {
-        Iterator<Map.Entry<String, Table<Sample.StringKey, Sample.IntValue, Sample.Metadata>>> it = mapNameToMapActive.entrySet().iterator();
-        if (it.hasNext()) {
-            return it.next().getValue();
-        }
-
-        return null;
-    }
-
-    /**
-     * Return the first map on standby cluster (typical for cases where the number of map is set to 1)
-     * @return first map on standby cluster
-     */
-    public Table<Sample.StringKey, Sample.IntValue, Sample.Metadata> getStandbyMap() {
-        Iterator<Map.Entry<String, Table<Sample.StringKey, Sample.IntValue, Sample.Metadata>>> it = mapNameToMapStandby.entrySet().iterator();
-        if (it.hasNext()) {
-            return it.next().getValue();
-        }
-
-        return null;
     }
 }

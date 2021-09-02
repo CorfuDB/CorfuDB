@@ -85,11 +85,11 @@ public class TestServerRouter implements IServerRouter {
                 .allMatch(x -> x.evaluate(newResponse, this))) {
             if (ctx instanceof TestChannelContext) {
                 ctx.writeAndFlush(newResponse);
-                log.info("sendResponse: Sent {} - {}", response.getPayload().getPayloadCase(),
+                log.debug("sendResponse: Sent {} - {}", response.getPayload().getPayloadCase(),
                         TextFormat.shortDebugString(response.getHeader()));
             } else {
                 this.protoResponseMessages.add(newResponse);
-                log.info("sendResponse: Added response - {} to protoResponseMessages List.",
+                log.debug("sendResponse: Added response - {} to protoResponseMessages List.",
                         TextFormat.shortDebugString(response.getHeader()));
             }
         }

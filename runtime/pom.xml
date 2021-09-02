@@ -13,6 +13,18 @@
 
     <properties>
         <maven.deploy.skip>false</maven.deploy.skip>
+
+        <rocksdb.version>6.8.1</rocksdb.version>
+        <gson.version>2.8.0</gson.version>
+        <kryo.version>4.0.0</kryo.version>
+        <kryo.serializers.version>0.41</kryo.serializers.version>
+        <plexus.version>3.0.24</plexus.version>
+        <javassist.version>3.21.0-GA</javassist.version>
+        <commons.lang3.version>3.9</commons.lang3.version>
+        <commons.compress.version>1.21</commons.compress.version>
+        <annotations.api.version>6.0.53</annotations.api.version>
+
+        <grpc.version>1.29.0</grpc.version>
     </properties>
 
     <build>
@@ -90,90 +102,78 @@
         </dependency>
         <dependency>
             <groupId>org.corfudb</groupId>
-            <artifactId>annotationProcessor</artifactId>
+            <artifactId>annotation-processor</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
             <groupId>com.esotericsoftware</groupId>
             <artifactId>kryo</artifactId>
-            <version>4.0.0</version>
+            <version>${kryo.version}</version>
         </dependency>
         <dependency>
             <groupId>org.codehaus.plexus</groupId>
             <artifactId>plexus-utils</artifactId>
-            <version>3.0.24</version>
+            <version>${plexus.version}</version>
         </dependency>
         <dependency>
             <groupId>de.javakaffee</groupId>
             <artifactId>kryo-serializers</artifactId>
-            <version>0.41</version>
+            <version>${kryo.serializers.version}</version>
         </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
-            <version>2.8.0</version>
+            <version>${gson.version}</version>
         </dependency>
         <dependency>
             <groupId>org.javassist</groupId>
             <artifactId>javassist</artifactId>
-            <version>3.21.0-GA</version>
+            <version>${javassist.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
-            <version>3.9</version>
+            <version>${commons.lang3.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-compress</artifactId>
-            <version>1.19</version>
-        </dependency>
-        <!-- https://mvnrepository.com/artifact/commons-io/commons-io -->
-        <dependency>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
-            <version>2.8.0</version>
+            <version>${commons.compress.version}</version>
         </dependency>
         <dependency>
             <groupId>org.rocksdb</groupId>
             <artifactId>rocksdbjni</artifactId>
-            <version>6.8.1</version>
+            <version>${rocksdb.version}</version>
         </dependency>
-        <dependency>
-            <groupId>org.roaringbitmap</groupId>
-            <artifactId>RoaringBitmap</artifactId>
-            <version>0.8.13</version>
-        </dependency>
-        <!-- https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java -->
+
         <dependency>
             <groupId>com.google.protobuf</groupId>
-            <artifactId>protobuf-java</artifactId>
-            <version>3.6.1</version>
+            <artifactId>protobuf-java-util</artifactId>
+            <version>${protobuf.version}</version>
         </dependency>
         <!--grpc dependencies-->
         <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-netty-shaded</artifactId>
-            <version>1.29.0</version>
+            <version>${grpc.version}</version>
         </dependency>
         <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-protobuf</artifactId>
-            <version>1.29.0</version>
+            <version>${grpc.version}</version>
         </dependency>
         <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-stub</artifactId>
-            <version>1.29.0</version>
+            <version>${grpc.version}</version>
         </dependency>
         <dependency> <!-- necessary for Java 9+ -->
             <groupId>org.apache.tomcat</groupId>
             <artifactId>annotations-api</artifactId>
-            <version>6.0.53</version>
+            <version>${annotations.api.version}</version>
             <scope>provided</scope>
         </dependency>
-
     </dependencies>
 
 </project>

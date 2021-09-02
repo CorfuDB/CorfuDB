@@ -53,8 +53,7 @@ public class ParallelTransferProcessor {
                                                        Semaphore semaphore)
             throws InterruptedException {
         semaphore.acquire();
-        Optional<Timer.Sample> sample = MeterRegistryProvider.getInstance().map(Timer::start);
-
+        Optional<Timer.Sample> sample = MicroMeterUtils.startTimer();
         CompletableFuture<Void> batchTransferResult =
                 stateTransferBatchProcessor
                         .transfer(request)
@@ -69,7 +68,6 @@ public class ParallelTransferProcessor {
                                 throw new StateTransferBatchProcessorException();
                             }
                         });
-
         CompletableFuture<Void> future = MicroMeterUtils
                 .timeWhenCompletes(
                         batchTransferResult,
@@ -110,9 +108,8 @@ public class ParallelTransferProcessor {
             while (iterator.hasNext() && !allFutures.isCompletedExceptionally()) {
                 try {
                     TransferBatchRequest request = iterator.next();
-                    MeterRegistryProvider.getInstance().ifPresent(registry ->
-                            registry.counter("state-transfer.read.throughput", "type", "committed")
-                                    .increment(request.getAddresses().size()));
+                    MicroMeterUtils.counterIncrement(request.getAddresses().size(),
+                            "state-transfer.read.throughput", "type", "committed");
                     allFutures = handleBatchRequest(request, allFutures, semaphore);
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();

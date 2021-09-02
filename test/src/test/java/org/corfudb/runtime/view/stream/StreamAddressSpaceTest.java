@@ -7,6 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
 import java.util.stream.LongStream;
 
 import com.google.common.collect.ImmutableSet;
@@ -14,6 +17,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
 import io.netty.buffer.Unpooled;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.view.Address;
 import org.junit.Test;
 
@@ -55,6 +59,47 @@ public class StreamAddressSpaceTest {
     }
 
     @Test
+    public void testMergeDifferentTrimMarks() {
+        StreamAddressSpace streamA = new StreamAddressSpace();
+        streamA.addAddress(1L);
+        streamA.trim(1L);
+        StreamAddressSpace streamB = new StreamAddressSpace(6L, Collections.EMPTY_SET);
+
+        assertThat(streamA.size()).isEqualTo(0);
+        assertThat(streamA.getTrimMark()).isEqualTo(1L);
+        assertThat(streamB.size()).isEqualTo(0);
+        assertThat(streamB.getTrimMark()).isEqualTo(6L);
+
+        // Merge streamB into streamA and verify that streamA adopted streamB's larger trim mark
+        StreamAddressSpace.merge(streamA, streamB);
+        assertThat(streamA.size()).isEqualTo(0);
+        assertThat(streamA.getTrimMark()).isEqualTo(6L);
+    }
+
+    @Test
+    public void testForEachUpTo() {
+        StreamAddressSpace stream = new StreamAddressSpace();
+
+        Set<Long> query1 = new HashSet<>();
+        stream.forEachUpTo(Long.MAX_VALUE, query1::add);
+        assertThat(query1).isEmpty();
+
+        stream.addAddress(1L);
+        stream.addAddress(5L);
+        stream.addAddress(6L);
+
+        Set<Long> query2 = new HashSet<>();
+        stream.forEachUpTo(6L, query2::add);
+        assertThat(query2).containsExactly(1L, 5L, 6L);
+
+        stream.trim(5L);
+
+        Set<Long> query3 = new HashSet<>();
+        stream.forEachUpTo(6L, query3::add);
+        assertThat(query3).containsExactly(6L);
+    }
+
+    @Test
     public void constructorTest() {
         StreamAddressSpace obj1 = new StreamAddressSpace(5L, Collections.emptySet());
         assertThat(obj1.getTrimMark()).isEqualTo(5L);
@@ -89,7 +134,9 @@ public class StreamAddressSpaceTest {
 
     @Test
     public void testConstructorTrim() {
-        StreamAddressSpace obj1 = new StreamAddressSpace(2L, ImmutableSet.of(1L, 2L, 3L, 4L));
+        StreamAddressSpace obj1 = new StreamAddressSpace(ImmutableSet.of(1L, 2L, 3L, 4L));
+        assertThat(obj1.size()).isEqualTo(4);
+        obj1.trim(2L);
         assertThat(obj1.size()).isEqualTo(2);
         assertThat(obj1.contains(1L)).isFalse();
         assertThat(obj1.contains(2L)).isFalse();
@@ -118,7 +165,26 @@ public class StreamAddressSpaceTest {
         assertThat(obj1.size()).isEqualTo(0);
         assertThat(obj1.contains(3L)).isFalse();
         assertThat(obj1.contains(4L)).isFalse();
+    }
 
+    @Test
+    public void testTrimMarkUpdate() {
+        StreamAddressSpace obj1 = new StreamAddressSpace(2L, ImmutableSet.of(3L, 4L, 6L));
+        assertThat(obj1.getTrimMark()).isEqualTo(2L);
+        obj1.trim(1L);
+        // Verify that the trim mark doesn't regress
+        assertThat(obj1.getTrimMark()).isEqualTo(2L);
+        // Trim an address that belongs to the bitset
+        obj1.trim(3L);
+        assertThat(obj1.getTrimMark()).isEqualTo(3L);
+        assertThat(obj1.contains(4L)).isTrue();
+        assertThat(obj1.contains(6L)).isTrue();
+        assertThat(obj1.size()).isEqualTo(2);
+        // Trim an address that doesn't belongs to the bitset
+        obj1.trim(5L);
+        assertThat(obj1.getTrimMark()).isEqualTo(4L);
+        assertThat(obj1.contains(6L)).isTrue();
+        assertThat(obj1.size()).isEqualTo(1);
     }
 
     @Test
@@ -140,19 +206,22 @@ public class StreamAddressSpaceTest {
 
     @Test
     public void testToArray() {
-        StreamAddressSpace obj1 = new StreamAddressSpace(3, ImmutableSet.of(1L, 2L, 3L, 4L, 5L));
+        StreamAddressSpace obj1 = new StreamAddressSpace(ImmutableSet.of(1L, 2L, 3L, 4L, 5L));
+        assertThat(obj1.size()).isEqualTo(5);
+        obj1.trim(3L);
         assertThat(obj1.toArray()).containsExactly(4L, 5L);
         obj1.trim(5);
         assertThat(obj1.toArray()).isEmpty();
     }
 
     @Test
+    @SuppressWarnings("ConstantConditions")
     public void testEquality() {
         assertThat(new StreamAddressSpace().equals(null)).isFalse();
         assertThat(new StreamAddressSpace().equals(new StreamAddressSpace())).isTrue();
-        assertThat(new StreamAddressSpace(2L, Collections.EMPTY_SET).equals(new StreamAddressSpace())).isFalse();
-        assertThat(new StreamAddressSpace(2L, Collections.EMPTY_SET)
-                .equals(new StreamAddressSpace(2L, Collections.EMPTY_SET))).isTrue();
+        assertThat(new StreamAddressSpace(2L, Collections.emptySet()).equals(new StreamAddressSpace())).isFalse();
+        assertThat(new StreamAddressSpace(2L, Collections.emptySet())
+                .equals(new StreamAddressSpace(2L, Collections.emptySet()))).isTrue();
         // TODO(Maithem): Re-enable after this fix https://github.com/RoaringBitmap/RoaringBitmap/pull/451
         //assertThat(new StreamAddressSpace(2L, Collections.EMPTY_SET)
           //      .equals(new StreamAddressSpace(2L, ImmutableSet.of(1L, 2L)))).isTrue();
@@ -173,6 +242,52 @@ public class StreamAddressSpaceTest {
         assertThat(obj1.getTrimMark()).isEqualTo(deserialized.getTrimMark());
         assertThat(obj1.size()).isEqualTo(deserialized.size());
         assertThat(obj1.toArray()).isEqualTo(deserialized.toArray());
+    }
+
+    @Test
+    public void testGetAddressesInRange() {
+        StreamAddressSpace obj1 = new StreamAddressSpace();
+        // getAddressesInRange queries (end, start]
+
+        StreamAddressRange invalidRange = new StreamAddressRange(UUID.randomUUID(), 1,  2);
+        assertThrows(IllegalArgumentException.class,
+                () -> obj1.getAddressesInRange(invalidRange),
+                "Invalid range (2, 1]");
+
+        StreamAddressRange range1 = new StreamAddressRange(UUID.randomUUID(), 2,  1);
+        assertThat(obj1.getAddressesInRange(range1).size()).isEqualTo(0);
+        assertThat(obj1.getAddressesInRange(range1).getTrimMark()).isEqualTo(Address.NON_ADDRESS);
+
+        // Intersect a single point
+        obj1.addAddress(5);
+
+        StreamAddressRange range2 = new StreamAddressRange(UUID.randomUUID(), 5,  1);
+        assertThat(obj1.getAddressesInRange(range2).size()).isEqualTo(1);
+        assertThat(obj1.getAddressesInRange(range2).contains(5)).isTrue();
+        assertThat(obj1.getAddressesInRange(range2).getTrimMark()).isEqualTo(Address.NON_ADDRESS);
+
+        StreamAddressRange range3 = new StreamAddressRange(UUID.randomUUID(), 6,  5);
+        assertThat(obj1.getAddressesInRange(range3).size()).isEqualTo(0);
+        assertThat(obj1.getAddressesInRange(range3).contains(5)).isFalse();
+        assertThat(obj1.getAddressesInRange(range3).getTrimMark()).isEqualTo(Address.NON_ADDRESS);
+
+        obj1.addAddress(7);
+        StreamAddressRange range4 = new StreamAddressRange(UUID.randomUUID(), 8,  4);
+        assertThat(obj1.getAddressesInRange(range4).size()).isEqualTo(2);
+        assertThat(obj1.getAddressesInRange(range4).contains(5)).isTrue();
+        assertThat(obj1.getAddressesInRange(range4).contains(7)).isTrue();
+        assertThat(obj1.getAddressesInRange(range4).getTrimMark()).isEqualTo(Address.NON_ADDRESS);
+
+        obj1.trim(6);
+        assertThat(obj1.getTrimMark()).isEqualTo(5L);
+        assertThat(obj1.size()).isEqualTo(1);
+        assertThat(obj1.contains(7)).isTrue();
+
+        StreamAddressRange range5 = new StreamAddressRange(UUID.randomUUID(), 8,  4);
+        assertThat(obj1.getAddressesInRange(range5).size()).isEqualTo(1);
+        assertThat(obj1.getAddressesInRange(range5).contains(5)).isFalse();
+        assertThat(obj1.getAddressesInRange(range5).contains(7)).isTrue();
+        assertThat(obj1.getAddressesInRange(range5).getTrimMark()).isEqualTo(5L);
     }
 
     @Test

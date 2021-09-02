@@ -63,6 +63,7 @@ import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getTrimLogRespo
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getTrimMarkResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getUpdateCommittedTailResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getWriteLogResponseMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getDefaultProtocolVersionMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
@@ -173,7 +174,7 @@ public class LogUnitServer extends AbstractServer {
                 .thenAccept(tailsResp ->
                     // Note: we reuse the request header as the ignore_cluster_id and
                     // ignore_epoch fields are the same in both cases.
-                    router.sendResponse(getResponseMsg(req.getHeader(), getTailResponseMsg(
+                    router.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()), getTailResponseMsg(
                             tailsResp.getEpoch(), tailsResp.getLogTail(), tailsResp.getStreamTails())), ctx))
                 .exceptionally(ex -> {
                     handleException(ex, ctx, req, router);
@@ -196,8 +197,8 @@ public class LogUnitServer extends AbstractServer {
                 .thenAccept(resp ->
                     // Note: we reuse the request header as the ignore_cluster_id and
                     // ignore_epoch fields are the same in both cases.
-                    router.sendResponse(getResponseMsg(req.getHeader(), getLogAddressSpaceResponseMsg(
-                            resp.getLogTail(), resp.getEpoch(), resp.getAddressMap())), ctx))
+                    router.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()),
+                            getLogAddressSpaceResponseMsg(resp.getLogTail(), resp.getEpoch(), resp.getAddressMap())), ctx))
                 .exceptionally(ex -> {
                     handleException(ex, ctx, req, router);
                     return null;
@@ -215,7 +216,8 @@ public class LogUnitServer extends AbstractServer {
 
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
-        router.sendResponse(getResponseMsg(req.getHeader(), getTrimMarkResponseMsg(streamLog.getTrimMark())), ctx);
+        router.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()),
+                getTrimMarkResponseMsg(streamLog.getTrimMark())), ctx);
     }
 
     /**
@@ -230,7 +232,7 @@ public class LogUnitServer extends AbstractServer {
 
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
-        router.sendResponse(getResponseMsg(req.getHeader(),
+        router.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()),
                 getCommittedTailResponseMsg(streamLog.getCommittedTail())), ctx);
     }
 
@@ -284,7 +286,7 @@ public class LogUnitServer extends AbstractServer {
     private void handleWrite(RequestMsg req, ChannelHandlerContext ctx, IServerRouter router) {
         LogData logData = getLogData(req.getPayload().getWriteLogRequest().getLogData());
 
-        log.debug("handleWrite: type: {}, address: {}, streams: {}",
+        log.debug("handleWrite: {}, at: {}, ids: {}",
                 logData.getType(), logData.getToken(), logData.getBackpointerMap());
 
         // Its not clear that making all holes high priority is the right thing to do, but since
@@ -298,7 +300,8 @@ public class LogUnitServer extends AbstractServer {
         batchWriter.addTask(BatchWriterOperation.Type.WRITE, batchProcessorReq)
                 .thenRunAsync(() -> {
                     dataCache.put(logData.getGlobalAddress(), logData);
-                    router.sendResponse(getResponseMsg(batchProcessorReq.getHeader(), getWriteLogResponseMsg()), ctx);
+                    HeaderMsg responseHeader = getHeaderMsg(batchProcessorReq.getHeader());
+                    router.sendResponse(getResponseMsg(responseHeader, getWriteLogResponseMsg()), ctx);
                 }, executor)
                 .exceptionally(ex -> {
                     handleException(ex, ctx, batchProcessorReq, router);
@@ -314,11 +317,12 @@ public class LogUnitServer extends AbstractServer {
         List<LogData> range = req.getPayload().getRangeWriteLogRequest().getLogDataList()
                 .stream().map(CorfuProtocolLogData::getLogData).collect(Collectors.toList());
 
-        log.debug("handleRangeWrite: Writing {} entries [{}-{}]", range.size(),
+        log.debug("handleRangeWrite: {} size [{}-{}]", range.size(),
                 range.get(0).getGlobalAddress(), range.get(range.size() - 1).getGlobalAddress());
 
         batchWriter.addTask(BatchWriterOperation.Type.RANGE_WRITE, req)
-                .thenRun(() -> router.sendResponse(getResponseMsg(req.getHeader(), getRangeWriteLogResponseMsg()), ctx))
+                .thenRun(() -> router.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()),
+                        getRangeWriteLogResponseMsg()), ctx))
                 .exceptionally(ex -> {
                     handleException(ex, ctx, req, router);
                     return null;
@@ -335,7 +339,7 @@ public class LogUnitServer extends AbstractServer {
     @RequestHandler(type = PayloadCase.TRIM_LOG_REQUEST)
     private void handleTrimLog(RequestMsg req, ChannelHandlerContext ctx, IServerRouter router) {
         if (log.isDebugEnabled()) {
-            log.debug("handleTrimLog[{}]: trimming prefix to {}", req.getHeader().getRequestId(),
+            log.debug("handleTrimLog[{}]: trim to {}", req.getHeader().getRequestId(),
                     TextFormat.shortDebugString(req.getPayload().getTrimLogRequest().getAddress()));
         }
 
@@ -370,12 +374,12 @@ public class LogUnitServer extends AbstractServer {
                 }
             } catch (DataCorruptionException dce) {
                 log.error("handleRead: Data corruption exception while reading addresses {}", addressList, dce);
-                router.sendResponse(getResponseMsg(req.getHeader(), getDataCorruptionErrorMsg(address)), ctx);
+                router.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()), getDataCorruptionErrorMsg(address)), ctx);
                 return;
             }
         }
 
-        router.sendResponse(getResponseMsg(req.getHeader(),
+        router.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()),
                 getReadLogResponseMsg(readResponse.getAddresses())), ctx);
     }
 
@@ -395,17 +399,18 @@ public class LogUnitServer extends AbstractServer {
                     emptyAddresses.add(address);
                 }
             } catch (TrimmedException te) {
-                router.sendResponse(getResponseMsg(req.getHeader(), getTrimmedErrorMsg()), ctx);
+                router.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()), getTrimmedErrorMsg()), ctx);
                 return;
             } catch (DataCorruptionException dce) {
-                router.sendResponse(getResponseMsg(req.getHeader(), getDataCorruptionErrorMsg(address)), ctx);
+                router.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()), getDataCorruptionErrorMsg(address)), ctx);
                 return;
             }
         }
 
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
-        router.sendResponse(getResponseMsg(req.getHeader(), getInspectAddressesResponseMsg(emptyAddresses)), ctx);
+        router.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()),
+                getInspectAddressesResponseMsg(emptyAddresses)), ctx);
     }
 
     /**
@@ -421,7 +426,8 @@ public class LogUnitServer extends AbstractServer {
 
             // Note: we reuse the request header as the ignore_cluster_id and
             // ignore_epoch fields are the same in both cases.
-            router.sendResponse(getResponseMsg(req.getHeader(), getKnownAddressResponseMsg(knownAddresses)), ctx);
+            router.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()),
+                    getKnownAddressResponseMsg(knownAddresses)), ctx);
         } catch (Exception e) {
             handleException(e, ctx, req, router);
         }
@@ -430,27 +436,27 @@ public class LogUnitServer extends AbstractServer {
     @RequestHandler(type = PayloadCase.COMPACT_REQUEST)
     private void handleCompactLogRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter router) {
         if (log.isDebugEnabled()) {
-            log.debug("handleCompactLogRequest: received a compact request {}", TextFormat.shortDebugString(req));
+            log.debug("handleCompactLogRequest: {}", TextFormat.shortDebugString(req));
         }
 
         streamLog.compact();
 
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
-        router.sendResponse(getResponseMsg(req.getHeader(), getCompactResponseMsg()), ctx);
+        router.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()), getCompactResponseMsg()), ctx);
     }
 
     @RequestHandler(type = PayloadCase.FLUSH_CACHE_REQUEST)
     private void handleFlushCacheRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter router) {
         if (log.isDebugEnabled()) {
-            log.debug("handleFlushCacheRequest: received a cache flush request {}", TextFormat.shortDebugString(req));
+            log.debug("handleFlushCacheRequest: {}", TextFormat.shortDebugString(req));
         }
 
         dataCache.invalidateAll();
 
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
-        router.sendResponse(getResponseMsg(req.getHeader(), getFlushCacheResponseMsg()), ctx);
+        router.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()), getFlushCacheResponseMsg()), ctx);
     }
 
     /**
@@ -463,7 +469,11 @@ public class LogUnitServer extends AbstractServer {
     @Override
     public void sealServerWithEpoch(long epoch) {
         RequestMsg batchProcessorReq = getRequestMsg(
-                HeaderMsg.newBuilder().setEpoch(epoch).setPriority(PriorityLevel.HIGH).build(),
+                HeaderMsg.newBuilder()
+                        .setVersion(getDefaultProtocolVersionMsg())
+                        .setEpoch(epoch)
+                        .setPriority(PriorityLevel.HIGH)
+                        .build(),
                 getSealRequestMsg(epoch)
         );
 
@@ -497,7 +507,7 @@ public class LogUnitServer extends AbstractServer {
         if (req.getPayload().getResetLogUnitRequest().getEpoch() <= serverContext.getLogUnitEpochWaterMark() ||
                 req.getPayload().getResetLogUnitRequest().getEpoch() != serverContext.getServerEpoch()) {
             log.info("handleResetLogUnit: LogUnit server reset request received but reset already done.");
-            router.sendResponse(getResponseMsg(req.getHeader(), getResetLogUnitResponseMsg()), ctx);
+            router.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()), getResetLogUnitResponseMsg()), ctx);
             return;
         }
 
@@ -507,7 +517,7 @@ public class LogUnitServer extends AbstractServer {
                 .thenRun(() -> {
                     dataCache.invalidateAll();
                     log.info("handleResetLogUnit: LogUnit server reset.");
-                    router.sendResponse(getResponseMsg(req.getHeader(), getResetLogUnitResponseMsg()), ctx);
+                    router.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()), getResetLogUnitResponseMsg()), ctx);
                 })
                 .exceptionally(ex -> {
                     handleException(ex, ctx, req, router);

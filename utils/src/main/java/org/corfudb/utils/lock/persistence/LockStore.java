@@ -6,7 +6,6 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.*;
 import org.corfudb.utils.CommonTypes.Uuid;
 import org.corfudb.utils.lock.LockDataTypes.LockData;
@@ -16,7 +15,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -40,18 +38,19 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @Slf4j
 public class LockStore {
     // Namespace used by locks
-    private static final String namespace = CORFU_SYSTEM_NAMESPACE;
+    private static final String NAMESPACE = CORFU_SYSTEM_NAMESPACE;
     // Locks table name
-    private static final String tableName = "LOCK";
+    private static final String TABLE_NAME = "LOCK";
     private final Table<LockId, LockData, Message> table;
 
     private final Uuid clientId;
     // Corfu store to access data from the Lock table.
     private final CorfuStore corfuStore;
+
     /**
      * Cache of all the observed locks/leases. Contains the last timestamp at which the lock was last observed.
      */
-    private Map<LockId, ObservedLock> observedLocks = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<LockId, ObservedLock> observedLocks = new ConcurrentHashMap<>();
 
     /**
      * Constructor
@@ -63,8 +62,8 @@ public class LockStore {
      */
     public LockStore(CorfuRuntime runtime, UUID clientUuid) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
         this.corfuStore = new CorfuStore(runtime);
-        this.table = this.corfuStore.openTable(namespace,
-                tableName,
+        this.table = this.corfuStore.openTable(NAMESPACE,
+                TABLE_NAME,
                 LockId.class,
                 LockData.class,
                 null,
@@ -90,8 +89,7 @@ public class LockStore {
      * @throws LockStoreException
      */
     public boolean acquire(LockId lockId) throws LockStoreException {
-        CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
-        Optional<LockData> lockInDatastore = get(lockId, timestamp);
+        Optional<LockData> lockInDatastore = get(lockId);
 
         if (!lockInDatastore.isPresent()) {
             LockData newLockData = LockData.newBuilder()
@@ -101,7 +99,7 @@ public class LockStore {
                     .setLeaseAcquisitionNumber(0)
                     .build();
             // if no lock present acquire(create) the lock in datastore
-            create(lockId, newLockData, timestamp);
+            create(lockId, newLockData);
             log.debug("Lock: {} Client:{} acquired lock. No pre-existing lease in datastore.", lockId, clientId);
             return true;
         } else {
@@ -113,7 +111,7 @@ public class LockStore {
                         .setLeaseAcquisitionNumber(lockInDatastore.get().getLeaseAcquisitionNumber() + 1)
                         .build();
                 // acquire(update) the lock in data store if it is stale
-                update(lockId, newLockData, timestamp);
+                update(lockId, newLockData);
                 log.debug("Lock: {} Client:{} acquired lock {}. Expired lease in datastore: {} ", lockId, clientId, newLockData, lockInDatastore.get());
                 return true;
             } else {
@@ -133,8 +131,7 @@ public class LockStore {
      * @throws LockStoreException
      */
     public boolean renew(LockId lockId) throws LockStoreException {
-        CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
-        Optional<LockData> lockInDatastore = get(lockId, timestamp);
+        Optional<LockData> lockInDatastore = get(lockId);
 
         if (!lockInDatastore.isPresent()) {
             // client had never acquire the lock. This should not happen!
@@ -151,7 +148,7 @@ public class LockStore {
                     .setLeaseOwnerId(lockInDatastore.get().getLeaseOwnerId())
                     .setLeaseRenewalNumber(lockInDatastore.get().getLeaseRenewalNumber() + 1)
                     .build();
-            update(lockId, newLockData, timestamp);
+            update(lockId, newLockData);
             log.debug("Lock: {} Client:{} renewed lease, new lock is {}.", lockId, clientId, newLockData);
             return true;
         }
@@ -188,13 +185,11 @@ public class LockStore {
      *
      * @param lockId
      * @param lockMetaData
-     * @param timestamp    Logical time at which to run tx for create
      * @throws LockStoreException
      */
-    private void create(LockId lockId, LockData lockMetaData, CorfuStoreMetadata.Timestamp timestamp) throws LockStoreException {
-        try {
+    private void create(LockId lockId, LockData lockMetaData) throws LockStoreException {
+        try (TxnContext txnContext = corfuStore.txn(NAMESPACE)) {
             log.info("LockStore: create lock record for : {}", lockId.getLockName());
-            TxnContext txnContext = corfuStore.txn(namespace, IsolationLevel.snapshot(timestamp));
             txnContext.putRecord(table, lockId, lockMetaData, null);
             txnContext.commit();
         } catch (Exception e) {
@@ -208,12 +203,10 @@ public class LockStore {
      *
      * @param lockId
      * @param lockMetaData
-     * @param timestamp    Logical time at which to run tx for update
      * @throws LockStoreException
      */
-    private void update(LockId lockId, LockData lockMetaData, CorfuStoreMetadata.Timestamp timestamp) throws LockStoreException {
-        try {
-            TxnContext txn = corfuStore.txn(namespace, IsolationLevel.snapshot(timestamp));
+    private void update(LockId lockId, LockData lockMetaData) throws LockStoreException {
+        try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
             txn.putRecord(table, lockId, lockMetaData, null);
             txn.commit();
         } catch (Exception e) {
@@ -226,36 +219,15 @@ public class LockStore {
      * Get a lock record.
      *
      * @param lockId
-     * @param timestamp Logical time at which to run the query
-     * @return
-     * @throws LockStoreException
-     */
-    private Optional<LockData> get(LockId lockId, CorfuStoreMetadata.Timestamp timestamp) throws LockStoreException {
-        try {
-            CorfuRecord record = corfuStore.query(namespace).getRecord(tableName, timestamp, lockId);
-            if (record != null) {
-                return Optional.of((LockData) record.getPayload());
-            } else {
-                return Optional.empty();
-            }
-        } catch (Exception e) {
-            log.error("Lock: {} Exception during get.", lockId, e);
-            throw new LockStoreException("Exception while getting data for lock " + lockId, e);
-        }
-    }
-
-    /**
-     * Get a lock record.
-     *
-     * @param lockId
      * @return
      * @throws LockStoreException
      */
     @VisibleForTesting
     public Optional<LockData> get(LockId lockId) throws LockStoreException {
-        try {
-            CorfuRecord record = corfuStore.query(namespace).getRecord(tableName, lockId);
-            if (record != null) {
+        try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
+            CorfuStoreEntry record = txn.getRecord(TABLE_NAME, lockId);
+            txn.commit();
+            if (record.getPayload() != null) {
                 return Optional.of((LockData) record.getPayload());
             } else {
                 return Optional.empty();
@@ -310,5 +282,4 @@ public class LockStore {
         private LockData lockData;
         private Instant timestamp;
     }
-
 }

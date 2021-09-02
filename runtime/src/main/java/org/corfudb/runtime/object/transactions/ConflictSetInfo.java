@@ -20,7 +20,6 @@ import lombok.Getter;
 @Getter
 public class ConflictSetInfo {
 
-
     /** Set of objects this conflict set conflicts with. */
     protected Map<ICorfuSMRProxyInternal, Set<Object>> conflicts = new HashMap<>();
 
@@ -59,10 +58,6 @@ public class ConflictSetInfo {
 
     /** Add an operation into this conflict set. */
     public <T extends ICorfuSMR<T>> void add(ICorfuSMRProxyInternal<T> proxy, Object[] conflictObjects) {
-        if (conflictObjects == null) {
-            return;
-        }
-
         // Add the conflict objects to the set for this proxy,
         // creating a new set if needed.
         conflicts.compute(proxy, (p, c) -> {
@@ -70,8 +65,11 @@ public class ConflictSetInfo {
             if (c == null) {
                 c = new HashSet<>();
             }
+
             // Add conflicts to set.
-            c.addAll(Arrays.asList(conflictObjects));
+            if (conflictObjects != null) {
+                c.addAll(Arrays.asList(conflictObjects));
+            }
             return c;
         });
     }

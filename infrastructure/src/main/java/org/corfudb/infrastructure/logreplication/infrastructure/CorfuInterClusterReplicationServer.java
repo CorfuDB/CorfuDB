@@ -339,7 +339,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
             try {
                 LoggerContext context =  (LoggerContext) LoggerFactory.getILoggerFactory();
                 Optional.ofNullable(context.exists(DEFAULT_METRICS_LOGGER_NAME))
-                        .ifPresent(logger -> MeterRegistryProvider.MeterRegistryInitializer.initLoggingRegistry(logger,
+                        .ifPresent(logger -> MeterRegistryProvider.MeterRegistryInitializer.initServerMetrics(logger,
                                 DEFAULT_METRICS_LOGGING_INTERVAL_DURATION, localEndpoint));
             }
             catch (IllegalStateException ise) {

@@ -22,7 +22,13 @@ enum PriorityLevel {
 }
 
 message ProtocolVersionMsg {
-  fixed64 capability_vector = 1;
+  // An array of bytes to represent the features supported so far.
+  // 1 byte = 8 bits = 8 Features
+  // Helps to check the compatibility of features across different versions of the code.
+  bytes capability_vector = 1;
+  // A field for indicating the version of Corfu client/server, from which
+  // the RPC message is sending from. It is populated from GitRepositoryState class.
+  int64 corfu_source_code_version = 2;
 }
 
 message HeaderMsg {
@@ -44,7 +50,6 @@ message RequestPayloadMsg {
     RestartRequestMsg restart_request = 12;
     ResetRequestMsg reset_request = 13;
     SealRequestMsg seal_request = 14;
-    VersionRequestMsg version_request = 15;
 
     // Layout Requests
     LayoutRequestMsg layout_request = 20;
@@ -99,7 +104,6 @@ message ResponsePayloadMsg {
     RestartResponseMsg restart_response = 12;
     ResetResponseMsg reset_response = 13;
     SealResponseMsg seal_response = 14;
-    VersionResponseMsg version_response = 15;
 
     // Layout Responses
     LayoutResponseMsg layout_response = 20;

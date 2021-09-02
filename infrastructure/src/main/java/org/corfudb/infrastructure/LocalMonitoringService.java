@@ -77,7 +77,7 @@ class LocalMonitoringService implements ManagementService {
                         return SequencerMetrics.NOT_READY;
                     }
 
-                    log.error("Error while requesting metrics from the sequencer: ", ex);
+                    log.error("Error requesting sequencer metrics: ", ex);
                     return SequencerMetrics.UNKNOWN;
                 });
     }

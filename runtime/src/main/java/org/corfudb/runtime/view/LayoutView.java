@@ -164,10 +164,6 @@ public class LayoutView extends AbstractView {
                     .filter(x -> x != null)
                     .toArray(LayoutPrepareResponse[]::new);
 
-            log.debug("prepare: Successful responses={}, needed={}, timeouts={}, "
-                            + "wrongEpochRejected={}",
-                    acceptList.length, getQuorumNumber(), timeouts, wrongEpochRejected);
-
             if (acceptList.length >= getQuorumNumber()) {
                 break;
             }
@@ -244,10 +240,6 @@ public class LayoutView extends AbstractView {
                     })
                     .filter(x -> x)
                     .count();
-
-            log.debug("propose: Successful responses={}, needed={}, timeouts={}, "
-                            + "wrongEpochRejected={}",
-                    count, getQuorumNumber(), timeouts, wrongEpochRejected);
 
             if (count >= getQuorumNumber()) {
                 break;

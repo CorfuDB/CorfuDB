@@ -1,14 +1,15 @@
 package org.corfudb.infrastructure;
 
-import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
-
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.joran.spi.JoranException;
+import com.google.common.collect.ImmutableList;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.initializers.LoggingRegistryInitializer;
+import org.corfudb.common.metrics.micrometer.initializers.RegistryInitializer;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
@@ -20,6 +21,8 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
+
+import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 
 
 /**
@@ -193,6 +196,7 @@ public class CorfuServer {
     private static final String DEFAULT_METRICS_LOGGER_NAME = "org.corfudb.metricsdata";
 
     private static final Duration DEFAULT_METRICS_LOGGING_INTERVAL = Duration.ofMinutes(1);
+
     /**
      * Main program entry point.
      *
@@ -226,12 +230,20 @@ public class CorfuServer {
     public static void configureMetrics(Map<String, Object> opts, String localEndpoint) {
         if ((boolean) opts.get("--metrics")) {
             try {
-                LoggerContext context =  (LoggerContext) LoggerFactory.getILoggerFactory();
+                LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
                 Optional.ofNullable(context.exists(DEFAULT_METRICS_LOGGER_NAME))
-                        .ifPresent(logger -> MeterRegistryProvider.MeterRegistryInitializer.initLoggingRegistry(logger,
-                                DEFAULT_METRICS_LOGGING_INTERVAL, localEndpoint));
-            }
-            catch (IllegalStateException ise) {
+                        .ifPresent(logger -> {
+                            RegistryInitializer loggingRegistryInitializer =
+                                    LoggingRegistryInitializer.builder()
+                                            .exportDuration(DEFAULT_METRICS_LOGGING_INTERVAL)
+                                            .logger(logger).build();
+                            ImmutableList<RegistryInitializer> registryInitializersList =
+                                    ImmutableList.of(loggingRegistryInitializer);
+                            MeterRegistryProvider.MeterRegistryInitializer.initServerMetrics(
+                                    registryInitializersList,
+                                    localEndpoint);
+                        });
+            } catch (IllegalStateException ise) {
                 log.warn("Registry has been previously initialized. Skipping.");
             }
 
