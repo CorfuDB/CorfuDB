@@ -19,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Created by mwei on 11/11/16.
  */
+@SuppressWarnings("checkstyle:magicnumber")
 public class CompileProxyTest extends AbstractViewTest {
     
     @Test

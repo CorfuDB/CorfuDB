@@ -1,5 +1,6 @@
 package org.corfudb.common.metrics.micrometer.registries.dropwizard;
 
+import com.codahale.metrics.Histogram;
 import io.micrometer.core.instrument.AbstractDistributionSummary;
 import io.micrometer.core.instrument.Clock;
 import io.micrometer.core.instrument.distribution.DistributionStatisticConfig;
@@ -9,13 +10,17 @@ import io.micrometer.core.lang.Nullable;
 
 import java.util.concurrent.atomic.DoubleAdder;
 
-public class DropwizardDistributionSummaryCustom extends AbstractDistributionSummary {
-    private final com.codahale.metrics.Histogram impl;
+/**
+ * This class delegates the functionality of a micrometer distribution summary to
+ * the dropwizard histogram.
+ */
+public class DropwizardDistributionSummaryDelegate extends AbstractDistributionSummary {
+    private final Histogram impl;
     private final DoubleAdder totalAmount = new DoubleAdder();
     private final TimeWindowMax max;
 
-    DropwizardDistributionSummaryCustom(Id id, Clock clock, com.codahale.metrics.Histogram impl, DistributionStatisticConfig distributionStatisticConfig,
-                                        double scale) {
+    DropwizardDistributionSummaryDelegate(Id id, Clock clock, Histogram impl, DistributionStatisticConfig distributionStatisticConfig,
+                                          double scale) {
         super(id, clock, distributionStatisticConfig, scale, false);
         this.impl = impl;
         this.max = new TimeWindowMax(clock, distributionStatisticConfig);

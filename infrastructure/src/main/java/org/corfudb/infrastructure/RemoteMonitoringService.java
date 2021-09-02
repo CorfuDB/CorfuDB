@@ -231,7 +231,7 @@ public class RemoteMonitoringService implements ManagementService {
         // current layout, it should not attempt to change layout.
         Layout layout = serverContext.getManagementLayout();
         if (!layout.getAllServers().contains(serverContext.getLocalEndpoint())) {
-            log.debug("This Server is not a part of the active layout. Aborting reconfiguration handling.");
+            log.debug("This Server is not in the active layout. Aborting.");
             return false;
         }
         return true;
@@ -814,7 +814,7 @@ public class RemoteMonitoringService implements ManagementService {
                         .committed(latestLayout.getEpoch(), latestLayout)
                         .get();
                 if (result) {
-                    log.debug("Layout Server: {} successfully patched with latest layout : {}",
+                    log.debug("Layout Server: {} patched with latest layout : {}",
                             layoutServer, latestLayout);
                 } else {
                     log.debug("Layout Server: {} patch with latest layout failed : {}", layoutServer, latestLayout);

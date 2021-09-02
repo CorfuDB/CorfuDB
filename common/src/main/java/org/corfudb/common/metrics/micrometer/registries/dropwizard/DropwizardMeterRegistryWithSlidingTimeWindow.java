@@ -1,5 +1,6 @@
 package org.corfudb.common.metrics.micrometer.registries.dropwizard;
 
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SlidingTimeWindowArrayReservoir;
 import io.micrometer.core.instrument.Clock;
@@ -40,15 +41,15 @@ public class DropwizardMeterRegistryWithSlidingTimeWindow extends DropwizardMete
         SlidingTimeWindowArrayReservoir reservoir = new SlidingTimeWindowArrayReservoir(windowSize, windowUnits);
         com.codahale.metrics.Timer timer = new com.codahale.metrics.Timer(reservoir);
         MetricRegistry registry = super.getDropwizardRegistry();
-        return new DropwizardTimerCustom(id, registry.timer(getName(id), () -> timer), clock, distributionStatisticConfig, pauseDetector);
+        return new DropwizardTimerDelegate(id, registry.timer(getName(id), () -> timer), clock, distributionStatisticConfig, pauseDetector);
     }
 
     @Override
     protected DistributionSummary newDistributionSummary(Meter.Id id, DistributionStatisticConfig distributionStatisticConfig, double scale) {
         SlidingTimeWindowArrayReservoir reservoir = new SlidingTimeWindowArrayReservoir(windowSize, windowUnits);
-        com.codahale.metrics.Histogram histogram = new com.codahale.metrics.Histogram(reservoir);
+        Histogram histogram = new Histogram(reservoir);
         MetricRegistry registry = super.getDropwizardRegistry();
-        return new DropwizardDistributionSummaryCustom(id, clock, registry.histogram(getName(id), () -> histogram), distributionStatisticConfig, scale);
+        return new DropwizardDistributionSummaryDelegate(id, clock, registry.histogram(getName(id), () -> histogram), distributionStatisticConfig, scale);
     }
 
     @Override

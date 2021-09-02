@@ -319,7 +319,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         }
         // now we go down the chain and write, ignoring any overwrite exception we get.
         for (int i = 1; i < numUnits; i++) {
-            log.debug("Recover[{}]: write chain {}/{}", layout, i + 1, numUnits);
+            log.debug("Recover[{}]: write {}/{}", layout, i + 1, numUnits);
             final int writableIndex = i;
             // In chain replication, we write synchronously to every unit in the chain.
             try {
@@ -328,11 +328,11 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
                         OverwriteException.class);
                 doWrite(runtimeLayout, globalAddress, writableIndex, writable);
                 // We successfully recovered a write to this member of the chain
-                log.debug("Recover[{}]: recovered write at chain {}/{}", layout, i + 1, numUnits);
+                log.debug("Recover[{}]: recovered write at {}/{}", layout, i + 1, numUnits);
             } catch (OverwriteException oe) {
                 // This member already had this data (in some cases, the write might have
                 // been committed to all members, so this is normal).
-                log.debug("Recover[{}]: overwritten at chain {}/{}", layout, i + 1, numUnits);
+                log.debug("Recover[{}]: overwritten at {}/{}", layout, i + 1, numUnits);
             }
         }
     }

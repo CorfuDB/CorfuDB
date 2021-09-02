@@ -5,6 +5,7 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 
 import java.util.Optional;
 
@@ -114,35 +115,20 @@ public class TableMetrics {
     TableMetrics(String fullTableName) {
         Optional<MeterRegistry> registryProvider = MeterRegistryProvider.getInstance();
         this.tableName = fullTableName;
-        this.numPuts = registryProvider.map(registry ->
-                registry.counter("table.numPuts", "tbl", fullTableName));
-        this.numEnqueues = registryProvider.map(registry ->
-                registry.counter("table.numEnqueues", "tbl", fullTableName));
-        this.numMerges = registryProvider.map(registry ->
-                registry.counter("table.numMerges", "tbl", fullTableName));
-        this.numTouches = registryProvider.map(registry ->
-                registry.counter("table.numTouches", "tbl", fullTableName));
-        this.numDeletes = registryProvider.map(registry ->
-                registry.counter("table.numDeletes", "tbl", fullTableName));
-        this.numClears = registryProvider.map(registry ->
-                registry.counter("table.numClears", "tbl", fullTableName));
-        this.numGets = registryProvider.map(registry ->
-                registry.counter("table.numGets", "tbl", fullTableName));
-        this.numCounts = registryProvider.map(registry ->
-                registry.counter("table.numCounts", "tbl", fullTableName));
-        this.numKeySets = registryProvider.map(registry ->
-                registry.counter("table.numKeySets", "tbl", fullTableName));
-        this.numScans = registryProvider.map(registry ->
-                registry.counter("table.numScans", "tbl", fullTableName));
-        this.numEntryLists = registryProvider.map(registry ->
-                registry.counter("table.numEntryLists", "tbl", fullTableName));
-        this.numJoins = registryProvider.map(registry ->
-                registry.counter("table.numJoins", "tbl", fullTableName));
-        this.numGetByIndex = registryProvider.map(registry ->
-                registry.counter("table.numGetByIndex", "tbl", fullTableName));
-        this.numTxnAborts = registryProvider.map(registry ->
-                registry.counter("table.numTxnAborts", "tbl", fullTableName));
-
+        this.numPuts = MicroMeterUtils.counter("table.numPuts", "tbl", fullTableName);
+        this.numEnqueues = MicroMeterUtils.counter("table.numEnqueues", "tbl", fullTableName);
+        this.numMerges = MicroMeterUtils.counter("table.numMerges", "tbl", fullTableName);
+        this.numTouches = MicroMeterUtils.counter("table.numTouches", "tbl", fullTableName);
+        this.numDeletes = MicroMeterUtils.counter("table.numDeletes", "tbl", fullTableName);
+        this.numClears = MicroMeterUtils.counter("table.numClears", "tbl", fullTableName);
+        this.numGets = MicroMeterUtils.counter("table.numGets", "tbl", fullTableName);
+        this.numCounts = MicroMeterUtils.counter("table.numCounts", "tbl", fullTableName);
+        this.numKeySets = MicroMeterUtils.counter("table.numKeySets", "tbl", fullTableName);
+        this.numScans = MicroMeterUtils.counter("table.numScans", "tbl", fullTableName);
+        this.numEntryLists = MicroMeterUtils.counter("table.numEntryLists", "tbl", fullTableName);
+        this.numJoins = MicroMeterUtils.counter("table.numJoins", "tbl", fullTableName);
+        this.numGetByIndex = MicroMeterUtils.counter("table.numGetByIndex", "tbl", fullTableName);
+        this.numTxnAborts = MicroMeterUtils.counter("table.numTxnAborts", "tbl", fullTableName);
         this.openTableTimes = new TimingHistogram("openTable", fullTableName);
         this.writeOnlyTxnTimes = new TimingHistogram("writeTxn", fullTableName);
         this.readOnlyTxnTimes = new TimingHistogram("readTxn", fullTableName);

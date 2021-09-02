@@ -24,10 +24,16 @@ import java.util.function.Supplier;
 public class MeterRegistryProvider {
     private static final CompositeMeterRegistry meterRegistry = new CompositeMeterRegistry();
     private static Optional<String> id = Optional.empty();
+    private static Optional<MetricType> metricType = Optional.empty();
     private static Optional<RegistryProvider> provider = Optional.empty();
 
     private MeterRegistryProvider() {
 
+    }
+
+    static enum MetricType {
+        SERVER,
+        CLIENT
     }
 
     /**
@@ -35,15 +41,34 @@ public class MeterRegistryProvider {
      */
     public static class MeterRegistryInitializer extends MeterRegistryProvider {
         /**
-         * Configure the meter registry of type LoggingMeterRegistry. All the metrics registered
-         * with this meter registry will be exported via provided logging sink with
-         * the provided loggingInterval frequency.
+         * Configure the meter registry for Corfu server.
+         * All the metrics will be exported to the logging registry and optionally to any third party provided registries.
          *
          * @param logger          An instance of the logger to print metrics.
          * @param loggingInterval A duration between log appends for every metric.
          * @param identifier      A global identifier to tag every metric with.
          */
-        public static synchronized void initLoggingRegistry(Logger logger, Duration loggingInterval, String identifier) {
+        public static void initServerMetrics(Logger logger, Duration loggingInterval, String identifier) {
+            metricType = Optional.of(MetricType.SERVER);
+            initLoggingRegistry(logger, loggingInterval, identifier);
+            registerProvidedRegistries();
+        }
+
+        /**
+         * Configure the meter registry for Corfu client.
+         * All the metrics will be exported to the logging registry and optionally to any third party provided registries.
+         *
+         * @param logger          An instance of the logger to print metrics.
+         * @param loggingInterval A duration between log appends for every metric.
+         * @param identifier      A global identifier to tag every metric with.
+         */
+        public static void initClientMetrics(Logger logger, Duration loggingInterval, String identifier) {
+            metricType = Optional.of(MetricType.CLIENT);
+            initLoggingRegistry(logger, loggingInterval, identifier);
+            registerProvidedRegistries();
+        }
+
+        private static synchronized void initLoggingRegistry(Logger logger, Duration loggingInterval, String identifier) {
             Supplier<Optional<MeterRegistry>> supplier = () -> {
                 LoggingRegistryConfig config = new IntervalLoggingConfig(loggingInterval);
                 LoggingMeterRegistryWithHistogramSupport registry =
@@ -58,11 +83,7 @@ public class MeterRegistryProvider {
             addToCompositeRegistry(supplier);
         }
 
-        /**
-         * Looks up the implementations of RegistryProvider on the classpath, initializes registries,
-         * and registers them with a global composite registry.
-         */
-        public static synchronized void registerProvidedRegistries() {
+        private static synchronized void registerProvidedRegistries() {
             RegistryLoader loader = new RegistryLoader();
             Iterator<RegistryProvider> registries = loader.getRegistries();
             while (registries.hasNext()) {
@@ -135,6 +156,15 @@ public class MeterRegistryProvider {
     }
 
     /**
+     * Get the metric type of this registry.
+     *
+     * @return An optional metric type.
+     */
+    public static synchronized Optional<MetricType> getMetricType() {
+        return metricType;
+    }
+
+    /**
      * Remove the meter by id.
      *
      * @param name Name of a meter.
@@ -143,12 +173,11 @@ public class MeterRegistryProvider {
      */
     public static synchronized void deregisterServerMeter(String name, Tags tags, Meter.Type type) {
         if (!id.isPresent()) {
-            log.warn("Id must be present to deregister meters.");
-            return;
+            throw new IllegalStateException("Id must be present to deregister meters.");
         }
         String server = id.get();
         Tags tagsToLookFor = tags.and(Tag.of("id", server));
-        Meter.Id id = new Meter.Id(name, tagsToLookFor, null, null, type);
-        meterRegistry.remove(id);
+        Meter.Id meterId = new Meter.Id(name, tagsToLookFor, null, null, type);
+        meterRegistry.remove(meterId);
     }
 }

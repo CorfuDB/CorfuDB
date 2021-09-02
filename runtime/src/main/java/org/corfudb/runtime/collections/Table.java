@@ -1,29 +1,22 @@
 package org.corfudb.runtime.collections;
 
-import com.google.protobuf.Descriptors;
 import com.google.protobuf.Message;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
-import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.CorfuGuidGenerator;
 import org.corfudb.util.serializer.ISerializer;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.util.AbstractMap;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -42,8 +35,6 @@ import java.util.stream.Stream;
  */
 @Slf4j
 public class Table<K extends Message, V extends Message, M extends Message> {
-
-    private final CorfuRuntime corfuRuntime;
 
     private final CorfuTable<K, CorfuRecord<V, M>> corfuTable;
 
@@ -101,7 +92,6 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      * @param versionPolicy           versioning policy
      * @param streamTags              set of UUIDs representing the streamTags
      */
-    @Nonnull
     public Table(@Nonnull final TableParameters<K, V, M> tableParameters,
                  @Nonnull final CorfuRuntime corfuRuntime,
                  @Nonnull final ISerializer serializer,
@@ -109,7 +99,6 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                  @NonNull final ICorfuVersionPolicy.VersionPolicy versionPolicy,
                  @NonNull final Set<UUID> streamTags) {
 
-        this.corfuRuntime = corfuRuntime;
         this.namespace = tableParameters.getNamespace();
         this.fullyQualifiedTableName = tableParameters.getFullyQualifiedTableName();
         this.streamUUID = CorfuRuntime.getStreamID(this.fullyQualifiedTableName);
@@ -169,10 +158,14 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      * Delete a record mapped to the specified key.
      *
      * @param key Key.
-     * @return Previously stored Corfu Record.
+     * @return Previously stored Corfu Record. Throws NoSuchElementException if key is not found.
      */
     @Nullable
     CorfuRecord<V, M> deleteRecord(@Nonnull final K key) {
+        if (!corfuTable.containsKey(key)) {
+            log.warn("Deleting a non-existent key {}", key);
+            return null;
+        }
         return corfuTable.remove(key);
     }
 

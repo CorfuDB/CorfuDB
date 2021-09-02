@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.reflect.TypeToken;
+import com.google.protobuf.Any;
 import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.FileDescriptor;
@@ -17,7 +18,6 @@ import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileDescriptor;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
-import org.corfudb.runtime.collections.StreamManager;
 import org.corfudb.runtime.collections.StreamingManager;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.StreamingMapDecorator;
@@ -29,6 +29,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.ObjectsView.StreamTagInfo;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -50,6 +51,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+
+import static org.corfudb.runtime.view.ObjectsView.LOG_REPLICATOR_STREAM_INFO;
 
 /**
  * Table Registry manages the lifecycle of all the tables in the system.
@@ -82,11 +85,6 @@ public class TableRegistry {
      * Connected runtime instance.
      */
     private final CorfuRuntime runtime;
-
-    /**
-     * A TableRegistry should just have one stream manager for lifecycle management.
-     */
-    private StreamManager streamManager;
 
     /**
      * A TableRegistry should just have one streaming manager for lifecycle management.
@@ -133,18 +131,18 @@ public class TableRegistry {
         }
         this.protobufSerializer = protoSerializer;
         this.registryTable = this.runtime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>>() {
-                })
-                .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, REGISTRY_TABLE_NAME))
-                .setSerializer(this.protobufSerializer)
-                .open();
+            .setTypeToken(new TypeToken<CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>>() {
+            })
+            .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, REGISTRY_TABLE_NAME))
+            .setSerializer(this.protobufSerializer)
+            .open();
 
         this.protobufDescriptorTable = this.runtime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>>() {
-                })
-                .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, PROTOBUF_DESCRIPTOR_TABLE_NAME))
-                .setSerializer(this.protobufSerializer)
-                .open();
+            .setTypeToken(new TypeToken<CorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>>() {
+            })
+            .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, PROTOBUF_DESCRIPTOR_TABLE_NAME))
+            .setSerializer(this.protobufSerializer)
+            .open();
 
         // Register the table schemas to schema table.
         addTypeToClassMap(TableName.getDefaultInstance());
@@ -156,18 +154,18 @@ public class TableRegistry {
         // Register the registry table itself.
         try {
             registerTable(CORFU_SYSTEM_NAMESPACE,
-                    REGISTRY_TABLE_NAME,
-                    TableName.class,
-                    TableDescriptors.class,
-                    TableMetadata.class,
-                    TableOptions.<TableName, TableDescriptors>builder().build());
+                REGISTRY_TABLE_NAME,
+                TableName.class,
+                TableDescriptors.class,
+                TableMetadata.class,
+                TableOptions.<TableName, TableDescriptors>builder().build());
 
             registerTable(CORFU_SYSTEM_NAMESPACE,
-                    PROTOBUF_DESCRIPTOR_TABLE_NAME,
-                    ProtobufFileName.class,
-                    ProtobufFileDescriptor.class,
-                    TableMetadata.class,
-                    TableOptions.<ProtobufFileName, ProtobufFileDescriptor>builder().build());
+                PROTOBUF_DESCRIPTOR_TABLE_NAME,
+                ProtobufFileName.class,
+                ProtobufFileDescriptor.class,
+                TableMetadata.class,
+                TableOptions.<ProtobufFileName, ProtobufFileDescriptor>builder().build());
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
@@ -207,9 +205,9 @@ public class TableRegistry {
 
         Map<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> allDescriptors = new HashMap<>();
         TableDescriptors.Builder tableDescriptorsBuilder = TableDescriptors.newBuilder();
-
         FileDescriptor keyFileDescriptor = defaultKeyMessage.getDescriptorForType().getFile();
         insertAllDependingFileDescriptorProtos(tableDescriptorsBuilder, keyFileDescriptor, allDescriptors);
+
         FileDescriptor valueFileDescriptor = defaultValueMessage.getDescriptorForType().getFile();
         insertAllDependingFileDescriptorProtos(tableDescriptorsBuilder, valueFileDescriptor, allDescriptors);
 
@@ -217,7 +215,13 @@ public class TableRegistry {
             M defaultMetadataMessage = (M) metadataClass.getMethod("getDefaultInstance").invoke(null);
             FileDescriptor metaFileDescriptor = defaultMetadataMessage.getDescriptorForType().getFile();
             insertAllDependingFileDescriptorProtos(tableDescriptorsBuilder, metaFileDescriptor, allDescriptors);
+            // Add Any for the metadata
+            tableDescriptorsBuilder.setMetadata(Any.pack(defaultMetadataMessage));
         }
+
+        // Add the Any for the key and value
+        tableDescriptorsBuilder.setKey(Any.pack(defaultKeyMessage))
+            .setValue(Any.pack(defaultValueMessage));
         TableDescriptors tableDescriptors = tableDescriptorsBuilder.build();
 
         TableMetadata.Builder metadataBuilder = TableMetadata.newBuilder();
@@ -232,19 +236,13 @@ public class TableRegistry {
             // Or no modification to the protobuf files.
             /**
              * Caller is opening a new table with a map of protobufFilename -> protobufFileDescriptor pairs
-             * Here are the cases that can happen:
-             * 1. No entry in TableRegistry -> New table
-             *  1.1: When inserting new protobufs into descriptor table, we find existing entries and they all match
-             *  1.2: When inserting new protobufs into descriptor table, we find mismatching [Schema Change!]
              *
-             * 2. Entry exists in TableRegistry -> Existing table re-opened:
-             *    2.1: Existing protobuf file list matches, newly inserted protobuf list
-             *    2.1.1: Each of Existing protobuf file descriptors match that in new file descriptor list
-             *    2.1.2: Existing protobuf file descriptor does not match that in new file descriptor![ SchemaChange!]
+             *  If no entry in TableRegistry, tt is a new table. Then we insert new protobufs into descriptor table.
+             *  Note: we do not replace existing descriptor, as table schema change should be handled by explicit APIs.
+             *  (assumption is that protobuf definitions do not change outside of an upgrade/migration scenario)
              *
-             *    2.2: Existing protobuf file list does not match, newly opened protobuf list [big Schema Change]
-             *    2.2.1: Existing protobuf file list matches existing proto files
-             *    2.2.3: Existing protobuf file's descriptor mismatches with the incoming descriptor
+             *  If entry exists in TableRegistry -> Existing table re-opened:
+             *  We won't check equality as the expectation is that schemas do not change outside of upgrade paths.
              */
             if (TransactionalContext.isInTransaction()) {
                 throw new IllegalThreadStateException("openTable: Called on an existing transaction");
@@ -252,24 +250,12 @@ public class TableRegistry {
             try {
                 this.runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
                 CorfuRecord<TableDescriptors, TableMetadata> oldRecord = this.registryTable.get(tableNameKey);
-                if (oldRecord == null) { // Case 1 above, new unseen table
+                if (oldRecord == null) {
                     this.registryTable.put(tableNameKey,
-                            new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
-                } else { // Case 2 above, re-open of existing table
-                    if (!oldRecord.getPayload().getFileDescriptorsMap().keySet()
-                            .equals(tableDescriptors.getFileDescriptorsMap().keySet())) {
-                        log.warn("Protobuf file list changed for {} table {}. Prev list {}, new list {}",
-                                namespace, tableName, oldRecord.getPayload().getFileDescriptorsMap().keySet(),
-                                tableDescriptors.getFileDescriptorsMap().keySet());
-                        for (StackTraceElement st : Thread.currentThread().getStackTrace()) {
-                            log.debug("{}", st);
-                        }
-                        this.registryTable.put(tableNameKey,
-                                new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
-                    } // else no need to re-add the exact same entry into the table
+                        new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
+
+                    allDescriptors.forEach(this::recordNewSchema);
                 }
-                allDescriptors.forEach((protoName, protoDescriptor) ->
-                        recordNewSchema(protoName, protoDescriptor, namespace, tableName));
                 this.runtime.getObjectsView().TXEnd();
                 break;
             } catch (TransactionAbortedException txAbort) {
@@ -293,37 +279,26 @@ public class TableRegistry {
      *
      * @param protoName - name of the protobuf file
      * @param newProtoFd - descriptor of the protobuf file that is being inserted.
-     * @param namespace - namespace of the table
-     * @param tableName - tablename without the namespace
      */
     private void recordNewSchema(ProtobufFileName protoName,
-                                    CorfuRecord<ProtobufFileDescriptor, TableMetadata> newProtoFd,
-                                    String namespace,
-                                    String tableName) {
-        final CorfuRecord<ProtobufFileDescriptor, TableMetadata> oldProto = this.protobufDescriptorTable.get(protoName);
-        if (oldProto == null) {
+                                    CorfuRecord<ProtobufFileDescriptor, TableMetadata> newProtoFd) {
+        final CorfuRecord<ProtobufFileDescriptor, TableMetadata> currentSchema = this.protobufDescriptorTable.get(protoName);
+        if (currentSchema == null) {
+            // If schema is not present, add to protobufDescriptorTable, otherwise,
+            // we assume schema definitions only change between upgrades/migration for which
+            // dedicated APIs are available
             this.protobufDescriptorTable.put(protoName, newProtoFd);
-            return;
-        }
-        if (!oldProto.getPayload().getFileDescriptor().equals(newProtoFd.getPayload().getFileDescriptor())) {
-            // protobuf files that start with google/protobuf are standard library files.
-            // Even if there is a change in these library files (say due to a new protobuf version update)
-            // it should not be flagged as a schema change since that file is not user created.
-            if (!protoName.getFileName().startsWith("google/protobuf")) {
-                log.warn("registerTable: Schema update detected for table {}${} in schema file {}",
-                        namespace, tableName, protoName);
+        } else {
+            if (log.isTraceEnabled() && !protoName.getFileName().startsWith("google/protobuf")
+                    && !currentSchema.getPayload().getFileDescriptor()
+                    .equals(newProtoFd.getPayload().getFileDescriptor())) {
+                log.trace("registerTable: Schema update detected for table {}! " +
+                                "Old schema is {}, new schema is {}", protoName,
+                        currentSchema.getPayload().getFileDescriptor(),
+                        newProtoFd.getPayload().getFileDescriptor());
 
-                StringBuilder stackTraceStr = new StringBuilder();
-                for (StackTraceElement st : Thread.currentThread().getStackTrace()) {
-                    stackTraceStr.append(st);
-                    stackTraceStr.append("\n");
-                }
-                log.debug("{}", stackTraceStr);
-                log.debug("registerTable: old schema: {}", oldProto.getPayload().getFileDescriptor());
-                log.debug("registerTable: new schema: {}", newProtoFd.getPayload().getFileDescriptor());
             }
-            this.protobufDescriptorTable.put(protoName, newProtoFd);
-        } // else old file descriptors match no need to re-add the file descriptors
+        }
     }
 
     /**
@@ -472,6 +447,7 @@ public class TableRegistry {
         }
 
         String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
+
         ICorfuVersionPolicy.VersionPolicy versionPolicy = ICorfuVersionPolicy.DEFAULT;
         Supplier<StreamingMap<K, V>> mapSupplier = () -> new StreamingMapDecorator();
         if (tableOptions.getPersistentDataPath().isPresent()) {
@@ -482,21 +458,29 @@ public class TableRegistry {
                     protobufSerializer, this.runtime);
         }
 
-        List<String> streamTagsStringList = defaultValueMessage.getDescriptorForType()
-                .getOptions().getExtension(CorfuOptions.tableSchema).getStreamTagList();
-
-        Set<UUID> streamTagsUUIDForTable = streamTagsStringList
+        Set<StreamTagInfo> streamTagInfoForTable = defaultValueMessage
+                .getDescriptorForType()
+                .getOptions()
+                .getExtension(CorfuOptions.tableSchema)
+                .getStreamTagList()
                 .stream()
-                .map(tag -> getStreamIdForStreamTag(namespace, tag))
+                .map(tag -> new StreamTagInfo(tag, getStreamIdForStreamTag(namespace, tag)))
                 .collect(Collectors.toSet());
 
         // If table is federated, add a new tagged stream (on which updates to federated tables will be appended for
         // streaming purposes)
-        boolean isFederated = defaultValueMessage.getDescriptorForType()
+        final boolean isFederated = defaultValueMessage.getDescriptorForType()
                 .getOptions().getExtension(CorfuOptions.tableSchema).getIsFederated();
         if (isFederated) {
-            streamTagsUUIDForTable.add(ObjectsView.LOG_REPLICATOR_STREAM_ID);
+            streamTagInfoForTable.add(LOG_REPLICATOR_STREAM_INFO);
         }
+
+        Set<UUID> streamTagIdsForTable = streamTagInfoForTable
+                .stream()
+                .map(StreamTagInfo::getStreamId)
+                .collect(Collectors.toSet());
+
+        log.info("openTable: opening {}${} with stream tags {}", namespace, tableName, streamTagInfoForTable);
 
         // Open and return table instance.
         Table<K, V, M> table = new Table<>(
@@ -512,7 +496,7 @@ public class TableRegistry {
                 this.protobufSerializer,
                 mapSupplier,
                 versionPolicy,
-                streamTagsUUIDForTable);
+                streamTagIdsForTable);
         tableMap.put(fullyQualifiedTableName, (Table<Message, Message, Message>) table);
 
         registerTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
@@ -629,17 +613,6 @@ public class TableRegistry {
     }
 
     /**
-     * Register a stream subscription manager. We want only one of these per runtime.
-     */
-    @Deprecated
-    public synchronized StreamManager getStreamManager() {
-        if (this.streamManager == null) {
-            this.streamManager = new StreamManager(runtime);
-        }
-        return this.streamManager;
-    }
-
-    /**
      * Register a streaming subscription manager as a singleton.
      */
     public synchronized StreamingManager getStreamingManager() {
@@ -653,9 +626,6 @@ public class TableRegistry {
      * Shutdown the table register, cleaning up relevant resources.
      */
     public void shutdown() {
-        if (streamManager != null) {
-            streamManager.shutdown();
-        }
         if (streamingManager != null) {
             streamingManager.shutdown();
         }

@@ -11,12 +11,16 @@ import io.micrometer.core.instrument.util.TimeUtils;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class DropwizardTimerCustom extends AbstractTimer {
+/**
+ * This class delegates the functionality of a micrometer timer to
+ * the dropwizard timer.
+ */
+public class DropwizardTimerDelegate extends AbstractTimer {
     private final Timer impl;
     private final AtomicLong totalTime = new AtomicLong(0);
     private final TimeWindowMax max;
 
-    DropwizardTimerCustom(Id id, Timer impl, Clock clock, DistributionStatisticConfig distributionStatisticConfig, PauseDetector pauseDetector) {
+    DropwizardTimerDelegate(Id id, Timer impl, Clock clock, DistributionStatisticConfig distributionStatisticConfig, PauseDetector pauseDetector) {
         super(id, clock, distributionStatisticConfig, pauseDetector, TimeUnit.MICROSECONDS, false);
         this.impl = impl;
         this.max = new TimeWindowMax(clock, distributionStatisticConfig);

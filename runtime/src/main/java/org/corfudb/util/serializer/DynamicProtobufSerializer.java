@@ -4,10 +4,12 @@ import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Any;
 import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
+import com.google.protobuf.Descriptors;
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.DescriptorValidationException;
 import com.google.protobuf.Descriptors.FileDescriptor;
 import com.google.protobuf.DynamicMessage;
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
@@ -38,10 +40,14 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
-import static org.corfudb.runtime.view.TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME;
+import com.google.protobuf.util.JsonFormat;
+
 import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 import static org.corfudb.runtime.view.TableRegistry.getTypeUrl;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.corfudb.runtime.view.TableRegistry.REGISTRY_TABLE_NAME;
+import static org.corfudb.runtime.view.TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME;
+
 
 /**
  * The Protobuf serializer is the main component that allows CorfuStore to use Protobufs to
@@ -85,19 +91,52 @@ public class DynamicProtobufSerializer implements ISerializer {
      */
     private final ConcurrentMap<String, FileDescriptor> fileDescriptorMap = new ConcurrentHashMap<>();
 
+    @Getter
+    private ConcurrentMap<TableName, CorfuRecord<TableDescriptors,
+        TableMetadata>> cachedRegistryTable = new ConcurrentHashMap<>();
+
+    @Getter
+    private ConcurrentMap<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor,
+        TableMetadata>> cachedProtobufDescriptorTable =
+        new ConcurrentHashMap<>();
+
     public DynamicProtobufSerializer(CorfuRuntime corfuRuntime) {
         this.type = ProtobufSerializer.PROTOBUF_SERIALIZER_CODE;
 
-        // Create and register a protobuf serializer to read the table registry.
-        ISerializer protobufSerializer = createProtobufSerializer();
-        Serializers.registerSerializer(protobufSerializer);
+        // Create or get a protobuf serializer to read the table registry.
+        ISerializer protobufSerializer;
+        try {
+            protobufSerializer = Serializers.getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
+        } catch (SerializerException se) {
+            // This means the protobuf serializer had not been registered yet.
+            log.info("Protobuf Serializer not found. Create and register a new one.");
+            protobufSerializer = createProtobufSerializer();
+            Serializers.registerSerializer(protobufSerializer);
+        }
+
+        // Open the Registry Table and cache its contents
+        CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable =
+            corfuRuntime.getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<CorfuTable<TableName,
+                    CorfuRecord<TableDescriptors, TableMetadata>>>() {
+                })
+                .setStreamName(
+                   getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+                       REGISTRY_TABLE_NAME))
+                .setSerializer(protobufSerializer)
+                .addOpenOption(ObjectOpenOption.NO_CACHE)
+                .open();
+        registryTable.forEach((tableName, descriptors) ->
+            cachedRegistryTable.put(tableName, descriptors));
 
         // Open the Protobuf Descriptor Table.
         CorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> descriptorTable = corfuRuntime.getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<CorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>>() {
                 })
-                .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, PROTOBUF_DESCRIPTOR_TABLE_NAME))
+                .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+                        PROTOBUF_DESCRIPTOR_TABLE_NAME))
                 .setSerializer(protobufSerializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
@@ -114,8 +153,13 @@ public class DynamicProtobufSerializer implements ISerializer {
             }
             fdProtoMap.putIfAbsent(protoFileName, fileDescriptorProto.getPayload().getFileDescriptor());
             identifyMessageTypesinFileDescriptorProto(fileDescriptorProto.getPayload().getFileDescriptor());
+
+            // cache the entry
+            cachedProtobufDescriptorTable.put(fdName, fileDescriptorProto);
         });
-        Serializers.registerSerializer(this);
+
+        // Remove the protobuf serializer
+        Serializers.clearCustomSerializers();
     }
 
     /**
@@ -129,10 +173,14 @@ public class DynamicProtobufSerializer implements ISerializer {
         // Register the schemas of TableName, TableDescriptors, TableMetadata, ProtobufFilename/Descriptor
         // to be able to understand registry table.
         classMap.put(getTypeUrl(TableName.getDescriptor()), TableName.class);
-        classMap.put(getTypeUrl(TableDescriptors.getDescriptor()), TableDescriptors.class);
-        classMap.put(getTypeUrl(TableMetadata.getDescriptor()), TableMetadata.class);
-        classMap.put(getTypeUrl(ProtobufFileName.getDescriptor()), ProtobufFileName.class);
-        classMap.put(getTypeUrl(ProtobufFileDescriptor.getDescriptor()), ProtobufFileDescriptor.class);
+        classMap.put(getTypeUrl(TableDescriptors.getDescriptor()),
+            TableDescriptors.class);
+        classMap.put(getTypeUrl(TableMetadata.getDescriptor()),
+            TableMetadata.class);
+        classMap.put(getTypeUrl(ProtobufFileName.getDescriptor()),
+            ProtobufFileName.class);
+        classMap.put(getTypeUrl(ProtobufFileDescriptor.getDescriptor()),
+            ProtobufFileDescriptor.class);
         return new ProtobufSerializer(classMap);
     }
 
@@ -219,6 +267,37 @@ public class DynamicProtobufSerializer implements ISerializer {
         return typeUrl.substring(typeUrl.lastIndexOf('/') + 1);
     }
 
+    public DynamicMessage createDynamicMessageFromJson(Any anyMsg,
+        String jsonString) {
+        FileDescriptor fileDescriptor;
+        try {
+            String fullMessageName = getFullMessageName(anyMsg);
+            fileDescriptor = getDescriptor(
+                messagesFdProtoNameMap.get(fullMessageName));
+        } catch (Descriptors.DescriptorValidationException e) {
+            log.warn("DescriptorValidationException thrown", e);
+            return null;
+        }
+        Descriptors.Descriptor descriptor =
+            fileDescriptor.findMessageTypeByName(getMessageName(anyMsg));
+        DynamicMessage.Builder builder;
+        try {
+            builder = DynamicMessage.parseFrom(descriptor,
+                anyMsg.getValue()).toBuilder();
+        } catch (InvalidProtocolBufferException e) {
+            log.warn("Unable to Parse Key {}", anyMsg.getValue());
+            return null;
+        }
+
+        try {
+            JsonFormat.parser().merge(jsonString, builder);
+        } catch(InvalidProtocolBufferException e) {
+            log.warn("Unable to Parse String {}", jsonString);
+            return null;
+        }
+        return builder.build();
+    }
+
     /**
      * Deserialize an object from a given byte buffer.
      *
@@ -236,8 +315,16 @@ public class DynamicProtobufSerializer implements ISerializer {
             Record record = Record.parseFrom(data);
             Any payload = record.getPayload();
 
+            String fullMessageName = getFullMessageName(payload);
+            if (!messagesFdProtoNameMap.containsKey(fullMessageName)) {
+                log.error("messagesFdProtoNameMap doesn't contain the message type {} of payload {}." +
+                                "Please check if the related table is properly opened with correct schema.",
+                        fullMessageName, payload);
+                log.error("messagesFdProtoNameMap keySet is {}", messagesFdProtoNameMap.keySet());
+            }
+
             FileDescriptor valueFileDescriptor
-                    = getDescriptor(messagesFdProtoNameMap.get(getFullMessageName(payload)));
+                    = getDescriptor(messagesFdProtoNameMap.get(fullMessageName));
             Descriptor valueDescriptor = valueFileDescriptor.findMessageTypeByName(getMessageName(payload));
             DynamicMessage value = DynamicMessage.parseFrom(valueDescriptor, payload.getValue());
 
@@ -251,8 +338,16 @@ public class DynamicProtobufSerializer implements ISerializer {
                 Any anyMetadata = record.getMetadata();
                 metadataTypeUrl = anyMetadata.getTypeUrl();
 
+                String fullMetadataMessageName = getFullMessageName(anyMetadata);
+                if (!messagesFdProtoNameMap.containsKey(fullMetadataMessageName)) {
+                    log.error("messagesFdProtoNameMap doesn't contain the message type {} of metadata {}." +
+                                    "Please check if the related table is properly opened with correct schema.",
+                            fullMetadataMessageName, anyMetadata);
+                    log.error("messagesFdProtoNameMap keySet is {}", messagesFdProtoNameMap.keySet());
+                }
+
                 FileDescriptor metaFileDescriptor
-                        = getDescriptor(messagesFdProtoNameMap.get(getFullMessageName(anyMetadata)));
+                        = getDescriptor(messagesFdProtoNameMap.get(fullMetadataMessageName));
                 Descriptor metaDescriptor = metaFileDescriptor.findMessageTypeByName(getMessageName(anyMetadata));
                 metadata = DynamicMessage.parseFrom(metaDescriptor, anyMetadata.getValue());
             }

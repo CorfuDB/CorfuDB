@@ -13,6 +13,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
@@ -26,9 +27,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-
-import static org.corfudb.runtime.view.ObjectsView.LOG_REPLICATOR_STREAM_ID;
-import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
 
 @Slf4j
 public class LogReplicationAckReader {
@@ -170,11 +168,11 @@ public class LogReplicationAckReader {
     }
 
     private long getTxStreamTail(Map<UUID, Long> tailMap) {
-        if (tailMap.containsKey(LOG_REPLICATOR_STREAM_ID)) {
-            return tailMap.get(LOG_REPLICATOR_STREAM_ID);
+        if (tailMap.containsKey(ObjectsView.getLogReplicatorStreamId())) {
+            return tailMap.get(ObjectsView.getLogReplicatorStreamId());
         }
 
-        log.warn("Tx Stream tail not present in sequencer, id={}", LOG_REPLICATOR_STREAM_ID);
+        log.warn("Tx Stream tail not present in sequencer, id={}", ObjectsView.getLogReplicatorStreamId());
         return Address.NON_ADDRESS;
     }
 
@@ -322,7 +320,7 @@ public class LogReplicationAckReader {
         long totalEntries = 0;
 
         if (upperBoundary > lowerBoundary) {
-            StreamAddressRange range = new StreamAddressRange(LOG_REPLICATOR_STREAM_ID, upperBoundary, lowerBoundary);
+            StreamAddressRange range = new StreamAddressRange(ObjectsView.getLogReplicatorStreamId(), upperBoundary, lowerBoundary);
             StreamAddressSpace txStreamAddressSpace = runtime.getSequencerView().getStreamAddressSpace(range);
             // Count how many entries are present in the Tx Stream (this can include holes,
             // valid entries and invalid entries), but we count them all (equal weight).

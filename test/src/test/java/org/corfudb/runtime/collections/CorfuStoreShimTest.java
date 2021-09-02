@@ -32,9 +32,11 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Random;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -1005,7 +1007,8 @@ public class CorfuStoreShimTest extends AbstractViewTest {
      * ProtobufDescriptorTable should de-duplicate common protobuf file descriptors.
      * This test creates a large number of tables that share protobuf files and validates
      * that de-duplication occurs.
-     * Also exercises schema change validation logic.
+     *
+     * It also verifies that the second registration is omitted.
      * @throws Exception exception
      */
     @Test
@@ -1054,28 +1057,34 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             assertThat(referenceMap.get(fileName.getFileName())).isNotNull();
         }
 
-        // Now update the schemas with different protobuf files
-        final int numProtoFiles = corfuRuntime.getTableRegistry().getProtobufDescriptorTable().size();
-        assertThat(numProtoFiles).isLessThan(numTables);
-        for (int i = 0; i < numTables; i++) {
-            shimStore.openTable(
-                    someNamespace,
-                    tableNamePrefix+i,
-                    UuidMsg.class,
-                    org.corfudb.runtime.proto.LogData.LogDataMsg.class, // this brings in 1 new protobuf file
-                    ManagedMetadata.class,
-                    // TableOptions includes option to choose - Memory/Disk based corfu table.
-                    TableOptions.builder().build());
-        }
+        final int numProtoFiles =
+                corfuRuntime.getTableRegistry().getProtobufDescriptorTable().size();
+        CorfuStoreMetadata.TableName tableName = CorfuStoreMetadata.TableName
+                .newBuilder()
+                .setNamespace(someNamespace)
+                .setTableName(tableNamePrefix+"0")
+                .build();
+        final Collection<CorfuRecord<ProtobufFileDescriptor, CorfuStoreMetadata.TableMetadata>> records =
+                corfuRuntime.getTableRegistry().getProtobufDescriptorTable().values();
+
+        shimStore.openTable(
+                someNamespace,
+                tableNamePrefix+"0",
+                UuidMsg.class,
+                org.corfudb.runtime.proto.LogData.LogDataMsg.class, // this brings in 1 new protobuf file
+                ManagedMetadata.class,
+                // TableOptions includes option to choose - Memory/Disk based corfu table.
+                TableOptions.builder().build());
+
         referenceMap.put(org.corfudb.runtime.proto.LogData.LogDataMsg.getDescriptor().getFile().getFullName(),
                 org.corfudb.runtime.proto.LogData.getDescriptor().getFile());
-        for (ProtobufFileName fileName : descriptorTable.keySet()) {
-            if (fileName.getFileName().startsWith("google/protobuf")) {
-                continue; // Do not validate library protos
-            }
-            assertThat(referenceMap.get(fileName.getFileName())).isNotNull();
-        }
-        final int numProtoFiles2 = corfuRuntime.getTableRegistry().getProtobufDescriptorTable().size();
-        assertThat(numProtoFiles2).isEqualTo(numProtoFiles + 1);
+
+        // verify the second registration is omitted.
+        final int numProtoFilesAfterChange =
+                corfuRuntime.getTableRegistry().getProtobufDescriptorTable().size();
+        final Collection<CorfuRecord<ProtobufFileDescriptor, CorfuStoreMetadata.TableMetadata>>
+                recordsAfterChange = corfuRuntime.getTableRegistry().getProtobufDescriptorTable().values();
+        assertThat(numProtoFiles).isEqualTo(numProtoFilesAfterChange);
+        assertThat(records).containsExactlyElementsOf(recordsAfterChange);
     }
 }

@@ -59,7 +59,7 @@ public class LogEntryWriter {
      */
     private void verifyMetadata(LogReplicationEntryMetadataMsg metadata) throws ReplicationWriterException {
         if (metadata.getEntryType() != LogReplicationEntryType.LOG_ENTRY_MESSAGE) {
-            log.error("Wrong message metadata {}, expecting  type {} snapshot {}",
+            log.error("Wrong message metadata {}, expecting type {} snapshot {}",
                     TextFormat.shortDebugString(metadata),
                     LogReplicationEntryType.LOG_ENTRY_MESSAGE, srcGlobalSnapshot);
             throw new ReplicationWriterException("wrong type of message");

@@ -20,7 +20,6 @@ import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
@@ -48,6 +47,7 @@ public class LogReplicationMetadataManager {
     public static final String METADATA_TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
     private static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
     private static final String REPLICATION_EVENT_TABLE_NAME = "LogReplicationEventTable";
+    private static final String LR_STREAM_TAG = "log_replication";
 
     private final CorfuStore corfuStore;
 
@@ -444,7 +444,7 @@ public class LogReplicationMetadataManager {
 
             CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, Message> record = txn.getRecord(replicationStatusTable, key);
 
-            if (record != null) {
+            if (record.getPayload() != null) {
                 ReplicationStatusVal previous = record.getPayload();
                 SnapshotSyncInfo previousSyncInfo = previous.getSnapshotSyncInfo();
 
@@ -637,7 +637,7 @@ public class LogReplicationMetadataManager {
         }
 
         // Initially, snapshot sync is pending so the data is not consistent.
-        if (record == null) {
+        if (record.getPayload() == null) {
             log.warn("No Key for Data Consistent found.  DataConsistent Status is not set.");
             statusVal = ReplicationStatusVal.newBuilder().setDataConsistent(false).build();
         } else {
@@ -758,8 +758,7 @@ public class LogReplicationMetadataManager {
      */
     public void subscribeReplicationEventTable(StreamListener listener) {
         log.info("LogReplication start listener for table {}", REPLICATION_EVENT_TABLE_NAME);
-        corfuStore.subscribe(listener, NAMESPACE,
-                Collections.singletonList(new TableSchema(REPLICATION_EVENT_TABLE_NAME, ReplicationEventKey.class, ReplicationEvent.class, null)), null);
+        corfuStore.subscribeListener(listener, NAMESPACE, LR_STREAM_TAG, Collections.singletonList(REPLICATION_EVENT_TABLE_NAME));
     }
 
     /**
@@ -767,7 +766,7 @@ public class LogReplicationMetadataManager {
      * @param listener
      */
     public void unsubscribeReplicationEventTable(StreamListener listener) {
-        corfuStore.unsubscribe(listener);
+        corfuStore.unsubscribeListener(listener);
     }
 
     public void shutdown() {

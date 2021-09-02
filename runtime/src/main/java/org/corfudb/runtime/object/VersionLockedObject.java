@@ -122,6 +122,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
     private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
 
     private final Optional<AtomicLong> noRollBackExceptionCounter;
+
     /*
      * The VersionLockedObject maintains a versioned object which is backed by an ISMRStream,
      * and is optionally backed by an additional optimistic update stream.
@@ -144,12 +145,8 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
         this.pendingUpcalls = ConcurrentHashMap.newKeySet();
         this.upcallResults = new ConcurrentHashMap<>();
         lock = new StampedLock();
-
-        Optional<MeterRegistry> metricsRegistry = MeterRegistryProvider.getInstance();
-        noRollBackExceptionCounter = metricsRegistry
-                .map(registry ->
-                        registry.gauge("vlo.no_rollback_exception.count",
-                               new AtomicLong(0L)));
+        noRollBackExceptionCounter = MicroMeterUtils.gauge("vlo.no_rollback_exception.count",
+                new AtomicLong(0L));
     }
 
     /**

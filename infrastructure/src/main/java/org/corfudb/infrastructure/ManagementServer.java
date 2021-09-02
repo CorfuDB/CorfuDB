@@ -196,7 +196,7 @@ public class ManagementServer extends AbstractServer {
     public synchronized void handleOrchestratorMsg(@Nonnull RequestMsg req,
                                                    @Nonnull ChannelHandlerContext ctx,
                                                    @Nonnull IServerRouter r) {
-        log.debug("handleOrchestratorMsg: message:{}",
+        log.debug("handleOrchestratorMsg: {}",
                 TextFormat.shortDebugString(req.getPayload().getOrchestratorRequest()));
         orchestrator.handle(req, ctx, r);
     }

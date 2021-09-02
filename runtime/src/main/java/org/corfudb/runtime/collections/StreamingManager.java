@@ -109,8 +109,8 @@ public class StreamingManager {
                 runtime.getParameters()));
         notificationExecutor.submit(new StreamNotificationTask(this, subscription, notificationExecutor, runtime.getParameters()));
 
-        log.info("Subscribed stream listener {}, numSubscribers: {}, streamTag: {}, lastAddress: {}, " +
-                        "namespace {}, tables {}", streamListener, subscriptions.size(), streamTag, lastAddress,
+        log.info("Subscribed stream listener [{}], numSubscribers: {}, streamTag: {}, lastAddress: {}, " +
+                        "namespace: {}, tables: {}", streamListener, subscriptions.size(), streamTag, lastAddress,
                 namespace, tablesOfInterest);
     }
 
