@@ -53,8 +53,9 @@ public class CorfuProtocolRemoteCorfuTable {
                                                      @NonNull RemoteCorfuTableVersionedKey versionedKey) {
         return RequestPayloadMsg.newBuilder()
                 .setRemoteCorfuTableRequest(RemoteCorfuTableRequestMsg.newBuilder()
+                    .setStreamId(getUuidMsg(streamID))
+                    .setTimestamp(versionedKey.getTimestamp())
                     .setGet(RemoteCorfuTableGetRequestMsg.newBuilder()
-                        .setStreamID(getUuidMsg(streamID))
                         .setVersionedKey(versionedKey.getEncodedVersionedKey())
                         .build())
                     .build())
@@ -92,11 +93,11 @@ public class CorfuProtocolRemoteCorfuTable {
                                                       long timestamp) {
         return RequestPayloadMsg.newBuilder()
                 .setRemoteCorfuTableRequest(RemoteCorfuTableRequestMsg.newBuilder()
+                    .setStreamId(getUuidMsg(streamID))
+                    .setTimestamp(timestamp)
                     .setScan(RemoteCorfuTableScanRequestMsg.newBuilder()
                         .setVersionedStartKey(versionedStartKey.getEncodedVersionedKey())
                         .setNumEntriesToScan(scanSize)
-                        .setStreamID(getUuidMsg(streamID))
-                        .setTimestamp(timestamp)
                         .build())
                     .build())
                 .build();
@@ -114,12 +115,12 @@ public class CorfuProtocolRemoteCorfuTable {
                                                       long timestamp) {
         return RequestPayloadMsg.newBuilder()
                 .setRemoteCorfuTableRequest(RemoteCorfuTableRequestMsg.newBuilder()
-                        .setScan(RemoteCorfuTableScanRequestMsg.newBuilder()
-                                .setTimestamp(timestamp)
-                                .setNumEntriesToScan(scanSize)
-                                .setStreamID(getUuidMsg(streamID))
-                                .build())
+                    .setStreamId(getUuidMsg(streamID))
+                    .setTimestamp(timestamp)
+                    .setScan(RemoteCorfuTableScanRequestMsg.newBuilder()
+                        .setNumEntriesToScan(scanSize)
                         .build())
+                    .build())
                 .build();
     }
 
@@ -142,17 +143,29 @@ public class CorfuProtocolRemoteCorfuTable {
                 .build();
     }
 
+    /**
+     * Returns a REMOTE CORFU TABLE response message containing a RemoteCorfuTableMultiGetRequestMsg
+     * that can be sent by the client. Used to read multiple keys in one request.
+     * @param keys The list of keys to read from the server. Must be non-empty.
+     * @param streamId The UUID of the stream backing the RemoteCorfuTable.
+     * @return MULTIGET request payload message to send to the server.
+     */
     public static RequestPayloadMsg getMultiGetRequestMsg(@NonNull List<RemoteCorfuTableVersionedKey> keys,
                                                           @NonNull UUID streamId) {
+        if (keys.isEmpty()) {
+            throw new IllegalArgumentException("Keys must not be empty");
+        }
+
         return RequestPayloadMsg.newBuilder()
                 .setRemoteCorfuTableRequest(RemoteCorfuTableRequestMsg.newBuilder()
+                    .setStreamId(getUuidMsg(streamId))
+                    .setTimestamp(keys.get(0).getTimestamp())
                     .setMultiget(RemoteCorfuTableMultiGetRequestMsg.newBuilder()
-                            .addAllVersionedKeys(keys
-                                    .stream()
-                                    .map(RemoteCorfuTableVersionedKey::getEncodedVersionedKey)
-                                    .collect(Collectors.toList()))
-                            .setStreamID(getUuidMsg(streamId))
-                            .build())
+                        .addAllVersionedKeys(keys
+                            .stream()
+                            .map(RemoteCorfuTableVersionedKey::getEncodedVersionedKey)
+                            .collect(Collectors.toList()))
+                        .build())
                     .build())
                 .build();
     }
@@ -168,8 +181,9 @@ public class CorfuProtocolRemoteCorfuTable {
                                                              @NonNull RemoteCorfuTableVersionedKey versionedKey) {
         return RequestPayloadMsg.newBuilder()
                 .setRemoteCorfuTableRequest(RemoteCorfuTableRequestMsg.newBuilder()
+                    .setStreamId(getUuidMsg(streamID))
+                    .setTimestamp(versionedKey.getTimestamp())
                     .setContainsKey(RemoteCorfuTableContainsKeyRequestMsg.newBuilder()
-                        .setStreamID(getUuidMsg(streamID))
                         .setVersionedKey(versionedKey.getEncodedVersionedKey())
                         .build())
                     .build())
@@ -189,10 +203,10 @@ public class CorfuProtocolRemoteCorfuTable {
                                                                long timestamp, @Positive int scanSize) {
         return RequestPayloadMsg.newBuilder()
                 .setRemoteCorfuTableRequest(RemoteCorfuTableRequestMsg.newBuilder()
+                    .setStreamId(getUuidMsg(streamID))
+                    .setTimestamp(timestamp)
                     .setContainsValue(RemoteCorfuTableContainsValueRequestMsg.newBuilder()
                         .setPayloadValue(payloadValue)
-                        .setStreamID(getUuidMsg(streamID))
-                        .setTimestamp(timestamp)
                         .setInternalScanSize(scanSize)
                         .build())
                     .build())
@@ -226,9 +240,9 @@ public class CorfuProtocolRemoteCorfuTable {
     public static RequestPayloadMsg getSizeRequestMsg(@NonNull UUID streamID, long timestamp, int scanSize) {
         return RequestPayloadMsg.newBuilder()
                 .setRemoteCorfuTableRequest(RemoteCorfuTableRequestMsg.newBuilder()
+                    .setStreamId(getUuidMsg(streamID))
+                    .setTimestamp(timestamp)
                     .setSize(RemoteCorfuTableSizeRequestMsg.newBuilder()
-                        .setStreamID(getUuidMsg(streamID))
-                        .setTimestamp(timestamp)
                         .setInternalScanSize(scanSize)
                         .build())
                     .build())
