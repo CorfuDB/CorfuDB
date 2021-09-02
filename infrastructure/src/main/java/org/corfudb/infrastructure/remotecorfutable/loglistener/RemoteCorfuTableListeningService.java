@@ -29,9 +29,11 @@ public interface RemoteCorfuTableListeningService {
      * entries at the desired timestamp.
      * @param streamId Stream to wait on.
      * @param timestamp Timestamp to wait until.
+     * @return The SMROperation that, when applied, will indicate that the database has consumed up to the requested
+     * state.
      * @throws InterruptedException An error during await.
      */
-    void awaitEndOfStreamCheck(UUID streamId, long timestamp) throws InterruptedException;
+    SMROperation awaitEndOfStreamCheck(UUID streamId, long timestamp) throws InterruptedException;
 
     /**
      * This method will receive the next task to process from the listener.

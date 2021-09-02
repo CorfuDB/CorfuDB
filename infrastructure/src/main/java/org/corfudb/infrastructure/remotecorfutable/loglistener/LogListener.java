@@ -56,7 +56,7 @@ public class LogListener implements AutoCloseable {
         if (op != null) {
             try {
                 op.applySMRMethod(handler);
-            } catch (RocksDBException e) {
+            } catch (Exception e) {
                 log.error("Error applying log update to database", e);
                 listener.removeStream(op.getStreamId());
                 listening.remove(op.getStreamId());
@@ -79,6 +79,22 @@ public class LogListener implements AutoCloseable {
                 listening.add(stream);
                 listener.addStream(stream);
             }
+        }
+    }
+
+    /**
+     * This method will allow readers to wait until the Log Listener has applied
+     * entries at the desired timestamp.
+     * @param streamID Requested stream ID.
+     * @param timestamp Timestamp to wait until.
+     * @throws InterruptedException Error in waiting.
+     */
+    public void waitForStream(UUID streamID, long timestamp) throws InterruptedException {
+        SMROperation op = listener.awaitEndOfStreamCheck(streamID, timestamp);
+        //if op is null we are already at a consistent state
+        if (op != null) {
+            //wait until the operation is applied to be consistent with the request
+            op.waitUntilApply();
         }
     }
 
