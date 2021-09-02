@@ -13,6 +13,7 @@ import org.rocksdb.RocksDBException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 
 /**
  * This class contains the logic for the delete operation from stream listener to database.
@@ -22,9 +23,13 @@ import java.util.UUID;
 @EqualsAndHashCode
 public class DeleteOperation implements SMROperation {
     private final List<ByteString> keys;
+    @Getter
     private final long timestamp;
     @Getter
     private final UUID streamId;
+    private final CountDownLatch isApplied = new CountDownLatch(1);
+    @Getter
+    private Exception exception;
 
     public DeleteOperation(@NonNull List<ByteString> keys, long timestamp, @NonNull UUID streamId) {
         if (keys.isEmpty()) {
@@ -42,14 +47,20 @@ public class DeleteOperation implements SMROperation {
      * </p>
      */
     @Override
-    public void applySMRMethod(@NonNull DatabaseHandler dbHandler) throws RocksDBException {
-        //optimization in case of only one key being deleted
-        if (keys.size() == 1) {
-            //single delete case - take first key in the list and delete it
-            RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(keys.get(0), timestamp);
-            dbHandler.update(key, ByteString.EMPTY, streamId);
-        } else {
-            dbHandler.updateAll(getEntryBatch(), streamId);
+    public void applySMRMethod(@NonNull DatabaseHandler dbHandler) {
+        try {
+            //optimization in case of only one key being deleted
+            if (keys.size() == 1) {
+                //single delete case - take first key in the list and delete it
+                RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(keys.get(0), timestamp);
+                dbHandler.update(key, ByteString.EMPTY, streamId);
+            } else {
+                dbHandler.updateAll(getEntryBatch(), streamId);
+            }
+        } catch (Exception e) {
+            exception = e;
+        } finally {
+            isApplied.countDown();
         }
     }
 
@@ -77,5 +88,10 @@ public class DeleteOperation implements SMROperation {
     @Override
     public RemoteCorfuTableSMRMethods getType() {
         return RemoteCorfuTableSMRMethods.DELETE;
+    }
+
+    @Override
+    public void waitUntilApply() throws InterruptedException {
+        isApplied.await();
     }
 }

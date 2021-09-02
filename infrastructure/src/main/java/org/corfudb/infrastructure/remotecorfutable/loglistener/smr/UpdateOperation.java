@@ -13,6 +13,7 @@ import org.rocksdb.RocksDBException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 
 /**
  * This class contains the logic for the update operation from stream listener to database.
@@ -24,6 +25,11 @@ public class UpdateOperation implements SMROperation {
     private final List<RemoteCorfuTableDatabaseEntry> entries;
     @Getter
     private final UUID streamId;
+    @Getter
+    private final long timestamp;
+    private final CountDownLatch isApplied = new CountDownLatch(1);
+    @Getter
+    private Exception exception;
 
     public UpdateOperation(@NonNull List<ByteString> args, long timestamp, @NonNull UUID streamId) {
         if (args.isEmpty()) {
@@ -40,6 +46,7 @@ public class UpdateOperation implements SMROperation {
             entries.add(entry);
         }
         this.streamId = streamId;
+        this.timestamp = timestamp;
     }
 
     /**
@@ -49,14 +56,20 @@ public class UpdateOperation implements SMROperation {
      * </p>
      */
     @Override
-    public void applySMRMethod(@NonNull DatabaseHandler dbHandler) throws RocksDBException {
-        //optimization in case of only one key being added
-        if (entries.size() == 1) {
-            //single update case
-            RemoteCorfuTableDatabaseEntry entry = entries.get(0);
-            dbHandler.update(entry.getKey(), entry.getValue(), streamId);
-        } else {
-            dbHandler.updateAll(entries, streamId);
+    public void applySMRMethod(@NonNull DatabaseHandler dbHandler) {
+        try {
+            //optimization in case of only one key being added
+            if (entries.size() == 1) {
+                //single update case
+                RemoteCorfuTableDatabaseEntry entry = entries.get(0);
+                dbHandler.update(entry.getKey(), entry.getValue(), streamId);
+            } else {
+                dbHandler.updateAll(entries, streamId);
+            }
+        } catch (Exception e) {
+            exception = e;
+        } finally {
+            isApplied.countDown();
         }
     }
 
@@ -77,5 +90,10 @@ public class UpdateOperation implements SMROperation {
     @Override
     public RemoteCorfuTableSMRMethods getType() {
         return RemoteCorfuTableSMRMethods.UPDATE;
+    }
+
+    @Override
+    public void waitUntilApply() throws InterruptedException {
+        isApplied.await();
     }
 }

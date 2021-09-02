@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure.remotecorfutable.loglistener.smr;
 
-import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
@@ -9,13 +8,13 @@ import org.corfudb.common.remotecorfutable.RemoteCorfuTableDatabaseEntry;
 import org.corfudb.common.remotecorfutable.RemoteCorfuTableVersionedKey;
 import org.corfudb.infrastructure.remotecorfutable.DatabaseHandler;
 import org.corfudb.runtime.collections.remotecorfutable.RemoteCorfuTableSMRMethods;
-import org.rocksdb.RocksDBException;
 
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 
 /**
  * This operation performs a batched write of a single transaction from a MultiSMREntry.
@@ -23,13 +22,28 @@ import java.util.UUID;
  * Created by nvaishampayan517 on 08/20/21
  */
 @EqualsAndHashCode
-@AllArgsConstructor
 public class CompositeOperation implements SMROperation {
     @NonNull
     private final List<SMROperation> subOperations;
     @Getter
     @NonNull
     private final UUID streamId;
+    private final CountDownLatch isApplied = new CountDownLatch(1);
+    @Getter
+    private final long timestamp;
+    @Getter
+    private Exception exception;
+
+    public CompositeOperation(@NonNull List<SMROperation> subOperations, @NonNull UUID streamId, long timestamp) {
+        if (subOperations.isEmpty()) {
+            throw new IllegalArgumentException("Cannot have composite operation with no suboperations");
+        } else if (!subOperations.stream().map(SMROperation::getTimestamp).allMatch(subOperations.get(0)::equals)) {
+            throw new IllegalArgumentException("Cannot create composite operation with suboperations of different timestamps");
+        }
+        this.subOperations = subOperations;
+        this.streamId = streamId;
+        this.timestamp = timestamp;
+    }
 
     /**
      * {@inheritDoc}
@@ -38,8 +52,14 @@ public class CompositeOperation implements SMROperation {
      * </p>
      */
     @Override
-    public void applySMRMethod(@NonNull DatabaseHandler dbHandler) throws RocksDBException {
-        dbHandler.updateAll(getEntryBatch(), streamId);
+    public void applySMRMethod(@NonNull DatabaseHandler dbHandler)  {
+        try {
+            dbHandler.updateAll(getEntryBatch(), streamId);
+        } catch (Exception e) {
+            exception = e;
+        } finally {
+            isApplied.countDown();
+        }
     }
 
     /**
@@ -79,5 +99,10 @@ public class CompositeOperation implements SMROperation {
     @Override
     public RemoteCorfuTableSMRMethods getType() {
         return RemoteCorfuTableSMRMethods.COMPOSITE;
+    }
+
+    @Override
+    public void waitUntilApply() throws InterruptedException {
+        isApplied.await();
     }
 }
