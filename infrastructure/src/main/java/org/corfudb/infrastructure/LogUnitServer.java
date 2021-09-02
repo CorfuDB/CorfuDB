@@ -121,6 +121,8 @@ public class LogUnitServer extends AbstractServer {
     @VisibleForTesting
     private final DatabaseHandler databaseHandler;
 
+    private final ExecutorService remoteCorfuTableExecutorService;
+
     private final SingletonResource<CorfuRuntime> singletonRuntime;
 
     //TODO: copied from management server, double check correctness
@@ -191,6 +193,8 @@ public class LogUnitServer extends AbstractServer {
         this.serverContext = serverContext;
         config = LogUnitServerConfig.parse(serverContext.getServerConfig());
         executor = serverContext.getExecutorService(serverContext.getLogUnitThreadCount(), "LogUnit-");
+        remoteCorfuTableExecutorService = serverContext.getExecutorService(serverContext.getLogUnitThreadCount(),
+                "RemoteCorfuTableHandling-");
 
         if (config.isMemoryMode()) {
             log.warn("Log unit opened in-memory mode (Maximum size={}). "
@@ -215,14 +219,16 @@ public class LogUnitServer extends AbstractServer {
                 serverContext.getLogUnitThreadCount(),"RemoteCorfuTable-");
         databaseHandler = serverInitializer.buildDatabaseHandler(remoteCorfuTableDBPath, rocksDBOptions, dbExecutor);
         remoteCorfuTableRequestHandler = serverInitializer.buildRemoteCorfuTableRequestHandler(databaseHandler);
-        //sharing executor for now
+        ScheduledExecutorService listeningServiceExecutor = Executors.newScheduledThreadPool(
+                serverContext.getLogUnitThreadCount(), new ServerThreadFactory("LogListeningService-",
+                        new ServerThreadFactory.ExceptionHandler()));
         ScheduledExecutorService listenerExecutor = Executors.newScheduledThreadPool(
                 serverContext.getLogUnitThreadCount(), new ServerThreadFactory("LogListener-",
                         new ServerThreadFactory.ExceptionHandler()));
         log.debug("Initializing Log Unit Server Singleton Runtime");
         singletonRuntime = SingletonResource.withInitial(this::buildCorfuRuntime);
         log.debug("Initializing Log Unit Server Scheduler");
-        listeningService = serverInitializer.buildRemoteCorfuTableListeningService(listenerExecutor, singletonRuntime,
+        listeningService = serverInitializer.buildRemoteCorfuTableListeningService(listeningServiceExecutor, singletonRuntime,
                 10);
         log.debug("Initializing Log Unit Server Log Listener");
         listener = serverInitializer.buildLogListener(singletonRuntime, databaseHandler, listenerExecutor,
@@ -251,7 +257,11 @@ public class LogUnitServer extends AbstractServer {
 
     @Override
     protected void processRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter router) {
-        executor.submit(() -> getHandlerMethods().handle(req, ctx, router));
+        if (req.hasPayload() && req.getPayload().hasRemoteCorfuTableRequest()) {
+            remoteCorfuTableExecutorService.submit(() -> getHandlerMethods().handle(req, ctx, router));
+        } else {
+            executor.submit(() -> getHandlerMethods().handle(req, ctx, router));
+        }
     }
 
     /**
