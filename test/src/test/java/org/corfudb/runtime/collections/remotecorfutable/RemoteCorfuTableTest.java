@@ -50,7 +50,7 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
     }
 
     @Test
-    public void testMultiGet() throws InterruptedException {
+    public void testMultiGet() {
         List<RemoteCorfuTable.TableEntry<String, String>> entries = new LinkedList<>();
         for (int i = 0; i < 5; i++) {
             RemoteCorfuTable.TableEntry<String, String> entry = new RemoteCorfuTable.TableEntry<>(
@@ -60,7 +60,6 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
             entries.add(entry);
         }
         table.updateAll(entries);
-        Thread.sleep(5000);
         List<String> readBackKeys = entries.stream()
                 .map(RemoteCorfuTable.TableEntry::getKey)
                 .collect(Collectors.toList());

@@ -144,7 +144,7 @@ public class LogListenerTest extends AbstractViewTest {
 
     @Test
     public void multiTableOperationListen() throws Exception {
-        lock = new CountDownLatch(10000);
+        lock = new CountDownLatch(5000);
         logListener.startListening();
         table.close();
         Map<String, String> expectedMap = new HashMap<>();
@@ -152,7 +152,7 @@ public class LogListenerTest extends AbstractViewTest {
         for (int i = 0; i < 4; i++) {
             tableList.add(RemoteCorfuTable.RemoteCorfuTableFactory.openTable(runtime.get(), "test" + i));
         }
-        for (int j = 0; j < 2500; j++) {
+        for (int j = 0; j < 1250; j++) {
             for (int i = 0; i < 4; i++) {
                 String key = "Table" + i + "Key" + j;
                 String value = "Table" + i + "Val" + j;

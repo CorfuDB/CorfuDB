@@ -64,7 +64,7 @@ public class RoundRobinListeningTest extends AbstractViewTest {
     }
 
     @Before
-    public void setupTable() throws RocksDBException {
+    public void setupTable() {
         singletonRuntime = SingletonResource.withInitial(this::getDefaultRuntime);
         table = RemoteCorfuTable.RemoteCorfuTableFactory.openTable(singletonRuntime.get(), "test1");
         logListener = new RoundRobinListeningService(Executors.newScheduledThreadPool(4), singletonRuntime, 10);
