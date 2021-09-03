@@ -123,11 +123,11 @@ public class TableRegistry {
             // are shared across all runtime's and not overwritten (if multiple runtime's exist).
             // This aims to overcome a current design limitation where the serializers are static and not
             // per runtime (to be changed).
-            protoSerializer = Serializers.getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
+            protoSerializer = runtime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
         } catch (SerializerException se) {
             // This means the protobuf serializer had not been registered yet.
             protoSerializer = new ProtobufSerializer(new ConcurrentHashMap<>());
-            Serializers.registerSerializer(protoSerializer);
+            runtime.getSerializers().registerSerializer(protoSerializer);
         }
         this.protobufSerializer = protoSerializer;
         this.registryTable = this.runtime.getObjectsView().build()
@@ -397,7 +397,7 @@ public class TableRegistry {
     private <T extends Message> void addTypeToClassMap(T msg) {
         String typeUrl = getTypeUrl(msg.getDescriptorForType());
         // Register the schemas to schema table.
-        ((ProtobufSerializer)Serializers.getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE))
+        ((ProtobufSerializer)runtime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE))
                 .getClassMap().put(typeUrl, msg.getClass());
     }
 

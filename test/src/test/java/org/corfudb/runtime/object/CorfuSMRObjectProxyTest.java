@@ -102,7 +102,7 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
     public void canUseCustomSerializer() throws Exception {
         //Register a custom serializer and use it with an SMR object
         ISerializer customSerializer = new CustomSerializer((byte) (Serializers.SYSTEM_SERIALIZERS_COUNT + 1));
-        Serializers.registerSerializer(customSerializer);
+        getDefaultRuntime().getSerializers().registerSerializer(customSerializer);
         CorfuRuntime r = getDefaultRuntime();
 
         Map<String, String> test = r.getObjectsView().build()
@@ -126,7 +126,7 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
     @Test
     public void doesNotResetSerializerIfMapAlreadyExists() throws Exception {
         ISerializer customSerializer = new CustomSerializer((byte) (Serializers.SYSTEM_SERIALIZERS_COUNT + 1));
-        Serializers.registerSerializer(customSerializer);
+        getDefaultRuntime().getSerializers().registerSerializer(customSerializer);
         CorfuRuntime r = getDefaultRuntime();
 
         Map<String, String> test = r.getObjectsView().build()

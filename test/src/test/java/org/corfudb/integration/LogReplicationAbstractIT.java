@@ -512,12 +512,12 @@ public class LogReplicationAbstractIT extends AbstractIT {
                 CorfuStoreMetadata.TableMetadata>> tableRegistryCT = tableRegistry.getRegistryTable();
 
         // Save the regular serializer first..
-        ISerializer protoBufSerializer = Serializers.getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
+        ISerializer protoBufSerializer = cpRuntime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
 
         // Must register dynamicProtoBufSerializer *AFTER* the getTableRegistry() call to ensure that
         // the serializer does not go back to the regular ProtoBufSerializer
         ISerializer dynamicProtoBufSerializer = new DynamicProtobufSerializer(cpRuntime);
-        Serializers.registerSerializer(dynamicProtoBufSerializer);
+        cpRuntime.getSerializers().registerSerializer(dynamicProtoBufSerializer);
 
         // First checkpoint the TableRegistry system table
         MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
@@ -549,7 +549,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
         // Lastly restore the regular protoBuf serializer and undo the dynamic protoBuf serializer
         // otherwise the test cannot continue beyond this point.
-        Serializers.registerSerializer(protoBufSerializer);
+        cpRuntime.getSerializers().registerSerializer(protoBufSerializer);
 
         // Trim
         log.debug("**** Trim Log @address=" + trimMark);
@@ -566,12 +566,12 @@ public class LogReplicationAbstractIT extends AbstractIT {
                 CorfuStoreMetadata.TableMetadata>> tableRegistryCT = tableRegistry.getRegistryTable();
 
         // Save the regular serializer first..
-        ISerializer protoBufSerializer = Serializers.getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
+        ISerializer protoBufSerializer = cpRuntime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
 
         // Must register dynamicProtoBufSerializer *AFTER* the getTableRegistry() call to ensure that
         // the serializer does not go back to the regular ProtoBufSerializer
         ISerializer dynamicProtoBufSerializer = new DynamicProtobufSerializer(cpRuntime);
-        Serializers.registerSerializer(dynamicProtoBufSerializer);
+        cpRuntime.getSerializers().registerSerializer(dynamicProtoBufSerializer);
 
         // First checkpoint the TableRegistry system table
         MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
@@ -601,7 +601,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
         // Lastly restore the regular protoBuf serializer and undo the dynamic protoBuf serializer
         // otherwise the test cannot continue beyond this point.
-        Serializers.registerSerializer(protoBufSerializer);
+        cpRuntime.getSerializers().registerSerializer(protoBufSerializer);
 
         // Trim
         log.debug("**** Trim Log @address=" + trimMark);
