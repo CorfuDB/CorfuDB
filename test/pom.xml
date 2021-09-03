@@ -140,7 +140,7 @@
                         <id>validate</id>
                         <phase>validate</phase>
                         <configuration>
-                            <skip>false</skip>
+                            <skip>true</skip>
                             <encoding>UTF-8</encoding>
                             <consoleOutput>true</consoleOutput>
                             <failsOnError>true</failsOnError>

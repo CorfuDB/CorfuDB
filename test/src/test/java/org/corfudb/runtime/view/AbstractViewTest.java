@@ -193,6 +193,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
     @After
     public void cleanupBuffers() {
+        System.out.println("Reached Abstract View test cleanup");
         testServerMap.values().forEach(server -> {
             server.getLogUnitServer().shutdown();
             server.getManagementServer().shutdown();
