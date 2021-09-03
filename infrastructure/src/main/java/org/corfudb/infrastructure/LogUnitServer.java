@@ -66,11 +66,13 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
 import org.corfudb.util.concurrent.SingletonResource;
+import org.rocksdb.InfoLogLevel;
 import org.rocksdb.Options;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
@@ -213,8 +215,10 @@ public class LogUnitServer extends AbstractServer {
         logCleaner = serverInitializer.buildStreamLogCompaction(streamLog);
 
         //TODO: replace with appropriate locations and executors or add as options in server context
-        Path remoteCorfuTableDBPath = SystemUtils.getUserHome().toPath();
+        Path homeDir = SystemUtils.getUserHome().toPath();
+        Path remoteCorfuTableDBPath = Paths.get(homeDir.toString(), "tempRocksDBDir");
         Options rocksDBOptions = DatabaseHandler.getDefaultOptions();
+        rocksDBOptions.setInfoLogLevel(InfoLogLevel.DEBUG_LEVEL);
         ExecutorService dbExecutor = serverContext.getExecutorService(
                 serverContext.getLogUnitThreadCount(),"RemoteCorfuTable-");
         databaseHandler = serverInitializer.buildDatabaseHandler(remoteCorfuTableDBPath, rocksDBOptions, dbExecutor);
