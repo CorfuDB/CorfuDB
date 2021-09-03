@@ -38,6 +38,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 
+//TODO: mock tests
 public class LogListenerTest extends AbstractViewTest {
     @Rule
     public MockitoRule mockito = MockitoJUnit.rule();
@@ -61,7 +62,7 @@ public class LogListenerTest extends AbstractViewTest {
                 runtime, 10);
         mHandler = mock(DatabaseHandler.class);
         logListener = new LogListener(runtime, mHandler, Executors.newScheduledThreadPool(4),
-                3, 10, listeningService);
+                10, listeningService);
         database = new ConcurrentHashMap<>();
 
         doAnswer(invocationOnMock -> {

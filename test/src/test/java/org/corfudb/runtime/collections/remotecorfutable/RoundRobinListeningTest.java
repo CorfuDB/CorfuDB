@@ -35,6 +35,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
+//TODO: mock tests
 @Slf4j
 public class RoundRobinListeningTest extends AbstractViewTest {
     private SingletonResource<CorfuRuntime> singletonRuntime;
@@ -53,7 +54,7 @@ public class RoundRobinListeningTest extends AbstractViewTest {
         }
 
         private void pollTask() {
-            SMROperation op = logListener.getTask();
+            SMROperation op = logListener.getTask(table.getStreamId());
             if (op != null) {
                 receivedUpdates.add(op);
                 lock.countDown();

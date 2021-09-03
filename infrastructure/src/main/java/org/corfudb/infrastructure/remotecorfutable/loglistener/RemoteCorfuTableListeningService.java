@@ -37,10 +37,10 @@ public interface RemoteCorfuTableListeningService {
 
     /**
      * This method will receive the next task to process from the listener.
+     * @param streamId Stream to pull task for.
      * @return SMROperation to apply to the database
      */
-    SMROperation getTask();
-
+    SMROperation getTask(UUID streamId);
 
     /**
      * Shutdown the service.
