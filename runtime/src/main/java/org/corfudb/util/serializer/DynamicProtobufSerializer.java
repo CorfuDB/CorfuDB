@@ -106,12 +106,12 @@ public class DynamicProtobufSerializer implements ISerializer {
         // Create or get a protobuf serializer to read the table registry.
         ISerializer protobufSerializer;
         try {
-            protobufSerializer = Serializers.getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
+            protobufSerializer = corfuRuntime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
         } catch (SerializerException se) {
             // This means the protobuf serializer had not been registered yet.
             log.info("Protobuf Serializer not found. Create and register a new one.");
             protobufSerializer = createProtobufSerializer();
-            Serializers.registerSerializer(protobufSerializer);
+            corfuRuntime.getSerializers().registerSerializer(protobufSerializer);
         }
 
         // Open the Registry Table and cache its contents
@@ -159,7 +159,7 @@ public class DynamicProtobufSerializer implements ISerializer {
         });
 
         // Remove the protobuf serializer
-        Serializers.clearCustomSerializers();
+        corfuRuntime.getSerializers().clearCustomSerializers();
     }
 
     /**

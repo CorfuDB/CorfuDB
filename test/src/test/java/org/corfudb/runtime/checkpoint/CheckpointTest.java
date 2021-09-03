@@ -40,7 +40,7 @@ public class CheckpointTest extends AbstractObjectTest {
     Map<String, Long> openMap(CorfuRuntime rt, String mapName) {
         final byte serializerByte = (byte) 20;
         ISerializer serializer = new CPSerializer(serializerByte);
-        Serializers.registerSerializer(serializer);
+        rt.getSerializers().registerSerializer(serializer);
         return (CorfuTable<String, Long>)
                 instantiateCorfuObject(
                         rt,
