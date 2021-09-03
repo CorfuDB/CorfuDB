@@ -120,7 +120,7 @@ public class RemoteCorfuTableTest extends AbstractViewTest {
         assertNull(readVal);
         readVal = table.get(key);
         assertEquals(prevVal, readVal);
-        readVal = table.put(key, prevVal);
+        readVal = table.put(key, currVal);
         assertEquals(prevVal, readVal);
         readVal = table.get(key);
         assertEquals(currVal, readVal);

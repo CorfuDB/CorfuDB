@@ -2,6 +2,7 @@ package org.corfudb.runtime;
 
 import com.google.common.collect.ImmutableMultiset;
 import com.google.common.collect.Multiset;
+import com.google.common.reflect.TypeToken;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
@@ -11,11 +12,14 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.remotecorfutable.RemoteCorfuTable;
 import static org.corfudb.runtime.collections.remotecorfutable.RemoteCorfuTableSMRMethods.CLEAR;
 import static org.corfudb.runtime.collections.remotecorfutable.RemoteCorfuTableSMRMethods.DELETE;
 import static org.corfudb.runtime.collections.remotecorfutable.RemoteCorfuTableSMRMethods.UPDATE;
 import org.corfudb.runtime.view.AddressSpaceView;
+import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.remotecorfutable.RemoteCorfuTableView;
 import org.corfudb.util.serializer.ISerializer;
@@ -26,6 +30,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -60,6 +65,8 @@ public class RemoteCorfuTableTest {
     private AddressSpaceView mAddressSpaceView;
     private SequencerView mSequencerView;
     private RemoteCorfuTableView mRemoteCorfuTableView;
+    private ObjectsView mObjectsView;
+    private SMRObject.Builder mBuilder;
     private TokenResponse mTokenResponse;
     private Token mToken;
 
@@ -74,15 +81,26 @@ public class RemoteCorfuTableTest {
         mRemoteCorfuTableView = mock(RemoteCorfuTableView.class);
         mTokenResponse = mock(TokenResponse.class);
         mToken = mock(Token.class);
+        mObjectsView = mock(ObjectsView.class);
+        mBuilder = mock(SMRObject.Builder.class);
+        CorfuTable<UUID, UUID> mGlobalRegistry = new CorfuTable<>();
 
         when(mRuntime.getAddressSpaceView()).thenReturn(mAddressSpaceView);
         when(mRuntime.getSequencerView()).thenReturn(mSequencerView);
         when(mRuntime.getRemoteCorfuTableView()).thenReturn(mRemoteCorfuTableView);
         when(mRuntime.getParameters()).thenReturn(mRuntimeParams);
+        when(mRuntime.getObjectsView()).thenReturn(mObjectsView);
 
         when(mAddressSpaceView.getLogTail()).thenReturn(1000L);
 
         when(mSequencerView.next(any(UUID.class))).thenReturn(mTokenResponse);
+
+        when(mObjectsView.build()).thenReturn(mBuilder);
+
+        when(mBuilder.setTypeToken(any(TypeToken.class))).thenReturn(mBuilder);
+        when(mBuilder.setStreamName(anyString())).thenReturn(mBuilder);
+        when(mBuilder.open()).thenReturn(mGlobalRegistry);
+
 
         when(mRuntimeParams.getCodecType()).thenReturn(Codec.Type.NONE);
         when(mRuntimeParams.getMaxWriteSize()).thenReturn(Integer.MAX_VALUE);
