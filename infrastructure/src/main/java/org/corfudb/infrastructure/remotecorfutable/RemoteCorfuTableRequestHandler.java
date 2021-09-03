@@ -158,6 +158,7 @@ public class RemoteCorfuTableRequestHandler {
     }
 
     private void handleMultiGet(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        log.trace("Handling MULTI GET request");
         RemoteCorfuTableRequestMsg rctRequestMsg = req.getPayload().getRemoteCorfuTableRequest();
         List<RemoteCorfuTableVersionedKey> keys = rctRequestMsg.getMultiget().getVersionedKeysList()
                 .stream().map(RemoteCorfuTableVersionedKey::new).collect(Collectors.toList());

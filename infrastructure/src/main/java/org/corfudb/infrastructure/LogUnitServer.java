@@ -17,10 +17,12 @@ import org.corfudb.infrastructure.remotecorfutable.RemoteCorfuTableRequestHandle
 import org.corfudb.infrastructure.remotecorfutable.loglistener.LogListener;
 import org.corfudb.infrastructure.remotecorfutable.loglistener.RemoteCorfuTableListeningService;
 import org.corfudb.infrastructure.remotecorfutable.loglistener.RoundRobinListeningService;
+import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import org.corfudb.protocols.CorfuProtocolLogData;
 import static org.corfudb.protocols.CorfuProtocolLogData.getLogData;
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getDataCorruptionErrorMsg;
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getOverwriteErrorMsg;
+import static org.corfudb.protocols.CorfuProtocolServerErrors.getRemoteCorfuTableError;
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getTrimmedErrorMsg;
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getUnknownErrorMsg;
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getWrongEpochErrorMsg;
@@ -62,6 +64,7 @@ import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
+import org.corfudb.runtime.proto.service.RemoteCorfuTableMessages;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
@@ -232,7 +235,7 @@ public class LogUnitServer extends AbstractServer {
                 10);
         log.debug("Initializing Log Unit Server Log Listener");
         listener = serverInitializer.buildLogListener(singletonRuntime, databaseHandler, listenerExecutor,
-                serverContext.getLogUnitThreadCount(), 10, listeningService);
+                10, listeningService);
         listenerStarted = new AtomicBoolean(false);
     }
 
@@ -357,11 +360,25 @@ public class LogUnitServer extends AbstractServer {
 
     @RequestHandler(type = PayloadCase.REMOTE_CORFU_TABLE_REQUEST)
     private void handleRemoteCorfuTableRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
-        //TODO: add waiting for the log listener to read up till the timestamp of the request
-        if (log.isTraceEnabled()) {
-            log.trace("handleRemoteCorfuTableRequest: received Remote Corfu Table request {}",
+        //TODO: change all this back to debug
+//        if (log.isTraceEnabled()) {
+//            log.trace("handleRemoteCorfuTableRequest: received Remote Corfu Table request {}",
+//                    TextFormat.shortDebugString(req));
+//        }
+        log.info("handleRemoteCorfuTableRequest: received Remote Corfu Table request {}",
                     TextFormat.shortDebugString(req));
+        //at this point, we are in the RCT executor pool, and need to wait for the db to be in a consistent state
+        RemoteCorfuTableMessages.RemoteCorfuTableRequestMsg rctMsg = req.getPayload().getRemoteCorfuTableRequest();
+        try {
+            log.info("Beginning wait for stream sync on {} request", rctMsg.getPayloadCase().name());
+            listener.waitForStream(getUUID(rctMsg.getStreamId()), rctMsg.getTimestamp());
+        } catch (InterruptedException e) {
+            log.info("Error in db sync wait", e);
+            r.sendResponse(getResponseMsg(
+                    getHeaderMsg(req.getHeader()),getRemoteCorfuTableError("Interrupted wait for db sync")
+            ), ctx);
         }
+        log.info("Handling RCT Request {}", rctMsg.getPayloadCase().name());
         remoteCorfuTableRequestHandler.handle(req, ctx, r);
     }
 
@@ -398,15 +415,15 @@ public class LogUnitServer extends AbstractServer {
      */
     @RequestHandler(type = PayloadCase.WRITE_LOG_REQUEST)
     private void handleWrite(RequestMsg req, ChannelHandlerContext ctx, IServerRouter router) {
-
-        log.debug("Handle Write called on Log Unit Server");
+        //TODO: change back to debugs
+        log.info("Handle Write called on Log Unit Server");
         //start listening on write since RemoteCorfuTable must be empty if no writes have been requested
         if (listenerStarted.compareAndSet(false, true)) {
             listener.startListening();
         }
         LogData logData = getLogData(req.getPayload().getWriteLogRequest().getLogData());
 
-        log.debug("handleWrite: type: {}, address: {}, streams: {}",
+        log.info("handleWrite: type: {}, address: {}, streams: {}",
                 logData.getType(), logData.getToken(), logData.getBackpointerMap());
 
         // Its not clear that making all holes high priority is the right thing to do, but since
@@ -764,9 +781,9 @@ public class LogUnitServer extends AbstractServer {
         }
 
         public LogListener buildLogListener(@NonNull SingletonResource<CorfuRuntime> runtime, @NonNull DatabaseHandler handler,
-                                            @NonNull ScheduledExecutorService executor, int workers, long delay,
+                                            @NonNull ScheduledExecutorService executor, long delay,
                                             @NonNull RemoteCorfuTableListeningService listener) {
-            return new LogListener(runtime, handler, executor, workers, delay, listener);
+            return new LogListener(runtime, handler, executor, delay, listener);
         }
     }
 }
