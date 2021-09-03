@@ -1,8 +1,6 @@
 #Remote Corfu Table Action Items
 
 ##Remaining Tasks
-1. Wait for access until the listener has read up to the 
-   appropriate position in the stream
 1. Non-Optimistic Request Routing 
 1. Request Failure Handling on Client
 1. RCT Param configuration on server 
