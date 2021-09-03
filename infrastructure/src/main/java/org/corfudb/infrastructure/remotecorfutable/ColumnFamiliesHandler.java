@@ -6,6 +6,7 @@ import com.google.common.primitives.Longs;
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import net.jcip.annotations.NotThreadSafe;
 import static org.corfudb.infrastructure.remotecorfutable.DatabaseHandler.CAUSE_OF_ERROR;
 import org.rocksdb.ColumnFamilyDescriptor;
 import org.rocksdb.ColumnFamilyHandle;
@@ -37,29 +38,28 @@ public class ColumnFamiliesHandler {
     @NonNull
     private final ConcurrentMap<UUID, ColumnFamilyHandle> columnFamilies;
 
-    public void addTable(@NonNull UUID streamId) {
-        columnFamilies.computeIfAbsent(streamId, id -> {
-            log.trace("Allocating new column family for stream {}", streamId);
-            ColumnFamilyOptions tableOptions = new ColumnFamilyOptions();
-            tableOptions.optimizeUniversalStyleCompaction();
-            ComparatorOptions comparatorOptions = new ComparatorOptions();
-            ReversedVersionedKeyComparator comparator = new ReversedVersionedKeyComparator(comparatorOptions);
-            tableOptions.setComparator(comparator);
-            ColumnFamilyDescriptor tableDescriptor = new ColumnFamilyDescriptor(getBytes(id), tableOptions);
-            ColumnFamilyHandle tableHandle;
-            try {
-                tableHandle = database.createColumnFamily(tableDescriptor);
-            } catch (RocksDBException e) {
-                log.error("Error in creating column family for table {}.", id);
-                log.error(CAUSE_OF_ERROR, e);
-                tableOptions.close();
-                comparatorOptions.close();
-                comparator.close();
-                return null;
-            }
-            log.trace("Successfully created new column family for stream {}", id);
-            return tableHandle;
-        });
+    //TODO: public check NOT THREAD SAFE
+    public ColumnFamilyHandle addTable(@NonNull UUID id) {
+        log.trace("Allocating new column family for stream {}", id);
+        ColumnFamilyOptions tableOptions = new ColumnFamilyOptions();
+        tableOptions.optimizeUniversalStyleCompaction();
+        ComparatorOptions comparatorOptions = new ComparatorOptions();
+        ReversedVersionedKeyComparator comparator = new ReversedVersionedKeyComparator(comparatorOptions);
+        tableOptions.setComparator(comparator);
+        ColumnFamilyDescriptor tableDescriptor = new ColumnFamilyDescriptor(getBytes(id), tableOptions);
+        ColumnFamilyHandle tableHandle;
+        try {
+            tableHandle = database.createColumnFamily(tableDescriptor);
+        } catch (RocksDBException e) {
+            log.error("Error in creating column family for table {}.", id);
+            log.error(CAUSE_OF_ERROR, e);
+            tableOptions.close();
+            comparatorOptions.close();
+            comparator.close();
+            return null;
+        }
+        log.trace("Successfully created new column family for stream {}", id);
+        return tableHandle;
     }
 
     private byte[] getBytes(UUID id) {
@@ -69,12 +69,10 @@ public class ColumnFamiliesHandler {
 
     public <R> R executeOnTable(@NonNull UUID streamId, ExceptionFunction<ColumnFamilyHandle, R> operation) throws Exception {
         log.trace("Getting correct column family for requested table");
-        ColumnFamilyHandle streamHandle = columnFamilies.get(streamId);
-        if (streamHandle == null) {
+        ColumnFamilyHandle streamHandle = columnFamilies.computeIfAbsent(streamId, id ->  {
             log.trace("Column Family did not exist - creating new column family");
-            addTable(streamId);
-            streamHandle = columnFamilies.get(streamId);
-        }
+            return addTable(streamId);
+        });
         return operation.run(streamHandle);
     }
 
