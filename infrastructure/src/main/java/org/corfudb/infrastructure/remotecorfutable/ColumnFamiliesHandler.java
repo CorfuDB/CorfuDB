@@ -39,6 +39,7 @@ public class ColumnFamiliesHandler {
 
     public void addTable(@NonNull UUID streamId) {
         columnFamilies.computeIfAbsent(streamId, id -> {
+            log.trace("Allocating new column family for stream {}", streamId);
             ColumnFamilyOptions tableOptions = new ColumnFamilyOptions();
             tableOptions.optimizeUniversalStyleCompaction();
             ComparatorOptions comparatorOptions = new ComparatorOptions();
@@ -56,6 +57,7 @@ public class ColumnFamiliesHandler {
                 comparator.close();
                 return null;
             }
+            log.trace("Successfully created new column family for stream {}", id);
             return tableHandle;
         });
     }
@@ -66,8 +68,10 @@ public class ColumnFamiliesHandler {
     }
 
     public <R> R executeOnTable(@NonNull UUID streamId, ExceptionFunction<ColumnFamilyHandle, R> operation) throws Exception {
+        log.trace("Getting correct column family for requested table");
         ColumnFamilyHandle streamHandle = columnFamilies.get(streamId);
         if (streamHandle == null) {
+            log.trace("Column Family did not exist - creating new column family");
             addTable(streamId);
             streamHandle = columnFamilies.get(streamId);
         }

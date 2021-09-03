@@ -102,6 +102,7 @@ public class DatabaseHandler implements AutoCloseable {
      */
     public ByteString get(@NonNull RemoteCorfuTableVersionedKey encodedKey, @NonNull UUID streamID)
             throws RocksDBException {
+        log.trace("Database Request: Get");
         try {
             return tableHandler.executeOnTable(streamID, handle -> {
                 final ByteString returnVal;
@@ -159,6 +160,7 @@ public class DatabaseHandler implements AutoCloseable {
      */
     public List<RemoteCorfuTableDatabaseEntry> multiGet(@NonNull List<RemoteCorfuTableVersionedKey> keys,
                                                         @NonNull UUID streamID) throws RocksDBException {
+        log.trace("Database Request: MultiGet");
         List<RemoteCorfuTableDatabaseEntry> results = new LinkedList<>();
         for (RemoteCorfuTableVersionedKey key : keys) {
             if (key == null) {
@@ -209,6 +211,7 @@ public class DatabaseHandler implements AutoCloseable {
     public void update(@NonNull RemoteCorfuTableVersionedKey encodedKey,
                        @NonNull ByteString value, @NonNull UUID streamID)
             throws RocksDBException {
+        log.trace("Database Request: Update");
         try {
             tableHandler.executeOnTable(streamID, handle -> {
                 byte[] encodedKeyBytes = new byte[encodedKey.size()];
@@ -251,6 +254,7 @@ public class DatabaseHandler implements AutoCloseable {
      */
     public void updateAll(@NonNull List<RemoteCorfuTableDatabaseEntry> encodedKeyValuePairs, @NonNull UUID streamID)
             throws RocksDBException {
+        log.trace("Database Request: Update All");
         try {
             tableHandler.executeOnTable(streamID, handle -> {
                 //encodedKeyValuePairs must be non-empty
