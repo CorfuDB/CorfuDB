@@ -674,6 +674,7 @@ public class LogUnitServer extends AbstractServer {
         log.info("Shutdown LogUnit server. Current epoch: {}, ", serverContext.getServerEpoch());
         super.shutdown();
         executor.shutdown();
+        remoteCorfuTableExecutorService.shutdown();
         logCleaner.shutdown();
         batchWriter.close();
         databaseHandler.close();
