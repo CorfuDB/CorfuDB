@@ -52,7 +52,6 @@ public class DatabaseHandler implements AutoCloseable {
     private final ExecutorService executor;
     private final long shutdownTimeout;
     private final ColumnFamiliesHandler tableHandler;
-    private final ConcurrentHashMap<UUID, Long> latestTimestampRead;
 
     /**
      * Constructor for the database handler. Each server should have a single database handler to serve all requests
@@ -74,7 +73,6 @@ public class DatabaseHandler implements AutoCloseable {
         this.executor = executor;
         this.shutdownTimeout = shutdownTimeout;
         tableHandler = new ColumnFamiliesHandler(database, new ConcurrentHashMap<>());
-        latestTimestampRead = new ConcurrentHashMap<>();
     }
 
     public static Options getDefaultOptions() {
@@ -217,7 +215,6 @@ public class DatabaseHandler implements AutoCloseable {
                 byte[] encodedKeyBytes = new byte[encodedKey.size()];
                 encodedKey.getEncodedVersionedKey().copyTo(encodedKeyBytes, 0);
                 database.put(handle, encodedKeyBytes, value.toByteArray());
-                updateLatestReadTime(streamID, encodedKey.getTimestamp());
                 return null;
             });
         } catch (RocksDBException e) {
@@ -279,7 +276,6 @@ public class DatabaseHandler implements AutoCloseable {
                         batchedWrite.put(handle, keyBytes, valueBytes);
                     }
                     database.write(writeOptions, batchedWrite);
-                    updateLatestReadTime(streamID, encodedKeyValuePairs.get(0).getKey().getTimestamp());
                 }
                 return null;
             });
@@ -340,7 +336,6 @@ public class DatabaseHandler implements AutoCloseable {
                     }
                     iter.status();
                     database.write(writeOptions, batchedWrite);
-                    updateLatestReadTime(streamID, timestamp);
                 }
                 return null;
             });
@@ -814,15 +809,5 @@ public class DatabaseHandler implements AutoCloseable {
             //unsafe method will return null on error
             return null;
         }
-    }
-
-    private void updateLatestReadTime(UUID streamID, long timestamp) {
-        latestTimestampRead.merge(streamID, timestamp, (prev, curr) -> {
-            if (prev < curr) {
-                return curr;
-            } else {
-                return prev;
-            }
-        });
     }
 }
