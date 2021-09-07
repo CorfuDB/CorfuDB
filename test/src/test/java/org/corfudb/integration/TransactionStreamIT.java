@@ -37,9 +37,9 @@ public class TransactionStreamIT extends AbstractIT {
      *
      * Extract the updates from the MultiObjectSMREntry and updates the counters map
      */
-    private void ConsumeDelta(Map<UUID, Integer> map, List<ILogData> deltas) {
+    private void ConsumeDelta(Map<UUID, Integer> map, List<ILogData> deltas, CorfuRuntime rt) {
         for (ILogData ld : deltas) {
-            MultiObjectSMREntry multiObjSmr = (MultiObjectSMREntry) ld.getPayload(null);
+            MultiObjectSMREntry multiObjSmr = (MultiObjectSMREntry) ld.getPayload(rt);
             for (Map.Entry<UUID, MultiSMREntry> multiSMREntry : multiObjSmr.getEntryMap().entrySet()) {
                 for (SMREntry update : multiSMREntry.getValue().getUpdates()) {
                     int key = (int) update.getSMRArguments()[0];
@@ -97,7 +97,7 @@ public class TransactionStreamIT extends AbstractIT {
                 List<ILogData> entries = txStream.remaining();
 
                 if (!entries.isEmpty()) {
-                    ConsumeDelta(counters, entries);
+                    ConsumeDelta(counters, entries, consumerRt);
                 }
 
                 consumed += entries.size();

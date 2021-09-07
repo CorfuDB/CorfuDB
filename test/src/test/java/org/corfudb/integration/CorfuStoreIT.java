@@ -135,7 +135,7 @@ public class CorfuStoreIT extends AbstractIT {
         runtime = createRuntime(singleNodeEndpoint);
 
         ISerializer dynamicProtobufSerializer = new DynamicProtobufSerializer(runtime);
-        Serializers.registerSerializer(dynamicProtobufSerializer);
+        runtime.getSerializers().registerSerializer(dynamicProtobufSerializer);
 
         CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> corfuTable = runtime.getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {
@@ -190,7 +190,7 @@ public class CorfuStoreIT extends AbstractIT {
 
         runtime.getAddressSpaceView().prefixTrim(trimPoint);
         runtime.getAddressSpaceView().gc();
-        Serializers.clearCustomSerializers();
+        runtime.getSerializers().clearCustomSerializers();
         runtime.shutdown();
 
         // PHASE 3
@@ -244,12 +244,12 @@ public class CorfuStoreIT extends AbstractIT {
         trimToken = Token.min(trimToken, token);
 
         // Save the regular serializer first..
-        ISerializer protobufSerializer = Serializers.getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
+        ISerializer protobufSerializer = runtimeC.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
 
         // Must register dynamicProtobufSerializer *AFTER* the getTableRegistry() call to ensure that
         // the serializer does not go back to the regular ProtobufSerializer
         ISerializer dynamicProtobufSerializer = new DynamicProtobufSerializer(runtimeC);
-        Serializers.registerSerializer(dynamicProtobufSerializer);
+        runtimeC.getSerializers().registerSerializer(dynamicProtobufSerializer);
 
         for (CorfuStoreMetadata.TableName tableName : tableRegistry.listTables(null)) {
             String fullTableName = TableRegistry.getFullyQualifiedTableName(
@@ -289,7 +289,7 @@ public class CorfuStoreIT extends AbstractIT {
         }
         // Lastly restore the regular protobuf serializer and undo the dynamic protobuf serializer
         // otherwise the test cannot continue beyond this point.
-        Serializers.registerSerializer(protobufSerializer);
+        runtimeC.getSerializers().registerSerializer(protobufSerializer);
         return trimToken;
     }
 
