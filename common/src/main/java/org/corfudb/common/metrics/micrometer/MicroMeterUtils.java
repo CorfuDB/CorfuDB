@@ -60,7 +60,9 @@ public class MicroMeterUtils {
             "multi_object_smrentry_deserialize_stream_lazy",
             "multi_object_smrentry_deserialize_stream_lazy",
             "logdata.compress",
-            "logdata.decompress"
+            "logdata.decompress",
+            "address_space.read_cache.avg_entry_size",
+            "address_space.read_cache.size"
     );
 
 
