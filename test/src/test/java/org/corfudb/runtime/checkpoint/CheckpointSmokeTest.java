@@ -758,6 +758,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
         // check the number of SMR entries in each CheckpointEntry is 50, 50, and 23
         setRuntime();
+        r.getSerializers().registerSerializer(serializer);
         long startAddress = snapshot.getSequence() + 1;
         assertThat(r.getAddressSpaceView().read(startAddress).getCheckpointType())
                 .isEqualTo(CheckpointEntry.CheckpointEntryType.START);
@@ -793,7 +794,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     }
 
     private StreamingMap<String, Long> instantiateMap(String streamName) {
-        Serializers.registerSerializer(serializer);
+        r.getSerializers().registerSerializer(serializer);
         return r.getObjectsView()
                 .build()
                 .setStreamName(streamName)
@@ -803,7 +804,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     }
 
     private StreamingMap<String, String> instantiateStringMap(String streamName) {
-        Serializers.registerSerializer(serializer);
+        r.getSerializers().registerSerializer(serializer);
         return r.getObjectsView()
                 .build()
                 .setStreamName(streamName)
@@ -977,7 +978,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         final String streamA = "streamA";
         final int entries = 10;
 
-        Serializers.registerSerializer(serializer);
+        r.getSerializers().registerSerializer(serializer);
         Map<String, String> mA =  r.getObjectsView()
                 .build()
                 .setStreamName(streamA)
@@ -1132,6 +1133,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
         // New Runtime
         CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
+        rt2.getSerializers().registerSerializer(serializer);
         Map<String, Long> mA2 = rt2.getObjectsView()
                 .build()
                 .setStreamName(streamA)

@@ -196,7 +196,7 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
                 ByteBuf buf = Unpooled.wrappedBuffer(streamUpdatesBuf);
                 byte magicByte = buf.readByte(); //
                 checkState(magicByte == CorfuSerializer.corfuPayloadMagic, "Not a ICorfuSerializable object");// strip magic
-                MultiSMREntry multiSMREntry = (MultiSMREntry) MultiSMREntry.deserialize(buf, null, isOpaque());
+                MultiSMREntry multiSMREntry = (MultiSMREntry) MultiSMREntry.deserialize(buf, runtime, isOpaque());
                 multiSMREntry.setGlobalAddress(getGlobalAddress());
                 streamBuffers.remove(id);
                 return multiSMREntry;

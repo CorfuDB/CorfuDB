@@ -59,13 +59,11 @@ public class CheckpointWriter<T extends StreamingMap> {
     private double batchThresholdPercentage = 0.95;
     private static final int DEFAULT_CP_MAX_WRITE_SIZE = 25 * (1 << 20);
 
-    private static final double MEMORY_USAGE_WARNING_THRESHOLD = 0.95;
-
     /** Batch size: number of SMREntry in a single CONTINUATION.
      */
     @Getter
     @Setter
-    private int batchSize = 50;
+    private int batchSize;
 
     @SuppressWarnings("checkstyle:abbreviation")
     private final UUID checkpointStreamID;
@@ -107,8 +105,6 @@ public class CheckpointWriter<T extends StreamingMap> {
     @Getter
     @Setter
     ISerializer serializer = Serializers.getDefaultSerializer();
-
-    private final Runtime javaRuntime = Runtime.getRuntime();
 
     /** Constructor for Checkpoint Writer for Corfu Maps.
      * @param rt object's runtime
@@ -312,13 +308,6 @@ public class CheckpointWriter<T extends StreamingMap> {
             // maintain current batch size only for test purposes.
             totalEntryCount++;
             inputBuffer.clear();
-
-            // Remove this warning in production. It's only for the purpose of experiments
-            // Calculation of usedMemPercentage is based on https://stackoverflow.com/questions/12807797/java-get-available-memory
-            double usedMemPercentage = ((double) javaRuntime.totalMemory() - javaRuntime.freeMemory()) / javaRuntime.maxMemory();
-            if (usedMemPercentage >= MEMORY_USAGE_WARNING_THRESHOLD) {
-                log.warn("Checkpointer detected high memory usage {}!", usedMemPercentage);
-            }
         }
 
         // the entries which are left behind for a final flush.
