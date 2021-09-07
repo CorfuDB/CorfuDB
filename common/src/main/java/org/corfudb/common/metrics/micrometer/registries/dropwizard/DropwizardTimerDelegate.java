@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * This class delegates the functionality of a micrometer timer to
- * the dropwizard timer.
+ * the dropwizard timer
  */
 public class DropwizardTimerDelegate extends AbstractTimer {
     private final Timer impl;
