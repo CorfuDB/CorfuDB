@@ -146,6 +146,11 @@ public class AutoCommitService implements ManagementService {
                         oldCommittedTail + 1, committedTail);
                 break;
 
+            } catch (TrimmedException trimmedException) {
+                // not sure if this line useful
+                trimmed = true;
+            } catch (NetworkException networkException) {
+                Sleep.sleepUninterruptibly(CONN_RETRY_RATE);
             } catch (RuntimeException re) {
                 log.trace("runAutoCommit: encountered an exception on attempt {}/{}.",
                         i, MAX_COMMIT_RETRY, re);
@@ -155,16 +160,9 @@ public class AutoCommitService implements ManagementService {
                     break;
                 }
 
-                // When inspecting address, log unit server could throw a TrimmedException if
-                // the address to inspect is trimmed, then we need to adjust committed tail.
-                if (re instanceof TrimmedException) {
-                    trimmed = true;
-                }
-
-                if (re instanceof NetworkException || re.getCause() instanceof TimeoutException) {
+                if (re.getCause() instanceof TimeoutException) {
                     Sleep.sleepUninterruptibly(CONN_RETRY_RATE);
                 }
-
             } catch (Throwable t) {
                 log.error("runAutoCommit: encountered unexpected exception", t);
                 updateLastLogTail(currentLayout);
