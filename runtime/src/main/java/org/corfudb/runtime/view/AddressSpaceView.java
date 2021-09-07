@@ -10,7 +10,6 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.UncheckedExecutionException;
-import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.binder.cache.GuavaCacheMetrics;
 import io.netty.handler.timeout.TimeoutException;
@@ -38,6 +37,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.Utils;
+import org.ehcache.sizeof.SizeOf;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -66,7 +66,7 @@ import java.util.stream.Collectors;
 public class AddressSpaceView extends AbstractView {
 
     private final static long DEFAULT_MAX_CACHE_ENTRIES = 5000;
-
+    private final SizeOf sizeOf;
     /**
      * A cache for read results.
      */
@@ -83,7 +83,7 @@ public class AddressSpaceView extends AbstractView {
      */
     public AddressSpaceView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
-
+        sizeOf = SizeOf.newInstance();
         CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
 
         final boolean cacheDisabled = runtime.getParameters().isCacheDisabled();
@@ -115,14 +115,30 @@ public class AddressSpaceView extends AbstractView {
                 .build();
 
         Optional<MeterRegistry> metricsRegistry = MeterRegistryProvider.getInstance();
-        MicroMeterUtils.gauge("address_space.read_cache.hit_ratio", readCache, cache -> cache.stats().hitRate());
         metricsRegistry.map(registry -> GuavaCacheMetrics.monitor(registry, readCache, "address_space.read_cache"));
+        MicroMeterUtils.gauge("address_space.read_cache.hit_ratio", readCache, cache -> cache.stats().hitRate());
+        
+        if (!runtime.getParameters().isCacheEntryMetricsDisabled()) {
+            MicroMeterUtils.gauge("address_space.read_cache.size", readCache, cache -> cache.size());
+            MicroMeterUtils.gauge("address_space.read_cache.avg_entry_size", readCache, cache -> calculateEstimatedAvgEntrySize());
+        }
     }
 
     private void handleEviction(RemovalNotification<Long, ILogData> notification) {
         if (log.isTraceEnabled()) {
             log.trace("handleEviction: evicting {} cause {}", notification.getKey(), notification.getCause());
         }
+    }
+
+    private double calculateEstimatedAvgEntrySize() {
+        if (readCache.size() == 0) {
+            return 0.0;
+        }
+        long currentCacheSize = readCache.size();
+        long currentDataSizeInCache = readCache.asMap().entrySet().stream()
+                .mapToLong(e -> sizeOf.deepSizeOf(e.getKey()) + sizeOf.deepSizeOf(e.getValue())).sum();
+
+        return (double) currentDataSizeInCache / currentCacheSize;
     }
 
 
@@ -315,6 +331,7 @@ public class AddressSpaceView extends AbstractView {
                 // is much cheaper than the cost of a NoRollBackException, therefore
                 // this trade-off is reasonable
                 final ILogData loadedVal = fetch(address);
+
                 return cacheLoadAndGet(readCache, address, loadedVal, options);
             }
             recordLogSizeDist(data.getSizeEstimate());
