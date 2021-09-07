@@ -164,7 +164,6 @@ public class AutoCommitService implements ManagementService {
                 if (re instanceof NetworkException || re.getCause() instanceof TimeoutException) {
                     Sleep.sleepUninterruptibly(CONN_RETRY_RATE);
                 }
-
             } catch (Throwable t) {
                 log.error("runAutoCommit: encountered unexpected exception", t);
                 updateLastLogTail(currentLayout);

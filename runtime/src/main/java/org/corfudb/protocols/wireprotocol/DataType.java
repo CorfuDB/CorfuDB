@@ -20,11 +20,12 @@ public enum DataType {
 
     final int val;
 
+    public static final Map<Byte, DataType> typeMap =
+            Arrays.stream(DataType.values())
+                    .collect(Collectors.toMap(DataType::asByte, Function.identity()));
+
     public byte asByte() {
         return (byte) val;
     }
 
-    public static final Map<Byte, DataType> typeMap =
-            Arrays.stream(DataType.values())
-                    .collect(Collectors.toMap(DataType::asByte, Function.identity()));
 }
