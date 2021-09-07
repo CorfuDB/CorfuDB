@@ -33,9 +33,11 @@ Logger name should be "org.corfudb.client.metricsdata".
 * **vlo.no_rollback_exception.count**: Number of times we were unable to roll back the particular stream by applying undo records in the reverse order.
 * **vlo.sync.rate**: Rate of updates applied/unapplied (mean, max and throughput) to a particular stream, distinguished by a type of update (apply and undo).
 * **vlo.read.rate**: Rate of access to the internal state of the corfu object (mean, max and throughput) backed by a particular stream, distinguished by a type of access (optimistic and pessimistic).
+* **address_space.read_cache.avg_entry_size**: The estimated average size of an entry in the address space cache, in bytes.
 * **address_space.read_cache.miss_ratio**: Ratio of cache read requests which were misses to the Corfu client address space.
 * **address_space.read_cache.load_count**: The total number of times that Corfu client address space cache reads resulted in the load of new values.
 * **address_space.read_cache.load_exception_count**: The number of times Corfu client address space cache lookups threw an exception while loading a new value.
+* **address_space.read_cache.size**: The number of entries in the address space cache.
 * **address_space.read.latency**: Time in milliseconds (mean, max, sum, 0.50p, 0.95p, 0.99p) it takes a client to read an object from an address or a range of addresses.
 * **address_space.write.latency**: Time in milliseconds (mean, max, sum, 0.50p, 0.95p, 0.99p) it takes a client to write the given log data using a token.
 * **address_space.log_data.size.bytes**: A size estimate distribution in bytes (mean, max, 0.50p, 0.95p, 0.99p) of the log data payload read or written through the address space API.

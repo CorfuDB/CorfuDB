@@ -53,6 +53,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -66,6 +67,7 @@ import java.util.stream.Collectors;
 public class AddressSpaceView extends AbstractView {
 
     private final static long DEFAULT_MAX_CACHE_ENTRIES = 5000;
+    private AtomicLong currentDataSizeInCache;
 
     /**
      * A cache for read results.
@@ -90,6 +92,7 @@ public class AddressSpaceView extends AbstractView {
         final long maxCacheEntries = runtime.getParameters().getMaxCacheEntries();
         final long maxCacheWeight = runtime.getParameters().getMaxCacheWeight();
         final int concurrencyLevel = runtime.getParameters().getCacheConcurrencyLevel();
+        currentDataSizeInCache = new AtomicLong(0);
 
         if (maxCacheWeight != 0) {
             throw new UnsupportedOperationException("Weighing cache is not supported!");
@@ -116,6 +119,9 @@ public class AddressSpaceView extends AbstractView {
 
         Optional<MeterRegistry> metricsRegistry = MeterRegistryProvider.getInstance();
         MicroMeterUtils.gauge("address_space.read_cache.hit_ratio", readCache, cache -> cache.stats().hitRate());
+        MicroMeterUtils.gauge("address_space.read_cache.estimated_avg_entry_size",
+                readCache.size() != 0 ? (currentDataSizeInCache.get() / readCache.size()) : 0);
+        MicroMeterUtils.gauge("address_space.read_cache.cache_size", readCache, cache -> cache.size());
         metricsRegistry.map(registry -> GuavaCacheMetrics.monitor(registry, readCache, "address_space.read_cache"));
     }
 
@@ -123,6 +129,11 @@ public class AddressSpaceView extends AbstractView {
         if (log.isTraceEnabled()) {
             log.trace("handleEviction: evicting {} cause {}", notification.getKey(), notification.getCause());
         }
+        updateCurrentDataSizeInCache(currentDataSizeInCache.get(), (notification.getValue().getSizeEstimate()) * -1);
+    }
+
+    private void updateCurrentDataSizeInCache(long expectedSize, int delta) {
+        currentDataSizeInCache.compareAndSet(expectedSize, expectedSize + delta);
     }
 
 
@@ -239,6 +250,7 @@ public class AddressSpaceView extends AbstractView {
             // Cache the successful write
             if (cacheOption == CacheOption.WRITE_THROUGH) {
                 readCache.put(token.getSequence(), ld);
+                updateCurrentDataSizeInCache(currentDataSizeInCache.get(), ld.getSizeEstimate());
             }
         };
 
