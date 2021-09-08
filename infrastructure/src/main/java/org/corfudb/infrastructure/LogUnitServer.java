@@ -378,6 +378,8 @@ public class LogUnitServer extends AbstractServer {
             r.sendResponse(getResponseMsg(
                     getHeaderMsg(req.getHeader()),getRemoteCorfuTableError("Interrupted wait for db sync")
             ), ctx);
+        } catch (IllegalStateException e) {
+
         }
         remoteCorfuTableRequestHandler.handle(req, ctx, r);
     }
