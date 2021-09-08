@@ -13,6 +13,8 @@ import org.rocksdb.RocksDBException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
 
 /**
@@ -62,12 +64,14 @@ public class UpdateOperation implements SMROperation {
             if (entries.size() == 1) {
                 //single update case
                 RemoteCorfuTableDatabaseEntry entry = entries.get(0);
-                dbHandler.update(entry.getKey(), entry.getValue(), streamId);
+                dbHandler.updateAsync(entry.getKey(), entry.getValue(), streamId).join();
             } else {
-                dbHandler.updateAll(entries, streamId);
+                dbHandler.updateAllAsync(entries, streamId).join();
             }
-        } catch (Exception e) {
+        } catch (CancellationException e) {
             exception = e;
+        } catch (CompletionException e) {
+            exception = (Exception) e.getCause();
         } finally {
             isApplied.countDown();
         }

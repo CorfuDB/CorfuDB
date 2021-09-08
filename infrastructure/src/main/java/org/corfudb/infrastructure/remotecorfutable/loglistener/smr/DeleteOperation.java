@@ -13,6 +13,8 @@ import org.rocksdb.RocksDBException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
 
 /**
@@ -53,12 +55,14 @@ public class DeleteOperation implements SMROperation {
             if (keys.size() == 1) {
                 //single delete case - take first key in the list and delete it
                 RemoteCorfuTableVersionedKey key = new RemoteCorfuTableVersionedKey(keys.get(0), timestamp);
-                dbHandler.update(key, ByteString.EMPTY, streamId);
+                dbHandler.updateAsync(key, ByteString.EMPTY, streamId).join();
             } else {
-                dbHandler.updateAll(getEntryBatch(), streamId);
+                dbHandler.updateAllAsync(getEntryBatch(), streamId).join();
             }
-        } catch (Exception e) {
+        } catch (CancellationException e) {
             exception = e;
+        } catch (CompletionException e) {
+            exception = (Exception) e.getCause();
         } finally {
             isApplied.countDown();
         }

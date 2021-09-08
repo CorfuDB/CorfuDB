@@ -14,6 +14,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
 
 /**
@@ -54,9 +56,11 @@ public class CompositeOperation implements SMROperation {
     @Override
     public void applySMRMethod(@NonNull DatabaseHandler dbHandler)  {
         try {
-            dbHandler.updateAll(getEntryBatch(), streamId);
-        } catch (Exception e) {
+            dbHandler.updateAllAsync(getEntryBatch(), streamId).join();
+        } catch (CancellationException e) {
             exception = e;
+        } catch (CompletionException e) {
+            exception = (Exception) e.getCause();
         } finally {
             isApplied.countDown();
         }
