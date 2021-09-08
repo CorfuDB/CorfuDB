@@ -67,7 +67,7 @@ import java.util.stream.Collectors;
 public class AddressSpaceView extends AbstractView {
 
     private final static long DEFAULT_MAX_CACHE_ENTRIES = 5000;
-    private AtomicLong currentDataSizeInCache;
+    private final AtomicLong currentDataSizeInCache;
 
     /**
      * A cache for read results.
@@ -117,30 +117,25 @@ public class AddressSpaceView extends AbstractView {
                 .recordStats()
                 .build();
 
-        MicroMeterUtils.gauge("address_space.read_cache.hit_ratio", readCache, cache -> cache.stats().hitRate());
-        MicroMeterUtils.gauge("address_space.read_cache.estimated_avg_entry_size", calculateEstimatedAvgEntrySize());
-        MicroMeterUtils.gauge("address_space.read_cache.cache_size", readCache, cache -> cache.size());
         Optional<MeterRegistry> metricsRegistry = MeterRegistryProvider.getInstance();
         metricsRegistry.map(registry -> GuavaCacheMetrics.monitor(registry, readCache, "address_space.read_cache"));
+        MicroMeterUtils.gauge("address_space.read_cache.hit_ratio", readCache, cache -> cache.stats().hitRate());
+        MicroMeterUtils.gauge("address_space.read_cache.size", readCache, cache -> cache.size());
+        MicroMeterUtils.gauge("address_space.read_cache.avg_entry_size", calculateEstimatedAvgEntrySize());
     }
 
     private void handleEviction(RemovalNotification<Long, ILogData> notification) {
         if (log.isTraceEnabled()) {
             log.trace("handleEviction: evicting {} cause {}", notification.getKey(), notification.getCause());
         }
-        updateCurrentDataSizeInCache(currentDataSizeInCache.get(),
-                (notification.getValue().getSizeEstimate()) * -1);
-    }
-
-    private void updateCurrentDataSizeInCache(long expectedSize, int delta) {
-        currentDataSizeInCache.compareAndSet(expectedSize, expectedSize + delta);
+        currentDataSizeInCache.addAndGet(notification.getValue().getSizeEstimate() * -1);
     }
 
     private double calculateEstimatedAvgEntrySize() {
         if (readCache.size() == 0) {
             return 0;
         }
-        return currentDataSizeInCache.get() / readCache.size();
+        return (double)currentDataSizeInCache.get() / readCache.size();
     }
 
 
@@ -257,7 +252,7 @@ public class AddressSpaceView extends AbstractView {
             // Cache the successful write
             if (cacheOption == CacheOption.WRITE_THROUGH) {
                 readCache.put(token.getSequence(), ld);
-                updateCurrentDataSizeInCache(currentDataSizeInCache.get(), ld.getSizeEstimate());
+                currentDataSizeInCache.addAndGet(ld.getSizeEstimate());
             }
         };
 
