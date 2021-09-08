@@ -61,3 +61,4 @@ public class DropwizardDistributionSummaryDelegate extends AbstractDistributionS
         return MeterEquivalence.hashCode(this);
     }
 }
+
