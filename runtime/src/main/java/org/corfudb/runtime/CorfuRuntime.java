@@ -275,6 +275,11 @@ public class CorfuRuntime {
         int checkpointRetries = 5;
 
         /*
+         * The maximum number of SMR entries that will be grouped in a CheckpointEntry.CONTINUATION
+         */
+        int checkpointBatchSize = 50;
+
+        /*
          * Stream Batch Size: number of addresses to fetch in advance when stream address discovery mechanism
          * relies on address maps instead of follow backpointers, i.e., followBackpointersEnabled = false;
          */
@@ -399,6 +404,7 @@ public class CorfuRuntime {
             private int writeRetry = 5;
             private int trimRetry = 2;
             private int checkpointRetries = 5;
+            private int checkpointBatchSize = 50;
             private int streamBatchSize = 10;
             private int checkpointReadBatchSize = 5;
             private Duration runtimeGCPeriod = Duration.ofMinutes(20);
@@ -607,6 +613,11 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder checkpointBatchSize(int checkpointBatchSize) {
+                this.checkpointBatchSize = checkpointBatchSize;
+                return this;
+            }
+
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamBatchSize(int streamBatchSize) {
                 this.streamBatchSize = streamBatchSize;
                 return this;
@@ -732,6 +743,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setWriteRetry(writeRetry);
                 corfuRuntimeParameters.setTrimRetry(trimRetry);
                 corfuRuntimeParameters.setCheckpointRetries(checkpointRetries);
+                corfuRuntimeParameters.setCheckpointBatchSize(checkpointBatchSize);
                 corfuRuntimeParameters.setStreamBatchSize(streamBatchSize);
                 corfuRuntimeParameters.setCheckpointReadBatchSize(checkpointReadBatchSize);
                 corfuRuntimeParameters.setRuntimeGCPeriod(runtimeGCPeriod);

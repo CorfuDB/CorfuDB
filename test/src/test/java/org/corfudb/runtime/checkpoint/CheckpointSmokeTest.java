@@ -712,6 +712,70 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         }
     }
 
+    /** Test the CheckpointWriter batch size.
+     *
+     * CheckpointWriter aggregates a batch of SMREntries into one
+     * CheckpointEntry. This test verifies that only given number
+     * of SMR entries (batchSize) will be grouped in one checkpoint
+     * entry.
+     */
+    @Test
+    @SuppressWarnings("checkstyle:magicnumber")
+    public void checkpointBatchSizeTest() throws Exception {
+        final String streamName = "mystream8";
+        final UUID streamId = CorfuRuntime.getStreamID(streamName);
+        final int numKeys = 123;
+
+        StreamingMap<String, String> m = instantiateStringMap(streamName);
+
+        for (int i = 0; i < numKeys; i++) {
+            // each entry is 1 KB
+            String key = String.valueOf(i);
+            String payload = getRandomStringOfSize(1 << 10);
+            m.put(key, payload);
+        }
+
+        // disable payload compression
+        getRuntime().getParameters().setCodecType(Codec.Type.NONE);
+        CheckpointWriter cpw = new CheckpointWriter(r, streamId, "author", m);
+        cpw.setSerializer(serializer);
+
+        // Write all CP data.
+        r.getObjectsView().TXBuild()
+                .type(TransactionType.SNAPSHOT)
+                .build()
+                .begin();
+        Token snapshot = TransactionalContext
+                .getCurrentContext()
+                .getSnapshotTimestamp();
+        try {
+            cpw.startCheckpoint(snapshot);
+            cpw.appendObjectState(m.entryStream());
+            cpw.finishCheckpoint();
+        } finally {
+            r.getObjectsView().TXEnd();
+        }
+
+        // check the number of SMR entries in each CheckpointEntry is 50, 50, and 23
+        setRuntime();
+        r.getSerializers().registerSerializer(serializer);
+        long startAddress = snapshot.getSequence() + 1;
+        assertThat(r.getAddressSpaceView().read(startAddress).getCheckpointType())
+                .isEqualTo(CheckpointEntry.CheckpointEntryType.START);
+
+        final long contRecordffset = startAddress + 1;
+        LogEntry cpEntry = (CheckpointEntry) r.getAddressSpaceView().read(contRecordffset).getPayload(r);
+        assertThat(((CheckpointEntry) cpEntry).getSmrEntries().getUpdates().size()).isEqualTo(50);
+
+        final long cont2Recordffset = startAddress + 2;
+        cpEntry = (CheckpointEntry) r.getAddressSpaceView().read(cont2Recordffset).getPayload(r);
+        assertThat(((CheckpointEntry) cpEntry).getSmrEntries().getUpdates().size()).isEqualTo(50);
+
+        final long cont3Recordffset = startAddress + 3;
+        cpEntry = (CheckpointEntry) r.getAddressSpaceView().read(cont3Recordffset).getPayload(r);
+        assertThat(((CheckpointEntry) cpEntry).getSmrEntries().getUpdates().size()).isEqualTo(23);
+    }
+
     private int getSerializedSMREntrySize(
             String key, String value, Function<Object, Object> keyMutator, Function<Object, Object> valueMutator, ISerializer serializer) {
         ByteBuf b = Unpooled.buffer();
