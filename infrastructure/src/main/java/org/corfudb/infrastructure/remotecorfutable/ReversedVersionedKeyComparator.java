@@ -10,9 +10,10 @@ public class ReversedVersionedKeyComparator extends AbstractComparator {
         super(comparatorOptions);
     }
 
+    private final String name = "corfudb.remotecorfutable.reversedversionedkeycomparator";
     @Override
     public String name() {
-        return "corfudb.remotecorfutable.reversedversionedkeycomparator";
+        return name;
     }
 
     @Override

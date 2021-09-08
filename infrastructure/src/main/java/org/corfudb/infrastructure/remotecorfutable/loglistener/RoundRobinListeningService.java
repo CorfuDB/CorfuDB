@@ -93,7 +93,6 @@ public class RoundRobinListeningService implements RemoteCorfuTableListeningServ
                         accessWaits.put(waitingReadRequests);
                     }
                 } else {
-                    log.trace("No entries to read in stream {}", streamId);
                     LinkedList<TimestampedLock> allWaitingRequests = new LinkedList<>();
                     accessWaits.drainTo(allWaitingRequests);
                     allWaitingRequests.forEach(req -> req.lock.countDown());

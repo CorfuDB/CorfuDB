@@ -86,6 +86,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -219,7 +220,8 @@ public class LogUnitServer extends AbstractServer {
 
         //TODO: replace with appropriate locations and executors or add as options in server context
         Path homeDir = SystemUtils.getUserHome().toPath();
-        Path remoteCorfuTableDBPath = Paths.get(homeDir.toString(), "tempRocksDBDir");
+        Path remoteCorfuTableDBPath = Paths.get(homeDir.toString(), "tempRocksDBDir" +
+                ThreadLocalRandom.current().nextInt());
         Options rocksDBOptions = DatabaseHandler.getDefaultOptions();
         rocksDBOptions.setInfoLogLevel(InfoLogLevel.DEBUG_LEVEL);
         ExecutorService dbExecutor = serverContext.getExecutorService(
@@ -232,12 +234,9 @@ public class LogUnitServer extends AbstractServer {
         ScheduledExecutorService listenerExecutor = Executors.newScheduledThreadPool(
                 serverContext.getLogUnitThreadCount(), new ServerThreadFactory("LogListener-",
                         new ServerThreadFactory.ExceptionHandler()));
-        log.debug("Initializing Log Unit Server Singleton Runtime");
         singletonRuntime = SingletonResource.withInitial(this::buildCorfuRuntime);
-        log.debug("Initializing Log Unit Server Scheduler");
         listeningService = serverInitializer.buildRemoteCorfuTableListeningService(listeningServiceExecutor, singletonRuntime,
                 10);
-        log.debug("Initializing Log Unit Server Log Listener");
         listener = serverInitializer.buildLogListener(singletonRuntime, databaseHandler, listenerExecutor,
                 10, listeningService);
         listenerStarted = new AtomicBoolean(false);
@@ -245,19 +244,19 @@ public class LogUnitServer extends AbstractServer {
 
     //TODO: ensure correctness
     private CorfuRuntime buildCorfuRuntime() {
-        log.debug("Started to build Corfu Runtime for LogUnit Server");
+        log.trace("Started to build Corfu Runtime for LogUnit Server");
         CorfuRuntime.CorfuRuntimeParameters params = serverContext.getManagementRuntimeParameters();
         params.setMaxWriteSize(1737);
         final CorfuRuntime r = CorfuRuntime.fromParameters(params);
-        log.debug("Requesting layout for LogUnit Server Runtime");
+        log.trace("Requesting layout for LogUnit Server Runtime");
         final Layout currLayout = serverContext.getCurrentLayout();
         // Runtime can be set up either using the layout or the bootstrapEndpoint address.
         if (currLayout != null) {
             currLayout.getLayoutServers().forEach(r::addLayoutServer);
         }
-        log.debug("Attempting to connect Corfu Runtime in LogUnit Server");
+        log.trace("Attempting to connect Corfu Runtime in LogUnit Server");
         r.connect();
-        log.info("buildCorfuRuntime: Corfu Runtime connected successfully");
+        log.debug("buildCorfuRuntime: Corfu Runtime connected successfully");
         params.setSystemDownHandler(runtimeSystemDownHandler);
         return r;
     }
@@ -365,16 +364,14 @@ public class LogUnitServer extends AbstractServer {
     @RequestHandler(type = PayloadCase.REMOTE_CORFU_TABLE_REQUEST)
     private void handleRemoteCorfuTableRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         //TODO: change all this back to debug
-//        if (log.isTraceEnabled()) {
-//            log.trace("handleRemoteCorfuTableRequest: received Remote Corfu Table request {}",
-//                    TextFormat.shortDebugString(req));
-//        }
-        log.info("handleRemoteCorfuTableRequest: received Remote Corfu Table request {}",
+        if (log.isTraceEnabled()) {
+            log.trace("handleRemoteCorfuTableRequest: received Remote Corfu Table request {}",
                     TextFormat.shortDebugString(req));
+        }
         //at this point, we are in the RCT executor pool, and need to wait for the db to be in a consistent state
         RemoteCorfuTableMessages.RemoteCorfuTableRequestMsg rctMsg = req.getPayload().getRemoteCorfuTableRequest();
         try {
-            log.info("Beginning wait for stream sync on {} request", rctMsg.getPayloadCase().name());
+            log.trace("Beginning wait for stream sync on {} request", rctMsg.getPayloadCase().name());
             listener.waitForStream(getUUID(rctMsg.getStreamId()), rctMsg.getTimestamp());
         } catch (InterruptedException e) {
             log.info("Error in db sync wait", e);
@@ -382,7 +379,6 @@ public class LogUnitServer extends AbstractServer {
                     getHeaderMsg(req.getHeader()),getRemoteCorfuTableError("Interrupted wait for db sync")
             ), ctx);
         }
-        log.info("Handling RCT Request {}", rctMsg.getPayloadCase().name());
         remoteCorfuTableRequestHandler.handle(req, ctx, r);
     }
 
@@ -419,15 +415,13 @@ public class LogUnitServer extends AbstractServer {
      */
     @RequestHandler(type = PayloadCase.WRITE_LOG_REQUEST)
     private void handleWrite(RequestMsg req, ChannelHandlerContext ctx, IServerRouter router) {
-        //TODO: change back to debugs
-        log.info("Handle Write called on Log Unit Server");
         //start listening on write since RemoteCorfuTable must be empty if no writes have been requested
         if (listenerStarted.compareAndSet(false, true)) {
             listener.startListening();
         }
         LogData logData = getLogData(req.getPayload().getWriteLogRequest().getLogData());
 
-        log.info("handleWrite: type: {}, address: {}, streams: {}",
+        log.debug("handleWrite: type: {}, address: {}, streams: {}",
                 logData.getType(), logData.getToken(), logData.getBackpointerMap());
 
         // Its not clear that making all holes high priority is the right thing to do, but since
