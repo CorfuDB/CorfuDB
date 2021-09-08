@@ -14,6 +14,8 @@ import org.rocksdb.RocksDBException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
 
 /**
@@ -41,9 +43,11 @@ public class ClearOperation implements SMROperation {
     @Override
     public void applySMRMethod(@NonNull DatabaseHandler dbHandler) {
         try {
-            dbHandler.clear(streamId, timestamp);
-        } catch (Exception e) {
+            dbHandler.clearAsync(streamId, timestamp).join();
+        } catch (CancellationException e) {
             exception = e;
+        } catch (CompletionException e) {
+            exception = (Exception) e.getCause();
         } finally {
             isApplied.countDown();
         }
