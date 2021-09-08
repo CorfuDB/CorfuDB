@@ -5,54 +5,24 @@ import com.google.protobuf.TextFormat;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.SystemUtils;
-import org.codehaus.groovy.runtime.WritablePath;
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.infrastructure.remotecorfutable.DatabaseHandler;
 import org.corfudb.infrastructure.remotecorfutable.RemoteCorfuTableRequestHandler;
+import org.corfudb.infrastructure.remotecorfutable.loglistener.LogListener;
+import org.corfudb.infrastructure.remotecorfutable.loglistener.RemoteCorfuTableListeningService;
+import org.corfudb.infrastructure.remotecorfutable.loglistener.RoundRobinListeningService;
+import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import org.corfudb.protocols.CorfuProtocolLogData;
-import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
-import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.ReadResponse;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
-import org.corfudb.protocols.wireprotocol.TailsResponse;
-import org.corfudb.runtime.exceptions.DataCorruptionException;
-import org.corfudb.runtime.exceptions.LogUnitException;
-import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.TrimmedException;
-import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
-import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
-import org.corfudb.util.Utils;
-
-import javax.annotation.Nonnull;
-import java.lang.invoke.MethodHandles;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-
 import static org.corfudb.protocols.CorfuProtocolLogData.getLogData;
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getDataCorruptionErrorMsg;
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getOverwriteErrorMsg;
+import static org.corfudb.protocols.CorfuProtocolServerErrors.getRemoteCorfuTableError;
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getTrimmedErrorMsg;
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getUnknownErrorMsg;
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getWrongEpochErrorMsg;
@@ -71,11 +41,55 @@ import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getTrimLogRespo
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getTrimMarkResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getUpdateCommittedTailResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getWriteLogResponseMsg;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getDefaultProtocolVersionMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.DataCorruptionException;
+import org.corfudb.runtime.exceptions.LogUnitException;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.UnreachableClusterException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
+import org.corfudb.runtime.proto.service.RemoteCorfuTableMessages;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.util.Utils;
+import org.corfudb.util.concurrent.SingletonResource;
+import org.rocksdb.InfoLogLevel;
 import org.rocksdb.Options;
+
+import javax.annotation.Nonnull;
+import java.lang.invoke.MethodHandles;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 
 /**
@@ -109,9 +123,36 @@ public class LogUnitServer extends AbstractServer {
     /**
      * Handler class for database supporting RemoteCorfuTable requests.
      */
-    @VisibleForTesting
     @Getter
+    @VisibleForTesting
     private final DatabaseHandler databaseHandler;
+
+    private final ExecutorService remoteCorfuTableExecutorService;
+
+    private final SingletonResource<CorfuRuntime> singletonRuntime;
+
+    //TODO: copied from management server, double check correctness
+    private final Runnable runtimeSystemDownHandler = () -> {
+        log.warn("ManagementServer: Runtime stalled. Invoking systemDownHandler after {} "
+                + "unsuccessful tries.", 60);
+        throw new UnreachableClusterException("Runtime stalled. Invoking systemDownHandler after "
+                + 60 + " unsuccessful tries.");
+    };
+
+    /**
+     * Log Listening scheduling service for RemoteCorfuTable.
+     */
+    private final RemoteCorfuTableListeningService listeningService;
+
+    /**
+     * Log Listener for RemoteCorfuTable.
+     */
+    private final LogListener listener;
+
+    /**
+     * Boolean representing state of listener
+     */
+    private final AtomicBoolean listenerStarted;
 
     /**
      * Reauest handler for all RemoteCorfuTable requests
@@ -158,6 +199,8 @@ public class LogUnitServer extends AbstractServer {
         this.serverContext = serverContext;
         config = LogUnitServerConfig.parse(serverContext.getServerConfig());
         executor = serverContext.getExecutorService(serverContext.getLogUnitThreadCount(), "LogUnit-");
+        remoteCorfuTableExecutorService = serverContext.getExecutorService(serverContext.getLogUnitThreadCount(),
+                "RemoteCorfuTableHandling-");
 
         if (config.isMemoryMode()) {
             log.warn("Log unit opened in-memory mode (Maximum size={}). "
@@ -176,19 +219,55 @@ public class LogUnitServer extends AbstractServer {
         logCleaner = serverInitializer.buildStreamLogCompaction(streamLog);
 
         //TODO: replace with appropriate locations and executors or add as options in server context
-        Path remoteCorfuTableDBPath = SystemUtils.getUserHome().toPath();
+        Path homeDir = SystemUtils.getUserHome().toPath();
+        Path remoteCorfuTableDBPath = Paths.get(homeDir.toString(), "tempRocksDBDir" +
+                ThreadLocalRandom.current().nextInt());
         Options rocksDBOptions = DatabaseHandler.getDefaultOptions();
+        rocksDBOptions.setInfoLogLevel(InfoLogLevel.DEBUG_LEVEL);
         ExecutorService dbExecutor = serverContext.getExecutorService(
                 serverContext.getLogUnitThreadCount(),"RemoteCorfuTable-");
         databaseHandler = serverInitializer.buildDatabaseHandler(remoteCorfuTableDBPath, rocksDBOptions, dbExecutor);
         remoteCorfuTableRequestHandler = serverInitializer.buildRemoteCorfuTableRequestHandler(databaseHandler);
+        ScheduledExecutorService listeningServiceExecutor = Executors.newScheduledThreadPool(
+                serverContext.getLogUnitThreadCount(), new ServerThreadFactory("LogListeningService-",
+                        new ServerThreadFactory.ExceptionHandler()));
+        ScheduledExecutorService listenerExecutor = Executors.newScheduledThreadPool(
+                serverContext.getLogUnitThreadCount(), new ServerThreadFactory("LogListener-",
+                        new ServerThreadFactory.ExceptionHandler()));
+        singletonRuntime = SingletonResource.withInitial(this::buildCorfuRuntime);
+        listeningService = serverInitializer.buildRemoteCorfuTableListeningService(listeningServiceExecutor, singletonRuntime,
+                10);
+        listener = serverInitializer.buildLogListener(singletonRuntime, databaseHandler, listenerExecutor,
+                10, listeningService);
+        listenerStarted = new AtomicBoolean(false);
+    }
 
-
+    //TODO: ensure correctness
+    private CorfuRuntime buildCorfuRuntime() {
+        log.trace("Started to build Corfu Runtime for LogUnit Server");
+        CorfuRuntime.CorfuRuntimeParameters params = serverContext.getManagementRuntimeParameters();
+        params.setMaxWriteSize(1737);
+        final CorfuRuntime r = CorfuRuntime.fromParameters(params);
+        log.trace("Requesting layout for LogUnit Server Runtime");
+        final Layout currLayout = serverContext.getCurrentLayout();
+        // Runtime can be set up either using the layout or the bootstrapEndpoint address.
+        if (currLayout != null) {
+            currLayout.getLayoutServers().forEach(r::addLayoutServer);
+        }
+        log.trace("Attempting to connect Corfu Runtime in LogUnit Server");
+        r.connect();
+        log.debug("buildCorfuRuntime: Corfu Runtime connected successfully");
+        params.setSystemDownHandler(runtimeSystemDownHandler);
+        return r;
     }
 
     @Override
     protected void processRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter router) {
-        executor.submit(() -> getHandlerMethods().handle(req, ctx, router));
+        if (req.hasPayload() && req.getPayload().hasRemoteCorfuTableRequest()) {
+            remoteCorfuTableExecutorService.submit(() -> getHandlerMethods().handle(req, ctx, router));
+        } else {
+            executor.submit(() -> getHandlerMethods().handle(req, ctx, router));
+        }
     }
 
     /**
@@ -284,9 +363,23 @@ public class LogUnitServer extends AbstractServer {
 
     @RequestHandler(type = PayloadCase.REMOTE_CORFU_TABLE_REQUEST)
     private void handleRemoteCorfuTableRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        //TODO: change all this back to debug
         if (log.isTraceEnabled()) {
             log.trace("handleRemoteCorfuTableRequest: received Remote Corfu Table request {}",
                     TextFormat.shortDebugString(req));
+        }
+        //at this point, we are in the RCT executor pool, and need to wait for the db to be in a consistent state
+        RemoteCorfuTableMessages.RemoteCorfuTableRequestMsg rctMsg = req.getPayload().getRemoteCorfuTableRequest();
+        try {
+            log.trace("Beginning wait for stream sync on {} request", rctMsg.getPayloadCase().name());
+            listener.waitForStream(getUUID(rctMsg.getStreamId()), rctMsg.getTimestamp());
+        } catch (InterruptedException e) {
+            log.info("Error in db sync wait", e);
+            r.sendResponse(getResponseMsg(
+                    getHeaderMsg(req.getHeader()),getRemoteCorfuTableError("Interrupted wait for db sync")
+            ), ctx);
+        } catch (IllegalStateException e) {
+
         }
         remoteCorfuTableRequestHandler.handle(req, ctx, r);
     }
@@ -324,6 +417,10 @@ public class LogUnitServer extends AbstractServer {
      */
     @RequestHandler(type = PayloadCase.WRITE_LOG_REQUEST)
     private void handleWrite(RequestMsg req, ChannelHandlerContext ctx, IServerRouter router) {
+        //start listening on write since RemoteCorfuTable must be empty if no writes have been requested
+        if (listenerStarted.compareAndSet(false, true)) {
+            listener.startListening();
+        }
         LogData logData = getLogData(req.getPayload().getWriteLogRequest().getLogData());
 
         log.debug("handleWrite: type: {}, address: {}, streams: {}",
@@ -354,6 +451,10 @@ public class LogUnitServer extends AbstractServer {
      */
     @RequestHandler(type = PayloadCase.RANGE_WRITE_LOG_REQUEST)
     private void handleRangeWrite(RequestMsg req, ChannelHandlerContext ctx, IServerRouter router) {
+        //start listening on write since RemoteCorfuTable must be empty if no writes have been requested
+        if (listenerStarted.compareAndSet(false, true)) {
+            listener.startListening();
+        }
         List<LogData> range = req.getPayload().getRangeWriteLogRequest().getLogDataList()
                 .stream().map(CorfuProtocolLogData::getLogData).collect(Collectors.toList());
 
@@ -577,6 +678,12 @@ public class LogUnitServer extends AbstractServer {
         logCleaner.shutdown();
         batchWriter.close();
         databaseHandler.close();
+        try {
+            listener.close();
+        } catch (Exception e) {
+            throw new UnrecoverableCorfuError("Error shutting down log listener");
+        }
+        singletonRuntime.cleanup(CorfuRuntime::shutdown);
     }
 
     @VisibleForTesting
@@ -667,6 +774,17 @@ public class LogUnitServer extends AbstractServer {
 
         public RemoteCorfuTableRequestHandler buildRemoteCorfuTableRequestHandler(@Nonnull DatabaseHandler dbhandler) {
             return new RemoteCorfuTableRequestHandler(dbhandler);
+        }
+
+        public RemoteCorfuTableListeningService buildRemoteCorfuTableListeningService(
+                @NonNull ScheduledExecutorService executor, @NonNull SingletonResource<CorfuRuntime> runtime, long delay) {
+            return new RoundRobinListeningService(executor, runtime, delay);
+        }
+
+        public LogListener buildLogListener(@NonNull SingletonResource<CorfuRuntime> runtime, @NonNull DatabaseHandler handler,
+                                            @NonNull ScheduledExecutorService executor, long delay,
+                                            @NonNull RemoteCorfuTableListeningService listener) {
+            return new LogListener(runtime, handler, executor, delay, listener);
         }
     }
 }
