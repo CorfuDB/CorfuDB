@@ -29,8 +29,11 @@ import java.util.stream.Collectors;
 public class RemoteCorfuTableView extends AbstractView {
 
     public static final String STREAM_ID_TAG = "streamId";
-    public static final String NODE_SELECT_FAILURE_MSG = "Failed to route request to correct node. Cause: ";
+    public static final String NODE_SELECT_FAILURE_MSG = "Failed to route request to correct node. Cause: {}";
+    public static final String ROUTING_RETRY_MSG = "Attempt #{} to route to correct node failed with {}";
     public static final String SCAN_METRIC_NAME = "remotecorfutable.scan";
+    //TODO: configure in params
+    private static final int ROUTING_RETRIES = 5;
 
     /**
      * Constructs a RemoteCorfuTableView object.
@@ -49,9 +52,9 @@ public class RemoteCorfuTableView extends AbstractView {
                 layoutHelper(e -> {
                     LogUnitClient logUnitClient;
                     try {
-                        logUnitClient = getNodeWithCorrectStripe(e, streamId);
+                        logUnitClient = routeRequest(e, streamId);
                     } catch (RuntimeException ex) {
-                        log.warn(NODE_SELECT_FAILURE_MSG, ex);
+                        log.warn(NODE_SELECT_FAILURE_MSG, ex.getMessage());
                         return ByteString.EMPTY;
                     }
                     return CFUtils.getUninterruptibly(logUnitClient
@@ -65,9 +68,9 @@ public class RemoteCorfuTableView extends AbstractView {
                 layoutHelper(e -> {
                     LogUnitClient logUnitClient;
                     try {
-                        logUnitClient = getNodeWithCorrectStripe(e, streamId);
+                        logUnitClient = routeRequest(e, streamId);
                     } catch (RuntimeException ex) {
-                        log.warn(NODE_SELECT_FAILURE_MSG, ex);
+                        log.warn(NODE_SELECT_FAILURE_MSG, ex.getMessage());
                         return keys.stream()
                                 .map(key -> new RemoteCorfuTableDatabaseEntry(key, ByteString.EMPTY))
                                 .collect(Collectors.toList());
@@ -89,9 +92,9 @@ public class RemoteCorfuTableView extends AbstractView {
                 layoutHelper(e -> {
                     LogUnitClient logUnitClient;
                     try {
-                        logUnitClient = getNodeWithCorrectStripe(e, streamId);
+                        logUnitClient = routeRequest(e, streamId);
                     } catch (RuntimeException ex) {
-                        log.warn(NODE_SELECT_FAILURE_MSG, ex);
+                        log.warn(NODE_SELECT_FAILURE_MSG, ex.getMessage());
                         return new LinkedList<>();
                     }
                     return CFUtils.getUninterruptibly(logUnitClient
@@ -113,9 +116,9 @@ public class RemoteCorfuTableView extends AbstractView {
                 layoutHelper(e -> {
                     LogUnitClient logUnitClient;
                     try {
-                        logUnitClient = getNodeWithCorrectStripe(e, streamId);
+                        logUnitClient = routeRequest(e, streamId);
                     } catch (RuntimeException ex) {
-                        log.warn(NODE_SELECT_FAILURE_MSG, ex);
+                        log.warn(NODE_SELECT_FAILURE_MSG, ex.getMessage());
                         return new LinkedList<>();
                     }
                     return CFUtils.getUninterruptibly(logUnitClient
@@ -139,9 +142,9 @@ public class RemoteCorfuTableView extends AbstractView {
                 layoutHelper(e -> {
                     LogUnitClient logUnitClient;
                     try {
-                        logUnitClient = getNodeWithCorrectStripe(e, streamId);
+                        logUnitClient = routeRequest(e, streamId);
                     } catch (RuntimeException ex) {
-                        log.warn(NODE_SELECT_FAILURE_MSG, ex);
+                        log.warn(NODE_SELECT_FAILURE_MSG, ex.getMessage());
                         return new LinkedList<>();
                     }
                     return CFUtils.getUninterruptibly(logUnitClient
@@ -165,9 +168,9 @@ public class RemoteCorfuTableView extends AbstractView {
                 layoutHelper(e -> {
                     LogUnitClient logUnitClient;
                     try {
-                        logUnitClient = getNodeWithCorrectStripe(e, streamId);
+                        logUnitClient = routeRequest(e, streamId);
                     } catch (RuntimeException ex) {
-                        log.warn(NODE_SELECT_FAILURE_MSG, ex);
+                        log.warn(NODE_SELECT_FAILURE_MSG, ex.getMessage());
                         return new LinkedList<>();
                     }
                     return CFUtils.getUninterruptibly(logUnitClient
@@ -188,9 +191,9 @@ public class RemoteCorfuTableView extends AbstractView {
                 layoutHelper(e -> {
                     LogUnitClient logUnitClient;
                     try {
-                        logUnitClient = getNodeWithCorrectStripe(e, streamId);
+                        logUnitClient = routeRequest(e, streamId);
                     } catch (RuntimeException ex) {
-                        log.warn(NODE_SELECT_FAILURE_MSG, ex);
+                        log.warn(NODE_SELECT_FAILURE_MSG, ex.getMessage());
                         return false;
                     }
                     return CFUtils.getUninterruptibly(logUnitClient
@@ -213,9 +216,9 @@ public class RemoteCorfuTableView extends AbstractView {
                 layoutHelper(e -> {
                     LogUnitClient logUnitClient;
                     try {
-                        logUnitClient = getNodeWithCorrectStripe(e, streamId);
+                        logUnitClient = routeRequest(e, streamId);
                     } catch (RuntimeException ex) {
-                        log.warn(NODE_SELECT_FAILURE_MSG, ex);
+                        log.warn(NODE_SELECT_FAILURE_MSG, ex.getMessage());
                         return false;
                     }
                     return CFUtils.getUninterruptibly(logUnitClient
@@ -237,9 +240,9 @@ public class RemoteCorfuTableView extends AbstractView {
                 layoutHelper(e -> {
                     LogUnitClient logUnitClient;
                     try {
-                        logUnitClient = getNodeWithCorrectStripe(e, streamId);
+                        logUnitClient = routeRequest(e, streamId);
                     } catch (RuntimeException ex) {
-                        log.warn(NODE_SELECT_FAILURE_MSG, ex);
+                        log.warn(NODE_SELECT_FAILURE_MSG, ex.getMessage());
                         return 0;
                     }
                     return CFUtils.getUninterruptibly(logUnitClient
@@ -247,6 +250,17 @@ public class RemoteCorfuTableView extends AbstractView {
                 });
         return MicroMeterUtils.time(sizeSupplier, "remotecorfutable.size", STREAM_ID_TAG,
                 streamId.toString());
+    }
+
+    private LogUnitClient routeRequest(RuntimeLayout e, UUID streamId) {
+        for (int i = 1; i <= ROUTING_RETRIES; i++) {
+            try {
+                return getNodeWithCorrectStripe(e, streamId);
+            } catch (RuntimeException ex) {
+                log.warn(ROUTING_RETRY_MSG, i, ex.getMessage());
+            }
+        }
+        throw new RuntimeException("Stream tail does not exist. Retries exhausted.");
     }
 
     private LogUnitClient getNodeWithCorrectStripe(RuntimeLayout e, UUID streamId) {
