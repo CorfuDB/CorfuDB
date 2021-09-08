@@ -85,6 +85,7 @@ public class LogData implements IMetadata, ILogData {
         if (value instanceof LogEntry) {
             if (!Address.isAddress(((LogEntry) value).getGlobalAddress())) {
                 ((LogEntry) value).setGlobalAddress(getGlobalAddress());
+                ((LogEntry) value).setRuntime(runtime);
             }
             return value;
         }

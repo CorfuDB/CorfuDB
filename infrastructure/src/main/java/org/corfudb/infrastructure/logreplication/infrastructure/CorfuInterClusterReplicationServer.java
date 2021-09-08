@@ -28,7 +28,7 @@ import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 /**
  * This class represents the Corfu Replication Server. This Server will be running on both ends
  * of the cross-cluster replication.
- *
+ * <p>
  * A discovery mechanism will enable a cluster as Source (Sender) and another as Sink (Receiver).
  */
 @Slf4j
@@ -276,7 +276,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         flushAsyncLogAppender();
     }
 
-    private ServerContext getServerContext(Map<String, Object> opts ) {
+    private ServerContext getServerContext(Map<String, Object> opts) {
         // Bind to all interfaces only if no address or interface specified by the user.
         // Fetch the address if given a network interface.
         if (opts.get("--network-interface") != null) {
@@ -337,12 +337,11 @@ public class CorfuInterClusterReplicationServer implements Runnable {
     public static void configureMetrics(Map<String, Object> opts, String localEndpoint) {
         if ((boolean) opts.get("--metrics")) {
             try {
-                LoggerContext context =  (LoggerContext) LoggerFactory.getILoggerFactory();
+                LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
                 Optional.ofNullable(context.exists(DEFAULT_METRICS_LOGGER_NAME))
                         .ifPresent(logger -> MeterRegistryProvider.MeterRegistryInitializer.initServerMetrics(logger,
                                 DEFAULT_METRICS_LOGGING_INTERVAL_DURATION, localEndpoint));
-            }
-            catch (IllegalStateException ise) {
+            } catch (IllegalStateException ise) {
                 log.warn("Registry has been previously initialized. Skipping.");
             }
         }
@@ -378,11 +377,11 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      */
     private static void printLogo() {
         println(" _                  ____            _ _           _   _             \n" +
-                    " | |    ___   __ _  |  _ \\ ___ _ __ | (_) ___ __ _| |_(_) ___  _ __  \n" +
-                    " | |   / _ \\ / _` | | |_) / _ \\ '_ \\| | |/ __/ _` | __| |/ _ \\| '_ \\ \n" +
-                    " | |__| (_) | (_| | |  _ <  __/ |_) | | | (_| (_| | |_| | (_) | | | |\n" +
-                    " |_____\\___/ \\__, | |_| \\_\\___| .__/|_|_|\\___\\__,_|\\__|_|\\___/|_| |_|\n" +
-                    "             |___/            |_|                                   ");
+                " | |    ___   __ _  |  _ \\ ___ _ __ | (_) ___ __ _| |_(_) ___  _ __  \n" +
+                " | |   / _ \\ / _` | | |_) / _ \\ '_ \\| | |/ __/ _` | __| |/ _ \\| '_ \\ \n" +
+                " | |__| (_) | (_| | |  _ <  __/ |_) | | | (_| (_| | |_| | (_) | | | |\n" +
+                " |_____\\___/ \\__, | |_| \\_\\___| .__/|_|_|\\___\\__,_|\\__|_|\\___/|_| |_|\n" +
+                "             |___/            |_|                                   ");
     }
 
     /**
@@ -402,15 +401,15 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      * @param opts Arguments.
      */
     private static void printStartupMsg(Map<String, Object> opts) {
-            printLogo();
-            println("");
-            println("------------------------------------");
-            println("Initializing LOG REPLICATION SERVER");
-            println("Version (" + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")");
-            final int port = Integer.parseInt((String) opts.get("<port>"));
-            println("Serving on port " + port);
-            println("------------------------------------");
-            println("");
+        printLogo();
+        println("");
+        println("------------------------------------");
+        println("Initializing LOG REPLICATION SERVER");
+        println("Version (" + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")");
+        final int port = Integer.parseInt((String) opts.get("<port>"));
+        println("Serving on port " + port);
+        println("------------------------------------");
+        println("");
     }
 
     /**

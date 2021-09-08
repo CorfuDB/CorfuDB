@@ -16,7 +16,6 @@ import lombok.ToString;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.ISerializer;
-import org.corfudb.util.serializer.Serializers;
 
 /**
  * Created by mwei on 1/8/16.
@@ -123,7 +122,7 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
         Object[] arguments = new Object[numArguments];
 
         if (!opaque) {
-            serializerType = Serializers.getSerializer(serializerId);
+            serializerType = rt.getSerializers().getSerializer(serializerId);
         } else {
             this.serializerId = serializerId;
         }

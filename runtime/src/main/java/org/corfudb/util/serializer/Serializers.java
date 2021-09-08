@@ -41,14 +41,14 @@ public class Serializers {
         serializersMap.put(QUEUE_SERIALIZER.getType(), QUEUE_SERIALIZER);
     }
 
-    private static final Map<Byte, ISerializer> customSerializers = new HashMap<>();
+    private final Map<Byte, ISerializer> customSerializers = new HashMap<>();
 
     /**
      * Return the serializer byte.
      * @param type A byte that tags a serializer
      * @return     A serializer that corresponds to the type byte
      */
-    public static ISerializer getSerializer(Byte type) {
+    public ISerializer getSerializer(Byte type) {
         if (type <= SYSTEM_SERIALIZERS_COUNT) {
             if (serializersMap.containsKey(type)) {
                 return serializersMap.get(type);
@@ -64,7 +64,7 @@ public class Serializers {
      * Register a serializer.
      * @param serializer Serializer to register
      */
-    public static synchronized void registerSerializer(ISerializer serializer) {
+    public synchronized void registerSerializer(ISerializer serializer) {
         if (serializer.getType() > SYSTEM_SERIALIZERS_COUNT) {
             customSerializers.put(serializer.getType(), serializer);
         } else {
@@ -77,12 +77,12 @@ public class Serializers {
     /**
      * Clear custom serializers.
      */
-    public static synchronized void clearCustomSerializers() {
+    public synchronized void clearCustomSerializers() {
         customSerializers.clear();
     }
 
     @VisibleForTesting
-    public static synchronized void removeSerializer(ISerializer serializer) {
+    public synchronized void removeSerializer(ISerializer serializer) {
         customSerializers.remove(serializer.getType());
     }
 }

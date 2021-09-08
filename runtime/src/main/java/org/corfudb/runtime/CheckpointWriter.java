@@ -59,6 +59,12 @@ public class CheckpointWriter<T extends StreamingMap> {
     private double batchThresholdPercentage = 0.95;
     private static final int DEFAULT_CP_MAX_WRITE_SIZE = 25 * (1 << 20);
 
+    /** Batch size: number of SMREntry in a single CONTINUATION.
+     */
+    @Getter
+    @Setter
+    private int batchSize;
+
     @SuppressWarnings("checkstyle:abbreviation")
     private final UUID checkpointStreamID;
     private final Map<CheckpointEntry.CheckpointDictKey, String> mdkv = new HashMap<>();
@@ -114,6 +120,7 @@ public class CheckpointWriter<T extends StreamingMap> {
         checkpointId = UUID.randomUUID();
         checkpointStreamID = CorfuRuntime.getCheckpointStreamIdFromId(streamId);
         sv = rt.getStreamsView();
+        batchSize = rt.getParameters().getCheckpointBatchSize();
     }
 
     /**
@@ -288,7 +295,7 @@ public class CheckpointWriter<T extends StreamingMap> {
              * of SMR entries. Its a safeguard against the smr entries amounting to the actual
              * boundary limit.
              */
-            if (numBytesPerCheckpointEntry > maxWriteSizeLimit) {
+            if (numBytesPerCheckpointEntry > maxWriteSizeLimit || smrEntries.getUpdates().size() >= batchSize) {
                 convertAndAppendCheckpointEntry(smrEntries, kvCopy);
                 log.trace("Batched size of checkpoint log entry consists {} smr entries",
                         smrEntries.getUpdates().size());
