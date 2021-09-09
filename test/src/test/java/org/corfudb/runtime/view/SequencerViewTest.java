@@ -28,6 +28,22 @@ public class SequencerViewTest extends AbstractViewTest {
     }
 
     @Test
+    public void testEmptyStreamDefaultValues() {
+        CorfuRuntime r = getDefaultRuntime();
+
+        assertThat(r.getSequencerView().query().getSequence()).isEqualTo(Address.NON_ADDRESS);
+        UUID steamId = UUID.randomUUID();
+        assertThat(r.getSequencerView()
+                .getStreamAddressSpace(new StreamAddressRange(steamId, Address.MAX, -1)).getTrimMark())
+                .isEqualTo(Address.NON_ADDRESS);
+        r.getSequencerView().next(steamId);
+        StreamAddressSpace sas = r.getSequencerView()
+                .getStreamAddressSpace(new StreamAddressRange(steamId, Address.MAX, -1));
+        assertThat(sas.getTrimMark()).isEqualTo(Address.NON_ADDRESS);
+        assertThat(sas.toArray()).containsExactly(0L);
+    }
+
+    @Test
     public void canQueryMultipleStreams() {
         CorfuRuntime r = getDefaultRuntime();
 
