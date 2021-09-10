@@ -52,7 +52,6 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
-import org.corfudb.util.serializer.Serializers;
 import org.rocksdb.Options;
 
 import com.google.protobuf.util.JsonFormat;
@@ -91,7 +90,7 @@ public class CorfuStoreBrowserEditor {
         this.diskPath = diskPath;
         dynamicProtobufSerializer =
             new DynamicProtobufSerializer(runtime);
-        Serializers.registerSerializer(dynamicProtobufSerializer);
+        runtime.getSerializers().registerSerializer(dynamicProtobufSerializer);
     }
 
     /**
@@ -282,7 +281,7 @@ public class CorfuStoreBrowserEditor {
      *  record was edited, either due to an error or key not found.
      */
     public CorfuDynamicRecord editRecord(String namespace, String tableName,
-        String keyToEdit, String newRecord) {
+                                         String keyToEdit, String newRecord) {
         System.out.println("\n======================\n");
         String fullName = TableRegistry.getFullyQualifiedTableName(namespace,
             tableName);
@@ -350,6 +349,60 @@ public class CorfuStoreBrowserEditor {
             }
         }
         return null;
+    }
+
+    /**
+     * Delete a record in a table and namespace
+     * @param namespace namespace of the table
+     * @param tableName name of the table
+     * @param keyToDelete JSON string representing the key protobuf that needs to be deleted.
+     * @return number of keys deleted.
+     */
+    @SuppressWarnings("checkstyle:magicnumber")
+    public int deleteRecord(String namespace, String tableName, String keyToDelete) {
+        System.out.println("\n======================\n");
+        String fullName = TableRegistry.getFullyQualifiedTableName(namespace,
+                tableName);
+        UUID streamUUID = CorfuRuntime.getStreamID(fullName);
+
+        TableName tableNameProto = TableName.newBuilder().setTableName(tableName)
+                .setNamespace(namespace).build();
+
+        Any defaultKeyAny =
+                dynamicProtobufSerializer.getCachedRegistryTable().get(tableNameProto)
+                        .getPayload().getKey();
+        DynamicMessage keyMsg =
+                dynamicProtobufSerializer.createDynamicMessageFromJson(defaultKeyAny,
+                        keyToDelete);
+
+        CorfuDynamicKey dynamicKey =
+                new CorfuDynamicKey(defaultKeyAny.getTypeUrl(), keyMsg);
+        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
+                getTable(namespace, tableName);
+        int numKeysDeleted = -1;
+        try {
+            runtime.getObjectsView().TXBegin();
+            if (!table.containsKey(dynamicKey)) {
+                System.out.println("Key "+keyToDelete+" not found in "+fullName);
+                runtime.getObjectsView().TXEnd();
+                numKeysDeleted = 0;
+                return numKeysDeleted;
+            }
+            System.out.println("Deleting record with Key " + keyToDelete +
+                    " in table " + tableName + " and namespace " + namespace +
+                    ".  Stream Id " + streamUUID);
+            table.delete(dynamicKey);
+            runtime.getObjectsView().TXEnd();
+            System.out.println("\n======================\n");
+            numKeysDeleted = 1;
+        } catch (TransactionAbortedException e) {
+            log.error("Transaction to delete record {} aborted.", keyToDelete, e);
+        } finally {
+            if (TransactionalContext.isInTransaction()) {
+                runtime.getObjectsView().TXAbort();
+            }
+        }
+        return numKeysDeleted;
     }
 
     /**

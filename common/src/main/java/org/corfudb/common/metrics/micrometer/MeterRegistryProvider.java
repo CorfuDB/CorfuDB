@@ -7,7 +7,10 @@ import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.initializers.RegistryInitializer;
+import org.corfudb.common.metrics.micrometer.registries.RegistryLoader;
+import org.corfudb.common.metrics.micrometer.registries.RegistryProvider;
 
+import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 
@@ -19,6 +22,7 @@ public class MeterRegistryProvider {
     private static final CompositeMeterRegistry meterRegistry = new CompositeMeterRegistry();
     private static Optional<String> id = Optional.empty();
     private static Optional<MetricType> metricType = Optional.empty();
+    private static Optional<RegistryProvider> provider = Optional.empty();
 
     private MeterRegistryProvider() {
 
@@ -33,9 +37,9 @@ public class MeterRegistryProvider {
      * Class that initializes the Meter Registry.
      */
     public static class MeterRegistryInitializer extends MeterRegistryProvider {
-
         /**
-         * Configure the registries for the corfu server.
+         * Configure the meter registry for Corfu server.
+         * All the metrics will be exported to the logging registry and optionally to any third party provided registries.
          *
          * @param inits      A list of registry initializers.
          * @param identifier A global identifier to tag every metric with.
@@ -44,10 +48,13 @@ public class MeterRegistryProvider {
             metricType = Optional.of(MetricType.SERVER);
             id = Optional.of(identifier);
             populateCompositeRegistry(inits);
+            registerProvidedRegistries();
         }
 
         /**
          * Configure the registries for the corfu client.
+         * Configure the meter registry for Corfu client.
+         * All the metrics will be exported to the logging registry and optionally to any third party provided registries.
          *
          * @param inits      A list of registry initializers.
          * @param identifier A global identifier to tag every metric with.
@@ -58,7 +65,7 @@ public class MeterRegistryProvider {
             populateCompositeRegistry(inits);
         }
 
-        private static void populateCompositeRegistry(List<RegistryInitializer> inits) {
+        private static synchronized void populateCompositeRegistry(List<RegistryInitializer> inits) {
             inits.forEach(init -> {
                 try {
                     MeterRegistry registry = init.createRegistry();
@@ -75,6 +82,22 @@ public class MeterRegistryProvider {
                 removeRegistry(registry);
             }
             addRegistry(registry);
+        }
+
+        private static synchronized void registerProvidedRegistries() {
+            RegistryLoader loader = new RegistryLoader();
+            Iterator<RegistryProvider> registries = loader.getRegistries();
+            while (registries.hasNext()) {
+                try {
+                    RegistryProvider registryProvider = registries.next();
+                    log.info("Registering provider: {}", registryProvider);
+                    provider = Optional.of(registryProvider);
+                    MeterRegistry registry = registryProvider.createRegistry();
+                    addToCompositeRegistry(registry);
+                } catch (Throwable exception) {
+                    log.error("Problems registering a registry", exception);
+                }
+            }
         }
 
         private static void addRegistry(MeterRegistry componentRegistry) {
@@ -96,7 +119,6 @@ public class MeterRegistryProvider {
         return meterRegistry.getRegistries().contains(componentRegistry);
     }
 
-
     /**
      * Returns true if no registries were registered with the composite registry.
      *
@@ -107,13 +129,20 @@ public class MeterRegistryProvider {
     }
 
     /**
-     * Get the previously configured meter registry.
-     * If the registry has not been previously configured, return an empty option.
+     * Get the composite meter registry.
      *
      * @return An optional configured meter registry.
      */
     public static synchronized Optional<MeterRegistry> getInstance() {
         return Optional.of(meterRegistry);
+    }
+
+    /**
+     * Close all the registries.
+     */
+    public static synchronized void close() {
+        meterRegistry.close();
+        provider.ifPresent(RegistryProvider::close);
     }
 
     /**

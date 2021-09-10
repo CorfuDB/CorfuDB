@@ -11,6 +11,7 @@ import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.common.compression.Codec;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.common.metrics.micrometer.initializers.LoggingRegistryInitializer;
@@ -40,6 +41,7 @@ import org.corfudb.util.CFUtils;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
+import org.corfudb.util.serializer.Serializers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,6 +72,121 @@ import java.util.stream.Collectors;
 @Slf4j
 @Accessors(chain = true)
 public class CorfuRuntime {
+
+    /**
+     * The parameters used to configure this {@link CorfuRuntime}.
+     */
+    @Getter
+    private final CorfuRuntimeParameters parameters;
+
+    /**
+     * The {@link EventLoopGroup} provided to netty routers.
+     */
+    @Getter
+    private final EventLoopGroup nettyEventLoop;
+
+    /**
+     * A view of the layout service in the Corfu server instance.
+     */
+    @Getter(lazy = true)
+    private final LayoutView layoutView = new LayoutView(this);
+    /**
+     * A view of the sequencer server in the Corfu server instance.
+     */
+    @Getter(lazy = true)
+    private final SequencerView sequencerView = new SequencerView(this);
+    /**
+     * A view of the address space in the Corfu server instance.
+     */
+    @Getter(lazy = true)
+    private final AddressSpaceView addressSpaceView = new AddressSpaceView(this);
+    /**
+     * A view of streamsView in the Corfu server instance.
+     */
+    @Getter(lazy = true)
+    private final StreamsView streamsView = new StreamsView(this);
+
+    /**
+     * Views of objects in the Corfu server instance.
+     */
+    @Getter(lazy = true)
+    private final ObjectsView objectsView = new ObjectsView(this);
+    /**
+     * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.
+     */
+    @Getter(lazy = true)
+    private final LayoutManagementView layoutManagementView = new LayoutManagementView(this);
+    /**
+     * A view of the Management Service.
+     */
+    @Getter(lazy = true)
+    private final ManagementView managementView = new ManagementView(this);
+
+    /**
+     * CorfuStore's table registry cache for Table lifecycle management.
+     */
+    private final AtomicReference<TableRegistry> tableRegistry = new AtomicReference<>(null);
+
+    /**
+     * List of initial set of layout servers, i.e., servers specified in
+     * connection string on bootstrap.
+     */
+    @Getter
+    private volatile List<String> bootstrapLayoutServers;
+
+    /**
+     * List of known layout servers, refreshed on each fetchLayout.
+     */
+    @Getter
+    private volatile List<String> layoutServers;
+
+    /**
+     * Node Router Pool.
+     */
+    @Getter
+    private NodeRouterPool nodeRouterPool;
+
+    /**
+     * A completable future containing a layout, when completed.
+     */
+    public volatile CompletableFuture<Layout> layout;
+
+    /**
+     * The {@link UUID} of the cluster we are currently connected to, or null, if
+     * there is no cluster yet.
+     */
+    @Getter
+    public volatile UUID clusterId;
+
+    @Getter
+    final ViewsGarbageCollector garbageCollector = new ViewsGarbageCollector(this);
+
+    /**
+     * Notifies that the runtime is no longer used
+     * and async retries to fetch the layout can be stopped.
+     */
+    @Getter
+    private volatile boolean isShutdown = false;
+
+
+    /**
+     * This thread is used by fetchLayout to find a new layout in the system
+     */
+    final ExecutorService runtimeExecutor = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
+            .setDaemon(true)
+            .setNameFormat("CorfuRuntime-%d")
+            .build());
+
+    /**
+     * Latest layout seen by the runtime.
+     */
+    private volatile Layout latestLayout = null;
+
+    /**
+     * A set of serializers used to serialize/deserialize data
+     */
+    @Getter
+    private final Serializers serializers = new Serializers();
 
     /**
      * A class which holds parameters and settings for the {@link CorfuRuntime}.
@@ -159,6 +276,11 @@ public class CorfuRuntime {
          * prevent epoch regressions. This is independent of the number of streams to be checkpointed.
          */
         int checkpointRetries = 5;
+
+        /*
+         * The maximum number of SMR entries that will be grouped in a CheckpointEntry.CONTINUATION
+         */
+        int checkpointBatchSize = 50;
 
         /*
          * Stream Batch Size: number of addresses to fetch in advance when stream address discovery mechanism
@@ -290,6 +412,7 @@ public class CorfuRuntime {
             private int writeRetry = 5;
             private int trimRetry = 2;
             private int checkpointRetries = 5;
+            private int checkpointBatchSize = 50;
             private int streamBatchSize = 10;
             private int checkpointReadBatchSize = 5;
             private Duration runtimeGCPeriod = Duration.ofMinutes(20);
@@ -511,6 +634,11 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder checkpointBatchSize(int checkpointBatchSize) {
+                this.checkpointBatchSize = checkpointBatchSize;
+                return this;
+            }
+
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamBatchSize(int streamBatchSize) {
                 this.streamBatchSize = streamBatchSize;
                 return this;
@@ -641,6 +769,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setWriteRetry(writeRetry);
                 corfuRuntimeParameters.setTrimRetry(trimRetry);
                 corfuRuntimeParameters.setCheckpointRetries(checkpointRetries);
+                corfuRuntimeParameters.setCheckpointBatchSize(checkpointBatchSize);
                 corfuRuntimeParameters.setStreamBatchSize(streamBatchSize);
                 corfuRuntimeParameters.setCheckpointReadBatchSize(checkpointReadBatchSize);
                 corfuRuntimeParameters.setRuntimeGCPeriod(runtimeGCPeriod);
@@ -664,115 +793,6 @@ public class CorfuRuntime {
             }
         }
     }
-
-    /**
-     * The parameters used to configure this {@link CorfuRuntime}.
-     */
-    @Getter
-    private final CorfuRuntimeParameters parameters;
-
-    /**
-     * The {@link EventLoopGroup} provided to netty routers.
-     */
-    @Getter
-    private final EventLoopGroup nettyEventLoop;
-
-    /**
-     * A view of the layout service in the Corfu server instance.
-     */
-    @Getter(lazy = true)
-    private final LayoutView layoutView = new LayoutView(this);
-    /**
-     * A view of the sequencer server in the Corfu server instance.
-     */
-    @Getter(lazy = true)
-    private final SequencerView sequencerView = new SequencerView(this);
-    /**
-     * A view of the address space in the Corfu server instance.
-     */
-    @Getter(lazy = true)
-    private final AddressSpaceView addressSpaceView = new AddressSpaceView(this);
-    /**
-     * A view of streamsView in the Corfu server instance.
-     */
-    @Getter(lazy = true)
-    private final StreamsView streamsView = new StreamsView(this);
-
-    /**
-     * Views of objects in the Corfu server instance.
-     */
-    @Getter(lazy = true)
-    private final ObjectsView objectsView = new ObjectsView(this);
-    /**
-     * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.
-     */
-    @Getter(lazy = true)
-    private final LayoutManagementView layoutManagementView = new LayoutManagementView(this);
-    /**
-     * A view of the Management Service.
-     */
-    @Getter(lazy = true)
-    private final ManagementView managementView = new ManagementView(this);
-
-    /**
-     * CorfuStore's table registry cache for Table lifecycle management.
-     */
-    private final AtomicReference<TableRegistry> tableRegistry = new AtomicReference<>(null);
-
-    /**
-     * List of initial set of layout servers, i.e., servers specified in
-     * connection string on bootstrap.
-     */
-    @Getter
-    private volatile List<String> bootstrapLayoutServers;
-
-    /**
-     * List of known layout servers, refreshed on each fetchLayout.
-     */
-    @Getter
-    private volatile List<String> layoutServers;
-
-    /**
-     * Node Router Pool.
-     */
-    @Getter
-    private NodeRouterPool nodeRouterPool;
-
-    /**
-     * A completable future containing a layout, when completed.
-     */
-    public volatile CompletableFuture<Layout> layout;
-
-    /**
-     * The {@link UUID} of the cluster we are currently connected to, or null, if
-     * there is no cluster yet.
-     */
-    @Getter
-    public volatile UUID clusterId;
-
-    @Getter
-    final ViewsGarbageCollector garbageCollector = new ViewsGarbageCollector(this);
-
-    /**
-     * Notifies that the runtime is no longer used
-     * and async retries to fetch the layout can be stopped.
-     */
-    @Getter
-    private volatile boolean isShutdown = false;
-
-
-    /**
-     * This thread is used by fetchLayout to find a new layout in the system
-     */
-    final ExecutorService runtimeExecutor = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
-            .setDaemon(true)
-            .setNameFormat("CorfuRuntime-%d")
-            .build());
-
-    /**
-     * Latest layout seen by the runtime.
-     */
-    private volatile Layout latestLayout = null;
 
     /**
      * Register SystemDownHandler.
@@ -963,6 +983,7 @@ public class CorfuRuntime {
         if (parameters.shutdownNettyEventLoop) {
             nettyEventLoop.shutdownGracefully();
         }
+        MeterRegistryProvider.close();
     }
 
     /**

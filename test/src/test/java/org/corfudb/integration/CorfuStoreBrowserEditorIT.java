@@ -34,6 +34,7 @@ import org.corfudb.test.SampleSchema;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@SuppressWarnings("checkstyle:magicnumber")
 public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
     private static String corfuSingleNodeHost;
@@ -144,8 +145,6 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         Assert.assertEquals(browser.clearTable(namespace, tableName), one);
         // Invoke tableInfo and verify size
         Assert.assertEquals(browser.printTableInfo(namespace, tableName), 0);
-        // TODO: Remove this once serializers move into the runtime
-        Serializers.clearCustomSerializers();
     }
 
     /**
@@ -168,8 +167,6 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
         Assert.assertEquals(browser.loadTable(namespace, tableName, numItems, batchSize, itemSize), batchSize);
         runtime.shutdown();
-        // TODO: Remove this once serializers move into the runtime
-        Serializers.clearCustomSerializers();
     }
 
     /**
@@ -229,7 +226,6 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         assertThat(tags).containsExactly(expectedTableNameToTags.get(tableName).toArray(new String[0]));
 
         runtime.shutdown();
-        Serializers.clearCustomSerializers();
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
@@ -285,7 +281,6 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         assertThat(browser.printAllProtoDescriptors()).isEqualTo(expectedFiles);
 
         runtime.shutdown();
-        Serializers.clearCustomSerializers();
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
@@ -354,8 +349,6 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
                 record.getPayload().getUnknownFields());
         }
         runtime.shutdown();
-        // TODO: Remove this once serializers move into the runtime
-        Serializers.clearCustomSerializers();
     }
 
     /**
@@ -415,8 +408,6 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
             browser.printTableInfo(TableRegistry.CORFU_SYSTEM_NAMESPACE,
         TableRegistry.REGISTRY_TABLE_NAME));
         Assert.assertEquals(1, browser.printTableInfo(namespace, tableName));
-        // Todo: Remove this once serializers move into the runtime
-        Serializers.clearCustomSerializers();
     }
 
     /**
@@ -470,8 +461,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         TxnContext tx = store.txn(namespace);
         tx.putRecord(table, uuidKey, uuidVal, metadata);
         tx.commit();
-        // Todo: Remove this once serializers move into the runtime
-        Serializers.clearCustomSerializers();
+
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
@@ -481,8 +471,6 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         // Verify table count
         Assert.assertEquals(1, browser.printTable(namespace, tableName));
 
-        // Todo: Remove this once serializers move into the runtime
-        Serializers.clearCustomSerializers();
         runtime.shutdown();
     }
 
@@ -556,14 +544,13 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
         Assert.assertEquals(expectedRecord, editedRecord);
 
-        // Try to edit a record corresponding to a non-existent key and
-        // verify it is a no-op
-        keyString = "{\"msb\": \"2\", \"lsb\": \"2\"}";
+        // Now test deleteRecord capability
+        assertThat(browser.deleteRecord(namespace, tableName, keyString)).isEqualTo(1);
+        // Try to edit the deleted key and verify it is a no-op
         Assert.assertNull(browser.editRecord(namespace, tableName, keyString,
             newValString));
-
-        // TODO: Remove this once serializers move into the runtime
-        Serializers.clearCustomSerializers();
+        // Try to delete a deleted key and verify it is a no-op
+        assertThat(browser.deleteRecord(namespace, tableName, keyString)).isZero();
         runtime.shutdown();
     }
 }

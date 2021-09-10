@@ -243,7 +243,7 @@ public class CorfuServer {
                                     registryInitializersList,
                                     localEndpoint);
                         });
-            } catch (IllegalStateException ise) {
+            }  catch (IllegalStateException ise) {
                 log.warn("Registry has been previously initialized. Skipping.");
             }
 
