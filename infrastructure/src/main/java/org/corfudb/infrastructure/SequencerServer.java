@@ -806,7 +806,7 @@ public class SequencerServer extends AbstractServer {
                         .getAddressesInRange(getStreamAddressRange(streamAddressRange));
                 requestedAddressSpaces.put(streamId, addressesInRange);
             } else {
-                requestedAddressSpaces.put(streamId, new StreamAddressSpace(Address.NON_EXIST, Collections.EMPTY_SET));
+                requestedAddressSpaces.put(streamId, new StreamAddressSpace(Address.NON_ADDRESS, Collections.EMPTY_SET));
             }
         }
 
