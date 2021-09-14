@@ -538,6 +538,7 @@ public class StreamingPatternsIT extends AbstractIT {
         // Confirm reset did not occur as a failure on full Sync happened and listener is not able to re-subscribe
         assertThat(defaultStreamListener.getUpdates()).isNotEmpty();
         assertThat(defaultStreamListener.getFullSyncBuffer().size()).isZero();
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 
     private void openDefaultTable() throws Exception {

@@ -66,19 +66,6 @@ public class StreamingIT extends AbstractIT {
     private final int sleepTime = 100;
 
     /**
-     * A helper method that takes host and port specification, start a single server and
-     * returns a process.
-     */
-    private Process runSinglePersistentServer(String host, int port) throws IOException {
-        return new AbstractIT.CorfuServerRunner()
-                .setHost(host)
-                .setPort(port)
-                .setLogPath(getCorfuServerLogPath(host, port))
-                .setSingle(true)
-                .runServer();
-    }
-
-    /**
      * Load properties for a single node corfu server before each test
      */
     @Before
@@ -216,7 +203,7 @@ public class StreamingIT extends AbstractIT {
     @Test
     public void testStreamingSingleTable() throws Exception {
         // Run a corfu server.
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        Process corfuServer = runPersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
 
         // Start a Corfu runtime.
         runtime = createRuntime(singleNodeEndpoint);
@@ -343,7 +330,7 @@ public class StreamingIT extends AbstractIT {
     @Test
     public void testStreamingSingleTableEmptyTag() throws Exception {
         // Run a corfu server.
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        Process corfuServer = runPersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
 
         // Start a Corfu runtime.
         runtime = createRuntime(singleNodeEndpoint);
@@ -388,7 +375,7 @@ public class StreamingIT extends AbstractIT {
     @Test
     public void testStreamingMultiTableSameListener() throws Exception {
         // Run a corfu server and start runtime
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        Process corfuServer = runPersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
         runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
@@ -506,7 +493,7 @@ public class StreamingIT extends AbstractIT {
     @Test
     public void testStreamingPrevValue() throws Exception {
         // Run a corfu server and start runtime
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        Process corfuServer = runPersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
         runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
         String ns = "test_namespace";
@@ -546,7 +533,7 @@ public class StreamingIT extends AbstractIT {
     @SuppressWarnings("checkstyle:magicnumber")
     public void testStreamingMultiTableStreams() throws Exception {
         // Run a corfu server.
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        Process corfuServer = runPersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
 
         // Start a Corfu runtime.
         runtime = createRuntime(singleNodeEndpoint);
@@ -669,7 +656,7 @@ public class StreamingIT extends AbstractIT {
     @SuppressWarnings("checkstyle:magicnumber")
     public void testMoreSubscribersAndSlowSubscribers() throws Exception {
         // Run a corfu server.
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        Process corfuServer = runPersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
 
         // Start a Corfu runtime.
         runtime = createRuntime(singleNodeEndpoint);
@@ -744,7 +731,7 @@ public class StreamingIT extends AbstractIT {
     @SuppressWarnings("checkstyle:magicnumber")
     public void testSubscriberOnEmptyTables() throws Exception {
         // Run a corfu server.
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        Process corfuServer = runPersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
 
         // Start a Corfu runtime.
         runtime = createRuntime(singleNodeEndpoint);
@@ -811,7 +798,7 @@ public class StreamingIT extends AbstractIT {
     @SuppressWarnings("checkstyle:magicnumber")
     public void testSubscriberTimestamp() throws Exception {
         // Run a corfu server.
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        Process corfuServer = runPersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
 
         // Start a Corfu runtime.
         runtime = createRuntime(singleNodeEndpoint);
@@ -924,7 +911,7 @@ public class StreamingIT extends AbstractIT {
     @Test
     public void testStreamingMultiTableSingleListener() throws Exception {
         // Run a corfu server.
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        Process corfuServer = runPersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
 
         // Start a Corfu runtime.
         runtime = createRuntime(singleNodeEndpoint);
@@ -1413,7 +1400,7 @@ public class StreamingIT extends AbstractIT {
     @Test
     public void testDeduplicationOfTxUpdates() throws Exception {
         // Run a corfu server.
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        Process corfuServer = runPersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
 
         // Start a Corfu runtime.
         runtime = createRuntime(singleNodeEndpoint);
@@ -1518,7 +1505,7 @@ public class StreamingIT extends AbstractIT {
     }
 
     private void initializeCorfu() throws Exception {
-        corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        corfuServer = runPersistentServer(corfuSingleNodeHost, corfuStringNodePort, true);
         runtime = createRuntime(singleNodeEndpoint);
         store = new CorfuStore(runtime);
     }

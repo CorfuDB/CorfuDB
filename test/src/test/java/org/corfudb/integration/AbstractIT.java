@@ -29,6 +29,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -54,7 +55,6 @@ public class AbstractIT extends AbstractCorfuTest {
     static final String CORFU_LOG_PATH = PARAMETERS.TEST_TEMP_DIR;
 
     private static final String KILL_COMMAND = "pkill -9 -P ";
-    private static final String FORCE_KILL_ALL_CORFU_COMMAND = "jps | grep -e CorfuServer -e CorfuInterClusterReplicationServer|awk '{print $1}'| xargs kill -9";
 
     private static final int SHUTDOWN_RETRIES = 10;
     private static final long SHUTDOWN_RETRY_WAIT = 500;
@@ -70,6 +70,7 @@ public class AbstractIT extends AbstractCorfuTest {
 
     public static final String TEST_SEQUENCE_LOG_PATH = CORFU_LOG_PATH + File.separator + "testSequenceLog";
 
+    List<Process> processes = new CopyOnWriteArrayList<>();
 
     public AbstractIT() {
         CorfuRuntime.overrideGetRouterFunction = null;
@@ -91,7 +92,6 @@ public class AbstractIT extends AbstractCorfuTest {
     @Before
     public void setUp() throws Exception {
         runtime = null;
-        forceShutdownAllCorfuServers();
         FileUtils.cleanDirectory(new File(CORFU_LOG_PATH));
     }
 
@@ -101,8 +101,15 @@ public class AbstractIT extends AbstractCorfuTest {
      * @throws Exception
      */
     @After
-    public void cleanUp() throws Exception {
-        forceShutdownAllCorfuServers();
+    public void cleanUp() {
+        processes.forEach(p -> {
+            try {
+                shutdownCorfuServer(p);
+            } catch (Exception e) {
+                log.error("clean up failed", e);
+            }
+        });
+
         if (runtime != null) {
             runtime.shutdown();
         }
@@ -113,19 +120,6 @@ public class AbstractIT extends AbstractCorfuTest {
     }
 
     /**
-     * Shuts down all corfu instances running on the node.
-     *
-     * @throws IOException
-     * @throws InterruptedException
-     */
-    public static void forceShutdownAllCorfuServers() throws IOException, InterruptedException {
-        ProcessBuilder builder = new ProcessBuilder();
-        builder.command("sh", "-c", FORCE_KILL_ALL_CORFU_COMMAND);
-        Process p = builder.start();
-        p.waitFor();
-    }
-
-    /**
      * Shuts down all corfu instances.
      *
      * @param corfuServerProcess
@@ -133,7 +127,7 @@ public class AbstractIT extends AbstractCorfuTest {
      * @throws IOException
      * @throws InterruptedException
      */
-    public static boolean shutdownCorfuServer(Process corfuServerProcess) throws IOException, InterruptedException {
+    public boolean shutdownCorfuServer(Process corfuServerProcess) throws IOException, InterruptedException {
         int retries = SHUTDOWN_RETRIES;
         while (true) {
             long parentPid = getPid(corfuServerProcess);
@@ -156,6 +150,7 @@ public class AbstractIT extends AbstractCorfuTest {
                 retries--;
                 Thread.sleep(SHUTDOWN_RETRY_WAIT);
             } else {
+                processes.remove(corfuServerProcess);
                 return true;
             }
         }
@@ -263,7 +258,7 @@ public class AbstractIT extends AbstractCorfuTest {
     }
 
 
-    public static long getPid(Process p) {
+    long getPid(Process p) {
         long pid = -1;
 
         try {
@@ -297,90 +292,70 @@ public class AbstractIT extends AbstractCorfuTest {
         return createRuntime(DEFAULT_ENDPOINT);
     }
 
-    public static Process runServer(int port, boolean single) throws IOException {
-        return new CorfuServerRunner()
+    public Process runServer(int port, boolean single) throws IOException {
+        Process p = new CorfuServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
                 .setSingle(single)
                 .runServer();
+        processes.add(p);
+        return p;
     }
 
-    public static Process runReplicationServer(int port) throws IOException {
-        return new CorfuReplicationServerRunner()
+    public Process runReplicationServer(int port) throws IOException {
+        Process p = new CorfuReplicationServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
                 .runServer();
+        processes.add(p);
+        return p;
     }
 
-    public static Process runReplicationServer(int port, String pluginConfigFilePath) throws IOException {
-        return new CorfuReplicationServerRunner()
-                .setHost(DEFAULT_HOST)
-                .setPort(port)
-                .setPluginConfigFilePath(pluginConfigFilePath)
-                .setMsg_size(MSG_SIZE)
-                .runServer();
-    }
-
-    public static Process runReplicationServer(int port, String pluginConfigFilePath, String metricsConfigFile)
-            throws IOException {
-        return new CorfuReplicationServerRunner()
+    public Process runReplicationServer(int port, String pluginConfigFilePath) throws IOException {
+        Process p = new CorfuReplicationServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
                 .setPluginConfigFilePath(pluginConfigFilePath)
                 .setMsg_size(MSG_SIZE)
-                .setMetricsConfigFile(metricsConfigFile)
                 .runServer();
+        processes.add(p);
+        return p;
     }
 
-    public static Process runReplicationServer(int port, String pluginConfigFilePath, int lockLeaseDuration) throws IOException {
-        return new CorfuReplicationServerRunner()
+    public Process runReplicationServer(int port, String pluginConfigFilePath, int lockLeaseDuration) throws IOException {
+        Process p = new CorfuReplicationServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
                 .setLockLeaseDuration(Integer.valueOf(lockLeaseDuration))
                 .setPluginConfigFilePath(pluginConfigFilePath)
                 .setMsg_size(MSG_SIZE)
                 .runServer();
+        processes.add(p);
+        return p;
     }
 
-    public static Process runReplicationServer(int port, String pluginConfigFilePath,
-                                               int lockLeaseDuration, String metricsConfigfFile) throws IOException {
-        return new CorfuReplicationServerRunner()
-                .setHost(DEFAULT_HOST)
-                .setPort(port)
-                .setLockLeaseDuration(Integer.valueOf(lockLeaseDuration))
-                .setPluginConfigFilePath(pluginConfigFilePath)
-                .setMsg_size(MSG_SIZE)
-                .setMetricsConfigFile(metricsConfigfFile)
-                .runServer();
-    }
-
-    public static Process runDefaultServer() throws IOException {
-        return new CorfuServerRunner()
+    public Process runDefaultServer() throws IOException {
+        Process p = new CorfuServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(DEFAULT_PORT)
                 .setSingle(true)
                 .setLogPath(getCorfuServerLogPath(DEFAULT_HOST, DEFAULT_PORT))
                 .runServer();
+        processes.add(p);
+        return p;
     }
 
-    public static Process runPersistentServer(String address, int port, boolean singleNode) throws IOException {
-        return new CorfuServerRunner()
+    public Process runPersistentServer(String address, int port, boolean singleNode) throws IOException {
+        Process p = new CorfuServerRunner()
                 .setHost(address)
                 .setPort(port)
                 .setLogPath(getCorfuServerLogPath(address, port))
                 .setSingle(singleNode)
                 .runServer();
+        processes.add(p);
+        return p;
     }
 
-    public static Process runPersistentServer(String address, int port, boolean singleNode, String metricsConfigFile) throws IOException {
-        return new CorfuServerRunner()
-                .setHost(address)
-                .setPort(port)
-                .setLogPath(getCorfuServerLogPath(address, port))
-                .setMetricsConfigFile(metricsConfigFile)
-                .setSingle(singleNode)
-                .runServer();
-    }
 
     public static CorfuRuntime createRuntime(String endpoint) {
         CorfuRuntime rt = new CorfuRuntime(endpoint)
