@@ -39,7 +39,6 @@ import org.corfudb.runtime.view.stream.AddressMapStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.serializer.ISerializer;
-import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
 

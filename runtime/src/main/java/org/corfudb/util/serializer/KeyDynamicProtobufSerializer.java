@@ -16,6 +16,13 @@ import org.corfudb.runtime.exceptions.SerializerException;
 
 import java.io.IOException;
 
+/**
+ * This Protobuf serializer class is based on the {@link DynamicProtobufSerializer}. The difference
+ * is that this KeyDynamicProtobufSerializer uses {@link OpaqueCorfuDynamicRecord} which has
+ * ByteString-format message payload. For the use cases where deserializing Any message from ByteString
+ * is not required (such as compactor), this serializer has lower memory usage ({@link DynamicMessage} has overhead)
+ * and is more efficient.
+ */
 @Slf4j
 public class KeyDynamicProtobufSerializer extends DynamicProtobufSerializer {
 
@@ -63,6 +70,7 @@ public class KeyDynamicProtobufSerializer extends DynamicProtobufSerializer {
                 metadataTypeUrl = anyMetadata.getTypeUrl();
                 metaDataByteString = anyMetadata.getValue();
 
+                // Check message type to detect any wrong schema / schema corruption
                 String fullMetadataMessageName = getFullMessageName(anyMetadata);
                 if (!messagesFdProtoNameMap.containsKey(fullMetadataMessageName)) {
                     log.error("messagesFdProtoNameMap doesn't contain the message type {} of metadata {}." +
