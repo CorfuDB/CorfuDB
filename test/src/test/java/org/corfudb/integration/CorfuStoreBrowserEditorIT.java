@@ -14,8 +14,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import org.corfudb.browser.CorfuStoreBrowserEditor;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.view.TableRegistry;
@@ -552,5 +554,52 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         // Try to delete a deleted key and verify it is a no-op
         assertThat(browser.deleteRecord(namespace, tableName, keyString)).isZero();
         runtime.shutdown();
+    }
+
+    @Test
+    public void listTableSnapshotsTest() throws Exception {
+        final String namespace = "namespace";
+        final String tableName = "table";
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        // Start a Corfu runtime
+        runtime = createRuntime(singleNodeEndpoint);
+
+        CorfuStore store = new CorfuStore(runtime);
+
+        final Table<SampleSchema.Uuid, SampleSchema.Uuid, SampleSchema.Uuid> table = store.openTable(
+                namespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                TableOptions.builder().build());
+
+        UUID streamId = CorfuRuntime.getStreamID(
+                TableRegistry.getFullyQualifiedTableName(namespace, tableName));
+
+        List<Long> txAddresses = new ArrayList<>();
+        for (int i = 0; i < 100; i++) {
+            try (TxnContext tx = store.txn(namespace)) {
+
+                SampleSchema.Uuid uuidMsg = SampleSchema.Uuid.newBuilder()
+                        .setMsb(i)
+                        .setLsb(i)
+                        .build();
+                tx.putRecord(table, uuidMsg, uuidMsg, null);
+                txAddresses.add(tx.commit().getSequence());
+            }
+        }
+        Collections.reverse(txAddresses);
+
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        List<Long> snapshots = browser.getTableSnapshots(streamId, 100);
+        Assert.assertEquals(100, snapshots.size());
+        Assert.assertArrayEquals(txAddresses.toArray(), snapshots.toArray());
+
+        snapshots = browser.getTableSnapshots(streamId, 10);
+        Assert.assertEquals(10, snapshots.size());
+        Assert.assertArrayEquals(txAddresses.subList(0, 10).toArray(), snapshots.toArray());
     }
 }

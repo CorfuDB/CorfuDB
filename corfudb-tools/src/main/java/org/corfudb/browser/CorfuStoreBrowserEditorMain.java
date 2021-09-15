@@ -6,6 +6,7 @@ import java.util.Optional;
 import com.google.common.base.Preconditions;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
@@ -40,6 +41,8 @@ public class CorfuStoreBrowserEditorMain {
         "[--keystore=<keystore_file>] [--ks_password=<keystore_password>] " +
         "[--truststore=<truststore_file>] [--truststore_password=<truststore_password>] " +
         "[--diskPath=<pathToTempDirForLargeTables>] "+
+        "[--timestamp=<timestamp>] " +
+        "[--maxNumOfSnapshots=<maxNumOfSnapshots>]" +
         "[--numItems=<numItems>] "+
         "[--batchSize=<itemsPerTransaction>] "+
         "[--itemSize=<sizeOfEachRecordValue>] "
@@ -60,6 +63,8 @@ public class CorfuStoreBrowserEditorMain {
         + "--truststore=<truststore_file> TrustStore File\n"
         + "--truststore_password=<truststore_password> Truststore Password\n"
         + "--diskPath=<pathToTempDirForLargeTables> Path to Temp Dir\n"
+        + "--timestamp=<timestamp> Timestamp of snapshot\n"
+        + "--maxNumOfSnapshots=<maxNumOfSnapshots>\n"
         + "--numItems=<numItems> Total Number of items for loadTable\n"
         + "--batchSize=<batchSize> Number of records per transaction for loadTable\n"
         + "--itemSize=<itemSize> Size of each item's payload for loadTable\n"
@@ -118,6 +123,21 @@ public class CorfuStoreBrowserEditorMain {
             } else {
                 browser = new CorfuStoreBrowserEditor(runtime);
             }
+
+            String timestamp = Optional.ofNullable(opts.get("--timestamp"))
+                    .map(Object::toString).orElse(null);
+            if (timestamp != null) {
+                Token snapshot = new Token(0L, Long.parseLong(timestamp));
+                log.info("reviewing data using snapshot {}", snapshot);
+                browser.setSnapshot(snapshot);
+            }
+
+            String maxNumOfSnapshots = Optional.ofNullable(opts.get("--maxNumOfSnapshots"))
+                    .map(Object::toString).orElse(null);
+            if (maxNumOfSnapshots != null) {
+                browser.setMaxNumOfSnapshots(Integer.parseInt(maxNumOfSnapshots));
+            }
+
             String namespace = Optional.ofNullable(opts.get("--namespace"))
                     .map(Object::toString)
                     .orElse(null);

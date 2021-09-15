@@ -85,6 +85,11 @@ public class ObjectsView extends AbstractView {
      */
     @SuppressWarnings({"checkstyle:methodname", "checkstyle:abbreviation"})
     public void TXBegin() {
+        TXBegin(Token.UNINITIALIZED);
+    }
+
+    @SuppressWarnings({"checkstyle:methodname", "checkstyle:abbreviation"})
+    public void TXBegin(Token snapshot) {
         TransactionType type = TransactionType.OPTIMISTIC;
 
         /* If it is a nested transaction, inherit type of parent */
@@ -94,6 +99,7 @@ public class ObjectsView extends AbstractView {
         }
 
         TXBuild()
+                .snapshot(snapshot)
                 .type(type)
                 .build()
                 .begin();

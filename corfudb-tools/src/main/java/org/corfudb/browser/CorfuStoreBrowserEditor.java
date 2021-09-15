@@ -1,5 +1,6 @@
 package org.corfudb.browser;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Iterables;
 import com.google.common.reflect.TypeToken;
 
@@ -12,8 +13,10 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableSet;
 import java.util.Random;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -26,6 +29,9 @@ import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.InvalidProtocolBufferException;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -47,10 +53,13 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.ManagedTxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.rocksdb.Options;
 
@@ -70,6 +79,8 @@ public class CorfuStoreBrowserEditor {
     private final CorfuRuntime runtime;
     private final String diskPath;
     private final DynamicProtobufSerializer dynamicProtobufSerializer;
+    private Token snapshot = Token.UNINITIALIZED;
+    private int maxNumOfSnapshots = Integer.MAX_VALUE;
 
     /**
      * Creates a CorfuBrowser which connects a runtime to the server.
@@ -91,6 +102,14 @@ public class CorfuStoreBrowserEditor {
         dynamicProtobufSerializer =
             new DynamicProtobufSerializer(runtime);
         runtime.getSerializers().registerSerializer(dynamicProtobufSerializer);
+    }
+
+    public void setSnapshot(Token snapshot) {
+        this.snapshot = snapshot;
+    }
+
+    public void setMaxNumOfSnapshots(int maxNumOfSnapshots) {
+        this.maxNumOfSnapshots = maxNumOfSnapshots;
     }
 
     /**
@@ -133,31 +152,44 @@ public class CorfuStoreBrowserEditor {
     public int printTable(String namespace, String tablename) {
         StringBuilder builder;
 
-        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
-            getTable(namespace, tablename);
-        int size = table.size();
-        final int batchSize = 50;
-        Stream<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> entryStream = table.entryStream();
-        final Iterable<List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>>> partitions =
-                Iterables.partition(entryStream::iterator, batchSize);
-        for (List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> partition : partitions) {
-            for (Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry : partition) {
-                try {
-                    builder = new StringBuilder("\nKey:\n")
-                            .append(JsonFormat.printer().print(entry.getKey().getKey()))
-                            .append("\nPayload:\n")
-                            .append(entry.getValue() != null && entry.getValue().getPayload() != null ?
-                                    JsonFormat.printer().print(entry.getValue().getPayload())   : "")
-                            .append("\nMetadata:\n")
-                            .append(entry.getValue() != null && entry.getValue().getMetadata() != null ?
-                                    JsonFormat.printer().print(entry.getValue().getMetadata()): "")
-                            .append("\n====================\n");
-                    System.out.println(builder.toString());
-                } catch (InvalidProtocolBufferException e) {
-                    log.error("invalid protobuf: ", e);
+        int size = 0;
+        try {
+            runtime.getObjectsView().TXBegin(snapshot);
+            CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
+                    getTable(namespace, tablename);
+            size = table.size();
+            final int batchSize = 50;
+            Stream<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> entryStream = table.entryStream();
+            final Iterable<List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>>> partitions =
+                    Iterables.partition(entryStream::iterator, batchSize);
+            for (List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> partition : partitions) {
+                for (Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry : partition) {
+                    try {
+                        builder = new StringBuilder("\nKey:\n")
+                                .append(JsonFormat.printer().print(entry.getKey().getKey()))
+                                .append("\nPayload:\n")
+                                .append(entry.getValue() != null && entry.getValue().getPayload() != null ?
+                                        JsonFormat.printer().print(entry.getValue().getPayload())   : "")
+                                .append("\nMetadata:\n")
+                                .append(entry.getValue() != null && entry.getValue().getMetadata() != null ?
+                                        JsonFormat.printer().print(entry.getValue().getMetadata()): "")
+                                .append("\n====================\n");
+                        System.out.println(builder.toString());
+                    } catch (InvalidProtocolBufferException e) {
+                        log.error("invalid protobuf: ", e);
+                    }
                 }
             }
+            runtime.getObjectsView().TXEnd();
+        } catch (TransactionAbortedException e) {
+            if (e.getCause() instanceof TrimmedException) {
+                System.out.println("\n****************************************************\n");
+                System.out.println("This snapshot is no longer available. \n" +
+                        "Database history is only available for the last ~30 min");
+                System.out.println("\n****************************************************\n");
+            }
         }
+
         return size;
     }
 
@@ -201,6 +233,7 @@ public class CorfuStoreBrowserEditor {
         int tableSize = table.size();
         System.out.println("Table " + tablename + " in namespace " + namespace +
             " with ID " + streamUUID.toString() + " has " + tableSize + " entries");
+        System.out.println("List of snapshots: " + getTableSnapshots(streamUUID, maxNumOfSnapshots));
         System.out.println("\n======================\n");
         return tableSize;
     }
@@ -670,5 +703,35 @@ public class CorfuStoreBrowserEditor {
         formatMapping = formatMapping.substring(0, formatMapping.length() - 2);
         System.out.println("Tag: " + tag + " --- Total Tables: " + tables.size()
             + " TableNames: " + formatMapping);
+    }
+
+    /**
+     * Returns a list of non-checkpoint addresses for the given stream UUID in descending order
+     */
+    public List<Long> getTableSnapshots(UUID streamUuid, int maxNumOfSnapshots) {
+        List<Long> snapshots = new ArrayList<>();
+        StreamAddressSpace streamAddressSpace = this.runtime.getSequencerView()
+                .getStreamAddressSpace(new StreamAddressRange(streamUuid, Address.MAX, Address.NON_ADDRESS));
+
+        if (streamAddressSpace.size() != 0) {
+            NavigableSet<Long> addresses = new TreeSet<>();
+            streamAddressSpace.forEachUpTo(Address.MAX, addresses::add);
+            Iterable<List<Long>> batches = Iterables.partition(addresses.descendingSet(),
+                    runtime.getParameters().getHighestSequenceNumberBatchSize());
+
+            for (List<Long> batch : batches) {
+                Map<Long, ILogData> entries = runtime.getAddressSpaceView().read(batch);
+                for (Long address : batch) {
+                    if (!entries.get(address).isHole()) {
+                        snapshots.add(address);
+                    }
+                    if (snapshots.size() == maxNumOfSnapshots) {
+                        return snapshots;
+                    }
+                }
+            }
+        }
+
+        return snapshots;
     }
 }
