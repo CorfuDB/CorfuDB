@@ -34,6 +34,14 @@ public class WavefrontRegistryInitializer implements RegistryInitializer {
     @Default
     private final Duration exportDuration = Duration.ofMinutes(1);
 
+    @Default
+    @NonNull
+    private final String source = "localhost";
+
+    @Default
+    @NonNull
+    private final String prefix = "corfu";
+
     @Override
     public MeterRegistry createRegistry() {
         Supplier<WavefrontConfig> wavefrontConfigSupplier = () -> new WavefrontConfig() {
@@ -48,6 +56,11 @@ public class WavefrontRegistryInitializer implements RegistryInitializer {
             }
 
             @Override
+            public String source() {
+                return source;
+            }
+
+            @Override
             public String apiToken() {
                 return apiToken;
             }
@@ -55,6 +68,11 @@ public class WavefrontRegistryInitializer implements RegistryInitializer {
             @Override
             public Duration step() {
                 return exportDuration;
+            }
+
+            @Override
+            public String prefix() {
+                return prefix;
             }
         };
         return new WavefrontMeterRegistry(wavefrontConfigSupplier.get(), Clock.SYSTEM);
