@@ -217,7 +217,7 @@ public class StreamAddressSpaceTest {
     @Test
     @SuppressWarnings("ConstantConditions")
     public void testEquality() {
-        assertThat(new StreamAddressSpace().equals(null)).isFalse();
+        assertThat(new StreamAddressSpace() == null).isFalse();
         assertThat(new StreamAddressSpace().equals(new StreamAddressSpace())).isTrue();
         assertThat(new StreamAddressSpace(2L, Collections.emptySet()).equals(new StreamAddressSpace())).isFalse();
         assertThat(new StreamAddressSpace(2L, Collections.emptySet())

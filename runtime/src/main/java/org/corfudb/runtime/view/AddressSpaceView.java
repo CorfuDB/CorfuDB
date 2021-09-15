@@ -607,21 +607,24 @@ public class AddressSpaceView extends AbstractView {
                 }, true);
 
                 break;
+            } catch (NetworkException ne) {
+                log.warn("prefixTrim[{}]: encountered a network error on attempt {}/{}",
+                        address, x + 1, numRetries, ne);
+                Duration retryRate = runtime.getParameters().getConnectionRetryRate();
+                Sleep.sleepUninterruptibly(retryRate);
+            } catch (WrongEpochException we) {
+                long serverEpoch = ((WrongEpochException) we).getCorrectEpoch();
+                long runtimeEpoch = runtime.getLayoutView().getLayout().getEpoch();
+                log.warn("prefixTrim[{}]: WrongEpochException, runtime is in epoch {}, while server " +
+                                "is in epoch {}. Invalidate layout for this client and retry, attempt: {}/{}",
+                        address, runtimeEpoch, serverEpoch, x + 1, numRetries);
+                runtime.invalidateLayout();
             } catch (RuntimeException e) {
-                // NetworkException is RuntimeException, CFUtils casts it into a RuntimeException.
-                // TimeoutException is a checked exception, CFUtils wraps it in a RuntimeException.
-                if (e instanceof NetworkException || e.getCause() instanceof TimeoutException) {
-                    log.warn("prefixTrim[{}]: encountered a network error on attempt {}/{}",
+                if (e.getCause() instanceof TimeoutException) {
+                    log.warn("prefixTrim[{}]: encountered a timeout error on attempt {}/{}",
                             address, x + 1, numRetries, e);
                     Duration retryRate = runtime.getParameters().getConnectionRetryRate();
                     Sleep.sleepUninterruptibly(retryRate);
-                } else if (e instanceof WrongEpochException) {
-                    long serverEpoch = ((WrongEpochException) e).getCorrectEpoch();
-                    long runtimeEpoch = runtime.getLayoutView().getLayout().getEpoch();
-                    log.warn("prefixTrim[{}]: WrongEpochException, runtime is in epoch {}, while server " +
-                                    "is in epoch {}. Invalidate layout for this client and retry, attempt: {}/{}",
-                            address, runtimeEpoch, serverEpoch, x + 1, numRetries);
-                    runtime.invalidateLayout();
                 } else {
                     throw e;
                 }

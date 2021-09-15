@@ -139,28 +139,36 @@ public abstract class AbstractView {
                     }
                     return rLayout;
                 }));
+            } catch (ServerNotReadyException se) {
+                log.warn("Server still not ready. Waiting for server to start "
+                        + "accepting requests.");
+                if (rethrowAllExceptions) {
+                    throw se;
+                }
+            } catch (WrongEpochException we) {
+                log.warn("Got a wrong epoch exception, updating epoch to {} and "
+                        + "invalidate view", we.getCorrectEpoch());
+                if (rethrowAllExceptions) {
+                    throw we;
+                }
+            } catch (NetworkException ne) {
+                log.warn("layoutHelper: System seems unavailable", ne);
+                if (rethrowAllExceptions) {
+                    throw ne;
+                }
+            } catch (WrongClusterException wce) {
+                log.warn("layoutHelper: Cluster reconfiguration or incorrect cluster", wce);
+                log.info("layoutHelper: Invoking the systemDownHandler.");
+                runtime.getParameters().getSystemDownHandler().run();
+                throw wce;
             } catch (RuntimeException re) {
                 if (re.getCause() instanceof TimeoutException) {
                     log.warn("Timeout executing remote call, invalidating view and retrying "
                             + "in {}s", retryRate);
-                } else if (re instanceof ServerNotReadyException) {
-                    log.warn("Server still not ready. Waiting for server to start "
-                            + "accepting requests.");
-                } else if (re instanceof WrongEpochException) {
-                    WrongEpochException we = (WrongEpochException) re;
-                    log.warn("Got a wrong epoch exception, updating epoch to {} and "
-                            + "invalidate view", we.getCorrectEpoch());
-                } else if (re instanceof NetworkException) {
-                    log.warn("layoutHelper: System seems unavailable", re);
-                } else if (re instanceof WrongClusterException) {
-                    log.warn("layoutHelper: Cluster reconfiguration or incorrect cluster", re);
-                    log.info("layoutHelper: Invoking the systemDownHandler.");
-                    runtime.getParameters().getSystemDownHandler().run();
-                    throw re;
-                }else {
-                    throw re;
-                }
-                if (rethrowAllExceptions) {
+                    if (rethrowAllExceptions) {
+                        throw re;
+                    }
+                } else {
                     throw re;
                 }
             }
