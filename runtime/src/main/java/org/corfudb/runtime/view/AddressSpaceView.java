@@ -118,7 +118,7 @@ public class AddressSpaceView extends AbstractView {
         metricsRegistry.map(registry -> GuavaCacheMetrics.monitor(registry, readCache, "address_space.read_cache"));
         MicroMeterUtils.gauge("address_space.read_cache.hit_ratio", readCache, cache -> cache.stats().hitRate());
         MicroMeterUtils.gauge("address_space.read_cache.size", readCache, cache -> cache.size());
-        MicroMeterUtils.gauge("address_space.read_cache.avg_entry_size", readCache, cache -> calculateEstimatedAvgEntrySize());
+//        MicroMeterUtils.gauge("address_space.read_cache.avg_entry_size", readCache, cache -> calculateEstimatedAvgEntrySize());
     }
 
     private void handleEviction(RemovalNotification<Long, ILogData> notification) {
@@ -127,16 +127,16 @@ public class AddressSpaceView extends AbstractView {
         }
     }
 
-    private double calculateEstimatedAvgEntrySize() {
-        if (readCache.size() == 0) {
-            return 0.0;
-        }
-        long currentCacheSize = readCache.size();
-        long currentDataSizeInCache = readCache.asMap().entrySet().stream()
-                .mapToLong(e -> sizeOf.deepSizeOf(e.getKey()) + sizeOf.deepSizeOf(e.getValue())).sum();
-
-        return (double) currentDataSizeInCache / currentCacheSize;
-    }
+//    private double calculateEstimatedAvgEntrySize() {
+//        if (readCache.size() == 0) {
+//            return 0.0;
+//        }
+//        long currentCacheSize = readCache.size();
+//        long currentDataSizeInCache = readCache.asMap().entrySet().stream()
+//                .mapToLong(e -> sizeOf.deepSizeOf(e.getKey()) + sizeOf.deepSizeOf(e.getValue())).sum();
+//
+//        return (double) currentDataSizeInCache / currentCacheSize;
+//    }
 
 
     private void recordLogSizeDist(double logSize) {
@@ -331,7 +331,7 @@ public class AddressSpaceView extends AbstractView {
 
                 return cacheLoadAndGet(readCache, address, loadedVal, options);
             }
-            recordLogSizeDist(sizeOf.deepSizeOf(data));
+//            recordLogSizeDist(sizeOf.deepSizeOf(data));
             return data;
         };
         return MicroMeterUtils.time(logDataSupplier, "address_space.read.latency", "type", "single");
@@ -361,7 +361,7 @@ public class AddressSpaceView extends AbstractView {
                 data = mapAddresses.get(nextRead);
             }
             final ILogData finalData = data;
-            recordLogSizeDist(sizeOf.deepSizeOf(finalData));
+//            recordLogSizeDist(sizeOf.deepSizeOf(finalData));
             return data;
         }
 
@@ -466,7 +466,7 @@ public class AddressSpaceView extends AbstractView {
                 // During streaming this message can flood logs, so modify log level with care.
                 log.debug("read: ignoring trimmed addresses {}", trimmedAddresses);
             }
-            result.values().forEach(value -> recordLogSizeDist(sizeOf.deepSizeOf(value)));
+//            result.values().forEach(value -> recordLogSizeDist(sizeOf.deepSizeOf(value)));
             return result;
         };
         return MicroMeterUtils.time(readSupplier, "address_space.read.latency", "type", "multi");

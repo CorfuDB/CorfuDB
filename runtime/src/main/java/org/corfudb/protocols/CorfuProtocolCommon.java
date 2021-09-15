@@ -466,7 +466,7 @@ public final class CorfuProtocolCommon {
             } catch (NoSuchFieldException e) {
                 throw new RuntimeException("only enums with a typeMap are supported!");
             } catch (IllegalAccessException e) {
-                throw new RuntimeException(e);
+                throw new RuntimeException(e.getCause());
             }
         }
 
