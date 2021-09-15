@@ -169,7 +169,7 @@ public abstract class AbstractView {
                         throw re;
                     }
                 } else {
-                    log.warn("layoutHelper: An unknown exception occured");
+                    log.warn("layoutHelper: An unknown RuntimeException occured");
                     throw re;
                 }
             }
