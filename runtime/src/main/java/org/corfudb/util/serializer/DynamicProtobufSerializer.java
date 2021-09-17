@@ -84,7 +84,7 @@ public class DynamicProtobufSerializer implements ISerializer {
      * This map is generated on initialization.
      * Maps the Message name to the name of the FileDescriptorProto containing it.
      */
-    private final ConcurrentMap<String, String> messagesFdProtoNameMap = new ConcurrentHashMap<>();
+    protected final ConcurrentMap<String, String> messagesFdProtoNameMap = new ConcurrentHashMap<>();
 
     /**
      * This is used as a file descriptor cache. Used for optimization.
@@ -211,7 +211,7 @@ public class DynamicProtobufSerializer implements ISerializer {
      * @return FileDescriptor.
      * @throws DescriptorValidationException If FileDescriptor construction fails.
      */
-    private FileDescriptor getDescriptor(String name) throws DescriptorValidationException {
+    protected FileDescriptor getDescriptor(String name) throws DescriptorValidationException {
 
         if (fileDescriptorMap.containsKey(name)) {
             return fileDescriptorMap.get(name);
@@ -243,7 +243,7 @@ public class DynamicProtobufSerializer implements ISerializer {
      * @param message Any message.
      * @return Message name.
      */
-    private String getMessageName(Any message) {
+    protected String getMessageName(Any message) {
         String typeUrl = message.getTypeUrl();
         String messageName = typeUrl.substring(typeUrl.lastIndexOf('.') + 1);
         if (messageName.contains("/")) {
@@ -262,7 +262,7 @@ public class DynamicProtobufSerializer implements ISerializer {
      * @param message Any message.
      * @return Full name of the message.
      */
-    private String getFullMessageName(Any message) {
+    protected String getFullMessageName(Any message) {
         String typeUrl = message.getTypeUrl();
         return typeUrl.substring(typeUrl.lastIndexOf('/') + 1);
     }
