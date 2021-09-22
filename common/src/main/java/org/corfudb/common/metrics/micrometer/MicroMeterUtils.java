@@ -48,17 +48,15 @@ public class MicroMeterUtils {
      */
     private static final Set<String> clientMetricsBlackList = ImmutableSet.of(
             "openTable",
-            "vlo_read_timer",
-            "vlo_sync_timer",
-            "vlo_write_timer",
-            "multi_object_smrentry_serialize_stream",
-            "multi_object_smrentry_serialize_stream_size",
-            "multi_object_smrentry_serialize_stream_updates",
-            "multi_object_smrentry_deserialize_stream",
-            "multi_object_smrentry_deserialize_stream",
-            "multi_object_smrentry_deserialize_stream_size",
-            "multi_object_smrentry_deserialize_stream_lazy",
-            "multi_object_smrentry_deserialize_stream_lazy",
+            "vlo.read.timer",
+            "vlo.sync.timer",
+            "vlo.write.timer",
+            "multi.object.smrentry.serialize.stream",
+            "multi.object.smrentry.serialize.stream.size",
+            "multi.object.smrentry.serialize.stream.updates",
+            "multi.object.smrentry.deserialize.stream",
+            "mult.object.smrentry.deserialize.stream.size",
+            "multi.object.smrentry.deserialize.stream.lazy",
             "logdata.compress",
             "logdata.decompress"
     );
