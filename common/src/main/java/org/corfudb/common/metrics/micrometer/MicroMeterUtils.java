@@ -55,7 +55,7 @@ public class MicroMeterUtils {
             "multi.object.smrentry.serialize.stream.size",
             "multi.object.smrentry.serialize.stream.updates",
             "multi.object.smrentry.deserialize.stream",
-            "mult.object.smrentry.deserialize.stream.size",
+            "multi.object.smrentry.deserialize.stream.size",
             "multi.object.smrentry.deserialize.stream.lazy",
             "logdata.compress",
             "logdata.decompress"
