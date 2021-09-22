@@ -6,10 +6,8 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.log.InMemoryStreamLog;
-import org.corfudb.infrastructure.log.StreamLog;
-import org.corfudb.infrastructure.log.StreamLogCompaction;
-import org.corfudb.infrastructure.log.StreamLogFiles;
+import org.corfudb.infrastructure.log.*;
+import org.corfudb.infrastructure.log.ResourceQuotaHandler.ResourceQuotaConfig;
 import org.corfudb.protocols.CorfuProtocolLogData;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
@@ -600,7 +598,8 @@ public class LogUnitServer extends AbstractServer {
 
         StreamLog buildStreamLog(@Nonnull LogUnitServerConfig config,
                                  @Nonnull ServerContext serverContext) {
-            return new StreamLogFiles(serverContext, config.isNoVerify());
+            ResourceQuotaHandler quotaHandler = new ResourceQuotaHandler(new ResourceQuotaConfig(serverContext));
+            return new StreamLogFiles(serverContext, config.isNoVerify(), quotaHandler.getLogSizeQuota());
         }
 
         LogUnitServerCache buildLogUnitServerCache(@Nonnull LogUnitServerConfig config,

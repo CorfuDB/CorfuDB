@@ -46,13 +46,10 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileSystems;
-import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -111,13 +108,6 @@ public class StreamLogFiles implements StreamLog {
     // the files of the old instance
     private LogMetadata logMetadata;
 
-    // Derived size in bytes that normal writes to the log unit are capped at.
-    // This is derived as a percentage of the log's filesystem capacity.
-    private final long logSizeLimit;
-
-    // Resource quota to track the log size
-    private ResourceQuota logSizeQuota;
-
     private final String logUnitSizeMetricName = "logunit.size";
     private final String logUnitTrimMarkMetricName = "logunit.trimmark";
     /**
@@ -126,6 +116,8 @@ public class StreamLogFiles implements StreamLog {
      */
     private final ReadWriteLock resetLock = new ReentrantReadWriteLock();
 
+    private ResourceQuota quota;
+
     /**
      * Returns a file-based stream log object.
      *
@@ -133,33 +125,20 @@ public class StreamLogFiles implements StreamLog {
      *                      segment and start address
      * @param noVerify      Disable checksum if true
      */
-    public StreamLogFiles(ServerContext serverContext, boolean noVerify) {
+    public StreamLogFiles(ServerContext serverContext, boolean noVerify, ResourceQuota quota) {
         logDir = Paths.get(serverContext.getServerConfig().get("--log-path").toString(), "log");
         writeChannels = new ConcurrentHashMap<>();
         channelsToSync = new HashSet<>();
         this.verify = !noVerify;
         this.dataStore = new StreamLogDataStore(serverContext.getDataStore());
-
-        String logSizeLimitPercentageParam = (String) serverContext.getServerConfig().get("--log-size-quota-percentage");
-        final double logSizeLimitPercentage = Double.parseDouble(logSizeLimitPercentageParam);
-        if (logSizeLimitPercentage < 0.0 || 100.0 < logSizeLimitPercentage) {
-            String msg = String.format("Invalid quota: quota(%f)%% must be between 0-100%%",
-                    logSizeLimitPercentage);
-            throw new LogUnitException(msg);
-        }
+        this.quota = quota;
 
         initStreamLogDirectory();
-        long fileSystemCapacity = getFileSystemCapacity();
-        logSizeLimit = (long) (fileSystemCapacity * logSizeLimitPercentage / 100.0);
 
-        logUnitSizeBytes = MicroMeterUtils.gauge(logUnitSizeMetricName, new AtomicDouble(0));
-        logUnitSizeEntries = MicroMeterUtils.gauge(logUnitSizeMetricName, new AtomicLong(0L));
-        openSegments = MicroMeterUtils.gauge(logUnitSizeMetricName, new AtomicLong(0L));
+        logUnitSizeBytes = MicroMeterUtils.gauge(logUnitSizeMetricName, new AtomicDouble());
+        logUnitSizeEntries = MicroMeterUtils.gauge(logUnitSizeMetricName, new AtomicLong());
+        openSegments = MicroMeterUtils.gauge(logUnitSizeMetricName, new AtomicLong());
         currentTrimMark = MicroMeterUtils.gauge(logUnitTrimMarkMetricName, new AtomicLong(getTrimMark()));
-        long initialLogSize = estimateSize(logDir);
-        log.info("StreamLogFiles: {} size is {} bytes, limit {}", logDir, initialLogSize, logSizeLimit);
-        logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
-        logSizeQuota.consume(initialLogSize);
 
         verifyLogs();
         // Starting address initialization should happen before
@@ -203,20 +182,6 @@ public class StreamLogFiles implements StreamLog {
         }
 
         log.info("initStreamLogDirectory: initialized {}", logDir);
-    }
-
-    /**
-     * Get corfu log dir partition size
-     *
-     * @return total capacity of the file system that owns the log files.
-     */
-    private long getFileSystemCapacity() {
-        Path corfuDir = logDir.getParent();
-        try {
-            return Files.getFileStore(corfuDir).getTotalSpace();
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed reading corfu log directory, path: " + corfuDir, e);
-        }
     }
 
     /**
@@ -303,12 +268,12 @@ public class StreamLogFiles implements StreamLog {
 
     @Override
     public boolean quotaExceeded() {
-        return !logSizeQuota.hasAvailable();
+        return !quota.hasAvailable();
     }
 
     @Override
     public long quotaLimitInBytes() {
-        return logSizeQuota.getLimit();
+        return quota.getLimit();
     }
 
     @Override
@@ -982,7 +947,7 @@ public class StreamLogFiles implements StreamLog {
     private void writeByteBuffer(FileChannel channel, ByteBuffer buf) throws IOException {
         // On IOExceptions this class should be reinitialized, so consuming
         // the buffer size and failing on the write should be an issue
-        logSizeQuota.consume(buf.remaining());
+        quota.consume(buf.remaining());
         while (buf.hasRemaining()) {
             channel.write(buf);
         }
@@ -1323,7 +1288,7 @@ public class StreamLogFiles implements StreamLog {
                 numFiles++;
             }
         }
-        logSizeQuota.release(freedBytes);
+        quota.release(freedBytes);
         final long freedBytesFinal = freedBytes;
         logUnitSizeBytes.ifPresent(counter -> counter.addAndGet(-freedBytesFinal));
         log.info("deleteFilesMatchingFilter: completed, deleted {} files, freed {} bytes", numFiles, freedBytes);
@@ -1357,7 +1322,7 @@ public class StreamLogFiles implements StreamLog {
             dataStore.resetTailSegment();
             logMetadata = new LogMetadata();
 
-            logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
+            quota.reset();
             cleanUpGauges();
             log.info("reset: Completed");
         } finally {
@@ -1382,35 +1347,5 @@ public class StreamLogFiles implements StreamLog {
     @VisibleForTesting
     Collection<SegmentHandle> getOpenSegmentHandles() {
         return writeChannels.values();
-    }
-
-    /**
-     * Estimate the size (in bytes) of a directory.
-     * From https://stackoverflow.com/a/19869323
-     */
-    @VisibleForTesting
-    static long estimateSize(Path directoryPath) {
-        final AtomicLong size = new AtomicLong(0);
-        try {
-            Files.walkFileTree(directoryPath, new SimpleFileVisitor<Path>() {
-                @Override
-                public FileVisitResult visitFile(Path file,
-                                                 BasicFileAttributes attrs) {
-                    size.addAndGet(attrs.size());
-                    return FileVisitResult.CONTINUE;
-                }
-
-                @Override
-                public FileVisitResult visitFileFailed(Path file, IOException exc) {
-                    // Skip folders that can't be traversed
-                    log.error("skipped: {}", file, exc);
-                    return FileVisitResult.CONTINUE;
-                }
-            });
-
-            return size.get();
-        } catch (IOException ioe) {
-            throw new IllegalStateException(ioe);
-        }
     }
 }
