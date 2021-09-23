@@ -15,6 +15,7 @@ import io.micrometer.core.instrument.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
@@ -73,7 +74,18 @@ public class LoggingMeterRegistryWithHistogramSupport extends StepMeterRegistry 
 
     Stream<String> writeGauge(Meter.Id id, Double value) {
         if (Double.isFinite(value)) {
-            return Stream.of(influxLineProtocol(id, "gauge", Stream.of(new Field("value", value))));
+            Stream<String> nonEmptyStream =
+                    Stream.of(influxLineProtocol(id, "gauge",
+                            Stream.of(new Field("value", value))));
+            // If a gauge is a percentile measurement and the value is zero, return
+            // an empty stream.
+            return Optional.ofNullable(id.getTag("phi")).map(phiValue -> {
+                if (value == 0) {
+                    return Stream.<String>empty();
+                } else {
+                    return nonEmptyStream;
+                }
+            }).orElse(nonEmptyStream);
         }
         return Stream.empty();
     }
