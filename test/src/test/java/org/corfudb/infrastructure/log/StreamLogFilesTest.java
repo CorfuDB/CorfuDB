@@ -27,6 +27,7 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.log.LogFormat.Metadata;
 import org.corfudb.infrastructure.log.LogFormat.LogHeader;
+import org.corfudb.infrastructure.log.FileSystemAgent.ResourceQuotaConfig;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -745,8 +746,11 @@ StreamLogFilesTest extends AbstractCorfuTest {
         parentDirFile.close();
         childDirFile.close();
 
-        long parentSize = StreamLogFiles.estimateSize(parentDir.toPath());
-        long childDirSize = StreamLogFiles.estimateSize(childDir.toPath());
+        FileSystemAgent.init(new ResourceQuotaConfig(parentDir.toPath(), 100));
+        long parentSize = FileSystemAgent.getResourceQuota().getUsed().get();
+
+        FileSystemAgent.init(new ResourceQuotaConfig(childDir.toPath(), 100));
+        long childDirSize = FileSystemAgent.getResourceQuota().getUsed().get();
 
         assertThat(parentSize).isEqualTo(parentDirFilePayloadSize + childDirFilePayloadSize);
         assertThat(childDirSize).isEqualTo(childDirFilePayloadSize);

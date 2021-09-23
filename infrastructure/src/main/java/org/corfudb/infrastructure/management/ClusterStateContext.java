@@ -24,7 +24,6 @@ public class ClusterStateContext {
     /**
      * Current cluster state, updated by failure detector on current iteration.
      */
-    @Getter
     @NonNull
     private final AtomicReference<ClusterState> clusterView;
 

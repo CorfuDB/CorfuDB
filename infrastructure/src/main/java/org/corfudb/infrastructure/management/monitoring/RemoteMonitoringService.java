@@ -46,7 +46,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -106,12 +105,6 @@ public class RemoteMonitoringService implements ManagementService {
      * sequencerNotReadyCounter counter exceeds this value.
      */
     private static final int SEQUENCER_NOT_READY_THRESHOLD = 3;
-
-    /**
-     * Failure detector counter. Keeps count of missing runs of failure detector
-     * if the detector is busy from previous run
-     */
-    private final AtomicLong counter = new AtomicLong(1);
 
     /**
      * Number of workers for failure detector. Three workers used by default:
@@ -202,8 +195,14 @@ public class RemoteMonitoringService implements ManagementService {
         // Trigger sequencer bootstrap on startup.
         sequencerBootstrap(serverContext);
 
+        Runnable asyncFdTask = () -> {
+            if (failureDetectorFuture.isDone()) {
+                failureDetectorFuture = runDetectionTasks();
+            }
+        };
+
         detectionTasksScheduler.scheduleAtFixedRate(
-                () -> LambdaUtils.runSansThrow(this::runDetectionTasks),
+                () -> LambdaUtils.runSansThrow(asyncFdTask),
                 0,
                 monitoringInterval.toMillis(),
                 TimeUnit.MILLISECONDS
@@ -264,47 +263,47 @@ public class RemoteMonitoringService implements ManagementService {
      *     them as unresponsive based on a failure handling policy.
      *    - make healed node responsive based on a healing detection mechanism
      *  </pre>
+     *
+     * @return task result
      */
-    private synchronized void runDetectionTasks() {
+    private synchronized CompletableFuture<DetectorTask> runDetectionTasks() {
 
-        Layout ourLayout = getCorfuRuntime()
+        final Layout ourLayout = getCorfuRuntime()
                 .invalidateLayout()
                 .thenApply(serverContext::saveManagementLayout)
                 .join();
 
-        if (!canHandleReconfigurations()) {
-            log.error("Can't run failure detector. This Server: {}, is not a part of the active layout: {}",
-                    serverContext.getLocalEndpoint(), ourLayout);
-            return;
-        }
-
-        if (!failureDetectorFuture.isDone()) {
-            log.trace("Cannot initiate new failure detection task. Polling in progress. Counter: {}", counter.get());
-            counter.incrementAndGet();
-            return;
-        }
-
-        counter.set(1);
-
-        failureDetectorFuture =
+        return CompletableFuture.runAsync(() -> reconfigurationHandling(ourLayout))
+                //Wait until previous iteration of failure detection has finished
+                .thenCompose(Void -> failureDetectorFuture)
                 //Get metrics from local monitoring service (local monitoring works in it's own thread)
-                localMonitoringService.getMetrics()
-                        //Poll report asynchronously using failureDetectorWorker executor
-                        .thenCompose(metrics -> pollReport(ourLayout, metrics))
-                        //Update cluster view by latest cluster state given by the poll report. No need to be asynchronous
-                        .thenApply(pollReport -> {
-                            log.trace("Update cluster view: {}", pollReport.getClusterState());
-                            clusterContext.refreshClusterView(ourLayout, pollReport);
-                            return pollReport;
-                        })
-                        //Execute failure detector task using failureDetectorWorker executor
-                        .thenCompose(pollReport -> runFailureDetectorTask(pollReport, ourLayout))
-                        //Print exceptions to log
-                        .whenComplete((taskResult, ex) -> {
-                            if (ex != null) {
-                                log.error("Failure detection task finished with error", ex);
-                            }
-                        });
+                .thenCompose(Void -> localMonitoringService.getMetrics())
+                //Poll report asynchronously using failureDetectorWorker executor
+                .thenCompose(metrics -> pollReport(ourLayout, metrics))
+                //Update cluster view by latest cluster state given by the poll report. No need to be asynchronous
+                .thenApply(pollReport -> {
+                    log.trace("Update cluster view: {}", pollReport.getClusterState());
+                    clusterContext.refreshClusterView(ourLayout, pollReport);
+                    return pollReport;
+                })
+                //Execute failure detector task using failureDetectorWorker executor
+                .thenCompose(pollReport -> runFailureDetectorTask(pollReport, ourLayout))
+                //Print exceptions to log
+                .whenComplete((taskResult, ex) -> {
+                    if (ex != null) {
+                        log.error("Failure detection task finished with error", ex);
+                    }
+                });
+    }
+
+    private void reconfigurationHandling(Layout ourLayout) {
+        if (!canHandleReconfigurations()) {
+            String err = String.format(
+                    "Can't run failure detector. This Server: %s, is not a part of the active layout: %s",
+                    serverContext.getLocalEndpoint(), ourLayout
+            );
+            throw new IllegalStateException(err);
+        }
     }
 
     private CompletableFuture<PollReport> pollReport(Layout layout, SequencerMetrics sequencerMetrics) {

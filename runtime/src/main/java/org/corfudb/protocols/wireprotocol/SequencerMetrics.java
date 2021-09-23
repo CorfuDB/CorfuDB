@@ -1,13 +1,15 @@
 package org.corfudb.protocols.wireprotocol;
 
-import lombok.Data;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 
 /**
  * Sequencer metrics for a node.
  *
  * <p>Created by zlokhandwala on 4/12/18.
  */
-@Data
+@AllArgsConstructor
+@Getter
 public class SequencerMetrics {
 
     public static final SequencerMetrics READY = new SequencerMetrics(SequencerStatus.READY);
@@ -27,8 +29,4 @@ public class SequencerMetrics {
      * Ready state ofN a sequencer to determine its READY/NOT_READY state.
      */
     private final SequencerStatus sequencerStatus;
-
-    public SequencerMetrics(SequencerStatus sequencerStatus) {
-        this.sequencerStatus = sequencerStatus;
-    }
 }

@@ -7,7 +7,6 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.log.*;
-import org.corfudb.infrastructure.log.ResourceQuotaHandler.ResourceQuotaConfig;
 import org.corfudb.protocols.CorfuProtocolLogData;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
@@ -598,8 +597,7 @@ public class LogUnitServer extends AbstractServer {
 
         StreamLog buildStreamLog(@Nonnull LogUnitServerConfig config,
                                  @Nonnull ServerContext serverContext) {
-            ResourceQuotaHandler quotaHandler = new ResourceQuotaHandler(new ResourceQuotaConfig(serverContext));
-            return new StreamLogFiles(serverContext, config.isNoVerify(), quotaHandler.getLogSizeQuota());
+            return new StreamLogFiles(serverContext, config.isNoVerify());
         }
 
         LogUnitServerCache buildLogUnitServerCache(@Nonnull LogUnitServerConfig config,

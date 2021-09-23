@@ -25,6 +25,7 @@ import org.corfudb.infrastructure.log.LogFormat.DataType;
 import org.corfudb.infrastructure.log.LogFormat.LogEntry;
 import org.corfudb.infrastructure.log.LogFormat.LogHeader;
 import org.corfudb.infrastructure.log.LogFormat.Metadata;
+import org.corfudb.infrastructure.log.FileSystemAgent.ResourceQuotaConfig;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -116,7 +117,7 @@ public class StreamLogFiles implements StreamLog {
      */
     private final ReadWriteLock resetLock = new ReentrantReadWriteLock();
 
-    private ResourceQuota quota;
+    private final ResourceQuota quota;
 
     /**
      * Returns a file-based stream log object.
@@ -125,15 +126,17 @@ public class StreamLogFiles implements StreamLog {
      *                      segment and start address
      * @param noVerify      Disable checksum if true
      */
-    public StreamLogFiles(ServerContext serverContext, boolean noVerify, ResourceQuota quota) {
+    public StreamLogFiles(ServerContext serverContext, boolean noVerify) {
         logDir = Paths.get(serverContext.getServerConfig().get("--log-path").toString(), "log");
         writeChannels = new ConcurrentHashMap<>();
         channelsToSync = new HashSet<>();
         this.verify = !noVerify;
         this.dataStore = new StreamLogDataStore(serverContext.getDataStore());
-        this.quota = quota;
 
         initStreamLogDirectory();
+
+        configureFileSystemStats(serverContext);
+        this.quota = FileSystemAgent.getResourceQuota();
 
         logUnitSizeBytes = MicroMeterUtils.gauge(logUnitSizeMetricName, new AtomicDouble());
         logUnitSizeEntries = MicroMeterUtils.gauge(logUnitSizeMetricName, new AtomicLong());
@@ -152,6 +155,12 @@ public class StreamLogFiles implements StreamLog {
             syncTailSegment(getTrimMark() - 1);
         }
 
+    }
+
+    private void configureFileSystemStats(ServerContext serverContext) {
+        if (!FileSystemAgent.configured()) {
+            FileSystemAgent.init(new ResourceQuotaConfig(serverContext));
+        }
     }
 
     private long getStartingSegment() {
