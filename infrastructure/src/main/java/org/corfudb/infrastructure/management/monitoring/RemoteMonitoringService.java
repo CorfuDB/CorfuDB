@@ -276,7 +276,7 @@ public class RemoteMonitoringService implements ManagementService {
         return CompletableFuture.runAsync(() -> reconfigurationHandling(ourLayout))
                 //Wait until previous iteration of failure detection has finished
                 .thenCompose(Void -> failureDetectorFuture)
-                //Get metrics from local monitoring service (local monitoring works in it's own thread)
+                //Get metrics from local monitoring service (local monitoring works in its own thread)
                 .thenCompose(Void -> localMonitoringService.getMetrics())
                 //Poll report asynchronously using failureDetectorWorker executor
                 .thenCompose(metrics -> pollReport(ourLayout, metrics))
@@ -284,6 +284,12 @@ public class RemoteMonitoringService implements ManagementService {
                 .thenApply(pollReport -> {
                     log.trace("Update cluster view: {}", pollReport.getClusterState());
                     clusterContext.refreshClusterView(ourLayout, pollReport);
+                    return pollReport;
+                })
+                .thenApply(pollReport -> {
+                    if (!pollReport.getClusterState().isReady()) {
+                        throw new IllegalStateException("Cluster state is not ready: " + pollReport.getClusterState());
+                    }
                     return pollReport;
                 })
                 //Execute failure detector task using failureDetectorWorker executor
@@ -331,11 +337,6 @@ public class RemoteMonitoringService implements ManagementService {
      */
     private CompletableFuture<DetectorTask> runFailureDetectorTask(
             PollReport pollReport, Layout ourLayout) {
-
-        if (!pollReport.getClusterState().isReady()) {
-            log.info("Cluster state is not ready: {}", pollReport.getClusterState());
-            return DETECTOR_TASK_SKIPPED;
-        }
 
         return CompletableFuture.supplyAsync(() -> {
 

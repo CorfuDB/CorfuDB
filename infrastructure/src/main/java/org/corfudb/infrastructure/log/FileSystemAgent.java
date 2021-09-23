@@ -10,28 +10,49 @@ import org.corfudb.runtime.exceptions.LogUnitException;
 import java.io.IOException;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 
 @Slf4j
-public class ResourceQuotaHandler {
+public class FileSystemAgent {
+    private static Optional<FileSystemAgent> INSTANCE = Optional.empty();
+
     private final ResourceQuotaConfig config;
     // Resource quota to track the log size
     @Getter
     private final ResourceQuota logSizeQuota;
 
-    public ResourceQuotaHandler(ResourceQuotaConfig config) {
+    private FileSystemAgent(ResourceQuotaConfig config) {
         this.config = config;
-        long fileSystemCapacity = getFileSystemCapacity();
-
-        // Derived size in bytes that normal writes to the log unit are capped at.
-        // This is derived as a percentage of the log's filesystem capacity.
-        long logSizeLimit = (long) (fileSystemCapacity * config.limitPercentage / 100);
 
         long initialLogSize = estimateSize();
+        long logSizeLimit = getLogSizeLimit();
 
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
         logSizeQuota.consume(initialLogSize);
         log.info("StreamLogFiles: {} size is {} bytes, limit {}", config.logDir, initialLogSize, logSizeLimit);
+    }
+
+    private long getLogSizeLimit() {
+        long fileSystemCapacity = getFileSystemCapacity();
+
+        // Derived size in bytes that normal writes to the log unit are capped at.
+        // This is derived as a percentage of the log's filesystem capacity.
+        return (long) (fileSystemCapacity * config.limitPercentage / 100);
+    }
+
+    public static void init(ResourceQuotaConfig config) {
+        INSTANCE = Optional.of(new FileSystemAgent(config));
+    }
+
+    public static boolean configured(){
+        return INSTANCE.isPresent();
+    }
+
+    public static ResourceQuota getResourceQuota() {
+        Supplier<IllegalStateException> err = () -> new IllegalStateException("ResourceQuota not configured");
+        return INSTANCE.orElseThrow(err).logSizeQuota;
     }
 
     /**
@@ -91,8 +112,14 @@ public class ResourceQuotaHandler {
             logDir = Paths.get(logPath, "log");
         }
 
+        public ResourceQuotaConfig(Path logDir, double limitPercentage) {
+            this.logDir = logDir;
+            this.limitPercentage = limitPercentage;
+            checkLimits();
+        }
+
         private void checkLimits() {
-            if (limitPercentage < 0.0 || 100.0 < limitPercentage) {
+            if (limitPercentage < 0.0 || limitPercentage > 100.0) {
                 String msg = String.format("Invalid quota: quota(%f)%% must be between 0-100%%", limitPercentage);
                 throw new LogUnitException(msg);
             }
