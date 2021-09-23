@@ -26,6 +26,7 @@ public class CorfuStoreBrowserEditorMain {
         listenOnTable,
         clearTable,
         listAllProtos,
+        deleteRecord,
         editTable,
         listTags,
         listTablesForTag,
@@ -43,12 +44,13 @@ public class CorfuStoreBrowserEditorMain {
         "[--batchSize=<itemsPerTransaction>] "+
         "[--itemSize=<sizeOfEachRecordValue>] "
         + "[--keyToEdit=<keyToEdit>] [--newRecord=<newRecord>] [--tag=<tag>]"
+        + "[--keyToDelete=<keyToDelete>]"
         + "[--tlsEnabled=<tls_enabled>]\n"
         + "Options:\n"
         + "--host=<host>   Hostname\n"
         + "--port=<port>   Port\n"
         + "--operation=<listTables|infoTable|showTable|clearTable" +
-        "|editTable|loadTable|listenOnTable|listTags|listTagsMap" +
+        "|editTable|deleteRecord|loadTable|listenOnTable|listTags|listTagsMap" +
         "|listTablesForTag|listTagsForTable|listAllProtos> Operation\n"
         + "--namespace=<namespace>   Namespace\n"
         + "--tablename=<tablename>   Table Name\n"
@@ -62,7 +64,8 @@ public class CorfuStoreBrowserEditorMain {
         + "--batchSize=<batchSize> Number of records per transaction for loadTable\n"
         + "--itemSize=<itemSize> Size of each item's payload for loadTable\n"
         + "--keyToEdit=<keyToEdit> Key of the record to edit\n"
-        + "--newRecord=<newRecord> New Editted record to insert\n"
+        + "--keyToDelete=<keyToDelete> Key of the record to be deleted\n"
+        + "--newRecord=<newRecord> New Edited record to insert\n"
         + "--tlsEnabled=<tls_enabled>";
 
     public static void main(String[] args) {
@@ -167,6 +170,19 @@ public class CorfuStoreBrowserEditorMain {
                     Preconditions.checkNotNull(newRecord,
                         "New Record is null");
                     browser.editRecord(namespace, tableName, keyToEdit, newRecord);
+                    break;
+                case deleteRecord:
+                    String keyToDelete = null;
+                    if (opts.get("--keyToDelete") != null) {
+                        keyToDelete = String.valueOf(opts.get("--keyToDelete"));
+                    }
+                    Preconditions.checkArgument(isValid(namespace),
+                            "Namespace is null or empty.");
+                    Preconditions.checkArgument(isValid(tableName),
+                            "Table name is null or empty.");
+                    Preconditions.checkNotNull(keyToDelete,
+                            "Key To Delete is Null.");
+                    browser.deleteRecord(namespace, tableName, keyToDelete);
                     break;
                 case loadTable:
                     int numItems = 1000;

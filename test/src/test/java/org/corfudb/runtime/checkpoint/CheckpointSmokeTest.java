@@ -1,6 +1,7 @@
 package org.corfudb.runtime.checkpoint;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 import static org.junit.Assert.fail;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
@@ -27,19 +28,30 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
+import org.corfudb.runtime.collections.CorfuDynamicKey;
+import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.OpaqueCorfuDynamicRecord;
 import org.corfudb.runtime.collections.StreamingMap;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.AddressMapStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.test.SampleAppliance;
+import org.corfudb.test.SampleSchema;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.serializer.ISerializer;
-import org.corfudb.util.serializer.Serializers;
+import org.corfudb.util.serializer.KeyDynamicProtobufSerializer;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -774,6 +786,90 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         final long cont3Recordffset = startAddress + 3;
         cpEntry = (CheckpointEntry) r.getAddressSpaceView().read(cont3Recordffset).getPayload(r);
         assertThat(((CheckpointEntry) cpEntry).getSmrEntries().getUpdates().size()).isEqualTo(23);
+    }
+
+    @Test
+    public void checkpointWithoutDeserializingValueTest() throws Exception {
+        final String streamName = "mystream9";
+        final UUID streamId = CorfuRuntime.getStreamID(streamName);
+        final String namespace = "test";
+        final int numKeys = 123;
+
+        // Create and populate the test table
+        CorfuStore corfuStoreWriter = new CorfuStore(r);
+        Table table = corfuStoreWriter.openTable(namespace, streamName,
+                SampleSchema.Uuid.class,
+                SampleSchema.FirewallRule.class, SampleSchema.ManagedMetadata.class,
+                TableOptions.builder().build());
+        TxnContext txn = corfuStoreWriter.txn(namespace);
+        Map<SampleSchema.Uuid, CorfuRecord<SampleSchema.FirewallRule, SampleSchema.ManagedMetadata>> mockedMap = new HashMap<>();
+        for (int i = 0; i < numKeys; i++) {
+            SampleSchema.Uuid uuid = SampleSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            SampleSchema.FirewallRule firewallRuleVal = SampleSchema.FirewallRule.newBuilder()
+                    .setRuleId(i).setRuleName("test_rule_" + i)
+                    .setInput(
+                            SampleAppliance.Appliance.newBuilder().setEndpoint("localhost_" + i))
+                    .setOutput(
+                            SampleAppliance.Appliance.newBuilder().setEndpoint("localhost_" + i))
+                    .build();
+            SampleSchema.ManagedMetadata metadata = SampleSchema.ManagedMetadata
+                    .newBuilder().setCreateUser("test_use_" + i).build();
+            txn.putRecord(table, uuid, firewallRuleVal, metadata);
+            mockedMap.put(uuid, new CorfuRecord<>(firewallRuleVal, metadata));
+        }
+        txn.commit();
+
+        // Open the table using KeyDynamicProtobufSerializer and perform checkpointing
+        setRuntime();
+        ISerializer serializer = new KeyDynamicProtobufSerializer(r);
+        r.getSerializers().registerSerializer(serializer);
+        CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> corfuTable = r.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>() {})
+                .setStreamName(getFullyQualifiedTableName(namespace, streamName))
+                .setSerializer(serializer)
+                .addOpenOption(ObjectOpenOption.NO_CACHE)
+                .open();
+        CheckpointWriter cpw = new CheckpointWriter(r, streamId, "author", corfuTable);
+        cpw.setSerializer(serializer);
+
+        r.getObjectsView().TXBuild()
+                .type(TransactionType.SNAPSHOT)
+                .build()
+                .begin();
+        Token snapshot = TransactionalContext
+                .getCurrentContext()
+                .getSnapshotTimestamp();
+        try {
+            cpw.startCheckpoint(snapshot);
+            cpw.appendObjectState(corfuTable.entryStream());
+            cpw.finishCheckpoint();
+        } finally {
+            r.getObjectsView().TXEnd();
+        }
+
+        // Read the checkpointed table, verify that the table entries are intact
+        setRuntime();
+        CorfuStore corfuStoreReader = new CorfuStore(r);
+        Table<SampleSchema.Uuid, SampleSchema.FirewallRule, SampleSchema.ManagedMetadata> tableRead =
+                corfuStoreReader.openTable(
+                        namespace, streamName,
+                        SampleSchema.Uuid.class,
+                        SampleSchema.FirewallRule.class, SampleSchema.ManagedMetadata.class,
+                        TableOptions.builder().build());
+        TxnContext txnReader = corfuStoreReader.txn(namespace);
+
+        assertThat(mockedMap.size()).isEqualTo(tableRead.count());
+        for (Map.Entry<SampleSchema.Uuid, CorfuRecord<SampleSchema.FirewallRule, SampleSchema.ManagedMetadata>>
+                entry : mockedMap.entrySet()) {
+            CorfuStoreEntry<SampleSchema.Uuid, SampleSchema.FirewallRule, SampleSchema.ManagedMetadata> entryRead =
+                    txnReader.getRecord(tableRead, entry.getKey());
+            assertThat(entryRead.getPayload().getRuleId())
+                    .isEqualTo(entry.getValue().getPayload().getRuleId());
+            assertThat(entryRead.getPayload().getInput().getEndpoint())
+                    .isEqualTo(entry.getValue().getPayload().getInput().getEndpoint());
+            assertThat(entryRead.getMetadata().getCreateUser())
+                    .isEqualTo(entry.getValue().getMetadata().getCreateUser());
+        }
     }
 
     private int getSerializedSMREntrySize(

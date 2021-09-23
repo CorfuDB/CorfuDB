@@ -34,6 +34,7 @@ import org.corfudb.test.SampleSchema;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@SuppressWarnings("checkstyle:magicnumber")
 public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
     private static String corfuSingleNodeHost;
@@ -543,11 +544,13 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
         Assert.assertEquals(expectedRecord, editedRecord);
 
-        // Try to edit a record corresponding to a non-existent key and
-        // verify it is a no-op
-        keyString = "{\"msb\": \"2\", \"lsb\": \"2\"}";
+        // Now test deleteRecord capability
+        assertThat(browser.deleteRecord(namespace, tableName, keyString)).isEqualTo(1);
+        // Try to edit the deleted key and verify it is a no-op
         Assert.assertNull(browser.editRecord(namespace, tableName, keyString,
             newValString));
+        // Try to delete a deleted key and verify it is a no-op
+        assertThat(browser.deleteRecord(namespace, tableName, keyString)).isZero();
         runtime.shutdown();
     }
 }
