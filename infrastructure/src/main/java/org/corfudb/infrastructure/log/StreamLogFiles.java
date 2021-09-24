@@ -988,7 +988,7 @@ public class StreamLogFiles implements StreamLog {
 
         logUnitSizeBytes.ifPresent(counter -> counter.addAndGet(size));
         MicroMeterUtils.measure(size, "logunit.write.throughput");
-        logUnitSizeEntries.ifPresent(counter -> counter.incrementAndGet());
+        logUnitSizeEntries.ifPresent(AtomicLong::incrementAndGet);
         return new AddressMetaData(metadata.getPayloadChecksum(), metadata.getLength(), channelOffset);
     }
 

@@ -28,24 +28,16 @@ import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.exceptions.UnreachableClusterException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.CFUtils;
 import org.corfudb.util.LambdaUtils;
 import org.corfudb.util.concurrent.SingletonResource;
 
 import java.time.Duration;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.TreeSet;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -280,16 +272,16 @@ public class RemoteMonitoringService implements ManagementService {
                 .thenCompose(Void -> localMonitoringService.getMetrics())
                 //Poll report asynchronously using failureDetectorWorker executor
                 .thenCompose(metrics -> pollReport(ourLayout, metrics))
-                //Update cluster view by latest cluster state given by the poll report. No need to be asynchronous
-                .thenApply(pollReport -> {
-                    log.trace("Update cluster view: {}", pollReport.getClusterState());
-                    clusterContext.refreshClusterView(ourLayout, pollReport);
-                    return pollReport;
-                })
                 .thenApply(pollReport -> {
                     if (!pollReport.getClusterState().isReady()) {
                         throw new IllegalStateException("Cluster state is not ready: " + pollReport.getClusterState());
                     }
+                    return pollReport;
+                })
+                //Update cluster view by latest cluster state given by the poll report. No need to be asynchronous
+                .thenApply(pollReport -> {
+                    log.trace("Update cluster view: {}", pollReport.getClusterState());
+                    clusterContext.refreshClusterView(ourLayout, pollReport);
                     return pollReport;
                 })
                 //Execute failure detector task using failureDetectorWorker executor
@@ -343,7 +335,8 @@ public class RemoteMonitoringService implements ManagementService {
             // Corrects out of phase epoch issues if present in the report. This method
             // performs re-sealing of all nodes if required and catchup of a layout server to
             // the current state.
-            final Layout latestLayout = correctWrongEpochs(pollReport, ourLayout);
+            CompletableFuture<Layout> latestLayoutFuture = correctWrongEpochs(pollReport, ourLayout);
+            final Layout latestLayout = latestLayoutFuture.join();
 
             Result<DetectorTask, RuntimeException> failure = Result.of(() -> {
 
@@ -684,52 +677,41 @@ public class RemoteMonitoringService implements ManagementService {
      *
      * @param pollReport Poll Report from running the failure detection policy.
      */
-    private Layout correctWrongEpochs(PollReport pollReport, Layout layout) {
+    private CompletableFuture<Layout> correctWrongEpochs(PollReport pollReport, Layout layout) {
 
         Map<String, Long> wrongEpochs = pollReport.getWrongEpochs();
         if (wrongEpochs.isEmpty()) {
-            return layout;
+            return CompletableFuture.completedFuture(layout);
         }
 
         log.debug("Correct wrong epochs. Poll report: {}", pollReport);
 
-        try {
-            final Layout oldLayout = layout;
-            // Query all layout servers to get quorum Layout.
-            Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap = layout
-                    .getLayoutServers()
-                    .stream()
-                    .collect(Collectors.toMap(Function.identity(),
-                            server -> getLayoutFromServer(oldLayout, server))
-                    );
-
-            // Retrieve the correct layout from quorum of members to reseal servers.
-            // If we are unable to reach a consensus from a quorum we get an exception and
-            // abort the epoch correction phase.
-            Optional<Layout> latestLayout = fetchLatestLayout(layoutCompletableFutureMap);
-
-            if (!latestLayout.isPresent()) {
-                log.error("Can't get a layout from any server in the cluster. Layout servers: {}, wrong epochs: {}",
-                        layout.getLayoutServers(), wrongEpochs
+        final Layout oldLayout = layout;
+        // Query all layout servers to get quorum Layout.
+        Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap = layout
+                .getLayoutServers()
+                .stream()
+                .collect(Collectors.toMap(Function.identity(),
+                        server -> getLayoutFromServer(oldLayout, server))
                 );
-                throw new IllegalStateException("Error in correcting server epochs. Local node is disconnected");
-            }
 
-            // Update local layout copy.
-            Layout newManagementLayout = serverContext.saveManagementLayout(latestLayout.get());
-
-            sealWithLatestLayout(pollReport, newManagementLayout);
-
-            // Check if any layout server has a stale layout.
-            // If yes patch it (commit) with the latestLayout.
-            updateTrailingLayoutServers(newManagementLayout, layoutCompletableFutureMap);
-            return newManagementLayout;
-
-        } catch (QuorumUnreachableException e) {
-            log.error("Error in correcting server epochs", e);
-        }
-
-        return serverContext.copyManagementLayout();
+        // Retrieve the correct layout from quorum of members to reseal servers.
+        // If we are unable to reach a consensus from a quorum we get an exception and
+        // abort the epoch correction phase.
+        return fetchLatestLayout(layoutCompletableFutureMap)
+                //Update local layout copy.
+                .thenApply(serverContext::saveManagementLayout)
+                .thenApply(newManagementLayout -> {
+                    sealWithLatestLayout(pollReport, newManagementLayout);
+                    return newManagementLayout;
+                })
+                .thenApply(newManagementLayout -> {
+                    // Check if any layout server has a stale layout.
+                    // If yes patch it (commit) with the latestLayout.
+                    updateTrailingLayoutServers(newManagementLayout, layoutCompletableFutureMap);
+                    return newManagementLayout;
+                })
+                .thenApply(newManagementLayout -> serverContext.copyManagementLayout());
     }
 
     /**
@@ -764,27 +746,32 @@ public class RemoteMonitoringService implements ManagementService {
      * @return quorum agreed layout.
      * @throws QuorumUnreachableException If unable to receive consensus on layout.
      */
-    private Optional<Layout> fetchLatestLayout(Map<String, CompletableFuture<Layout>> futureLayouts) {
+    private CompletableFuture<Layout> fetchLatestLayout(Map<String, CompletableFuture<Layout>> futureLayouts) {
+        Collection<CompletableFuture<Layout>> all = futureLayouts.values();
+
         //Sort layouts according to epochs
         TreeSet<Layout> layouts = new TreeSet<>(Layout.LAYOUT_COMPARATOR);
 
-        futureLayouts.values()
-                .stream()
-                //transform exceptions (connection errors) to optional values
-                .map(async -> async.handle((layout, ex) -> {
-                    //Ignore all connection errors
-                    if (ex != null) {
-                        return Optional.<Layout>empty();
-                    }
+        //Layout requests completed successfully
+        List<CompletableFuture<Layout>> completed = new CopyOnWriteArrayList<>();
 
-                    return Optional.of(layout);
-                }))
-                //Get results synchronously
-                .map(CompletableFuture::join)
-                //Add all layouts to the set
-                .forEach(optionalLayout -> optionalLayout.ifPresent(layouts::add));
+        all.forEach(asyncLayout -> asyncLayout.whenComplete((layout, ex) -> {
+            //Ignore all connection errors
+            if (ex == null) {
+                layouts.add(layout);
+                completed.add(asyncLayout);
+            }
+        }));
 
-        return Optional.ofNullable(layouts.isEmpty() ? null : layouts.first());
+        //If local node can't connect to any node in the layout then the operation unsuccessful
+        if (completed.isEmpty()) {
+            CompletableFuture<Layout> cf = new CompletableFuture<>();
+            cf.completeExceptionally(new UnreachableClusterException("Cluster unavailable"));
+            return cf;
+        }
+
+        //Get a layout with the highest epoch
+        return CFUtils.allOf(completed).thenApply(Void -> layouts.pollFirst());
     }
 
     /**
