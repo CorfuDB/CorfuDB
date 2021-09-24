@@ -367,12 +367,12 @@ public class CorfuRuntime {
         /*
          * Total number of threads in Polling Executor Pool (shared across all listeners)
          */
-        private int streamingPollingThreadPoolSize = 4;
+        private int streamingPollingThreadPoolSize = 2;
 
         /*
          * Total number of threads in Notification Executor Pool (shared across all listeners)
          */
-        private int streamingNotificationThreadPoolSize = 8;
+        private int streamingNotificationThreadPoolSize = 4;
 
         /*
          * Total time in milliseconds to block for new updates to appear in the queue, if empty.
