@@ -12,9 +12,14 @@ import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.OpaqueStream;
+import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.IntervalRetry;
+import org.corfudb.util.retry.RetryNeededException;
 import org.corfudb.util.serializer.Serializers;
 
 import javax.annotation.concurrent.NotThreadSafe;
@@ -102,9 +107,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
 
     /**
      * Clear all tables registered
-     *
-     * TODO: replace with stream API
-     */
+     **/
     private void clearTables() {
 
         long persistedTopologyConfigId;
@@ -136,19 +139,37 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             log.debug("Clear shadow streams, count={}", streamViewMap.size());
         }
 
-        try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
-            logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
+        clearStreams();
+    }
 
-            for (UUID streamID : streamViewMap.keySet()) {
-                UUID streamToClear = streamID;
-                if (phase == Phase.TRANSFER_PHASE) {
-                    streamToClear = regularToShadowStreamId.get(streamID);
+    private void clearStreams() {
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
+                    logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
+                    clearStreams(txnContext);
+                    txnContext.commit();
+                } catch (TransactionAbortedException tae) {
+                    log.error("Error while attempting to clear tables.", tae);
+                    throw new RetryNeededException();
                 }
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when attempting to clear tables.", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
+    }
 
-                SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
-                txnContext.logUpdate(streamToClear, entry);
+    private void clearStreams(TxnContext txnContext) {
+        for (UUID streamID : streamViewMap.keySet()) {
+            UUID streamToClear = streamID;
+            if (phase == Phase.TRANSFER_PHASE) {
+                streamToClear = regularToShadowStreamId.get(streamID);
             }
-            txnContext.commit();
+
+            SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
+            txnContext.logUpdate(streamToClear, entry);
         }
     }
 
