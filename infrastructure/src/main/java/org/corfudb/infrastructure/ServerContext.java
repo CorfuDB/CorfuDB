@@ -550,7 +550,7 @@ public class ServerContext implements AutoCloseable {
         if (currentLayout == null || newLayout.getEpoch() > currentLayout.getEpoch()) {
             dataStore.put(MANAGEMENT_LAYOUT_RECORD, newLayout);
             currentLayout = copyManagementLayout();
-            log.info("Update to new layout at epoch {}", currentLayout.getEpoch());
+            log.info("Node: {}, update to new layout at epoch {}", localEndpoint, currentLayout.getEpoch());
             return currentLayout;
         }
 

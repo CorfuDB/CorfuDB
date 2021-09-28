@@ -2,6 +2,7 @@ package org.corfudb.protocols.wireprotocol;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.ToString;
 
 /**
  * Sequencer metrics for a node.
@@ -10,6 +11,7 @@ import lombok.Getter;
  */
 @AllArgsConstructor
 @Getter
+@ToString
 public class SequencerMetrics {
 
     public static final SequencerMetrics READY = new SequencerMetrics(SequencerStatus.READY);

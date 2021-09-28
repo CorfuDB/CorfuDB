@@ -11,6 +11,7 @@ import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
@@ -292,16 +293,20 @@ public class ManagementViewTest extends AbstractViewTest {
         setAggressiveTimeouts(l, corfuRuntime,
                 getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
 
-        NodeState nodeState= null;
+        NodeState nodeState = null;
 
         // Send heartbeat requests and wait until we get a valid response.
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
 
-            nodeState = corfuRuntime.getLayoutView().getRuntimeLayout()
-                    .getManagementClient(SERVERS.ENDPOINT_0).sendNodeStateRequest().get();
+            nodeState = corfuRuntime
+                    .getLayoutView()
+                    .getRuntimeLayout()
+                    .getManagementClient(SERVERS.ENDPOINT_0)
+                    .sendNodeStateRequest()
+                    .get();
 
-            if (nodeState.getConnectivity().getType() == NodeConnectivityType.CONNECTED
-                    && !nodeState.getConnectivity().getConnectedNodes().isEmpty()) {
+            NodeConnectivity conn = nodeState.getConnectivity();
+            if (conn.getType() == NodeConnectivityType.CONNECTED && !conn.getConnectedNodes().isEmpty()) {
                 break;
             }
             TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
