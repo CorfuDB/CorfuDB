@@ -32,7 +32,7 @@ public class ResourceQuota {
      * Consumes an amount of the resource quota.
      */
     public void consume(long amount) {
-        used.updateAndGet(currVal -> Math.min(currVal + amount, Long.MAX_VALUE));
+        used.updateAndGet(currVal -> Math.min(Math.addExact(currVal, amount), Long.MAX_VALUE));
     }
 
     /**
@@ -46,7 +46,7 @@ public class ResourceQuota {
      * Returns some amount of the resource to the quota
      */
     public void release(long amount) {
-        used.updateAndGet(currVal -> Math.max(0, currVal - amount));
+        used.updateAndGet(currVal -> Math.max(0, Math.subtractExact(currVal, amount)));
     }
 
     /**
