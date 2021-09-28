@@ -16,6 +16,7 @@ import io.netty.handler.ssl.SslHandler;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.infrastructure.ManagementServer.ManagementServerInitializer;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -68,7 +69,7 @@ public class CorfuServerNode implements AutoCloseable {
                         .put(LayoutServer.class, new LayoutServer(serverContext))
                         .put(LogUnitServer.class, new LogUnitServer(serverContext))
                         .put(ManagementServer.class, new ManagementServer(serverContext,
-                                new ManagementServer.ManagementServerInitializer()))
+                                new ManagementServerInitializer()))
                         .build()
         );
     }
