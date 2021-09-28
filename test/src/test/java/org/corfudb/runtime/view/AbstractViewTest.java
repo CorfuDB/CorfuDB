@@ -11,6 +11,7 @@ import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.LayoutServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.ManagementServer;
+import org.corfudb.infrastructure.ManagementServer.ManagementServerInitializer;
 import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
@@ -518,8 +519,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
             this.sequencerServer = new SequencerServer(serverContext);
             this.layoutServer = new LayoutServer(serverContext);
             this.logUnitServer = new LogUnitServer(serverContext);
-            this.managementServer = new ManagementServer(serverContext,
-                    new ManagementServer.ManagementServerInitializer());
+            this.managementServer = new ManagementServer(serverContext, new ManagementServerInitializer());
 
             this.serverRouter.addServer(baseServer);
             this.serverRouter.addServer(sequencerServer);

@@ -124,7 +124,7 @@ public class RemoteMonitoringService implements ManagementService {
     /**
      * Duration in which the restore redundancy and merge segments workflow status is queried.
      */
-    public static final Duration MERGE_SEGMENTS_RETRY_QUERY_TIMEOUT = Duration.ofSeconds(1);
+    private static final Duration MERGE_SEGMENTS_RETRY_QUERY_TIMEOUT = Duration.ofSeconds(1);
 
     /**
      * This tuple maintains, in an epoch, how many heartbeats the primary sequencer has responded
@@ -192,7 +192,7 @@ public class RemoteMonitoringService implements ManagementService {
      * every second (by default). Next iteration of detection task can be run only if current iteration is completed.
      */
     @Override
-    public void start(Duration monitoringInterval) {
+    public synchronized void start(Duration monitoringInterval) {
         // Trigger sequencer bootstrap on startup.
         sequencerBootstrap(serverContext);
 
@@ -267,7 +267,7 @@ public class RemoteMonitoringService implements ManagementService {
      *    - make healed node responsive based on a healing detection mechanism
      *  </pre>
      */
-    private synchronized CompletableFuture<DetectorTask> runDetectionTasks() {
+    private CompletableFuture<DetectorTask> runDetectionTasks() {
 
         Layout ourLayout = getCorfuRuntime()
                 .invalidateLayout()
@@ -289,6 +289,12 @@ public class RemoteMonitoringService implements ManagementService {
                         .thenApply(pollReport -> {
                             log.trace("Update cluster view: {}", pollReport.getClusterState());
                             clusterContext.refreshClusterView(ourLayout, pollReport);
+                            return pollReport;
+                        })
+                        .thenApply(pollReport -> {
+                            if (!pollReport.getClusterState().isReady()) {
+                                throw new IllegalStateException("Cluster state is not ready: " + pollReport.getClusterState());
+                            }
                             return pollReport;
                         })
                         //Execute failure detector task using failureDetectorWorker executor
@@ -326,11 +332,6 @@ public class RemoteMonitoringService implements ManagementService {
      */
     private CompletableFuture<DetectorTask> runFailureDetectorTask(
             PollReport pollReport, Layout ourLayout) {
-
-        if (!pollReport.getClusterState().isReady()) {
-            log.info("Cluster state is not ready: {}", pollReport.getClusterState());
-            return DETECTOR_TASK_SKIPPED;
-        }
 
         return CompletableFuture.supplyAsync(() -> {
 

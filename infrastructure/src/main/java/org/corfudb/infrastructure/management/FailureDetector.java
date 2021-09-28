@@ -66,7 +66,7 @@ public class FailureDetector implements IDetector {
     @Setter
     private NetworkStretcher networkStretcher = NetworkStretcher.builder().build();
 
-    public FailureDetector(String localEndpoint) {
+    public FailureDetector(@NonNull String localEndpoint) {
         this.localEndpoint = localEndpoint;
     }
 

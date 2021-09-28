@@ -51,8 +51,6 @@ import static org.junit.Assert.fail;
 
 /**
  * Test to verify the Management Server functionalities.
- *
- * Created by zlokhandwala on 11/9/16.
  */
 @Slf4j
 public class ManagementViewTest extends AbstractViewTest {
@@ -76,7 +74,7 @@ public class ManagementViewTest extends AbstractViewTest {
      * We fail SERVERS.PORT_0 and then listen to intercept the message
      * sent by SERVERS.PORT_1's client to the server to handle the failure.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void invokeFailureHandler()
