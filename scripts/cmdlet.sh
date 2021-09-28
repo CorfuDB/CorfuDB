@@ -24,14 +24,14 @@ else
 fi
 
 # Windows (cygwin) support
-case "`uname`" in
+case "$(uname)" in
     CYGWIN*) cygwin=true ;;
     *) cygwin=false ;;
 esac
 
 if $cygwin
 then
-    CLASSPATH=`cygpath -wp "$CLASSPATH"`
+    CLASSPATH=$(cygpath -wp "$CLASSPATH")
 fi
 
 
@@ -39,5 +39,5 @@ fi
 CORFUDB_HEAP="${CORFUDB_HEAP:-1000}"
 export CORFUDB_JVMFLAGS="-Xmx${CORFUDB_HEAP}m $SERVER_JVMFLAGS"
 
-RUN_AS=`basename $0`
-"$JAVA" -cp "$CLASSPATH" $JVMFLAGS org.corfudb.shell.ShellMain run-script "$DIR/../corfu_scripts/$RUN_AS.clj" $*
+RUN_AS="$(basename "$0")"
+"$JAVA" -cp "$CLASSPATH" "$JVMFLAGS" org.corfudb.shell.ShellMain run-script "$DIR/../corfu_scripts/$RUN_AS.clj" "$*"

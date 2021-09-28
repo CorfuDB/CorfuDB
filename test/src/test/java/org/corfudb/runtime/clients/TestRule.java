@@ -1,6 +1,5 @@
 package org.corfudb.runtime.clients;
 
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 import org.corfudb.infrastructure.IServerRouter;
@@ -21,11 +20,6 @@ public class TestRule {
 
     // actions
     private boolean drop = false;
-    private boolean dropEven = false;
-    private boolean dropOdd = false;
-
-    // state
-    private AtomicInteger timesMatched = new AtomicInteger();
 
     /**
      * Always evaluate this rule.

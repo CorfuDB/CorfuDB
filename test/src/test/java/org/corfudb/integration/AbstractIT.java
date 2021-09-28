@@ -256,7 +256,7 @@ public class AbstractIT extends AbstractCorfuTest {
             }
 
         } catch (IOException e) {
-            throw e;
+            log.error("Error {} ", e);
         } finally {
             return childPIDs;
         }

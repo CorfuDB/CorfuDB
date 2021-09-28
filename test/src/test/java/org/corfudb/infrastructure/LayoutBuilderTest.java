@@ -10,7 +10,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.view.Layout;
@@ -132,7 +131,7 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
                 .removeLogunitServers(failedNodes)
                 .removeSequencerServers(failedNodes)
                 .build();
-        Assertions.assertThat(actualLayout).isEqualTo(expectedLayout);
+        assertThat(actualLayout).isEqualTo(expectedLayout);
 
         expectedLayout = new TestLayoutBuilder()
                 .setEpoch(1L)

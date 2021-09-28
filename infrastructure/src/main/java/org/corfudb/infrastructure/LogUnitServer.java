@@ -292,11 +292,13 @@ public class LogUnitServer extends AbstractServer {
         // Its not clear that making all holes high priority is the right thing to do, but since
         // some reads will block until a hole is filled this is required (i.e. bypass quota checks)
         // because the requirement is to allow reads, but only block writes once the quota is exhausted
+        final RequestMsg batchProcessorReq;
         if (logData.isHole()) {
-            req = getRequestMsg(req.getHeader().toBuilder().setPriority(PriorityLevel.HIGH).build(), req.getPayload());
+            batchProcessorReq = getRequestMsg(req.getHeader().toBuilder().setPriority(PriorityLevel.HIGH).build(), req.getPayload());
+        } else {
+            batchProcessorReq = req;
         }
 
-        final RequestMsg batchProcessorReq = req;
         batchWriter.addTask(BatchWriterOperation.Type.WRITE, batchProcessorReq)
                 .thenRunAsync(() -> {
                     dataCache.put(logData.getGlobalAddress(), logData);
