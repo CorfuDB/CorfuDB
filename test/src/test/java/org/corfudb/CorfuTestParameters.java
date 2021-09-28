@@ -21,6 +21,11 @@ public class CorfuTestParameters {
      */
     public final Duration TIMEOUT_VERY_SHORT;
 
+    /**
+     * The shortest timeout
+     */
+    public final Duration TIMEOUT_ULTRA_SHORT;
+
     /** A short timeout, typically in the order of 1s.
      * You might expect a typical request to timeout in this timeframe.
      */
@@ -86,6 +91,7 @@ public class CorfuTestParameters {
     public CorfuTestParameters(){
 
         // Timeouts
+        TIMEOUT_ULTRA_SHORT = Duration.of(100, MILLIS);
         TIMEOUT_VERY_SHORT = Duration.of(500, MILLIS);
         TIMEOUT_SHORT = Duration.of(1, SECONDS);
         TIMEOUT_NORMAL = Duration.of(10, SECONDS);

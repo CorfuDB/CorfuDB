@@ -18,14 +18,18 @@ public class FailureDetectorTest {
     @Test
     public void testPollRound() {
         final String endpoint = "a";
+
         NetworkStretcher ns = NetworkStretcher.builder()
                 .initialPollInterval(Duration.ofMillis(100))
                 .currentPeriod(Duration.ofMillis(100))
                 .maxPeriod(Duration.ofMillis(200))
                 .periodDelta(Duration.ofMillis(50))
                 .build();
-        FailureDetector failureDetector = new FailureDetector(endpoint);
-        failureDetector.setNetworkStretcher(ns);
+
+        FailureDetector failureDetector = FailureDetector.builder()
+                .localEndpoint(endpoint)
+                .networkStretcher(ns)
+                .build();
 
         long epoch = 1;
         UUID clusterId = UUID.fromString("00000000-0000-0000-0000-000000000000");

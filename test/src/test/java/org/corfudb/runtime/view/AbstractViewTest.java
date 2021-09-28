@@ -323,28 +323,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                         null, primarySequencerNode.serverRouter);
     }
 
-
-    /**
-     * Set aggressive timeouts for the detectors.
-     *
-     * @param managementServersPorts Management server endpoints.
-     */
-    void setAggressiveDetectorTimeouts(int... managementServersPorts) {
-        Arrays.stream(managementServersPorts).forEach(port -> {
-            NetworkStretcher stretcher = NetworkStretcher.builder()
-                    .periodDelta(PARAMETERS.TIMEOUT_VERY_SHORT)
-                    .maxPeriod(PARAMETERS.TIMEOUT_VERY_SHORT)
-                    .initialPollInterval(PARAMETERS.TIMEOUT_VERY_SHORT)
-                    .build();
-
-            FailureDetector failureDetector = getManagementServer(port)
-                    .getManagementAgent()
-                    .getRemoteMonitoringService()
-                    .getFailureDetector();
-            failureDetector.setNetworkStretcher(stretcher);
-        });
-    }
-
     /**
      * Increment the cluster layout epoch by 1.
      *
@@ -519,7 +497,24 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
             this.sequencerServer = new SequencerServer(serverContext);
             this.layoutServer = new LayoutServer(serverContext);
             this.logUnitServer = new LogUnitServer(serverContext);
-            this.managementServer = new ManagementServer(serverContext, new ManagementServerInitializer());
+            ManagementServerInitializer serverInitializer = new ManagementServerInitializer(){
+                @Override
+                public FailureDetector buildFailureDetector(ServerContext serverContext) {
+                    NetworkStretcher networkStretcher = NetworkStretcher.builder()
+                            .periodDelta(PARAMETERS.TIMEOUT_ULTRA_SHORT)
+                            .maxPeriod(PARAMETERS.TIMEOUT_ULTRA_SHORT)
+                            .initialPollInterval(PARAMETERS.TIMEOUT_ULTRA_SHORT)
+                            .currentPeriod(PARAMETERS.TIMEOUT_VERY_SHORT)
+                            .periodDelta(PARAMETERS.TIMEOUT_VERY_SHORT)
+                            .build();
+
+                    return FailureDetector.builder()
+                            .localEndpoint(serverContext.getLocalEndpoint())
+                            .networkStretcher(networkStretcher)
+                            .build();
+                }
+            };
+            this.managementServer = new ManagementServer(serverContext, serverInitializer);
 
             this.serverRouter.addServer(baseServer);
             this.serverRouter.addServer(sequencerServer);

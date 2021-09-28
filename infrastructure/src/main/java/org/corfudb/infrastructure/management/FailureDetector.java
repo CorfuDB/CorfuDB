@@ -5,10 +5,10 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import io.micrometer.core.instrument.Timer;
+import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Getter;
 import lombok.NonNull;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.management.monitoring.RemoteMonitoringService;
@@ -45,17 +45,17 @@ import java.util.stream.Collectors;
  * - Poll result aggregation.
  * - If we complete an iteration without detecting failures, we end the round successfully.
  * The management Server ensures only one instance of this class and hence this is NOT thread safe.
- * Created by zlokhandwala on 11/29/17.
+ *
  */
 @Slf4j
+@Builder
 public class FailureDetector implements IDetector {
-
 
     /**
      * Number of iterations to execute to detect a failure in a round.
      */
     @Getter
-    @Setter
+    @Default
     private int failureThreshold = 3;
 
     @NonNull
@@ -63,12 +63,7 @@ public class FailureDetector implements IDetector {
 
     @NonNull
     @Default
-    @Setter
     private NetworkStretcher networkStretcher = NetworkStretcher.builder().build();
-
-    public FailureDetector(@NonNull String localEndpoint) {
-        this.localEndpoint = localEndpoint;
-    }
 
     /**
      * Executes the policy once.

@@ -18,6 +18,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.FailureDetector;
+import org.corfudb.infrastructure.management.NetworkStretcher;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.orchestrator.Orchestrator;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
@@ -494,8 +495,16 @@ public class ManagementServer extends AbstractServer {
         ManagementAgent buildManagementAgent(@Nonnull SingletonResource<CorfuRuntime> corfuRuntime,
                                              @Nonnull ServerContext serverContext,
                                              @Nonnull ClusterStateContext clusterContext) {
-            return new ManagementAgent(corfuRuntime, serverContext, clusterContext,
-                    new FailureDetector(serverContext.getLocalEndpoint()), serverContext.getManagementLayout());
+            return new ManagementAgent(
+                    corfuRuntime, serverContext, clusterContext,
+                    buildFailureDetector(serverContext), serverContext.getManagementLayout()
+            );
+        }
+
+        public FailureDetector buildFailureDetector(ServerContext serverContext) {
+            return FailureDetector.builder()
+                    .localEndpoint(serverContext.getLocalEndpoint())
+                    .build();
         }
     }
 }

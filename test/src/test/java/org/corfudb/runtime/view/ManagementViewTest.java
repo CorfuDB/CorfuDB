@@ -165,9 +165,6 @@ public class ManagementViewTest extends AbstractViewTest {
                 getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
                 getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime());
 
-        // Setting aggressive timeouts for failure and healing detectors
-        setAggressiveDetectorTimeouts(SERVERS.PORT_0, SERVERS.PORT_1, SERVERS.PORT_2);
-
         // Adding a rule on SERVERS.PORT_1 to drop all packets
         addServerRule(SERVERS.PORT_1, new TestRule().always().drop());
         getManagementServer(SERVERS.PORT_1).shutdown();
@@ -217,8 +214,6 @@ public class ManagementViewTest extends AbstractViewTest {
                 getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
                 getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime());
 
-        setAggressiveDetectorTimeouts(SERVERS.PORT_0, SERVERS.PORT_1, SERVERS.PORT_2);
-
         return l;
     }
 
@@ -254,8 +249,6 @@ public class ManagementViewTest extends AbstractViewTest {
                 getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
                 getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
                 getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime());
-
-        setAggressiveDetectorTimeouts(SERVERS.PORT_0, SERVERS.PORT_1, SERVERS.PORT_2);
 
         return l;
     }
@@ -371,8 +364,6 @@ public class ManagementViewTest extends AbstractViewTest {
                 getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
                 getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
                 getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime());
-
-        setAggressiveDetectorTimeouts(SERVERS.PORT_0, SERVERS.PORT_1, SERVERS.PORT_2);
 
         failureDetected.acquire(2);
 
@@ -944,7 +935,6 @@ public class ManagementViewTest extends AbstractViewTest {
     public void unblockSealedCluster() throws Exception {
         CorfuRuntime corfuRuntime = getDefaultRuntime();
         Layout l = new Layout(corfuRuntime.getLayoutView().getLayout());
-        setAggressiveDetectorTimeouts(SERVERS.PORT_0);
 
         waitForSequencerToBootstrap(SERVERS.PORT_0);
 
@@ -995,7 +985,6 @@ public class ManagementViewTest extends AbstractViewTest {
             corfuRuntime = getRuntime(l).connect();
             setAggressiveTimeouts(l, corfuRuntime,
                     getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
-            setAggressiveDetectorTimeouts(SERVERS.PORT_0);
 
             addServerRule(SERVERS.PORT_2, new TestRule().always().drop());
             waitForLayoutChange(layout -> layout.getUnresponsiveServers()
@@ -1432,7 +1421,6 @@ public class ManagementViewTest extends AbstractViewTest {
 
         // Setting aggressive timeouts
         setAggressiveTimeouts(layout, corfuRuntime, managementRuntime0, managementRuntime1);
-        setAggressiveDetectorTimeouts(SERVERS.PORT_0, SERVERS.PORT_1);
 
         // Append data.
         IStreamView streamView = corfuRuntime.getStreamsView()
@@ -1518,7 +1506,6 @@ public class ManagementViewTest extends AbstractViewTest {
         // Setting aggressive timeouts
         setAggressiveTimeouts(layout, corfuRuntime,
                 getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
-        setAggressiveDetectorTimeouts(SERVERS.PORT_0);
 
         final int sysDownTriggerLimit = 3;
         getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime().getParameters()

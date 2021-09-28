@@ -456,7 +456,6 @@ public class StateTransferTest extends AbstractViewTest {
         CorfuRuntime rt = getNewRuntime(getDefaultNode()).connect();
         setAggressiveTimeouts(l1, rt,
                 getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
-        setAggressiveDetectorTimeouts(SERVERS.PORT_0);
         IStreamView testStream = rt.getStreamsView().get(CorfuRuntime.getStreamID("test"));
 
         // Write to address spaces 0 to 2 (inclusive) to SERVER 0 only.
@@ -1322,7 +1321,6 @@ public class StateTransferTest extends AbstractViewTest {
             CorfuRuntime rt = getRuntime(l1).connect();
             setAggressiveTimeouts(l1, rt,
                     getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
-            setAggressiveDetectorTimeouts(SERVERS.PORT_0);
 
             // write a non-consolidated logs
             Set<Long> noWriteHoles = new HashSet<>(Arrays.asList(10L, 100L, 1000L, 2000L, 2500L, 2550L));

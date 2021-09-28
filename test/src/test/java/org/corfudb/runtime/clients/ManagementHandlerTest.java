@@ -7,6 +7,7 @@ import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.LayoutServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.ManagementServer;
+import org.corfudb.infrastructure.ManagementServer.ManagementServerInitializer;
 import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
@@ -41,7 +42,7 @@ public class ManagementHandlerTest extends AbstractClientTest {
                 .setServerRouter(serverRouter)
                 .setPort(SERVERS.PORT_0)
                 .build();
-        server = new ManagementServer(serverContext, new ManagementServer.ManagementServerInitializer());
+        server = new ManagementServer(serverContext, new ManagementServerInitializer());
         serverRouter.setServerContext(serverContext);
         return new ImmutableSet.Builder<AbstractServer>()
                 .add(server)
@@ -75,7 +76,7 @@ public class ManagementHandlerTest extends AbstractClientTest {
     /**
      * Tests the bootstrapping of the management server.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void handleBootstrap()
@@ -96,11 +97,10 @@ public class ManagementHandlerTest extends AbstractClientTest {
     /**
      * Tests the Node State request and asserts if response is received.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
-    public void sendNodeStateRequest()
-            throws Exception {
+    public void sendNodeStateRequest() throws Exception {
         NodeState nodeState= client.sendNodeStateRequest().get();
         assertThat(nodeState).isNotNull();
     }
