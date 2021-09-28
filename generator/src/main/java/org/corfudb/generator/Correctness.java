@@ -9,10 +9,6 @@ import org.slf4j.LoggerFactory;
  */
 public class Correctness {
 
-    private Correctness() {
-        throw new IllegalStateException("Utility class");
-    }
-
     private static final String TX_PATTERN = "%s, %s";
     private static final String TX_PATTERN_VERSION = "%s, %s, %s";
 
@@ -21,6 +17,10 @@ public class Correctness {
     public static final String TX_ABORTED = "aborted";
 
     private static final Logger correctnessLogger = (Logger) LoggerFactory.getLogger("correctness");
+
+    private Correctness() {
+        throw new IllegalStateException("Utility class");
+    }
 
     public static void recordOperation(String operation, boolean transactionPrefix) {
         if (transactionPrefix) {

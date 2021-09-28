@@ -21,11 +21,6 @@ public class TestRule {
 
     // actions
     private boolean drop = false;
-    private boolean dropEven = false;
-    private boolean dropOdd = false;
-
-    // state
-    private AtomicInteger timesMatched = new AtomicInteger();
 
     /**
      * Always evaluate this rule.

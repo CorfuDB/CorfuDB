@@ -132,7 +132,7 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
                 .removeLogunitServers(failedNodes)
                 .removeSequencerServers(failedNodes)
                 .build();
-        Assertions.assertThat(actualLayout).isEqualTo(expectedLayout);
+        assertThat(actualLayout).isEqualTo(expectedLayout);
 
         expectedLayout = new TestLayoutBuilder()
                 .setEpoch(1L)

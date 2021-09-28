@@ -74,34 +74,34 @@ public class CorfuStoreBrowserEditorMain {
             log.info("CorfuBrowser starting...");
             // Parse the options given, using docopt.
             Map<String, Object> opts =
-                new Docopt(USAGE)
-                    .withVersion(GitRepositoryState.getRepositoryState().describe)
-                    .parse(args);
+                    new Docopt(USAGE)
+                            .withVersion(GitRepositoryState.getRepositoryState().describe)
+                            .parse(args);
             String host = opts.get("--host").toString();
             Integer port = Integer.parseInt(opts.get("--port").toString());
             boolean tlsEnabled = Boolean.parseBoolean(opts.get("--tlsEnabled")
-                .toString());
+                    .toString());
             String operation = opts.get("--operation").toString();
 
             final int SYSTEM_EXIT_ERROR_CODE = 1;
             final int SYSTEM_DOWN_RETRIES = 5;
             CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder
-                builder = CorfuRuntime.CorfuRuntimeParameters.builder()
-                .cacheDisabled(true)
-                .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
-                .systemDownHandlerTriggerLimit(SYSTEM_DOWN_RETRIES)
-                .tlsEnabled(tlsEnabled);
+                    builder = CorfuRuntime.CorfuRuntimeParameters.builder()
+                    .cacheDisabled(true)
+                    .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
+                    .systemDownHandlerTriggerLimit(SYSTEM_DOWN_RETRIES)
+                    .tlsEnabled(tlsEnabled);
             if (tlsEnabled) {
                 String keystore = opts.get("--keystore").toString();
                 String ks_password = opts.get("--ks_password").toString();
                 String truststore = opts.get("--truststore").toString();
                 String truststore_password =
-                    opts.get("--truststore_password").toString();
+                        opts.get("--truststore_password").toString();
                 builder.tlsEnabled(tlsEnabled)
-                    .keyStore(keystore)
-                    .ksPasswordFile(ks_password)
-                    .trustStore(truststore)
-                    .tsPasswordFile(truststore_password);
+                        .keyStore(keystore)
+                        .ksPasswordFile(ks_password)
+                        .trustStore(truststore)
+                        .tsPasswordFile(truststore_password);
             }
 
             runtime = CorfuRuntime.fromParameters(builder.build());
@@ -114,7 +114,7 @@ public class CorfuStoreBrowserEditorMain {
             CorfuStoreBrowserEditor browser;
             if (opts.get("--diskPath") != null) {
                 browser = new CorfuStoreBrowserEditor(runtime, opts.get(
-                    "--diskPath").toString());
+                        "--diskPath").toString());
             } else {
                 browser = new CorfuStoreBrowserEditor(runtime);
             }

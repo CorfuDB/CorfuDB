@@ -208,7 +208,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Checkpoint S2
             MultiCheckpointWriter mcw2 = new MultiCheckpointWriter();
             mcw2.addMap(map2);
-            Token maxCheckpointAddress = mcw2.appendCheckpoints(defaultRT, "author");
+            mcw2.appendCheckpoints(defaultRT, "author");
 
             transactionalWrite(defaultRT, map2, "15", "15");
 

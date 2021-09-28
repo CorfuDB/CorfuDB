@@ -5,10 +5,6 @@ import java.util.stream.Collectors;
 
 public class PrometheusConfig {
 
-    private PrometheusConfig() {
-        //prevent creating PrometheusConfig instances
-    }
-
     private static final String CONFIG =
             "global:\n" +
                     "  scrape_interval:     15s # Set the scrape interval to every 15 seconds. Default is every 1 minute.\n" +
@@ -32,6 +28,10 @@ public class PrometheusConfig {
                     "\n" +
                     "    static_configs:\n" +
                     "    - targets: ['localhost:9090', %s]\n";
+
+    private PrometheusConfig() {
+        //prevent creating PrometheusConfig instances
+    }
 
     static String getConfig(String hostname, Set<Integer> metricsPorts) {
         assert !metricsPorts.isEmpty();

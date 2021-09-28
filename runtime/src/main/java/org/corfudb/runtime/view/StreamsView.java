@@ -236,6 +236,8 @@ public class StreamsView extends AbstractView {
             case TX_ABORT_SEQ_TRIM:
                 abortCause = AbortCause.SEQUENCER_TRIM;
                 break;
+            default:
+                log.warn("getAbortCauseFromToken : Unknown response {} ",tokenResponse);
         }
 
         return abortCause;
