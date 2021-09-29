@@ -124,6 +124,6 @@ public class ImmutableListSetWrapper<E> extends AbstractSet<E> implements Set<E>
 
     @Override
     public Stream<E> parallelStream() {
-        return internalList.stream();
+        return internalList.parallelStream();
     }
 }
