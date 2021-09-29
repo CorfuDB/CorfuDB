@@ -131,6 +131,7 @@ public final class CorfuProtocolBase {
                 .setHandshakeRequest(HandshakeRequestMsg.newBuilder()
                         .setClientId(getUuidMsg(clientId))
                         .setServerId(getUuidMsg(nodeId))
+                        .setRollingUpgradeRequest(true)
                         .build())
                 .build();
     }
@@ -146,6 +147,7 @@ public final class CorfuProtocolBase {
         return ResponsePayloadMsg.newBuilder()
                 .setHandshakeResponse(HandshakeResponseMsg.newBuilder()
                         .setServerId(getUuidMsg(nodeId))
+                        .setRollingUpgradeResponse(true)
                         .build())
                 .build();
     }

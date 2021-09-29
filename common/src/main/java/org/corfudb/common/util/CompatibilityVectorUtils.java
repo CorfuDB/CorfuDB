@@ -71,7 +71,8 @@ public class CompatibilityVectorUtils {
     public enum Feature {
         // Comma separated enum values indicating each feature along with their sequence number.
         // FEATURE_A(0),
-        ;
+        // Rolling Upgrade: A test futuristic feature
+        HANDSHAKE_V1(99999);
 
         /**
          * Contains the vectors representing the Corfu features enabled so far.

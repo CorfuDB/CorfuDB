@@ -6,17 +6,19 @@ import io.netty.channel.ChannelPromise;
 import io.netty.handler.timeout.ReadTimeoutException;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.util.AttributeKey;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.Set;
-import java.util.UUID;
-import javax.net.ssl.SSLHandshakeException;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.wireprotocol.HandshakeState;
 import org.corfudb.runtime.proto.service.Base.HandshakeRequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 
+import javax.net.ssl.SSLHandshakeException;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+import static org.corfudb.common.util.CompatibilityVectorUtils.Feature.HANDSHAKE_V1;
+import static org.corfudb.common.util.CompatibilityVectorUtils.isFeatureEnabled;
 import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.service.CorfuProtocolBase.getHandshakeResponseMsg;
@@ -26,19 +28,19 @@ import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 /**
  * The ServerHandshakeHandler waits for the handshake message, validates and sends
  * a response to the client. This reply contains its node id and current version of Corfu.
- *
+ * <p>
  * Created by amartinezman on 12/11/17.
  */
 @Slf4j
 public class ServerHandshakeHandler extends ChannelDuplexHandler {
 
+    private static final AttributeKey<UUID> clientIdAttrKey = AttributeKey.valueOf("ClientID");
+    private static final String READ_TIMEOUT_HANDLER = "readTimeoutHandler";
     private final UUID nodeId;
     private final HandshakeState handshakeState;
     private final int timeoutInSeconds;
     private final long corfuServerVersion;
     private final Set<ResponseMsg> responseMessages = ConcurrentHashMap.newKeySet();
-    private static final  AttributeKey<UUID> clientIdAttrKey = AttributeKey.valueOf("ClientID");
-    private static final String READ_TIMEOUT_HANDLER = "readTimeoutHandler";
 
     /**
      * Creates a new ServerHandshakeHandler which will handle the handshake--initiated by a client
@@ -57,7 +59,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
      * Read data from the Channel.
      *
      * @param ctx channel handler context
-     * @param m object received in inbound buffer
+     * @param m   object received in inbound buffer
      * @throws Exception
      */
     @Override
@@ -105,6 +107,17 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
         UUID clientId = getUUID(handshakeRequest.getClientId());
         UUID serverId = getUUID(handshakeRequest.getServerId());
 
+        // Rolling Upgrade: Check if the request is of HANDSHAKE_V1
+        if (isFeatureEnabled(HANDSHAKE_V1, requestMsg.getHeader().getVersion().getCapabilityVector())) {
+            log.info("channelRead: Handshake request version is {}, " +
+                            "rollingUpgradeRequest: {}",
+                    HANDSHAKE_V1.name(),
+                    handshakeRequest.getRollingUpgradeRequest());
+        } else {
+            log.info("channelRead: Handshake request version {} is not supported by the client",
+                    HANDSHAKE_V1.name());
+        }
+
         // Validate handshake, but first verify if node identifier is set to default (all 0's)
         // which indicates node id matching is not required.
         if (serverId.equals(DEFAULT_UUID)) {
@@ -119,7 +132,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
         // Store clientID as a channel attribute.
         ctx.channel().attr(clientIdAttrKey).set(clientId);
         log.debug("channelRead: Sending handshake response: Node Id: {}, client version:" +
-                " {}, server version: {}", this.nodeId, Long.toHexString(corfuClientVersion),
+                        " {}, server version: {}", this.nodeId, Long.toHexString(corfuClientVersion),
                 Long.toHexString(corfuServerVersion));
 
 
@@ -171,7 +184,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
     /**
      * Channel event that is triggered when an exception is caught.
      *
-     * @param ctx channel handler context
+     * @param ctx   channel handler context
      * @param cause exception cause
      * @throws Exception
      */
@@ -216,8 +229,8 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
     /**
      * Channel event that is triggered when an outbound handler attempts to write into the channel.
      *
-     * @param ctx channel handler context
-     * @param msg message written into channel
+     * @param ctx     channel handler context
+     * @param msg     message written into channel
      * @param promise channel promise
      * @throws Exception
      */
@@ -232,7 +245,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
             log.debug("write: Handshake already completed, not appending corfu message to queue");
             super.write(ctx, msg, promise);
         } else {
-            if (msg instanceof ResponseMsg){
+            if (msg instanceof ResponseMsg) {
                 this.responseMessages.add((ResponseMsg) msg);
             } else {
                 log.warn("write: Invalid message received through the pipeline by Handshake handler, Dropping it." +

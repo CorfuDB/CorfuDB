@@ -21,11 +21,17 @@ message PingResponseMsg {
 message HandshakeRequestMsg {
   UuidMsg client_id = 1;
   UuidMsg server_id = 2;
+
+  // Rolling Upgrade: A test field to simulate a futuristic field
+  bool rollingUpgradeRequest = 999;
 }
 
 // Response sent by server in the handshake stage.
 message HandshakeResponseMsg {
   UuidMsg server_id = 1;
+
+  // Rolling Upgrade: A test field to simulate a futuristic field
+  bool rollingUpgradeResponse = 999;
 }
 
 message RestartRequestMsg {

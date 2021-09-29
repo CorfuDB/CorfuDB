@@ -6,12 +6,8 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.timeout.ReadTimeoutException;
 import io.netty.handler.timeout.ReadTimeoutHandler;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.Set;
-import java.util.UUID;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.runtime.proto.service.Base.HandshakeResponseMsg;
@@ -21,6 +17,12 @@ import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.util.GitRepositoryState;
 
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+import static org.corfudb.common.util.CompatibilityVectorUtils.Feature.HANDSHAKE_V1;
+import static org.corfudb.common.util.CompatibilityVectorUtils.isFeatureEnabled;
 import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.service.CorfuProtocolBase.getHandshakeRequestMsg;
@@ -29,32 +31,24 @@ import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 
 /**
  * The ClientHandshakeHandler initiates the handshake upon socket connection.
- *
+ * <p>
  * - Once the client connects to the server, it sends a handshake message that contains:
- *         its own id and the (asserted) server's node id.
+ * its own id and the (asserted) server's node id.
  * - The server validates and replies with its node id and current version of Corfu.
  * - If validation is correct on both sides, message exchange is initiated between client-server,
  * otherwise, the handshake times out, and either server or client close the connection.
- *
+ * <p>
  * Created by amartinezman on 12/8/17.
  */
 @Slf4j
 public class ClientHandshakeHandler extends ChannelDuplexHandler {
 
+    private static final String READ_TIMEOUT_HANDLER = "readTimeoutHandler";
     private final UUID clientId;
     private final UUID nodeId;
     private final int handshakeTimeout;
     private final HandshakeState handshakeState;
     private final Set<RequestMsg> requestMessages = ConcurrentHashMap.newKeySet();
-    private static final String READ_TIMEOUT_HANDLER = "readTimeoutHandler";
-
-    /** Events that the handshaker sends to downstream handlers.
-     *
-     */
-    public enum ClientHandshakeEvent {
-        CONNECTED,  /* Connection succeeded. */
-        FAILED      /* Handshake failed. */
-    }
 
     /**
      * Creates a new ClientHandshakeHandler which will handle the handshake between the
@@ -80,7 +74,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
      * Read data from the Channel.
      *
      * @param ctx channel handler context
-     * @param m object received in inbound buffer
+     * @param m   object received in inbound buffer
      * @throws Exception
      */
     @Override
@@ -121,6 +115,17 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         ctx.pipeline().remove(READ_TIMEOUT_HANDLER).handlerRemoved(ctx);
         HandshakeResponseMsg handshakeResponse = response.getPayload().getHandshakeResponse();
         UUID serverId = getUUID(handshakeResponse.getServerId());
+
+        // Rolling Upgrade: Check if the request is of HANDSHAKE_V1
+        if (isFeatureEnabled(HANDSHAKE_V1, response.getHeader().getVersion().getCapabilityVector())) {
+            log.info("channelRead: Handshake request version is {}, " +
+                            "rollingUpgradeResponse: {}",
+                    HANDSHAKE_V1.name(),
+                    handshakeResponse.getRollingUpgradeResponse());
+        } else {
+            log.info("channelRead: Handshake request version {} is not supported by the server",
+                    HANDSHAKE_V1.name());
+        }
 
         // Validate handshake, but first verify if node identifier is set to default (all 0's)
         // which indicates node id matching is not required.
@@ -185,7 +190,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
     /**
      * Channel event that is triggered when an exception is caught.
      *
-     * @param ctx channel handler context
+     * @param ctx   channel handler context
      * @param cause exception cause
      * @throws Exception
      */
@@ -222,8 +227,8 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
     /**
      * Channel event that is triggered when an outbound handler attempts to write into the channel.
      *
-     * @param ctx channel handler context
-     * @param msg message written into channel
+     * @param ctx     channel handler context
+     * @param msg     message written into channel
      * @param promise channel promise
      * @throws Exception
      */
@@ -269,5 +274,13 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         this.handshakeState.set(false, true);
         // Let downstream handlers know the handshake succeeded.
         ctx.fireUserEventTriggered(ClientHandshakeEvent.CONNECTED);
+    }
+
+    /**
+     * Events that the handshaker sends to downstream handlers.
+     */
+    public enum ClientHandshakeEvent {
+        CONNECTED,  /* Connection succeeded. */
+        FAILED      /* Handshake failed. */
     }
 }
