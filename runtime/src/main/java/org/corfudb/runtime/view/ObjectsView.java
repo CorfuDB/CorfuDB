@@ -164,7 +164,7 @@ public class ObjectsView extends AbstractView {
         try {
             return TransactionalContext.getCurrentContext().commitTransaction();
         } catch (TransactionAbortedException e) {
-            log.warn("TXEnd[{}] Aborted Exception {}", context, e);
+            log.warn("TXEnd[{}] Aborted Exception ", context, e);
             TransactionalContext.getCurrentContext().abortTransaction(e);
             throw e;
         } catch (NetworkException | WriteSizeException | QuotaExceededException e) {
