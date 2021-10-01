@@ -56,7 +56,7 @@ public class MeterRegistryProvider {
 
         /**
          * Configure the meter registry for Corfu client.
-         * All the metrics will be exported to the logging registry and optionally to any third party provided registries.
+         * All the metrics will be exported to the logging registry.
          *
          * @param logger          An instance of the logger to print metrics.
          * @param loggingInterval A duration between log appends for every metric.
@@ -65,7 +65,6 @@ public class MeterRegistryProvider {
         public static void initClientMetrics(Logger logger, Duration loggingInterval, String identifier) {
             metricType = Optional.of(MetricType.CLIENT);
             initLoggingRegistry(logger, loggingInterval, identifier);
-            registerProvidedRegistries();
         }
 
         private static synchronized void initLoggingRegistry(Logger logger, Duration loggingInterval, String identifier) {
