@@ -219,6 +219,11 @@ public class CorfuRuntime {
         Duration holeFillTimeout = Duration.ofSeconds(10);
 
         /*
+        * cache metrics are to be enabled only for the tuning exercise.
+        */
+        boolean cacheEntryMetricsDisabled = true;
+
+        /*
          * Whether or not to disable the cache.
          */
         boolean cacheDisabled = false;
@@ -395,6 +400,7 @@ public class CorfuRuntime {
             private int holeFillRetry = 10;
             private Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
             private Duration holeFillTimeout = Duration.ofSeconds(10);
+            private boolean cacheEntryMetricsDisabled = true;
             private boolean cacheDisabled = false;
             private long maxCacheEntries;
             private long maxCacheWeight;
@@ -568,6 +574,11 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder cacheEntryMetricsDisabled(boolean cacheEntryMetricsDisabled) {
+                this.cacheEntryMetricsDisabled = cacheEntryMetricsDisabled;
+                return this;
+            }
+
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder cacheDisabled(boolean cacheDisabled) {
                 this.cacheDisabled = cacheDisabled;
                 return this;
@@ -734,6 +745,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setHoleFillRetry(holeFillRetry);
                 corfuRuntimeParameters.setHoleFillRetryThreshold(holeFillRetryThreshold);
                 corfuRuntimeParameters.setHoleFillTimeout(holeFillTimeout);
+                corfuRuntimeParameters.setCacheEntryMetricsDisabled(cacheEntryMetricsDisabled);
                 corfuRuntimeParameters.setCacheDisabled(cacheDisabled);
                 corfuRuntimeParameters.setMaxCacheEntries(maxCacheEntries);
                 corfuRuntimeParameters.setMaxCacheWeight(maxCacheWeight);
