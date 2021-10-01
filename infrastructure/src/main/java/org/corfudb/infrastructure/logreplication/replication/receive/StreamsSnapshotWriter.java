@@ -57,6 +57,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     private long srcGlobalSnapshot; // The source snapshot timestamp
     private long recvSeq;
     private Optional<SnapshotSyncStartMarker> snapshotSyncStartMarker;
+    private Map<UUID, List<UUID>> dataStreamToTagsMap;
 
     @Getter
     private final LogReplicationMetadataManager logReplicationMetadataManager;
@@ -73,6 +74,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         this.regularToShadowStreamId = new HashMap<>();
         this.phase = Phase.TRANSFER_PHASE;
         this.snapshotSyncStartMarker = Optional.empty();
+        this.dataStreamToTagsMap = config.getDataStreamToTagsMap();
 
         initializeShadowStreams(config);
     }
@@ -103,6 +105,9 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
 
             log.trace("Shadow stream=[{}] for regular stream=[{}] name=({})", shadowStreamId, streamId, streamName);
         }
+
+        log.info("Stream tag map for streaming on Standby/Sink total={}, streams={}", dataStreamToTagsMap.size(),
+                dataStreamToTagsMap);
     }
 
     /**
@@ -203,34 +208,21 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         snapshotSyncStartMarker = Optional.empty();
     }
 
-
     /**
-     * Write a list of SMR entries to the specified stream log.
-     *
-     * @param smrEntries
-     * @param shadowStreamUuid
-     */
-    private void processOpaqueEntry(List<SMREntry> smrEntries, UUID shadowStreamUuid) {
-        try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
-            processOpaqueEntry(txnContext, smrEntries, shadowStreamUuid);
-            txnContext.commit();
-        }
-
-        log.debug("Process entries count={}", smrEntries.size());
-    }
-
-    /**
-     * Write a list of SMR entries to the specified stream log.
+     * Process updates to shadow stream (temporal stream)
      *
      * @param smrEntries
      * @param currentSeqNum
      * @param shadowStreamUuid
      */
-    private void processOpaqueEntry(List<SMREntry> smrEntries, Long currentSeqNum, UUID shadowStreamUuid, UUID snapshotSyncId) {
+    private void processUpdatesShadowStream(List<SMREntry> smrEntries, Long currentSeqNum, UUID shadowStreamUuid,
+                                            UUID snapshotSyncId) {
         CorfuStoreMetadata.Timestamp timestamp;
 
         try (TxnContext txn = logReplicationMetadataManager.getTxnContext()) {
-            processOpaqueEntryShadowStream(txn, smrEntries, currentSeqNum, shadowStreamUuid);
+            updateLog(txn, smrEntries, shadowStreamUuid);
+            logReplicationMetadataManager.appendUpdate(txn,
+                    LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER, currentSeqNum);
             timestamp = txn.commit();
         }
 
@@ -241,12 +233,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
                 txn.commit();
             }
         }
-        log.debug("Process entries total={}, set sequence number {}", smrEntries.size(), currentSeqNum);
-    }
 
-    private void processOpaqueEntryShadowStream(TxnContext txnContext, List<SMREntry> smrEntries, Long currentSeqNum, UUID shadowStreamUuid) {
-        processOpaqueEntry(txnContext, smrEntries, shadowStreamUuid);
-        logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER, currentSeqNum);
+        log.debug("Process entries total={}, set sequence number {}", smrEntries.size(), currentSeqNum);
     }
 
     /**
@@ -255,7 +243,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * @param smrEntries
      * @param shadowStreamUuid
      */
-    private void processOpaqueEntry(TxnContext txnContext, List<SMREntry> smrEntries, UUID shadowStreamUuid) {
+    private void updateLog(TxnContext txnContext, List<SMREntry> smrEntries, UUID shadowStreamUuid) {
         Map<LogReplicationMetadataType, Long> metadataMap = logReplicationMetadataManager.queryMetadata(txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID,
                 LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER);
         long persistedTopologyConfigId = metadataMap.get(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
@@ -273,7 +261,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, srcGlobalSnapshot);
 
         for (SMREntry smrEntry : smrEntries) {
-            txnContext.logUpdate(shadowStreamUuid, smrEntry);
+            txnContext.logUpdate(shadowStreamUuid, smrEntry, dataStreamToTagsMap.get(shadowStreamUuid));
         }
     }
 
@@ -310,10 +298,9 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             return;
         }
         UUID uuid = opaqueEntry.getEntries().keySet().stream().findFirst().get();
-        processOpaqueEntry(opaqueEntry.getEntries().get(uuid), message.getMetadata().getSnapshotSyncSeqNum(),
+        processUpdatesShadowStream(opaqueEntry.getEntries().get(uuid), message.getMetadata().getSnapshotSyncSeqNum(),
                 regularToShadowStreamId.get(uuid), getUUID(message.getMetadata().getSyncRequestId()));
         recvSeq++;
-
     }
 
     @Override
@@ -355,7 +342,14 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         Iterator<OpaqueEntry> iterator = shadowStream.iterator();
         while (iterator.hasNext()) {
             OpaqueEntry opaqueEntry = iterator.next();
-            processOpaqueEntry(opaqueEntry.getEntries().get(shadowStreamId), streamId);
+            List<SMREntry> smrEntries =  opaqueEntry.getEntries().get(shadowStreamId);
+
+            try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
+                updateLog(txnContext, smrEntries, streamId);
+                txnContext.commit();
+            }
+
+            log.debug("Process entries count={}", smrEntries.size());
         }
     }
 

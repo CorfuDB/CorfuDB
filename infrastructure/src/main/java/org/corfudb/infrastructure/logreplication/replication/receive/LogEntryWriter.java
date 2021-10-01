@@ -6,20 +6,17 @@ import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.extractOpaqueEntries;
@@ -35,22 +32,17 @@ public class LogEntryWriter {
     private final HashMap<UUID, String> streamMap; //the set of streams that log entry writer will work on.
     private long srcGlobalSnapshot; //the source snapshot that the transaction logs are based
     private long lastMsgTs; //the timestamp of the last message processed.
+    private Map<UUID, List<UUID>> dataStreamToTagsMap;
 
-    public LogEntryWriter(LogReplicationConfig config,
-                          LogReplicationMetadataManager logReplicationMetadataManager) {
+    public LogEntryWriter(LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager) {
         this.logReplicationMetadataManager = logReplicationMetadataManager;
+        this.srcGlobalSnapshot = Address.NON_ADDRESS;
+        this.lastMsgTs = Address.NON_ADDRESS;
+        this.streamMap = new HashMap<>();
+        this.dataStreamToTagsMap = config.getDataStreamToTagsMap();
 
-        Set<String> streams = config.getStreamsToReplicate();
-        streamMap = new HashMap<>();
-
-        for (String s : streams) {
-            streamMap.put(CorfuRuntime.getStreamID(s), s);
-        }
-
-        srcGlobalSnapshot = Address.NON_ADDRESS;
-        lastMsgTs = Address.NON_ADDRESS;
+        config.getStreamsToReplicate().stream().forEach(stream -> streamMap.put(CorfuRuntime.getStreamID(stream), stream));
     }
-
 
     /**
      * Verify the metadata is the correct data type.
@@ -78,9 +70,9 @@ public class LogEntryWriter {
             Map<LogReplicationMetadataType, Long> metadataMap = logReplicationMetadataManager.queryMetadata(txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED,
                     LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED, LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED);
             long persistedTopologyConfigId = metadataMap.get(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
-            long persistedSnapshotStart = metadataMap.get(LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
-            long persistedSnapshotDone = metadataMap.get(LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED);
-            long persistedLogTs = metadataMap.get(LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED);
+            long persistedSnapshotStart = metadataMap.get(LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
+            long persistedSnapshotDone = metadataMap.get(LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED);
+            long persistedLogTs = metadataMap.get(LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED);
 
             long topologyConfigId = txMessage.getMetadata().getTopologyConfigID();
             long baseSnapshotTs = txMessage.getMetadata().getSnapshotTimestamp();
@@ -108,17 +100,17 @@ public class LogEntryWriter {
                 }
             }
 
-            logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
-            logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED, entryTs);
+            logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
+            logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED, entryTs);
 
             for (OpaqueEntry opaqueEntry : newOpaqueEntryList) {
-                for (UUID uuid : opaqueEntry.getEntries().keySet()) {
-                    for (SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {
-                        txnContext.logUpdate(uuid, smrEntry);
+                for (UUID streamId : opaqueEntry.getEntries().keySet()) {
+                    for (SMREntry smrEntry : opaqueEntry.getEntries().get(streamId)) {
+                        // If stream tags exist for the current stream, it means its intended for streaming on the Sink (receiver)
+                        txnContext.logUpdate(streamId, smrEntry, dataStreamToTagsMap.get(streamId));
                     }
                 }
             }
-
             txnContext.commit();
 
             lastMsgTs = Math.max(entryTs, lastMsgTs);
@@ -126,7 +118,8 @@ public class LogEntryWriter {
     }
 
     /**
-     * Apply message generate by log entry reader and will apply at the destination corfu cluster.
+     * Apply message at the destination Corfu Cluster
+     *
      * @param msg
      * @return last processed message timestamp
      * @throws ReplicationWriterException
@@ -153,7 +146,7 @@ public class LogEntryWriter {
             lastMsgTs = srcGlobalSnapshot;
         }
 
-        // we will skip the entries has been processed.
+        // Skip entries that have already been processed
         if (msg.getMetadata().getTimestamp() <= lastMsgTs) {
             log.warn("Ignore Log Entry. Received message with snapshot {} is smaller than lastMsgTs {}.",
                     msg.getMetadata().getSnapshotTimestamp(), lastMsgTs);

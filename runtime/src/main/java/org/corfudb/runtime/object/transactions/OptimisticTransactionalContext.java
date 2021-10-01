@@ -183,6 +183,11 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     }
 
     @Override
+    public void logUpdate(UUID streamId, SMREntry updateEntry, List<UUID> streamTags) {
+        addToWriteSet(streamId, updateEntry, streamTags);
+    }
+
+    @Override
     public void logUpdate(UUID streamId, List<SMREntry> updateEntries) {
         addToWriteSet(streamId, updateEntries);
     }
@@ -294,7 +299,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
         super.commitTransaction();
         commitAddress = address;
-
         log.trace("Commit[{}] Written to {}", this, address);
         return address;
     }
