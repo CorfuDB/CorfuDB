@@ -45,8 +45,7 @@ public final class JVMMetrics {
                 long delta = current - data.safepointCount;
                 data.safepointCount = current;
                 return delta;
-            }).baseUnit(TimeUnit.MILLISECONDS.toString())
-                    .strongReference(true)
+            }).strongReference(true)
                     .register(metricsRegistry.get());
         }
     }

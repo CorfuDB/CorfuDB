@@ -13,8 +13,10 @@ import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.binder.cache.GuavaCacheMetrics;
 import io.netty.handler.timeout.TimeoutException;
+import lombok.Data;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.CacheMetrics;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -115,9 +117,8 @@ public class AddressSpaceView extends AbstractView {
                 .build();
 
         Optional<MeterRegistry> metricsRegistry = MeterRegistryProvider.getInstance();
-        metricsRegistry.map(registry -> GuavaCacheMetrics.monitor(registry, readCache, "address_space.read_cache"));
-        MicroMeterUtils.gauge("address_space.read_cache.hit_ratio", readCache, cache -> cache.stats().hitRate());
-        
+        CacheMetrics.register(metricsRegistry, readCache, "address_space.read_cache");
+
         if (!runtime.getParameters().isCacheEntryMetricsDisabled()) {
             MicroMeterUtils.gauge("address_space.read_cache.size", readCache, cache -> cache.size());
             MicroMeterUtils.gauge("address_space.read_cache.avg_entry_size", readCache, cache -> calculateEstimatedAvgEntrySize());
