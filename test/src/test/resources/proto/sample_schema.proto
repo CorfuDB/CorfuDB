@@ -102,3 +102,18 @@ message SampleTableDMsg {
 extend google.protobuf.MessageOptions {
     optional ManagedResourceOptionsMsg mgoptions = 54312;
 }
+
+message ValueFieldTagOne {
+    option (org.corfudb.runtime.table_schema).stream_tag = "tag_one";
+    option (org.corfudb.runtime.table_schema).is_federated = true;
+
+    optional string payload = 1;
+}
+
+message ValueFieldTagOneAndTwo {
+    option (org.corfudb.runtime.table_schema).stream_tag = "tag_one";
+    option (org.corfudb.runtime.table_schema).stream_tag = "tag_two";
+    option (org.corfudb.runtime.table_schema).is_federated = true;
+
+    optional string payload = 1;
+}

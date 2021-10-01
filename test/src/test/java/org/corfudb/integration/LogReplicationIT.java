@@ -42,7 +42,7 @@ import java.util.concurrent.Semaphore;
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.integration.ReplicationReaderWriterIT.ckStreamsAndTrim;
+import static org.corfudb.integration.LogReplicationReaderWriterIT.ckStreamsAndTrim;
 
 /**
  * Test the core components of log replication, namely, Snapshot Sync and Log Entry Sync,

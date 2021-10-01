@@ -33,7 +33,6 @@ import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
-import org.corfudb.util.serializer.Serializers;
 
 @Slf4j
 public class LogReplicationAbstractIT extends AbstractIT {
@@ -215,7 +214,9 @@ public class LogReplicationAbstractIT extends AbstractIT {
             activeRuntime.parseConfigurationString(activeEndpoint);
             activeRuntime.connect();
 
-            standbyRuntime = new CorfuRuntime(standbyEndpoint).connect();
+            standbyRuntime = CorfuRuntime.fromParameters(params).setTransactionLogging(true);
+            standbyRuntime.parseConfigurationString(standbyEndpoint);
+            standbyRuntime.connect();
 
             corfuStoreActive = new CorfuStore(activeRuntime);
             corfuStoreStandby = new CorfuStore(standbyRuntime);
@@ -229,7 +230,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         mapNameToMapActive = new HashMap<>();
         mapNameToMapStandby = new HashMap<>();
 
-        for(int i=1; i<=mapCount; i++) {
+        for(int i=1; i <= mapCount; i++) {
             String mapName = TABLE_PREFIX + i;
 
             Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapActive = corfuStoreActive.openTable(

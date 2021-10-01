@@ -44,7 +44,7 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Slf4j
-public class ReplicationReaderWriterIT extends AbstractIT {
+public class LogReplicationReaderWriterIT extends AbstractIT {
     private static final String DEFAULT_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
     private static final int WRITER_PORT = DEFAULT_PORT + 1;
     private static final String WRITER_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
@@ -95,7 +95,6 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     private final List<LogReplicationEntryMsg> msgQ = new ArrayList<>();
 
     private void setupEnv() throws IOException {
-        // Start node one and populate it with data
         new CorfuServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(DEFAULT_PORT)
@@ -364,14 +363,13 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         LogEntryWriter writer = new LogEntryWriter(config, logReplicationMetadataManager);
 
         if (msgQ.isEmpty()) {
-            log.debug("msgQ is empty");
+            log.debug("msgQ is EMPTY");
         }
 
         for (LogReplicationEntryMsg msg : msgQ) {
             writer.apply(msg);
         }
     }
-
 
     private void accessTxStream(Iterator<ILogData> iterator, int num) {
 
@@ -473,7 +471,6 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         }
     }
 
-
     @Test
     public void testOpenTableAfterTrimWithoutCheckpoint () throws IOException {
         final int offset = 20;
@@ -528,7 +525,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     }
 
     private void tearDownEnv() {
-        if(srcDataRuntime != null) {
+        if (srcDataRuntime != null) {
             srcDataRuntime.shutdown();
             srcTestRuntime.shutdown();
             readerRuntime.shutdown();
@@ -678,8 +675,6 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
     @Test
     public void testLogEntryTransferWithSerializer() throws Exception {
-        // setup environment
-        log.debug("\ntest start ok");
         setupEnv();
         ISerializer serializer = new TestSerializer(Byte.MAX_VALUE);
 
@@ -693,7 +688,6 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         //play messages at dst server
         writeLogEntryMsgs(msgQ, srcHashMap.keySet(), writerRuntime);
 
-
         //verify data with hashtable
         openStreams(dstTables, dstDataRuntime, NUM_STREAMS, serializer);
 
@@ -702,6 +696,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
         cleanUp();
     }
+
 
 
     /**
