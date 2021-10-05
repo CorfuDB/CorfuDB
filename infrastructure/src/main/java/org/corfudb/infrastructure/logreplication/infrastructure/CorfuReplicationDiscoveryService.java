@@ -788,7 +788,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     @Override
     public Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus() {
-        if (localClusterDescriptor == null) {
+        if (localClusterDescriptor == null || logReplicationMetadataManager == null) {
             log.warn("Cluster configuration has not been pushed to current LR node.");
             return null;
         } else if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
