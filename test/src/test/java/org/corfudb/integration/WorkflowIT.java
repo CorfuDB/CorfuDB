@@ -86,7 +86,7 @@ public class WorkflowIT extends AbstractIT {
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(table);
 
-        Token prefix = mcw.appendCheckpoints(runtime, "Maithem");
+        Token prefix = mcw.appendCheckpoints(runtime, "checkpointer");
 
         runtime.getAddressSpaceView().prefixTrim(prefix);
 
