@@ -634,7 +634,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
                     .get(CorfuRuntime.getStreamID(streamNameB));
 
             // Verify address space and trim mark is properly set for the given stream.
-            assertThat(addressSpaceB.getTrimMark()).isEqualTo(Address.NON_EXIST);
+            assertThat(addressSpaceB.getTrimMark()).isEqualTo(Address.NON_ADDRESS);
             assertThat(addressSpaceB.size()).isEqualTo(insertions);
 
             // Open mapB new runtime
@@ -660,7 +660,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
                     .get(CorfuRuntime.getStreamID(streamNameB));
 
             // Verify address space and trim mark is properly set for the given stream.
-            assertThat(addressSpaceB.getTrimMark()).isEqualTo(Address.NON_EXIST);
+            assertThat(addressSpaceB.getTrimMark()).isEqualTo(Address.NON_ADDRESS);
             assertThat(addressSpaceB.size()).isEqualTo(insertions);
 
             // Open mapB after restart

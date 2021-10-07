@@ -4,6 +4,7 @@ package org.corfudb.integration;
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Message;
 import lombok.Getter;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
@@ -24,6 +25,7 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.SampleTableAMsg;
 import org.corfudb.test.SampleSchema.SampleTableBMsg;
@@ -40,6 +42,7 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -88,6 +91,25 @@ public class StreamingIT extends AbstractIT {
         singleNodeEndpoint = String.format("%s:%d",
                 corfuSingleNodeHost,
                 corfuStringNodePort);
+    }
+
+    @Test
+    @SuppressWarnings("checkstyle:magicnumber")
+    public void testStreamQuery() throws Exception {
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        CorfuRuntime rt = createRuntime(singleNodeEndpoint);
+        UUID streamId = UUID.randomUUID();
+
+        StreamAddressSpace sas = rt.getSequencerView()
+                .getStreamAddressSpace(new StreamAddressRange(streamId, 100L, 50L));
+        rt.getStreamsView().get(streamId).append(new byte[100]);
+        assertThat(sas.getTrimMark()).isEqualTo(Address.NON_ADDRESS);
+        // Restart the server
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+        corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        StreamAddressSpace sas2 = rt.getSequencerView()
+                .getStreamAddressSpace(new StreamAddressRange(streamId, 100L, 50L));
+        assertThat(sas2.getTrimMark()).isEqualTo(Address.NON_ADDRESS);
     }
 
     /**

@@ -1173,7 +1173,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         assertThat(streamAddressSpace.getTrimMark()).isEqualTo(numEntries);
         assertThat(cpStreamAddressSpace.size()).isEqualTo(checkpointSize);
-        assertThat(cpStreamAddressSpace.getTrimMark()).isEqualTo(Address.NON_EXIST);
+        assertThat(cpStreamAddressSpace.getTrimMark()).isEqualTo(Address.NON_ADDRESS);
 
         // Verify START_ADDRESS of checkpoint for stream
         StreamAddressSpace checkpointAddressSpace = Utils.getLogAddressSpace(runtime2.getLayoutView()

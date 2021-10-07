@@ -537,7 +537,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
 
         // Get Stream's Address Space
         StreamAddressSpace addressSpace = client.getLogAddressSpace().join().getAddressMap().get(streamId);
-        assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_EXIST);
+        assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_ADDRESS);
         assertThat(addressSpace.size()).isEqualTo(numEntries);
         assertThat(addressSpace.contains(addressOne));
 
@@ -545,7 +545,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         CompletableFuture<StreamsAddressResponse> cfLog = client.getLogAddressSpace();
         StreamsAddressResponse response = cfLog.get();
         addressSpace = response.getAddressMap().get(streamId);
-        assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_EXIST);
+        assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_ADDRESS);
         assertThat(addressSpace.size()).isEqualTo(numEntries);
         assertThat(addressSpace.contains(addressOne));
         assertThat(response.getLogTail()).isEqualTo(addressTwo);

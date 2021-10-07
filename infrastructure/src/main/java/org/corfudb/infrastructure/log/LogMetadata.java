@@ -89,10 +89,10 @@ public class LogMetadata {
         // Update stream address space (used for sequencer recovery), add this entry as a valid address for this stream.
         streamsAddressSpaceMap.compute(streamId, (id, addressSpace) -> {
             if (addressSpace == null) {
-                // Note: stream trim mark is initialized to -6
+                // Note: stream trim mark is initialized to -1
                 // its value will be computed as checkpoints for this stream are found in the log.
                 // The presence of a checkpoint provides a valid trim mark for a stream.
-                return new StreamAddressSpace(Address.NON_EXIST, Collections.singleton(entryAddress));
+                return new StreamAddressSpace(Address.NON_ADDRESS, Collections.singleton(entryAddress));
             }
             addressSpace.addAddress(entryAddress);
             return addressSpace;
