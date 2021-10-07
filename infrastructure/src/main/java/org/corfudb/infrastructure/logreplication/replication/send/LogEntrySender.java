@@ -29,17 +29,17 @@ public class LogEntrySender {
     /*
      * Implementation of Log Entry Reader. Default implementation reads at the stream layer.
      */
-    private LogEntryReader logEntryReader;
+    private final LogEntryReader logEntryReader;
 
     /*
      * Implementation of buffering messages and sending/resending messages
      */
-    private SenderBufferManager dataSenderBufferManager;
+    private final SenderBufferManager dataSenderBufferManager;
 
     /*
      * Log Replication FSM (to insert internal events)
      */
-    private LogReplicationFSM logReplicationFSM;
+    private final LogReplicationFSM logReplicationFSM;
 
     private volatile boolean taskActive = false;
 
@@ -56,11 +56,10 @@ public class LogEntrySender {
      * @param logEntryReader    log entry logreader implementation
      * @param dataSender        implementation of a data sender, both snapshot and log entry, this represents
      *                          the application callback for data transmission
-     * @param readProcessor     post read processing logic
      * @param logReplicationFSM log replication FSM to insert events upon message acknowledgement
      */
     public LogEntrySender(LogEntryReader logEntryReader, DataSender dataSender,
-                          ReadProcessor readProcessor, LogReplicationFSM logReplicationFSM) {
+                          LogReplicationFSM logReplicationFSM) {
 
         this.logEntryReader = logEntryReader;
         this.logReplicationFSM = logReplicationFSM;
@@ -166,5 +165,9 @@ public class LogEntrySender {
 
     public void updateTopologyConfigId(long topologyConfigId) {
         dataSenderBufferManager.updateTopologyConfigId(topologyConfigId);
+    }
+
+    public int getPendingACKQueueSize() {
+        return dataSenderBufferManager.getPendingMessages().getSize();
     }
 }
