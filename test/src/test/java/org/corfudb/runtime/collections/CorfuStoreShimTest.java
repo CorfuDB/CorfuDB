@@ -36,9 +36,12 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Random;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -346,6 +349,84 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         corfuRuntime.getObjectsView().getObjectCache().clear();
 
         assertThat(shimStore.getHighestSequence(namespace, tableName)).isEqualTo(addressSpace.getTail());
+    }
+
+    /**
+     * 4 threads all insert an element followed by full table scan of all elements of all threads
+     * thread0: slow threads sleeps after inserting data
+     * thread3: skips doing scans
+     *
+     * @throws Exception
+     */
+    @Test
+    public void readWriterStressTest() throws Exception {
+        final String namespace = "corfu";
+        final String tableName = "UT-Table";
+        final int numUpdates = PARAMETERS.NUM_ITERATIONS_LOW;
+
+        // Open 'table' and write 'n' consecutive updates
+        CorfuRuntime corfuRuntime = getTestRuntime();
+        final CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+        Table<UuidMsg, ExampleSchemas.ExampleValue, ManagedMetadata> table = shimStore.openTable(
+                namespace,
+                tableName,
+                UuidMsg.class,
+                ExampleSchemas.ExampleValue.class,
+                ManagedMetadata.class,
+                TableOptions.builder().build());
+
+
+        final int numThreads = 4;
+        ExecutorService executorService = Executors.newFixedThreadPool(numThreads);
+        long loadStart = System.currentTimeMillis();
+        for (int tid = 0; tid < numThreads; tid++) {
+            final int threadId = tid;
+            executorService.submit(() -> {
+                HashMap<Long, Long> refMap = new HashMap<>(); // each thread has its local map
+                UuidMsg key;
+                for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
+                    for (long index = 0; index < numUpdates; index++) {
+                        try (ManagedTxnContext tx = shimStore.tx(namespace)) {
+                            key = UuidMsg.newBuilder()
+                                    .setMsb(threadId) // separates thread's updates from others
+                                    .setLsb(index).build();
+                            Long randomLong = ThreadLocalRandom.current().nextLong();
+                            ExampleSchemas.ExampleValue val = ExampleSchemas.ExampleValue.newBuilder()
+                                    .setPayload(randomLong.toString())
+                                    .setEntryIndex(index)
+                                    .build();
+                            refMap.put(index, randomLong);
+                            tx.putRecord(table, key, val, ManagedMetadata.newBuilder().build());
+
+                            if (threadId == 0) {
+                                try {
+                                    Thread.sleep(10);
+                                } catch (InterruptedException ignored) {
+                                }
+                            }
+                            if (index > 0 && (index % (numUpdates / 10) == 0)) {
+                                System.out.println("Thread " + threadId + " done with " + index + " out of " + numUpdates + " Round "+i);
+                            }
+
+                            // Now do a full table scan and only verify this thread's entries
+                            if (threadId != 3) {
+                                final List<CorfuStoreEntry<UuidMsg, ExampleSchemas.ExampleValue, ManagedMetadata>> threadSubSet =
+                                        tx.executeQuery(table, e -> (e.getKey().getMsb() == threadId));
+                                threadSubSet.forEach(e -> {
+                                    assertThat(e.getPayload().getPayload())
+                                            .isEqualTo(refMap.get(e.getKey().getLsb()).toString());
+                                });
+                                assertThat(threadSubSet.size()).isEqualTo(refMap.size());
+                            }
+                            tx.commit();
+                        }
+                    }
+                }
+            });
+        }
+        executorService.awaitTermination(5, TimeUnit.MINUTES);
+        long loadEnd = System.currentTimeMillis();
+        System.out.println("It took "+ (loadEnd - loadStart)+"ms for "+numUpdates+ " insertions");
     }
 
     /**
