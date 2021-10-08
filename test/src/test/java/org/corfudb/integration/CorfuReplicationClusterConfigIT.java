@@ -124,7 +124,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         configTable = activeCorfuStore.openTable(
                 DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
                 ClusterUuidMsg.class, ClusterUuidMsg.class, ClusterUuidMsg.class,
-                TableOptions.builder().build()
+                TableOptions.fromProtoSchema(ClusterUuidMsg.class)
         );
 
         activeLockTable = activeCorfuStore.openTable(
@@ -133,21 +133,21 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 LockDataTypes.LockId.class,
                 LockDataTypes.LockData.class,
                 null,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(LockDataTypes.LockData.class));
 
         activeCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE,
                 LogReplicationMetadata.ReplicationStatusKey.class,
                 LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         standbyCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE,
                 LogReplicationMetadata.ReplicationStatusKey.class,
                 LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
     }
 
     @After
@@ -908,7 +908,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                     LogReplicationMetadataKey.class,
                     LogReplicationMetadataVal.class,
                     null,
-                    TableOptions.builder().build());
+                    TableOptions.fromProtoSchema(LogReplicationMetadataVal.class));
 
         return metadataTable;
     }

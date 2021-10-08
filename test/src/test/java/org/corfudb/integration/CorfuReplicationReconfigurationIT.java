@@ -279,7 +279,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             corfuStore.openTable(
                     NAMESPACE, mapName,
                     Sample.StringKey.class, Sample.IntValueTag.class, Sample.Metadata.class,
-                    TableOptions.builder().build()
+                    TableOptions.fromProtoSchema(Sample.IntValueTag.class)
             );
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -514,23 +514,23 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             if (i % 2 == 0) {
                 Table<Sample.StringKey, ValueFieldTagOne, Sample.Metadata> mapActive = corfuStoreActive.openTable(
                         NAMESPACE, mapName, Sample.StringKey.class, ValueFieldTagOne.class, Sample.Metadata.class,
-                        TableOptions.builder().build());
+                        TableOptions.fromProtoSchema(ValueFieldTagOne.class));
                 mapNameToMapActiveTypeA.put(mapName, mapActive);
 
                 Table<Sample.StringKey, ValueFieldTagOne, Sample.Metadata> mapStandby = corfuStoreStandby.openTable(
                         NAMESPACE, mapName, Sample.StringKey.class, ValueFieldTagOne.class, Sample.Metadata.class,
-                        TableOptions.builder().build());
+                        TableOptions.fromProtoSchema(ValueFieldTagOne.class));
                 mapNameToMapStandbyTypeA.put(mapName, mapStandby);
 
             } else {
                 Table<Sample.StringKey, ValueFieldTagOneAndTwo , Sample.Metadata> mapActive = corfuStoreActive.openTable(
                         NAMESPACE, mapName, Sample.StringKey.class, ValueFieldTagOneAndTwo.class, Sample.Metadata.class,
-                        TableOptions.builder().build());
+                        TableOptions.fromProtoSchema(ValueFieldTagOneAndTwo.class));
                 mapNameToMapActiveTypeB.put(mapName, mapActive);
 
                 Table<Sample.StringKey, ValueFieldTagOneAndTwo, Sample.Metadata> mapStandby = corfuStoreStandby.openTable(
                         NAMESPACE, mapName, Sample.StringKey.class, ValueFieldTagOneAndTwo.class, Sample.Metadata.class,
-                        TableOptions.builder().build());
+                        TableOptions.fromProtoSchema(ValueFieldTagOneAndTwo.class));
                 mapNameToMapStandbyTypeB.put(mapName, mapStandby);
             }
         }

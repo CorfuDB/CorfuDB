@@ -193,7 +193,7 @@ public class TableRegistry {
                        @Nonnull Class<K> keyClass,
                        @Nonnull Class<V> payloadClass,
                        @Nullable Class<M> metadataClass,
-                       @Nonnull final TableOptions<K, V> tableOptions)
+                       @Nonnull final TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
 
         TableName tableNameKey = TableName.newBuilder()
@@ -225,11 +225,14 @@ public class TableRegistry {
             .setValue(Any.pack(defaultValueMessage));
         TableDescriptors tableDescriptors = tableDescriptorsBuilder.build();
 
+        // Also capture any TableOptions passed in permanently into the metadata section.
         TableMetadata.Builder metadataBuilder = TableMetadata.newBuilder();
         metadataBuilder.setDiskBased(tableOptions.getPersistentDataPath().isPresent());
-        metadataBuilder.setTableOptions(defaultValueMessage
-                .getDescriptorForType().getOptions()
-                .getExtension(CorfuOptions.tableSchema));
+        if (tableOptions.getSchemaOptions() == null) {
+            metadataBuilder.setTableOptions(CorfuOptions.SchemaOptions.getDefaultInstance());
+        } else {
+            metadataBuilder.setTableOptions(tableOptions.getSchemaOptions());
+        }
 
         int numRetries = 9; // Since this is an internal transaction, retry a few times before giving up.
         while (numRetries-- > 0) {
@@ -425,7 +428,7 @@ public class TableRegistry {
                              @Nonnull final Class<K> kClass,
                              @Nonnull final Class<V> vClass,
                              @Nullable final Class<M> mClass,
-                             @Nonnull final TableOptions<K, V> tableOptions)
+                             @Nonnull final TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
 
         // Register the schemas to schema table.
@@ -459,19 +462,20 @@ public class TableRegistry {
                     protobufSerializer, this.runtime);
         }
 
-        Set<StreamTagInfo> streamTagInfoForTable = defaultValueMessage
-                .getDescriptorForType()
-                .getOptions()
-                .getExtension(CorfuOptions.tableSchema)
-                .getStreamTagList()
-                .stream()
+        CorfuOptions.SchemaOptions tableSchemaOptions;
+        if (tableOptions.getSchemaOptions() != null) {
+            tableSchemaOptions = tableOptions.getSchemaOptions();
+        } else {
+            tableSchemaOptions = CorfuOptions.SchemaOptions.getDefaultInstance();
+        }
+        final Set<StreamTagInfo> streamTagInfoForTable = tableSchemaOptions
+                .getStreamTagList().stream()
                 .map(tag -> new StreamTagInfo(tag, getStreamIdForStreamTag(namespace, tag)))
                 .collect(Collectors.toSet());
 
+        final boolean isFederated = tableSchemaOptions.getIsFederated();
         // If table is federated, add a new tagged stream (on which updates to federated tables will be appended for
         // streaming purposes)
-        final boolean isFederated = defaultValueMessage.getDescriptorForType()
-                .getOptions().getExtension(CorfuOptions.tableSchema).getIsFederated();
         if (isFederated) {
             streamTagInfoForTable.add(LOG_REPLICATOR_STREAM_INFO);
         }
@@ -492,7 +496,9 @@ public class TableRegistry {
                         .vClass(vClass)
                         .mClass(mClass)
                         .valueSchema(defaultValueMessage)
-                        .metadataSchema(defaultMetadataMessage).build(),
+                        .metadataSchema(defaultMetadataMessage)
+                        .schemaOptions(tableSchemaOptions)
+                        .build(),
                 this.runtime,
                 this.protobufSerializer,
                 mapSupplier,
@@ -503,6 +509,7 @@ public class TableRegistry {
         registerTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
         return table;
     }
+
 
     /**
      * Get an already opened table. Fetches the table from the cache given only the namespace and table name.

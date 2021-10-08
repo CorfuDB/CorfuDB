@@ -227,7 +227,7 @@ public class StreamingIT extends AbstractIT {
         Table<Uuid, SampleTableAMsg, Uuid> tableA = store.openTable(
                 "test_namespace", "tableA",
                 Uuid.class, SampleTableAMsg.class, Uuid.class,
-                TableOptions.builder().build()
+                TableOptions.fromProtoSchema(SampleTableAMsg.class)
         );
 
         // Make some updates to the table, more than the buffer size.
@@ -356,7 +356,7 @@ public class StreamingIT extends AbstractIT {
         Table<Uuid, SampleTableCMsg, Uuid> tableNoTags = store.openTable(
                 "test_namespace", tableName,
                 Uuid.class, SampleTableCMsg.class, Uuid.class,
-                TableOptions.builder().build()
+                TableOptions.fromProtoSchema(SampleTableCMsg.class)
         );
 
         // Make some updates to the table, more than the buffer size.
@@ -481,7 +481,7 @@ public class StreamingIT extends AbstractIT {
         // Create two tables.
         Table<Uuid, SampleTableAMsg, Uuid> table = store.openTable(ns, tn,
                 Uuid.class, SampleTableAMsg.class, Uuid.class,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(SampleTableAMsg.class));
 
         final int numRecords = PARAMETERS.NUM_ITERATIONS_LOW;
         CountDownLatch latch = new CountDownLatch(numRecords);
@@ -528,13 +528,13 @@ public class StreamingIT extends AbstractIT {
         Table<Uuid, SampleTableAMsg, Uuid> tableA = store.openTable(
                 "test_namespace", "tableA",
                 Uuid.class, SampleTableAMsg.class, Uuid.class,
-                TableOptions.builder().build()
+                TableOptions.fromProtoSchema(SampleTableAMsg.class)
         );
 
         Table<Uuid, SampleTableBMsg, Uuid> tableB = store.openTable(
                 "test_namespace", "tableB",
                 Uuid.class, SampleTableBMsg.class, Uuid.class,
-                TableOptions.builder().build()
+                TableOptions.fromProtoSchema(SampleTableBMsg.class)
         );
 
         // Make some updates to the tables.
@@ -651,7 +651,7 @@ public class StreamingIT extends AbstractIT {
         Table<Uuid, SampleTableAMsg, Uuid> tableA = store.openTable(
                 "test_namespace", "tableA",
                 Uuid.class, SampleTableAMsg.class, Uuid.class,
-                TableOptions.builder().build()
+                TableOptions.fromProtoSchema(SampleTableAMsg.class)
         );
 
         final int numThread = 2;
@@ -726,7 +726,7 @@ public class StreamingIT extends AbstractIT {
         Table<Uuid, SampleTableAMsg, Uuid> tableA = store.openTable(
                 namespace, tableName,
                 Uuid.class, SampleTableAMsg.class, Uuid.class,
-                TableOptions.builder().build()
+                TableOptions.fromProtoSchema(SampleTableAMsg.class)
         );
 
         // Subscribe to streaming updates, while table has not been yet updated
@@ -794,13 +794,13 @@ public class StreamingIT extends AbstractIT {
         Table<Uuid, SampleTableAMsg, Uuid> tableA = store.openTable(
                 namespace, tableNameA,
                 Uuid.class, SampleTableAMsg.class, Uuid.class,
-                TableOptions.builder().build()
+                TableOptions.fromProtoSchema(SampleTableAMsg.class)
         );
 
         Table<Uuid, SampleTableBMsg, Uuid> tableB = store.openTable(
                 namespace, tableNameB,
                 Uuid.class, SampleTableBMsg.class, Uuid.class,
-                TableOptions.builder().build()
+                TableOptions.fromProtoSchema(SampleTableBMsg.class)
         );
 
         final int numUpdates = 10;
@@ -906,13 +906,13 @@ public class StreamingIT extends AbstractIT {
         Table<Uuid, Uuid, Uuid> n1t1 = store.openTable(
                 namespace, "t1", Uuid.class,
                 Uuid.class, Uuid.class,
-                TableOptions.builder().build()
+                TableOptions.fromProtoSchema(Uuid.class)
         );
 
         Table<Uuid, Uuid, Uuid> n1t2 = store.openTable(
                 namespace, "t2", Uuid.class,
                 Uuid.class, Uuid.class,
-                TableOptions.builder().build()
+                TableOptions.fromProtoSchema(Uuid.class)
         );
 
         // Make an update to the tables in a transaction.
@@ -1152,7 +1152,7 @@ public class StreamingIT extends AbstractIT {
         newStore.openTable(
                 namespace, table2Name,
                 Uuid.class, SampleTableBMsg.class, Uuid.class,
-                TableOptions.builder().build()
+                TableOptions.fromProtoSchema(SampleTableBMsg.class)
         );
 
         // Attempt to subscribe to 'commonStreamTag', it should still fail as ALL of the tables labeled with this tag
@@ -1165,13 +1165,13 @@ public class StreamingIT extends AbstractIT {
         newStore.openTable(
                 namespace, table3Name,
                 Uuid.class, SampleTableBMsg.class, Uuid.class,
-                TableOptions.builder().build()
+                TableOptions.fromProtoSchema(SampleTableBMsg.class)
         );
 
         newStore.openTable(
                 namespace, table1Name,
                 Uuid.class, SampleTableAMsg.class, Uuid.class,
-                TableOptions.builder().build()
+                TableOptions.fromProtoSchema(SampleTableAMsg.class)
         );
 
         // Attempt to register, now that 3 tables have been opened
@@ -1208,7 +1208,7 @@ public class StreamingIT extends AbstractIT {
         store.openTable(
                 namespace, defaultTableName,
                 Uuid.class, SampleTableAMsg.class, Uuid.class,
-                TableOptions.builder().build()
+                TableOptions.fromProtoSchema(SampleTableAMsg.class)
         );
 
         // Subscribe before any data is written to the tables, to verify the timestamp corresponds to the current state
@@ -1264,7 +1264,7 @@ public class StreamingIT extends AbstractIT {
         Table<Uuid, SampleTableAMsg, Uuid> tableA = store.openTable(
                 namespace, tableName,
                 Uuid.class, SampleTableAMsg.class, Uuid.class,
-                TableOptions.builder().build()
+                TableOptions.fromProtoSchema(SampleTableAMsg.class)
         );
 
         // Subscribe to streaming updates
@@ -1313,7 +1313,7 @@ public class StreamingIT extends AbstractIT {
         Table<Uuid, SampleTableAMsg, Uuid> tableA = store.openTable(
                 namespace, defaultTableName,
                 Uuid.class, SampleTableAMsg.class, Uuid.class,
-                TableOptions.builder().build()
+                TableOptions.fromProtoSchema(SampleTableAMsg.class)
         );
 
         // Make some updates to tableA
@@ -1338,7 +1338,7 @@ public class StreamingIT extends AbstractIT {
         Table<Uuid, SampleTableBMsg, Uuid> tableB = store.openTable(
                 namespace, tableName,
                 Uuid.class, SampleTableBMsg.class, Uuid.class,
-                TableOptions.builder().build()
+                TableOptions.fromProtoSchema(SampleTableBMsg.class)
         );
 
         for (int index = offset; index < offset + numUpdates; index++) {
@@ -1363,7 +1363,7 @@ public class StreamingIT extends AbstractIT {
 
         readStore.openTable(namespace, defaultTableName,
                 Uuid.class, SampleTableAMsg.class, Uuid.class,
-                TableOptions.builder().build()
+                TableOptions.fromProtoSchema(SampleTableAMsg.class)
         );
 
         try (TxnContext txn = readStore.txn(namespace, IsolationLevel.snapshot(snapshotTimestamp))) {
