@@ -1,5 +1,6 @@
 package org.corfudb.integration;
 
+import com.google.common.collect.Iterables;
 import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +28,10 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -78,7 +82,8 @@ public class StreamingPatternsIT extends AbstractIT {
         private final CountDownLatch errorNotifierLatch;
 
         @Getter
-        private final LinkedList<CorfuStreamEntries> updates = new LinkedList<>();
+        private final List<CorfuStreamEntries> updates = Collections.synchronizedList(new LinkedList<>());
+
 
         public StreamListenerResumeOrDefaultImpl(CorfuStore store, String namespace, String streamTag,
                                                  int updatesToError, CountDownLatch errorNotifierLatch) {
@@ -126,10 +131,10 @@ public class StreamingPatternsIT extends AbstractIT {
         private boolean failOnFullSync = false;
 
         @Getter
-        private final LinkedList<CorfuStreamEntry> updates = new LinkedList<>();
+        private final Collection<CorfuStreamEntry> updates = Collections.synchronizedCollection(new ArrayList<>());
 
         @Getter
-        private final LinkedList<CorfuStoreEntry> fullSyncBuffer = new LinkedList<>();
+        private final Collection<CorfuStoreEntry> fullSyncBuffer = Collections.synchronizedCollection(new ArrayList<>());
 
         public StreamListenerResumeOrFullSyncImpl(CorfuStore store, String namespace, String streamTag,
                                                   int updatesToError, CountDownLatch errorNotifierLatch, CountDownLatch fullSyncLatch) {
@@ -312,8 +317,9 @@ public class StreamingPatternsIT extends AbstractIT {
         mcw.addMap(runtime.getTableRegistry().getProtobufDescriptorTable());
         mcw.appendCheckpoints(runtime, "StreamingPatternsIT");
 
-        Timestamp lastProcessedTs = defaultStreamListener.getUpdates().getLast().getTimestamp();
-        Token trimPoint = new Token(lastProcessedTs.getEpoch(), lastProcessedTs.getSequence() + deltaToError + (numUpdates/2));
+        Timestamp lastProcessedTs = Iterables.getLast(defaultStreamListener.getUpdates()).getTimestamp();
+        Token trimPoint = new Token(lastProcessedTs.getEpoch(),
+                lastProcessedTs.getSequence() + deltaToError + (numUpdates/2));
         runtime.getAddressSpaceView().prefixTrim(trimPoint);
         runtime.getAddressSpaceView().gc();
         runtime.getObjectsView().getObjectCache().clear();

@@ -261,9 +261,8 @@ public class DeltaStreamTest {
         UUID streamId = UUID.randomUUID();
         AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
         final int bufferSize = 1;
-        final long lastAddressRead = 0;
+        final long lastAddressRead = -1;
         DeltaStream stream = new DeltaStream(addressSpaceView, streamId, lastAddressRead, bufferSize);
-
         List<ILogData> consumed = new CopyOnWriteArrayList<>();
         final int numToProduce = 50;
 
@@ -273,11 +272,21 @@ public class DeltaStreamTest {
                 if (stream.hasNext()) {
                     consumed.add(stream.next());
                     done.countDown();
+                    if (done.getCount() == 0) {
+                        break;
+                    }
                 }
             }
         });
 
+        consumer.setName("consumer");
         consumer.start();
+
+        for (long x = 0; x < numToProduce; x++) {
+            LogData hole = new LogData(DataType.HOLE);
+            hole.setGlobalAddress(x);
+            when(addressSpaceView.read(x, options)).thenReturn(hole);
+        }
 
         Thread producer = new Thread(() -> {
             int numProduced = 0;
@@ -287,9 +296,6 @@ public class DeltaStreamTest {
                     long nextAddressToProduce = stream.getMaxAddressSeen() + 1;
                     StreamAddressSpace sas = new StreamAddressSpace();
                     sas.addAddress(nextAddressToProduce);
-                    LogData hole1 = new LogData(DataType.HOLE);
-                    hole1.setGlobalAddress(nextAddressToProduce);
-                    when(addressSpaceView.read(nextAddressToProduce, options)).thenReturn(hole1);
                     stream.refresh(sas);
                     numProduced++;
                 }
@@ -297,11 +303,13 @@ public class DeltaStreamTest {
 
         });
 
+        producer.setName("producer");
         producer.start();
         done.await(1, TimeUnit.SECONDS);
+
         assertThat(consumed.size()).isEqualTo(numToProduce);
         for (int x = 0; x < numToProduce; x++) {
-            assertThat(consumed.get(x).getGlobalAddress()).isEqualTo(x + 1);
+            assertThat(consumed.get(x).getGlobalAddress()).isEqualTo(x);
         }
     }
 }
