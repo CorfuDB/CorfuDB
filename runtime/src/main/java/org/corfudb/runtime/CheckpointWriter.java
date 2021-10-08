@@ -18,14 +18,19 @@ import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.CacheOption;
 import org.corfudb.runtime.view.StreamsView;
+import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.ProtobufSerializer;
 import org.corfudb.util.serializer.Serializers;
 
 import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
@@ -178,8 +183,41 @@ public class CheckpointWriter<T extends StreamingMap> {
         return snapshotTimestamp;
     }
 
+    private Set<UUID> discoverTableTags(UUID stream) {
+        Set<UUID> tags = new HashSet<>();
+        Set<CorfuStoreMetadata.TableName> names = ((DynamicProtobufSerializer) serializer).getCachedRegistryTable().keySet();
+        for (CorfuStoreMetadata.TableName tableName : names) {
+            String qName = TableRegistry.getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName());
+            if (CorfuRuntime.getStreamID(qName).equals(stream)) {
+                ((DynamicProtobufSerializer) serializer)
+                        .getCachedRegistryTable()
+                        .get(tableName)
+                        .getMetadata().getTableOptions().getStreamTagList()
+                        .forEach(tagName -> tags.add(TableRegistry.getStreamIdForStreamTag(tableName.getNamespace(), tagName)));
+
+                break;
+            }
+        }
+        return tags;
+    }
+
     private Token forceNoOpEntry() {
-        TokenResponse writeToken = rt.getSequencerView().next(streamId);
+        Set<UUID> streamsToAdvance = new HashSet<>();
+        if (serializer instanceof DynamicProtobufSerializer) {
+            // One of the use-cases of a no-op entry written by the checkpointer is to always - even for empty streams -
+            // have a written address per-stream after a prefix trim. This is required for stream implementations to
+            // detect whether there is a trim gap while syncing. For example, if the last read address read by the
+            // stream is less than the stream's trim mark then a trim gap has occurred and a stream must re-sync.
+            // Since UFO stream listeners can track multiple table updates via stream tags, we need to also
+            // make sure that each stream tag has a valid address after a prefix trim. In addition to the table
+            // stream, discoverTableTags will find all tags associated with a table and also write a no-op on
+            // their streams.
+            streamsToAdvance.addAll(discoverTableTags(streamId));
+        }
+
+        streamsToAdvance.add(streamId);
+        TokenResponse writeToken = rt.getSequencerView()
+                .next(streamsToAdvance.toArray(new UUID[streamsToAdvance.size()]));
         LogData logData = new LogData(DataType.HOLE);
         rt.getAddressSpaceView().write(writeToken, logData, CacheOption.WRITE_AROUND);
         return writeToken.getToken();

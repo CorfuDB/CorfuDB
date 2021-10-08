@@ -8,6 +8,7 @@ import "google/protobuf/descriptor.proto";
 import "sample_appliance.proto";
 
 message FirewallRule {
+    option (org.corfudb.runtime.table_schema).stream_tag = "firewall_tag";
     optional int64 rule_id = 1 [(org.corfudb.runtime.schema).secondary_key = true];
     optional string rule_name = 2 [(org.corfudb.runtime.schema).secondary_key = true];
     optional org.corfudb.test.Appliance input = 3;
