@@ -93,9 +93,9 @@ public class CorfuTestParameters {
 
         // Iterations
         NUM_ITERATIONS_VERY_LOW = 10;
-        NUM_ITERATIONS_LOW = 100;
-        NUM_ITERATIONS_MODERATE = 1000;
-        NUM_ITERATIONS_LARGE = 10_000;
+        NUM_ITERATIONS_LOW = 50;
+        NUM_ITERATIONS_MODERATE = 300;
+        NUM_ITERATIONS_LARGE = 1500;
 
         // Concurrency
         CONCURRENCY_ONE = 1;

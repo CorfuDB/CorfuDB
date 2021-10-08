@@ -52,7 +52,7 @@ public class StreamingPatternsIT extends AbstractIT {
     private final String defaultTableName = "table_default";
     private final String defaultTag = "sample_streamer_1";
 
-    private final int sleepTime = 100;
+    private final int sleepTime = 300;
 
     private Table<Uuid, SampleTableAMsg, Uuid> tableDefault;
 
