@@ -108,7 +108,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
             Table<ClusterUuidMsg, ClusterUuidMsg, ClusterUuidMsg> table = corfuStore.openTable(
                     CONFIG_NAMESPACE, CONFIG_TABLE_NAME,
                     ClusterUuidMsg.class, ClusterUuidMsg.class, ClusterUuidMsg.class,
-                    TableOptions.builder().build()
+                    TableOptions.fromProtoSchema(ClusterUuidMsg.class)
             );
             table.clearAll();
         } catch (Exception e) {

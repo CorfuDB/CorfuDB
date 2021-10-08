@@ -22,7 +22,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.view.TableRegistry;
-import org.corfudb.util.serializer.Serializers;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -160,7 +159,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
                 SampleSchema.Uuid.class,
                 SampleSchema.Uuid.class,
                 SampleSchema.Uuid.class,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
 
         final long keyUuid = 1L;
         final long valueUuid = 3L;
@@ -312,7 +311,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         for (int index = 0; index < totalTables; index++) {
             store.openTable(namespace, tableBaseName + index,
                     SampleSchema.Uuid.class, valueTypes.get(index % valueTypes.size()), SampleSchema.Uuid.class,
-                    TableOptions.builder().build());
+                    TableOptions.fromProtoSchema(valueTypes.get(index % valueTypes.size())));
             tableNameToTags.put(tableBaseName + index, expectedTagsPerValues.get(valueTypes.get(index % valueTypes.size())));
         }
 
@@ -378,7 +377,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
                 SampleSchema.Uuid.class,
                 SampleSchema.FirewallRule.class,
                 SampleSchema.Uuid.class,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(SampleSchema.FirewallRule.class));
 
         SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder().setLsb(keyUuid)
             .setMsb(keyUuid).build();
@@ -441,7 +440,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
                 SampleSchema.Uuid.class,
                 SampleSchema.Uuid.class,
                 null,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
 
         final long keyUuid = 1L;
         final long valueUuid = 3L;
@@ -500,7 +499,10 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
                 SampleSchema.Uuid.class,
                 SampleSchema.Uuid.class,
                 SampleSchema.Uuid.class,
-                TableOptions.builder().persistentDataPath(Paths.get(PARAMETERS.TEST_TEMP_DIR)).build());
+                TableOptions.fromProtoSchema(SampleSchema.Uuid.class,
+                        TableOptions.builder()
+                                .persistentDataPath(Paths.get(PARAMETERS.TEST_TEMP_DIR)).build())
+        );
 
         final long keyUuid = 1L;
         final long valueUuid = 3L;
@@ -552,7 +554,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
             SampleSchema.Uuid.class,
             SampleSchema.Uuid.class,
             SampleSchema.Uuid.class,
-            TableOptions.builder().build());
+            TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
 
         final long keyUuid = 1L;
         final long valueUuid = 3L;

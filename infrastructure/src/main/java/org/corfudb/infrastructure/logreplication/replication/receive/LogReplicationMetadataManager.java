@@ -77,21 +77,21 @@ public class LogReplicationMetadataManager {
                             LogReplicationMetadataKey.class,
                             LogReplicationMetadataVal.class,
                             null,
-                            TableOptions.builder().build());
+                            TableOptions.fromProtoSchema(LogReplicationMetadataVal.class));
 
             this.replicationStatusTable = this.corfuStore.openTable(NAMESPACE,
                             REPLICATION_STATUS_TABLE,
                             ReplicationStatusKey.class,
                             ReplicationStatusVal.class,
                             null,
-                            TableOptions.builder().build());
+                            TableOptions.fromProtoSchema(ReplicationStatusVal.class));
 
             this.replicationEventTable = this.corfuStore.openTable(NAMESPACE,
                     REPLICATION_EVENT_TABLE_NAME,
                     ReplicationEventKey.class,
                     ReplicationEvent.class,
                     null,
-                    TableOptions.builder().build());
+                    TableOptions.fromProtoSchema(ReplicationEvent.class));
 
             this.localClusterId = localClusterId;
         } catch (Exception e) {

@@ -554,7 +554,7 @@ public class StreamingPatternsIT extends AbstractIT {
         tableDefault = store.openTable(
                 namespace, defaultTableName,
                 Uuid.class, SampleTableAMsg.class, Uuid.class,
-                TableOptions.builder().build()
+                TableOptions.fromProtoSchema(SampleTableAMsg.class)
         );
     }
 
@@ -573,7 +573,7 @@ public class StreamingPatternsIT extends AbstractIT {
         Table<Uuid, SampleTableBMsg, Uuid> randomTable = store.openTable(
                 namespace, "tableRandom",
                 Uuid.class, SampleTableBMsg.class, Uuid.class,
-                TableOptions.builder().build()
+                TableOptions.fromProtoSchema(SampleTableBMsg.class)
         );
 
         for (int index = 0; index < numUpdates; index++) {

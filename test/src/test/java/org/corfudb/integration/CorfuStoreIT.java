@@ -647,7 +647,7 @@ public class CorfuStoreIT extends AbstractIT {
                     SampleSchema.Uuid.class,
                     SampleSchema.SampleTableAMsg.class,
                     SampleSchema.ManagedMetadata.class,
-                    TableOptions.builder().build());
+                    TableOptions.fromProtoSchema(SampleSchema.SampleTableAMsg.class));
 
             SampleSchema.Uuid key = SampleSchema.Uuid.newBuilder().setLsb(0).setMsb(0).build();
             SampleSchema.SampleTableAMsg value = SampleSchema.SampleTableAMsg.newBuilder().setPayload("Payload Value").build();

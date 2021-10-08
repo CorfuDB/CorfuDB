@@ -7,12 +7,15 @@ import "corfu_options.proto";
 import "work_experience.proto";
 
 message Name {
-    string first_name = 1 [(org.corfudb.runtime.schema).secondary_key = true];
-    string last_name = 2 [(org.corfudb.runtime.schema).secondary_key = true];
+    string first_name = 1;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "first_name"};
+    string last_name = 2;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "last_name"};
 }
 
 message Person {
-    Name name = 1 [(org.corfudb.runtime.schema).secondary_key = true];
+    Name name = 1;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "name"};
     int32 age = 2;
     samples.protobuf.Experience exp = 3;
 }

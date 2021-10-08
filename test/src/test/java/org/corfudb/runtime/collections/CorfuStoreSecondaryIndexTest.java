@@ -63,7 +63,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                 ExampleValue.class,
                 ManagedMetadata.class,
                 // TableOptions includes option to choose - Memory/Disk based corfu table.
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(ExampleValue.class));
 
         UUID uuid1 = UUID.nameUUIDFromBytes("1".getBytes());
         UuidMsg key1 = UuidMsg.newBuilder()
@@ -128,7 +128,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                 UuidMsg.class,
                 ActivitySchedule.class,
                 ManagedMetadata.class,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(ActivitySchedule.class));
 
         // Populate table with X records
         final int numRecords = 42;
@@ -216,7 +216,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                 UuidMsg.class,
                 ExampleValue.class,
                 ManagedMetadata.class,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(ExampleValue.class));
 
         // Create 100 records
         final int totalRecords = 100;
@@ -313,7 +313,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                 ExampleSchemas.ClassRoom.class,
                 ManagedMetadata.class,
                 // TableOptions includes option to choose - Memory/Disk based corfu table.
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(ExampleSchemas.ClassRoom.class));
 
         // Create records for 40 classRooms
         final int totalClassRooms = 40;
@@ -380,7 +380,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                 ExampleSchemas.Network.class,
                 ManagedMetadata.class,
                 // TableOptions includes option to choose - Memory/Disk based corfu table.
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(ExampleSchemas.Network.class));
 
         final int totalNetworks = 10;
 
@@ -470,7 +470,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                 UuidMsg.class,
                 ExampleSchemas.Company.class,
                 ManagedMetadata.class,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(ExampleSchemas.Company.class));
 
         final int totalCompanies = 100;
 
@@ -607,7 +607,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                 UuidMsg.class,
                 ExampleSchemas.Person.class,
                 ManagedMetadata.class,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(ExampleSchemas.Person.class));
 
         // Create 10 records
         final int people = 10;
@@ -683,7 +683,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                 ExampleSchemas.Office.class,
                 ManagedMetadata.class,
                 // TableOptions includes option to choose - Memory/Disk based corfu table.
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(ExampleSchemas.Office.class));
 
         // Create 10 records
         final int numOffices = 6;
@@ -781,7 +781,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                 UuidMsg.class,
                 ExampleSchemas.School.class,
                 ManagedMetadata.class,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(ExampleSchemas.School.class));
 
         final int numSchools = 10;
         final long oddNumDesks = 35L;
@@ -926,7 +926,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                 UuidMsg.class,
                 ExampleSchemas.ContactBook.class,
                 ManagedMetadata.class,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(ExampleSchemas.ContactBook.class));
 
         // Common mobile number (nested repeated field in a 'oneOf' field) which will be present across all contactBooks
         final String commonMobile = "408-2219873";
@@ -1045,13 +1045,13 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
 
     /**
      * Simple example to prove an invalid nested secondary index definition will
-     * throw an error on openTable (the name is invalid from the root of the secondary index).
+     * throw an error on openTable if the schema has an index on a non-existent field
      * Please see example_schemas.proto.
      *
      * @throws Exception exception
      */
     @Test
-    public void testInvalidNestedSecondaryIndexRoot() throws Exception {
+    public void testInvalidSecondaryIndexNonExistentField() throws Exception {
         // Get a Corfu Runtime instance.
         CorfuRuntime corfuRuntime = getTestRuntime();
 
@@ -1062,15 +1062,14 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
         final String someNamespace = "some-namespace";
         // Define table name.
         final String tableName = "ManagedMetadata";
-
         // Create & Register the table.
         assertThrows(IllegalArgumentException.class, () -> shimStore.openTable(
                 someNamespace,
                 tableName,
                 UuidMsg.class,
-                ExampleSchemas.InvalidExampleValue.class,
+                ExampleSchemas.InvalidExampleNonExistentIndexField.class,
                 ManagedMetadata.class,
-                TableOptions.builder().build()));
+                TableOptions.fromProtoSchema(ExampleSchemas.InvalidExampleNonExistentIndexField.class)));
     }
 
     /**
@@ -1100,7 +1099,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                 UuidMsg.class,
                 ExampleSchemas.InvalidNestedSecondaryIndex.class,
                 ManagedMetadata.class,
-                TableOptions.builder().build()));
+                TableOptions.fromProtoSchema(ExampleSchemas.InvalidNestedSecondaryIndex.class)));
     }
 
     /**
@@ -1124,13 +1123,13 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
         final String tableName = "ManagedMetadata";
 
         // Create & Register the table.
-        assertThrows(UnsupportedOperationException.class, () -> shimStore.openTable(
+        assertThrows(IllegalArgumentException.class, () -> shimStore.openTable(
                 someNamespace,
                 tableName,
                 UuidMsg.class,
                 ExampleSchemas.InvalidFullNestedSecondaryIndex.class,
                 ManagedMetadata.class,
-                TableOptions.builder().build()));
+                TableOptions.fromProtoSchema(ExampleSchemas.InvalidFullNestedSecondaryIndex.class)));
     }
 
     /**
@@ -1161,7 +1160,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                 UuidMsg.class,
                 ExampleSchemas.Adult.class,
                 ManagedMetadata.class,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(ExampleSchemas.Adult.class));
 
         ManagedMetadata user = ManagedMetadata.newBuilder().setCreateUser("user_UT").build();
 
@@ -1257,7 +1256,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                 UuidMsg.class,
                 ExampleSchemas.InvalidAdultDefaultIndexName.class,
                 ManagedMetadata.class,
-                TableOptions.builder().build()));
+                TableOptions.fromProtoSchema(ExampleSchemas.InvalidAdultDefaultIndexName.class)));
     }
 
     /**
@@ -1285,7 +1284,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                 UuidMsg.class,
                 ExampleSchemas.InvalidAdultCustomIndexName.class,
                 ManagedMetadata.class,
-                TableOptions.builder().build()));
+                TableOptions.fromProtoSchema(ExampleSchemas.InvalidAdultCustomIndexName.class)));
     }
 
     /**
@@ -1315,7 +1314,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                 UuidMsg.class,
                 ExampleSchemas.NotNestedSecondaryIndex.class,
                 ManagedMetadata.class,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(ExampleSchemas.NotNestedSecondaryIndex.class));
 
         UUID id = UUID.randomUUID();
         UuidMsg key1 = UuidMsg.newBuilder()
@@ -1370,7 +1369,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                 UuidMsg.class,
                 ExampleSchemas.Adult.class,
                 ManagedMetadata.class,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(ExampleSchemas.Adult.class));
 
         // Create 1st person, with 'NO' secondary index field set (no age, children, company id or address id)
         ExampleSchemas.Adult ricky = Adult.newBuilder()
@@ -1483,7 +1482,7 @@ public class CorfuStoreSecondaryIndexTest extends AbstractViewTest {
                 UuidMsg.class,
                 ExampleSchemas.SportsProfessional.class,
                 ManagedMetadata.class,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(ExampleSchemas.SportsProfessional.class));
 
         // Define a player and set only (1) oneOf type, then query for the unset field to confirm this
         // is indexed as NULL (i.e., not set)

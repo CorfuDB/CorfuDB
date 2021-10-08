@@ -49,7 +49,8 @@ public class CorfuStoreShim {
                              @Nullable Class<M> mClass,
                              @Nonnull TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        return corfuStore.openTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
+        return corfuStore.openTable(namespace, tableName, kClass, vClass, mClass,
+                TableOptions.fromProtoSchema(vClass, tableOptions));
     }
 
     /**
