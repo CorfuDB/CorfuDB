@@ -60,7 +60,7 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
         }
     }
 
-    protected final int numIterations = PARAMETERS.NUM_ITERATIONS_MODERATE;
+    protected final int numIterations = 100;
     protected final Long numConflictKeys = 2L;
 
     private ByteString getByteString(String string) {
@@ -189,9 +189,6 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
                         null,
                         // TableOptions includes option to choose - Memory/Disk based corfu table.
                         TableOptions.builder().build());
-
-        UuidMsg key = UuidMsg.newBuilder().setLsb(0L).setMsb(0L).build();
-        ExampleSchemas.ManagedMetadata value = ExampleSchemas.ManagedMetadata.newBuilder().setCreateUser("simpleValue").build();
 
         Table<Queue.CorfuGuidMsg, ExampleSchemas.ExampleValue, Queue.CorfuQueueMetadataMsg> corfuQueue =
                 shimStore.openQueue(someNamespace, "testQueue",

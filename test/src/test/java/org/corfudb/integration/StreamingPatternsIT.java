@@ -94,7 +94,7 @@ public class StreamingPatternsIT extends AbstractIT {
                 updatesToError -= 1;
                 throw new IllegalStateException("Artificial exception to trigger onError");
             }
-
+            log.info("on next adding {}", results.getTimestamp());
             updates.add(results);
         }
 
@@ -206,6 +206,7 @@ public class StreamingPatternsIT extends AbstractIT {
      * This test verifies the 'resume' functionality for the resumeOrDefault re-subscription policy pattern.
      */
     @Test
+    @SuppressWarnings("checkstyle:magicnumber")
     public void testResumePortionOfResumeOrDefaultPolicy() throws Exception {
         // Run a corfu server & initialize CorfuStore
         initializeCorfu();
@@ -243,7 +244,7 @@ public class StreamingPatternsIT extends AbstractIT {
         updateDefaultTable(numUpdates, numUpdates);
 
         // Wait for a while to confirm listener has stopped receiving updates
-        TimeUnit.MILLISECONDS.sleep(sleepTime);
+        TimeUnit.MILLISECONDS.sleep(sleepTime * 4);
         assertThat(defaultStreamListener.getUpdates()).hasSize(processedBeforeError);
 
         // Unblock listener so it resumes subscription
@@ -251,7 +252,7 @@ public class StreamingPatternsIT extends AbstractIT {
 
         // Wait for a while so listener is re-subscribed and confirm it has synced from the last point (not lost the
         // numUpdates added while unsubscribed)
-        TimeUnit.MILLISECONDS.sleep(sleepTime);
+        TimeUnit.MILLISECONDS.sleep(sleepTime * 4);
         assertThat(defaultStreamListener.getUpdates()).hasSize(numUpdates*2);
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
@@ -340,6 +341,7 @@ public class StreamingPatternsIT extends AbstractIT {
      * This test verifies the 'resume' functionality for the resumeOrFullSync re-subscription policy pattern.
      */
     @Test
+    @SuppressWarnings("checkstyle:magicnumber")
     public void testResumePortionOfResumeOrFullSyncPolicy() throws Exception {
         // Run a corfu server & initialize CorfuStore
         initializeCorfu();
@@ -377,7 +379,7 @@ public class StreamingPatternsIT extends AbstractIT {
         updateDefaultTable(numUpdates, numUpdates);
 
         // Wait for a while to confirm listener has stopped receiving updates
-        TimeUnit.MILLISECONDS.sleep(sleepTime);
+        TimeUnit.MILLISECONDS.sleep(sleepTime * 5);
         assertThat(defaultStreamListener.getUpdates()).hasSize(processedBeforeError);
 
         // Unblock listener so it resumes subscription
@@ -385,7 +387,7 @@ public class StreamingPatternsIT extends AbstractIT {
 
         // Wait for a while so listener is re-subscribed and confirm it has synced from the last point (not lost the
         // numUpdates added while unsubscribed)
-        TimeUnit.MILLISECONDS.sleep(sleepTime);
+        TimeUnit.MILLISECONDS.sleep(sleepTime * 4);
         assertThat(defaultStreamListener.getUpdates()).hasSize(numUpdates*2);
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
@@ -396,6 +398,7 @@ public class StreamingPatternsIT extends AbstractIT {
      * resume is not possible.
      */
     @Test
+    @SuppressWarnings("checkstyle:magicnumber")
     public void testFullSyncPortionOfResumeOrFullSyncPolicy() throws Exception {
         // Run a corfu server & initialize CorfuStore
         initializeCorfu();
@@ -453,7 +456,7 @@ public class StreamingPatternsIT extends AbstractIT {
         errorLatch.countDown();
 
         // Wait while default re-subscription policy kicks in
-        TimeUnit.MILLISECONDS.sleep(sleepTime);
+        TimeUnit.MILLISECONDS.sleep(sleepTime * 5);
 
         // Confirm no updates have been processed
         // (as it was reset by full sync and all updates are part of the checkpoint)
@@ -466,7 +469,7 @@ public class StreamingPatternsIT extends AbstractIT {
         // (as they're beyond the point of re-subscription)
         updateDefaultTable(numUpdates, numUpdates);
 
-        TimeUnit.MILLISECONDS.sleep(sleepTime);
+        TimeUnit.MILLISECONDS.sleep(sleepTime * 3);
         assertThat(defaultStreamListener.getUpdates()).hasSize(numUpdates);
         assertThat(defaultStreamListener.getFullSyncBuffer().size()).isEqualTo(numUpdates*2);
 
@@ -538,6 +541,7 @@ public class StreamingPatternsIT extends AbstractIT {
         // Confirm reset did not occur as a failure on full Sync happened and listener is not able to re-subscribe
         assertThat(defaultStreamListener.getUpdates()).isNotEmpty();
         assertThat(defaultStreamListener.getFullSyncBuffer().size()).isZero();
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 
     private void openDefaultTable() throws Exception {
