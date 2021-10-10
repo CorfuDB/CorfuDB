@@ -5,6 +5,7 @@ import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
 
 import java.util.Optional;
@@ -150,7 +151,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                   Cancel snapshot send if still in progress.
                  */
                 cancelSnapshotSync("replication terminated.");
-                return fsm.getStates().get(LogReplicationStateType.STOPPED);
+                return fsm.getStates().get(LogReplicationStateType.ERROR);
             default: {
                 log.warn("Unexpected log replication event {} when in snapshot sync state.", event.getType());
             }
@@ -167,12 +168,19 @@ public class InSnapshotSyncState implements LogReplicationState {
                 snapshotSender.reset();
                 fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionEventId);
                 snapshotSyncTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
-
             }
             transmitFuture = fsm.getLogReplicationFSMWorkers()
                     .submit(() -> snapshotSender.transmit(transitionEventId));
         } catch (Throwable t) {
             log.error("Error on entry of InSnapshotSyncState.", t);
+        }
+    }
+
+    @Override
+    public void onExit(LogReplicationState to) {
+        if (to.getType().equals(LogReplicationStateType.INITIALIZED)) {
+            fsm.getAckReader().markSyncStatus(SyncStatus.STOPPED);
+            log.debug("Snapshot sync status changed to STOPPED");
         }
     }
 
