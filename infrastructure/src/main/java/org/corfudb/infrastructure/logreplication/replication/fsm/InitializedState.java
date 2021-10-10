@@ -16,9 +16,6 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 @Slf4j
 public class InitializedState implements LogReplicationState {
 
-    /*
-     * Log Replication Finite State Machine Instance
-     */
     private final LogReplicationFSM fsm;
 
     /**
@@ -61,7 +58,7 @@ public class InitializedState implements LogReplicationState {
             case REPLICATION_STOP:
                 return this;
             case REPLICATION_SHUTDOWN:
-                return fsm.getStates().get(LogReplicationStateType.STOPPED);
+                return fsm.getStates().get(LogReplicationStateType.ERROR);
             default: {
                 log.warn("Unexpected log replication event {} when in initialized state.", event.getType());
                 throw new IllegalTransitionException(event.getType(), getType());
@@ -71,17 +68,18 @@ public class InitializedState implements LogReplicationState {
 
     @Override
     public void onEntry(LogReplicationState from) {
-        try {
-            fsm.getAckReader().getOngoing().set(false);
+        if (from != this) {
             fsm.getAckReader().markSyncStatus(LogReplicationMetadata.SyncStatus.STOPPED);
-        } catch (Exception e) {
-            log.error("Error on exit of InitializedState.", e);
+            // Disable periodic sync status periodic task while in initialized state (no actual replication occurring)
+            fsm.getAckReader().stopSyncStatusUpdatePeriodicTask();
         }
     }
 
     @Override
     public void onExit(LogReplicationState to) {
-        fsm.getAckReader().getOngoing().set(true);
+        if (to != this || to.getType() != LogReplicationStateType.ERROR) {
+            fsm.getAckReader().startSyncStatusUpdatePeriodicTask();
+        }
     }
 
     @Override

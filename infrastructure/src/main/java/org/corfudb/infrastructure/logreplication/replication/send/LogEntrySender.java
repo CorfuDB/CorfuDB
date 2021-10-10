@@ -41,9 +41,7 @@ public class LogEntrySender {
      */
     private LogReplicationFSM logReplicationFSM;
 
-
     private volatile boolean taskActive = false;
-
 
     /**
      * Stop the send for Log Entry Sync
