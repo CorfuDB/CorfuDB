@@ -81,7 +81,7 @@ For instance, there are multiple possible scenarios of failures that could happe
     }
   ],
   "unresponsiveServers": [
-    "192.168.0.1:9000",
+    "192.168.0.3:9000",
     "192.168.0.2:9000"
   ],
   "failures": [
