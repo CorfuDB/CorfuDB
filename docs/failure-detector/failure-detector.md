@@ -38,21 +38,21 @@ Failure detector component (RemoteMonitoringService) consists of 4 parts:
  - Build a ClusterGraph based on aggregated ClusterState (the cluster state built on poll report stage):
    - find a failure in the cluster graph (if exists).
    - get a `Decision maker` - the node which can add a node to the unresponsive list. The decision maker node in the cluster:
-     1. has highest number of successful connections in the cluster (there could be more than one decision maker in a cluster).
-     2. has lowest node name in the cluster. For instance: [a, b, c] - `a` has lowest name, `c` has highest name.
+     1. has the highest number of successful connections in the cluster (there could be more than one decision maker in a cluster).
+     2. has the lowest node name in the cluster. For instance: [a, b, c] - `a` has the lowest name, `c` has the highest name.
    - choose a failed node:
-     1. the node has lowest number of successful connections.
-     2. the node has highest node name in the cluster.
+     1. the node has the lowest number of successful connections.
+     2. the node has the highest node name in the cluster.
    - if local node is a decision maker then the node adds the failed node in the unresponsive list.
    
 In the example:
  - node `a` is a decision maker, it has 3 successful connections
- - node `c` is a failed node, it has same number of successful connections like node `b` but is has higher node name.
+ - node `c` is a failed node, it has the same number of successful connections like node `b` but is has higher node name.
  - node `a` will add node `c` to the unresponsive list.     
  
 ### Implementation
 
-**Remote Monitoring Service** comprises of monitoring, failure handling and healing.
+**Remote Monitoring Service** comprises monitoring, failure handling and healing.
 This service is responsible for heartbeat and aggregating the cluster view. 
 This is updated in the shared context with the management server which serves the heartbeat responses.
 The failure detector updates the unreachable nodes in the layout.
@@ -62,15 +62,16 @@ The healing detector heals nodes which were previously marked unresponsive but h
 **Collect poll report**
 Each poll round consists of iterations. In each iteration, the FailureDetector pings all responsive nodes 
 in the layout and also collects their node states to provide cluster state.
-To provide more resilient failre detection mechanism, the failure detector collects few "poll reports" 
-equal to `failureThreshold` number then aggregates final poll report
+To provide more resilient failure detection mechanism:
+ - the failure detector collects few "poll reports" equal to `failureThreshold` number 
+ - aggregates final poll report
 
 Once a poll report collected, the `failureDetectionTask` is triggered by Remote Monitoring Service.
 To detect a failure in the cluster the Remote Monitoring Service gets `cluster state` from a poll report.
 The cluster state contains information about the cluster.
 
 **ClusterAdvisor** detects failures using cluster state. There could be different types of cluster advisors.
-Currently we use `CompleteGraphAdvisor` - any alive node must be connected to all other alive nodes in the cluster.
+Currently, we use `CompleteGraphAdvisor` - any alive node must be connected to all other alive nodes in the cluster.
 `CompleteGraphAdvisor`:
  - The advisor transforms cluster state into the cluster graph and makes it symmetric.
  It means converting a cluster graph which could have asymmetric failures to a graph with symmetric failures between nodes.
@@ -106,16 +107,15 @@ Sorting nodes according to:
 - Descending order of number of connections
 - Ascending order of a node name (alphabetically)
 
-A `Decision maker` always has highest number of successful connections and smallest name and
-a failed node always has lowest number of successful connections and highest name.
+A `Decision maker` always has the highest number of successful connections and smallest name and
+a failed node always has the lowest number of successful connections and highest name.
 
 Finding a failed node - collect all node ranks in a graph and choose the node 
 with the smallest number of successful connections and with the highest name (sorted alphabetically).
 
-Even if we have found a node with smallest number of connections it doesnt mean that the node is 
-failed. We also have to check if the node is *fully connected*. 
-Only if the node is not fully connected and has the smallest number of successful connections then
-the node can be added to the unresponsive list.   
+Even if we have found a node with the smallest number of connections it doesn't mean that the node is 
+failed. We also have to check if the node is *fully connected*. Only if the node is not fully connected 
+and has the smallest number of successful connections then the node can be added to the unresponsive list.   
 
 **Healing process** - determine if a node is alive and remove it from the unresponsive list.
 The node can heal only itself. The node responsible only for itself, can't heal other nodes.
