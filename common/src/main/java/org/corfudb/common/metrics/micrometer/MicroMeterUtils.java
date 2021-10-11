@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.Timer;
@@ -134,30 +135,23 @@ public class MicroMeterUtils {
         summary.ifPresent(s -> s.record(measuredValue));
     }
 
-    private static List<Tag> toTagIterable(String... tags) {
-        if (tags.length % 2 != 0) {
-            throw new IllegalArgumentException("Only key-value pairs allowed.");
-        }
-        if (tags.length == 0) {
-            return ImmutableList.of();
-        }
-        return IntStream.range(1, tags.length)
-                .filter(i -> i % 2 != 0)
-                .mapToObj(i -> Tag.of(tags[i - 1], tags[i]))
-                .collect(Collectors.toList());
-    }
-
     public static <T> Optional<T> gauge(String name, T state, ToDoubleFunction<T> valueFunction, String... tags) {
         return filterGetInstance(name).map(registry -> {
-            List<Tag> tagsList = toTagIterable(tags);
-            return registry.gauge(name, tagsList, state, valueFunction);
+            Gauge.builder(name, state, valueFunction)
+                    .tags(tags)
+                    .strongReference(true)
+                    .register(registry);
+            return state;
         });
     }
 
     public static <T extends Number> Optional<T> gauge(String name, T state, String... tags) {
         return filterGetInstance(name).map(registry -> {
-            List<Tag> tagsList = toTagIterable(tags);
-            return registry.gauge(name, tagsList, state);
+            Gauge.builder(name, state, Number::doubleValue)
+                    .tags(tags)
+                    .strongReference(true)
+                    .register(registry);
+            return state;
         });
     }
 

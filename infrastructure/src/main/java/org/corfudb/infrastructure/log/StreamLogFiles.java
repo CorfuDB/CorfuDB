@@ -153,11 +153,9 @@ public class StreamLogFiles implements StreamLog {
         long fileSystemCapacity = initStreamLogDirectory();
         logSizeLimit = (long) (fileSystemCapacity * logSizeLimitPercentage / 100.0);
 
-        String baseUnits = "bytes";
-
-        logUnitSizeBytes = MicroMeterUtils.gauge(logUnitSizeMetricName, new AtomicDouble(0));
-        logUnitSizeEntries = MicroMeterUtils.gauge(logUnitSizeMetricName, new AtomicLong(0L));
-        openSegments = MicroMeterUtils.gauge(logUnitSizeMetricName, new AtomicLong(0L));
+        logUnitSizeBytes = MicroMeterUtils.gauge(logUnitSizeMetricName + ".bytes", new AtomicDouble(0));
+        logUnitSizeEntries = MicroMeterUtils.gauge(logUnitSizeMetricName + ".entries", new AtomicLong(0L));
+        openSegments = MicroMeterUtils.gauge(logUnitSizeMetricName + ".segments", new AtomicLong(0L));
         currentTrimMark = MicroMeterUtils.gauge(logUnitTrimMarkMetricName, new AtomicLong(getTrimMark()));
         long initialLogSize = estimateSize(logDir);
         log.info("StreamLogFiles: {} size is {} bytes, limit {}", logDir, initialLogSize, logSizeLimit);
