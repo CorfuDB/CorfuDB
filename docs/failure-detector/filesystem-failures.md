@@ -52,7 +52,7 @@ For instance, there are multiple possible scenarios of failures that could happe
 
 #### An example of a layout with detected failures
 
-```json
+```javascript
 {
   "layoutServers": [
     "192.168.0.1:9000",
