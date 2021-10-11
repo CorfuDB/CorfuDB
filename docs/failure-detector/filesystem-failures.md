@@ -48,4 +48,4 @@ For instance, there are multiple possible scenarios of failures that could happe
  
 #### Local Node Failure Detection Sequence Diagram
 
-![Local Node Failure Detection Visualization](http://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/CorfuDB/CorfuDB/master/docs/failure-detector/file-system-failure-detection.puml)
+![Local Node Failure Detection Visualization](https://raw.githubusercontent.com/CorfuDB/CorfuDB/failure-detector-read-only-filesystem/docs/failure-detector/file-system-failure-detection.puml)
