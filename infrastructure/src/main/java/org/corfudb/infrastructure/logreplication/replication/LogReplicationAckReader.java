@@ -6,6 +6,7 @@ import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
+import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader.StreamIteratorMetadata;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
@@ -54,6 +55,8 @@ public class LogReplicationAckReader {
 
     private LogEntryReader logEntryReader;
 
+    private LogEntrySender logEntrySender;
+
     private final Lock lock = new ReentrantLock();
 
     public LogReplicationAckReader(LogReplicationMetadataManager metadataManager, LogReplicationConfig config,
@@ -85,6 +88,10 @@ public class LogReplicationAckReader {
 
     public void setLogEntryReader(LogEntryReader logEntryReader) {
         this.logEntryReader = logEntryReader;
+    }
+
+    public void setLogEntrySender(LogEntrySender logEntrySender) {
+        this.logEntrySender = logEntrySender;
     }
 
     /**
@@ -191,21 +198,14 @@ public class LogReplicationAckReader {
      tx          tx          tx       tx        (log tail / not part of tx stream)
 
 
-     * Case 1.0: Log Entry Sync lagging behind (in processing) current processing not acked with entries to replicate
+     * Case 1: Log Entry Sync lagging behind (in processing)
      *          - lastAckedTimestamp = 50
      *          - txStreamTail = 70
-     *          - currentTxStreamProcessedTs = 60, true (contains replicated streams)
-     *
-     *          remainingEntries = entriesBetween(50, 70] = 2
-
-     * Case 1.1: Log Entry Sync lagging behind (in processing) current processing no entries to replicate
-     *          - lastAckedTimestamp = 50
-     *          - txStreamTail = 70
-     *          - currentTxStreamProcessedTs = 60, false (does not contain streams to replicate)
+     *          - currentTxStreamProcessedTs = 60, true (does contain streams to replicate)
      *
      * (despite the current processed not requiring ACk, there might be entries between lastAcked and currentProcessed
-     * which still have not been acknowledged so it is better to overestimate as it will eventually converge to an accurate value)
-     *          remainingEntries = entriesBetween(50, 70] = 1
+     * which still have not been acknowledged so we check sender's pendingQueue's size
+     *          remainingEntries = entriesBetween(60, 70] + pendingQueueSize = 1 + 1 = 2
 
      * Case 2.0: Log Entry Sync Up to Date
      *          - lastAckedTimestamp = 70
@@ -279,17 +279,18 @@ public class LogReplicationAckReader {
             return noRemainingEntriesToSend;
         }
 
-        // (Cases 1.0 and 1.1)
-        long remainingEntries = getTxStreamTotalEntries(lastAckedTs, txStreamTail);
+        // (Cases 1)
+        // The currentTxStreamProcessedTs must be not less than lastAckedTs.
+
+        long currentTxStreamProcessed = currentTxStreamProcessedTs.getTimestamp();
+        long remainingEntries = getTxStreamTotalEntries(currentTxStreamProcessed, txStreamTail);
+        if (logEntrySender != null) {
+            remainingEntries += logEntrySender.getPendingACKQueueSize();
+        }
+
         if (log.isTraceEnabled()) {
             log.trace("Log Entry Sync pending entries for processing, lastAckedTs={}, txStreamTail={}, currentTxProcessedTs={}, containsEntries={}, remaining={}", lastAckedTs,
                     txStreamTail, currentTxStreamProcessedTs.getTimestamp(), currentTxStreamProcessedTs.isStreamsToReplicatePresent(), remainingEntries);
-        }
-
-        if (!currentTxStreamProcessedTs.isStreamsToReplicatePresent()) {
-            // Case 1.1
-            // Remove one entry, which accounts for the current processed which does not have streams to replicate
-            return remainingEntries - 1;
         }
 
         return remainingEntries;
