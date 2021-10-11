@@ -109,6 +109,7 @@ public class LogReplicationSourceManager {
 
         this.logReplicationFSM.setTopologyConfigId(params.getTopologyConfigId());
         this.ackReader.setLogEntryReader(this.logReplicationFSM.getLogEntryReader());
+        this.ackReader.setLogEntrySender(this.logReplicationFSM.getLogEntrySender());
     }
 
     /**
