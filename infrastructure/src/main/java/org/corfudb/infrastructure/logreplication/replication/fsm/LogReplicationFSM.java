@@ -187,6 +187,7 @@ public class LogReplicationFSM {
     /**
      * Log Entry Sender (send incremental updates to remote cluster)
      */
+    @Getter
     private final LogEntrySender logEntrySender;
 
     /**
@@ -242,7 +243,7 @@ public class LogReplicationFSM {
         // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and send data
         // through the callbacks provided by the application
         snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor, config.getMaxNumMsgPerBatch(), this);
-        logEntrySender = new LogEntrySender(logEntryReader, dataSender, readProcessor, this);
+        logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
 
         // Initialize Log Replication 5 FSM states - single instance per state
         initializeStates(snapshotSender, logEntrySender, dataSender);
