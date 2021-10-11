@@ -52,7 +52,7 @@ For instance, there are multiple possible scenarios of failures that could happe
 
 #### An example of a layout with detected failures
 
-```javascript
+```json
 {
   "layoutServers": [
     "192.168.0.1:9000",
@@ -72,9 +72,9 @@ For instance, there are multiple possible scenarios of failures that could happe
       "stripes": [
         {
           "logServers": [
-            "localhost:9000",
-            "localhost:9001",
-            "localhost:9002"
+            "192.168.0.1:9000",
+            "192.168.0.2:9001",
+            "192.168.0.3:9002"
           ]
         }
       ]
@@ -86,21 +86,12 @@ For instance, there are multiple possible scenarios of failures that could happe
   ],
   "failures": [
     {
-      // failed node
       "node": "192.168.0.3:9000",
-      //type of a failure
       "failureType": "ReadOnlyFileSystem",
-      //the node detected failure (decision maker node)
       "failureDetector": "192.168.0.1:9000",
-      //time when a failure detected by a node
       "timestamp": "1633972903",
-      // cluster status on a node which detected failure
       "clusterState": {
-        "nodes": [
-          "192.168.0.1:9000",
-          "192.168.0.2:9000",
-          "192.168.0.3:9000"
-        ],
+        "nodes": ["192.168.0.1:9000", "192.168.0.2:9000", "192.168.0.3:9000"],
         "connectivity": [
           ["OK", "OK", "FAIL"],
           ["OK", "OK", "FAIL"],
@@ -114,11 +105,7 @@ For instance, there are multiple possible scenarios of failures that could happe
       "failureDetector": "192.168.0.1:9000",
       "timestamp": "1633972903",
       "clusterState": {
-        "nodes": [
-          "192.168.0.1:9000",
-          "192.168.0.2:9000",
-          "192.168.0.3:9000"
-        ],
+        "nodes": ["192.168.0.1:9000", "192.168.0.2:9000", "192.168.0.3:9000"],
         "connectivity": [
           ["OK", "FAIL", "OK"],
           ["FAIL", "OK", "OK"],
@@ -130,3 +117,10 @@ For instance, there are multiple possible scenarios of failures that could happe
   "epoch": 0
 }
 ```
+
+#### "Failures section"
+ - node: failed node
+ - failureType: type of failure
+ - failureDetector: the node detected failure (decision maker node)
+ - timestamp: time when a failure detected by a node
+ - clusterState: cluster status on a node which detected failure
