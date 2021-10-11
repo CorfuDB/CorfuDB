@@ -118,7 +118,7 @@ For instance, there are multiple possible scenarios of failures that could happe
 }
 ```
 
-#### "Failures section"
+#### "Failures" section in the layout:
  - node: failed node
  - failureType: type of failure
  - failureDetector: the node detected failure (decision maker node)
