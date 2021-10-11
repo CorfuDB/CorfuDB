@@ -77,7 +77,7 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
         LogData incompleteWrite = getLogData(0, "incomplete".getBytes());
 
         // Write the incomplete write to the head of the chain
-        runtimeLayout.getLogUnitClient(SERVERS.ENDPOINT_0).write(incompleteWrite);
+        runtimeLayout.getLogUnitClient(SERVERS.ENDPOINT_0).write(incompleteWrite).join();
 
         // Attempt to write using the replication protocol.
         // Should result in an overwrite exception
@@ -108,7 +108,7 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
         LogData incompleteWrite = getLogData(0, "incomplete".getBytes());
 
         // Write the incomplete write to the head of the chain
-        runtimeLayout.getLogUnitClient(SERVERS.ENDPOINT_0).write(incompleteWrite);
+        runtimeLayout.getLogUnitClient(SERVERS.ENDPOINT_0).write(incompleteWrite).join();
 
         // At this point, a read
         // reflect the -other- clients value
@@ -148,7 +148,7 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
         LogData incompleteWrite = getLogData(0, "incomplete".getBytes());
 
         // Write the incomplete write to the head of the chain
-        runtimeLayout.getLogUnitClient(SERVERS.ENDPOINT_0).write(incompleteWrite);
+        runtimeLayout.getLogUnitClient(SERVERS.ENDPOINT_0).write(incompleteWrite).join();
         removeLogUnit(layout, SERVERS.ENDPOINT_2);
         r.invalidateLayout();
         r.getLayoutView().getLayout();
