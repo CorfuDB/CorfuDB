@@ -49,3 +49,84 @@ For instance, there are multiple possible scenarios of failures that could happe
 #### Local Node Failure Detection Sequence Diagram
 
 ![Local Node Failure Detection Visualization](http://www.plantuml.com/plantuml/proxy?src=https://raw.githubusercontent.com/CorfuDB/CorfuDB/failure-detector-read-only-filesystem/docs/failure-detector/file-system-failure-detection.puml)
+
+#### An example of a layout with detected failures
+
+```json
+{
+  "layoutServers": [
+    "192.168.0.1:9000",
+    "192.168.0.2:9000",
+    "192.168.0.3:9000"
+  ],
+  "sequencers": [
+    "192.168.0.1:9000",
+    "192.168.0.2:9000",
+    "192.168.0.3:9000"
+  ],
+  "segments": [
+    {
+      "replicationMode": "CHAIN_REPLICATION",
+      "start": 0,
+      "end": -1,
+      "stripes": [
+        {
+          "logServers": [
+            "localhost:9000",
+            "localhost:9001",
+            "localhost:9002"
+          ]
+        }
+      ]
+    }
+  ],
+  "unresponsiveServers": [
+    "192.168.0.1:9000",
+    "192.168.0.2:9000"
+  ],
+  "failures": [
+    {
+      // failed node
+      "node": "192.168.0.3:9000",
+      //type of a failure
+      "failureType": "ReadOnlyFileSystem",
+      //the node detected failure (decision maker node)
+      "failureDetector": "192.168.0.1:9000",
+      //time when a failure detected by a node
+      "timestamp": "1633972903",
+      // cluster status on a node which detected failure
+      "clusterState": {
+        "nodes": [
+          "192.168.0.1:9000",
+          "192.168.0.2:9000",
+          "192.168.0.3:9000"
+        ],
+        "connectivity": [
+          ["OK", "OK", "FAIL"],
+          ["OK", "OK", "FAIL"],
+          ["FAIL", "FAIL", "OK"]
+        ]
+      }
+    },
+    {
+      "node": "192.168.0.2:9000",
+      "failureType": "QuotaExceeded",
+      "failureDetector": "192.168.0.1:9000",
+      "timestamp": "1633972903",
+      "clusterState": {
+        "nodes": [
+          "192.168.0.1:9000",
+          "192.168.0.2:9000",
+          "192.168.0.3:9000"
+        ],
+        "connectivity": [
+          ["OK", "FAIL", "OK"],
+          ["FAIL", "OK", "OK"],
+          ["OK", "FAIL", "OK"]
+        ]
+      }
+    }
+  ],
+  "epoch": 0
+}
+```
