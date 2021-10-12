@@ -21,6 +21,7 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.Sleep;
 import org.corfudb.utils.lock.LockDataTypes;
 import org.junit.After;
@@ -458,6 +459,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         // (4) Write noisy streams and check remaining entries
         // Write 'N' entries to active noisy map
+        long txTail = activeRuntime.getSequencerView().query(ObjectsView.getLogReplicatorStreamId());
         CorfuTable<String, Integer> noisyMap = activeRuntime.getObjectsView()
                 .build()
                 .setStreamName(streamName+"noisy")
@@ -470,7 +472,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(noisyMap.size()).isEqualTo(firstBatch);
-
+        long newTxTail = activeRuntime.getSequencerView().query(ObjectsView.getLogReplicatorStreamId());
+        assertThat(newTxTail-txTail).isGreaterThanOrEqualTo(firstBatch);
 
         // Wait the polling period time and verify sync status again (to make sure it was not erroneously updated)
         Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + deltaSeconds));
