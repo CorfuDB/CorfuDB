@@ -48,7 +48,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  *  - In_Log_Entry_Sync
  *  - In_Snapshot_Sync
  *  - Wait_Snapshot_Apply
- *  - Stopped
+ *  - Error
  *
  * Events:
  * ------
@@ -113,7 +113,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  *
  *
  *     +-------------+
- *     |   STOPPED   <-----REPLICATION-----  ALL_STATES
+ *     |   ERROR      <-----REPLICATION-----  ALL_STATES
  *     +-------------+       SHUTDOWN
  *
  *
@@ -187,6 +187,7 @@ public class LogReplicationFSM {
     /**
      * Log Entry Sender (send incremental updates to remote cluster)
      */
+    @Getter
     private final LogEntrySender logEntrySender;
 
     /**
@@ -242,7 +243,7 @@ public class LogReplicationFSM {
         // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and send data
         // through the callbacks provided by the application
         snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor, config.getMaxNumMsgPerBatch(), this);
-        logEntrySender = new LogEntrySender(logEntryReader, dataSender, readProcessor, this);
+        logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
 
         // Initialize Log Replication 5 FSM states - single instance per state
         initializeStates(snapshotSender, logEntrySender, dataSender);
@@ -273,7 +274,7 @@ public class LogReplicationFSM {
         states.put(LogReplicationStateType.IN_SNAPSHOT_SYNC, new InSnapshotSyncState(this, snapshotSender));
         states.put(LogReplicationStateType.WAIT_SNAPSHOT_APPLY, new WaitSnapshotApplyState(this, dataSender));
         states.put(LogReplicationStateType.IN_LOG_ENTRY_SYNC, new InLogEntrySyncState(this, logEntrySender));
-        states.put(LogReplicationStateType.STOPPED, new StoppedState(this));
+        states.put(LogReplicationStateType.ERROR, new ErrorState(this));
     }
 
     /**
@@ -285,7 +286,7 @@ public class LogReplicationFSM {
      */
     public synchronized void input(LogReplicationEvent event) {
         try {
-            if (state.getType().equals(LogReplicationStateType.STOPPED)) {
+            if (state.getType().equals(LogReplicationStateType.ERROR)) {
                 // Log: not accepting events, in stopped state
                 return;
             }
@@ -305,7 +306,7 @@ public class LogReplicationFSM {
      */
     private void consume() {
         try {
-            if (state.getType() == LogReplicationStateType.STOPPED) {
+            if (state.getType() == LogReplicationStateType.ERROR) {
                 log.info("Log Replication State Machine has been stopped. No more events will be processed.");
                 return;
             }
@@ -365,19 +366,11 @@ public class LogReplicationFSM {
     }
 
     /**
-     * Start consumer again due to cluster switch.
-     * It will clean the queue first and prepare the new transfer
-     *
-     * @param topologyConfigId topology configuration identifier
+     * Shutdown Log Replication FSM
      */
-    public void startFSM(long topologyConfigId) {
-        if (state.getType() != LogReplicationStateType.INITIALIZED) {
-            log.error("The FSM is not in the correct state {}, expecting state {}",
-                    state, LogReplicationStateType.INITIALIZED);
-        }
-
-        log.info("start the log replication with topologyConfigId {}", topologyConfigId);
-        eventQueue.clear();
-        setTopologyConfigId(topologyConfigId);
+    public void shutdown() {
+        this.ackReader.shutdown();
+        this.logReplicationFSMConsumer.shutdown();
+        this.logReplicationFSMWorkers.shutdown();
     }
 }

@@ -9,6 +9,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Re
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
@@ -19,7 +20,7 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 public class LogEntrySenderBufferManager extends SenderBufferManager {
-    private LogReplicationAckReader ackReader;
+    private final LogReplicationAckReader ackReader;
 
     /**
      * Constructor
@@ -62,8 +63,7 @@ public class LogEntrySenderBufferManager extends SenderBufferManager {
         // Remove CompletableFutures for Acks that has received.
         pendingCompletableFutureForAcks = pendingCompletableFutureForAcks.entrySet().stream()
                 .filter(entry -> entry.getKey() > maxAckTimestamp)
-                .collect(Collectors.toMap(x -> x.getKey(), x -> x.getValue()));
-        ackReader.setAckedTsAndSyncType(newAck, ReplicationStatusVal.SyncType.LOG_ENTRY);
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     /**
@@ -73,6 +73,8 @@ public class LogEntrySenderBufferManager extends SenderBufferManager {
     @Override
     public void updateAck(LogReplicationEntryMsg entry) {
         updateAck(entry.getMetadata().getTimestamp());
+        ackReader.setAckedTsAndSyncType(entry.getMetadata().getTimestamp(),
+                ReplicationStatusVal.SyncType.LOG_ENTRY);
     }
 
     private static Optional<AtomicLong> configureAcksCounter() {

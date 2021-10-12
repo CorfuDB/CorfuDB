@@ -6,9 +6,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataVal;
+import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -280,7 +282,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                         .setClusterId(DefaultClusterConfig.getActiveClusterId())
                         .build();
 
-        LogReplicationMetadata.ReplicationStatusVal standbyStatusVal;
+        ReplicationStatusVal standbyStatusVal;
         try (TxnContext txn = standbyCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
             standbyStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, StandbyKey).getPayload();
             assertThat(txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload()).isNull();
@@ -367,6 +369,102 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
         assertThat(replicationStatusVal.getSnapshotSyncInfo().getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
+    }
+
+    /**
+     * Test all combinations of active/standby LR start/stopped and the output of sync status
+     */
+    @Test
+    public void testClusterSyncStatus() throws Exception {
+
+        final int waitInMillis = 500;
+        final int deltaSeconds = 5;
+
+        // (1) Start with: active LR stopped & standby LR started
+        // No status should be reported, as status is queried on active LR and it is stopped.
+        standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, nettyPluginPath);
+
+        // Write 'N' entries to active map (to ensure nothing happens wrt. the status, as LR is not started on active)
+        for (int i = 0; i < firstBatch; i++) {
+            activeRuntime.getObjectsView().TXBegin();
+            mapActive.put(String.valueOf(i), i);
+            activeRuntime.getObjectsView().TXEnd();
+        }
+        assertThat(mapActive.size()).isEqualTo(firstBatch);
+
+        // Verify Sync Status
+        ReplicationStatusKey standbyClusterId = ReplicationStatusKey.newBuilder()
+                        .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                        .build();
+        ReplicationStatusVal standbyStatus;
+
+        try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            // Since LR has never been started, the table should not exist in the registry
+            // Note that, in the case of a real client querying the status, this would simply time out
+            // because LR is not available and status is only queried on the active site through LR. For the purpose of this
+            // test, we query the database directly, so we should simply not find any record.
+            standbyStatus = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, standbyClusterId).getPayload();
+            assertThat(standbyStatus).isNull();
+        }
+
+        // (2) Now stop standby LR and start active LR
+        // The sync status should indicate replication has not started, as there is no way to stablish a connection
+        // to the remote/standby site as it is stopped.
+        shutdownCorfuServer(standbyReplicationServer);
+        activeReplicationServer = runReplicationServer(activeReplicationServerPort, nettyPluginPath);
+
+        // Verify Sync Status
+        while (standbyStatus == null) {
+            Sleep.sleepUninterruptibly(Duration.ofMillis(waitInMillis));
+
+            try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                standbyStatus = (ReplicationStatusVal) txn.getRecord(REPLICATION_STATUS_TABLE, standbyClusterId).getPayload();
+                if (standbyStatus != null) {
+                    assertThat(standbyStatus.getStatus()).isEqualTo(LogReplicationMetadata.SyncStatus.NOT_STARTED);
+                }
+                txn.commit();
+            }
+        }
+
+        // Wait the polling period time and verify sync status again (to make sure it was not erroneously updated)
+        Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + deltaSeconds));
+
+        try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            standbyStatus = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, standbyClusterId).getPayload();
+            assertThat(standbyStatus.getStatus()).isEqualTo(LogReplicationMetadata.SyncStatus.NOT_STARTED);
+            txn.commit();
+        }
+
+        // (3) Next, start standby LR, replication should start. wait until snapshot replication is completed and
+        // confirm Log Entry is ONGOING.
+        standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, nettyPluginPath);
+        waitForReplication(size -> size == firstBatch, mapStandby, firstBatch);
+
+        // Verify data on Standby
+        for (int i = 0; i < firstBatch; i++) {
+            assertThat(mapStandby.containsKey(String.valueOf(i))).isTrue();
+        }
+
+        while (!standbyStatus.getSnapshotSyncInfo().getStatus().equals(LogReplicationMetadata.SyncStatus.COMPLETED)) {
+            try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                standbyStatus = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, standbyClusterId).getPayload();
+                txn.commit();
+            }
+        }
+
+        log.info("Snapshot replication status : COMPLETED");
+        // Confirm Log entry Sync status is ONGOING
+        assertThat(standbyStatus.getStatus()).isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
+
+        // (4) Confirm that if standby LR is stopped, in the middle of replication, the status changes to STOPPED
+        shutdownCorfuServer(standbyReplicationServer);
+
+        while (!standbyStatus.getStatus().equals(LogReplicationMetadata.SyncStatus.STOPPED)) {
+            try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                standbyStatus = (ReplicationStatusVal) txn.getRecord(REPLICATION_STATUS_TABLE, standbyClusterId).getPayload();
+                txn.commit();
+            }
+        }
     }
 
     /**

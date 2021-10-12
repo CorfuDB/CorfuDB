@@ -1,7 +1,8 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
 
 import java.util.UUID;
@@ -78,7 +79,7 @@ public class InLogEntrySyncState implements LogReplicationState {
                 return fsm.getStates().get(LogReplicationStateType.INITIALIZED);
             case REPLICATION_SHUTDOWN:
                 cancelLogEntrySync("replication terminated.");
-                return fsm.getStates().get(LogReplicationStateType.STOPPED);
+                return fsm.getStates().get(LogReplicationStateType.ERROR);
             case LOG_ENTRY_SYNC_REPLICATED:
                 // Verify the replicated entry corresponds to the current log entry sync cycle (and not a previous/old one)
                 if (transitionEventId.equals(event.getMetadata().getRequestId())) {
@@ -141,18 +142,24 @@ public class InLogEntrySyncState implements LogReplicationState {
                     || from.getType() == LogReplicationStateType.INITIALIZED) {
                 // Set LogEntryAckReader to Log Entry Sync state, to compute remaining entries based
                 // on the tx stream, regardless of ACKs or updates being processed for the tx stream
-                fsm.getAckReader().setSyncType(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
+                fsm.getAckReader().setSyncType(SyncType.LOG_ENTRY);
                 logEntrySender.reset(fsm.getBaseSnapshot(), fsm.getAckedTimestamp());
-            }
-
-            if (from.getType() == LogReplicationStateType.WAIT_SNAPSHOT_APPLY) {
                 fsm.getAckReader().markSnapshotSyncInfoCompleted();
             }
+
             logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(() ->
                     logEntrySender.send(transitionEventId));
 
         } catch (Throwable t) {
             log.error("Error on entry of InLogEntrySyncState", t);
+        }
+    }
+
+    @Override
+    public void onExit(LogReplicationState to) {
+        if (to.getType().equals(LogReplicationStateType.INITIALIZED)) {
+            fsm.getAckReader().markSyncStatus(SyncStatus.STOPPED);
+            log.debug("Log Entry replication status changed to STOPPED");
         }
     }
 

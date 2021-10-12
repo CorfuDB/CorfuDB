@@ -67,6 +67,7 @@ public class ReplicatingState implements LogReplicationRuntimeState {
 
     @Override
     public void onEntry(LogReplicationRuntimeState from) {
+
         switch (replicationEvent.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
                 UUID snapshotSyncRequestId = replicationSourceManager.startSnapshotSync();
