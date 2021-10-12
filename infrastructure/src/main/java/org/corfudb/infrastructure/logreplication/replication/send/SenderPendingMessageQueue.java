@@ -18,7 +18,7 @@ public class SenderPendingMessageQueue {
     /*
      * The max number of the entries that the queue can contain
      */
-    private int maxSize;
+    private final int maxSize;
 
     /*
      * The list of pending entries.

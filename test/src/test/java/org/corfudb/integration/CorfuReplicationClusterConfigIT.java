@@ -456,7 +456,34 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Confirm Log entry Sync status is ONGOING
         assertThat(standbyStatus.getStatus()).isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
 
-        // (4) Confirm that if standby LR is stopped, in the middle of replication, the status changes to STOPPED
+        // (4) Write noisy streams and check remaining entries
+        // Write 'N' entries to active noisy map
+        CorfuTable<String, Integer> noisyMap = activeRuntime.getObjectsView()
+                .build()
+                .setStreamName(streamName+"noisy")
+                .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {
+                })
+                .open();
+        for (int i = 0; i < firstBatch; i++) {
+            activeRuntime.getObjectsView().TXBegin();
+            noisyMap.put(String.valueOf(i), i);
+            activeRuntime.getObjectsView().TXEnd();
+        }
+        assertThat(noisyMap.size()).isEqualTo(firstBatch);
+
+
+        // Wait the polling period time and verify sync status again (to make sure it was not erroneously updated)
+        Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + deltaSeconds));
+
+        try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            standbyStatus = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, standbyClusterId).getPayload();
+            txn.commit();
+        }
+
+        // Confirm remaining entries is equal to 0
+        assertThat(standbyStatus.getRemainingEntriesToSend()).isEqualTo(0L);
+
+        // (5) Confirm that if standby LR is stopped, in the middle of replication, the status changes to STOPPED
         shutdownCorfuServer(standbyReplicationServer);
 
         while (!standbyStatus.getStatus().equals(LogReplicationMetadata.SyncStatus.STOPPED)) {
@@ -465,6 +492,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 txn.commit();
             }
         }
+        assertThat(standbyStatus.getStatus()).isEqualTo(LogReplicationMetadata.SyncStatus.STOPPED);
     }
 
     /**
