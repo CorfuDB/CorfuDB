@@ -486,11 +486,6 @@ public class SequencerServer extends AbstractServer {
         // It is necessary because we reset the sequencer.
         if (!bootstrapWithoutTailsUpdate) {
             globalLogTail = req.getPayload().getBootstrapSequencerRequest().getGlobalTail();
-            // Deregister gauges
-            MeterRegistryProvider.deregisterServerMeter(cache.getConflictKeysCounterName(),
-                    Tags.empty(), Meter.Type.GAUGE);
-            MeterRegistryProvider.deregisterServerMeter(cache.getWindowSizeName(),
-                    Tags.empty(), Meter.Type.GAUGE);
             cache = sequencerFactoryHelper.getSequencerServerCache(
                     cache.getCacheSize(),
                     globalLogTail - 1

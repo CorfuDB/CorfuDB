@@ -1,16 +1,18 @@
 package org.corfudb.common.metrics.micrometer;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Tag;
+import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MetricType;
+import org.corfudb.common.util.Tuple;
 
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -18,7 +20,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 import java.util.function.ToDoubleFunction;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 public class MicroMeterUtils {
 
@@ -153,6 +154,34 @@ public class MicroMeterUtils {
                     .register(registry);
             return state;
         });
+    }
+
+    private static void removeMeters(List<Tuple<String, Tags>> ids, Meter.Type meterType) {
+        MeterRegistryProvider
+                .getTagId()
+                .ifPresent(tid ->
+                        ids.forEach(id -> {
+                            String name = id.first;
+                            Tags tags = id.second;
+                            Tags allTags = tags.and(tid);
+                            Meter.Id meterId = new Meter.Id(name, allTags,
+                                    null, null, meterType);
+                            MeterRegistryProvider.deregisterByMeterId(meterId);
+                        }));
+    }
+
+    public static void removeGauges(List<Tuple<String, Tags>> gids) {
+        removeMeters(gids, Meter.Type.GAUGE);
+    }
+
+    public static void removeGaugesWithNoTags(String... metricNames) {
+        MicroMeterUtils.removeGauges(
+                Arrays
+                        .stream(metricNames)
+                        .map(name ->
+                                Tuple.of(name, Tags.empty()))
+                        .collect(Collectors.toList())
+        );
     }
 
     public static Optional<Counter> counter(String name, String... tags) {

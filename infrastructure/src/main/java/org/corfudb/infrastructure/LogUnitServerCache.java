@@ -4,8 +4,6 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.annotations.VisibleForTesting;
-import io.micrometer.core.instrument.Meter;
-import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
@@ -139,18 +137,11 @@ public class LogUnitServerCache {
      */
     public void invalidateAll() {
         dataCache.invalidateAll();
-        cleanUpGauges();
+        MicroMeterUtils.removeGaugesWithNoTags(loadTimeName, hitRatioName, weightName);
     }
 
     @VisibleForTesting
     public int getSize() {
         return dataCache.asMap().size();
-    }
-
-    private void cleanUpGauges() {
-        String  [] names = new String[] {loadTimeName, hitRatioName, weightName};
-        for (String gaugeName: names) {
-            MeterRegistryProvider.deregisterServerMeter(gaugeName, Tags.empty(), Meter.Type.GAUGE);
-        }
     }
 }
