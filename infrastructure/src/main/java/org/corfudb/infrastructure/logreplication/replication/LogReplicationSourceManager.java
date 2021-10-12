@@ -38,30 +38,16 @@ import java.util.concurrent.Executors;
 public class LogReplicationSourceManager {
 
     private CorfuRuntime runtime;
-    /*
-     * Default number of Log Replication State Machine Worker Threads
-     */
+
     private static final int DEFAULT_FSM_WORKER_THREADS = 1;
 
-    /*
-     *  Log Replication State Machine
-     */
     @VisibleForTesting
     private final LogReplicationFSM logReplicationFSM;
 
-    /*
-     * Log Replication Runtime Parameters
-     */
     private final LogReplicationRuntimeParameters parameters;
 
-    /*
-     * Log Replication Configuration
-     */
     private final LogReplicationConfig config;
 
-    /*
-     * Log Replication MetadataManager.
-     */
     private final LogReplicationMetadataManager metadataManager;
 
     private final LogReplicationAckReader ackReader;
@@ -73,6 +59,8 @@ public class LogReplicationSourceManager {
     private ObservableAckMsg ackMessages = new ObservableAckMsg();
 
     /**
+     * Constructor
+     *
      * @param params Log Replication parameters
      * @param client LogReplication client, which is a data sender, both snapshot and log entry, this represents
      *              the application callback for data transmission
@@ -120,7 +108,8 @@ public class LogReplicationSourceManager {
                 dataSender, readProcessor, logReplicationFSMWorkers, ackReader);
 
         this.logReplicationFSM.setTopologyConfigId(params.getTopologyConfigId());
-        this.ackReader.startAckReader(this.logReplicationFSM.getLogEntryReader());
+        this.ackReader.setLogEntryReader(this.logReplicationFSM.getLogEntryReader());
+        this.ackReader.setLogEntrySender(this.logReplicationFSM.getLogEntrySender());
     }
 
     /**
@@ -197,12 +186,12 @@ public class LogReplicationSourceManager {
                 logReplicationEvent.wait();
             }
         } catch (InterruptedException e) {
-            log.error("Caught an exception ", e);
+            log.error("Caught an exception during source manager shutdown ", e);
         }
 
         log.info("Shutdown Log Replication.");
-        ackReader.shutdown();
-        this.runtime.shutdown();
+        logReplicationFSM.shutdown();
+        runtime.shutdown();
     }
 
     /**

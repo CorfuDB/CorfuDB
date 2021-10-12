@@ -1,6 +1,9 @@
 package org.corfudb.runtime.checkpoint;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.corfudb.runtime.view.TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME;
+import static org.corfudb.runtime.view.TableRegistry.REGISTRY_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 import static org.junit.Assert.fail;
 import com.google.common.collect.ImmutableMap;
@@ -27,8 +30,10 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
+import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
@@ -45,11 +50,13 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.StreamOptions;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.AddressMapStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.test.SampleAppliance;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.util.NodeLocator;
+import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.KeyDynamicProtobufSerializer;
 import org.junit.Before;
@@ -68,7 +75,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     public void setRuntime() {
         // This module *really* needs separate & independent runtimes.
         r = getDefaultRuntime().connect(); // side-effect of using AbstractViewTest::getRouterFunction
-        r = getNewRuntime(getDefaultNode()).connect();
+        r = getNewRuntime(getDefaultNode()).setCacheDisabled(true).connect();
     }
 
     @Test
@@ -788,11 +795,35 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         assertThat(((CheckpointEntry) cpEntry).getSmrEntries().getUpdates().size()).isEqualTo(23);
     }
 
+    private Token checkpointUfoSystemTables(CorfuRuntime runtime, ISerializer serializer) {
+        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> tableRegistry = runtime.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {
+                })
+                .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
+                        TableRegistry.REGISTRY_TABLE_NAME))
+                .setSerializer(serializer)
+                .addOpenOption(ObjectOpenOption.NO_CACHE)
+                .open();
+        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> descriptorTable = runtime.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {
+                })
+                .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
+                        TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME))
+                .setSerializer(serializer)
+                .addOpenOption(ObjectOpenOption.NO_CACHE)
+                .open();
+
+        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        mcw.addMap(tableRegistry);
+        mcw.addMap(descriptorTable);
+        return mcw.appendCheckpoints(runtime, "checkpointer");
+    }
+
     @Test
     public void checkpointWithoutDeserializingValueTest() throws Exception {
         final String streamName = "mystream9";
-        final UUID streamId = CorfuRuntime.getStreamID(streamName);
         final String namespace = "test";
+        UUID streamId = UUID.nameUUIDFromBytes(getFullyQualifiedTableName(namespace, streamName).getBytes());
         final int numKeys = 123;
 
         // Create and populate the test table
@@ -832,20 +863,16 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         CheckpointWriter cpw = new CheckpointWriter(r, streamId, "author", corfuTable);
         cpw.setSerializer(serializer);
 
-        r.getObjectsView().TXBuild()
-                .type(TransactionType.SNAPSHOT)
-                .build()
-                .begin();
-        Token snapshot = TransactionalContext
-                .getCurrentContext()
-                .getSnapshotTimestamp();
-        try {
-            cpw.startCheckpoint(snapshot);
-            cpw.appendObjectState(corfuTable.entryStream());
-            cpw.finishCheckpoint();
-        } finally {
-            r.getObjectsView().TXEnd();
-        }
+        Token trimToken = Token.min(checkpointUfoSystemTables(r, serializer), cpw.appendCheckpoint());
+        r.getAddressSpaceView().prefixTrim(trimToken);
+
+        // Verify that the stream's tail is a hole that contains the Table tags as well
+        long cpHoleAddress = r.getSequencerView().query(streamId);
+        ILogData ld = r.getAddressSpaceView().read(cpHoleAddress);
+        assertThat(ld.isHole()).isTrue();
+        assertThat(ld.getStreams())
+                .containsExactlyInAnyOrder(streamId,
+                        TableRegistry.getStreamIdForStreamTag(namespace, "firewall_tag"));
 
         // Read the checkpointed table, verify that the table entries are intact
         setRuntime();

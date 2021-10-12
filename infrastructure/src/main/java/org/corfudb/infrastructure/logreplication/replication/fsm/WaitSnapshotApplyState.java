@@ -120,7 +120,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                 return fsm.getStates().get(LogReplicationStateType.INITIALIZED);
             case REPLICATION_SHUTDOWN:
                 log.debug("Shutdown Log Replication while waiting for snapshot sync apply to complete id={}", transitionEventId);
-                return fsm.getStates().get(LogReplicationStateType.STOPPED);
+                return fsm.getStates().get(LogReplicationStateType.ERROR);
             default: {
                 log.warn("Unexpected log replication event {} when in wait snapshot sync apply state.", event.getType());
                 throw new IllegalTransitionException(event.getType(), getType());
@@ -131,6 +131,9 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     @Override
     public void onEntry(LogReplicationState from) {
         log.info("OnEntry :: wait snapshot apply state");
+        if (from.getType().equals(LogReplicationStateType.INITIALIZED)) {
+            fsm.getAckReader().markSnapshotSyncInfoOngoing();
+        }
         this.fsm.getLogReplicationFSMWorkers().submit(this::verifyStatusOfSnapshotSyncApply);
     }
 
@@ -140,7 +143,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
 
             // Query metadata on remote cluster to verify the status of the snapshot sync apply
             CompletableFuture<LogReplicationMetadataResponseMsg>
-                    metadataResponseCompletableFuture =dataSender.sendMetadataRequest();
+                    metadataResponseCompletableFuture = dataSender.sendMetadataRequest();
             LogReplicationMetadataResponseMsg metadataResponse = metadataResponseCompletableFuture
                     .get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
 
