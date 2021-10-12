@@ -1,6 +1,8 @@
 package org.corfudb.runtime.collections;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.Assert.assertNotSame;
+
 import com.google.common.reflect.TypeToken;
 
 import java.util.ArrayList;
@@ -56,6 +58,31 @@ public class CorfuTableTest extends AbstractViewTest {
         // TODO(Maithem): This might seem like weird semantics, but we
         // address it once we tackle the lifecycle of SMRObjects.
 //        assertThat(instance2.getIndexerClass()).isEqualTo(instance1.getIndexerClass());
+    }
+
+    @Test
+    public void internalMapContainersTest() {
+        CorfuTable<String, String>
+                corfuTable = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setArguments(new StringIndexer())
+                .setStreamName("test")
+                .open();
+
+        corfuTable.put("k1", "v1");
+        Map.Entry<String, String> entryV1 = corfuTable.entryStream().iterator().next();
+        Map.Entry<String, String> entryV1FromSecondaryIndex = corfuTable.getByIndex(StringIndexer.BY_FIRST_LETTER, "v")
+                .iterator().next();
+
+        corfuTable.put("k1", "v2");
+        Map.Entry<String, String> entryV2 = corfuTable.entryStream().iterator().next();
+        Map.Entry<String, String> entryV2FromSecondaryIndex = corfuTable.getByIndex(StringIndexer.BY_FIRST_LETTER, "v")
+                .iterator().next();
+
+        assertThat(corfuTable.size()).isOne();
+        // Verify that the Map.Entry container is not leaked to the caller
+        assertNotSame(entryV1, entryV2);
+        assertNotSame(entryV1FromSecondaryIndex, entryV2FromSecondaryIndex);
     }
 
     @Test
