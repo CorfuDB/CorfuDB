@@ -9,10 +9,9 @@ option java_package = "org.corfudb.runtime.proto";
  */
 
 enum NodeConnectivityType {
-  NODE_CONNECTIVITY_TYPE_INVALID = 0;
-  NOT_READY = 1;
-  CONNECTED = 2;
-  UNAVAILABLE = 3;
+  NOT_READY = 0;
+  CONNECTED = 1;
+  UNAVAILABLE = 2;
 }
 
 message ConnectivityEntryMsg {

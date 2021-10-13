@@ -28,11 +28,10 @@ import "tx_resolution.proto";
  */
 message TokenRequestMsg {
   enum TokenRequestType {
-    INVALID = 0;
-    TK_QUERY = 1;
-    TK_RAW = 2;
-    TK_MULTI_STREAM = 3;
-    TK_TX = 4;
+    TK_QUERY = 0;
+    TK_RAW = 1;
+    TK_MULTI_STREAM = 2;
+    TK_TX = 3;
   }
 
   TokenRequestType request_type = 11;
@@ -43,25 +42,23 @@ message TokenRequestMsg {
 
 message TokenResponseMsg {
   enum TokenType {
-    TOKEN_TYPE_INVALID = 0;
-
     // Standard token issue by sequencer or a tail-query response
-    TX_NORMAL = 1;
+    TX_NORMAL = 0;
 
     // Token request for optimistic TX-commit rejected due to conflict
-    TX_ABORT_CONFLICT = 2;
+    TX_ABORT_CONFLICT = 1;
 
     // Token request for optimistic TX-commit rejected due to a
     // failover-sequencer lacking conflict-resolution info
-    TX_ABORT_NEWSEQ = 3;
+    TX_ABORT_NEWSEQ = 2;
 
     // Sent when a transaction aborts a transaction due to missing information
     // (required data evicted from cache)
-    TX_ABORT_SEQ_OVERFLOW = 4;
+    TX_ABORT_SEQ_OVERFLOW = 3;
 
     // Sent when a transaction aborts because it has an old version (i.e. older than
     // the trim mark). This is to detect slow transactions
-    TX_ABORT_SEQ_TRIM = 5;
+    TX_ABORT_SEQ_TRIM = 4;
   }
 
   // The cause/type of response.
@@ -119,11 +116,10 @@ message SequencerMetricsResponseMsg {
  */
 message StreamsAddressRequestMsg {
   enum Type {
-    INVALID = 0;
     /* To request specific streams */
-    STREAMS = 1;
+    STREAMS = 0;
     /* To request all streams */
-    ALL_STREAMS = 2;
+    ALL_STREAMS = 1;
   }
   /** The type of request, one of the above. */
   Type req_type = 1;

@@ -479,35 +479,6 @@ public class SequencerServerTest {
                 assertEquals(Address.NON_ADDRESS, responseStreamAddressSpaceB.getTrimMark());
             }
         });
-
-
-        // Case 3: Send StreamsAddressRequestMsg.INVALID RPC call.
-        // SequencerServer should send all streams and their address spaces as the response
-        request = getRequestMsg(
-                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
-                CorfuMessage.RequestPayloadMsg.newBuilder()
-                        .setStreamsAddressRequest(StreamsAddressRequestMsg.newBuilder()
-                                .setReqType(StreamsAddressRequestMsg.Type.INVALID)
-                                .build())
-                        .build()
-        );
-
-        sequencerServer.handleMessage(request, mockChannelHandlerContext, mockServerRouter);
-
-        verify(mockServerRouter, times(3))
-                .sendResponse(responseCaptor.capture(), any(ChannelHandlerContext.class));
-        response = responseCaptor.getValue();
-        assertTrue(compareBaseHeaderFields(request.getHeader(), response.getHeader()));
-        assertTrue(response.getPayload().hasServerError());
-        assertTrue(response.getPayload().getServerError().hasUnknownError());
-        // A SerializerException is expected.
-        ByteString bs = response.getPayload().getServerError().getUnknownError().getThrowable();
-        try (ObjectInputStream ois = new ObjectInputStream(bs.newInput())) {
-            Throwable payloadThrowable = (Throwable) ois.readObject();
-            assertTrue(payloadThrowable instanceof IllegalArgumentException);
-        } catch (Exception ex) {
-            fail("Missing an IllegalArgumentException from the SequencerServer");
-        }
     }
 
     /**
