@@ -63,7 +63,7 @@ import java.util.stream.Collectors;
  * <p>Created by mwei on 12/10/15.</p>
  */
 @Slf4j
-public class AddressSpaceView extends AbstractView {
+public class AddressSpaceView extends AbstractView implements AutoCloseable {
 
     private final static long DEFAULT_MAX_CACHE_ENTRIES = 5000;
     private final SizeOf sizeOf;
@@ -77,6 +77,10 @@ public class AddressSpaceView extends AbstractView {
             .clientCacheable(true)
             .serverCacheable(true)
             .build();
+
+    private final String hitRatioName = "address_space.read_cache.hit_ratio";
+    private final String sizeName = "address_space.read_cache.size";
+    private final String entrySizeName = "address_space.read_cache.avg_entry_size";
 
     /**
      * Constructor for the Address Space View.
@@ -116,11 +120,11 @@ public class AddressSpaceView extends AbstractView {
 
         Optional<MeterRegistry> metricsRegistry = MeterRegistryProvider.getInstance();
         metricsRegistry.map(registry -> GuavaCacheMetrics.monitor(registry, readCache, "address_space.read_cache"));
-        MicroMeterUtils.gauge("address_space.read_cache.hit_ratio", readCache, cache -> cache.stats().hitRate());
-        
+        MicroMeterUtils.gauge(hitRatioName, readCache, cache -> cache.stats().hitRate());
+
         if (!runtime.getParameters().isCacheEntryMetricsDisabled()) {
-            MicroMeterUtils.gauge("address_space.read_cache.size", readCache, cache -> cache.size());
-            MicroMeterUtils.gauge("address_space.read_cache.avg_entry_size", readCache, cache -> calculateEstimatedAvgEntrySize());
+            MicroMeterUtils.gauge(sizeName, readCache, Cache::size);
+            MicroMeterUtils.gauge(entrySizeName, readCache, cache -> calculateEstimatedAvgEntrySize());
         }
     }
 
@@ -785,5 +789,10 @@ public class AddressSpaceView extends AbstractView {
     @VisibleForTesting
     Cache<Long, ILogData> getReadCache() {
         return readCache;
+    }
+
+    @Override
+    public void close() {
+        MicroMeterUtils.removeGaugesWithNoTags(hitRatioName, sizeName, entrySizeName);
     }
 }

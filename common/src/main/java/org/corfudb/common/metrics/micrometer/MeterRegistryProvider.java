@@ -3,9 +3,10 @@ package org.corfudb.common.metrics.micrometer;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
-import io.micrometer.core.instrument.Tags;
+
 import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import io.micrometer.core.instrument.logging.LoggingRegistryConfig;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.registries.LoggingMeterRegistryWithHistogramSupport;
 import org.corfudb.common.metrics.micrometer.registries.RegistryLoader;
@@ -22,7 +23,9 @@ import java.util.function.Supplier;
  */
 @Slf4j
 public class MeterRegistryProvider {
+    @Getter
     private static final CompositeMeterRegistry meterRegistry = new CompositeMeterRegistry();
+    @Getter
     private static Optional<String> id = Optional.empty();
     private static Optional<MetricType> metricType = Optional.empty();
     private static Optional<RegistryProvider> provider = Optional.empty();
@@ -167,18 +170,13 @@ public class MeterRegistryProvider {
     /**
      * Remove the meter by id.
      *
-     * @param name Name of a meter.
-     * @param tags Tags.
-     * @param type Type of a meter.
+     * @param meterId Meter id.
      */
-    public static synchronized void deregisterServerMeter(String name, Tags tags, Meter.Type type) {
-        if (!id.isPresent()) {
-            log.warn("Id must be present to deregister meters.");
-            return;
-        }
-        String server = id.get();
-        Tags tagsToLookFor = tags.and(Tag.of("id", server));
-        Meter.Id meterId = new Meter.Id(name, tagsToLookFor, null, null, type);
+    public static synchronized void deregisterByMeterId(Meter.Id meterId) {
         meterRegistry.remove(meterId);
+    }
+
+    public static Optional<Tag> getTagId() {
+        return id.map(uId -> Tag.of("id", uId));
     }
 }
