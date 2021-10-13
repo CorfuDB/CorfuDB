@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.log;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
@@ -9,15 +8,12 @@ import com.google.common.util.concurrent.AtomicDouble;
 import com.google.protobuf.AbstractMessage;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
-import io.micrometer.core.instrument.Meter;
-import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.corfudb.common.compression.Codec;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
@@ -153,11 +149,9 @@ public class StreamLogFiles implements StreamLog {
         long fileSystemCapacity = initStreamLogDirectory();
         logSizeLimit = (long) (fileSystemCapacity * logSizeLimitPercentage / 100.0);
 
-        String baseUnits = "bytes";
-
-        logUnitSizeBytes = MicroMeterUtils.gauge(logUnitSizeMetricName, new AtomicDouble(0));
-        logUnitSizeEntries = MicroMeterUtils.gauge(logUnitSizeMetricName, new AtomicLong(0L));
-        openSegments = MicroMeterUtils.gauge(logUnitSizeMetricName, new AtomicLong(0L));
+        logUnitSizeBytes = MicroMeterUtils.gauge(logUnitSizeMetricName + ".bytes", new AtomicDouble(0));
+        logUnitSizeEntries = MicroMeterUtils.gauge(logUnitSizeMetricName + ".entries", new AtomicLong(0L));
+        openSegments = MicroMeterUtils.gauge(logUnitSizeMetricName + ".segments", new AtomicLong(0L));
         currentTrimMark = MicroMeterUtils.gauge(logUnitTrimMarkMetricName, new AtomicLong(getTrimMark()));
         long initialLogSize = estimateSize(logDir);
         log.info("StreamLogFiles: {} size is {} bytes, limit {}", logDir, initialLogSize, logSizeLimit);
@@ -1258,8 +1252,8 @@ public class StreamLogFiles implements StreamLog {
         for (SegmentHandle fh : writeChannels.values()) {
             fh.close();
         }
-
         writeChannels = new ConcurrentHashMap<>();
+        removeLocalGauges();
     }
 
     /**
@@ -1354,22 +1348,21 @@ public class StreamLogFiles implements StreamLog {
             dataStore.resetStartingAddress();
             dataStore.resetTailSegment();
             logMetadata = new LogMetadata();
-
+            removeLocalGauges();
             logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
-            cleanUpGauges();
+
             log.info("reset: Completed");
         } finally {
             lock.unlock();
         }
     }
 
-    private void cleanUpGauges() {
-        String unitTag = "unit";
-        ImmutableList.of(Tags.of(unitTag, "bytes"), Tags.of(unitTag, "entries"), Tags.of(unitTag, "segments"))
-                .forEach(tags -> MeterRegistryProvider
-                        .deregisterServerMeter(logUnitSizeMetricName, tags, Meter.Type.GAUGE));
-        MeterRegistryProvider.deregisterServerMeter(logUnitTrimMarkMetricName, Tags.empty(),
-                Meter.Type.GAUGE);
+    private void removeLocalGauges() {
+        MicroMeterUtils.removeGaugesWithNoTags(
+                logUnitSizeMetricName + ".bytes",
+                logUnitSizeMetricName + ".entries",
+                logUnitSizeMetricName + ".segments",
+                logUnitTrimMarkMetricName);
     }
 
     @VisibleForTesting
