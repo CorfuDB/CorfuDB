@@ -86,8 +86,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
                             // Obtain the stream position as when transaction context last
                             // remembered it.
-                            long streamReadPosition = getKnownStreamPosition()
-                                    .getOrDefault(proxy.getStreamID(), ts);
+                            long streamReadPosition = knownStreamsPosition.getOrDefault(proxy.getStreamID(), ts);
 
                             return (
                                     (stream == null || stream.isStreamCurrentContextThreadCurrentContext())
@@ -103,12 +102,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                             // committed changes, or apply forward committed changes.
                             syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy,
                                     o::setUncommittedChanges);
-
-                            // Update the global positions map. The value obtained from underlying
-                            // object must be under object's write-lock.
-                            getKnownStreamPosition().put(proxy.getStreamID(), o.getVersionUnsafe());
                         },
-                        accessFunction::access
+                        accessFunction::access,
+                        version -> updateKnownStreamPosition(proxy.getStreamID(), version)
         );
     }
 
@@ -249,7 +245,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // subscription, the later could lead to data loss scenarios.
         if (getWriteSetInfo().getWriteSet().getEntryMap().isEmpty()) {
             log.trace("Commit[{}] Read-only commit (no write)", this);
-            return getMaxAddress(getReadSetInfo());
+            return getMaxAddressRead();
         }
 
         Set<UUID> affectedStreamsIds = new HashSet<>(getWriteSetInfo()
@@ -297,18 +293,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
         log.trace("Commit[{}] Acquire address {}", this, address);
 
-        super.commitTransaction();
         commitAddress = address;
         log.trace("Commit[{}] Written to {}", this, address);
         return address;
-    }
-
-    private long getMaxAddress(ConflictSetInfo readSetInfo) {
-        long maxAddress = AbstractTransactionalContext.NOWRITE_ADDRESS;
-        for (ICorfuSMRProxyInternal proxy : readSetInfo.getConflicts().keySet()) {
-            maxAddress = Long.max(maxAddress, proxy.getUnderlyingObject().getVersionUnsafe());
-        }
-        return maxAddress;
     }
 
     @Override
