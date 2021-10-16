@@ -54,6 +54,7 @@ public class AbstractIT extends AbstractCorfuTest {
     static final String CORFU_LOG_PATH = PARAMETERS.TEST_TEMP_DIR;
 
     private static final String KILL_COMMAND = "pkill -9 -P ";
+    // FIXME: if jps doesn't exist tear down will fail silently
     private static final String FORCE_KILL_ALL_CORFU_COMMAND = "jps | grep -e CorfuServer -e CorfuInterClusterReplicationServer|awk '{print $1}'| xargs kill -9";
 
     private static final int SHUTDOWN_RETRIES = 10;
@@ -297,7 +298,7 @@ public class AbstractIT extends AbstractCorfuTest {
         return createRuntime(DEFAULT_ENDPOINT);
     }
 
-    public static Process runServer(int port, boolean single) throws IOException {
+    public Process runServer(int port, boolean single) throws IOException {
         return new CorfuServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
@@ -305,34 +306,23 @@ public class AbstractIT extends AbstractCorfuTest {
                 .runServer();
     }
 
-    public static Process runReplicationServer(int port) throws IOException {
+    public Process runReplicationServer(int port) throws IOException {
         return new CorfuReplicationServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
                 .runServer();
     }
 
-    public static Process runReplicationServer(int port, String pluginConfigFilePath) throws IOException {
-        return new CorfuReplicationServerRunner()
-                .setHost(DEFAULT_HOST)
-                .setPort(port)
-                .setPluginConfigFilePath(pluginConfigFilePath)
-                .setMsg_size(MSG_SIZE)
-                .runServer();
-    }
-
-    public static Process runReplicationServer(int port, String pluginConfigFilePath, String metricsConfigFile)
-            throws IOException {
+    public Process runReplicationServer(int port, String pluginConfigFilePath) throws IOException {
         return new CorfuReplicationServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
                 .setPluginConfigFilePath(pluginConfigFilePath)
                 .setMsg_size(MSG_SIZE)
-                .setMetricsConfigFile(metricsConfigFile)
                 .runServer();
     }
 
-    public static Process runReplicationServer(int port, String pluginConfigFilePath, int lockLeaseDuration) throws IOException {
+    public Process runReplicationServer(int port, String pluginConfigFilePath, int lockLeaseDuration) throws IOException {
         return new CorfuReplicationServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
@@ -342,19 +332,7 @@ public class AbstractIT extends AbstractCorfuTest {
                 .runServer();
     }
 
-    public static Process runReplicationServer(int port, String pluginConfigFilePath,
-                                               int lockLeaseDuration, String metricsConfigfFile) throws IOException {
-        return new CorfuReplicationServerRunner()
-                .setHost(DEFAULT_HOST)
-                .setPort(port)
-                .setLockLeaseDuration(Integer.valueOf(lockLeaseDuration))
-                .setPluginConfigFilePath(pluginConfigFilePath)
-                .setMsg_size(MSG_SIZE)
-                .setMetricsConfigFile(metricsConfigfFile)
-                .runServer();
-    }
-
-    public static Process runDefaultServer() throws IOException {
+    public Process runDefaultServer() throws IOException {
         return new CorfuServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(DEFAULT_PORT)
@@ -363,7 +341,7 @@ public class AbstractIT extends AbstractCorfuTest {
                 .runServer();
     }
 
-    public static Process runPersistentServer(String address, int port, boolean singleNode) throws IOException {
+    public Process runPersistentServer(String address, int port, boolean singleNode) throws IOException {
         return new CorfuServerRunner()
                 .setHost(address)
                 .setPort(port)
@@ -372,15 +350,6 @@ public class AbstractIT extends AbstractCorfuTest {
                 .runServer();
     }
 
-    public static Process runPersistentServer(String address, int port, boolean singleNode, String metricsConfigFile) throws IOException {
-        return new CorfuServerRunner()
-                .setHost(address)
-                .setPort(port)
-                .setLogPath(getCorfuServerLogPath(address, port))
-                .setMetricsConfigFile(metricsConfigFile)
-                .setSingle(singleNode)
-                .runServer();
-    }
 
     public static CorfuRuntime createRuntime(String endpoint) {
         CorfuRuntime rt = new CorfuRuntime(endpoint)

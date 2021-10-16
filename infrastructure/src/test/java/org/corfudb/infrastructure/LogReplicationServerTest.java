@@ -102,7 +102,7 @@ public class LogReplicationServerTest {
     }
 
     /**
-     * MAke sure that the server will process {@link LogReplicationEntryMsg}
+     * Make sure that the server will process {@link LogReplicationEntryMsg}
      * and provide an appropriate {@link ResponseMsg} message.
      */
     @Test

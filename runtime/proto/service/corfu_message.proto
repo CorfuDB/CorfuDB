@@ -16,9 +16,8 @@ import "server_errors.proto";
  * Enum indicating the priority of a request or response.
  */
 enum PriorityLevel {
-  PRIORITY_LEVEL_INVALID = 0;
-  NORMAL = 1;
-  HIGH = 2;
+  NORMAL = 0;
+  HIGH = 1;
 }
 
 message ProtocolVersionMsg {

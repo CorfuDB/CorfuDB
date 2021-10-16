@@ -42,7 +42,7 @@ import java.util.concurrent.Semaphore;
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.integration.ReplicationReaderWriterIT.ckStreamsAndTrim;
+import static org.corfudb.integration.LogReplicationReaderWriterIT.ckStreamsAndTrim;
 
 /**
  * Test the core components of log replication, namely, Snapshot Sync and Log Entry Sync,
@@ -224,6 +224,12 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private void cleanEnv() {
+        log.info("*** Clean environment");
+
+        if (sourceDataSender != null) {
+            sourceDataSender.shutdown();
+        }
+
         if (srcDataRuntime != null) {
             srcDataRuntime.shutdown();
             srcTestRuntime.shutdown();
@@ -232,10 +238,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
             readerRuntime.shutdown();
             writerRuntime.shutdown();
-        }
-
-        if (sourceDataSender != null) {
-            sourceDataSender.shutdown();
         }
     }
 
@@ -1214,7 +1216,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                                 .replicationConfig(config).localCorfuEndpoint(SOURCE_ENDPOINT).build(),
                 logReplicationMetadataManager,
                 sourceDataSender);
-        logReplicationSourceManager.getLogReplicationFSM().getAckReader().getOngoing().set(false);
 
         // Set Log Replication Source Manager so we can emulate the channel for data & control messages (required
         // for testing)

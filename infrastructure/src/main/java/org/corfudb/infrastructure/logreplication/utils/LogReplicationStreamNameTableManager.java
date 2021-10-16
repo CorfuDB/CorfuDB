@@ -22,9 +22,12 @@ import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -91,6 +94,7 @@ public class LogReplicationStreamNameTableManager {
     }
 
     private void initStreamNameFetcherPlugin() {
+        log.info(">> PLUGIN IS: {}", pluginConfigFilePath);
         LogReplicationPluginConfig config = new LogReplicationPluginConfig(pluginConfigFilePath);
         File jar = new File(config.getStreamFetcherPluginJARPath());
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
@@ -116,11 +120,11 @@ public class LogReplicationStreamNameTableManager {
     private void openExistingTable(String tableName) {
         try {
             if (Objects.equals(tableName, LOG_REPLICATION_STREAMS_NAME_TABLE)) {
-                corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, tableName, LogReplicationStreams.TableInfo.class,
-                    LogReplicationStreams.Namespace.class, CommonTypes.Uuid.class, TableOptions.builder().build());
+                corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, tableName, TableInfo.class,
+                    Namespace.class, CommonTypes.Uuid.class, TableOptions.builder().build());
             } else {
-                corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_PLUGIN_VERSION_TABLE, LogReplicationStreams.VersionString.class,
-                        LogReplicationStreams.Version.class, CommonTypes.Uuid.class, TableOptions.builder().build());
+                corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_PLUGIN_VERSION_TABLE, VersionString.class,
+                        Version.class, CommonTypes.Uuid.class, TableOptions.builder().build());
             }
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             log.warn("Exception when opening existing table {}", e);
@@ -128,7 +132,7 @@ public class LogReplicationStreamNameTableManager {
     }
 
     private boolean tableVersionMatchesPlugin() {
-        VersionString versionString = LogReplicationStreams.VersionString.newBuilder().setName("VERSION").build();
+        VersionString versionString = VersionString.newBuilder().setName("VERSION").build();
         CorfuStoreEntry<VersionString, Version, CommonTypes.Uuid> record;
 
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -166,28 +170,23 @@ public class LogReplicationStreamNameTableManager {
 
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                 // Populate the plugin version in the version table
-                LogReplicationStreams.VersionString versionString =
-                        LogReplicationStreams.VersionString.newBuilder()
+                LogReplicationStreams.VersionString versionString = VersionString.newBuilder()
                                 .setName("VERSION").build();
-                LogReplicationStreams.Version version =
-                        LogReplicationStreams.Version.newBuilder()
+                LogReplicationStreams.Version version = Version.newBuilder()
                                 .setVersion(logReplicationConfigAdapter.getVersion()).build();
                 txn.putRecord(pluginVersionTable, versionString, version, defaultMetadata);
 
                 // Copy all stream names to the stream names table.  Each name is
                 // a fully qualified stream name
                 for (String entry : streams) {
-                    LogReplicationStreams.TableInfo tableInfo =
-                            LogReplicationStreams.TableInfo.newBuilder().setName(entry)
-                                    .build();
+                    LogReplicationStreams.TableInfo tableInfo = TableInfo.newBuilder().setName(entry).build();
 
                     // As each name is fully qualified, no need to insert the
                     // namespace.  Simply insert an empty string there.
                     // TODO: Ideally the Namespace protobuf can be removed but it
                     //  will involve data migration on upgrade as it is a schema
                     //  change
-                    LogReplicationStreams.Namespace namespace =
-                            LogReplicationStreams.Namespace.newBuilder().setName(
+                    LogReplicationStreams.Namespace namespace = Namespace.newBuilder().setName(
                                     EMPTY_STR)
                                     .build();
                     txn.putRecord(streamsNameTable, tableInfo, namespace, defaultMetadata);
@@ -207,5 +206,22 @@ public class LogReplicationStreamNameTableManager {
             txn.commit();
         }
         return tableNames;
+    }
+
+    /**
+     * Get stream tags to send data change notifications to on the receiver (sink / standby site)
+     *
+     * Stream tags will be read from a static configuration file. This file should contain not only
+     * the stream tag of interest (namespace, tag), i.e., the stream tag we wish to receive notifications on
+     * but also the table names of interest within that tag.
+     *
+     * Note that, we need the mapping as we cannot infer the stream tag from the replicated data on the sink.
+     * Data is replicated at the stream level and not deserialized, hence we cannot infer from the transferred log
+     * entries, the tags associated to them.
+     *
+     * @return map of stream tag UUID to data streams UUIDs.
+     */
+    public Map<UUID, List<UUID>> getStreamingConfigOnSink() {
+        return logReplicationConfigAdapter.getStreamingConfigOnSink();
     }
 }

@@ -82,15 +82,15 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     /**
      * Returns a Table instance backed by a CorfuTable.
      *
-     * @param tableParameters         Table parameters including
-     *                                table's namespace and fullyQualifiedTableName,
-     *                                key, value, and metadata classes,
-     *                                value and metadata schemas
-     * @param corfuRuntime            connected instance of the Corfu Runtime
-     * @param serializer              protobuf serializer
-     * @param streamingMapSupplier    supplier of underlying map data structure
-     * @param versionPolicy           versioning policy
-     * @param streamTags              set of UUIDs representing the streamTags
+     * @param tableParameters      Table parameters including
+     *                             table's namespace and fullyQualifiedTableName,
+     *                             key, value, and metadata classes,
+     *                             value and metadata schemas
+     * @param corfuRuntime         connected instance of the Corfu Runtime
+     * @param serializer           protobuf serializer
+     * @param streamingMapSupplier supplier of underlying map data structure
+     * @param versionPolicy        versioning policy
+     * @param streamTags           set of UUIDs representing the streamTags
      */
     public Table(@Nonnull final TableParameters<K, V, M> tableParameters,
                  @Nonnull final CorfuRuntime corfuRuntime,
@@ -173,7 +173,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      * Clear All table entries.
      */
     public void clearAll() {
-       corfuTable.clear();
+        corfuTable.clear();
     }
 
     /**
@@ -184,7 +184,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      *
      * @param e the element to add
      * @throws IllegalArgumentException if some property of the specified
-     *         element prevents it from being added to this queue
+     *                                  element prevents it from being added to this queue
      */
     public K enqueue(V e) {
         /**
@@ -203,7 +203,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
              */
             @Override
             public void preCommitCallback(TokenResponse tokenResponse) {
-                record.setMetadata((M)Queue.CorfuQueueMetadataMsg.newBuilder()
+                record.setMetadata((M) Queue.CorfuQueueMetadataMsg.newBuilder()
                         .setTxSequence(tokenResponse.getSequence()).build());
                 log.trace("preCommitCallback for Queue: " + tokenResponse);
             }
@@ -212,12 +212,12 @@ public class Table<K extends Message, V extends Message, M extends Message> {
         // Obtain a cluster-wide unique 64-bit id to identify this entry in the queue.
         long entryId = guidGenerator.nextLong();
         // Embed this key into a protobuf.
-        K keyOfQueueEntry = (K)Queue.CorfuGuidMsg.newBuilder().setInstanceId(entryId).build();
+        K keyOfQueueEntry = (K) Queue.CorfuGuidMsg.newBuilder().setInstanceId(entryId).build();
 
         // Prepare a partial record with the queue's payload and temporary metadata that will be overwritten
         // by the QueueEntryAddressGetter callback above when the transaction finally commits.
         CorfuRecord<V, M> queueEntry = new CorfuRecord<>(e,
-                (M)Queue.CorfuQueueMetadataMsg.newBuilder().setTxSequence(0).build());
+                (M) Queue.CorfuQueueMetadataMsg.newBuilder().setTxSequence(0).build());
 
         QueueEntryAddressGetter addressGetter = new QueueEntryAddressGetter(queueEntry);
         log.trace("enqueue: Adding preCommitListener for Queue: " + e.toString());
@@ -236,22 +236,22 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      *
      * @return List of Entries sorted by their enqueue order
      */
-    public List<CorfuQueueRecord>  entryList() {
-        Comparator<Map.Entry<K, CorfuRecord<V,M>>> queueComparator =
-                (Map.Entry<K, CorfuRecord<V,M>> rec1, Map.Entry<K, CorfuRecord<V,M>> rec2) -> {
-                    long r1EntryId = ((Queue.CorfuGuidMsg)rec1.getKey()).getInstanceId();
-                    long r1Sequence = ((Queue.CorfuQueueMetadataMsg)rec1.getValue().getMetadata()).getTxSequence();
+    public List<CorfuQueueRecord> entryList() {
+        Comparator<Map.Entry<K, CorfuRecord<V, M>>> queueComparator =
+                (Map.Entry<K, CorfuRecord<V, M>> rec1, Map.Entry<K, CorfuRecord<V, M>> rec2) -> {
+                    long r1EntryId = ((Queue.CorfuGuidMsg) rec1.getKey()).getInstanceId();
+                    long r1Sequence = ((Queue.CorfuQueueMetadataMsg) rec1.getValue().getMetadata()).getTxSequence();
 
-                    long r2EntryId = ((Queue.CorfuGuidMsg)rec2.getKey()).getInstanceId();
-                    long r2Sequence = ((Queue.CorfuQueueMetadataMsg)rec2.getValue().getMetadata()).getTxSequence();
+                    long r2EntryId = ((Queue.CorfuGuidMsg) rec2.getKey()).getInstanceId();
+                    long r2Sequence = ((Queue.CorfuQueueMetadataMsg) rec2.getValue().getMetadata()).getTxSequence();
                     return CorfuQueueRecord.compareTo(r1EntryId, r2EntryId, r1Sequence, r2Sequence);
                 };
 
         List<CorfuQueueRecord> copy = new ArrayList<>(corfuTable.size());
-        for (Map.Entry<K, CorfuRecord<V,M>> entry : corfuTable.entryStream()
+        for (Map.Entry<K, CorfuRecord<V, M>> entry : corfuTable.entryStream()
                 .sorted(queueComparator).collect(Collectors.toList())) {
-            copy.add(new CorfuQueueRecord((Queue.CorfuGuidMsg)entry.getKey(),
-                    (Queue.CorfuQueueMetadataMsg)entry.getValue().getMetadata(),
+            copy.add(new CorfuQueueRecord((Queue.CorfuGuidMsg) entry.getKey(),
+                    (Queue.CorfuQueueMetadataMsg) entry.getValue().getMetadata(),
                     entry.getValue().getPayload()));
         }
         return copy;
@@ -262,7 +262,6 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      * It is a read-only type returned by the entryList() method.
      * The ID returned here can be used for both point get()s as well as remove() operations
      * on this Queue.
-     *
      */
     public static class CorfuQueueRecord implements Comparable<CorfuQueueRecord> {
         /**
@@ -351,17 +350,20 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     @Nonnull
     List<CorfuStoreEntry<K, V, M>> scanAndFilterByEntry(
             @Nonnull final Predicate<CorfuStoreEntry<K, V, M>> entryPredicate) {
-        return corfuTable.scanAndFilterByEntry(recordEntry ->
-                entryPredicate.test(new CorfuStoreEntry<>(
-                        recordEntry.getKey(),
-                        recordEntry.getValue().getPayload(),
-                        recordEntry.getValue().getMetadata())))
-                .parallelStream()
-                .map(entry -> new CorfuStoreEntry<>(
-                        entry.getKey(),
-                        entry.getValue().getPayload(),
-                        entry.getValue().getMetadata()))
-                .collect(Collectors.toList());
+        try(Stream<Map.Entry<K, CorfuRecord<V, M>>> stream = corfuTable.entryStream()) {
+            return CorfuTable.pool.submit(() -> stream
+                    .filter(recordEntry ->
+                            entryPredicate.test(new CorfuStoreEntry<>(
+                                    recordEntry.getKey(),
+                                    recordEntry.getValue().getPayload(),
+                                    recordEntry.getValue().getMetadata())))
+                    .parallel()
+                    .map(entry -> new CorfuStoreEntry<>(
+                            entry.getKey(),
+                            entry.getValue().getPayload(),
+                            entry.getValue().getMetadata()))
+                    .collect(Collectors.toList())).join();
+        }
     }
 
     /**
@@ -372,11 +374,11 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      */
     public @Nonnull
     Stream<CorfuStoreEntry<K, V, M>> entryStream() {
-         return corfuTable.entryStream().map(entry ->
-                 new CorfuStoreEntry<>(
-                         entry.getKey(),
-                         entry.getValue().getPayload(),
-                         entry.getValue().getMetadata()));
+        return corfuTable.entryStream().map(entry ->
+                new CorfuStoreEntry<>(
+                        entry.getKey(),
+                        entry.getValue().getPayload(),
+                        entry.getValue().getMetadata()));
     }
 
     /**
@@ -390,7 +392,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     @Nonnull
     <I>
     List<CorfuStoreEntry<K, V, M>> getByIndex(@Nonnull final String indexName,
-                    @Nonnull final I indexKey) {
+                                              @Nonnull final I indexKey) {
         return corfuTable.getByIndex(() -> indexName, indexKey).stream()
                 .map(entry -> new CorfuStoreEntry<K, V, M>(entry.getKey(),
                         entry.getValue().getPayload(),

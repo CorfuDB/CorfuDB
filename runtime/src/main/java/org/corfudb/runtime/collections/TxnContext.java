@@ -344,6 +344,27 @@ public class TxnContext implements AutoCloseable {
     }
 
     /**
+     * Apply a Corfu SMREntry directly to a stream. This can be used for replaying the mutations
+     * directly into the underlying stream bypassing the object layer entirely.
+     *
+     * This API is used for LR feature, as streaming is selectively required on standby (receiver)
+     * by means of a static configuration file.
+     *
+     * @param streamId    - UUID of the stream on which the logUpdate is being added to.
+     * @param updateEntry - the actual State Machine Replicated entry.
+     * @param streamTags - stream tags associated to the given stream id
+     */
+    public void logUpdate(UUID streamId, SMREntry updateEntry, List<UUID> streamTags) {
+        operations.add(() -> {
+            if (streamTags != null) {
+                TransactionalContext.getCurrentContext().logUpdate(streamId, updateEntry, streamTags);
+            } else {
+                TransactionalContext.getCurrentContext().logUpdate(streamId, updateEntry);
+            }
+        });
+    }
+
+    /**
      * Apply a list of Corfu SMREntries directly to a stream. This can be used for replaying the mutations
      * directly into the underlying stream bypassing the object layer entirely.
      *

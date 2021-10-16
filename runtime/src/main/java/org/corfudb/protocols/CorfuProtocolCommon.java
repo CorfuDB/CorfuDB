@@ -181,7 +181,7 @@ public final class CorfuProtocolCommon {
     public static SequencerMetricsMsg getSequencerMetricsMsg(SequencerMetrics metrics) {
         return SequencerMetricsMsg.newBuilder()
                 .setSequencerStatus(sequencerStatusTypeMap.getOrDefault(
-                        metrics.getSequencerStatus(), SequencerStatus.INVALID))
+                        metrics.getSequencerStatus(), SequencerStatus.UNKNOWN))
                 .build();
     }
 
@@ -198,11 +198,8 @@ public final class CorfuProtocolCommon {
                 return SequencerMetrics.READY;
             case NOT_READY:
                 return SequencerMetrics.NOT_READY;
-            case UNKNOWN:
-                return SequencerMetrics.UNKNOWN;
             default:
-                throw new UnsupportedOperationException("SequencerMetrics message unrecognized: "
-                        + "Status=" + msg.getSequencerStatus());
+                return SequencerMetrics.UNKNOWN;
         }
     }
 

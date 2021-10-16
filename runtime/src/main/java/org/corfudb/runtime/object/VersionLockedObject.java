@@ -1,10 +1,8 @@
 package org.corfudb.runtime.object;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.micrometer.core.instrument.MeterRegistry;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.exceptions.NoRollbackException;
@@ -48,7 +46,7 @@ import java.util.function.Supplier;
  * <p>Created by mwei on 11/13/16.
  */
 @Slf4j
-public class VersionLockedObject<T extends ICorfuSMR<T>> {
+public class VersionLockedObject<T extends ICorfuSMR<T>> implements AutoCloseable {
     /**
      * The actual underlying object.
      */
@@ -121,6 +119,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      */
     private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
 
+    private final String noRollbackName = "vlo.no_rollback_exception.count";
     private final Optional<AtomicLong> noRollBackExceptionCounter;
 
     /*
@@ -145,7 +144,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
         this.pendingUpcalls = ConcurrentHashMap.newKeySet();
         this.upcallResults = new ConcurrentHashMap<>();
         lock = new StampedLock();
-        noRollBackExceptionCounter = MicroMeterUtils.gauge("vlo.no_rollback_exception.count",
+        noRollBackExceptionCounter = MicroMeterUtils.gauge(noRollbackName,
                 new AtomicLong(0L));
     }
 
@@ -729,5 +728,10 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
     @VisibleForTesting
     public ISMRStream getSmrStream() {
         return smrStream;
+    }
+
+    @Override
+    public void close() {
+        MicroMeterUtils.removeGaugesWithNoTags(noRollbackName);
     }
 }

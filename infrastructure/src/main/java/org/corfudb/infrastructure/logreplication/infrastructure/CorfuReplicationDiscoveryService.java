@@ -43,6 +43,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -365,6 +366,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     .tlsEnabled((Boolean) serverContext.getServerConfig().get("--enable-tls"))
                     .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
                     .build())
+                    .setTransactionLogging(true)
                     .parseConfigurationString(localCorfuEndpoint).connect();
         }
 
@@ -415,16 +417,18 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
             Set<String> streamsToReplicate = replicationStreamNameTableManager.getStreamsToReplicate();
 
+            Map<UUID, List<UUID>> streamingConfigSink = replicationStreamNameTableManager.getStreamingConfigOnSink();
+
             // TODO pankti: Check if version does not match. If it does not, create an event for site discovery to
             //  do a snapshot sync.
-            boolean upgraded = replicationStreamNameTableManager
-                .isUpgraded();
+            boolean upgraded = replicationStreamNameTableManager.isUpgraded();
 
             if (upgraded) {
                 input(new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.UPGRADE));
             }
 
-            return new LogReplicationConfig(streamsToReplicate, serverContext.getLogReplicationMaxNumMsgPerBatch(), serverContext.getLogReplicationMaxDataMessageSize());
+            return new LogReplicationConfig(streamsToReplicate, streamingConfigSink, serverContext.getLogReplicationMaxNumMsgPerBatch(),
+                    serverContext.getLogReplicationMaxDataMessageSize());
         } catch (Throwable t) {
             log.error("Exception when fetching the Replication Config", t);
             throw t;
@@ -784,7 +788,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     @Override
     public Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus() {
-        if (localClusterDescriptor == null) {
+        if (localClusterDescriptor == null || logReplicationMetadataManager == null) {
             log.warn("Cluster configuration has not been pushed to current LR node.");
             return null;
         } else if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {

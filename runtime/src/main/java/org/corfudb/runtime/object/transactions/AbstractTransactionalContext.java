@@ -234,6 +234,8 @@ public abstract class AbstractTransactionalContext implements
 
     public abstract void logUpdate(UUID streamId, SMREntry updateEntry);
 
+    public abstract void logUpdate(UUID streamId, SMREntry updateEntry, List<UUID> streamTags);
+
     /**
      * Log a list of SMR updates to the specified Corfu stream log
      *
@@ -351,6 +353,10 @@ public abstract class AbstractTransactionalContext implements
 
     void addToWriteSet(UUID streamId, SMREntry updateEntry) {
         getWriteSetInfo().add(streamId, updateEntry);
+    }
+
+    void addToWriteSet(UUID streamId, SMREntry updateEntry, List<UUID> streamTags) {
+        getWriteSetInfo().add(streamId, updateEntry, streamTags);
     }
 
     public void addToWriteSet(UUID streamId, List<SMREntry> updateEntries) {

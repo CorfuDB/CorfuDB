@@ -89,6 +89,11 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     }
 
     @Override
+    public void logUpdate(UUID streamId, SMREntry updateEntry, List<UUID> streamTags) {
+        throw new UnsupportedOperationException("Can't modify object during a read-only transaction!");
+    }
+
+    @Override
     public void logUpdate(UUID streamId, List<SMREntry> updateEntries) {
         throw new UnsupportedOperationException("Can't modify object during a read-only transaction!");
     }

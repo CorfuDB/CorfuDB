@@ -185,7 +185,6 @@ final public class StreamAddressSpace {
         while (iterator.hasNext()) {
             long current = iterator.next();
             if (current <= newTrimMark) {
-                log.info("trim: stream trim mark moved from {} to {}", this.trimMark, current);
                 this.trimMark = current;
                 break;
             }
