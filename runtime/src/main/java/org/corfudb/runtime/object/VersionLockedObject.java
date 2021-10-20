@@ -196,25 +196,29 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> implements AutoCloseabl
      * @param accessFunction            A function which allows the user to directly access
      *                                  the object while locked in the state enforced by
      *                                  either the directAccessCheckFunction or updateFunction.
+     * @param versionAccessed           A function which allows for learning the version of
+     *                                  the object during access
      * @param <R>                       The type of the access function return.
      * @return Returns the access function.
      */
     public <R> R access(Function<VersionLockedObject<T>, Boolean> directAccessCheckFunction,
                         Consumer<VersionLockedObject<T>> updateFunction,
-                        Function<T, R> accessFunction) {
+                        Function<T, R> accessFunction,
+                        Consumer<Long> versionAccessed) {
         // First, we try to do an optimistic read on the object, in case it
         // meets the conditions for direct access.
         long ts = lock.tryOptimisticRead();
         if (ts != 0) {
             try {
                 if (directAccessCheckFunction.apply(this)) {
+                    long vloAccessedVersion = getVersionUnsafe();
                     log.trace("Access [{}] Direct (optimistic-read) access at {}",
-                            this, getVersionUnsafe());
+                            this, vloAccessedVersion);
                     R ret = accessFunction.apply(object.getContext(ICorfuExecutionContext.DEFAULT));
 
-                    long versionForCorrectness = getVersionUnsafe();
                     if (lock.validate(ts)) {
-                        correctnessLogger.trace("Version, {}", versionForCorrectness);
+                        correctnessLogger.trace("Version, {}", vloAccessedVersion);
+                        versionAccessed.accept(vloAccessedVersion);
                         return ret;
                     }
                 }
@@ -243,15 +247,19 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> implements AutoCloseabl
             }
             // Check if direct access is possible (unlikely).
             if (directAccessCheckFunction.apply(this)) {
-                log.trace("Access [{}] Direct (writelock) access at {}", this, getVersionUnsafe());
+                long vloAccessedVersion = getVersionUnsafe();
+                log.trace("Access [{}] Direct (writelock) access at {}", this, vloAccessedVersion);
                 R ret = accessFunction.apply(object.getContext(ICorfuExecutionContext.DEFAULT));
-                correctnessLogger.trace("Version, {}", getVersionUnsafe());
+                correctnessLogger.trace("Version, {}", vloAccessedVersion);
+                versionAccessed.accept(vloAccessedVersion);
                 return ret;
             }
             // If not, perform the update operations
             updateFunction.accept(this);
-            correctnessLogger.trace("Version, {}", getVersionUnsafe());
-            log.trace("Access [{}] Updated (writelock) access at {}", this, getVersionUnsafe());
+            long vloAccessedVersion = getVersionUnsafe();
+            correctnessLogger.trace("Version, {}", vloAccessedVersion);
+            log.trace("Access [{}] Updated (writelock) access at {}", this, vloAccessedVersion);
+            versionAccessed.accept(vloAccessedVersion);
             return accessFunction.apply(object.getContext(ICorfuExecutionContext.DEFAULT));
             // And perform the access
         } finally {
