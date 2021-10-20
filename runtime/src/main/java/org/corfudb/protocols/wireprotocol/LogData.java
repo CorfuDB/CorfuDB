@@ -39,7 +39,9 @@ public class LogData implements IMetadata, ILogData {
 
     private int lastKnownSize = NOT_KNOWN;
 
-    private final transient AtomicReference<Object> payload = new AtomicReference<>();
+    private final AtomicReference<Object> payload = new AtomicReference<>();
+
+    private volatile boolean initializedAddress = false;
 
     private final EnumMap<LogUnitMetadataType, Object> metadataMap;
 
@@ -79,57 +81,53 @@ public class LogData implements IMetadata, ILogData {
     public Object getPayload(CorfuRuntime runtime) {
         Object value = payload.get();
 
-        // This is only needed for unit test framework to work. Since unit
-        // tests do not serialize payload to byte array, the address will
-        // not be set in the following codes, so doing here instead.
-        if (value instanceof LogEntry) {
-            if (!Address.isAddress(((LogEntry) value).getGlobalAddress())) {
-                ((LogEntry) value).setGlobalAddress(getGlobalAddress());
-                ((LogEntry) value).setRuntime(runtime);
-            }
+        if (value instanceof LogEntry && initializedAddress) {
             return value;
         }
 
-        if (value == null) {
-            synchronized (this.payload) {
-                value = this.payload.get();
-                if (value == null) {
-                    if (data == null) {
-                        this.payload.set(null);
-                    } else {
-                        ByteBuf serializedBuf = Unpooled.wrappedBuffer(data);
-                        if (hasPayloadCodec()) {
-                            // If the payload has a codec we need to decode it before deserialization.
-                            ByteBuf compressedBuf = CorfuProtocolCommon.fromBuffer(data, ByteBuf.class);
-                            byte[] compressedArrayBuf = new byte[compressedBuf.readableBytes()];
-                            compressedBuf.readBytes(compressedArrayBuf);
-                            Supplier<ByteBuf> bufSupplier = () -> Unpooled.wrappedBuffer(getPayloadCodecType()
-                                    .getInstance().decompress(ByteBuffer.wrap(compressedArrayBuf)));
-                            serializedBuf = MicroMeterUtils.time(bufSupplier,
-                                    "logdata.decompress");
-                        }
+        synchronized (payload) {
 
-                        final Object actualValue;
-                        try {
-                            actualValue =
-                                    Serializers.CORFU.deserialize(serializedBuf, runtime);
+            if (value instanceof LogEntry) {
+                if (!Address.isAddress(((LogEntry) value).getGlobalAddress())) {
+                    ((LogEntry) value).setGlobalAddress(getGlobalAddress());
+                    ((LogEntry) value).setRuntime(runtime);
+                    initializedAddress = true;
+                }
+                return value;
+            }
 
-                            if (actualValue instanceof LogEntry) {
-                                ((LogEntry) actualValue).setGlobalAddress(getGlobalAddress());
-                                ((LogEntry) actualValue).setRuntime(runtime);
-                            }
-                            value = actualValue == null ? this.payload : actualValue;
-                            this.payload.set(value);
-                            lastKnownSize = data.length;
-                        } catch (Throwable throwable) {
-                            log.error("Exception caught at address {}, {}, {}",
-                                    getGlobalAddress(), getStreams(), getType());
-                            throw throwable;
-                        } finally {
-                            serializedBuf.release();
-                            data = null;
-                        }
+            if (value == null && data != null) {
+
+                ByteBuf serializedBuf = Unpooled.wrappedBuffer(data);
+                if (hasPayloadCodec()) {
+                    // If the payload has a codec we need to decode it before deserialization.
+                    ByteBuf compressedBuf = CorfuProtocolCommon.fromBuffer(data, ByteBuf.class);
+                    byte[] compressedArrayBuf = new byte[compressedBuf.readableBytes()];
+                    compressedBuf.readBytes(compressedArrayBuf);
+                    Supplier<ByteBuf> bufSupplier = () -> Unpooled.wrappedBuffer(getPayloadCodecType()
+                            .getInstance().decompress(ByteBuffer.wrap(compressedArrayBuf)));
+                    serializedBuf = MicroMeterUtils.time(bufSupplier,
+                            "logdata.decompress");
+                }
+
+                final Object actualValue;
+                try {
+                    actualValue =
+                            Serializers.CORFU.deserialize(serializedBuf, runtime);
+
+                    if (actualValue instanceof LogEntry) {
+                        ((LogEntry) actualValue).setGlobalAddress(getGlobalAddress());
+                        ((LogEntry) actualValue).setRuntime(runtime);
                     }
+                    payload.set(actualValue);
+                    lastKnownSize = data.length;
+                } catch (Throwable throwable) {
+                    log.error("Exception caught at address {}, {}, {}",
+                            getGlobalAddress(), getStreams(), getType());
+                    throw throwable;
+                } finally {
+                    serializedBuf.release();
+                    data = null;
                 }
             }
         }
