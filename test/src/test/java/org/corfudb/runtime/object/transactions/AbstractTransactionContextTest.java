@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
 
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicIntegerArray;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -12,6 +14,7 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.object.CorfuSharedCounter;
+import org.corfudb.runtime.view.Address;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -99,7 +102,50 @@ public abstract class AbstractTransactionContextTest extends AbstractTransaction
                 .isNull();
 
         assertThat(result)
-                .isEqualTo(AbstractTransactionalContext.NOWRITE_ADDRESS);
+                .isEqualTo(Address.NON_ADDRESS);
+    }
+
+    /**
+     * This test verifies that when read-only transactions commit they return the highest
+     * observed sequence number as the commit address. Since the object can roll forward
+     * and backward because of threads interleaving, the test verifies that versions
+     * are computed safely (i.e., under proper locking) in the case of interleaving.
+     */
+    @Test
+    public void testReadOnlyTransactionsCommitAddress() throws Exception {
+        Map<String, String> map = getMap();
+        map.put("k1", "v1");
+        Token snapshot1 = getRuntime().getSequencerView().query().getToken();
+        map.put("k2", "v2");
+        Token snapshot2 = getRuntime().getSequencerView().query().getToken();
+
+        AtomicLong otherThreadCommitAddress = new AtomicLong(Address.NON_ADDRESS);
+
+        TXBegin();
+
+        assertThat(map.get("k2")).isEqualTo("v2");
+
+        // Force the object to roll back with a different thread
+        Thread thread = new Thread(() -> {
+            getRuntime().getObjectsView().TXBuild()
+                    .type(TransactionType.WRITE_AFTER_WRITE)
+                    .snapshot(snapshot1)
+                    .build()
+                    .begin();
+
+            assertThat(map.get("k1")).isEqualTo("v1");
+
+            otherThreadCommitAddress.set(getRuntime().getObjectsView().TXEnd());
+        });
+
+        thread.start();
+        final long waitTime = 100;
+        thread.join(waitTime);
+        assertThat(otherThreadCommitAddress.get()).isEqualTo(snapshot1.getSequence());
+
+
+        long commitAddress = getRuntime().getObjectsView().TXEnd();
+        assertThat(commitAddress).isEqualTo(snapshot2.getSequence());
     }
 
     @Test
