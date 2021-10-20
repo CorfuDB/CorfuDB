@@ -17,6 +17,7 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
 
 import java.util.ArrayList;
@@ -158,6 +159,12 @@ public class StreamingTask<K extends Message, V extends Message, M extends Messa
         ILogData logData = stream.next();
         Optional<CorfuStreamEntries> streamEntries = transform(logData);
         log.debug("producing {} {} on {}", logData.getGlobalAddress(), logData.getType(), listenerId);
+
+        streamEntries.ifPresent(e -> e.getEntries().values().forEach(l -> l.forEach(k -> {
+            if (k.getAddress() == Address.NON_ADDRESS) {
+                throw new IllegalStateException("address cant be zero!");
+            }
+        })));
 
         streamEntries.ifPresent(e -> MicroMeterUtils.time(() -> listener.onNextEntry(e),
                 "stream.notify.duration",
