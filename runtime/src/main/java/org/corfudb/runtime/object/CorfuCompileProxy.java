@@ -194,7 +194,8 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
                         }
                     }
                 },
-                o -> accessMethod.access(o));
+                o -> accessMethod.access(o),
+                a -> {});
     }
 
     /**
