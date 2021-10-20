@@ -2,7 +2,8 @@ package org.corfudb.infrastructure.log;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
-
+import com.google.common.hash.Hasher;
+import com.google.common.hash.Hashing;
 import com.google.common.util.concurrent.AtomicDouble;
 import com.google.protobuf.AbstractMessage;
 import com.google.protobuf.ByteString;
@@ -21,7 +22,6 @@ import org.corfudb.infrastructure.log.LogFormat.DataType;
 import org.corfudb.infrastructure.log.LogFormat.LogEntry;
 import org.corfudb.infrastructure.log.LogFormat.LogHeader;
 import org.corfudb.infrastructure.log.LogFormat.Metadata;
-import org.corfudb.infrastructure.log.FileSystemAgent.ResourceQuotaConfig;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -42,11 +42,15 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.FileStore;
 import java.nio.file.FileSystems;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -105,6 +109,13 @@ public class StreamLogFiles implements StreamLog {
     // the files of the old instance
     private LogMetadata logMetadata;
 
+    // Derived size in bytes that normal writes to the log unit are capped at.
+    // This is derived as a percentage of the log's filesystem capacity.
+    private final long logSizeLimit;
+
+    // Resource quota to track the log size
+    private ResourceQuota logSizeQuota;
+
     private final String logUnitSizeMetricName = "logunit.size";
     private final String logUnitTrimMarkMetricName = "logunit.trimmark";
     /**
@@ -112,8 +123,6 @@ public class StreamLogFiles implements StreamLog {
      * operations (reset log unit and stream log compaction) in parallel
      */
     private final ReadWriteLock resetLock = new ReentrantReadWriteLock();
-
-    private final ResourceQuota quota;
 
     /**
      * Returns a file-based stream log object.
@@ -129,14 +138,25 @@ public class StreamLogFiles implements StreamLog {
         this.verify = !noVerify;
         this.dataStore = new StreamLogDataStore(serverContext.getDataStore());
 
-        initStreamLogDirectory();
+        String logSizeLimitPercentageParam = (String) serverContext.getServerConfig().get("--log-size-quota-percentage");
+        final double logSizeLimitPercentage = Double.parseDouble(logSizeLimitPercentageParam);
+        if (logSizeLimitPercentage < 0.0 || 100.0 < logSizeLimitPercentage) {
+            String msg = String.format("Invalid quota: quota(%f)%% must be between 0-100%%",
+                    logSizeLimitPercentage);
+            throw new LogUnitException(msg);
+        }
 
-        configureFileSystemStats(serverContext);
-        this.quota = FileSystemAgent.getResourceQuota();
+        long fileSystemCapacity = initStreamLogDirectory();
+        logSizeLimit = (long) (fileSystemCapacity * logSizeLimitPercentage / 100.0);
+
         logUnitSizeBytes = MicroMeterUtils.gauge(logUnitSizeMetricName + ".bytes", new AtomicDouble(0));
         logUnitSizeEntries = MicroMeterUtils.gauge(logUnitSizeMetricName + ".entries", new AtomicLong(0L));
         openSegments = MicroMeterUtils.gauge(logUnitSizeMetricName + ".segments", new AtomicLong(0L));
         currentTrimMark = MicroMeterUtils.gauge(logUnitTrimMarkMetricName, new AtomicLong(getTrimMark()));
+        long initialLogSize = estimateSize(logDir);
+        log.info("StreamLogFiles: {} size is {} bytes, limit {}", logDir, initialLogSize, logSizeLimit);
+        logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
+        logSizeQuota.consume(initialLogSize);
 
         verifyLogs();
         // Starting address initialization should happen before
@@ -152,28 +172,28 @@ public class StreamLogFiles implements StreamLog {
 
     }
 
-    private void configureFileSystemStats(ServerContext serverContext) {
-        if (!FileSystemAgent.configured()) {
-            FileSystemAgent.init(new ResourceQuotaConfig(serverContext));
-        }
-    }
-
     private long getStartingSegment() {
         return dataStore.getStartingAddress() / RECORDS_PER_LOG_FILE;
     }
 
     /**
      * Create stream log directory if not exists
+     *
+     * @return total capacity of the file system that owns the log files.
      */
-    private void initStreamLogDirectory() {
+    private long initStreamLogDirectory() {
+        long fileSystemCapacity;
+
         try {
             if (!logDir.toFile().exists()) {
                 Files.createDirectories(logDir);
             }
 
-            Path corfuDir = logDir.getParent();
+            String corfuDir = logDir.getParent().toString();
+            FileStore corfuDirBackend = Files.getFileStore(Paths.get(corfuDir));
 
-            if (!Files.isWritable(corfuDir)) {
+            File corfuDirFile = new File(corfuDir);
+            if (!corfuDirFile.canWrite()) {
                 throw new LogUnitException("Corfu directory is not writable " + corfuDir);
             }
 
@@ -181,11 +201,14 @@ public class StreamLogFiles implements StreamLog {
             if (!logDirectory.canWrite()) {
                 throw new LogUnitException("Stream log directory not writable in " + corfuDir);
             }
+
+            fileSystemCapacity = corfuDirBackend.getTotalSpace();
         } catch (IOException ioe) {
             throw new LogUnitException(ioe);
         }
 
         log.info("initStreamLogDirectory: initialized {}", logDir);
+        return fileSystemCapacity;
     }
 
     /**
@@ -272,12 +295,12 @@ public class StreamLogFiles implements StreamLog {
 
     @Override
     public boolean quotaExceeded() {
-        return !quota.hasAvailable();
+        return !logSizeQuota.hasAvailable();
     }
 
     @Override
     public long quotaLimitInBytes() {
-        return quota.getLimit();
+        return logSizeQuota.getLimit();
     }
 
     @Override
@@ -951,7 +974,7 @@ public class StreamLogFiles implements StreamLog {
     private void writeByteBuffer(FileChannel channel, ByteBuffer buf) throws IOException {
         // On IOExceptions this class should be reinitialized, so consuming
         // the buffer size and failing on the write should be an issue
-        quota.consume(buf.remaining());
+        logSizeQuota.consume(buf.remaining());
         while (buf.hasRemaining()) {
             channel.write(buf);
         }
@@ -983,7 +1006,7 @@ public class StreamLogFiles implements StreamLog {
 
         logUnitSizeBytes.ifPresent(counter -> counter.addAndGet(size));
         MicroMeterUtils.measure(size, "logunit.write.throughput");
-        logUnitSizeEntries.ifPresent(AtomicLong::incrementAndGet);
+        logUnitSizeEntries.ifPresent(counter -> counter.incrementAndGet());
         return new AddressMetaData(metadata.getPayloadChecksum(), metadata.getLength(), channelOffset);
     }
 
@@ -1292,7 +1315,7 @@ public class StreamLogFiles implements StreamLog {
                 numFiles++;
             }
         }
-        quota.release(freedBytes);
+        logSizeQuota.release(freedBytes);
         final long freedBytesFinal = freedBytes;
         logUnitSizeBytes.ifPresent(counter -> counter.addAndGet(-freedBytesFinal));
         log.info("deleteFilesMatchingFilter: completed, deleted {} files, freed {} bytes", numFiles, freedBytes);
@@ -1327,6 +1350,7 @@ public class StreamLogFiles implements StreamLog {
             logMetadata = new LogMetadata();
             removeLocalGauges();
             logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
+
             log.info("reset: Completed");
         } finally {
             lock.unlock();
@@ -1349,5 +1373,62 @@ public class StreamLogFiles implements StreamLog {
     @VisibleForTesting
     Collection<SegmentHandle> getOpenSegmentHandles() {
         return writeChannels.values();
+    }
+
+    public static class Checksum {
+
+        private Checksum() {
+            //prevent creating instances
+        }
+
+        /**
+         * Returns checksum used for log.
+         *
+         * @param bytes data over which to compute the checksum
+         * @return checksum of bytes
+         */
+        public static int getChecksum(byte[] bytes) {
+            Hasher hasher = Hashing.crc32c().newHasher();
+            for (byte a : bytes) {
+                hasher.putByte(a);
+            }
+
+            return hasher.hash().asInt();
+        }
+
+        public static int getChecksum(int num) {
+            Hasher hasher = Hashing.crc32c().newHasher();
+            return hasher.putInt(num).hash().asInt();
+        }
+    }
+
+    /**
+     * Estimate the size (in bytes) of a directory.
+     * From https://stackoverflow.com/a/19869323
+     */
+    @VisibleForTesting
+    static long estimateSize(Path directoryPath) {
+        final AtomicLong size = new AtomicLong(0);
+        try {
+            Files.walkFileTree(directoryPath, new SimpleFileVisitor<Path>() {
+                @Override
+                public FileVisitResult visitFile(Path file,
+                                                 BasicFileAttributes attrs) {
+                    size.addAndGet(attrs.size());
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                    // Skip folders that can't be traversed
+                    log.error("skipped: {}", file, exc);
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+
+            return size.get();
+        } catch (IOException ioe) {
+            throw new IllegalStateException(ioe);
+        }
     }
 }
