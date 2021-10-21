@@ -62,7 +62,7 @@ public class BatchProcessor implements AutoCloseable {
      */
     public BatchProcessor(StreamLog streamLog, long sealEpoch, boolean sync) {
         this.sealEpoch = sealEpoch;
-        this.sync = sync;
+        this.sync = false;
         this.streamLog = streamLog;
 
         BATCH_SIZE = 50;
