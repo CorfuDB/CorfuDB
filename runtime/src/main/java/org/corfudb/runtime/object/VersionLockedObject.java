@@ -1,6 +1,7 @@
 package org.corfudb.runtime.object;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.micrometer.core.instrument.Counter;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
@@ -21,7 +22,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -46,7 +46,7 @@ import java.util.function.Supplier;
  * <p>Created by mwei on 11/13/16.
  */
 @Slf4j
-public class VersionLockedObject<T extends ICorfuSMR<T>> implements AutoCloseable {
+public class VersionLockedObject<T extends ICorfuSMR<T>> {
     /**
      * The actual underlying object.
      */
@@ -119,8 +119,8 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> implements AutoCloseabl
      */
     private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
 
-    private final String noRollbackName = "vlo.no_rollback_exception.count";
-    private final Optional<AtomicLong> noRollBackExceptionCounter;
+    private static final String noRollbackName = "vlo.no_rollback_exception.count";
+    private final Optional<Counter> noRollBackExceptionCounter;
 
     /*
      * The VersionLockedObject maintains a versioned object which is backed by an ISMRStream,
@@ -144,8 +144,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> implements AutoCloseabl
         this.pendingUpcalls = ConcurrentHashMap.newKeySet();
         this.upcallResults = new ConcurrentHashMap<>();
         lock = new StampedLock();
-        noRollBackExceptionCounter = MicroMeterUtils.gauge(noRollbackName,
-                new AtomicLong(0L));
+        noRollBackExceptionCounter = MicroMeterUtils.counter(noRollbackName);
     }
 
     /**
@@ -312,7 +311,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> implements AutoCloseabl
             log.trace("Rollback[{}] completed", this);
         } catch (NoRollbackException nre) {
             log.warn("SyncObjectUnsafe[{}] to {} failed {}", this, timestamp, nre);
-            noRollBackExceptionCounter.ifPresent(AtomicLong::getAndIncrement);
+            noRollBackExceptionCounter.ifPresent(Counter::increment);
             resetUnsafe();
         }
     }
@@ -717,29 +716,13 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> implements AutoCloseabl
             log.trace("OptimisticRollback[{}] complete", this);
         } catch (NoRollbackException nre) {
             log.warn("OptimisticRollback[{}] failed", this);
-            noRollBackExceptionCounter.ifPresent(AtomicLong::getAndIncrement);
+            noRollBackExceptionCounter.ifPresent(Counter::increment);
             resetUnsafe();
         }
-    }
-
-    /**
-     * Apply an SMREntry to the version object, while
-     * doing bookkeeping for the underlying stream.
-     *
-     * @param entry smr entry
-     */
-    public void applyUpdateToStreamUnsafe(SMREntry entry, long globalAddress) {
-        applyUpdateUnsafe(entry, globalAddress);
-        seek(globalAddress + 1);
     }
 
     @VisibleForTesting
     public ISMRStream getSmrStream() {
         return smrStream;
-    }
-
-    @Override
-    public void close() {
-        MicroMeterUtils.removeGaugesWithNoTags(noRollbackName);
     }
 }
