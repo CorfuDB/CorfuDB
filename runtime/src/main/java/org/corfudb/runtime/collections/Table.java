@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.Queue;
@@ -15,6 +16,7 @@ import org.corfudb.util.serializer.ISerializer;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -55,12 +57,6 @@ public class Table<K extends Message, V extends Message, M extends Message> {
 
     @Getter
     private final MetadataOptions metadataOptions;
-
-    /**
-     * List of Metrics captured on this table
-     */
-    @Getter
-    private final TableMetrics metrics;
 
     @Getter
     private final Class<K> keyClass;
@@ -117,7 +113,6 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                 .setArguments(new ProtobufIndexer(tableParameters.getValueSchema()), streamingMapSupplier, versionPolicy)
                 .setStreamTags(streamTags)
                 .open();
-        this.metrics = new TableMetrics(this.fullyQualifiedTableName);
         this.keyClass = tableParameters.getKClass();
         this.valueClass = tableParameters.getVClass();
         this.metadataClass = tableParameters.getMClass();
@@ -146,27 +141,25 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      * @param key      Key.
      * @param value    Value.
      * @param metadata Metadata.
-     * @return Previously stored value for the provided key - null if create.
      */
-    CorfuRecord<V, M> put(@Nonnull final K key,
+    protected void put(@Nonnull final K key,
                           @Nonnull final V value,
                           @Nullable final M metadata) {
-        return corfuTable.put(key, new CorfuRecord<>(value, metadata));
+        corfuTable.insert(key, new CorfuRecord<>(value, metadata));
     }
 
     /**
      * Delete a record mapped to the specified key.
      *
      * @param key Key.
-     * @return Previously stored Corfu Record. Throws NoSuchElementException if key is not found.
      */
     @Nullable
-    CorfuRecord<V, M> deleteRecord(@Nonnull final K key) {
+    protected void deleteRecord(@Nonnull final K key) {
         if (!corfuTable.containsKey(key)) {
             log.warn("Deleting a non-existent key {}", key);
-            return null;
+            return;
         }
-        return corfuTable.remove(key);
+        corfuTable.delete(key);
     }
 
     /**
@@ -223,7 +216,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
         log.trace("enqueue: Adding preCommitListener for Queue: " + e.toString());
         TransactionalContext.getRootContext().addPreCommitListener(addressGetter);
 
-        corfuTable.put(keyOfQueueEntry, queueEntry);
+        corfuTable.insert(keyOfQueueEntry, queueEntry);
         return keyOfQueueEntry;
     }
 
@@ -350,8 +343,9 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     @Nonnull
     List<CorfuStoreEntry<K, V, M>> scanAndFilterByEntry(
             @Nonnull final Predicate<CorfuStoreEntry<K, V, M>> entryPredicate) {
+        long startTime = System.nanoTime();
         try(Stream<Map.Entry<K, CorfuRecord<V, M>>> stream = corfuTable.entryStream()) {
-            return CorfuTable.pool.submit(() -> stream
+            List<CorfuStoreEntry<K, V, M>> res = CorfuTable.pool.submit(() -> stream
                     .filter(recordEntry ->
                             entryPredicate.test(new CorfuStoreEntry<>(
                                     recordEntry.getKey(),
@@ -363,6 +357,9 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                             entry.getValue().getPayload(),
                             entry.getValue().getMetadata()))
                     .collect(Collectors.toList())).join();
+            MicroMeterUtils.time(Duration.ofNanos(System.nanoTime() - startTime), "table.scan",
+                    "tableName", getFullyQualifiedTableName());
+            return res;
         }
     }
 

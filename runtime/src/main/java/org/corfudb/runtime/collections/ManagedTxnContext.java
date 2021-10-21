@@ -10,9 +10,7 @@ import org.corfudb.runtime.view.Address;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
@@ -527,9 +525,6 @@ public class ManagedTxnContext implements AutoCloseable {
         return this.txnContext.getNamespace();
     }
 
-    public Map<UUID, Table> getTablesInTxn() {
-        return this.txnContext.getTablesInTxn();
-    }
 
     /**
      * Returns a string representation of the object. In general, the

@@ -36,7 +36,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Random;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -149,7 +148,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             assertThatThrownBy( () -> readWriteTxn.putRecord(tableName, key2, null, null))
                     .isExactlyInstanceOf(IllegalArgumentException.class);
         }
-        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -408,10 +406,10 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         // Ensure that if metadata's revision field is set, it is validated and exception thrown if stale
         final ManagedTxnContext txn1 = shimStore.tx(someNamespace);
-        txn1.putRecord(tableName, key1,
+        assertThatThrownBy(() -> txn1.putRecord(tableName, key1,
                 ManagedMetadata.newBuilder().setCreateUser("abc").build(),
-                ManagedMetadata.newBuilder().setRevision(1L).build());
-        assertThatThrownBy(txn1::commit).isExactlyInstanceOf(StaleRevisionUpdateException.class);
+                ManagedMetadata.newBuilder().setRevision(1L).build()))
+                .isExactlyInstanceOf(StaleRevisionUpdateException.class);
 
         // Correct revision field set should NOT throw an exception
         try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
@@ -436,7 +434,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         assertThat(entry.getMetadata().getCreateUser()).isEqualTo("user_1");
         assertThat(entry.getMetadata().getLastModifiedTime()).isLessThan(System.currentTimeMillis() + 1);
         assertThat(entry.getMetadata().getCreateTime()).isLessThan(entry.getMetadata().getLastModifiedTime());
-        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -507,7 +504,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         txn.commit();
         assertThat(shimStore.getTable(someNamespace, tableName).get(key1).getMetadata())
                 .isNull();
-        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -578,7 +574,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                             .build(), true);
             txn.commit();
         }
-        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -627,58 +622,64 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         assertThat(entry.getMetadata().getCreateTime()).isEqualTo(entry.getMetadata().getLastModifiedTime());
 
         class CommitCallbackImpl implements TxnContext.CommitCallback {
+
+            CorfuStreamEntry.OperationType expectedOperation;
+
+            private boolean called;
+
+            public CommitCallbackImpl(CorfuStreamEntry.OperationType expectedOperation) {
+                this.expectedOperation = expectedOperation;
+            }
+
             public void onCommit(Map<String, List<CorfuStreamEntry>> mutations) {
                 assertThat(mutations.size()).isEqualTo(1);
+                assertThat(mutations.containsKey(table.getFullyQualifiedTableName())).isTrue();
                 assertThat(mutations.get(table.getFullyQualifiedTableName()).size()).isEqualTo(1);
                 // This one way to selectively extract the metadata out
                 ManagedMetadata metadata = (ManagedMetadata) mutations.get(table.getFullyQualifiedTableName()).get(0).getMetadata();
-                assertThat(metadata.getRevision()).isGreaterThan(0);
+                if (metadata != null) {
+                    assertThat(metadata.getRevision()).isGreaterThan(0);
+                }
 
-                // This is another way to extract the metadata out..
-                mutations.forEach((tblName, entries) -> {
-                    entries.forEach(mutation -> {
-                        // This is how we can extract the metadata out
-                        ManagedMetadata metaData = (ManagedMetadata) mutations.get(tblName).get(0).getMetadata();
-                        assertThat(metaData.getRevision()).isGreaterThan(0);
-                    });
-                });
+                assertThat(Iterables.getOnlyElement(mutations.values()).get(0).getOperation())
+                        .isEqualTo(expectedOperation);
+                called = true;
+            }
+
+            public boolean isVerified() {
+                return called;
             }
         }
 
-        CommitCallbackImpl commitCallback = new CommitCallbackImpl();
+        CommitCallbackImpl updateCb = new CommitCallbackImpl(CorfuStreamEntry.OperationType.UPDATE);
+
         try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
+            txn.addCommitCallback(updateCb);
             txn.putRecord(tableName, key, value); // Look no metadata specified!
-            txn.addCommitCallback((mutations) -> {
-                mutations.values().forEach(mutation -> {
-                    CorfuStreamEntry.OperationType op = mutation.get(0).getOperation();
-                    assertThat(op).isEqualTo(CorfuStreamEntry.OperationType.UPDATE);
-                });
-            });
             txn.commit();
         }
 
+        assertThat(updateCb.isVerified()).isTrue();
+
+        CommitCallbackImpl deleteCb = new CommitCallbackImpl(CorfuStreamEntry.OperationType.DELETE);
+
         try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
+            txn.addCommitCallback(deleteCb);
             txn.deleteRecord(tableName, key, ManagedMetadata.newBuilder().build());
-            txn.addCommitCallback((mutations) -> {
-                mutations.values().forEach(mutation -> {
-                    CorfuStreamEntry.OperationType op = mutation.get(0).getOperation();
-                    assertThat(op).isEqualTo(CorfuStreamEntry.OperationType.DELETE);
-                });
-            });
             txn.commit();
         }
 
+        assertThat(deleteCb.isVerified()).isTrue();
+
+        CommitCallbackImpl clearCb = new CommitCallbackImpl(CorfuStreamEntry.OperationType.CLEAR);
+
         try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
+            txn.addCommitCallback(clearCb);
             txn.clear(tableName);
-            txn.addCommitCallback((mutations) -> {
-                mutations.values().forEach(mutation -> {
-                    CorfuStreamEntry.OperationType op = mutation.get(0).getOperation();
-                    assertThat(op).isEqualTo(CorfuStreamEntry.OperationType.CLEAR);
-                });
-            });
             txn.commit();
         }
-        log.debug(table.getMetrics().toString());
+
+        assertThat(clearCb.isVerified()).isTrue();
     }
 
     /**
@@ -765,7 +766,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         assertThat(TransactionalContext.isInTransaction()).isTrue();
         long commitAddress = corfuRuntime.getObjectsView().TXEnd();
         assertThat(commitAddress).isNotEqualTo(Address.NON_ADDRESS);
-        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -837,7 +837,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             Long order = ((ExampleSchemas.ExampleValue)records.get(i).getEntry()).getAnotherKey();
             assertThat(order).isEqualTo(validator.get(i));
         }
-        log.debug(corfuQueue.getMetrics().toString());
     }
 
     /**
