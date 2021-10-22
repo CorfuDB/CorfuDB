@@ -763,6 +763,7 @@ public class TxnContext implements AutoCloseable {
             log.warn("commit() called on an inner transaction not started by CorfuStore");
         } else {
             commitAddress = this.objectsView.TXEnd();
+            log.info("Committed at {}", commitAddress);
         }
 
         // These can be moved to trace once stability improves.
