@@ -355,6 +355,7 @@ public class TxnContext implements AutoCloseable {
      * @param streamTags - stream tags associated to the given stream id
      */
     public void logUpdate(UUID streamId, SMREntry updateEntry, List<UUID> streamTags) {
+        log.info("logUpdate:: streamTags is {}", streamTags);
         operations.add(() -> {
             if (streamTags != null) {
                 TransactionalContext.getCurrentContext().logUpdate(streamId, updateEntry, streamTags);

@@ -551,6 +551,8 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         public synchronized void onNext(CorfuStreamEntries results) {
             log.info("StreamingStandbyListener:: onNext {} with entry size {}", results, results.getEntries().size());
 
+            System.out.println("StreamingStandbyListener:: onNext " + results);
+
             results.getEntries().forEach((schema, entries) -> {
                 if (tablesToListenTo.contains(CorfuRuntime.getStreamID(NAMESPACE + "$" + schema.getTableName()))) {
                     messages.addAll(entries);

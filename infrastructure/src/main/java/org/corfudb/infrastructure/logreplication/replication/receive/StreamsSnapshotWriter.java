@@ -220,6 +220,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         CorfuStoreMetadata.Timestamp timestamp;
 
         try (TxnContext txn = logReplicationMetadataManager.getTxnContext()) {
+            log.info("processUpdatesShadowStream :: shadowStreamUuid is {}", shadowStreamUuid);
             updateLog(txn, smrEntries, shadowStreamUuid);
             logReplicationMetadataManager.appendUpdate(txn,
                     LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER, currentSeqNum);
@@ -241,6 +242,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * Write a list of SMR entries to the specified stream log.
      *
      * @param smrEntries
+     * @param regularStreamUuid
      * @param shadowStreamUuid
      */
     private void updateLog(TxnContext txnContext, List<SMREntry> smrEntries, UUID shadowStreamUuid) {
@@ -261,6 +263,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, srcGlobalSnapshot);
 
         for (SMREntry smrEntry : smrEntries) {
+            log.info("updateLog:: streamId is {}, tagList is {}", shadowStreamUuid, dataStreamToTagsMap.get(shadowStreamUuid));
             txnContext.logUpdate(shadowStreamUuid, smrEntry, dataStreamToTagsMap.get(shadowStreamUuid));
         }
     }
@@ -345,6 +348,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             List<SMREntry> smrEntries =  opaqueEntry.getEntries().get(shadowStreamId);
 
             try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
+                log.info("applyShadowStream:: streamId is {}", streamId);
                 updateLog(txnContext, smrEntries, streamId);
                 txnContext.commit();
             }
