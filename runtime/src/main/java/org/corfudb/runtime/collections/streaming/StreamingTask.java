@@ -123,7 +123,7 @@ public class StreamingTask<K extends Message, V extends Message, M extends Messa
             // Only deserialize the interested streams to reduce overheads.
             List<CorfuStreamEntry> entryList = smrEntries.getSMRUpdates(streamId)
                     .stream()
-                    .map(entry -> CorfuStreamEntry.fromSMREntry(entry, epoch))
+                    .map(CorfuStreamEntry::fromSMREntry)
                     .collect(Collectors.toList());
 
             // Deduplicate entries per stream Id, ordering within a transaction is not guaranteed
