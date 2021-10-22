@@ -28,7 +28,7 @@ public class MicroMeterUtils {
     /**
      * A list of server metrics that will be ignored.
      */
-    private static final Set<String> serverMetricsBlackList = ImmutableSet.of(
+    private static final Set<String> serverMetricsBlockList = ImmutableSet.of(
             "corfu.infrastructure.message-handler.bootstrap_management_request",
             "corfu.infrastructure.message-handler.bootstrap_sequencer_request",
             "corfu.infrastructure.message-handler.committed_tail_request",
@@ -48,9 +48,8 @@ public class MicroMeterUtils {
     /**
      * A list of client metrics that will be ignored.
      */
-    private static final Set<String> clientMetricsBlackList = ImmutableSet.of(
+    private static final Set<String> clientMetricsBlockList = ImmutableSet.of(
             "openTable",
-            "vlo.read.timer",
             "vlo.sync.timer",
             "vlo.write.timer",
             "multi.object.smrentry.serialize.stream",
@@ -68,19 +67,19 @@ public class MicroMeterUtils {
 
     }
 
-    private static Optional<Set<String>> getMetricsBlackList() {
+    private static Optional<Set<String>> getMetricsBlockList() {
         return MeterRegistryProvider.getMetricType().map(type -> {
             if (type == MetricType.CLIENT) {
-                return clientMetricsBlackList;
+                return clientMetricsBlockList;
             } else if (type == MetricType.SERVER) {
-                return serverMetricsBlackList;
+                return serverMetricsBlockList;
             }
             throw new IllegalArgumentException("Unsupported metrics type");
         });
     }
 
     private static Optional<MeterRegistry> filterGetInstance(String name) {
-        return getMetricsBlackList()
+        return getMetricsBlockList()
                 .filter(list -> !list.contains(name))
                 .flatMap(list -> MeterRegistryProvider.getInstance());
     }
