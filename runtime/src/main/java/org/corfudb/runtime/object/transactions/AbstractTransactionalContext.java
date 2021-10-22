@@ -297,11 +297,11 @@ public abstract class AbstractTransactionalContext implements
             // If we're in a nested transaction, the first read timestamp
             // needs to come from the root.
             Token parentTimestamp = parentCtx.getSnapshotTimestamp();
-            log.trace("obtainSnapshotTimestamp: inheriting parent snapshot" +
+            log.info("obtainSnapshotTimestamp: inheriting parent snapshot" +
                     " SnapshotTimestamp[{}] {}", this, parentTimestamp);
             return parentTimestamp;
         } else if (!txnBuilderTs.equals(Token.UNINITIALIZED)) {
-            log.trace("obtainSnapshotTimestamp: using user defined snapshot" +
+            log.info("obtainSnapshotTimestamp: using user defined snapshot" +
                     " SnapshotTimestamp[{}] {}", this, txnBuilderTs);
             return txnBuilderTs;
         } else {
@@ -312,7 +312,7 @@ public abstract class AbstractTransactionalContext implements
                     .getSequencerView()
                     .query()
                     .getToken();
-            log.trace("obtainSnapshotTimestamp: sequencer SnapshotTimestamp[{}] {}", this, timestamp);
+            log.info("obtainSnapshotTimestamp: sequencer SnapshotTimestamp[{}] {}", this, timestamp);
             return timestamp;
         }
     }

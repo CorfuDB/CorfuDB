@@ -829,6 +829,7 @@ public class TxnContext implements AutoCloseable {
         } else {
             try {
                 commitAddress = this.objectsView.TXEnd();
+                log.info("Committed at {}", commitAddress);
             } catch (Exception ex) {
                 tablesInTxn.values().forEach(t -> t.getMetrics().incNumTxnAborts());
                 tablesInTxn.clear();
