@@ -236,7 +236,7 @@ public class LogReplicationClientRouter implements IClientRouter {
             } catch (Exception e) {
                 outstandingRequests.remove(requestId);
                 log.error("sendMessageAndGetCompletable: Remove request {} to {} due to exception! Message:{}",
-                        requestId, remoteClusterId, payload, e);
+                        requestId, remoteClusterId, payload.getPayloadCase(), e);
                 cf.completeExceptionally(e);
                 return cf;
             }
@@ -249,7 +249,7 @@ public class LogReplicationClientRouter implements IClientRouter {
                 if (e.getCause() instanceof TimeoutException) {
                     outstandingRequests.remove(requestId);
                     log.debug("sendMessageAndGetCompletable: Remove request {} to {} due to timeout! Message:{}",
-                            requestId, remoteClusterId, TextFormat.shortDebugString(payload));
+                            requestId, remoteClusterId, payload.getPayloadCase());
                 }
                 return null;
             });

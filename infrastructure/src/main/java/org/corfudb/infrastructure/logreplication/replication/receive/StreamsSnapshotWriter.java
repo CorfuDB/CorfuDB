@@ -174,7 +174,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             }
 
             SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
-            txnContext.logUpdate(streamToClear, entry);
+            txnContext.logUpdate(streamToClear, entry, dataStreamToTagsMap.get(streamID));
         }
     }
 
@@ -241,9 +241,9 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * Write a list of SMR entries to the specified stream log.
      *
      * @param smrEntries
-     * @param shadowStreamUuid
+     * @param streamId
      */
-    private void updateLog(TxnContext txnContext, List<SMREntry> smrEntries, UUID shadowStreamUuid) {
+    private void updateLog(TxnContext txnContext, List<SMREntry> smrEntries, UUID streamId) {
         Map<LogReplicationMetadataType, Long> metadataMap = logReplicationMetadataManager.queryMetadata(txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID,
                 LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER);
         long persistedTopologyConfigId = metadataMap.get(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
@@ -261,7 +261,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, srcGlobalSnapshot);
 
         for (SMREntry smrEntry : smrEntries) {
-            txnContext.logUpdate(shadowStreamUuid, smrEntry, dataStreamToTagsMap.get(shadowStreamUuid));
+            txnContext.logUpdate(streamId, smrEntry, dataStreamToTagsMap.get(streamId));
         }
     }
 
