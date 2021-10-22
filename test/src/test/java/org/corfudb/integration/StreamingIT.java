@@ -288,7 +288,7 @@ public class StreamingIT extends AbstractIT {
         CorfuStreamEntries update = updates.getLast();
         assertThat(update.getEntries()).hasSize(1);
         List<CorfuStreamEntry> entry = update.getEntries().values().stream().findFirst().get();
-        assertThat(entry.get(0).getAddress()).isGreaterThan(0L);
+        assertThat(update.getTimestamp().getSequence()).isGreaterThan(0L);
         assertThat(entry).hasSize(1);
         assertThat(entry.get(0).getOperation()).isEqualTo(CorfuStreamEntry.OperationType.DELETE);
         assertThat(entry.get(0).getKey()).isEqualTo(uuid0);
@@ -411,7 +411,8 @@ public class StreamingIT extends AbstractIT {
             results.getEntries().forEach((k, v) -> {
                 v.forEach(entry -> {
                     final CorfuStoreEntry<K, V, M> previousRecord =
-                            getPreviousRecord(namespace, tableName, entry, entry.getEpoch(), entry.getAddress());
+                            getPreviousRecord(namespace, tableName, entry, results.getTimestamp().getEpoch(),
+                                    results.getTimestamp().getSequence());
                     SampleTableAMsg prevMsg = (SampleTableAMsg) previousRecord.getPayload();
                     if (recordCount > 0) {
                         assertThat(prevMsg.getPayload()).isEqualTo("val"+(recordCount - 1));

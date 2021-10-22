@@ -771,8 +771,8 @@ public class TxnContext implements AutoCloseable {
         MultiObjectSMREntry writeSet = rootContext.getWriteSetInfo().getWriteSet();
         final Map<String, List<CorfuStreamEntry>> mutations = new HashMap<>(tablesUpdated.size());
         tablesUpdated.forEach((uuid, table) -> {
-            List<CorfuStreamEntry> writesInTable = writeSet.getSMRUpdates(uuid).stream().map(entry ->
-                    CorfuStreamEntry.fromSMREntry(entry, 0)).collect(Collectors.toList());
+            List<CorfuStreamEntry> writesInTable = writeSet.getSMRUpdates(uuid).stream()
+                    .map(CorfuStreamEntry::fromSMREntry).collect(Collectors.toList());
             mutations.put(table.getFullyQualifiedTableName(), writesInTable);
         });
 
