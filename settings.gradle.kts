@@ -1,0 +1,20 @@
+
+rootProject.name = "corfu"
+include(":annotations")
+include(":test")
+include(":samples")
+include(":corfudb-tools")
+include(":utils")
+include(":runtime")
+include(":universe")
+include(":cmdlets")
+include(":debian")
+include(":infrastructure")
+include(":coverage")
+include(":annotation-processor")
+include(":generator")
+include(":corfudb-common")
+
+project(":universe").projectDir = file("it")
+project(":annotation-processor").projectDir = file("annotationProcessor")
+project(":corfudb-common").projectDir = file("common")

@@ -1,7 +1,7 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.collect.Sets;
-import groovy.util.logging.Slf4j;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.Test;
 
 import java.io.IOException;

@@ -19,7 +19,7 @@ import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.test.SampleSchema;
-import org.corfudb.test.TestSchema;
+import org.corfudb.test.SampleSchema;
 import org.corfudb.util.serializer.ISerializer;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -140,10 +140,10 @@ public class StreamingTaskTest {
         UUID tableStream = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(namespace, tableName));
 
         MultiObjectSMREntry multiObject = new MultiObjectSMREntry();
-        TestSchema.Uuid key = TestSchema.Uuid
+        SampleSchema.Uuid key = SampleSchema.Uuid
                 .getDefaultInstance();
 
-        TestSchema.EventInfo val = TestSchema.EventInfo
+        SampleSchema.EventInfo val = SampleSchema.EventInfo
                 .getDefaultInstance();
 
         SampleSchema.ManagedMetadata metadata = SampleSchema.ManagedMetadata.getDefaultInstance();

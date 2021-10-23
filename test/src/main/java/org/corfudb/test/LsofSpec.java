@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static org.junit.Assert.fail;
+import org.junit.jupiter.api.Assertions;
 
 @Slf4j
 public class LsofSpec {
@@ -34,7 +34,7 @@ public class LsofSpec {
 
             if (!leaks.isEmpty()) {
                 log.error("File descriptor leaks detected.");
-                fail("File descriptor leaks error: " + leaks);
+                Assertions.fail("File descriptor leaks error: " + leaks);
             }
         }
     }

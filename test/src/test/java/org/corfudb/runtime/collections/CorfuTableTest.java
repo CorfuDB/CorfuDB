@@ -26,7 +26,7 @@ import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.test.TestSchema;
+import org.corfudb.test.SampleSchema;
 import org.junit.Test;
 
 public class CorfuTableTest extends AbstractViewTest {
@@ -150,18 +150,18 @@ public class CorfuTableTest extends AbstractViewTest {
     @Test
     @SuppressWarnings("checkstyle:magicnumber")
     public void canLookupByIndexAndFilterWhenIndexIsNonPrimitive() {
-        CorfuTable<TestSchema.Uuid, TestSchema.Uuid>
+        CorfuTable<SampleSchema.Uuid, SampleSchema.Uuid>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<TestSchema.Uuid, TestSchema.Uuid>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<SampleSchema.Uuid, SampleSchema.Uuid>>() {})
                 .setArguments(new UuidIndexer())
                 .setStreamName("test")
                 .open();
 
-        TestSchema.Uuid uuid0 = TestSchema.Uuid.newBuilder()
+        SampleSchema.Uuid uuid0 = SampleSchema.Uuid.newBuilder()
                 .setMsb(0L).setLsb(0L).build();
-        TestSchema.Uuid uuid1 = TestSchema.Uuid.newBuilder()
+        SampleSchema.Uuid uuid1 = SampleSchema.Uuid.newBuilder()
                 .setMsb(1L).setLsb(1L).build();
-        TestSchema.Uuid uuid2 = TestSchema.Uuid.newBuilder()
+        SampleSchema.Uuid uuid2 = SampleSchema.Uuid.newBuilder()
                 .setMsb(2L).setLsb(2L).build();
 
         corfuTable.put(uuid0, uuid0);
@@ -170,7 +170,7 @@ public class CorfuTableTest extends AbstractViewTest {
 
         assertThat(corfuTable.getByIndexAndFilter(UuidIndexer.BY_VALUE, p -> true, uuid0)).hasSize(3);
         assertThat(corfuTable.getByIndexAndFilter(UuidIndexer.BY_VALUE, p -> p.getKey().equals(uuid2), uuid0)).hasSize(1);
-        List<TestSchema.Uuid> keyList = corfuTable.getByIndexAndFilter(UuidIndexer.BY_VALUE, p -> true, uuid0)
+        List<SampleSchema.Uuid> keyList = corfuTable.getByIndexAndFilter(UuidIndexer.BY_VALUE, p -> true, uuid0)
                 .stream()
                 .map(Map.Entry::getKey)
                 .collect(Collectors.toList());

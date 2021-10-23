@@ -4,7 +4,6 @@
  */
 package org.corfudb.runtime.view;
 
-import org.apache.maven.wagon.ConnectionException;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.junit.Test;
@@ -128,7 +127,7 @@ public class QuorumFuturesFactoryTest extends AbstractCorfuTest {
         CompletableFuture<String> f2 = new CompletableFuture<>();
         CompletableFuture<String> f3 = new CompletableFuture<>();
         QuorumFuturesFactory.CompositeFuture<String> result = QuorumFuturesFactory.getQuorumFuture(String::compareTo, f1, f2, f3);
-        f1.completeExceptionally(new ConnectionException(""));
+        f1.completeExceptionally(new RuntimeException(""));
         f3.complete("");
         try {
             Object value = result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
@@ -148,7 +147,7 @@ public class QuorumFuturesFactoryTest extends AbstractCorfuTest {
         for (Throwable t: result.getThrowables()) {
             set.add(t.getClass());
         }
-        assertTrue(set.contains(ConnectionException.class));
+        assertTrue(set.contains(RuntimeException.class));
         assertTrue(set.contains(IllegalArgumentException.class));
     }
 
