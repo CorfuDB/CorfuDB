@@ -343,10 +343,13 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             setupActiveAndStandbyCorfu();
             openMaps();
 
-            // Start Listener on the 'stream_tag' of interest, on standby site
-            CountDownLatch streamingStandbySnapshotCompletion = new CountDownLatch(totalEntries*2);
+            Set<UUID> tablesToListen = new DefaultLogReplicationConfigAdapter().getStreamingConfigOnSink().keySet();
+
+            // Start Listener on the 'stream_tag' of interest, on standby site + tables to listen (which accounts
+            // for the notification for 'clear' table)
+            CountDownLatch streamingStandbySnapshotCompletion = new CountDownLatch(totalEntries*2 + tablesToListen.size());
             StreamingStandbyListener listener = new StreamingStandbyListener(streamingStandbySnapshotCompletion,
-                    new DefaultLogReplicationConfigAdapter().getStreamingConfigOnSink().keySet());
+                    tablesToListen);
             corfuStoreStandby.subscribeListener(listener, NAMESPACE, DefaultLogReplicationConfigAdapter.TAG_ONE);
 
             // Add Data for Snapshot Sync (before LR is started)
@@ -366,7 +369,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
             log.info("** Wait for data change notifications (snapshot)");
             streamingStandbySnapshotCompletion.await();
-            assertThat(listener.messages.size()).isEqualTo(totalEntries*2);
+            assertThat(listener.messages.size()).isEqualTo(totalEntries*2 + tablesToListen.size());
 
             // Attach new listener for deltas (the same listener could be used) but simplifying the use of the latch
             CountDownLatch streamingStandbyDeltaCompletion = new CountDownLatch(totalEntries*2);
