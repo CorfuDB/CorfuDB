@@ -1,21 +1,28 @@
 package org.corfudb.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.Assert.fail;
 
 
 import com.google.common.reflect.TypeToken;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.StringJoiner;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -24,7 +31,9 @@ import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
@@ -145,9 +154,28 @@ public class LogReplicationAbstractIT extends AbstractIT {
     }
 
     public void testEndToEndSnapshotAndLogEntrySyncUFO(int totalNumMaps) throws Exception {
+        // For the purpose of this test, standby should on;y update status 3 times:
+        // (1) When initializing LR : is_data_consistent = false
+        // (2) When starting snapshot sync apply : is_data_consistent = false
+        // (3) When completing snapshot sync apply : is_data_consistent = true
+        final int totalStandbyStatusUpdates = 3;
+
         try {
             log.debug("Setup active and standby Corfu's");
             setupActiveAndStandbyCorfu();
+
+            // Subscribe to replication status table on Standby (to be sure data change on status are captured)
+            corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
+                    LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                    LogReplicationMetadata.ReplicationStatusKey.class,
+                    LogReplicationMetadata.ReplicationStatusVal.class,
+                    null,
+                    TableOptions.builder().build());
+
+            CountDownLatch statusUpdateLatch = new CountDownLatch(totalStandbyStatusUpdates);
+            ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch);
+            corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
+                    LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
             log.debug("Open map(s) on active and standby");
             openMaps(totalNumMaps);
@@ -176,6 +204,12 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
             log.debug("Wait ... Delta log replication in progress ...");
             verifyDataOnStandby((numWrites + (numWrites / 2)));
+
+            // Verify Standby Status Listener received all expected updates (is_data_consistent)
+            statusUpdateLatch.await();
+            assertThat(standbyListener.getAccumulatedStatus().size()).isEqualTo(totalStandbyStatusUpdates);
+            assertThat(standbyListener.getAccumulatedStatus().get(standbyListener.getAccumulatedStatus().size() - 1)).isTrue();
+            assertThat(standbyListener.getAccumulatedStatus()).contains(false);
         } finally {
             executorService.shutdownNow();
 
@@ -194,6 +228,30 @@ public class LogReplicationAbstractIT extends AbstractIT {
             if (standbyReplicationServer != null) {
                 standbyReplicationServer.destroy();
             }
+        }
+    }
+
+    private class ReplicationStatusListener implements StreamListener {
+
+        @Getter
+        List<Boolean> accumulatedStatus = new ArrayList<>();
+
+        private final CountDownLatch countDownLatch;
+
+        public ReplicationStatusListener(CountDownLatch countdownLatch) {
+            this.countDownLatch = countdownLatch;
+        }
+
+        @Override
+        public void onNext(CorfuStreamEntries results) {
+            results.getEntries().forEach((schema, entries) -> entries.forEach(e ->
+                    accumulatedStatus.add(((LogReplicationMetadata.ReplicationStatusVal)e.getPayload()).getDataConsistent())));
+            countDownLatch.countDown();
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            fail();
         }
     }
 

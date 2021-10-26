@@ -167,15 +167,16 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         // Set the data consistent status.
         // It could have tx conflict with another log replicator instance.
-        setDataConsistentWithRetry();
+        setDataConsistentWithRetry(dataConsistent.get());
         initWriterAndBufferMgr();
     }
 
-    private void setDataConsistentWithRetry() {
+    private void setDataConsistentWithRetry(boolean isDataConsistent) {
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
-                    setDataConsistent(dataConsistent.get());
+                    dataConsistent.set(isDataConsistent);
+                    logReplicationMetadataManager.setDataConsistentOnStandby(isDataConsistent);
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to setDataConsistent in SinkManager's init", tae);
                     throw new RetryNeededException();
@@ -461,10 +462,10 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     private synchronized void startSnapshotApply(LogReplication.LogReplicationEntryMsg entry) {
         log.debug("Entry Start Snapshot Sync Apply, id={}", entry.getMetadata().getSyncRequestId());
-        setDataConsistent(false);
+        setDataConsistentWithRetry(false);
         snapshotWriter.startSnapshotSyncApply();
         completeSnapshotApply(entry);
-        setDataConsistent(true);
+        setDataConsistentWithRetry(true);
         ongoingApply.set(false);
         log.debug("Exit Start Snapshot Sync Apply, id={}", entry.getMetadata().getSyncRequestId());
     }
@@ -508,11 +509,6 @@ public class LogReplicationSinkManager implements DataReceiver {
         return rxState == RxState.SNAPSHOT_SYNC && (message.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_MESSAGE
                 || message.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_END)
                 || rxState == RxState.LOG_ENTRY_SYNC && message.getMetadata().getEntryType() == LogReplicationEntryType.LOG_ENTRY_MESSAGE;
-    }
-
-    private void setDataConsistent(boolean isDataConsistent) {
-        dataConsistent.set(isDataConsistent);
-        logReplicationMetadataManager.setDataConsistentOnStandby(isDataConsistent);
     }
 
     /**

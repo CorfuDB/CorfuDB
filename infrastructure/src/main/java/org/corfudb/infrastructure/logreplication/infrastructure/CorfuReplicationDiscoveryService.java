@@ -241,7 +241,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 runtime.shutdown();
             }
 
-            interClusterReplicationService.close();
+            if (interClusterReplicationService != null) {
+                interClusterReplicationService.close();
+            }
         }
     }
 

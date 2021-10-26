@@ -46,7 +46,8 @@ public class LogReplicationMetadataManager {
 
     public static final String NAMESPACE = CORFU_SYSTEM_NAMESPACE;
     public static final String METADATA_TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
-    private static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
+    public static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
+    public static final String LR_STATUS_STREAM_TAG = "lr_status";
     private static final String REPLICATION_EVENT_TABLE_NAME = "LogReplicationEventTable";
     private static final String LR_STREAM_TAG = "log_replication";
 
