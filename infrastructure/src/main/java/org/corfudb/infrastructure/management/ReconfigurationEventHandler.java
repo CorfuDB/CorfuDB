@@ -50,11 +50,12 @@ public class ReconfigurationEventHandler {
                                         @Nonnull CorfuRuntime corfuRuntime,
                                         @Nonnull Set<String> failedServers) {
         try {
-            corfuRuntime.getLayoutManagementView().handleFailure(failureHandlerPolicy,
-                    currentLayout, failedServers);
+            corfuRuntime
+                    .getLayoutManagementView()
+                    .handleFailure(failureHandlerPolicy, currentLayout, failedServers);
             return true;
         } catch (Exception e) {
-            log.error("Error: handleFailure: {}", e);
+            log.error("Error: handleFailure", e);
             return false;
         }
     }
@@ -116,7 +117,7 @@ public class ReconfigurationEventHandler {
             }
             return true;
         } catch (Exception e) {
-            log.error("Error: handleHealing: {}", e);
+            log.error("Error: handleHealing", e);
             return false;
         }
     }

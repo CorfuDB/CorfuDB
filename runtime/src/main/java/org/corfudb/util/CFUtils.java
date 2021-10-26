@@ -9,6 +9,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -148,21 +149,18 @@ public final class CFUtils {
      * @param <T>     A return type of the future.
      * @return A completable future, which completes with a list of the results.
      */
-    public static <T> CompletableFuture<List<T>> sequence(List<CompletableFuture<T>> futures) {
-        return allOf(futures).thenCompose(empty -> {
-                    CompletableFuture<List<T>> aggregated = CompletableFuture
-                            .completedFuture(new ArrayList<>());
+    public static <T> CompletableFuture<List<T>> sequence(Collection<CompletableFuture<T>> futures) {
+        List<T> aggList = new CopyOnWriteArrayList<>();
+        CompletableFuture<List<T>> aggregated = CompletableFuture.completedFuture(aggList);
 
-                    for (CompletableFuture<T> future : futures) {
-                        aggregated = aggregated.thenCombine(future, (List<T> list, T value) -> {
-                            list.add(value);
-                            return list;
-                        });
-                    }
+        for (CompletableFuture<T> future : futures) {
+            aggregated = aggregated.thenCombine(future, (List<T> list, T value) -> {
+                list.add(value);
+                return list;
+            });
+        }
 
-                    return aggregated;
-                }
-        );
+        return aggregated;
     }
 
     /**
