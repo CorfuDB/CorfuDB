@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -13,12 +15,12 @@ import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.ClusterType;
 import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.PollReport;
+import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
 import org.corfudb.infrastructure.management.failuredetector.EpochHandler;
-import org.corfudb.infrastructure.management.failuredetector.FailureDetectorDataStore;
 import org.corfudb.infrastructure.management.failuredetector.FailureDetectorException;
 import org.corfudb.infrastructure.management.failuredetector.FailureDetectorHelper;
-import org.corfudb.infrastructure.management.failuredetector.HealingAgent;
+import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
@@ -26,6 +28,8 @@ import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics.FailureDetectorAction;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.LambdaUtils;
 import org.corfudb.util.concurrent.SingletonResource;
@@ -33,14 +37,20 @@ import org.corfudb.util.concurrent.SingletonResource;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 /**
  * Remote Monitoring Service constitutes of failure and healing monitoring and handling.
@@ -91,15 +101,11 @@ public class RemoteMonitoringService implements ManagementService {
 
     private final ClusterAdvisor advisor;
 
-    private final HealingAgent healingAgent;
-
-    private final FailureDetectorDataStore fdDataStore;
-
     /**
      * The management agent attempts to bootstrap a NOT_READY sequencer if the
      * sequencerNotReadyCounter counter exceeds this value.
      */
-    private final int sequencerNotReadyThreshold = 3;
+    private static final int SEQUENCER_NOT_READY_THRESHOLD = 3;
 
     /**
      * Number of workers for failure detector. Three workers used by default:
@@ -108,6 +114,17 @@ public class RemoteMonitoringService implements ManagementService {
      * - merge segments
      */
     private final int detectionWorkersCount = 3;
+
+    /**
+     * Future which is reset every time a new task to mergeSegments is launched.
+     * This is to avoid multiple mergeSegments requests.
+     */
+    private volatile CompletableFuture<Boolean> mergeSegmentsTask = CompletableFuture.completedFuture(true);
+
+    /**
+     * Duration in which the restore redundancy and merge segments workflow status is queried.
+     */
+    private static final Duration MERGE_SEGMENTS_RETRY_QUERY_TIMEOUT = Duration.ofSeconds(1);
 
     /**
      * This tuple maintains, in an epoch, how many heartbeats the primary sequencer has responded
@@ -151,24 +168,13 @@ public class RemoteMonitoringService implements ManagementService {
         // Creating the detection worker thread pool.
         // This thread pool is utilized to dispatch detection tasks at regular intervals in the
         // detectorTaskScheduler.
-        ThreadFactory fdThreadFactory = new ThreadFactoryBuilder()
-                .setDaemon(true)
-                .setNameFormat(serverContext.getThreadPrefix() + "DetectionWorker-%d")
-                .build();
-        this.failureDetectorWorker = Executors.newFixedThreadPool(detectionWorkersCount, fdThreadFactory);
-
-        fdDataStore = FailureDetectorDataStore.builder()
-                .localEndpoint(serverContext.getLocalEndpoint())
-                .dataStore(serverContext.getDataStore())
-                .build();
-
-        healingAgent = HealingAgent.builder()
-                .advisor(advisor)
-                .localEndpoint(serverContext.getLocalEndpoint())
-                .runtimeSingleton(runtimeSingletonResource)
-                .failureDetectorWorker(failureDetectorWorker)
-                .dataStore(fdDataStore)
-                .build();
+        this.failureDetectorWorker = Executors.newFixedThreadPool(
+                detectionWorkersCount,
+                new ThreadFactoryBuilder()
+                        .setDaemon(true)
+                        .setNameFormat(serverContext.getThreadPrefix() + "DetectionWorker-%d")
+                        .build()
+        );
     }
 
     private CorfuRuntime getCorfuRuntime() {
@@ -305,29 +311,28 @@ public class RemoteMonitoringService implements ManagementService {
      */
     private CompletableFuture<DetectorTask> runFailureDetectorTask(PollReport pollReport, Layout ourLayout) {
 
-        EpochHandler epochHandler = EpochHandler.builder()
-                .corfuRuntime(getCorfuRuntime())
-                .serverContext(serverContext)
-                .failureDetectorWorker(failureDetectorWorker)
-                .build();
+        return CompletableFuture.supplyAsync(() -> {
 
-        // Corrects out of phase epoch issues if present in the report. This method
-        // performs re-sealing of all nodes if required and catchup of a layout server to
-        // the current state.
-        CompletableFuture<Layout> wrongEpochTask = epochHandler.correctWrongEpochs(pollReport, ourLayout);
+            // Corrects out of phase epoch issues if present in the report. This method
+            // performs re-sealing of all nodes if required and catchup of a layout server to
+            // the current state.
+            EpochHandler epochHandler = EpochHandler.builder()
+                    .corfuRuntime(getCorfuRuntime())
+                    .serverContext(serverContext)
+                    .build();
 
-        return wrongEpochTask.thenApplyAsync(latestLayout -> {
-
-            // This is just an optimization in case we receive a WrongEpochException
-            // while one of the other management clients is trying to move to a new layout.
-            // This check is merely trying to minimize the scenario in which we end up
-            // filling the slot with an outdated layout.
-            if (!pollReport.areAllResponsiveServersSealed()) {
-                log.debug("All responsive servers have not been sealed yet. Skipping.");
-                return DetectorTask.COMPLETED;
-            }
+            final Layout latestLayout = epochHandler.correctWrongEpochs(pollReport, ourLayout);
 
             Result<DetectorTask, RuntimeException> failure = Result.of(() -> {
+
+                // This is just an optimization in case we receive a WrongEpochException
+                // while one of the other management clients is trying to move to a new layout.
+                // This check is merely trying to minimize the scenario in which we end up
+                // filling the slot with an outdated layout.
+                if (!pollReport.areAllResponsiveServersSealed()) {
+                    log.debug("All responsive servers have not been sealed yet. Skipping.");
+                    return DetectorTask.COMPLETED;
+                }
 
                 Optional<Long> unfilledSlot = pollReport.getLayoutSlotUnFilled(latestLayout);
                 // If the latest slot has not been filled, fill it with the previous known layout.
@@ -338,24 +343,24 @@ public class RemoteMonitoringService implements ManagementService {
                     return DetectorTask.COMPLETED;
                 }
 
+                if (!pollReport.getWrongEpochs().isEmpty()) {
+                    log.debug("Wait for next iteration. Poll report contains wrong epochs: {}",
+                            pollReport.getWrongEpochs()
+                    );
+                    return DetectorTask.COMPLETED;
+                }
+
+                // If layout was updated by correcting wrong epochs,
+                // we can't continue with failure detection,
+                // as the cluster state has changed.
+                if (!latestLayout.equals(ourLayout)) {
+                    log.warn("Layout was updated by correcting wrong epochs. " +
+                            "Cancel current round of failure detection.");
+                    return DetectorTask.COMPLETED;
+                }
+
                 return DetectorTask.NOT_COMPLETED;
             });
-
-            if (!pollReport.getWrongEpochs().isEmpty()) {
-                log.debug("Wait for next iteration. Poll report contains wrong epochs: {}",
-                        pollReport.getWrongEpochs()
-                );
-                return DetectorTask.COMPLETED;
-            }
-
-            // If layout was updated by correcting wrong epochs,
-            // we can't continue with failure detection,
-            // as the cluster state has changed.
-            if (!latestLayout.equals(ourLayout)) {
-                log.warn("Layout was updated by correcting wrong epochs. " +
-                        "Cancel current round of failure detection.");
-                return DetectorTask.COMPLETED;
-            }
 
             failure.ifError(err -> log.error("Can't fill slot. Poll report: {}", pollReport, err));
 
@@ -363,7 +368,7 @@ public class RemoteMonitoringService implements ManagementService {
                 return DetectorTask.COMPLETED;
             }
 
-            DetectorTask healing = healingAgent.detectHealing(pollReport, ourLayout).join();
+            DetectorTask healing = detectHealing(pollReport, ourLayout);
 
             //If local node healed it causes change in the cluster state which means the layout is changed also.
             //If the cluster status is changed let failure detector detect the change on next iteration and
@@ -382,13 +387,124 @@ public class RemoteMonitoringService implements ManagementService {
             }
 
             // Restores redundancy and merges multiple segments if present.
-            healingAgent.restoreRedundancyAndMergeSegments(ourLayout);
+            restoreRedundancyAndMergeSegments(ourLayout);
 
             handleSequencer(ourLayout);
 
             return DetectorTask.COMPLETED;
-
         }, failureDetectorWorker);
+    }
+
+    /**
+     * Spawns a new asynchronous task to restore redundancy and merge segments.
+     * A new task is not spawned if a task is already in progress.
+     * This method does not wait on the completion of the restore redundancy and merge segments task.
+     */
+    private void restoreRedundancyAndMergeSegments(Layout layout) {
+        String localEndpoint = serverContext.getLocalEndpoint();
+
+        // Check that the task is not currently running.
+        if (!mergeSegmentsTask.isDone()) {
+            log.trace("Merge segments task already in progress. Skipping spawning another task.");
+            return;
+        }
+
+        // Check that the current node can invoke a restoration action,
+        // also verify that the current node is healed (not present in the unresponsive list).
+        if (RedundancyCalculator.canRestoreRedundancyOrMergeSegments(layout, localEndpoint) &&
+                !layout.getUnresponsiveServers().contains(localEndpoint)) {
+            log.info("Layout requires restoration: {}. Spawning task to merge segments on {}.",
+                    layout, localEndpoint);
+            Supplier<Boolean> redundancyAction = () -> handleMergeSegments(
+                    localEndpoint, runtimeSingletonResource, layout
+            );
+            mergeSegmentsTask = CompletableFuture.supplyAsync(redundancyAction, failureDetectorWorker);
+
+            return;
+        }
+
+        log.trace("No segments to merge. Skipping step.");
+    }
+
+
+    @VisibleForTesting
+    public void restoreRedundancy(Layout layout) {
+        restoreRedundancyAndMergeSegments(layout);
+    }
+
+    @VisibleForTesting
+    boolean handleMergeSegments(String localEndpoint,
+                                SingletonResource<CorfuRuntime> runtimeSingletonResource,
+                                Layout layout) {
+        return ReconfigurationEventHandler.handleMergeSegments(
+                localEndpoint,
+                runtimeSingletonResource.get(), layout,
+                RemoteMonitoringService.MERGE_SEGMENTS_RETRY_QUERY_TIMEOUT
+        );
+    }
+
+    /**
+     * Handle healed node.
+     * Cluster advisor provides healed node based on current cluster state if healed node found then
+     * save healed node in the history and send a message with the detected healed node
+     * to the relevant management server.
+     *
+     * @param pollReport poll report
+     * @param layout     current layout
+     */
+    private DetectorTask detectHealing(PollReport pollReport, Layout layout) {
+        log.trace("Handle healing, layout: {}", layout);
+
+        Optional<NodeRank> healed = advisor.healedServer(pollReport.getClusterState());
+
+        //Transform Optional value to a Set
+        Set<String> healedNodes = healed
+                .map(NodeRank::getEndpoint)
+                .map(ImmutableSet::of)
+                .orElse(ImmutableSet.of());
+
+        if (healedNodes.isEmpty()) {
+            log.trace("Nothing to heal");
+            return DetectorTask.SKIPPED;
+        }
+
+        //save history
+        FailureDetectorMetrics history = FailureDetectorMetrics.builder()
+                .localNode(serverContext.getLocalEndpoint())
+                .graph(advisor.getGraph(pollReport.getClusterState()).connectivityGraph())
+                .healed(healed.get())
+                .action(FailureDetectorAction.HEAL)
+                .unresponsiveNodes(layout.getUnresponsiveServers())
+                .layout(layout.getLayoutServers())
+                .epoch(layout.getEpoch())
+                .build();
+
+        log.info("Handle healing. Failure detector state: {}", history.toJson());
+
+        try {
+            CorfuRuntime corfuRuntime = getCorfuRuntime();
+
+            corfuRuntime.getLayoutView()
+                    .getRuntimeLayout(layout)
+                    .getManagementClient(serverContext.getLocalEndpoint())
+                    //handle healing asynchronously
+                    .handleHealing(pollReport.getPollEpoch(), healedNodes)
+                    //completable future: wait this future to complete and get result
+                    .get();
+
+            serverContext.saveFailureDetectorMetrics(history);
+
+            log.info("Healing local node successful: {}", history.toJson());
+
+            return DetectorTask.COMPLETED;
+        } catch (ExecutionException ee) {
+            log.error("Healing local node failed: ", ee);
+        } catch (InterruptedException ie) {
+            log.error("Healing local node interrupted: ", ie);
+            throw new UnrecoverableCorfuInterruptedError(ie);
+        }
+
+        return DetectorTask.NOT_COMPLETED;
     }
 
     /**
@@ -427,7 +543,7 @@ public class RemoteMonitoringService implements ManagementService {
                         .epoch(layout.getEpoch())
                         .build();
 
-                fdDataStore.saveFailureDetectorMetrics(history);
+                serverContext.saveFailureDetectorMetrics(history);
 
                 Set<String> failedNodes = new HashSet<>();
                 failedNodes.add(failedNode.getEndpoint());
@@ -468,7 +584,7 @@ public class RemoteMonitoringService implements ManagementService {
         // increment the count and attempt to bootstrap the sequencer if the count has
         // crossed the threshold.
         sequencerNotReadyCounter.increment();
-        if (sequencerNotReadyCounter.getCounter() < sequencerNotReadyThreshold) {
+        if (sequencerNotReadyCounter.getCounter() < SEQUENCER_NOT_READY_THRESHOLD) {
             return DETECTOR_TASK_SKIPPED;
         }
 
