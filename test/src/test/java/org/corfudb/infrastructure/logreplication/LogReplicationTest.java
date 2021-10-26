@@ -8,6 +8,7 @@ import java.io.IOException;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.Serializers;
 
 @Slf4j
@@ -44,8 +45,7 @@ public class LogReplicationTest {
 //                .tlsEnabled(true)
                 .build();
 
-        runtime = CorfuRuntime.fromParameters(params)
-                .setTransactionLogging(true);
+        runtime = CorfuRuntime.fromParameters(params);
         runtime.parseConfigurationString(endpoint);
         runtime.registerSystemDownHandler(() -> {throw new RuntimeException("Disconnected from database. Terminating thread.");});
 
@@ -58,6 +58,7 @@ public class LogReplicationTest {
         table1 = runtime.getObjectsView()
                 .build()
                 .setStreamName("Table001")
+                .setStreamTags(ObjectsView.getLogReplicatorStreamId())
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                 })
                 .setSerializer(Serializers.PRIMITIVE)
@@ -65,6 +66,7 @@ public class LogReplicationTest {
         table2 = runtime.getObjectsView()
                 .build()
                 .setStreamName("Table002")
+                .setStreamTags(ObjectsView.getLogReplicatorStreamId())
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                 })
                 .setSerializer(Serializers.PRIMITIVE)
@@ -72,6 +74,7 @@ public class LogReplicationTest {
         table3 = runtime.getObjectsView()
                 .build()
                 .setStreamName("Table003")
+                .setStreamTags(ObjectsView.getLogReplicatorStreamId())
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                 })
                 .setSerializer(Serializers.PRIMITIVE)

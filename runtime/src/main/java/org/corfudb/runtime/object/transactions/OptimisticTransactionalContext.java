@@ -1,7 +1,5 @@
 package org.corfudb.runtime.object.transactions;
 
-import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
-
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -251,13 +249,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         Set<UUID> affectedStreamsIds = new HashSet<>(getWriteSetInfo()
                 .getWriteSet().getEntryMap().keySet());
 
-        // Write to transaction streams pertaining to the streamTags and
-        // global transaction stream if transaction logging is enabled.
-        // With stream tagging being introduced, the latter is only for backward compatibility.
-        if (transaction.isLoggingEnabled()) {
-            affectedStreamsIds.addAll(getWriteSetInfo().getStreamTags());
-            affectedStreamsIds.add(TRANSACTION_STREAM_ID);
-        }
+        // Write to streams corresponding to the streamTags
+        affectedStreamsIds.addAll(getWriteSetInfo().getStreamTags());
 
         UUID[] affectedStreams = affectedStreamsIds.toArray(new UUID[affectedStreamsIds.size()]);
 
