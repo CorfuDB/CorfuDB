@@ -371,7 +371,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     // heavily on the cache (hence can be smaller)
                     .maxCacheEntries(serverContext.getLogReplicationCacheMaxSize()/2)
                     .build())
-                    .setTransactionLogging(true)
                     .parseConfigurationString(localCorfuEndpoint).connect();
         }
 

@@ -49,10 +49,6 @@ public class Transaction {
         TransactionalContext.newContext(type.get.apply(this));
     }
 
-    public boolean isLoggingEnabled() {
-        return runtime.getObjectsView().isTransactionLogging();
-    }
-
     /**
      * Verifies that this transaction has a valid snapshot and context.
      */
