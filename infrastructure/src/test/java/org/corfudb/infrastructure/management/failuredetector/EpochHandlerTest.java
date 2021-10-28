@@ -12,10 +12,17 @@ import org.mockito.Mockito;
 import java.util.HashMap;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeoutException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 class EpochHandlerTest extends LayoutBasedTestHelper {
 
@@ -81,6 +88,82 @@ class EpochHandlerTest extends LayoutBasedTestHelper {
 
         assertTrue(latestLayout.isPresent());
         assertEquals(highestEpoch, latestLayout.get().getEpoch());
+    }
+
+    @Test
+    void updateTrailingLayoutServersCommitLayoutExecution() {
+        EpochHandler handlerSpy = Mockito.spy(buildHandler());
+
+        HashMap<String, CompletableFuture<Layout>> requests = new HashMap<>();
+        CompletableFuture<Layout> request1 = new CompletableFuture<>();
+        request1.complete(buildSimpleLayout(2));
+        requests.put(NodeNames.A, request1);
+
+        CompletableFuture<Boolean> asyncCommit = CompletableFuture.completedFuture(true);
+        doReturn(asyncCommit).when(handlerSpy).commitLayout(isA(Layout.class), anyString());
+
+        Layout layout1 = buildSimpleLayout();
+        handlerSpy.updateTrailingLayoutServers(layout1, requests);
+
+        verify(handlerSpy, times(1)).commitLayout(any(Layout.class), anyString());
+    }
+
+    @Test
+    void updateTrailingLayoutServersFailedConnections() {
+        EpochHandler handlerSpy = Mockito.spy(buildHandler());
+
+        CompletableFuture<Layout> request1 = new CompletableFuture<>();
+        CompletableFuture<Layout> request2 = new CompletableFuture<>();
+        CompletableFuture<Layout> request3 = new CompletableFuture<>();
+        request1.complete(buildSimpleLayout(2));
+        request2.completeExceptionally(new TimeoutException("Connection error"));
+        request3.completeExceptionally(new TimeoutException("Connection error"));
+
+        HashMap<String, CompletableFuture<Layout>> requests = new HashMap<>();
+        requests.put(NodeNames.A, request1);
+        requests.put(NodeNames.B, request2);
+        requests.put(NodeNames.C, request3);
+
+        CompletableFuture<Boolean> asyncCommit = CompletableFuture.completedFuture(true);
+        doReturn(asyncCommit).when(handlerSpy).commitLayout(isA(Layout.class), anyString());
+
+        Layout layout1 = buildSimpleLayout();
+        handlerSpy.updateTrailingLayoutServers(layout1, requests).join();
+
+        verify(handlerSpy, times(3)).commitLayout(any(Layout.class), anyString());
+    }
+
+    @Test
+    void commitLayout() {
+        final boolean commitResult = true;
+        EpochHandler handlerSpy = Mockito.spy(buildHandler());
+
+        CompletableFuture<Boolean> asyncCommit = CompletableFuture.completedFuture(commitResult);
+        doReturn(asyncCommit).when(handlerSpy).commitLayoutAsync(isA(Layout.class), anyString());
+
+        Layout layout1 = buildSimpleLayout();
+        Boolean result = handlerSpy.commitLayout(layout1, NodeNames.A).join();
+
+        verify(handlerSpy, times(1)).commitLayoutAsync(any(Layout.class), anyString());
+
+        assertEquals(commitResult, result);
+    }
+
+    @Test
+    void commitLayoutConnectionError() {
+        final boolean commitResult = true;
+        EpochHandler handlerSpy = Mockito.spy(buildHandler());
+
+        CompletableFuture<Boolean> asyncCommit = new CompletableFuture<>();
+        asyncCommit.completeExceptionally(new TimeoutException("timeout exception"));
+        doReturn(asyncCommit).when(handlerSpy).commitLayoutAsync(isA(Layout.class), anyString());
+
+        Layout layout1 = buildSimpleLayout();
+        Boolean result = handlerSpy.commitLayout(layout1, NodeNames.A).join();
+
+        verify(handlerSpy, times(1)).commitLayoutAsync(any(Layout.class), anyString());
+
+        assertFalse(result);
     }
 
     private EpochHandler buildHandler() {
