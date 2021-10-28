@@ -1,6 +1,8 @@
 package org.corfudb.infrastructure.management.failuredetector;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.sun.org.apache.xpath.internal.operations.Bool;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -8,25 +10,22 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SortedSet;
-import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentSkipListSet;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutionException;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Slf4j
 @Builder
+@AllArgsConstructor
 public class EpochHandler {
 
     @NonNull
@@ -78,7 +77,7 @@ public class EpochHandler {
 
             // Check if any layout server has a stale layout.
             // If yes patch it (commit) with the latestLayout.
-            updateTrailingLayoutServers(newManagementLayout, layoutCompletableFutureMap);
+            updateTrailingLayoutServers(newManagementLayout, layoutCompletableFutureMap).join();
             return newManagementLayout;
 
         } catch (QuorumUnreachableException e) {
@@ -167,53 +166,78 @@ public class EpochHandler {
      * Finds all trailing layout servers and patches them with the latest persisted layout
      * retrieved by quorum.
      *
-     * @param layoutCompletableFutureMap Map of layout server endpoints to their layout requests.
+     * @param layoutRequests Map of layout server endpoints to their layout requests.
      */
-    private void updateTrailingLayoutServers(
-            Layout latestLayout, Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap) {
+    public CompletableFuture<Void> updateTrailingLayoutServers(
+            Layout latestLayout, Map<String, CompletableFuture<Layout>> layoutRequests) {
+
+        List<CompletableFuture<Boolean>> asyncUpdates = new ArrayList<>();
 
         // Patch trailing layout servers with latestLayout.
-        layoutCompletableFutureMap.keySet().forEach(layoutServer -> {
-            Layout layout = null;
-            try {
-                layout = layoutCompletableFutureMap.get(layoutServer).get();
-            } catch (ExecutionException ee) {
-                // Expected wrong epoch exception if layout server fell behind and has stale
-                // layout and server epoch.
-                log.warn("updateTrailingLayoutServers: layout fetch from {} failed: {}",
-                        layoutServer, ee);
-            } catch (InterruptedException ie) {
-                log.error("updateTrailingLayoutServers: layout fetch from {} failed: {}",
-                        layoutServer, ie);
-                throw new UnrecoverableCorfuInterruptedError(ie);
-            }
+        for (String layoutServer : layoutRequests.keySet()) {
+            CompletableFuture<Boolean> asyncLayout = layoutRequests
+                    .get(layoutServer)
+                    .thenApply(remoteLayout -> {
+                        if (remoteLayout.equals(latestLayout)) {
+                            return LayoutCommit.NO_NEED_UPDATE;
+                        } else {
+                            return LayoutCommit.NEED_UPDATE;
+                        }
+                    })
+                    .exceptionally(ex -> {
+                        log.warn("updateTrailingLayoutServers: layout fetch from {} failed: {}", layoutServer, ex);
+                        return LayoutCommit.NEED_UPDATE;
+                    })
+                    .thenCompose(updateRequest -> {
+                        if (updateRequest == LayoutCommit.NEED_UPDATE) {
+                            return commitLayout(latestLayout, layoutServer);
+                        } else {
+                            return CompletableFuture.completedFuture(false);
+                        }
+                    });
 
-            // Do nothing if this layout server is updated with the latestLayout.
-            if (layout != null && layout.equals(latestLayout)) {
-                return;
-            }
-            try {
-                // Committing this layout directly to the trailing layout servers.
-                // This is safe because this layout is acquired by a quorum fetch which confirms
-                // that there was a consensus on this layout and has been committed to a quorum.
-                boolean result = corfuRuntime
-                        .getLayoutView()
-                        .getRuntimeLayout(latestLayout)
-                        .getLayoutClient(layoutServer)
-                        .committed(latestLayout.getEpoch(), latestLayout)
-                        .get();
-                if (result) {
-                    log.debug("Layout Server: {} patched with latest layout : {}",
-                            layoutServer, latestLayout);
-                } else {
-                    log.debug("Layout Server: {} patch with latest layout failed : {}", layoutServer, latestLayout);
-                }
-            } catch (ExecutionException ee) {
-                log.error("Updating layout servers failed due to", ee);
-            } catch (InterruptedException ie) {
-                log.error("Updating layout servers failed due to", ie);
-                throw new UnrecoverableCorfuInterruptedError(ie);
-            }
-        });
+            asyncUpdates.add(asyncLayout);
+        }
+
+        return CFUtils.allOf(asyncUpdates);
+    }
+
+    public CompletableFuture<Boolean> commitLayout(Layout latestLayout, String layoutServer) {
+        // Committing this layout directly to the trailing layout servers.
+        // This is safe because this layout is acquired by a quorum fetch which confirms
+        // that there was a consensus on this layout and has been committed to a quorum.
+        CompletableFuture<Boolean> committedAsync = commitLayoutAsync(latestLayout, layoutServer);
+
+        return committedAsync
+                .thenApply(result -> {
+                    if (result) {
+                        log.debug("Layout Server: {} patched with latest layout : {}",
+                                layoutServer, latestLayout
+                        );
+                    } else {
+                        log.debug("Layout Server: {} patch with latest layout failed : {}",
+                                layoutServer, latestLayout
+                        );
+                    }
+
+                    return true;
+                })
+                .exceptionally(ex -> {
+                    log.error("Updating layout servers failed due to", ex);
+                    return false;
+                });
+    }
+
+    @VisibleForTesting
+    CompletableFuture<Boolean> commitLayoutAsync(Layout latestLayout, String layoutServer) {
+        return corfuRuntime
+                .getLayoutView()
+                .getRuntimeLayout(latestLayout)
+                .getLayoutClient(layoutServer)
+                .committed(latestLayout.getEpoch(), latestLayout);
+    }
+
+    private enum LayoutCommit {
+        NEED_UPDATE, NO_NEED_UPDATE
     }
 }
