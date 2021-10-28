@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.management.failuredetector;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.sun.org.apache.xpath.internal.operations.Bool;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.NonNull;
@@ -20,9 +19,13 @@ import java.util.Optional;
 import java.util.SortedSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.ExecutorService;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * Manages epochs on local node and updates epochs to the latest
+ */
 @Slf4j
 @Builder
 @AllArgsConstructor
@@ -32,6 +35,8 @@ public class EpochHandler {
     private final CorfuRuntime corfuRuntime;
     @NonNull
     private final ServerContext serverContext;
+    @NonNull
+    private final ExecutorService failureDetectorWorker;
 
     /**
      * Corrects out of phase epochs by resealing the servers.
@@ -39,52 +44,46 @@ public class EpochHandler {
      *
      * @param pollReport Poll Report from running the failure detection policy.
      */
-    public Layout correctWrongEpochs(PollReport pollReport, Layout layout) {
+    public CompletableFuture<Layout> correctWrongEpochs(PollReport pollReport, Layout layout) {
 
         Map<String, Long> wrongEpochs = pollReport.getWrongEpochs();
         if (wrongEpochs.isEmpty()) {
-            return layout;
+            return CompletableFuture.completedFuture(layout);
         }
 
         log.debug("Correct wrong epochs. Poll report: {}", pollReport);
 
-        try {
-            final Layout oldLayout = layout;
-            // Query all layout servers to get quorum Layout.
-            Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap = layout
-                    .getLayoutServers()
-                    .stream()
-                    .collect(Collectors.toMap(Function.identity(),
-                            server -> getLayoutFromServer(oldLayout, server))
-                    );
-
-            // Retrieve the correct layout from quorum of members to reseal servers.
-            // If we are unable to reach a consensus from a quorum we get an exception and
-            // abort the epoch correction phase.
-            Optional<Layout> latestLayout = fetchLatestLayout(layoutCompletableFutureMap).join();
-
-            if (!latestLayout.isPresent()) {
-                log.error("Can't get a layout from any server in the cluster. Layout servers: {}, wrong epochs: {}",
-                        layout.getLayoutServers(), wrongEpochs
+        final Layout oldLayout = layout;
+        // Query all layout servers to get quorum Layout.
+        Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap = layout
+                .getLayoutServers()
+                .stream()
+                .collect(Collectors.toMap(Function.identity(),
+                        server -> getLayoutFromServer(oldLayout, server))
                 );
-                throw FailureDetectorException.disconnected();
-            }
 
-            // Update local layout copy.
-            Layout newManagementLayout = serverContext.saveManagementLayout(latestLayout.get());
 
-            sealWithLatestLayout(pollReport, newManagementLayout);
+        return fetchLatestLayout(layoutCompletableFutureMap)
+                .thenApply(maybeLayout -> maybeLayout.orElseThrow(() -> disconnectedEx(layout, wrongEpochs)))
+                // Update local layout copy.
+                .thenApply(serverContext::saveManagementLayout)
+                .thenApplyAsync(newManagementLayout -> {
+                    try {
+                        sealWithLatestLayout(pollReport, newManagementLayout);
+                    } catch (QuorumUnreachableException e) {
+                        log.error("Error in correcting server epochs", e);
+                        return serverContext.copyManagementLayout();
+                    }
 
-            // Check if any layout server has a stale layout.
-            // If yes patch it (commit) with the latestLayout.
-            updateTrailingLayoutServers(newManagementLayout, layoutCompletableFutureMap).join();
-            return newManagementLayout;
+                    // Check if any layout server has a stale layout.
+                    // If yes patch it (commit) with the latestLayout.
+                    updateTrailingLayoutServers(newManagementLayout, layoutCompletableFutureMap).join();
+                    return newManagementLayout;
+                }, failureDetectorWorker);
+    }
 
-        } catch (QuorumUnreachableException e) {
-            log.error("Error in correcting server epochs", e);
-        }
-
-        return serverContext.copyManagementLayout();
+    private FailureDetectorException disconnectedEx(Layout layout, Map<String, Long> wrongEpochs) {
+        return FailureDetectorException.disconnected(layout.getLayoutServers(), wrongEpochs);
     }
 
     /**
@@ -127,10 +126,10 @@ public class EpochHandler {
                     .thenApply(Optional::of)
                     .exceptionally(ex -> Optional.empty());
 
-            aggregated = aggregated.thenCombine(async, (SortedSet<Layout> set, Optional<Layout> maybeLayout) -> {
+            aggregated = aggregated.thenCombineAsync(async, (SortedSet<Layout> set, Optional<Layout> maybeLayout) -> {
                 maybeLayout.ifPresent(set::add);
                 return set;
-            });
+            }, failureDetectorWorker);
         }
 
         return aggregated.thenApply(set -> set.stream().findFirst());
@@ -185,7 +184,7 @@ public class EpochHandler {
                         }
                     })
                     .exceptionally(ex -> {
-                        log.warn("updateTrailingLayoutServers: layout fetch from {} failed: {}", layoutServer, ex);
+                        log.warn("updateTrailingLayoutServers: layout fetch from {} failed: {}", layoutServer, ex.getMessage());
                         return LayoutCommit.NEED_UPDATE;
                     })
                     .thenCompose(updateRequest -> {
@@ -202,7 +201,8 @@ public class EpochHandler {
         return CFUtils.allOf(asyncUpdates);
     }
 
-    public CompletableFuture<Boolean> commitLayout(Layout latestLayout, String layoutServer) {
+    @VisibleForTesting
+    CompletableFuture<Boolean> commitLayout(Layout latestLayout, String layoutServer) {
         // Committing this layout directly to the trailing layout servers.
         // This is safe because this layout is acquired by a quorum fetch which confirms
         // that there was a consensus on this layout and has been committed to a quorum.
@@ -223,7 +223,7 @@ public class EpochHandler {
                     return true;
                 })
                 .exceptionally(ex -> {
-                    log.error("Updating layout servers failed due to", ex);
+                    log.error("Updating layout servers failed due to: {}", ex.getMessage());
                     return false;
                 });
     }

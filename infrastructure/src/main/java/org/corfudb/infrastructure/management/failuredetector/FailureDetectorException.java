@@ -3,6 +3,12 @@ package org.corfudb.infrastructure.management.failuredetector;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.runtime.view.Layout;
 
+import java.util.List;
+import java.util.Map;
+
+/**
+ * A common exception for all types of Failure Detection exceptional situations
+ */
 public class FailureDetectorException extends RuntimeException {
 
 
@@ -37,8 +43,21 @@ public class FailureDetectorException extends RuntimeException {
         return new FailureDetectorException(err);
     }
 
-    public static FailureDetectorException disconnected() {
-        String err = "Error in correcting server epochs. Local node is disconnected";
+    public static FailureDetectorException disconnected(List<String> layoutServers, Map<String, Long> wrongEpochs) {
+        String err = String.format(
+                "Can't get a layout from any server in the cluster. Local node is disconnected. " +
+                "Layout servers: %s, wrong epochs: %s",
+                layoutServers, wrongEpochs
+        );
+        return new FailureDetectorException(err);
+    }
+
+    public static FailureDetectorException notInCluster(String localEndpoint, Layout layout) {
+        String err = String.format(
+                "Can't run failure detector. This Server: %s, doesn't belong to the active layout: %s",
+                localEndpoint, layout
+        );
+
         return new FailureDetectorException(err);
     }
 }

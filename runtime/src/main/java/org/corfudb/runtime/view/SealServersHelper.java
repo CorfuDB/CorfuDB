@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.view.QuorumFuturesFactory.CompositeFuture;
 import org.corfudb.util.CFUtils;
 
 /**
@@ -75,7 +76,7 @@ public class SealServersHelper {
         for (Layout.LayoutStripe layoutStripe : layoutSegment.getStripes()) {
             CompletableFuture<Boolean>[] completableFutures =
                     filterFutureMapAndGetArray(completableFutureMap, layoutStripe.getLogServers()::contains);
-            QuorumFuturesFactory.CompositeFuture<Boolean> quorumFuture =
+            CompositeFuture<Boolean> quorumFuture =
                     QuorumFuturesFactory.getFirstWinsFuture(Boolean::compareTo, completableFutures);
 
             boolean success = false;
@@ -127,7 +128,7 @@ public class SealServersHelper {
     public static void waitForQuorum(CompletableFuture<Boolean>[] completableFutures)
             throws QuorumUnreachableException {
         Boolean success = false;
-        QuorumFuturesFactory.CompositeFuture<Boolean> quorumFuture =
+        CompositeFuture<Boolean> quorumFuture =
                 QuorumFuturesFactory.getQuorumFuture(Boolean::compareTo, completableFutures);
         try {
             success = quorumFuture.get();
