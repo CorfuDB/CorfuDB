@@ -390,11 +390,13 @@ public class StreamingIT extends AbstractIT {
         private CorfuStore corfuStore;
         private final String namespace;
         private final String tableName;
-        public PrevValueStreamer(CorfuStore corfuStore, String namespace, String tableName) {
+        private final CountDownLatch latch;
+        public PrevValueStreamer(CorfuStore corfuStore, String namespace, String tableName, CountDownLatch latch) {
             recordCount = 0;
             this.corfuStore = corfuStore;
             this.namespace = namespace;
             this.tableName = tableName;
+            this.latch = latch;
         }
 
         public String toString() {
@@ -422,6 +424,7 @@ public class StreamingIT extends AbstractIT {
                 });
             });
             recordCount++;
+            latch.countDown();
         }
 
         /**
@@ -480,11 +483,12 @@ public class StreamingIT extends AbstractIT {
                 Uuid.class, SampleTableAMsg.class, Uuid.class,
                 TableOptions.builder().build());
 
+        final int numRecords = PARAMETERS.NUM_ITERATIONS_LOW;
+        CountDownLatch latch = new CountDownLatch(numRecords);
         // Subscribe to streaming updates from tableA using listenerCommon
-        PrevValueStreamer listenerCommon = new PrevValueStreamer<Uuid, SampleTableAMsg, Uuid>(store, ns, tn);
+        PrevValueStreamer listenerCommon = new PrevValueStreamer<Uuid, SampleTableAMsg, Uuid>(store, ns, tn, latch);
         store.subscribeListener(listenerCommon, ns, "sample_streamer_1",
                 Collections.singletonList(tn));
-        final int numRecords = PARAMETERS.NUM_ITERATIONS_LOW;
         for (int i = 0; i < numRecords; i++) {
             try (TxnContext tx = store.txn(namespace)) {
                 Uuid key = Uuid.newBuilder().setLsb(0).setMsb(0).build();
@@ -495,8 +499,8 @@ public class StreamingIT extends AbstractIT {
             }
         }
 
-        // After a brief wait verify that the listener gets all the updates.
-        TimeUnit.MILLISECONDS.sleep(sleepTime);
+        // Await until the listener gets all the updates
+        latch.await();
         assertThat(listenerCommon.getRecordCount()).isEqualTo(numRecords);
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
