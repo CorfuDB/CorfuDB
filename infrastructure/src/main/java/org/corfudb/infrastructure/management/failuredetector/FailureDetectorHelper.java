@@ -3,9 +3,13 @@ package org.corfudb.infrastructure.management.failuredetector;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.CFUtils;
 
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Utility helper which provide generic functions to Failure Detector
+ */
 @Slf4j
 @AllArgsConstructor
 public class FailureDetectorHelper {
@@ -36,12 +40,8 @@ public class FailureDetectorHelper {
             return CompletableFuture.completedFuture(layout);
         }
 
-        String err = String.format(
-                "Can't run failure detector. This Server: %s, doesn't belong to the active layout: %s",
-                localEndpoint, layout
-        );
         CompletableFuture<Layout> cf = new CompletableFuture<>();
-        cf.completeExceptionally(new IllegalStateException(err));
+        cf.completeExceptionally(FailureDetectorException.notInCluster(localEndpoint, layout));
         return cf;
     }
 }

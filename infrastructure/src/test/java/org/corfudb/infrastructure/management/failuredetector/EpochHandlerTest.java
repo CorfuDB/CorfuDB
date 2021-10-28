@@ -10,8 +10,11 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeoutException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -43,7 +46,7 @@ class EpochHandlerTest extends LayoutBasedTestHelper {
         CompletableFuture<Layout> err2 = new CompletableFuture<>();
         err2.completeExceptionally(new WrongEpochException(321));
 
-        HashMap<String, CompletableFuture<Layout>> futureLayouts = new HashMap<>();
+        Map<String, CompletableFuture<Layout>> futureLayouts = new HashMap<>();
         futureLayouts.put(NodeNames.A, err);
         futureLayouts.put(NodeNames.B, err2);
 
@@ -167,9 +170,12 @@ class EpochHandlerTest extends LayoutBasedTestHelper {
     }
 
     private EpochHandler buildHandler() {
+        final int threads = 5;
+        ExecutorService fdWorker = Executors.newFixedThreadPool(threads);
         return EpochHandler.builder()
                 .corfuRuntime(Mockito.mock(CorfuRuntime.class))
                 .serverContext(Mockito.mock(ServerContext.class))
+                .failureDetectorWorker(fdWorker)
                 .build();
     }
 }

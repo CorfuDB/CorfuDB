@@ -36,7 +36,7 @@ class FailureDetectorHelperTest extends LayoutBasedTestHelper {
     public void handleReconfigurationsAsyncError() {
         Layout layout = buildSimpleLayout();
         FailureDetectorHelper helper = new FailureDetectorHelper(layout, NodeNames.NOT_IN_CLUSTER_NODE);
-        assertThrows(IllegalStateException.class, () -> {
+        assertThrows(FailureDetectorException.class, () -> {
             try {
                 helper.handleReconfigurationsAsync().join();
             } catch (Exception ex) {
