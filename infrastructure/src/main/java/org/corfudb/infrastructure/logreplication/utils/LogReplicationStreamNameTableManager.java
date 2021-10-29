@@ -10,6 +10,7 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.utils.CommonTypes;
 import org.corfudb.utils.LogReplicationStreams;
 import org.corfudb.utils.LogReplicationStreams.VersionString;
@@ -21,6 +22,8 @@ import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -29,7 +32,9 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.corfudb.runtime.view.ObjectsView.LOG_REPLICATOR_STREAM_INFO;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 
 /**
  * Handle creation and maintenance of the Corfu table/s containing names of tables
@@ -44,14 +49,21 @@ public class LogReplicationStreamNameTableManager {
 
     private ILogReplicationConfigAdapter logReplicationConfigAdapter;
 
-    private String pluginConfigFilePath;
+    private final String pluginConfigFilePath;
 
-    private CorfuStore corfuStore;
+    private final CorfuStore corfuStore;
 
     private static final String EMPTY_STR = "";
 
     private static final CommonTypes.Uuid defaultMetadata =
         CommonTypes.Uuid.newBuilder().setLsb(0).setMsb(0).build();
+
+    private static final Set<UUID> MERGE_ONLY_STREAM_ID_LIST = new HashSet<>(Arrays.asList(
+            CorfuRuntime.getStreamID(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+                    TableRegistry.REGISTRY_TABLE_NAME)),
+            CorfuRuntime.getStreamID(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+                    TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME))
+    ));
 
     public LogReplicationStreamNameTableManager(CorfuRuntime runtime, String pluginConfigFilePath) {
         this.pluginConfigFilePath = pluginConfigFilePath;
@@ -113,7 +125,9 @@ public class LogReplicationStreamNameTableManager {
         } catch (NoSuchElementException e) {
             // Table does not exist
             return false;
-        } catch (IllegalArgumentException e) { }
+        } catch (IllegalArgumentException e) {
+            // Ignore
+        }
         return true;
     }
 
@@ -127,7 +141,7 @@ public class LogReplicationStreamNameTableManager {
                         Version.class, CommonTypes.Uuid.class, TableOptions.builder().build());
             }
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
-            log.warn("Exception when opening existing table {}", e);
+            log.warn("Exception when opening existing table ", e);
         }
     }
 
@@ -142,7 +156,7 @@ public class LogReplicationStreamNameTableManager {
             txn.commit();
         }
 
-        return record == null ? false : (Objects.equals(record.getPayload().getVersion(),
+        return record.getPayload() != null && (Objects.equals(record.getPayload().getVersion(),
                 logReplicationConfigAdapter.getVersion()));
     }
 
@@ -152,7 +166,6 @@ public class LogReplicationStreamNameTableManager {
             corfuStore.deleteTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_PLUGIN_VERSION_TABLE);
         } catch (NoSuchElementException e) {
             // If the table does not exist, simply return
-            return;
         }
     }
 
@@ -167,6 +180,16 @@ public class LogReplicationStreamNameTableManager {
                 LOG_REPLICATION_PLUGIN_VERSION_TABLE,
                 VersionString.class, Version.class, CommonTypes.Uuid.class,
                 TableOptions.builder().build());
+
+            // add registryTable to the streams
+            String registryTable = getFullyQualifiedTableName(
+                    CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME);
+            streams.add(registryTable);
+
+            // add protobufDescriptorTable to the streams
+            String protoTable = getFullyQualifiedTableName(
+                    CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME);
+            streams.add(protoTable);
 
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                 // Populate the plugin version in the version table
@@ -194,7 +217,7 @@ public class LogReplicationStreamNameTableManager {
                 txn.commit();
             }
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
-            log.warn("Exception when opening the table {}", e);
+            log.warn("Exception when opening the table", e);
         }
     }
 
@@ -222,6 +245,15 @@ public class LogReplicationStreamNameTableManager {
      * @return map of stream tag UUID to data streams UUIDs.
      */
     public Map<UUID, List<UUID>> getStreamingConfigOnSink() {
-        return logReplicationConfigAdapter.getStreamingConfigOnSink();
+        Map<UUID, List<UUID>> streamingConfig = logReplicationConfigAdapter.getStreamingConfigOnSink();
+        for (UUID id : MERGE_ONLY_STREAM_ID_LIST) {
+            streamingConfig.put(id,
+                    Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId()));
+        }
+        return streamingConfig;
+    }
+
+    public static Set<UUID> getMergeOnlyStreamIdList() {
+        return MERGE_ONLY_STREAM_ID_LIST;
     }
 }
