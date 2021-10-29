@@ -29,6 +29,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -57,7 +58,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     private long srcGlobalSnapshot; // The source snapshot timestamp
     private long recvSeq;
     private Optional<SnapshotSyncStartMarker> snapshotSyncStartMarker;
-    private Map<UUID, List<UUID>> dataStreamToTagsMap;
+    private final Map<UUID, List<UUID>> dataStreamToTagsMap;
+    private final Set<UUID> mergeOnlyStreams;
 
     @Getter
     private final LogReplicationMetadataManager logReplicationMetadataManager;
@@ -75,6 +77,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         this.phase = Phase.TRANSFER_PHASE;
         this.snapshotSyncStartMarker = Optional.empty();
         this.dataStreamToTagsMap = config.getDataStreamToTagsMap();
+        this.mergeOnlyStreams = config.getMergeOnlyStreams();
 
         initializeShadowStreams(config);
     }
@@ -173,6 +176,10 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
                 streamToClear = regularToShadowStreamId.get(streamID);
             }
 
+            if (mergeOnlyStreams.contains(streamToClear)) {
+                continue;
+            }
+
             SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
             txnContext.logUpdate(streamToClear, entry, dataStreamToTagsMap.get(streamID));
         }
@@ -182,7 +189,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * If the metadata has wrong message type or baseSnapshot, throw an exception
      * @param metadata
      */
-    private void verifyMetadata(LogReplicationEntryMetadataMsg metadata) throws ReplicationWriterException {
+    private void verifyMetadata(LogReplicationEntryMetadataMsg metadata) {
         if (metadata.getEntryType() != LogReplicationEntryType.SNAPSHOT_MESSAGE ||
                 metadata.getSnapshotTimestamp() != srcGlobalSnapshot ||
                 metadata.getSnapshotSyncSeqNum() != recvSeq) {
@@ -337,7 +344,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         long currentMinShadowStreamTimestamp = logReplicationMetadataManager.getMinSnapshotSyncShadowStreamTs();
         OpaqueStream shadowOpaqueStream = new OpaqueStream(rt.getStreamsView().get(shadowStreamId, options));
         shadowOpaqueStream.seek(currentMinShadowStreamTimestamp);
-        Stream shadowStream = shadowOpaqueStream.streamUpTo(snapshot);
+        Stream<OpaqueEntry> shadowStream = shadowOpaqueStream.streamUpTo(snapshot);
 
         Iterator<OpaqueEntry> iterator = shadowStream.iterator();
         while (iterator.hasNext()) {

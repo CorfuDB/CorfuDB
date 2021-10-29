@@ -421,6 +421,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
             Map<UUID, List<UUID>> streamingConfigSink = replicationStreamNameTableManager.getStreamingConfigOnSink();
 
+            Set<UUID> mergeOnlyStreams = LogReplicationStreamNameTableManager.getMergeOnlyStreamIdList();
+
             // TODO pankti: Check if version does not match. If it does not, create an event for site discovery to
             //  do a snapshot sync.
             boolean upgraded = replicationStreamNameTableManager.isUpgraded();
@@ -429,7 +431,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 input(new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.UPGRADE));
             }
 
-            return new LogReplicationConfig(streamsToReplicate, streamingConfigSink, serverContext.getLogReplicationMaxNumMsgPerBatch(),
+            return new LogReplicationConfig(streamsToReplicate,
+                    streamingConfigSink,
+                    mergeOnlyStreams,
+                    serverContext.getLogReplicationMaxNumMsgPerBatch(),
                     serverContext.getLogReplicationMaxDataMessageSize());
         } catch (Throwable t) {
             log.error("Exception when fetching the Replication Config", t);
