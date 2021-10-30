@@ -49,7 +49,7 @@ public class ObjectsView extends AbstractView {
     // We are temporarily naming this stream with the same name as TRANSACTION_STREAM_ID to avoid breaking LR code
     // while transition to UFO is completed (once migration is complete to UFO this stream can be renamed)
     // add a prefix to the name: e.g., org.corfudb.logreplication.transactionstream
-    static final StreamTagInfo LOG_REPLICATOR_STREAM_INFO =
+    public static final StreamTagInfo LOG_REPLICATOR_STREAM_INFO =
             new StreamTagInfo("Transaction_Stream", CorfuRuntime.getStreamID("Transaction_Stream"));
 
     /**
@@ -238,7 +238,7 @@ public class ObjectsView extends AbstractView {
     @AllArgsConstructor
     @Getter
     @EqualsAndHashCode
-    static final class StreamTagInfo {
+    public static final class StreamTagInfo {
         @NonNull
         private final String tagName;
         @NonNull

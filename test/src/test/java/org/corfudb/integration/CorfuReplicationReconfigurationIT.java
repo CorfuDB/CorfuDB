@@ -5,6 +5,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultL
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
@@ -361,11 +362,27 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             // Confirm data does not exist on Standby Cluster
             verifyDataOnStandby(0);
 
+            // Open a local table on Standby Cluster
+            openTable(corfuStoreStandby, "local");
+
+            // Open an extra table on Active Cluster
+            openTable(corfuStoreActive, "extra");
+
+            // Confirm local table is opened on Standby
+            verifyTableOpened(corfuStoreStandby, "local");
+
+            // Confirm extra table is opened on Active
+            verifyTableOpened(corfuStoreActive, "extra");
+
             // Start LR
             startLogReplicatorServers();
 
             // Verify Snapshot has successfully replicated
             verifyDataOnStandby(totalEntries);
+
+            // Verify both extra and local table are opened on Standby
+            verifyTableOpened(corfuStoreStandby, "local");
+            verifyTableOpened(corfuStoreStandby, "extra");
 
             log.info("** Wait for data change notifications (snapshot)");
             streamingStandbySnapshotCompletion.await();
@@ -379,9 +396,13 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
             // Add Delta's for Log Entry Sync
             writeToActiveDifferentTypes(totalEntries, totalEntries);
+            openTable(corfuStoreActive, "extra_delta");
 
             // Verify Delta's are replicated to standby
             verifyDataOnStandby((totalEntries*2));
+
+            // Verify tableRegistry's delta is replicated to Standby
+            verifyTableOpened(corfuStoreStandby, "extra_delta");
 
             // Confirm data has been received by standby streaming listeners (deltas generated)
             // Block until all updates are received
@@ -466,6 +487,24 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
                 }
             }
         }
+    }
+
+    private void openTable(CorfuStore corfuStore, String tableName) throws Exception {
+        corfuStore.openTable(
+                NAMESPACE, tableName,
+                Sample.StringKey.class, Sample.IntValueTag.class, Sample.Metadata.class,
+                TableOptions.builder().build()
+        );
+    }
+
+    private void verifyTableOpened(CorfuStore corfuStore, String tableName) {
+        CorfuStoreMetadata.TableName key = CorfuStoreMetadata.TableName.newBuilder()
+                .setNamespace(NAMESPACE)
+                .setTableName(tableName)
+                .build();
+
+        assertThat(corfuStore.getRuntime().getTableRegistry().listTables())
+                .contains(key);
     }
 
     public void openMaps() throws Exception {

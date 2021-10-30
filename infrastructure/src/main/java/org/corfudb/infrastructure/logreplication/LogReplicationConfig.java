@@ -6,6 +6,7 @@ import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -37,6 +38,10 @@ public class LogReplicationConfig {
 
     // Streaming tags on Sink/Standby (map data stream id to list of tags associated to it)
     private Map<UUID, List<UUID>> dataStreamToTagsMap = new HashMap<>();
+
+    // Merge only streams - We do not clear table when we apply shadow streams, in order to
+    // prevent data loss from local data (i.e., data that is not replicated but local to the site)
+    private Set<UUID> mergeOnlyStreams = new HashSet<>();
 
     // Snapshot Sync Batch Size(number of messages)
     private int maxNumMsgPerBatch;
@@ -73,8 +78,9 @@ public class LogReplicationConfig {
     }
 
     public LogReplicationConfig(Set<String> streamsToReplicate, Map<UUID, List<UUID>> streamingTagsMap,
-                                int maxNumMsgPerBatch, int maxMsgSize) {
+                                Set<UUID> mergeOnlyStreams, int maxNumMsgPerBatch, int maxMsgSize) {
         this(streamsToReplicate, maxNumMsgPerBatch, maxMsgSize);
         this.dataStreamToTagsMap = streamingTagsMap;
+        this.mergeOnlyStreams = mergeOnlyStreams;
     }
 }
