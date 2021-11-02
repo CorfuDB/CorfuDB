@@ -1,4 +1,4 @@
-name: CorfuDB Artifacts
+name: CorfuDB Coverage and Artifacts
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - master
 
 jobs:
-  publish_corfu_db_artifacts:
+  report_coverage_and_publish_artifacts:
 
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
@@ -42,7 +42,13 @@ jobs:
         continue-on-error: true
 
       - name: Prepare Corfu
-        run: ./mvnw clean install -Pdocker -DskipTests -Dmaven.javadoc.skip=true -Dcheckstyle.skip -T 1C
+        run: ./mvnw clean install -Pdocker -pl \!samples -Dmaven.javadoc.skip=true -Dcheckstyle.skip -T 1C
+
+      - name: Run codacy-coverage-reporter
+        uses: codacy/codacy-coverage-reporter-action@v1
+        with:
+          project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
+          coverage-reports: ./coverage/target/site/jacoco-aggregate/jacoco.xml
 
       - name: Publish corfu artifacts
         working-directory: ./

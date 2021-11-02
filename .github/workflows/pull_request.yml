@@ -2,7 +2,7 @@ on: pull_request
 name: Pull Request
 
 jobs:
-  unit_test:
+  unit_test_and_code_coverage:
     # https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
     runs-on: ubuntu-18.04
 
@@ -29,6 +29,12 @@ jobs:
 
     - name: run unit tests
       run: ./mvnw clean test -pl \!samples -am -Dmaven.javadoc.skip=true -T 1C
+
+    - name: Run codacy-coverage-reporter
+      uses: codacy/codacy-coverage-reporter-action@v1
+      with:
+        project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
+        coverage-reports: ./coverage/target/site/jacoco-aggregate/jacoco.xml
 
   integration_test:
       # https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
