@@ -9,11 +9,13 @@ import org.corfudb.infrastructure.management.FileSystemAdvisor;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttrStat;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.ResourceQuotaStats;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.concurrent.SingletonResource;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -79,7 +81,7 @@ class HealingAgentTest {
         final int limit = 100;
         final int used = 80;
         ResourceQuotaStats quota = new ResourceQuotaStats(limit, used);
-        FileSystemStats fsStats = new FileSystemStats(quota);
+        FileSystemStats fsStats = new FileSystemStats(quota, Mockito.mock(PartitionAttrStat.class));
 
         PollReport pollReportMock = mock(PollReport.class);
         ClusterState clusterState = buildClusterState(

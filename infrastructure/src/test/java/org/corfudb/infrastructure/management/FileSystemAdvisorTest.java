@@ -4,9 +4,12 @@ import com.google.common.collect.ImmutableList;
 import org.corfudb.infrastructure.NodeNames;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttrStat;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.ResourceQuotaStats;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank.NodeRankByPartitionAttributes;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank.NodeRankByResourceQuota;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.util.Optional;
 
@@ -24,9 +27,7 @@ class FileSystemAdvisorTest {
         final long epoch = 0;
         final String localEndpoint = NodeNames.A;
 
-        final int limit = 100;
-        final int used = 200;
-        FileSystemStats fsStats = new FileSystemStats(new ResourceQuotaStats(limit, used));
+        FileSystemStats fsStats = buildExceededQuota();
 
         ClusterState cluster = buildClusterState(
                 localEndpoint,
@@ -45,14 +46,11 @@ class FileSystemAdvisorTest {
     }
 
     @Test
-    public void testHealedServer() {
+    public void healedServer() {
         final long epoch = 0;
         final String localEndpoint = "c";
-        final int limit = 100;
-        final int used = 80;
-
-        ResourceQuotaStats quota = new ResourceQuotaStats(limit, used);
-        FileSystemStats fsStats = new FileSystemStats(quota);
+        ResourceQuotaStats quota = buildRegularQuota();
+        FileSystemStats fsStats = new FileSystemStats(quota, Mockito.mock(PartitionAttrStat.class));
 
         ClusterState cluster = buildClusterState(
                 localEndpoint,
@@ -67,5 +65,47 @@ class FileSystemAdvisorTest {
 
         assertTrue(maybeHealedNode.isPresent());
         assertEquals(new NodeRankByResourceQuota(localEndpoint, quota), maybeHealedNode.get());
+    }
+
+    @Test
+    public void failedNodeByPartitionAttributes() {
+        final long epoch = 0;
+        final String localEndpoint = "c";
+
+        ResourceQuotaStats quota = Mockito.mock(ResourceQuotaStats.class);
+        PartitionAttrStat attrs = new PartitionAttrStat(true);
+        FileSystemStats fsStats = new FileSystemStats(quota, attrs);
+
+        ClusterState cluster = buildClusterState(
+                localEndpoint,
+                ImmutableList.of(localEndpoint),
+                nodeState("a", epoch, Optional.of(fsStats), OK, OK, OK),
+                nodeState("b", epoch, OK, OK, OK),
+                nodeState(localEndpoint, epoch, OK, OK, OK)
+        );
+
+        FileSystemAdvisor advisor = new FileSystemAdvisor();
+        Optional<NodeRankByPartitionAttributes> maybeFailedNode = advisor
+                .findFailedNodeByPartitionAttributes(cluster);
+
+        assertTrue(maybeFailedNode.isPresent());
+        assertEquals(new NodeRankByPartitionAttributes(localEndpoint, attrs), maybeFailedNode.get());
+    }
+
+    private ResourceQuotaStats buildRegularQuota() {
+        final int limit = 100;
+        final int used = 80;
+
+        return new ResourceQuotaStats(limit, used);
+    }
+
+    private FileSystemStats buildExceededQuota() {
+        final int limit = 100;
+        final int used = 200;
+
+        return new FileSystemStats(
+                new ResourceQuotaStats(limit, used),
+                Mockito.mock(PartitionAttrStat.class)
+        );
     }
 }

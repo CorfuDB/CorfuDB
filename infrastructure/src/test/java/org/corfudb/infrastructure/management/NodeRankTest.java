@@ -1,8 +1,12 @@
 package org.corfudb.infrastructure.management;
 
 
+import org.corfudb.infrastructure.NodeNames;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttrStat;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.ResourceQuotaStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank.NodeRankByPartitionAttributes;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank.NodeRankByResourceQuota;
 import org.junit.jupiter.api.Test;
 
@@ -77,5 +81,24 @@ public class NodeRankTest {
 
         assertEquals(quotaB, set.first());
         assertEquals(quotaA, set.last());
+    }
+
+    @Test
+    public void testPartitionAttributesOrdering(){
+        NodeRankByPartitionAttributes attrA = buildAttributes(NodeNames.A, true);
+        NodeRankByPartitionAttributes attrB = buildAttributes(NodeNames.B, true);
+        NodeRankByPartitionAttributes attrC = buildAttributes(NodeNames.C, false);
+
+        SortedSet<NodeRankByPartitionAttributes> set = new TreeSet<>();
+        set.add(attrA);
+        set.add(attrB);
+        set.add(attrC);
+
+        assertEquals(attrA, set.first());
+        assertEquals(attrC, set.last());
+    }
+
+    private NodeRankByPartitionAttributes buildAttributes(String node, boolean readOnly) {
+        return new NodeRankByPartitionAttributes(node, new PartitionAttrStat(readOnly));
     }
 }

@@ -1,10 +1,12 @@
 package org.corfudb.infrastructure.log;
 
 import com.google.common.annotations.VisibleForTesting;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.log.FileSystemAgent.PartitionAgent.PartitionAttr;
 import org.corfudb.runtime.exceptions.LogUnitException;
 
 import java.io.IOException;
@@ -19,13 +21,16 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 @Slf4j
-public final class FileSystemAgent {
-    private static Optional<FileSystemAgent> instance = Optional.empty();
+public class FileSystemAgent {
+    private static Optional<FileSystemAgent> INSTANCE = Optional.empty();
 
     private final ResourceQuotaConfig config;
     // Resource quota to track the log size
     @Getter
     private final ResourceQuota logSizeQuota;
+
+    @Getter
+    private final PartitionAttr partitionAttr;
 
     private FileSystemAgent(ResourceQuotaConfig config) {
         this.config = config;
@@ -34,6 +39,8 @@ public final class FileSystemAgent {
         long logSizeLimit = getLogSizeLimit();
 
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
+        partitionAttr = new PartitionAgent().getPartitionAttr();
+
         logSizeQuota.consume(initialLogSize);
         log.info("StreamLogFiles: {} size is {} bytes, limit {}", config.logDir, initialLogSize, logSizeLimit);
     }
@@ -47,16 +54,21 @@ public final class FileSystemAgent {
     }
 
     public static void init(ResourceQuotaConfig config) {
-        instance = Optional.of(new FileSystemAgent(config));
+        INSTANCE = Optional.of(new FileSystemAgent(config));
     }
 
     public static boolean configured(){
-        return instance.isPresent();
+        return INSTANCE.isPresent();
     }
 
     public static ResourceQuota getResourceQuota() {
-        Supplier<IllegalStateException> err = () -> new IllegalStateException("ResourceQuota not configured");
-        return instance.orElseThrow(err).logSizeQuota;
+        Supplier<IllegalStateException> err = () -> new IllegalStateException("FileSystemAgent not configured");
+        return INSTANCE.orElseThrow(err).logSizeQuota;
+    }
+
+    public static PartitionAttr getPartition() {
+        Supplier<IllegalStateException> err = () -> new IllegalStateException("FileSystemAgent not configured");
+        return INSTANCE.orElseThrow(err).partitionAttr;
     }
 
     /**
@@ -127,6 +139,21 @@ public final class FileSystemAgent {
                 String msg = String.format("Invalid quota: quota(%f)%% must be between 0-100%%", limitPercentage);
                 throw new LogUnitException(msg);
             }
+        }
+    }
+
+    public static class PartitionAgent {
+        @Getter
+        private PartitionAttr partitionAttr;
+
+        public PartitionAgent() {
+            //we need a scheduler
+        }
+
+        @AllArgsConstructor
+        @Getter
+        public static class PartitionAttr {
+            private final boolean readOnly;
         }
     }
 }

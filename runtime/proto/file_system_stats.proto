@@ -5,9 +5,14 @@ option java_package = "org.corfudb.runtime.proto";
 
 message FileSystemStatsMsg {
     ResourceQuotaStatsMsg quota = 1;
+    PartitionAttrStatsMsg partition;
 }
 
 message ResourceQuotaStatsMsg {
   int64 limit = 1;
   int64 used = 2;
+}
+
+message PartitionAttrStatsMsg {
+  bool readOnly = 1;
 }

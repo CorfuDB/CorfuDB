@@ -6,6 +6,7 @@ import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttrStat;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.ResourceQuotaStats;
 import org.corfudb.runtime.proto.FileSystemStats.FileSystemStatsMsg;
 import org.corfudb.runtime.proto.FileSystemStats.ResourceQuotaStatsMsg;
@@ -101,7 +102,11 @@ public final class CorfuProtocolManagement {
         if(msg.hasFileSystem()){
             ResourceQuotaStatsMsg quotaMsg = msg.getFileSystem().getQuota();
             ResourceQuotaStats quotaStats = new ResourceQuotaStats(quotaMsg.getLimit(), quotaMsg.getUsed());
-            FileSystemStats fsStats = new FileSystemStats(quotaStats);
+            PartitionAttrStat attrStats = null;// = new PartitionAttrStat(quotaMsg.isRadOnly());
+            if (attrStats == null) {
+                throw new IllegalStateException("intialize attrStats");
+            }
+            FileSystemStats fsStats = new FileSystemStats(quotaStats, attrStats);
             maybeFsStats = Optional.of(fsStats);
         } else {
             maybeFsStats = Optional.empty();

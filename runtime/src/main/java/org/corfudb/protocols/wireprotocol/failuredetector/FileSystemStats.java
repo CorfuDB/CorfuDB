@@ -15,6 +15,9 @@ public class FileSystemStats {
     @NonNull
     private final ResourceQuotaStats quota;
 
+    @NonNull
+    private final PartitionAttrStat partitionAttr;
+
     @AllArgsConstructor
     @EqualsAndHashCode
     @Getter
@@ -23,12 +26,28 @@ public class FileSystemStats {
         private final long limit;
         private final long used;
 
-        public boolean isExceeded(){
+        public boolean isExceeded() {
             return used > limit;
+        }
+
+        public boolean isNotExceeded(){
+            return !isExceeded();
         }
 
         public long available() {
             return limit - used;
+        }
+    }
+
+    @AllArgsConstructor
+    @Getter
+    @EqualsAndHashCode
+    @ToString
+    public static class PartitionAttrStat {
+        private final boolean readOnly;
+
+        public boolean isWritable() {
+            return !readOnly;
         }
     }
 }

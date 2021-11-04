@@ -6,6 +6,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
 import org.corfudb.protocols.CorfuProtocolCommon;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttrStat;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.ResourceQuotaStats;
 
 /**
@@ -18,7 +19,7 @@ import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.Resour
 @EqualsAndHashCode
 @Getter
 @ToString
-public class NodeRank implements Comparable<NodeRank> {
+public class NodeRank implements Comparable<NodeRank>, NodeRanking {
     public static final NodeRank EMPTY_NODE_RANK = new NodeRank("--", Integer.MIN_VALUE);
 
     private final String endpoint;
@@ -59,7 +60,7 @@ public class NodeRank implements Comparable<NodeRank> {
     @EqualsAndHashCode
     @Getter
     @ToString
-    public static class NodeRankByResourceQuota implements Comparable<NodeRankByResourceQuota> {
+    public static class NodeRankByResourceQuota implements Comparable<NodeRankByResourceQuota>, NodeRanking {
         public static final NodeRankByResourceQuota MIN_QUOTA_RANK = new NodeRankByResourceQuota(
                 "--",
                 new ResourceQuotaStats(0, Long.MAX_VALUE)
@@ -71,9 +72,30 @@ public class NodeRank implements Comparable<NodeRank> {
         @Override
         public int compareTo(NodeRankByResourceQuota other) {
             //Descending order
-            int availableSpaceRank = Long.compare(other.quota.available(), quota.available());
-            if (availableSpaceRank != 0) {
-                return availableSpaceRank;
+            int quotaExceeded = Boolean.compare(other.quota.isExceeded(), quota.isExceeded());
+            if (quotaExceeded != 0) {
+                return quotaExceeded;
+            }
+
+            //Ascending order
+            return endpoint.compareTo(other.endpoint);
+        }
+    }
+
+    @AllArgsConstructor
+    @EqualsAndHashCode
+    @Getter
+    @ToString
+    public static class NodeRankByPartitionAttributes implements Comparable<NodeRankByPartitionAttributes>, NodeRanking {
+        private final String endpoint;
+        private final PartitionAttrStat attr;
+
+        @Override
+        public int compareTo(NodeRankByPartitionAttributes other) {
+            //Descending order
+            int readOnly = Boolean.compare(other.attr.isReadOnly(), attr.isReadOnly());
+            if (readOnly != 0) {
+                return readOnly;
             }
 
             //Ascending order

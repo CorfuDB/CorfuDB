@@ -78,7 +78,7 @@ public class HealingAgent {
         log.trace("Handle healing, layout: {}", layout);
 
         Optional<NodeRankByResourceQuota> fsHealth = fsAdvisor.healedServer(pollReport.getClusterState());
-        if (!fsHealth.isPresent()) {
+        if (!fsHealth.isPresent()){
             log.trace("Unhealthy node. No free space. Quota limit exceeded");
             return skippedTask;
         }
