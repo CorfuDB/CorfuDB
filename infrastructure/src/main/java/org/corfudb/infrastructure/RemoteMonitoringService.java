@@ -7,11 +7,13 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.result.Result;
+import org.corfudb.infrastructure.log.FileSystemAgent;
 import org.corfudb.infrastructure.management.ClusterAdvisor;
 import org.corfudb.infrastructure.management.ClusterAdvisorFactory;
 import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.ClusterType;
 import org.corfudb.infrastructure.management.FailureDetector;
+import org.corfudb.infrastructure.management.FileSystemAdvisor;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
 import org.corfudb.infrastructure.management.failuredetector.EpochHandler;
@@ -24,7 +26,10 @@ import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics.FailureDetectorAction;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.ResourceQuotaStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank.NodeRankByResourceQuota;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.LambdaUtils;
@@ -33,14 +38,18 @@ import org.corfudb.util.concurrent.SingletonResource;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.NavigableSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * Remote Monitoring Service constitutes of failure and healing monitoring and handling.
@@ -164,6 +173,7 @@ public class RemoteMonitoringService implements ManagementService {
 
         healingAgent = HealingAgent.builder()
                 .advisor(advisor)
+                .fsAdvisor(new FileSystemAdvisor())
                 .localEndpoint(serverContext.getLocalEndpoint())
                 .runtimeSingleton(runtimeSingletonResource)
                 .failureDetectorWorker(failureDetectorWorker)
@@ -282,9 +292,13 @@ public class RemoteMonitoringService implements ManagementService {
 
     private CompletableFuture<PollReport> pollReport(Layout layout, SequencerMetrics sequencerMetrics) {
         return CompletableFuture.supplyAsync(() -> {
+            ResourceQuota quota = FileSystemAgent.getResourceQuota();
+            ResourceQuotaStats quotaStats = new ResourceQuotaStats(quota.getLimit(), quota.getUsed().get());
+            FileSystemStats fsStats = new FileSystemStats(quotaStats);
+
             CorfuRuntime corfuRuntime = getCorfuRuntime();
 
-            return failureDetector.poll(layout, corfuRuntime, sequencerMetrics);
+            return failureDetector.poll(layout, corfuRuntime, sequencerMetrics, fsStats);
         }, failureDetectorWorker);
     }
 
@@ -433,6 +447,17 @@ public class RemoteMonitoringService implements ManagementService {
                 failedNodes.add(failedNode.getEndpoint());
                 return detectFailure(layout, failedNodes, pollReport).get();
             }
+
+            FileSystemAdvisor fsAdvisor = new FileSystemAdvisor();
+
+            Optional<NodeRankByResourceQuota> maybeFailedNodeByQuota = fsAdvisor.findFailedNodeByResourceQuota(clusterState);
+            if (maybeFailedNodeByQuota.isPresent()) {
+                NodeRankByResourceQuota failedNode = maybeFailedNodeByQuota.get();
+                Set<String> failedNodes = new HashSet<>();
+                failedNodes.add(failedNode.getEndpoint());
+                return detectFailure(layout, failedNodes, pollReport).get();
+            }
+
         } catch (Exception e) {
             log.error("Exception invoking failure handler", e);
         }

@@ -5,13 +5,16 @@ import com.google.common.collect.ImmutableMap;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -66,6 +69,7 @@ public class ClusterStateCollectorTest {
         ClusterStateCollector collector = ClusterStateCollector.builder()
                 .localEndpoint(localEndpoint)
                 .clusterState(clusterConnectivity)
+                .localNodeFileSystem(Mockito.mock(FileSystemStats.class))
                 .build();
 
         ClusterState clusterState = collector.collectClusterState(
@@ -100,7 +104,7 @@ public class ClusterStateCollectorTest {
         wrongEpochCf.completeExceptionally(new WrongEpochException(newEpoch));
 
         CompletableFuture<NodeState> nodeAState = CompletableFuture.completedFuture(
-                NodeState.builder().build()
+                NodeState.getUnavailableNodeState("c")
         );
 
         clusterConnectivity.put("a", nodeAState);
@@ -109,6 +113,7 @@ public class ClusterStateCollectorTest {
         ClusterStateCollector collector = ClusterStateCollector.builder()
                 .localEndpoint(localEndpoint)
                 .clusterState(clusterConnectivity)
+                .localNodeFileSystem(Mockito.mock(FileSystemStats.class))
                 .build();
 
         ImmutableMap<String, Long> wrongEpochs = collector.collectWrongEpochs();

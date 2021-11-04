@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.management;
 
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 
@@ -19,5 +20,6 @@ public interface IDetector {
      *
      * @return A poll report containing the results of the poll.
      */
-    PollReport poll(@Nonnull Layout layout, @Nonnull CorfuRuntime corfuRuntime, SequencerMetrics sequencerMetrics);
+    PollReport poll(@Nonnull Layout layout, @Nonnull CorfuRuntime corfuRuntime, SequencerMetrics sequencerMetrics,
+                    FileSystemStats fileSystemStats);
 }

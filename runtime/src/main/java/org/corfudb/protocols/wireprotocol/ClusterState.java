@@ -51,6 +51,10 @@ public class ClusterState {
         return nodes.size();
     }
 
+    public Optional<NodeState> getLocalNode() {
+        return getNode(localEndpoint);
+    }
+
     public Optional<NodeState> getNode(String endpoint) {
         return Optional.ofNullable(nodes.get(endpoint));
     }

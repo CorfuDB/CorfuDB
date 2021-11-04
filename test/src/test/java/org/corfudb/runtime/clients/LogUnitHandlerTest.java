@@ -210,9 +210,11 @@ public class LogUnitHandlerTest extends AbstractClientTest {
 
         client.write(address0, payload, Collections.emptyMap()).get();
         client.write(address1, payload, Collections.emptyMap()).get();
+
         assertThatThrownBy(() -> client.write(address2, payload, Collections.emptyMap()).get())
                 .isInstanceOf(ExecutionException.class)
                 .hasRootCauseInstanceOf(QuotaExceededException.class);
+
         // Before elevating the clients priority, try to write a hole and verify that it goes through
         // even after the quota has been exceeded
         client.write(LogData.getHole(address4)).get();

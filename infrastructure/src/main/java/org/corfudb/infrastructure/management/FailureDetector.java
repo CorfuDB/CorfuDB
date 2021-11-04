@@ -15,6 +15,7 @@ import org.corfudb.infrastructure.RemoteMonitoringService;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.ManagementClient;
@@ -50,7 +51,6 @@ import java.util.stream.Collectors;
 @Slf4j
 public class FailureDetector implements IDetector {
 
-
     /**
      * Number of iterations to execute to detect a failure in a round.
      */
@@ -78,28 +78,33 @@ public class FailureDetector implements IDetector {
      * @param layout Current Layout
      */
     public PollReport poll(
-            @Nonnull Layout layout, @Nonnull CorfuRuntime corfuRuntime, @NonNull SequencerMetrics sequencerMetrics) {
+            @Nonnull Layout layout, @Nonnull CorfuRuntime corfuRuntime, @NonNull SequencerMetrics sequencerMetrics,
+            FileSystemStats fileSystemStats) {
 
         log.trace("Poll report. Layout: {}", layout);
-
-        Map<String, IClientRouter> routerMap;
 
         // Collect and set all responsive servers in the members array.
         Set<String> allServers = layout.getAllServers();
 
-        // Set up arrays for routers to the endpoints.
-        routerMap = new HashMap<>();
-        allServers.forEach(s -> {
-            IClientRouter router = corfuRuntime.getRouter(s);
-            router.setTimeoutResponse(networkStretcher.getCurrentPeriod().toMillis());
-            routerMap.put(s, router);
-        });
+        Map<String, IClientRouter> routers = adjustRouters(corfuRuntime, allServers);
 
         // Perform polling of all responsive servers.
         return pollRound(
-                layout.getEpoch(), layout.getClusterId(), allServers, routerMap, sequencerMetrics,
-                ImmutableList.copyOf(layout.getUnresponsiveServers())
+                layout.getEpoch(), layout.getClusterId(), allServers, routers, sequencerMetrics,
+                ImmutableList.copyOf(layout.getUnresponsiveServers()),
+                fileSystemStats
         );
+    }
+
+    private Map<String, IClientRouter> adjustRouters(CorfuRuntime corfuRuntime, Set<String> allServers) {
+        // Set up arrays for routers to the endpoints.
+        Map<String, IClientRouter> routers = new HashMap<>();
+        allServers.forEach(server -> {
+            IClientRouter router = corfuRuntime.getRouter(server);
+            router.setTimeoutResponse(networkStretcher.getCurrentPeriod().toMillis());
+            routers.put(server, router);
+        });
+        return routers;
     }
 
     /**
@@ -121,7 +126,8 @@ public class FailureDetector implements IDetector {
     @VisibleForTesting
     PollReport pollRound(
             long epoch, UUID clusterID, Set<String> allServers, Map<String, IClientRouter> router,
-            SequencerMetrics sequencerMetrics, ImmutableList<String> layoutUnresponsiveNodes) {
+            SequencerMetrics sequencerMetrics, ImmutableList<String> layoutUnresponsiveNodes,
+            FileSystemStats fileSystemStats) {
 
         if (failureThreshold < 1) {
             throw new IllegalStateException("Invalid failure threshold");
@@ -130,7 +136,7 @@ public class FailureDetector implements IDetector {
         List<PollReport> reports = new ArrayList<>();
         for (int iteration = 0; iteration < failureThreshold; iteration++) {
             PollReport currReport = pollIteration(
-                    allServers, router, epoch, clusterID, sequencerMetrics, layoutUnresponsiveNodes
+                    allServers, router, epoch, clusterID, sequencerMetrics, layoutUnresponsiveNodes, fileSystemStats
             );
             reports.add(currReport);
 
@@ -236,7 +242,8 @@ public class FailureDetector implements IDetector {
      */
     private PollReport pollIteration(
             Set<String> allServers, Map<String, IClientRouter> clientRouters, long epoch, UUID clusterID,
-            SequencerMetrics sequencerMetrics, ImmutableList<String> layoutUnresponsiveNodes) {
+            SequencerMetrics sequencerMetrics, ImmutableList<String> layoutUnresponsiveNodes,
+            FileSystemStats fileSystemStats) {
 
         log.trace("Poll iteration. Epoch: {}", epoch);
 
@@ -245,12 +252,12 @@ public class FailureDetector implements IDetector {
         ClusterStateCollector clusterCollector = ClusterStateCollector.builder()
                 .localEndpoint(localEndpoint)
                 .clusterState(pollAsync(allServers, clientRouters, epoch, clusterID))
+                .localNodeFileSystem(fileSystemStats)
                 .build();
 
         //Cluster state internal map.
-        ClusterState clusterState = clusterCollector.collectClusterState(
-                epoch, layoutUnresponsiveNodes, sequencerMetrics
-        );
+        ClusterState clusterState = clusterCollector
+                .collectClusterState(epoch, layoutUnresponsiveNodes, sequencerMetrics);
 
         Duration elapsedTime = Duration.ofMillis(System.currentTimeMillis() - start);
 
@@ -280,10 +287,11 @@ public class FailureDetector implements IDetector {
         allServers.forEach(s -> {
             try {
                 Optional<Timer.Sample> sample = MicroMeterUtils.startTimer();
-                CompletableFuture<NodeState> nodeStateFuture =
-                        MicroMeterUtils.timeWhenCompletes(new ManagementClient(clientRouters.get(s), epoch, clusterId)
-                                        .sendNodeStateRequest(), sample,
-                                "failure-detector.ping-latency", "node", s);
+                CompletableFuture<NodeState> request = new ManagementClient(clientRouters.get(s), epoch, clusterId)
+                        .sendNodeStateRequest();
+                CompletableFuture<NodeState> nodeStateFuture = MicroMeterUtils.timeWhenCompletes(
+                        request, sample, "failure-detector.ping-latency", "node", s
+                );
                 clusterState.put(s, nodeStateFuture);
             } catch (Exception e) {
                 CompletableFuture<NodeState> cf = new CompletableFuture<>();

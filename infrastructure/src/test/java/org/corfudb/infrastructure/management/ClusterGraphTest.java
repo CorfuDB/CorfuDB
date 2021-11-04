@@ -32,11 +32,13 @@ public class ClusterGraphTest {
         NodeState a = NodeState.builder()
                 .sequencerMetrics(SequencerMetrics.READY)
                 .connectivity(connectivity(A, ImmutableMap.of(A, OK, B, OK, C, FAILED)))
+                .fileSystem(Optional.empty())
                 .build();
 
         NodeState b = NodeState.builder()
                 .sequencerMetrics(SequencerMetrics.READY)
                 .connectivity(connectivity(B, ImmutableMap.of(A, OK, B, OK, C, FAILED)))
+                .fileSystem(Optional.empty())
                 .build();
 
         NodeState c = unavailableNodeState(C);
@@ -205,6 +207,7 @@ public class ClusterGraphTest {
     private NodeState unavailableNodeState(String endpoint) {
         return new NodeState(
                 unavailable(endpoint),
+                Optional.empty(),
                 SequencerMetrics.UNKNOWN
         );
     }

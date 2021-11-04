@@ -8,12 +8,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -31,6 +33,9 @@ public class ClusterStateCollector {
     private final String localEndpoint;
     @NonNull
     private final Map<String, CompletableFuture<NodeState>> clusterState;
+
+    @NonNull
+    private final FileSystemStats localNodeFileSystem;
 
     /**
      * Provides cluster state
@@ -129,6 +134,7 @@ public class ClusterStateCollector {
         return NodeState.builder()
                 .connectivity(localConnectivity)
                 .sequencerMetrics(sequencerMetrics)
+                .fileSystem(Optional.of(localNodeFileSystem))
                 .build();
     }
 }

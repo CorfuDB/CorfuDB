@@ -1,9 +1,14 @@
 package org.corfudb.protocols.service;
 
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.NodeState;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.ResourceQuotaStats;
+import org.corfudb.runtime.proto.FileSystemStats.FileSystemStatsMsg;
+import org.corfudb.runtime.proto.FileSystemStats.ResourceQuotaStatsMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import org.corfudb.runtime.proto.service.Management.BootstrapManagementRequestMsg;
@@ -62,11 +67,26 @@ public final class CorfuProtocolManagement {
      * @return            a ResponsePayloadMsg containing the QUERY_NODE response
      */
     public static ResponsePayloadMsg getQueryNodeResponseMsg(NodeState nodeState) {
+        QueryNodeResponseMsg.Builder responseBuilder = QueryNodeResponseMsg.newBuilder()
+                .setNodeConnectivity(getNodeConnectivityMsg(nodeState.getConnectivity()))
+                .setSequencerMetrics(getSequencerMetricsMsg(nodeState.getSequencerMetrics()));
+
+        nodeState.getFileSystem().ifPresent(fsStats -> {
+            ResourceQuotaStatsMsg quotaMsg = ResourceQuotaStatsMsg.newBuilder()
+                    .setLimit(fsStats.getQuota().getLimit())
+                    .setUsed(fsStats.getQuota().getUsed())
+                    .build();
+            FileSystemStatsMsg fsStatsMsg = FileSystemStatsMsg.newBuilder()
+                    .setQuota(quotaMsg)
+                    .build();
+
+            responseBuilder.setFileSystem(fsStatsMsg);
+        });
+
+        QueryNodeResponseMsg responseMsg = responseBuilder.build();
+
         return ResponsePayloadMsg.newBuilder()
-                .setQueryNodeResponse(QueryNodeResponseMsg.newBuilder()
-                        .setNodeConnectivity(getNodeConnectivityMsg(nodeState.getConnectivity()))
-                        .setSequencerMetrics(getSequencerMetricsMsg(nodeState.getSequencerMetrics()))
-                        .build())
+                .setQueryNodeResponse(responseMsg)
                 .build();
     }
 
@@ -77,8 +97,21 @@ public final class CorfuProtocolManagement {
      * @return      an equivalent Java NodeState object
      */
     public static NodeState getNodeState(QueryNodeResponseMsg msg) {
-        return new NodeState(getNodeConnectivity(msg.getNodeConnectivity()),
-                getSequencerMetrics(msg.getSequencerMetrics()));
+        Optional<FileSystemStats> maybeFsStats;
+        if(msg.hasFileSystem()){
+            ResourceQuotaStatsMsg quotaMsg = msg.getFileSystem().getQuota();
+            ResourceQuotaStats quotaStats = new ResourceQuotaStats(quotaMsg.getLimit(), quotaMsg.getUsed());
+            FileSystemStats fsStats = new FileSystemStats(quotaStats);
+            maybeFsStats = Optional.of(fsStats);
+        } else {
+            maybeFsStats = Optional.empty();
+        }
+
+        return new NodeState(
+                getNodeConnectivity(msg.getNodeConnectivity()),
+                maybeFsStats,
+                getSequencerMetrics(msg.getSequencerMetrics())
+        );
     }
 
     /**

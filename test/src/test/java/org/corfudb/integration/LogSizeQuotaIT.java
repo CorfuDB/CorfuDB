@@ -192,10 +192,10 @@ public class LogSizeQuotaIT extends AbstractIT {
         final Duration pollPeriod = Duration.ofMillis(50);
         final int workflowNumRetry = 3;
 
-        rt.getManagementView().addNode(DEFAULT_HOST + ":" + n2Port, workflowNumRetry,
-                timeout, pollPeriod);
-        rt.getManagementView().addNode(DEFAULT_HOST + ":" + n3Port, workflowNumRetry,
-                timeout, pollPeriod);
+        rt.getManagementView()
+                .addNode(DEFAULT_HOST + ":" + n2Port, workflowNumRetry, timeout, pollPeriod);
+        rt.getManagementView()
+                .addNode(DEFAULT_HOST + ":" + n3Port, workflowNumRetry, timeout, pollPeriod);
 
         final int clusterSizeN3 = 3;
         waitForLayoutChange(layout -> layout.getAllServers().size() == clusterSizeN3
