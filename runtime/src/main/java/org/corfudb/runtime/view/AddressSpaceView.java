@@ -44,6 +44,7 @@ import javax.annotation.Nullable;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -77,6 +78,8 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
             .clientCacheable(true)
             .serverCacheable(true)
             .build();
+
+    private final Set<Long> writesPending;
 
     private final String hitRatioName = "address_space.read_cache.hit_ratio";
     private final String sizeName = "address_space.read_cache.size";
@@ -117,6 +120,8 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
                 .removalListener(this::handleEviction)
                 .recordStats()
                 .build();
+
+        writesPending = new HashSet<>();
 
         Optional<MeterRegistry> metricsRegistry = MeterRegistryProvider.getInstance();
         metricsRegistry.map(registry -> GuavaCacheMetrics.monitor(registry, readCache, "address_space.read_cache"));
@@ -224,6 +229,11 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
                     throw new StaleTokenException(l.getEpoch());
                 }
 
+                // Keep a list of ongoing writes, in order to prevent caching
+                // read values (which don't carry undo records), whenever a reader thread
+                // is faster then the writer. This will avoid potential NoRollBackExceptions
+                writesPending.add(token.getSequence());
+
                 // Set the data to use the token
                 ld.useToken(token);
                 ld.setId(runtime.getParameters().getClientId());
@@ -234,6 +244,8 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
                             .getReplicationProtocol(runtime)
                             .write(e, ld);
                 } catch (OverwriteException ex) {
+                    writesPending.add(token.getSequence());
+
                     if (ex.getOverWriteCause() == OverwriteCause.SAME_DATA) {
                         // If we have an overwrite exception with the SAME_DATA cause, it means that the
                         // server suspects our data has already been written, in this case we need to
@@ -248,9 +260,11 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
                     }
                 } catch (WriteSizeException | QuotaExceededException ie) {
                     log.warn("write: write failed", ie);
+                    writesPending.add(token.getSequence());
                     throw ie;
                 } catch (RuntimeException re) {
-                    log.error("write: Got exception during replication protocol write with token: {}", token, re);
+                    log.error("write: Got exception during replication protocol write with token: {}", token, re);                        writesPending.add(token.getSequence());
+                    writesPending.add(token.getSequence());
                     validateStateOfWrittenEntry(token.getSequence(), ld);
                 }
                 return null;
@@ -259,6 +273,7 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
             // Cache the successful write
             if (cacheOption == CacheOption.WRITE_THROUGH) {
                 readCache.put(token.getSequence(), ld);
+                writesPending.remove(token.getSequence());
             }
         };
 
@@ -430,6 +445,15 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
         }
 
         try {
+            // If this address represents an in-flight write from this client,
+            // we want to avoid placing this LogData in the cache as 'undoRecords'
+            // from the mutator upcallResult would be missed, leading to NoRollbackExceptions
+            // on future writes.
+            if (writesPending.contains(address)) {
+                // Bypass cache for pending writes
+                return loadedValue;
+            }
+
             return cache.get(address, () -> loadedValue);
         } catch (ExecutionException | UncheckedExecutionException e) {
             // Guava wraps the exceptions thrown from the lower layers, therefore
