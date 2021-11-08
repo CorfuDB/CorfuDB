@@ -145,7 +145,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     protected void put(@Nonnull final K key,
                           @Nonnull final V value,
                           @Nullable final M metadata) {
-        corfuTable.put(key, new CorfuRecord<>(value, metadata));
+        corfuTable.insert(key, new CorfuRecord<>(value, metadata));
     }
 
     /**
@@ -159,7 +159,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
             log.warn("Deleting a non-existent key {}", key);
             return;
         }
-        corfuTable.remove(key);
+        corfuTable.delete(key);
     }
 
     /**
@@ -216,7 +216,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
         log.trace("enqueue: Adding preCommitListener for Queue: " + e.toString());
         TransactionalContext.getRootContext().addPreCommitListener(addressGetter);
 
-        corfuTable.put(keyOfQueueEntry, queueEntry);
+        corfuTable.insert(keyOfQueueEntry, queueEntry);
         return keyOfQueueEntry;
     }
 
