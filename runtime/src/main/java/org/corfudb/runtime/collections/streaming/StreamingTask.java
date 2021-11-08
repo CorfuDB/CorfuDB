@@ -157,7 +157,7 @@ public class StreamingTask<K extends Message, V extends Message, M extends Messa
         Preconditions.checkState(stream.hasNext());
         ILogData logData = stream.next();
         Optional<CorfuStreamEntries> streamEntries = transform(logData);
-        log.info("producing {} {} on {}", logData.getGlobalAddress(), logData.getType(), listenerId);
+        log.debug("producing {}@{} {} on {}", logData.getEpoch(), logData.getGlobalAddress(), logData.getType(), listenerId);
 
         streamEntries.ifPresent(e -> MicroMeterUtils.time(() -> listener.onNextEntry(e),
                 "stream.notify.duration",
