@@ -31,7 +31,8 @@ public class CorfuStoreBrowserEditorMain {
         listTags,
         listTablesForTag,
         listTagsForTable,
-        listTagsMap
+        listTagsMap,
+        printMetadataMap
     }
 
     private static final String USAGE = "Usage: corfu-browser --host=<host> " +
@@ -41,6 +42,7 @@ public class CorfuStoreBrowserEditorMain {
         "[--truststore=<truststore_file>] [--truststore_password=<truststore_password>] " +
         "[--diskPath=<pathToTempDirForLargeTables>] "+
         "[--numItems=<numItems>] "+
+        "[--address=<address>] "+
         "[--batchSize=<itemsPerTransaction>] "+
         "[--itemSize=<sizeOfEachRecordValue>] "
         + "[--keyToEdit=<keyToEdit>] [--newRecord=<newRecord>] [--tag=<tag>]"
@@ -61,6 +63,7 @@ public class CorfuStoreBrowserEditorMain {
         + "--truststore_password=<truststore_password> Truststore Password\n"
         + "--diskPath=<pathToTempDirForLargeTables> Path to Temp Dir\n"
         + "--numItems=<numItems> Total Number of items for loadTable\n"
+        + "--address=<address> Log global address\n"
         + "--batchSize=<batchSize> Number of records per transaction for loadTable\n"
         + "--itemSize=<itemSize> Size of each item's payload for loadTable\n"
         + "--keyToEdit=<keyToEdit> Key of the record to edit\n"
@@ -239,6 +242,13 @@ public class CorfuStoreBrowserEditorMain {
                 case listAllProtos:
                     browser.printAllProtoDescriptors();
                     break;
+                case printMetadataMap:
+                    if (opts.get("--address") != null) {
+                        long address = Integer.parseInt(opts.get("--address").toString());
+                        browser.printMetadataMap(address);
+                    } else {
+                        log.error("Print metadata map for a specific address. Specify using tag --address");
+                    }
                 default:
                     break;
             }
