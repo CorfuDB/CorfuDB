@@ -65,7 +65,7 @@ public class LayoutManagementView extends AbstractView {
             sealEpoch(layout);
             attemptConsensus(layout);
         } catch (Exception e) {
-            log.error("Error: recovery: {}", e);
+            log.error("Error: recovery: {}.", e);
             return false;
         }
         return true;
