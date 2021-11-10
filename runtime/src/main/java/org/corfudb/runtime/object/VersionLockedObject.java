@@ -22,6 +22,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -680,26 +682,34 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                 ? "Optimistic" : "to " + timestamp);
         long syncTo = (timestamp == Address.OPTIMISTIC) ? Address.MAX : timestamp;
 
-        Runnable syncStreamRunnable = () ->
-                stream.streamUpTo(syncTo)
-                        .forEachOrdered(entry -> {
-                            try {
-                                Object res = applyUpdateUnsafe(entry, timestamp);
-                                if (timestamp == Address.OPTIMISTIC) {
-                                    entry.setUpcallResult(res);
-                                } else if (pendingUpcalls.contains(entry.getGlobalAddress())) {
-                                    log.debug("Sync[{}] Upcall Result {}",
-                                            this, entry.getGlobalAddress());
-                                    upcallResults.put(entry.getGlobalAddress(), res == null
-                                            ? NullValue.NULL_VALUE : res);
-                                    pendingUpcalls.remove(entry.getGlobalAddress());
-                                }
+        Runnable syncStreamRunnable = () -> {
+            AtomicLong numEntries = new AtomicLong();
+            AtomicLong totalEntrySize = new AtomicLong();
+            stream.streamUpTo(syncTo)
+                    .forEachOrdered(entry -> {
+                        numEntries.getAndIncrement();
+                        totalEntrySize.getAndAdd(entry.getSerializedSize());
+                        try {
+                            Object res = applyUpdateUnsafe(entry, timestamp);
+                            if (timestamp == Address.OPTIMISTIC) {
                                 entry.setUpcallResult(res);
-                            } catch (Exception e) {
-                                log.error("Sync[{}] Error: Couldn't execute upcall due to {}", this, e);
-                                throw new UnrecoverableCorfuError(e);
+                            } else if (pendingUpcalls.contains(entry.getGlobalAddress())) {
+                                log.debug("Sync[{}] Upcall Result {}",
+                                        this, entry.getGlobalAddress());
+                                upcallResults.put(entry.getGlobalAddress(), res == null
+                                        ? NullValue.NULL_VALUE : res);
+                                pendingUpcalls.remove(entry.getGlobalAddress());
                             }
-                        });
+                            entry.setUpcallResult(res);
+                        } catch (Exception e) {
+                            log.error("Sync[{}] Error: Couldn't execute upcall due to {}", this, e);
+                            throw new UnrecoverableCorfuError(e);
+                        }
+                    });
+            log.info("syncStreamUnsafe: synced stream {}, numEntries {}, totalEntrySize {}",
+                    stream.getID(), numEntries, totalEntrySize);
+        };
+
         MicroMeterUtils.time(syncStreamRunnable, "vlo.sync.timer",
                 "streamId", getID().toString());
     }
