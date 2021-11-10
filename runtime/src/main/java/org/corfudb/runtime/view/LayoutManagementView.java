@@ -465,7 +465,7 @@ public class LayoutManagementView extends AbstractView {
      */
     public CompletableFuture<Boolean> asyncSequencerBootstrap(
             @NonNull Layout layout, @NonNull ExecutorService service) {
-
+        log.debug("Bootstrapping with layout: " + layout);
         return sequencerRecoveryFuture.updateAndGet(sequencerRecovery -> {
             if (!sequencerRecovery.isDone()) {
                 log.info("triggerSequencerBootstrap: a bootstrap task is already in progress.");
