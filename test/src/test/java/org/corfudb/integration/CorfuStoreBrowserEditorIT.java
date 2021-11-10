@@ -10,12 +10,15 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import org.corfudb.browser.CorfuStoreBrowserEditor;
+import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.view.TableRegistry;
@@ -68,6 +71,63 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
             corfuSingleNodeHost,
             corfuStringNodePort
         );
+    }
+
+    /**
+     * Test print metadata map functionality of Browser
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testPrintMetadataMap() throws Exception {
+        Process corfuServer = null;
+        try {
+            corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+            final String namespace = "namespace";
+            final String tableName = "table";
+            final int totalUpdates = 5;
+            List<CorfuStoreMetadata.Timestamp> committedTimestamps = new ArrayList();
+
+            // Start a Corfu runtime & Corfu Store
+            runtime = createRuntime(singleNodeEndpoint);
+            CorfuStore store = new CorfuStore(runtime);
+
+            // Open one table and write couple of updates
+            final Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.ManagedMetadata> tableA = store.openTable(
+                    namespace,
+                    tableName,
+                    SampleSchema.Uuid.class,
+                    SampleSchema.SampleTableAMsg.class,
+                    SampleSchema.ManagedMetadata.class,
+                    TableOptions.builder().build());
+
+            for(int i = 0; i < totalUpdates; i++) {
+                SampleSchema.Uuid key = SampleSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+                SampleSchema.SampleTableAMsg value = SampleSchema.SampleTableAMsg.newBuilder().setPayload(Integer.toString(i)).build();
+                SampleSchema.ManagedMetadata metadata = SampleSchema.ManagedMetadata.newBuilder().setCreateTime(System.currentTimeMillis())
+                        .setCreateUser("User_" + i).build();
+                try (TxnContext tx = store.txn(namespace)) {
+                    tx.putRecord(tableA, key, value, metadata);
+                    committedTimestamps.add(tx.commit());
+                }
+            }
+
+            // Create CorfuStoreBrowser on its own dedicated runtime
+            CorfuRuntime browserRuntime = createRuntime(singleNodeEndpoint);
+            CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(browserRuntime);
+
+            committedTimestamps.forEach(ts -> {
+                EnumMap<IMetadata.LogUnitMetadataType, Object> metadataMap = browser.printMetadataMap(ts.getSequence());
+                // TODO: fix tx.commit() returning wrong epoch (txSnapshot)
+                // assertThat(ts.getEpoch()).isEqualTo(metadataMap.get(IMetadata.LogUnitMetadataType.EPOCH));
+                assertThat(0L).isEqualTo(metadataMap.get(IMetadata.LogUnitMetadataType.EPOCH));
+                assertThat(ts.getSequence()).isEqualTo(metadataMap.get(IMetadata.LogUnitMetadataType.GLOBAL_ADDRESS));
+                assertThat(Thread.currentThread().getId()).isEqualTo(metadataMap.get(IMetadata.LogUnitMetadataType.THREAD_ID)); });
+        } finally {
+            if (corfuServer != null) {
+                shutdownCorfuServer(corfuServer);
+            }
+        }
     }
 
     /**

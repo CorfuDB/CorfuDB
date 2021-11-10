@@ -8,6 +8,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -26,6 +27,8 @@ import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.InvalidProtocolBufferException;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -91,6 +94,24 @@ public class CorfuStoreBrowserEditor {
         dynamicProtobufSerializer =
             new DynamicProtobufSerializer(runtime);
         runtime.getSerializers().registerSerializer(dynamicProtobufSerializer);
+    }
+
+    /**
+     * Print ILogData metadata map for a given address
+     *
+     * @param address specific address to read metadata map from
+     * @return
+     */
+    public EnumMap<IMetadata.LogUnitMetadataType, Object> printMetadataMap(long address) {
+        ILogData data = runtime.getAddressSpaceView().read(address);
+        System.out.println("\n========== Metadata Map ==========\n");
+        for(Map.Entry<IMetadata.LogUnitMetadataType, Object> entry : data.getMetadataMap().entrySet()) {
+            System.out.println(entry.getKey() + "  :: " + entry.getValue());
+        }
+        System.out.println("\n==================================\n");
+
+
+        return data.getMetadataMap();
     }
 
     /**
@@ -319,7 +340,7 @@ public class CorfuStoreBrowserEditor {
                 CorfuDynamicRecord oldRecord = table.get(dynamicKey);
 
                 if (oldRecord == null) {
-                    log.warn("Unexpedted Null Value found for key {} in table " +
+                    log.warn("Unexpected Null Value found for key {} in table " +
                             "{} and namespace {}.  Stream Id {}", keyToEdit, tableName,
                         namespace, streamUUID);
                 } else {
