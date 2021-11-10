@@ -46,6 +46,7 @@ message LogEntry {
     // less than 4-bytes to encode, since the codecType
     // range is positive and fits in a byte
     optional int32 codecType = 19;
+    optional int64 epoch = 20;
 }
 
 message LogHeader {
