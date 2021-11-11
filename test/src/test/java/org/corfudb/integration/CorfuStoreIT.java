@@ -4,6 +4,8 @@ import com.google.common.collect.Iterables;
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.DynamicMessage;
 
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -23,6 +25,7 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.view.ObjectOpenOption;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.test.SampleSchema;
@@ -31,7 +34,6 @@ import org.corfudb.test.SampleSchema.ManagedResources;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
-import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
 import org.rocksdb.Options;
@@ -39,9 +41,11 @@ import org.rocksdb.Options;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -615,4 +619,76 @@ public class CorfuStoreIT extends AbstractIT {
 
         return corfuServer;
     }
+
+    /**
+     * Verify that LogData metadata information is recovered when entries are no longer
+     * available in the server's cache and are read back from disk. Particularly, test
+     * for the presence of 'epoch' which was missing (until this fix).
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testLogDataPersistedMetadata() throws Exception {
+        Process corfuServer = null;
+        try {
+            corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+            final String namespace = "namespace";
+            final String tableName = "table";
+            Timestamp commitTimestamp;
+
+            // Start a Corfu runtime & Corfu Store
+            runtime = createRuntime(singleNodeEndpoint);
+            CorfuStore store = new CorfuStore(runtime);
+
+            // Open one table and write one update
+            final Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.ManagedMetadata> tableA = store.openTable(
+                    namespace,
+                    tableName,
+                    SampleSchema.Uuid.class,
+                    SampleSchema.SampleTableAMsg.class,
+                    SampleSchema.ManagedMetadata.class,
+                    TableOptions.builder().build());
+
+            SampleSchema.Uuid key = SampleSchema.Uuid.newBuilder().setLsb(0).setMsb(0).build();
+            SampleSchema.SampleTableAMsg value = SampleSchema.SampleTableAMsg.newBuilder().setPayload("Payload Value").build();
+            SampleSchema.ManagedMetadata metadata = SampleSchema.ManagedMetadata.newBuilder().setCreateTime(System.currentTimeMillis())
+                    .setCreateUser("User_IT").build();
+
+            try (TxnContext tx = store.txn(namespace)) {
+                tx.putRecord(tableA, key, value, metadata);
+                commitTimestamp = tx.commit();
+            }
+
+            // Invalidate server cache, so data is loaded from disk (re-built),
+            // here was the previous bug as LogEntry did not persist the epoch
+            // and hence it was lost when data was read from disk
+            runtime.getAddressSpaceView().invalidateServerCaches();
+
+            // Bypass VLO and do a direct read so we can access the LogData
+            ILogData ld = runtime.getAddressSpaceView().read(commitTimestamp.getSequence());
+
+            // TODO: this should match the commitTs epoch, but we have a bug and it returns -1 when no access is done in the TX
+            assertThat(runtime.getLayoutView().getLayout().getEpoch()).isEqualTo(ld.getMetadataMap().get(IMetadata.LogUnitMetadataType.EPOCH));
+            assertThat(commitTimestamp.getSequence()).isEqualTo(ld.getMetadataMap().get(IMetadata.LogUnitMetadataType.GLOBAL_ADDRESS));
+            assertThat(Thread.currentThread().getId()).isEqualTo(ld.getMetadataMap().get(IMetadata.LogUnitMetadataType.THREAD_ID));
+            assertThat(runtime.getParameters().getCodecType()).isEqualTo(ld.getMetadataMap().get(IMetadata.LogUnitMetadataType.PAYLOAD_CODEC));
+            assertThat(runtime.getParameters().getClientId()).isEqualTo(ld.getMetadataMap().get(IMetadata.LogUnitMetadataType.CLIENT_ID));
+            Map<UUID, Long> backpointerMap = (Map<UUID, Long>) ld.getMetadataMap().get(IMetadata.LogUnitMetadataType.BACKPOINTER_MAP);
+            Set<UUID> expectedTableUpdates = new HashSet<>();
+            // Table itself (tableA)
+            expectedTableUpdates.add(CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(namespace, tableName)));
+            // Stream tags for tableA
+            expectedTableUpdates.add(TableRegistry.getStreamIdForStreamTag(namespace, "sample_streamer_1"));
+            expectedTableUpdates.add(TableRegistry.getStreamIdForStreamTag(namespace, "sample_streamer_2"));
+            expectedTableUpdates.add(ObjectsView.TRANSACTION_STREAM_ID);
+
+            assertThat(expectedTableUpdates.size()).isEqualTo(backpointerMap.size());
+            expectedTableUpdates.forEach(table -> assertThat(backpointerMap.keySet()).contains(table));
+        } finally {
+            if (corfuServer != null) {
+                shutdownCorfuServer(corfuServer);
+            }
+        }
+    }
+
 }

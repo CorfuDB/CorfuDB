@@ -478,6 +478,7 @@ public class StreamLogFiles implements StreamLog {
 
         logData.setBackpointerMap(getUUIDLongMap(entry.getBackpointersMap()));
         logData.setGlobalAddress(entry.getGlobalAddress());
+        logData.setEpoch(entry.getEpoch());
 
         if (entry.hasThreadId()) {
             logData.setThreadId(entry.getThreadId());
@@ -879,6 +880,7 @@ public class StreamLogFiles implements StreamLog {
                 .setCodecType(entry.getPayloadCodecType().getId())
                 .setData(ByteString.copyFrom(data))
                 .setGlobalAddress(address)
+                .setEpoch(entry.getEpoch())
                 .addAllStreams(getStrUUID(entry.getStreams()))
                 .putAllBackpointers(getStrLongMap(entry.getBackpointerMap()));
 
