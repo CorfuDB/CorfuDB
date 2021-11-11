@@ -217,7 +217,7 @@ public class StreamsView extends AbstractView {
      */
     public long append(@Nonnull Object object, @Nullable TxResolutionInfo conflictInfo,
                        @Nonnull UUID... streamIDs) {
-        return append(object, conflictInfo, CacheOption.WRITE_THROUGH, streamIDs);
+        return append(object, conflictInfo, CacheOption.WRITE_AROUND, streamIDs);
     }
 
     private AbortCause getAbortCauseFromToken(TokenResponse tokenResponse) {
