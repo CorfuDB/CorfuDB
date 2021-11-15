@@ -295,6 +295,16 @@ public class CorfuRuntime {
          * address discovery mechanism relies on address maps instead of follow backpointers;
          */
         int checkpointReadBatchSize = 5;
+
+        /*
+         * Cache Option for local writes.
+         *
+         * If set to 'false', writes won't be cached on the write path.
+         * Note that even if cacheWrites is set, the addressSpaceView
+         *
+         */
+        boolean cacheWrites = true;
+
         // endregion
 
         /*
@@ -410,6 +420,7 @@ public class CorfuRuntime {
             private Duration streamingPollPeriod = Duration.ofMillis(50);
             private int streamingSchedulerPollBatchSize = 25;
             private int streamingSchedulerPollThreshold = 5;
+            private boolean cacheWrites = true;
 
             public CorfuRuntimeParametersBuilder streamingWorkersThreadPoolSize(int streamingWorkersThreadPoolSize) {
                 this.streamingWorkersThreadPoolSize = streamingWorkersThreadPoolSize;
@@ -641,6 +652,11 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder cacheWrites(boolean cacheWrites) {
+                this.cacheWrites = cacheWrites;
+                return this;
+            }
+
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder runtimeGCPeriod(Duration runtimeGCPeriod) {
                 this.runtimeGCPeriod = runtimeGCPeriod;
                 return this;
@@ -737,6 +753,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setStreamingPollPeriod(streamingPollPeriod);
                 corfuRuntimeParameters.setStreamingSchedulerPollBatchSize(streamingSchedulerPollBatchSize);
                 corfuRuntimeParameters.setStreamingSchedulerPollThreshold(streamingSchedulerPollThreshold);
+                corfuRuntimeParameters.setCacheWrites(cacheWrites);
                 return corfuRuntimeParameters;
             }
         }

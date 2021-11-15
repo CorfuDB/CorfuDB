@@ -256,9 +256,41 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
                 return null;
             }, true);
 
-            // Cache the successful write
+            // Cache the successful write if it is not already present (due to a fast reading thread)
             if (cacheOption == CacheOption.WRITE_THROUGH) {
-                readCache.put(token.getSequence(), ld);
+                // Due to UFO write path optimization---where the number of acquired locks is reduced around
+                // mutations (put/delete) by means of not executing upcalls on these paths---'undoRecords'
+                // are no longer being generated  on the write path. For this reason, NoRollbackExceptions
+                // started showing up with higher frequency, basically under the following access pattern:
+
+                // Take the case of 3 different threads accessing the same table, where:
+                // Thread#1 (the writer thread): accesses the VLO at version X, writes a new update to address X+1.
+                // Thread#2 (the listener thread): accesses the VLO at version X+1 (right after the token has been assigned,
+                // though the writer thread has still not completed the write).
+                // Thread#3 (the old snapshot thread): accesses VLO at version X - delta (old version).
+
+                // Consider the following sequence:
+
+                // Thread#1 acquires the token to write and gets token X+1, starts writing (still not completed)
+                // Thread#2 starts a read at version X+1, fails to find in local cache, so goes fetch the data.
+                // Thread#2 wins and gets the data in the cache, applies the data under the lock and generates undoRecord.
+                // Thread#1 returns and overwrites the cached value (if cache WRITE_THROUGH enabled)
+                // (now with no undoRecord and this won't be generated as upcall will not be executed for mutations)
+                // Thread#3 tries to rollback but fails to do so because X+1 (overwritten value) does not have undoRecord
+                // ---> Unnecessary NRE (but this can be prevented if writer writes around the cache whenever present).
+                try {
+                    readCache.get(token.getSequence(), () -> ld);
+                } catch (ExecutionException | UncheckedExecutionException e) {
+                    // Guava wraps the exceptions thrown from the lower layers, therefore
+                    // we need to unwrap them before throwing them to the upper layers that
+                    // don't understand the guava exceptions
+                    Throwable cause = e.getCause();
+                    if (cause instanceof RuntimeException) {
+                        throw (RuntimeException) cause;
+                    } else {
+                        throw new RuntimeException(cause);
+                    }
+                }
             }
         };
 

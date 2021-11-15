@@ -60,7 +60,6 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         SMREntry smrEntry1 = new SMREntry("method", new Object[]{"arg1"}, Serializers.PRIMITIVE);
         SMREntry smrEntry2 = new SMREntry("method2", new Object[]{"arg1"}, Serializers.PRIMITIVE);
 
-
         getDefaultRuntime().getObjectsView().TXBegin();
         map.put("k1", "v1");
         TransactionalContext.getCurrentContext().logUpdate(stream1Id, smrEntry1);
