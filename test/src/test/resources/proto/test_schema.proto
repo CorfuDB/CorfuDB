@@ -14,7 +14,8 @@ message EventInfo {
     optional uint32 id = 1;
     optional string name = 2;
     optional uint32 port = 3;
-    optional int64 event_time = 4 [(org.corfudb.runtime.schema).secondary_key = true];
+    optional int64 event_time = 4;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "event_time"};
     optional uint32 frequency = 5;
 }
 

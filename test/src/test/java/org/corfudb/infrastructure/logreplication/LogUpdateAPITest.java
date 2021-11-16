@@ -54,7 +54,7 @@ public class LogUpdateAPITest extends AbstractViewTest {
         CorfuStore corfuStore1 = new CorfuStore(runtime1);
 
         Table<Uuid, Uuid, Uuid> tableA = corfuStore1.openTable(namespace, tableAName,
-                Uuid.class, Uuid.class, Uuid.class, TableOptions.builder().build());
+                Uuid.class, Uuid.class, Uuid.class, TableOptions.fromProtoSchema(Uuid.class));
 
         UUID uuidA = CorfuRuntime.getStreamID(tableA.getFullyQualifiedTableName());
 
@@ -73,7 +73,7 @@ public class LogUpdateAPITest extends AbstractViewTest {
         CorfuRuntime runtime2 = getNewRuntime(getDefaultNode()).setTransactionLogging(true).connect();
         CorfuStore corfuStore2 = new CorfuStore(runtime2);
         Table<Uuid, Uuid, Uuid> tableC2 = corfuStore2.openTable(namespace, tableCName,
-                Uuid.class, Uuid.class, Uuid.class, TableOptions.builder().build());
+                Uuid.class, Uuid.class, Uuid.class, TableOptions.fromProtoSchema(Uuid.class));
 
         StreamOptions options = StreamOptions.builder()
                 .ignoreTrimmed(false)
@@ -92,7 +92,7 @@ public class LogUpdateAPITest extends AbstractViewTest {
         Iterator<OpaqueEntry> iterator = streamA.iterator();
 
         Table<Uuid, Uuid, Uuid> tableB = corfuStore1.openTable(namespace, tableBName,
-                Uuid.class, Uuid.class, Uuid.class, TableOptions.builder().build());
+                Uuid.class, Uuid.class, Uuid.class, TableOptions.fromProtoSchema(Uuid.class));
 
         UUID uuidB = CorfuRuntime.getStreamID(tableB.getFullyQualifiedTableName());
 

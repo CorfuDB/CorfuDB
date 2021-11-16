@@ -163,7 +163,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         CorfuRuntime corfuRuntime = getDefaultRuntime();
 
         // Creating Corfu Store using a connected corfu client.
-        CorfuStoreShim corfuStore = new CorfuStoreShim(corfuRuntime);
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
 
         // Define a namespace for the table.
         final String nsxManager = "nsx-manager";
@@ -172,7 +172,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         // Create & Register the table.
         // This is required to initialize the table for the current corfu client.
-        Table<SampleSchema.Uuid, SampleSchema.EventInfo, ManagedResources> table = corfuStore.openTable(
+        Table<SampleSchema.Uuid, SampleSchema.EventInfo, ManagedResources> table = shimStore.openTable(
                 nsxManager,
                 tableName,
                 SampleSchema.Uuid.class,
@@ -189,12 +189,12 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         ManagedResources user_2 = ManagedResources.newBuilder().setCreateUser("user_2").build();
         long expectedVersion = 0L;
 
-        try (ManagedTxnContext txn = corfuStore.tx(nsxManager)) {
+        try (ManagedTxnContext txn = shimStore.tx(nsxManager)) {
             txn.putRecord(table, key1, SampleSchema.EventInfo.newBuilder().setName("abc").build(), user_1);
             txn.commit();
         }
 
-        assertThat(corfuStore.getTable(nsxManager, tableName).get(key1).getMetadata())
+        assertThat(shimStore.getTable(nsxManager, tableName).get(key1).getMetadata())
                 .isEqualTo(ManagedResources.newBuilder()
                         .setCreateUser("user_1")
                         .setCreateTimestamp(0L)
@@ -202,7 +202,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                         .setVersion(expectedVersion).build());
 
         // Set the version field to the correct value 1 and expect that no exception is thrown
-        try (ManagedTxnContext txn = corfuStore.tx(nsxManager)) {
+        try (ManagedTxnContext txn = shimStore.tx(nsxManager)) {
             // Enforce version number
             txn.putRecord(table, key1, SampleSchema.EventInfo.newBuilder().setName("bcd").build(),
                     ManagedResources.newBuilder().setCreateUser("user_2").setVersion(0L).build());
@@ -210,7 +210,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         }
 
         // Honor enforced version number
-        assertThat(corfuStore.getTable(nsxManager, tableName).get(key1).getMetadata())
+        assertThat(shimStore.getTable(nsxManager, tableName).get(key1).getMetadata())
                 .isEqualTo(ManagedResources.newBuilder()
                         .setCreateUser("user_2")
                         .setCreateTimestamp(0L)
@@ -218,32 +218,32 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                         .setVersion(0L).build());
 
         // Now do an update without setting the version field, and it should not get validated!
-        try (ManagedTxnContext txn = corfuStore.tx(nsxManager)) {
+        try (ManagedTxnContext txn = shimStore.tx(nsxManager)) {
             txn.putRecord(table, key1, SampleSchema.EventInfo.newBuilder().setName("cde").build(),
                     user_2);
             txn.commit();
         }
 
-        assertThat(corfuStore.getTable(nsxManager, tableName).get(key1).getMetadata())
+        assertThat(shimStore.getTable(nsxManager, tableName).get(key1).getMetadata())
                 .isEqualTo(ManagedResources.newBuilder()
                         .setCreateUser("user_2")
                         .setCreateTimestamp(0L)
                         .setNestedType(SampleSchema.NestedTypeA.newBuilder().build())
                         .setVersion(expectedVersion).build());
 
-        try (ManagedTxnContext txn = corfuStore.tx(nsxManager)) {
+        try (ManagedTxnContext txn = shimStore.tx(nsxManager)) {
             txn.delete(table, key1);
             txn.commit();
         }
-        assertThat(corfuStore.getTable(nsxManager, tableName).get(key1)).isNull();
+        assertThat(shimStore.getTable(nsxManager, tableName).get(key1)).isNull();
         expectedVersion = 0L;
 
-        try (ManagedTxnContext txn = corfuStore.tx(nsxManager)) {
+        try (ManagedTxnContext txn = shimStore.tx(nsxManager)) {
             txn.putRecord(table, key1, SampleSchema.EventInfo.newBuilder().setName("def").build(), user_2);
             txn.commit();
         }
 
-        assertThat(corfuStore.getTable(nsxManager, tableName).get(key1).getMetadata())
+        assertThat(shimStore.getTable(nsxManager, tableName).get(key1).getMetadata())
                 .isEqualTo(ManagedResources.newBuilder(user_2)
                         .setCreateTimestamp(0L)
                         .setNestedType(SampleSchema.NestedTypeA.newBuilder().build())
@@ -271,7 +271,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     @Test
     public void checkOpenRetriesTXN() throws Exception {
         CorfuRuntime corfuRuntime = getDefaultRuntime();
-        CorfuStoreShim corfuStore = new CorfuStoreShim(corfuRuntime);
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
         final String nsxManager = "nsx-manager"; // namespace for the table
         final String tableName = "EventInfo"; // table name
         final int numThreads = 5;
@@ -279,7 +279,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
                 // Create & Register the table.
                 // This is required to initialize the table for the current corfu client.
-                corfuStore.openTable(nsxManager, tableName, SampleSchema.Uuid.class, SampleSchema.EventInfo.class, null,
+                shimStore.openTable(nsxManager, tableName, SampleSchema.Uuid.class, SampleSchema.EventInfo.class, null,
                         TableOptions.builder().build());
             }
 
@@ -860,8 +860,8 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         Message message = rule;
 
         message.getAllFields().forEach((fieldDescriptor, field) -> {
-            if (fieldDescriptor.getOptions().getExtension(CorfuOptions.schema).getSecondaryKey()) {
-                log.info("Detected secondary key " + fieldDescriptor.getName() + " = " + field);
+            if (fieldDescriptor.getOptions().getExtension(CorfuOptions.schema).getVersion()) {
+                log.info("Detected version in field " + fieldDescriptor.getName() + " = " + field);
             }
         });
 
@@ -948,7 +948,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         CorfuRuntime corfuRuntime = getDefaultRuntime();
 
         // Creating Corfu Store using a connected corfu client.
-        CorfuStoreShim corfuStore = new CorfuStoreShim(corfuRuntime);
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
 
         // Define a namespace for the table.
         final String someNamespace = "some-namespace";
@@ -958,7 +958,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         // Create & Register the table.
         // This is required to initialize the table for the current corfu client.
         Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, Message> table =
-                corfuStore.openTable(
+                shimStore.openTable(
                         someNamespace,
                         tableName,
                         SampleSchema.Uuid.class,
@@ -980,8 +980,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         assertThat(tableRegistry.getRegistryTable().get(tableNameProto).getMetadata().getTableOptions().getStreamTag(0)).isEqualTo(streamTag1);
         assertThat(tableRegistry.getRegistryTable().get(tableNameProto).getMetadata().getTableOptions().getStreamTag(1)).isEqualTo(streamTag2);
-
-        assertThat(tableRegistry.getRegistryTable().get(tableNameProto).getMetadata().getTableOptions().getOwnershipValidation()).isTrue();
     }
 
     private void printMessage(byte[] data, Map<String, FileDescriptorProto> map) throws Exception {

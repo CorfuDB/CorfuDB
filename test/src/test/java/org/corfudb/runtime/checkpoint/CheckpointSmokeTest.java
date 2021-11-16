@@ -831,7 +831,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         Table table = corfuStoreWriter.openTable(namespace, streamName,
                 SampleSchema.Uuid.class,
                 SampleSchema.FirewallRule.class, SampleSchema.ManagedMetadata.class,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(SampleSchema.FirewallRule.class));
         TxnContext txn = corfuStoreWriter.txn(namespace);
         Map<SampleSchema.Uuid, CorfuRecord<SampleSchema.FirewallRule, SampleSchema.ManagedMetadata>> mockedMap = new HashMap<>();
         for (int i = 0; i < numKeys; i++) {
@@ -882,7 +882,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                         namespace, streamName,
                         SampleSchema.Uuid.class,
                         SampleSchema.FirewallRule.class, SampleSchema.ManagedMetadata.class,
-                        TableOptions.builder().build());
+                        TableOptions.fromProtoSchema(SampleSchema.FirewallRule.class));
         TxnContext txnReader = corfuStoreReader.txn(namespace);
 
         assertThat(mockedMap.size()).isEqualTo(tableRead.count());

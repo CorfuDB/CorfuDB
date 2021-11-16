@@ -111,7 +111,7 @@ public class CorfuStoreIT extends AbstractIT {
                 Uuid.class,
                 Uuid.class,
                 ManagedResources.class,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(Uuid.class));
 
         final long keyUuid = 1L;
         final long valueUuid = 3L;
@@ -212,7 +212,7 @@ public class CorfuStoreIT extends AbstractIT {
 
         Table<Uuid, Uuid, ManagedResources> table1 = store3.openTable(namespace,
                 tableName, Uuid.class, Uuid.class, ManagedResources.class,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(Uuid.class));
         try (TxnContext txn = store3.txn(namespace)) {
             CorfuStoreEntry<Uuid, Uuid, ManagedResources> record = txn.getRecord(tableName, uuidKey);
             assertThat(record.getMetadata().getCreateTimestamp()).isEqualTo(newMetadataUuid);
@@ -647,7 +647,7 @@ public class CorfuStoreIT extends AbstractIT {
                     SampleSchema.Uuid.class,
                     SampleSchema.SampleTableAMsg.class,
                     SampleSchema.ManagedMetadata.class,
-                    TableOptions.builder().build());
+                    TableOptions.fromProtoSchema(SampleSchema.SampleTableAMsg.class));
 
             SampleSchema.Uuid key = SampleSchema.Uuid.newBuilder().setLsb(0).setMsb(0).build();
             SampleSchema.SampleTableAMsg value = SampleSchema.SampleTableAMsg.newBuilder().setPayload("Payload Value").build();

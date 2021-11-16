@@ -154,7 +154,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
     }
 
     public void testEndToEndSnapshotAndLogEntrySyncUFO(int totalNumMaps) throws Exception {
-        // For the purpose of this test, standby should on;y update status 3 times:
+        // For the purpose of this test, standby should only update status 3 times:
         // (1) When initializing LR : is_data_consistent = false
         // (2) When starting snapshot sync apply : is_data_consistent = false
         // (3) When completing snapshot sync apply : is_data_consistent = true
@@ -170,7 +170,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
                     LogReplicationMetadata.ReplicationStatusKey.class,
                     LogReplicationMetadata.ReplicationStatusVal.class,
                     null,
-                    TableOptions.builder().build());
+                    TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
             CountDownLatch statusUpdateLatch = new CountDownLatch(totalStandbyStatusUpdates);
             ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch);
@@ -293,11 +293,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
             Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapActive = corfuStoreActive.openTable(
                     NAMESPACE, mapName, Sample.StringKey.class, Sample.IntValueTag.class, Sample.Metadata.class,
-                    TableOptions.builder().build());
+                    TableOptions.fromProtoSchema(Sample.IntValueTag.class));
 
             Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapStandby = corfuStoreStandby.openTable(
                     NAMESPACE, mapName, Sample.StringKey.class, Sample.IntValueTag.class, Sample.Metadata.class,
-                    TableOptions.builder().build());
+                    TableOptions.fromProtoSchema(Sample.IntValueTag.class));
 
             mapNameToMapActive.put(mapName, mapActive);
             mapNameToMapStandby.put(mapName, mapStandby);

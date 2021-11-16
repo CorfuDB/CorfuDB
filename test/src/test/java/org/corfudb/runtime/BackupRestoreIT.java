@@ -170,7 +170,7 @@ public class BackupRestoreIT extends AbstractIT {
                 SampleSchema.Uuid.class,
                 SampleSchema.EventInfo.class,
                 SampleSchema.Uuid.class,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(SampleSchema.EventInfo.class));
     }
 
     /**
@@ -190,7 +190,7 @@ public class BackupRestoreIT extends AbstractIT {
                 SampleSchema.Uuid.class,
                 SampleSchema.SampleTableAMsg.class,
                 SampleSchema.Uuid.class,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(SampleSchema.SampleTableAMsg.class));
     }
 
     /**

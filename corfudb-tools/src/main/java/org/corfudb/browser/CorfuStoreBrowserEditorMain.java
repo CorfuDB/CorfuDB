@@ -7,6 +7,7 @@ import com.google.common.base.Preconditions;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 
@@ -93,6 +94,7 @@ public class CorfuStoreBrowserEditorMain {
                 .cacheDisabled(true)
                 .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
                 .systemDownHandlerTriggerLimit(SYSTEM_DOWN_RETRIES)
+                .priorityLevel(CorfuMessage.PriorityLevel.HIGH)
                 .tlsEnabled(tlsEnabled);
             if (tlsEnabled) {
                 String keystore = opts.get("--keystore").toString();

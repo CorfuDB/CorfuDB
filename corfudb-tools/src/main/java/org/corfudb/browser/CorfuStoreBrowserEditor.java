@@ -438,7 +438,7 @@ public class CorfuStoreBrowserEditor {
     public int loadTable(String namespace, String tablename, int numItems, int batchSize, int itemSize) {
         CorfuStoreShim store = new CorfuStoreShim(runtime);
         try {
-            TableOptions.TableOptionsBuilder<Object, Object> optionsBuilder = TableOptions.builder();
+            TableOptions.TableOptionsBuilder optionsBuilder = TableOptions.builder();
             if (diskPath != null) {
                 optionsBuilder.persistentDataPath(Paths.get(diskPath));
             }
@@ -447,7 +447,8 @@ public class CorfuStoreBrowserEditor {
                     ExampleTableName.class,
                     ExampleTableName.class,
                     ManagedMetadata.class,
-                    optionsBuilder.build());
+                    TableOptions.fromProtoSchema(ExampleTableName.class, optionsBuilder.build())
+            );
 
             byte[] array = new byte[itemSize];
 
@@ -492,7 +493,7 @@ public class CorfuStoreBrowserEditor {
         CorfuStoreShim store = new CorfuStoreShim(runtime);
         final Table<ExampleTableName, ExampleTableName, ManagedMetadata> table;
         try {
-            TableOptions.TableOptionsBuilder<Object, Object> optionsBuilder = TableOptions.builder();
+            TableOptions.TableOptionsBuilder optionsBuilder = TableOptions.builder();
             if (diskPath != null) {
                 optionsBuilder.persistentDataPath(Paths.get(diskPath));
             }
@@ -501,7 +502,8 @@ public class CorfuStoreBrowserEditor {
                     ExampleTableName.class,
                     ExampleTableName.class,
                     ManagedMetadata.class,
-                    optionsBuilder.build());
+                    TableOptions.fromProtoSchema(ExampleTableName.class, optionsBuilder.build())
+            );
         } catch (Exception ex) {
             log.error("Unable to open table " + namespace + "$" + tableName);
             throw new RuntimeException("Unable to open table.");

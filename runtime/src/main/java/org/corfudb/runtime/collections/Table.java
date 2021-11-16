@@ -110,7 +110,9 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                 .setTypeToken(CorfuTable.<K, CorfuRecord<V, M>>getTableType())
                 .setStreamName(this.fullyQualifiedTableName)
                 .setSerializer(serializer)
-                .setArguments(new ProtobufIndexer(tableParameters.getValueSchema()), streamingMapSupplier, versionPolicy)
+                .setArguments(new ProtobufIndexer(tableParameters.getValueSchema(),
+                        tableParameters.getSchemaOptions()),
+                        streamingMapSupplier, versionPolicy)
                 .setStreamTags(streamTags)
                 .open();
         this.keyClass = tableParameters.getKClass();

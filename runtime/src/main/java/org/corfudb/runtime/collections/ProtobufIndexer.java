@@ -1,6 +1,5 @@
 package org.corfudb.runtime.collections;
 
-import com.google.protobuf.Descriptors;
 import com.google.protobuf.Descriptors.OneofDescriptor;
 import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.Message;
@@ -35,8 +34,8 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
     // Map from secondary index name to index path (index fully qualified name)
     private final HashMap<String, String> secondaryIndexNameToPath = new HashMap<>();
 
-    ProtobufIndexer(Message payloadSchema) {
-        payloadSchema.getDescriptorForType().getFields().forEach(this::registerIndices);
+    ProtobufIndexer(Message payloadSchema, CorfuOptions.SchemaOptions schemaOptions) {
+        registerSecondaryIndex(payloadSchema, schemaOptions);
     }
 
     private <T> Index.Spec<Message, CorfuRecord<Message, Message>, ?>
@@ -278,38 +277,29 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
         return repeatedMessage;
     }
 
-    /**
-     * Register a Secondary Index
-     *
-     * @param fieldDescriptor describes the root field of a proto MESSAGE type
-     */
-    private void registerIndices(final Descriptors.FieldDescriptor fieldDescriptor) {
-        if (fieldDescriptor.getOptions().getExtension(CorfuOptions.schema).getSecondaryKey()) {
-            final String indexName = fieldDescriptor.getName();
-            if (fieldDescriptor.getType() == FieldDescriptor.Type.GROUP) {
-                throw new IllegalArgumentException("group is a deprecated, unsupported type");
-            }
-            indices.put(indexName, getIndex(indexName, indexName, fieldDescriptor));
-        } else if (fieldDescriptor.getOptions().getExtension(CorfuOptions.schema).getNestedSecondaryKeyCount() > 0) {
-
-            for (int i=0; i<fieldDescriptor.getOptions().getExtension(CorfuOptions.schema).getNestedSecondaryKeyCount(); i++) {
-                CorfuOptions.NestedSecondaryIndex secondaryIndex = fieldDescriptor.getOptions().getExtension(CorfuOptions.schema)
-                        .getNestedSecondaryKey(i);
+    private void registerSecondaryIndex(final Message payloadSchema,
+                                        final CorfuOptions.SchemaOptions schemaOptions) {
+        if (schemaOptions.getSecondaryKeyCount() > 0) {
+            for (int i = 0; i < schemaOptions.getSecondaryKeyCount(); i++) {
+                CorfuOptions.SecondaryIndex secondaryIndex = schemaOptions
+                        .getSecondaryKey(i);
 
                 // Remove whitespaces and/or invisible characters
                 String indexPath = secondaryIndex.getIndexPath().replaceAll("\\s+", "");
                 String indexName;
 
+                String[] nestedFields = indexPath.split("\\.");
                 // Index Name is optional, if not present, default to last attributes name
-                if (secondaryIndex.hasIndexName()) {
+                // Ignore empty index names
+                if (secondaryIndex.hasIndexName() && secondaryIndex.getIndexName().length() > 0) {
                     indexName = secondaryIndex.getIndexName().replaceAll("\\s+", "");
                 } else {
                     // Get all nested fields for secondary key (dot-separated), format example: person.fullName.lastName
-                    String[] nestedFields = indexPath.split("\\.");
                     indexName = nestedFields[(nestedFields.length) - 1];
                 }
 
-                validateNestedSecondaryKey(indexPath, fieldDescriptor);
+                FieldDescriptor fieldDescriptor = payloadSchema.getDescriptorForType().findFieldByName(nestedFields[0]);
+                validateSecondaryKey(indexPath, fieldDescriptor);
 
                 // Place index name and a function on how the indexed value is computed
                 indices.put(indexPath, getNestedIndex(indexPath, indexName));
@@ -334,23 +324,25 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
     }
 
     /**
-     * Validate nested secondary key string
-     *
+     * Validate secondary key string
      */
-    private void validateNestedSecondaryKey(String indexPath, FieldDescriptor fieldDescriptor) {
+    private void validateSecondaryKey(String indexPath, FieldDescriptor fieldDescriptor) {
+        if (fieldDescriptor == null) {
+            throw new IllegalArgumentException("Invalid secondary key ="+indexPath+". Field does not exist");
+        }
+
         if (!indexPath.isEmpty()) {
             // Get all nested fields for a single secondary key (dot-separated), format example: person.fullName.lastName
             String[] nestedFields = indexPath.split("\\.");
-
-            // Confirm start of secondary key corresponds to the annotated field descriptor
-            if (!nestedFields[0].equals(fieldDescriptor.toProto().getName())) {
-                throw new IllegalArgumentException("Invalid nested secondary key=" + indexPath + ", invalid field :: " + nestedFields[0]);
-            }
 
             FieldDescriptor nestedDescriptor = fieldDescriptor;
 
             // Skip root (index 0) field which corresponds to the initial fieldDescriptor
             for (int i = 1; i < nestedFields.length; i++) {
+                if (!nestedDescriptor.getType().equals(FieldDescriptor.Type.MESSAGE)) {
+                    throw new IllegalArgumentException("Invalid secondary key=" +indexPath+" nested field "+nestedFields[i - 1]+" is a primitive type");
+                }
+                // proceed down get the next level of nested descriptor only if it is non-primitive
                 nestedDescriptor = nestedDescriptor.getMessageType().findFieldByName(nestedFields[i]);
 
                 if (nestedDescriptor == null) {
