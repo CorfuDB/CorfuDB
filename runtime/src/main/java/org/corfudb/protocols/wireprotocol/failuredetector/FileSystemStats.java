@@ -13,10 +13,10 @@ import lombok.ToString;
 public class FileSystemStats {
 
     @NonNull
-    private final ResourceQuotaStats quota;
+    private final ResourceQuotaStats resourceQuotaStats;
 
     @NonNull
-    private final PartitionAttrStat partitionAttr;
+    private final FileSystemStats.PartitionAttributeStats partitionAttributeStats;
 
     @AllArgsConstructor
     @EqualsAndHashCode
@@ -43,8 +43,11 @@ public class FileSystemStats {
     @Getter
     @EqualsAndHashCode
     @ToString
-    public static class PartitionAttrStat {
+    public static class PartitionAttributeStats {
         private final boolean readOnly;
+        private final long availableSpace;
+        private final long totalSpace;
+
 
         public boolean isWritable() {
             return !readOnly;

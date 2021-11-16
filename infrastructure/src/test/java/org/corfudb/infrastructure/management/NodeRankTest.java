@@ -2,8 +2,7 @@ package org.corfudb.infrastructure.management;
 
 
 import org.corfudb.infrastructure.NodeNames;
-import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
-import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttrStat;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttributeStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.ResourceQuotaStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank.NodeRankByPartitionAttributes;
@@ -99,6 +98,6 @@ public class NodeRankTest {
     }
 
     private NodeRankByPartitionAttributes buildAttributes(String node, boolean readOnly) {
-        return new NodeRankByPartitionAttributes(node, new PartitionAttrStat(readOnly));
+        return new NodeRankByPartitionAttributes(node, new PartitionAttributeStats(readOnly, 0, 0));
     }
 }

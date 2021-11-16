@@ -4,7 +4,7 @@ import com.google.common.collect.ImmutableList;
 import org.corfudb.infrastructure.NodeNames;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
-import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttrStat;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttributeStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.ResourceQuotaStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank.NodeRankByPartitionAttributes;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank.NodeRankByResourceQuota;
@@ -50,7 +50,7 @@ class FileSystemAdvisorTest {
         final long epoch = 0;
         final String localEndpoint = "c";
         ResourceQuotaStats quota = buildRegularQuota();
-        FileSystemStats fsStats = new FileSystemStats(quota, Mockito.mock(PartitionAttrStat.class));
+        FileSystemStats fsStats = new FileSystemStats(quota, Mockito.mock(PartitionAttributeStats.class));
 
         ClusterState cluster = buildClusterState(
                 localEndpoint,
@@ -73,7 +73,8 @@ class FileSystemAdvisorTest {
         final String localEndpoint = "c";
 
         ResourceQuotaStats quota = Mockito.mock(ResourceQuotaStats.class);
-        PartitionAttrStat attrs = new PartitionAttrStat(true);
+        FileSystemStats.PartitionAttributeStats attrs =
+                new FileSystemStats.PartitionAttributeStats(true, 0, 0);
         FileSystemStats fsStats = new FileSystemStats(quota, attrs);
 
         ClusterState cluster = buildClusterState(
@@ -105,7 +106,7 @@ class FileSystemAdvisorTest {
 
         return new FileSystemStats(
                 new ResourceQuotaStats(limit, used),
-                Mockito.mock(PartitionAttrStat.class)
+                Mockito.mock(FileSystemStats.PartitionAttributeStats.class)
         );
     }
 }

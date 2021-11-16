@@ -25,7 +25,7 @@ import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
-import org.corfudb.infrastructure.log.FileSystemAgent.ResourceQuotaConfig;
+import org.corfudb.infrastructure.log.FileSystemAgent.FileSystemConfig;
 import org.corfudb.infrastructure.log.StreamLogFiles.Checksum;
 import org.corfudb.infrastructure.log.LogFormat.Metadata;
 import org.corfudb.infrastructure.log.LogFormat.LogHeader;
@@ -748,10 +748,10 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
 
         final double limit = 100.0;
-        FileSystemAgent.init(new ResourceQuotaConfig(parentDir.toPath(), limit));
+        FileSystemAgent.init(new FileSystemConfig(parentDir.toPath(), limit));
         long parentSize = FileSystemAgent.getResourceQuota().getUsed().get();
 
-        FileSystemAgent.init(new ResourceQuotaConfig(childDir.toPath(), limit));
+        FileSystemAgent.init(new FileSystemConfig(childDir.toPath(), limit));
         long childDirSize = FileSystemAgent.getResourceQuota().getUsed().get();
 
         assertThat(parentSize).isEqualTo(parentDirFilePayloadSize + childDirFilePayloadSize);

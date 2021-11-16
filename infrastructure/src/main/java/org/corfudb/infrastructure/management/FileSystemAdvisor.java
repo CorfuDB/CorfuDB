@@ -33,13 +33,13 @@ public class FileSystemAdvisor {
         NavigableSet<NodeRankByResourceQuota> set = new TreeSet<>();
         for (NodeState node : clusterState.getNodes().values()) {
             node.getFileSystem().ifPresent(fsStats -> {
-                if (!fsStats.getQuota().isExceeded()) {
+                if (!fsStats.getResourceQuotaStats().isExceeded()) {
                     return;
                 }
 
                 NodeRankByResourceQuota quota = new NodeRankByResourceQuota(
                         node.getConnectivity().getEndpoint(),
-                        fsStats.getQuota()
+                        fsStats.getResourceQuotaStats()
                 );
                 set.add(quota);
             });
@@ -77,10 +77,10 @@ public class FileSystemAdvisor {
         NavigableSet<NodeRankByPartitionAttributes> set = new TreeSet<>();
         for (NodeState node : clusterState.getNodes().values()) {
             node.getFileSystem().ifPresent(fsStats -> {
-                if (fsStats.getPartitionAttr().isReadOnly()) {
+                if (fsStats.getPartitionAttributeStats().isReadOnly()) {
                     NodeRankByPartitionAttributes quota = new NodeRankByPartitionAttributes(
                             node.getConnectivity().getEndpoint(),
-                            fsStats.getPartitionAttr()
+                            fsStats.getPartitionAttributeStats()
                     );
                     set.add(quota);
                 }
@@ -121,11 +121,11 @@ public class FileSystemAdvisor {
         return maybeFileSystem
                 .filter(fileSystem -> {
                     log.trace("No node to heal, quota is exceeded");
-                    return fileSystem.getQuota().isNotExceeded();
+                    return fileSystem.getResourceQuotaStats().isNotExceeded();
                 })
                 .map(fileSystem -> new NodeRankByResourceQuota(
                         clusterState.getLocalEndpoint(),
-                        fileSystem.getQuota()
+                        fileSystem.getResourceQuotaStats()
                 ));
     }
 

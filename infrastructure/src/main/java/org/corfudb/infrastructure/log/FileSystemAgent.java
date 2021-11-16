@@ -6,15 +6,19 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.log.FileSystemAgent.PartitionAgent.PartitionAttr;
+import org.corfudb.infrastructure.log.FileSystemAgent.PartitionAgent.PartitionAttribute;
 import org.corfudb.runtime.exceptions.LogUnitException;
 
+import java.io.File;
 import java.io.IOException;
+import java.nio.file.FileStore;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributeView;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
@@ -24,22 +28,22 @@ import java.util.function.Supplier;
 public class FileSystemAgent {
     private static Optional<FileSystemAgent> INSTANCE = Optional.empty();
 
-    private final ResourceQuotaConfig config;
+    private final FileSystemConfig config;
     // Resource quota to track the log size
     @Getter
     private final ResourceQuota logSizeQuota;
 
     @Getter
-    private final PartitionAttr partitionAttr;
+    private final PartitionAttribute partitionAttribute;
 
-    private FileSystemAgent(ResourceQuotaConfig config) {
+    private FileSystemAgent(FileSystemConfig config) {
         this.config = config;
 
         long initialLogSize = estimateSize();
         long logSizeLimit = getLogSizeLimit();
 
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
-        partitionAttr = new PartitionAgent().getPartitionAttr();
+        partitionAttribute = new PartitionAgent(config).getPartitionAttribute();
 
         logSizeQuota.consume(initialLogSize);
         log.info("StreamLogFiles: {} size is {} bytes, limit {}", config.logDir, initialLogSize, logSizeLimit);
@@ -53,7 +57,7 @@ public class FileSystemAgent {
         return (long) (fileSystemCapacity * config.limitPercentage / 100);
     }
 
-    public static void init(ResourceQuotaConfig config) {
+    public static void init(FileSystemConfig config) {
         INSTANCE = Optional.of(new FileSystemAgent(config));
     }
 
@@ -66,9 +70,9 @@ public class FileSystemAgent {
         return INSTANCE.orElseThrow(err).logSizeQuota;
     }
 
-    public static PartitionAttr getPartition() {
+    public static PartitionAttribute getPartition() {
         Supplier<IllegalStateException> err = () -> new IllegalStateException("FileSystemAgent not configured");
-        return INSTANCE.orElseThrow(err).partitionAttr;
+        return INSTANCE.orElseThrow(err).partitionAttribute;
     }
 
     /**
@@ -114,11 +118,23 @@ public class FileSystemAgent {
         }
     }
 
-    public static class ResourceQuotaConfig {
+    private BasicFileAttributes setFileAttributes() {
+        BasicFileAttributeView fileAttributeView = Files.getFileAttributeView(
+                config.logDir, BasicFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+        BasicFileAttributes basicFileAttributes = null;
+        try {
+            basicFileAttributes = fileAttributeView.readAttributes();
+        } catch (Exception e) {
+            log.error("getPartitionStats: Error while reading from filesystem", e);
+        }
+        return basicFileAttributes;
+    }
+
+    public static class FileSystemConfig {
         private final Path logDir;
         private final double limitPercentage;
 
-        public ResourceQuotaConfig(ServerContext serverContext) {
+        public FileSystemConfig(ServerContext serverContext) {
             String limitParam = serverContext.getServerConfig(String.class, "--log-size-quota-percentage");
             limitPercentage = Double.parseDouble(limitParam);
 
@@ -128,7 +144,7 @@ public class FileSystemAgent {
             logDir = Paths.get(logPath, "log");
         }
 
-        public ResourceQuotaConfig(Path logDir, double limitPercentage) {
+        public FileSystemConfig(Path logDir, double limitPercentage) {
             this.logDir = logDir;
             this.limitPercentage = limitPercentage;
             checkLimits();
@@ -144,16 +160,43 @@ public class FileSystemAgent {
 
     public static class PartitionAgent {
         @Getter
-        private PartitionAttr partitionAttr;
-
-        public PartitionAgent() {
+        private PartitionAttribute partitionAttribute;
+        private final Path logPartition;
+        private final FileSystemConfig config;
+        public PartitionAgent(FileSystemConfig config) {
+            this.config =  config;
+            logPartition = Paths.get(config.logDir.getRoot().toString(), config.logDir.subpath(0, 1).toString());
+            partitionAttribute = setPartitionAttribute();
             //we need a scheduler
+        }
+
+        private PartitionAttribute setPartitionAttribute() {
+            try {
+                File logDirectoryFile = config.logDir.toFile();
+                FileStore fileStore = Files.getFileStore(config.logDir);
+                partitionAttribute = new PartitionAttribute(
+                        fileStore.isReadOnly() || !logDirectoryFile.canWrite(),
+                        fileStore.getUsableSpace(),
+                        fileStore.getTotalSpace()
+                );
+            } catch (IOException e) {
+                log.error("setPartitionStats: Error while getting PartitionStats", e);
+            }
+
+            return partitionAttribute;
+        }
+
+        public PartitionAttribute resetPartitionInfo() {
+            partitionAttribute = setPartitionAttribute();
+            return partitionAttribute;
         }
 
         @AllArgsConstructor
         @Getter
-        public static class PartitionAttr {
+        public static class PartitionAttribute {
             private final boolean readOnly;
+            private final long availableSpace;
+            private final long totalSpace;
         }
     }
 }

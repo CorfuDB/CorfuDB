@@ -6,7 +6,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
 import org.corfudb.protocols.CorfuProtocolCommon;
-import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttrStat;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttributeStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.ResourceQuotaStats;
 
 /**
@@ -88,7 +88,7 @@ public class NodeRank implements Comparable<NodeRank>, NodeRanking {
     @ToString
     public static class NodeRankByPartitionAttributes implements Comparable<NodeRankByPartitionAttributes>, NodeRanking {
         private final String endpoint;
-        private final PartitionAttrStat attr;
+        private final PartitionAttributeStats attr;
 
         @Override
         public int compareTo(NodeRankByPartitionAttributes other) {

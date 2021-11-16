@@ -8,7 +8,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.log.FileSystemAgent;
-import org.corfudb.infrastructure.log.FileSystemAgent.PartitionAgent.PartitionAttr;
+import org.corfudb.infrastructure.log.FileSystemAgent.PartitionAgent.PartitionAttribute;
 import org.corfudb.infrastructure.management.ClusterAdvisor;
 import org.corfudb.infrastructure.management.ClusterAdvisorFactory;
 import org.corfudb.infrastructure.management.ClusterStateContext;
@@ -28,7 +28,7 @@ import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics.FailureDetectorAction;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
-import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttrStat;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttributeStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.ResourceQuotaStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank.NodeRankByPartitionAttributes;
@@ -42,18 +42,14 @@ import org.corfudb.util.concurrent.SingletonResource;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.NavigableSet;
 import java.util.Optional;
 import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 /**
  * Remote Monitoring Service constitutes of failure and healing monitoring and handling.
@@ -303,8 +299,12 @@ public class RemoteMonitoringService implements ManagementService {
             ResourceQuota quota = FileSystemAgent.getResourceQuota();
             ResourceQuotaStats quotaStats = new ResourceQuotaStats(quota.getLimit(), quota.getUsed().get());
 
-            PartitionAttr partition = FileSystemAgent.getPartition();
-            PartitionAttrStat partitionStats = new PartitionAttrStat(partition.isReadOnly());
+            PartitionAttribute partition = FileSystemAgent.getPartition();
+            PartitionAttributeStats partitionStats = new PartitionAttributeStats(
+                    partition.isReadOnly(),
+                    partition.getAvailableSpace(),
+                    partition.getTotalSpace()
+            );
 
             FileSystemStats fsStats = new FileSystemStats(quotaStats, partitionStats);
 

@@ -6,9 +6,10 @@ import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
-import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttrStat;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttributeStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.ResourceQuotaStats;
 import org.corfudb.runtime.proto.FileSystemStats.FileSystemStatsMsg;
+import org.corfudb.runtime.proto.FileSystemStats.PartitionAttributeStatsMsg;
 import org.corfudb.runtime.proto.FileSystemStats.ResourceQuotaStatsMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
@@ -73,12 +74,19 @@ public final class CorfuProtocolManagement {
                 .setSequencerMetrics(getSequencerMetricsMsg(nodeState.getSequencerMetrics()));
 
         nodeState.getFileSystem().ifPresent(fsStats -> {
-            ResourceQuotaStatsMsg quotaMsg = ResourceQuotaStatsMsg.newBuilder()
-                    .setLimit(fsStats.getQuota().getLimit())
-                    .setUsed(fsStats.getQuota().getUsed())
+            ResourceQuotaStatsMsg resourceQuotaStatsMsg = ResourceQuotaStatsMsg.newBuilder()
+                    .setLimit(fsStats.getResourceQuotaStats().getLimit())
+                    .setUsed(fsStats.getResourceQuotaStats().getUsed())
+                    .build();
+            PartitionAttributeStatsMsg partitionAttributeStatsMsg =
+                    PartitionAttributeStatsMsg.newBuilder()
+                    .setIsReadOnly(fsStats.getPartitionAttributeStats().isReadOnly())
+                    .setAvailableSpace(fsStats.getPartitionAttributeStats().getAvailableSpace())
+                    .setTotalSpace(fsStats.getPartitionAttributeStats().getTotalSpace())
                     .build();
             FileSystemStatsMsg fsStatsMsg = FileSystemStatsMsg.newBuilder()
-                    .setQuota(quotaMsg)
+                    .setResourceQuotaStats(resourceQuotaStatsMsg)
+                    .setPartitionAttributeStats(partitionAttributeStatsMsg)
                     .build();
 
             responseBuilder.setFileSystem(fsStatsMsg);
@@ -100,13 +108,17 @@ public final class CorfuProtocolManagement {
     public static NodeState getNodeState(QueryNodeResponseMsg msg) {
         Optional<FileSystemStats> maybeFsStats;
         if(msg.hasFileSystem()){
-            ResourceQuotaStatsMsg quotaMsg = msg.getFileSystem().getQuota();
+            ResourceQuotaStatsMsg quotaMsg = msg.getFileSystem().getResourceQuotaStats();
             ResourceQuotaStats quotaStats = new ResourceQuotaStats(quotaMsg.getLimit(), quotaMsg.getUsed());
-            PartitionAttrStat attrStats = null;// = new PartitionAttrStat(quotaMsg.isRadOnly());
-            if (attrStats == null) {
-                throw new IllegalStateException("intialize attrStats");
-            }
-            FileSystemStats fsStats = new FileSystemStats(quotaStats, attrStats);
+
+            PartitionAttributeStatsMsg partitionAttributeStatsMsg = msg.getFileSystem().getPartitionAttributeStats();
+            PartitionAttributeStats partitionAttributeStats = new PartitionAttributeStats(
+                    partitionAttributeStatsMsg.getIsReadOnly(),
+                    partitionAttributeStatsMsg.getAvailableSpace(),
+                    partitionAttributeStatsMsg.getTotalSpace()
+            );
+
+            FileSystemStats fsStats = new FileSystemStats(quotaStats, partitionAttributeStats);
             maybeFsStats = Optional.of(fsStats);
         } else {
             maybeFsStats = Optional.empty();

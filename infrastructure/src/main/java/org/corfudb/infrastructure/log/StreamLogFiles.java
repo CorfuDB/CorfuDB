@@ -17,7 +17,7 @@ import org.corfudb.common.compression.Codec;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.log.FileSystemAgent.ResourceQuotaConfig;
+import org.corfudb.infrastructure.log.FileSystemAgent.FileSystemConfig;
 import org.corfudb.infrastructure.log.LogFormat.CheckpointEntryType;
 import org.corfudb.infrastructure.log.LogFormat.DataType;
 import org.corfudb.infrastructure.log.LogFormat.LogEntry;
@@ -43,15 +43,11 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.FileAlreadyExistsException;
-import java.nio.file.FileStore;
 import java.nio.file.FileSystems;
-import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -137,7 +133,7 @@ public class StreamLogFiles implements StreamLog {
 
         initStreamLogDirectory();
 
-        ResourceQuotaConfig config = new ResourceQuotaConfig(serverContext);
+        FileSystemConfig config = new FileSystemConfig(serverContext);
         FileSystemAgent.init(config);
 
         logUnitSizeBytes = MicroMeterUtils.gauge(logUnitSizeMetricName + ".bytes", new AtomicDouble(0));
