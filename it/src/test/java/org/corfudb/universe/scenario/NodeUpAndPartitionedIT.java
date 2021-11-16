@@ -74,7 +74,6 @@ public class NodeUpAndPartitionedIT extends GenericIntegrationTest {
             waitForNextEpoch(corfuClient, currEpoch + 1);
             assertThat(corfuClient.getLayout().getUnresponsiveServers())
                     .containsExactly(server1.getEndpoint());
-            currEpoch++;
 
             // Partition the responsive server0 from both unresponsive server1
             // and responsive server2 and reconnect server 1. Wait for layout's unresponsive
@@ -95,7 +94,6 @@ public class NodeUpAndPartitionedIT extends GenericIntegrationTest {
             assertThat(unresponsiveServers)
                     .as("Wrong number of unresponsive servers: %s", unresponsiveServers)
                     .containsExactly(server0.getEndpoint());
-            currEpoch += 2;
 
             waitUninterruptibly(Duration.ofSeconds(20));
 
@@ -108,8 +106,7 @@ public class NodeUpAndPartitionedIT extends GenericIntegrationTest {
 
             // Heal all the link failures
             server0.reconnect(Arrays.asList(server1, server2));
-            waitForNextEpoch(corfuClient, currEpoch + 1);
-            currEpoch++;
+            waitForLayoutChange(layout -> layout.getUnresponsiveServers().isEmpty(), corfuClient);
 
             Duration sleepDuration = Duration.ofSeconds(1);
             // Verify cluster status is STABLE

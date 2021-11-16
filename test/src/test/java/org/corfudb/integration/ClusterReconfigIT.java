@@ -792,7 +792,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         // Restart server 3 and wait for heal node workflow to modify the layout.
         corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
-        waitForEpochChange(refreshedEpoch -> refreshedEpoch > layoutAfterFailure.getEpoch(), runtime);
+        waitForLayoutChange(l -> l.getUnresponsiveServers().isEmpty(), runtime);
 
         // Write at address 5-9.
         final long startAddress = 0L;
