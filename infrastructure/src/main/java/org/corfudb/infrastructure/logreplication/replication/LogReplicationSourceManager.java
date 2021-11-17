@@ -76,13 +76,17 @@ public class LogReplicationSourceManager {
                                        LogReplicationMetadataManager metadataManager,
                                        DataSender dataSender) {
 
+        // This runtime is used exclusively for the snapshot and log entry reader which do not require a cache
+        // as these are one time operations.
         this.runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
                 .trustStore(params.getTrustStore())
                 .tsPasswordFile(params.getTsPasswordFile())
                 .keyStore(params.getKeyStore())
                 .ksPasswordFile(params.getKsPasswordFile())
                 .systemDownHandler(params.getSystemDownHandler())
-                .tlsEnabled(params.isTlsEnabled()).build());
+                .tlsEnabled(params.isTlsEnabled())
+                .cacheDisabled(true)
+                .build());
         runtime.parseConfigurationString(params.getLocalCorfuEndpoint()).connect();
 
         this.parameters = params;

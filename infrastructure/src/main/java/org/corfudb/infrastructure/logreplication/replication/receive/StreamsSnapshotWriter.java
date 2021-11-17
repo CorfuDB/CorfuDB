@@ -370,6 +370,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         for (UUID uuid : streamViewMap.keySet()) {
             applyShadowStream(uuid, snapshot);
         }
+        // Invalidate client cache after snapshot sync is completed, as shadow streams are no longer useful in the cache
+        rt.getAddressSpaceView().invalidateClientCache();
     }
 
     /**

@@ -63,11 +63,7 @@ public class LogReplicationMetadataManager {
     private final Table<ReplicationEventKey, ReplicationEvent, Message> replicationEventTable;
 
     public LogReplicationMetadataManager(CorfuRuntime rt, long topologyConfigId, String localClusterId) {
-
-        // LR does not require transaction logging enabled as we don't want to trigger subscriber's logic
-        // on replicated data which could eventually lead to overwrites
         this.runtime = rt;
-        // CorfuStore must have TX Logging Enabled as it might be used by consumers to update UI
         this.corfuStore = new CorfuStore(runtime);
 
         metadataTableName = getPersistedWriterMetadataTableName(localClusterId);

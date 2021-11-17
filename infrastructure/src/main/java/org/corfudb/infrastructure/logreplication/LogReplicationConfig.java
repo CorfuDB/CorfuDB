@@ -30,6 +30,12 @@ public class LogReplicationConfig {
     // Log Replication default max data message size is 64MB
     public static final int MAX_DATA_MSG_SIZE_SUPPORTED = (64 << 20);
 
+    // Log Replication default max cache number of entries
+    // Note: if we want to improve performance for large scale this value should be tuned as it
+    // used in snapshot sync to quickly access shadow stream entries, written locally.
+    // This value is exposed as a configuration parameter for LR.
+    public static final int MAX_CACHE_NUM_ENTRIES = 200;
+
     // Percentage of log data per log replication message
     public static final int DATA_FRACTION_PER_MSG = 90;
 
@@ -49,6 +55,9 @@ public class LogReplicationConfig {
     // Max Size of Log Replication Data Message
     private int maxMsgSize;
 
+    // Max Cache number of entries
+    private int maxCacheSize;
+
     /**
      * The max size of data payload for the log replication message.
      */
@@ -61,7 +70,21 @@ public class LogReplicationConfig {
      */
     @VisibleForTesting
     public LogReplicationConfig(Set<String> streamsToReplicate) {
-        this(streamsToReplicate, DEFAULT_MAX_NUM_MSG_PER_BATCH, MAX_DATA_MSG_SIZE_SUPPORTED);
+        this(streamsToReplicate, DEFAULT_MAX_NUM_MSG_PER_BATCH, MAX_DATA_MSG_SIZE_SUPPORTED, MAX_CACHE_NUM_ENTRIES);
+    }
+
+    /**
+     * Constructor
+     *
+     * @param streamsToReplicate Unique identifiers for all streams to be replicated across sites.
+     * @param maxNumMsgPerBatch snapshot sync batch size (number of entries per batch)
+     */
+    public LogReplicationConfig(Set<String> streamsToReplicate, int maxNumMsgPerBatch, int maxMsgSize, int cacheSize) {
+        this.streamsToReplicate = streamsToReplicate;
+        this.maxNumMsgPerBatch = maxNumMsgPerBatch;
+        this.maxMsgSize = maxMsgSize;
+        this.maxCacheSize = cacheSize;
+        this.maxDataSizePerMsg = maxMsgSize * DATA_FRACTION_PER_MSG / 100;
     }
 
     /**
@@ -71,15 +94,12 @@ public class LogReplicationConfig {
      * @param maxNumMsgPerBatch snapshot sync batch size (number of entries per batch)
      */
     public LogReplicationConfig(Set<String> streamsToReplicate, int maxNumMsgPerBatch, int maxMsgSize) {
-        this.streamsToReplicate = streamsToReplicate;
-        this.maxNumMsgPerBatch = maxNumMsgPerBatch;
-        this.maxMsgSize = maxMsgSize;
-        this.maxDataSizePerMsg = maxMsgSize * DATA_FRACTION_PER_MSG / 100;
+        this(streamsToReplicate, maxNumMsgPerBatch, maxMsgSize, MAX_CACHE_NUM_ENTRIES);
     }
 
     public LogReplicationConfig(Set<String> streamsToReplicate, Map<UUID, List<UUID>> streamingTagsMap,
-                                Set<UUID> mergeOnlyStreams, int maxNumMsgPerBatch, int maxMsgSize) {
-        this(streamsToReplicate, maxNumMsgPerBatch, maxMsgSize);
+                                Set<UUID> mergeOnlyStreams, int maxNumMsgPerBatch, int maxMsgSize, int cacheSize) {
+        this(streamsToReplicate, maxNumMsgPerBatch, maxMsgSize, cacheSize);
         this.dataStreamToTagsMap = streamingTagsMap;
         this.mergeOnlyStreams = mergeOnlyStreams;
     }

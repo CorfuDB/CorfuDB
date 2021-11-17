@@ -116,12 +116,13 @@ public class LogReplicationSinkManager implements DataReceiver {
                                      LogReplicationMetadataManager metadataManager,
                                      ServerContext context, long topologyConfigId) {
 
-        this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
+        this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
                 .trustStore((String) context.getServerConfig().get("--truststore"))
                 .tsPasswordFile((String) context.getServerConfig().get("--truststore-password-file"))
                 .keyStore((String) context.getServerConfig().get("--keystore"))
                 .ksPasswordFile((String) context.getServerConfig().get("--keystore-password-file"))
                 .tlsEnabled((Boolean) context.getServerConfig().get("--enable-tls"))
+                .maxCacheEntries(config.getMaxCacheSize())
                 .build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.pluginConfigFilePath = context.getPluginConfigFilePath();
@@ -138,7 +139,9 @@ public class LogReplicationSinkManager implements DataReceiver {
     @VisibleForTesting
     public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config,
                                      LogReplicationMetadataManager metadataManager, String pluginConfigFilePath) {
-        this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
+        this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(config.getMaxCacheSize())
+                .build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.pluginConfigFilePath = pluginConfigFilePath;
         init(metadataManager, config);
