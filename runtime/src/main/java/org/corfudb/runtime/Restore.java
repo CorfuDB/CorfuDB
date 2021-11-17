@@ -8,6 +8,7 @@ import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.BackupRestoreException;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.Serializers;
 
@@ -42,7 +43,7 @@ public class Restore {
     private final String filePath;
 
     // The path of a temporary directory under which the unpacked table's backup files are stored
-    private final String restoreTempDirPath;
+    private String restoreTempDirPath;
 
     // The filename of each table's backup file, format: uuid.namespace$tableName.
     private final List<String> tableBackups;
@@ -66,7 +67,6 @@ public class Restore {
      */
     public Restore(String filePath, CorfuRuntime runtime, RestoreMode restoreMode) throws IOException {
         this.filePath = filePath;
-        this.restoreTempDirPath = Files.createTempDirectory(RESTORE_TEMP_DIR_PREFIX).toString();
         this.tableBackups = new ArrayList<>();
         this.corfuStore = new CorfuStore(runtime);
         this.restoreMode = restoreMode;
@@ -78,13 +78,16 @@ public class Restore {
      * @throws IOException
      */
     public void start() throws IOException {
+        log.info("started corfu restore");
         try {
+            // The cleanup() in finally block is not guaranteed to have
+            // been run in previous restore if there was OOM
+            cleanup();
             openTarFile();
             verify();
             restore();
-        } catch (IOException e) {
-            log.error("failed to restore from backup tar file {}", filePath);
-            throw e;
+        } catch (Exception e) {
+            throw new BackupRestoreException("failed to restore from backup file " + filePath, e);
         } finally {
             cleanup();
         }
@@ -158,6 +161,7 @@ public class Restore {
      * Open the backup tar file and save the table backups to tableDir directory
      */
     private void openTarFile() throws IOException {
+        this.restoreTempDirPath = Files.createTempDirectory(RESTORE_TEMP_DIR_PREFIX).toString();
         try (FileInputStream fileInput = new FileInputStream(filePath);
              TarArchiveInputStream tarInput = new TarArchiveInputStream(fileInput)) {
             getTablesFromTarFile(tarInput);
@@ -193,10 +197,21 @@ public class Restore {
     }
 
     /**
-     * Cleanup the table backup files under the tableDir directory.
+     * Delete all temp restore directories under the system temp directory.
      */
-    private void cleanup() throws IOException {
-        FileUtils.deleteDirectory(new File(restoreTempDirPath));
+    private void cleanup() {
+        File tmpdir = new File(System.getProperty("java.io.tmpdir"));
+        File[] restoreDirs = tmpdir.listFiles(file -> file.getName().contains(RESTORE_TEMP_DIR_PREFIX));
+        if (restoreDirs != null) {
+            for (File file : restoreDirs) {
+                try {
+                    FileUtils.deleteDirectory(file);
+                    log.info("removed temporary backup directory {}", file.getAbsolutePath());
+                } catch (IOException e) {
+                    log.error("failed to delete the temporary backup directory {}", file.getAbsolutePath());
+                }
+            }
+        }
     }
 
     private void clearAllTables() {
