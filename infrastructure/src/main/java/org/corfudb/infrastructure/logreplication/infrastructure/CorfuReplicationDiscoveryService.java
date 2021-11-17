@@ -367,6 +367,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     .ksPasswordFile((String) serverContext.getServerConfig().get("--keystore-password-file"))
                     .tlsEnabled((Boolean) serverContext.getServerConfig().get("--enable-tls"))
                     .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
+                    .maxCacheEntries(100)
                     .build())
                     .setTransactionLogging(true)
                     .parseConfigurationString(localCorfuEndpoint).connect();
