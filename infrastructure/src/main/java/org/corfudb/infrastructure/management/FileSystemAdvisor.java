@@ -1,9 +1,12 @@
 package org.corfudb.infrastructure.management;
 
+import com.google.common.collect.ImmutableList;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttributeStats;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.ResourceQuotaStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank.NodeRankByPartitionAttributes;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank.NodeRankByResourceQuota;
@@ -26,92 +29,50 @@ public class FileSystemAdvisor {
      */
     public Optional<NodeRankByResourceQuota> findFailedNodeByResourceQuota(ClusterState clusterState) {
 
-        if (!clusterState.getLocalNode().isPresent()) {
-            return Optional.empty();
-        }
-
         NavigableSet<NodeRankByResourceQuota> set = new TreeSet<>();
+
         for (NodeState node : clusterState.getNodes().values()) {
-            node.getFileSystem().ifPresent(fsStats -> {
-                if (!fsStats.getResourceQuotaStats().isExceeded()) {
-                    return;
-                }
+            String nodeEndpoint = node.getConnectivity().getEndpoint();
 
-                NodeRankByResourceQuota quota = new NodeRankByResourceQuota(
-                        node.getConnectivity().getEndpoint(),
-                        fsStats.getResourceQuotaStats()
-                );
-                set.add(quota);
-            });
-        }
-
-        Optional<NodeRankByResourceQuota> maybeDecisionMaker = Optional.ofNullable(set.pollFirst());
-
-        if (!maybeDecisionMaker.isPresent()) {
-            log.trace("Decision maker not found");
-            return Optional.empty();
-        }
-
-        NodeRankByResourceQuota decisionMaker = maybeDecisionMaker.get();
-        if (!decisionMaker.getEndpoint().equals(clusterState.getLocalEndpoint())) {
-            String message = "The node can't be a decision maker, skip operation. Decision maker node is: {}";
-            log.trace(message, decisionMaker);
-            return Optional.empty();
-        }
-
-        Optional<NodeRankByResourceQuota> maybeFailedNode = Optional.ofNullable(set.pollLast());
-
-        if (maybeFailedNode.isPresent()) {
-            NodeRankByResourceQuota failedNode = maybeFailedNode.get();
-            if (decisionMaker.getEndpoint().equals(failedNode.getEndpoint())) {
-                log.trace("The Decision maker and a failed node are the same, no way to detect a failure");
-                return Optional.empty();
+            ImmutableList<String> unresponsiveNodes = clusterState.getUnresponsiveNodes();
+            if (unresponsiveNodes.contains(nodeEndpoint)) {
+                log.trace("Failed node already in the list of unresponsive nodes: {}", unresponsiveNodes);
+                continue;
             }
+
+            node.getFileSystem()
+                    .map(FileSystemStats::getResourceQuotaStats)
+                    //check if the node has failed: exceeded quota
+                    .filter(ResourceQuotaStats::isExceeded)
+                    .map(quota -> new NodeRankByResourceQuota(nodeEndpoint, quota))
+                    .ifPresent(set::add);
         }
 
-        return maybeFailedNode;
+        return Optional.ofNullable(set.pollLast());
     }
 
     public Optional<NodeRankByPartitionAttributes> findFailedNodeByPartitionAttributes(ClusterState clusterState) {
-
         NavigableSet<NodeRankByPartitionAttributes> set = new TreeSet<>();
+
         for (NodeState node : clusterState.getNodes().values()) {
-            node.getFileSystem().ifPresent(fsStats -> {
-                if (fsStats.getPartitionAttributeStats().isReadOnly()) {
-                    NodeRankByPartitionAttributes quota = new NodeRankByPartitionAttributes(
-                            node.getConnectivity().getEndpoint(),
-                            fsStats.getPartitionAttributeStats()
-                    );
-                    set.add(quota);
-                }
-            });
-        }
+            String localEndpoint = node.getConnectivity().getEndpoint();
 
-        Optional<NodeRankByPartitionAttributes> maybeFailedNode = Optional.ofNullable(set.pollLast());
+            String nodeEndpoint = node.getConnectivity().getEndpoint();
 
-        Optional<NodeRankByPartitionAttributes> maybeDecisionMaker = Optional.ofNullable(set.pollFirst());
-
-        if (!maybeDecisionMaker.isPresent()) {
-            log.trace("Decision maker not found");
-            return Optional.empty();
-        }
-
-        NodeRankByPartitionAttributes decisionMaker = maybeDecisionMaker.get();
-        if (!decisionMaker.getEndpoint().equals(clusterState.getLocalEndpoint())) {
-            String message = "The node can't be a decision maker, skip operation. Decision maker node is: {}";
-            log.trace(message, decisionMaker);
-            return Optional.empty();
-        }
-
-        if (maybeFailedNode.isPresent()) {
-            NodeRankByPartitionAttributes failedNode = maybeFailedNode.get();
-            if (decisionMaker.getEndpoint().equals(failedNode.getEndpoint())) {
-                log.trace("The Decision maker and a failed node are the same, no way to detect a failure");
-                return Optional.empty();
+            ImmutableList<String> unresponsiveNodes = clusterState.getUnresponsiveNodes();
+            if (unresponsiveNodes.contains(nodeEndpoint)) {
+                log.trace("Failed node already in the list of unresponsive nodes: {}", unresponsiveNodes);
+                continue;
             }
+
+            node.getFileSystem()
+                    .map(FileSystemStats::getPartitionAttributeStats)
+                    .filter(PartitionAttributeStats::isReadOnly)
+                    .map(attr -> new NodeRankByPartitionAttributes(localEndpoint, attr))
+                    .ifPresent(set::add);
         }
 
-        return maybeFailedNode;
+        return Optional.ofNullable(set.pollLast());
     }
 
     public Optional<NodeRankByResourceQuota> healedServer(ClusterState clusterState) {

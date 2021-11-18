@@ -27,14 +27,14 @@ class FileSystemAdvisorTest {
         final long epoch = 0;
         final String localEndpoint = NodeNames.A;
 
-        FileSystemStats fsStats = buildExceededQuota();
+        FileSystemStats fsStats = NodeStateTestUtil.buildExceededQuota();
 
         ClusterState cluster = buildClusterState(
                 localEndpoint,
                 ImmutableList.of(),
                 nodeState(localEndpoint, epoch, Optional.of(fsStats), OK, OK, OK),
-                nodeState("b", epoch, Optional.of(fsStats), OK, OK, OK),
-                nodeState("c", epoch, OK, OK, OK)
+                nodeState(NodeNames.B, epoch, Optional.of(fsStats), OK, OK, OK),
+                nodeState(NodeNames.C, epoch, OK, OK, OK)
         );
 
 
@@ -42,21 +42,21 @@ class FileSystemAdvisorTest {
         Optional<NodeRankByResourceQuota> maybeFailedNode = advisor.findFailedNodeByResourceQuota(cluster);
 
         assertTrue(maybeFailedNode.isPresent());
-        assertEquals("b", maybeFailedNode.get().getEndpoint());
+        assertEquals(NodeNames.B, maybeFailedNode.get().getEndpoint());
     }
 
     @Test
     public void healedServer() {
         final long epoch = 0;
-        final String localEndpoint = "c";
-        ResourceQuotaStats quota = buildRegularQuota();
+        final String localEndpoint = NodeNames.C;
+        ResourceQuotaStats quota = NodeStateTestUtil.buildRegularQuota();
         FileSystemStats fsStats = new FileSystemStats(quota, Mockito.mock(PartitionAttributeStats.class));
 
         ClusterState cluster = buildClusterState(
                 localEndpoint,
                 ImmutableList.of(localEndpoint),
-                nodeState("a", epoch, OK, OK, FAILED),
-                nodeState("b", epoch, OK, OK, OK),
+                nodeState(NodeNames.A, epoch, OK, OK, FAILED),
+                nodeState(NodeNames.B, epoch, OK, OK, OK),
                 nodeState(localEndpoint, epoch, Optional.of(fsStats), FAILED, OK, OK)
         );
 
@@ -70,43 +70,24 @@ class FileSystemAdvisorTest {
     @Test
     public void failedNodeByPartitionAttributes() {
         final long epoch = 0;
-        final String localEndpoint = "c";
+        final String localEndpoint = NodeNames.C;
 
         ResourceQuotaStats quota = Mockito.mock(ResourceQuotaStats.class);
-        FileSystemStats.PartitionAttributeStats attrs =
-                new FileSystemStats.PartitionAttributeStats(true, 0, 0);
+        PartitionAttributeStats attrs = new PartitionAttributeStats(true, 0, 0);
         FileSystemStats fsStats = new FileSystemStats(quota, attrs);
 
         ClusterState cluster = buildClusterState(
                 localEndpoint,
                 ImmutableList.of(localEndpoint),
-                nodeState("a", epoch, Optional.of(fsStats), OK, OK, OK),
-                nodeState("b", epoch, OK, OK, OK),
+                nodeState(NodeNames.A, epoch, Optional.of(fsStats), OK, OK, OK),
+                nodeState(NodeNames.B, epoch, OK, OK, OK),
                 nodeState(localEndpoint, epoch, OK, OK, OK)
         );
 
         FileSystemAdvisor advisor = new FileSystemAdvisor();
-        Optional<NodeRankByPartitionAttributes> maybeFailedNode = advisor
-                .findFailedNodeByPartitionAttributes(cluster);
+        Optional<NodeRankByPartitionAttributes> maybeFailedNode = advisor.findFailedNodeByPartitionAttributes(cluster);
 
         assertTrue(maybeFailedNode.isPresent());
-        assertEquals(new NodeRankByPartitionAttributes(localEndpoint, attrs), maybeFailedNode.get());
-    }
-
-    private ResourceQuotaStats buildRegularQuota() {
-        final int limit = 100;
-        final int used = 80;
-
-        return new ResourceQuotaStats(limit, used);
-    }
-
-    private FileSystemStats buildExceededQuota() {
-        final int limit = 100;
-        final int used = 200;
-
-        return new FileSystemStats(
-                new ResourceQuotaStats(limit, used),
-                Mockito.mock(FileSystemStats.PartitionAttributeStats.class)
-        );
+        assertEquals(new NodeRankByPartitionAttributes(NodeNames.A, attrs), maybeFailedNode.get());
     }
 }

@@ -56,4 +56,6 @@ public interface ClusterAdvisor {
      * @return
      */
     ClusterGraph getGraph(ClusterState clusterState);
+
+    Optional<NodeRank> findDecisionMaker(ClusterState clusterState);
 }

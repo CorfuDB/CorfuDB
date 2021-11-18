@@ -6,9 +6,12 @@ import org.corfudb.infrastructure.NodeNames.NodeName;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttributeStats;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.ResourceQuotaStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
+import org.mockito.Mockito;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -47,5 +50,22 @@ public class NodeStateTestUtil {
 
     public static NodeState nodeState(String endpoint, long epoch, ConnectionStatus... connectionStates) {
         return nodeState(endpoint, epoch, Optional.empty(), connectionStates);
+    }
+
+    public static ResourceQuotaStats buildRegularQuota() {
+        final int limit = 100;
+        final int used = 80;
+
+        return new ResourceQuotaStats(limit, used);
+    }
+
+    public static FileSystemStats buildExceededQuota() {
+        final int limit = 100;
+        final int used = 200;
+
+        return new FileSystemStats(
+                new ResourceQuotaStats(limit, used),
+                Mockito.mock(PartitionAttributeStats.class)
+        );
     }
 }

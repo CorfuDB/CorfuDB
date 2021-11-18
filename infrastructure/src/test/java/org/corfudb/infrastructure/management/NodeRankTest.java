@@ -78,8 +78,8 @@ public class NodeRankTest {
         set.add(quotaA);
         set.add(quotaB);
 
-        assertEquals(quotaB, set.first());
-        assertEquals(quotaA, set.last());
+        assertEquals(quotaA, set.first());
+        assertEquals(quotaB, set.last());
     }
 
     @Test

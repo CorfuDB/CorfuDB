@@ -72,7 +72,7 @@ public class NodeRank implements Comparable<NodeRank>, NodeRanking {
         @Override
         public int compareTo(NodeRankByResourceQuota other) {
             //Descending order
-            int quotaExceeded = Boolean.compare(other.quota.isExceeded(), quota.isExceeded());
+            int quotaExceeded = Boolean.compare(other.quota.isNotExceeded(), quota.isNotExceeded());
             if (quotaExceeded != 0) {
                 return quotaExceeded;
             }

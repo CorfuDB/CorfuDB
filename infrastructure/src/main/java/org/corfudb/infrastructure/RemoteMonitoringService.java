@@ -17,6 +17,7 @@ import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.FileSystemAdvisor;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
+import org.corfudb.infrastructure.management.failuredetector.DecisionMakerAgent;
 import org.corfudb.infrastructure.management.failuredetector.EpochHandler;
 import org.corfudb.infrastructure.management.failuredetector.FailureDetectorDataStore;
 import org.corfudb.infrastructure.management.failuredetector.FailureDetectorException;
@@ -437,11 +438,42 @@ public class RemoteMonitoringService implements ManagementService {
                 throw FailureDetectorException.layoutMismatch(clusterState, layout);
             }
 
+            DecisionMakerAgent decisionMakerAgent = new DecisionMakerAgent(clusterState, advisor);
+            Optional<String> maybeDecisionMaker = decisionMakerAgent.findDecisionMaker();
+
+            if (!maybeDecisionMaker.isPresent()) {
+                return DetectorTask.NOT_COMPLETED;
+            }
+
+            String decisionMaker = maybeDecisionMaker.get();
+
             Optional<NodeRankByPartitionAttributes> maybeFailedNodeByPartitionAttr = fsAdvisor
                     .findFailedNodeByPartitionAttributes(clusterState);
 
             if (maybeFailedNodeByPartitionAttr.isPresent()) {
-                NodeRanking failedNode = maybeFailedNodeByPartitionAttr.get();
+                NodeRankByPartitionAttributes failedNode = maybeFailedNodeByPartitionAttr.get();
+
+                if (decisionMaker.equals(failedNode.getEndpoint())) {
+                    log.error("Decision maker and failed node are the same node: {}", decisionMakerAgent);
+                    return DetectorTask.NOT_COMPLETED;
+                }
+
+                Set<String> failedNodes = new HashSet<>();
+                failedNodes.add(failedNode.getEndpoint());
+                return detectFailure(layout, failedNodes, pollReport).join();
+            }
+
+            Optional<NodeRankByResourceQuota> maybeFailedNodeByQuota = fsAdvisor
+                    .findFailedNodeByResourceQuota(clusterState);
+
+            if (maybeFailedNodeByQuota.isPresent()) {
+                NodeRankByResourceQuota failedNode = maybeFailedNodeByQuota.get();
+
+                if (decisionMaker.equals(failedNode.getEndpoint())) {
+                    log.error("Decision maker and failed node are the same node: {}", decisionMakerAgent);
+                    return DetectorTask.NOT_COMPLETED;
+                }
+
                 Set<String> failedNodes = new HashSet<>();
                 failedNodes.add(failedNode.getEndpoint());
                 return detectFailure(layout, failedNodes, pollReport).join();
@@ -451,6 +483,11 @@ public class RemoteMonitoringService implements ManagementService {
 
             if (maybeFailedNode.isPresent()) {
                 NodeRank failedNode = maybeFailedNode.get();
+
+                if (decisionMaker.equals(failedNode.getEndpoint())) {
+                    log.error("Decision maker and failed node are the same node: {}", decisionMakerAgent);
+                    return DetectorTask.NOT_COMPLETED;
+                }
 
                 //Collect failures history
                 FailureDetectorMetrics history = FailureDetectorMetrics.builder()
@@ -469,17 +506,6 @@ public class RemoteMonitoringService implements ManagementService {
                 failedNodes.add(failedNode.getEndpoint());
                 return detectFailure(layout, failedNodes, pollReport).join();
             }
-
-            Optional<NodeRankByResourceQuota> maybeFailedNodeByQuota = fsAdvisor
-                    .findFailedNodeByResourceQuota(clusterState);
-
-            if (maybeFailedNodeByQuota.isPresent()) {
-                NodeRankByResourceQuota failedNode = maybeFailedNodeByQuota.get();
-                Set<String> failedNodes = new HashSet<>();
-                failedNodes.add(failedNode.getEndpoint());
-                return detectFailure(layout, failedNodes, pollReport).join();
-            }
-
         } catch (Exception e) {
             log.error("Exception invoking failure handler", e);
         }

@@ -187,15 +187,33 @@ public class ClusterGraph {
             return Optional.empty();
         }
 
-        NodeRank decisionMaker = nodes.first();
+        Optional<NodeRank> maybeDecisionMaker = Optional.ofNullable(nodes.pollFirst());
 
-        if (decisionMaker.getNumConnections() < 1) {
-            log.trace("The node is fully disconnected from the graph. Decision maker doesn't exists");
+        if (!maybeDecisionMaker.isPresent()) {
+            log.error("Decision maker not found for graph: {}", toJson());
             return Optional.empty();
         }
 
-        log.trace("Decision maker has found: {}, all node ranks: {}", decisionMaker, nodes);
-        return Optional.of(decisionMaker);
+        return maybeDecisionMaker
+                //filter out completely disconnected decision maker
+                .filter(decisionMaker -> {
+                    boolean isConnected = decisionMaker.getNumConnections() >= 1;
+                    if (!isConnected) {
+                        log.trace("The node is fully disconnected from the graph. Decision maker doesn't exists");
+                    }
+
+                    return isConnected;
+                })
+                //Give up if the local node is not a decision maker
+                .filter(decisionMaker -> {
+                    boolean isLocalNodeADecisionMaker = decisionMaker.is(localNode);
+                    if (!isLocalNodeADecisionMaker) {
+                        String message = "The node can't be a decision maker, skip operation. Decision maker node is: {}";
+                        log.trace(message, decisionMaker);
+                    }
+
+                    return isLocalNodeADecisionMaker;
+                });
     }
 
     /**

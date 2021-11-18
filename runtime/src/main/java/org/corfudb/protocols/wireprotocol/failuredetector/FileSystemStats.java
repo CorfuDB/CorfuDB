@@ -16,7 +16,7 @@ public class FileSystemStats {
     private final ResourceQuotaStats resourceQuotaStats;
 
     @NonNull
-    private final FileSystemStats.PartitionAttributeStats partitionAttributeStats;
+    private final PartitionAttributeStats partitionAttributeStats;
 
     @AllArgsConstructor
     @EqualsAndHashCode

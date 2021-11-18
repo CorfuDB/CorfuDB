@@ -56,34 +56,17 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
 
         log.trace("Detecting failed nodes for: ClusterState= {}", clusterState);
 
-        ClusterGraph graph = ClusterGraph.toClusterGraph(clusterState);
-
-        ClusterGraph symmetric = graph.toSymmetric();
-        Optional<NodeRank> maybeDecisionMaker = symmetric.getDecisionMaker();
-
-        if (!maybeDecisionMaker.isPresent()) {
-            log.error("Decision maker not found for graph: {}", symmetric.toJson());
-            return Optional.empty();
-        }
-
-        NodeRank decisionMaker = maybeDecisionMaker.get();
-        if (!decisionMaker.is(localEndpoint)) {
-            String message = "The node can't be a decision maker, skip operation. Decision maker node is: {}";
-            log.trace(message, decisionMaker);
-            return Optional.empty();
-        }
+        ClusterGraph symmetric =  ClusterGraph
+                .toClusterGraph(clusterState)
+                .toSymmetric();
 
         Optional<NodeRank> maybeFailedNode = symmetric.findFailedNode();
+
         if (!maybeFailedNode.isPresent()) {
             return Optional.empty();
         }
 
         NodeRank failedNode = maybeFailedNode.get();
-
-        if (decisionMaker.equals(failedNode)) {
-            log.error("Decision maker and failed node are same node: {}", decisionMaker);
-            return Optional.empty();
-        }
 
         ImmutableList<String> unresponsiveNodes = clusterState.getUnresponsiveNodes();
         if (unresponsiveNodes.contains(failedNode.getEndpoint())) {
@@ -142,5 +125,14 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
     @Override
     public ClusterGraph getGraph(ClusterState clusterState) {
         return ClusterGraph.toClusterGraph(clusterState).toSymmetric();
+    }
+
+    @Override
+    public Optional<NodeRank> findDecisionMaker(ClusterState clusterState) {
+        ClusterGraph symmetric =  ClusterGraph
+                .toClusterGraph(clusterState)
+                .toSymmetric();
+
+        return symmetric.getDecisionMaker();
     }
 }
