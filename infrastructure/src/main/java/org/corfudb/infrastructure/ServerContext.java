@@ -2,6 +2,7 @@ package org.corfudb.infrastructure;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
 
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -248,11 +249,22 @@ public class ServerContext implements AutoCloseable {
     /**
      * Get the max size of the log replication data message used by both snapshot data message and
      * log entry sync data message.
-     * @return
+     *
+     * @return max data message size
      */
     public int getLogReplicationMaxDataMessageSize() {
         String val = getServerConfig(String.class, "--max-replication-data-message-size");
         return val == null ? MAX_DATA_MSG_SIZE_SUPPORTED : Integer.parseInt(val);
+    }
+
+    /**
+     * Get the max size of LR's runtime cache in number of entries.
+     *
+     * @return max cache number of entries
+     */
+    public int getLogReplicationCacheMaxSize() {
+        String val = getServerConfig(String.class, "--lrCacheSize");
+        return val == null ? MAX_CACHE_NUM_ENTRIES : Integer.parseInt(val);
     }
 
     /**

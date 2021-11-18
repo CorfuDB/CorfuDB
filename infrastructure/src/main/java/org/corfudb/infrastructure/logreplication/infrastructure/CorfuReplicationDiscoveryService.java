@@ -367,6 +367,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     .ksPasswordFile((String) serverContext.getServerConfig().get("--keystore-password-file"))
                     .tlsEnabled((Boolean) serverContext.getServerConfig().get("--enable-tls"))
                     .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
+                    // This runtime is used for the LockStore, Metadata Manager and Log Entry Sync, which don't rely
+                    // heavily on the cache (hence can be smaller)
+                    .maxCacheEntries(serverContext.getLogReplicationCacheMaxSize()/2)
                     .build())
                     .setTransactionLogging(true)
                     .parseConfigurationString(localCorfuEndpoint).connect();
@@ -435,7 +438,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     streamingConfigSink,
                     mergeOnlyStreams,
                     serverContext.getLogReplicationMaxNumMsgPerBatch(),
-                    serverContext.getLogReplicationMaxDataMessageSize());
+                    serverContext.getLogReplicationMaxDataMessageSize(),
+                    serverContext.getLogReplicationCacheMaxSize());
         } catch (Throwable t) {
             log.error("Exception when fetching the Replication Config", t);
             throw t;
