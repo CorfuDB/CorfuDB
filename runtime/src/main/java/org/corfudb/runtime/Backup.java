@@ -6,6 +6,7 @@ import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.runtime.exceptions.BackupRestoreException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.TableRegistry;
@@ -42,7 +43,7 @@ public class Backup {
     private final String filePath;
 
     // The path of a temporary directory under which table's backup files are stored
-    private final String backupTempDirPath;
+    private String backupTempDirPath;
 
     // The stream IDs of tables which are backed up
     private final List<UUID> streamIDs;
@@ -65,11 +66,9 @@ public class Backup {
      * @param filePath      - the filePath where the generated backup tar file will be placed
      * @param streamIDs     - the stream IDs of tables which are backed up
      * @param runtime       - the runtime which is performing the back up
-     * @throws IOException  - when failed to create the temp directory
      */
-    public Backup(String filePath, List<UUID> streamIDs, CorfuRuntime runtime) throws IOException {
+    public Backup(String filePath, List<UUID> streamIDs, CorfuRuntime runtime) {
         this.filePath = filePath;
-        this.backupTempDirPath = Files.createTempDirectory(BACKUP_TEMP_DIR_PREFIX).toString();
         this.streamIDs = streamIDs;
         this.runtime = runtime;
     }
@@ -82,9 +81,8 @@ public class Backup {
      * @param taggedTablesOnly  - if true, back up tables which has requires_backup_support tag set;
      *                            if false, back up all UFO tables
      */
-    public Backup(String filePath, CorfuRuntime runtime, boolean taggedTablesOnly) throws IOException {
+    public Backup(String filePath, CorfuRuntime runtime, boolean taggedTablesOnly) {
         this.filePath = filePath;
-        this.backupTempDirPath = Files.createTempDirectory(BACKUP_TEMP_DIR_PREFIX).toString();
         this.runtime = runtime;
         if (taggedTablesOnly) {
             this.streamIDs = getTaggedTables();
@@ -99,6 +97,7 @@ public class Backup {
      * @throws IOException
      */
     public void start() throws IOException {
+        log.info("started corfu backup");
         if (streamIDs == null) {
             log.warn("streamIDs is a null variable! back up aborted!");
             return;
@@ -107,11 +106,13 @@ public class Backup {
         this.timestamp = runtime.getAddressSpaceView().getLogTail();
 
         try {
+            // The cleanup() in finally block is not guaranteed to have
+            // been run in previous backups if there was OOM
+            cleanup();
             backup();
             generateTarFile();
-        } catch (IOException e) {
-            log.error("failed to backup tables: {}", streamIDs);
-            throw e;
+        } catch (Exception e) {
+            throw new BackupRestoreException("failed to backup tables " + streamIDs, e);
         } finally {
             cleanup();
         }
@@ -146,6 +147,8 @@ public class Backup {
         }
 
         long startTime = System.currentTimeMillis();
+
+        this.backupTempDirPath = Files.createTempDirectory(BACKUP_TEMP_DIR_PREFIX).toString();
         Map<UUID, String> streamIdToTableNameMap = getStreamIdToTableNameMap();
         for (UUID streamId : streamIDs) {
             if (!tableExists(streamId)) {
@@ -322,14 +325,22 @@ public class Backup {
         });
         return streamIdToTableNameMap;
     }
+
     /**
-     * Cleanup the table backup files under the backupDir directory.
+     * Delete all temp backup directories under the system temp directory.
      */
     private void cleanup() {
-        try {
-            FileUtils.deleteDirectory(new File(backupTempDirPath));
-        } catch (IOException e) {
-            log.error("failed to clean up the temporary backup directory {}", backupTempDirPath);
+        File tmpdir = new File(System.getProperty("java.io.tmpdir"));
+        File[] backupDirs = tmpdir.listFiles(file -> file.getName().contains(BACKUP_TEMP_DIR_PREFIX));
+        if (backupDirs != null) {
+            for (File file : backupDirs) {
+                try {
+                    FileUtils.deleteDirectory(file);
+                    log.info("removed temporary backup directory {}", file.getAbsolutePath());
+                } catch (IOException e) {
+                    log.error("failed to delete the temporary backup directory {}", file.getAbsolutePath());
+                }
+            }
         }
     }
 

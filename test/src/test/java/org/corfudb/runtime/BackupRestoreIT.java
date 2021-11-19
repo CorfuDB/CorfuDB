@@ -14,6 +14,7 @@ import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.BackupRestoreException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.TableRegistry;
@@ -26,6 +27,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -52,6 +54,8 @@ public class BackupRestoreIT extends AbstractIT {
     private static final int WRITER_PORT = DEFAULT_PORT + 1;
     private static final String SOURCE_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
     private static final String DESTINATION_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
+    private static final String BACKUP_TEMP_DIR_PREFIX = "corfu_backup_";
+    private static final String RESTORE_TEMP_DIR_PREFIX = "corfu_restore_";
 
     // Log path of source server
     static final private String LOG_PATH1 = getCorfuServerLogPath(DEFAULT_HOST, DEFAULT_PORT);
@@ -615,7 +619,8 @@ public class BackupRestoreIT extends AbstractIT {
 
         // Restore using backup files
         Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.PARTIAL);
-        assertThrows(FileNotFoundException.class, restore::start);
+        Exception e = assertThrows(BackupRestoreException.class, restore::start);
+        assertThat(e.getCause().getClass()).isEqualTo(FileNotFoundException.class);
 
         // Close servers and runtime before exiting
         cleanEnv();
@@ -657,8 +662,9 @@ public class BackupRestoreIT extends AbstractIT {
         // Backup
         Backup backup = new Backup(BACKUP_TAR_FILE_PATH, streamIDs, backupRuntime);
 
-        Exception ex = assertThrows(TransactionAbortedException.class, backup::start);
-        assertThat(ex.getCause().getClass()).isEqualTo(TrimmedException.class);
+        Exception ex = assertThrows(BackupRestoreException.class, backup::start);
+        assertThat(ex.getCause().getClass()).isEqualTo(TransactionAbortedException.class);
+        assertThat(ex.getCause().getCause().getClass()).isEqualTo(TrimmedException.class);
 
         // Verify that backup tar file exists
         File backupTarFile = new File(BACKUP_TAR_FILE_PATH);
@@ -730,4 +736,31 @@ public class BackupRestoreIT extends AbstractIT {
         // Close servers and runtime before exiting
         cleanEnv();
     }
-}
+
+    @Test
+    public void cleanupTempDirsBeforeBackupRestoreTest() throws Exception{
+        // Set up the test environment
+        setupEnv();
+
+        // Simulate existing directories that were not cleaned up in previous runs
+        File dir1 = Files.createTempDirectory(BACKUP_TEMP_DIR_PREFIX).toFile();
+        File dir2 = Files.createTempDirectory(BACKUP_TEMP_DIR_PREFIX).toFile();
+
+        // Backup
+        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, false);
+        backup.start();
+
+        assertThat(dir1).doesNotExist();
+        assertThat(dir2).doesNotExist();
+
+        // Simulate existing directories that were not cleaned up in previous runs
+        dir1 = Files.createTempDirectory(RESTORE_TEMP_DIR_PREFIX).toFile();
+        dir2 = Files.createTempDirectory(RESTORE_TEMP_DIR_PREFIX).toFile();
+
+        // Restore using backup files
+        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.PARTIAL);
+        restore.start();
+
+        assertThat(dir1).doesNotExist();
+        assertThat(dir2).doesNotExist();
+    }}
