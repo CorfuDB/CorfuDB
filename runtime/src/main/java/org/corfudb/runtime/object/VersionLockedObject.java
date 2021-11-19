@@ -22,6 +22,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -680,6 +681,8 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                 ? "Optimistic" : "to " + timestamp);
         long syncTo = (timestamp == Address.OPTIMISTIC) ? Address.MAX : timestamp;
 
+        AtomicLong numBytes = new AtomicLong();
+        AtomicLong numEntries = new AtomicLong();
         Runnable syncStreamRunnable = () ->
                 stream.streamUpTo(syncTo)
                         .forEachOrdered(entry -> {
@@ -693,6 +696,8 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                                     upcallResults.put(entry.getGlobalAddress(), res == null
                                             ? NullValue.NULL_VALUE : res);
                                     pendingUpcalls.remove(entry.getGlobalAddress());
+                                    numEntries.getAndIncrement();
+                                    numBytes.getAndAdd(entry.getSerializedSize()==null ? 0: entry.getSerializedSize());
                                 }
                                 entry.setUpcallResult(res);
                             } catch (Exception e) {
@@ -702,6 +707,8 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                         });
         MicroMeterUtils.time(syncStreamRunnable, "vlo.sync.timer",
                 "streamId", getID().toString());
+        MicroMeterUtils.measure(numBytes.longValue(), "vlo.sync.read_size");
+        MicroMeterUtils.measure(numEntries.longValue(), "vlo.sync.read_entries");
     }
 
     /**
