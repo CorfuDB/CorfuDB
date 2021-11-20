@@ -52,6 +52,7 @@ public class StreamingTask<K extends Message, V extends Message, M extends Messa
     // The table id to schema map of the interested tables.
     private final Map<UUID, TableSchema<K, V, M>> tableSchemas;
 
+    @Getter
     private final String listenerId;
 
     private final CorfuRuntime runtime;
@@ -190,10 +191,14 @@ public class StreamingTask<K extends Message, V extends Message, M extends Messa
         try {
             produce();
         } catch (Throwable throwable) {
-            status.set(StreamStatus.ERROR);
-            this.error = throwable;
+            setError(throwable);
             log.error("StreamingTask: encountered exception {} during client notification callback, " +
                     "listener: {} name {} id {}", throwable, listener, listenerId, stream.getStreamId());
         }
+    }
+
+    public void setError(Throwable throwable) {
+        status.set(StreamStatus.ERROR);
+        this.error = throwable;
     }
 }
