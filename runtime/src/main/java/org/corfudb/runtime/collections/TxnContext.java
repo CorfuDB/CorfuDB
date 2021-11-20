@@ -815,7 +815,7 @@ public class TxnContext implements AutoCloseable {
         if (TransactionalContext.isInTransaction()) {
             AbstractTransactionalContext rootContext = TransactionalContext.getRootContext();
             rootContext.setTxnContext(null);
-            log.warn("closing {} transaction without calling commit()!", rootContext);
+            log.trace("closing {} transaction without calling commit()!", rootContext);
 
             if (iDidNotStartCorfuTxn) {
                 log.warn("close() called on an inner transaction not started by CorfuStore");
