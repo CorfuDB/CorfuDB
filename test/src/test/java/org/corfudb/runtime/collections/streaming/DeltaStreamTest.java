@@ -72,7 +72,11 @@ public class DeltaStreamTest {
                 .hasMessage("lastAddressRead -1 trimMark 5");
     }
 
-    @Test
+    // TODO: we do need a sequencer regression test, but an actual sequencer regression
+    // is not the same as a trim mark regression (as this one is given by a failed prefix trim on a given LU)
+    // a sequencer regression should exercise addresses already 'buffered' by the streaming scheduler
+    // but leading to an actual failed read (stream not found in this address).
+    // @Test
     public void sequencerRegression() {
         UUID streamId = UUID.fromString("16a6eae6-c5b9-4aa8-98de-b93a69d3d736");
         AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);

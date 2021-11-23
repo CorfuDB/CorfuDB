@@ -155,9 +155,19 @@ public class DeltaStream {
         }
 
         if (Address.isAddress(streamAddressSpace.getTrimMark())) {
-            Preconditions.checkState(trimMark.get() <= streamAddressSpace.getTrimMark(),
-                    "streamId=%s new trimMark %s has to be >= %s", streamId,
-                    streamAddressSpace.getTrimMark(), trimMark);
+            if (streamAddressSpace.getTrimMark() < trimMark.get()) {
+                // As per Corfu's current design, this check can only be an error message (instead of an actual
+                // validation leading to an exception).
+                // Current 'prefix trim' protocol allows the system to be in a state such that the start address of all
+                // nodes is not the same, i.e., whenever prefixTrim has not gone through all LUs (for instance
+                // consider the case where a TimeoutException hits on the last LU during prefixTrim). If this
+                // LU becomes the new sequencer during this time, its trim mark is expected to regress wrt the other
+                // LUs.
+                // For this error message to become an actual validation it needs to be backed-up by the protocol.
+                log.warn("StreamId={} new trimMark {} should be >= {}, unless trim mark regressed due to " +
+                                "NEW sequencer bootstrapped from untrimmed log unit.", streamId,
+                        streamAddressSpace.getTrimMark(), trimMark);
+            }
 
             // Adopt new trim mark
             trimMark.set(streamAddressSpace.getTrimMark());

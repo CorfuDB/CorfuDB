@@ -230,13 +230,18 @@ public class StreamPollingScheduler {
 
         for (int idx = 0; idx < tasks.size(); idx++) {
             StreamingTask task = tasks.get(idx);
-            StreamAddressRange taskQuery = queries.get(idx);
-            Preconditions.checkState(task.getStream().getStreamId().equals(taskQuery.getStreamID()));
-            Preconditions.checkState(allQueryResults.containsKey(taskQuery.getStreamID()),
-                    "StreamAddressSpace missing for %s", task.getStream().getStreamId());
-
-            StreamAddressSpace sas = allQueryResults.get(task.getStream().getStreamId()).getAddressesInRange(taskQuery);
-            task.getStream().refresh(sas);
+            try {
+                StreamAddressRange taskQuery = queries.get(idx);
+                Preconditions.checkState(task.getStream().getStreamId().equals(taskQuery.getStreamID()));
+                Preconditions.checkState(allQueryResults.containsKey(taskQuery.getStreamID()),
+                        "StreamAddressSpace missing for %s", task.getStream().getStreamId());
+                StreamAddressSpace sas = allQueryResults.get(task.getStream().getStreamId()).getAddressesInRange(taskQuery);
+                task.getStream().refresh(sas);
+            } catch (Throwable throwable) {
+                task.setError(throwable);
+                log.error("StreamingPollingScheduler: encountered exception {} during streaming task scheduling. " +
+                        "Notify stream listener {} with id={} onError.", throwable, task.getListener(), task.getListenerId());
+            }
         }
     }
 
@@ -316,32 +321,53 @@ public class StreamPollingScheduler {
      * them from the scheduler).
      */
     public void schedule() throws InterruptedException {
-        // Block thread until there's work to do
-        waitForTasks();
+        long cycleStartTimeNs = 0L;
 
-        final long cycleStartTimeNs = System.nanoTime();
+        try {
+            // Block thread until there's work to do
+            waitForTasks();
 
-        final List<StreamingTask> runnableTasks = getTasks(StreamStatus.RUNNABLE);
-        final List<StreamingTask> syncingTasks = getTasks(StreamStatus.SYNCING,
-                t -> t.getStream().availableSpace() >= pollThreshold);
-        final List<StreamingTask> failedTasks = getTasks(StreamStatus.ERROR);
+            cycleStartTimeNs = System.nanoTime();
 
-        runnableTasks.forEach(t -> t.move(StreamStatus.RUNNABLE, StreamStatus.SCHEDULING));
-        poll(runnableTasks);
-        dispatchSyncTasks(runnableTasks);
+            final List<StreamingTask> runnableTasks = getTasks(StreamStatus.RUNNABLE);
+            final List<StreamingTask> syncingTasks = getTasks(StreamStatus.SYNCING,
+                    t -> t.getStream().availableSpace() >= pollThreshold);
+            final List<StreamingTask> failedTasks = getTasks(StreamStatus.ERROR);
 
-        // Since these tasks are already syncing, they shouldn't be dispatched again
-        poll(syncingTasks);
+            runnableTasks.forEach(t -> {
+                try {
+                    t.move(StreamStatus.RUNNABLE, StreamStatus.SCHEDULING);
+                } catch (Exception e) {
+                    t.setError(e);
+                    log.error("StreamingPollingScheduler: encountered exception {} while moving to 'scheduling' status, " +
+                            "listener={} with id={} onError()", e, t.getListener(), t.getListenerId());
+                }
+            });
+            poll(runnableTasks);
+            dispatchSyncTasks(runnableTasks);
 
-        // handle tasks that have failed (i.e., remove them and propagate the errors to the listeners)
-        handleFailures(failedTasks);
+            // Since these tasks are already syncing, they shouldn't be dispatched again
+            poll(syncingTasks);
 
-        long elapsedTimeNs = System.nanoTime() - cycleStartTimeNs;
-        MicroMeterUtils.time(Duration.ofNanos(elapsedTimeNs), "schedule.cycle");
-        long nextSchedule = Math.max(0, pollPeriod.toNanos() - elapsedTimeNs);
-        Preconditions.checkState(nextSchedule <= pollPeriod.toNanos());
-
-        scheduler.schedule(this::tick, nextSchedule, TimeUnit.NANOSECONDS);
+            // handle tasks that have failed (i.e., remove them and propagate the errors to the listeners)
+            handleFailures(failedTasks);
+        } catch (InterruptedException ie) {
+            throw ie;
+        } catch (Exception e) {
+            // In the event that scheduling fails due to an exception not related to a specific task
+            // we'll error all tasks to give it the opportunity to recover
+            log.error("StreamPollingScheduler: unrecoverable error, fail all tasks, so listeners can recover.", e);
+            getTasks(StreamStatus.RUNNABLE).forEach(t -> t.setError(e));
+            getTasks(StreamStatus.SCHEDULING).forEach(t -> t.setError(e));
+            getTasks(StreamStatus.SYNCING).forEach(t -> t.setError(e));
+            handleFailures(getTasks(StreamStatus.ERROR));
+        } finally {
+            long elapsedTimeNs = cycleStartTimeNs != 0L ? (System.nanoTime() - cycleStartTimeNs) : 0L;
+            MicroMeterUtils.time(Duration.ofNanos(elapsedTimeNs), "schedule.cycle");
+            long nextSchedule = Math.max(0, pollPeriod.toNanos() - elapsedTimeNs);
+            Preconditions.checkState(nextSchedule <= pollPeriod.toNanos());
+            scheduler.schedule(this::tick, nextSchedule, TimeUnit.NANOSECONDS);
+        }
     }
 
     public void shutdown() {
