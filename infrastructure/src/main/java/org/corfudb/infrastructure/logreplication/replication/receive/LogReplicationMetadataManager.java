@@ -381,8 +381,18 @@ public class LogReplicationMetadataManager {
             appendUpdate(txn, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
             appendUpdate(txn, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED, ts);
             appendUpdate(txn, LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED, ts);
-            txn.commit();
 
+            // Set 'isDataConsistent' flag on replication status table atomically with snapshot sync completed
+            // information, to prevent any inconsistency between flag and state of snapshot sync completion in
+            // the event of crashes
+            ReplicationStatusVal statusValue = ReplicationStatusVal.newBuilder()
+                    .setDataConsistent(true)
+                    .setStatus(SyncStatus.UNAVAILABLE)
+                    .build();
+            txn.putRecord(replicationStatusTable, ReplicationStatusKey.newBuilder().setClusterId(localClusterId).build(),
+                    statusValue, null);
+
+            txn.commit();
             log.debug("Commit snapshot apply complete timestamp={}, for topologyConfigId={}", ts, topologyConfigId);
         }
     }
@@ -613,7 +623,7 @@ public class LogReplicationMetadataManager {
     }
 
     /**
-     * Set DataConsistent filed in status table on standby side.
+     * Set DataConsistent field in status table on standby side.
      *
      * Note: TransactionAbortedException has been handled by upper level.
      *
@@ -630,9 +640,7 @@ public class LogReplicationMetadataManager {
             txn.commit();
         }
 
-        if (log.isTraceEnabled()) {
-            log.trace("setDataConsistentOnStandby: localClusterId: {}, isConsistent: {}", localClusterId, isConsistent);
-        }
+        log.debug("setDataConsistentOnStandby: localClusterId: {}, isConsistent: {}", localClusterId, isConsistent);
     }
 
     public Map<String, ReplicationStatusVal> getDataConsistentOnStandby() {
@@ -646,7 +654,7 @@ public class LogReplicationMetadataManager {
 
         // Initially, snapshot sync is pending so the data is not consistent.
         if (record.getPayload() == null) {
-            log.warn("No Key for Data Consistent found.  DataConsistent Status is not set.");
+            log.warn("DataConsistent status is not set for local cluster {}", localClusterId);
             statusVal = ReplicationStatusVal.newBuilder().setDataConsistent(false).build();
         } else {
             statusVal = record.getPayload();

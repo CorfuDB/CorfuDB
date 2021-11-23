@@ -615,8 +615,12 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         // Update topology config id in metadata manager
         logReplicationMetadataManager.setupTopologyConfigId(topologyDescriptor.getTopologyConfigId());
 
-        // Reset the Replication Status on Active and Standby
-        resetReplicationStatusTableWithRetry();
+        if (isLeader.get()) {
+            // Reset the Replication Status on Active and Standby only for the leader node
+            // Consider the case of async configuration changes, non-lead nodes could overwrite
+            // the replication status if it has already completed by the lead node
+            resetReplicationStatusTableWithRetry();
+        }
 
         log.debug("Persist new topologyConfigId {}, cluster id={}, role={}", topologyDescriptor.getTopologyConfigId(),
                 localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
