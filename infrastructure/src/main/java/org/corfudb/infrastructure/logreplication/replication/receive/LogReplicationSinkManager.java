@@ -168,9 +168,6 @@ public class LogReplicationSinkManager implements DataReceiver {
                         .setNameFormat("snapshotSyncApplyExecutor")
                         .build());
 
-        // Set the data consistent status.
-        // It could have tx conflict with another log replicator instance.
-        setDataConsistentWithRetry(dataConsistent.get());
         initWriterAndBufferMgr();
     }
 
@@ -185,9 +182,8 @@ public class LogReplicationSinkManager implements DataReceiver {
                     throw new RetryNeededException();
                 }
 
-                if (log.isTraceEnabled()) {
-                    log.trace("setDataConsistentWithRetry succeeds, current value is {}", dataConsistent.get());
-                }
+                log.debug("setDataConsistentWithRetry succeeds, current value is {}", dataConsistent.get());
+
                 return null;
             }).run();
         } catch (InterruptedException e) {
@@ -420,7 +416,20 @@ public class LogReplicationSinkManager implements DataReceiver {
      * checkpoint/trim process can be resumed.
      */
     private void completeSnapshotApply(LogReplication.LogReplicationEntryMsg entry) {
-        logReplicationMetadataManager.setSnapshotAppliedComplete(entry);
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    logReplicationMetadataManager.setSnapshotAppliedComplete(entry);
+                } catch (TransactionAbortedException tae) {
+                    log.error("Error while attempting to set SNAPSHOT_SYNC as completed.", tae);
+                    throw new RetryNeededException();
+                }
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when attempting to set SNAPSHOT_SYNC as completed.", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
 
         processSnapshotSyncApplied(entry);
 
@@ -468,7 +477,6 @@ public class LogReplicationSinkManager implements DataReceiver {
         setDataConsistentWithRetry(false);
         snapshotWriter.startSnapshotSyncApply();
         completeSnapshotApply(entry);
-        setDataConsistentWithRetry(true);
         ongoingApply.set(false);
         log.debug("Exit Start Snapshot Sync Apply, id={}", entry.getMetadata().getSyncRequestId());
     }

@@ -107,7 +107,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
         // (6) Verify Data on Standby after Restart
         log.debug(">>> (6) Verify Data on Standby");
-        verifyDataOnStandby((numWrites*2 + numWrites/2));
+        verifyStandbyData((numWrites*2 + numWrites/2));
     }
 
     /**
@@ -132,7 +132,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         log.debug(">>> (3) Stop Active Node");
         stopActiveLogReplicator();
 
-        // (4) Sleep Interval so writes keep going through, while standby is down
+        // (4) Sleep Interval so writes keep going through, while active is down
         log.debug(">>> (4) Wait for some time");
         Sleep.sleepUninterruptibly(Duration.ofSeconds(SLEEP_DURATION));
 
@@ -142,7 +142,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
         // (6) Verify Data on Standby after Restart
         log.debug(">>> (6) Verify Data on Standby");
-        verifyDataOnStandby((numWrites*2 + numWrites/2));
+        verifyStandbyData((numWrites*2 + numWrites/2));
     }
 
     @Test
@@ -178,13 +178,13 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             startLogReplicatorServers();
 
             log.debug("Wait ... Snapshot log replication in progress ...");
-            verifyDataOnStandby(numWritesSmaller);
+            verifyStandbyData(numWritesSmaller);
 
             // Add Delta's for Log Entry Sync
             writeToActive(numWritesSmaller, numWritesSmaller / 2);
 
             log.debug("Wait ... Delta log replication in progress ...");
-            verifyDataOnStandby((numWritesSmaller + (numWritesSmaller / 2)));
+            verifyStandbyData((numWritesSmaller + (numWritesSmaller / 2)));
         } finally {
             executorService.shutdownNow();
 
@@ -357,10 +357,10 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             writeToActiveDifferentTypes(0, totalEntries);
 
             // Confirm data does exist on Active Cluster
-            verifyDataOnActive(totalEntries);
+            verifyActiveData(totalEntries);
 
             // Confirm data does not exist on Standby Cluster
-            verifyDataOnStandby(0);
+            verifyStandbyData(0);
 
             // Open a local table on Standby Cluster
             openTable(corfuStoreStandby, "local");
@@ -378,7 +378,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             startLogReplicatorServers();
 
             // Verify Snapshot has successfully replicated
-            verifyDataOnStandby(totalEntries);
+            verifyStandbyData(totalEntries);
 
             // Verify both extra and local table are opened on Standby
             verifyTableOpened(corfuStoreStandby, "local");
@@ -399,7 +399,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             openTable(corfuStoreActive, "extra_delta");
 
             // Verify Delta's are replicated to standby
-            verifyDataOnStandby((totalEntries*2));
+            verifyStandbyData((totalEntries*2));
 
             // Verify tableRegistry's delta is replicated to Standby
             verifyTableOpened(corfuStoreStandby, "extra_delta");
@@ -431,7 +431,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
     }
 
-    private void verifyDataOnActive(int totalEntries) {
+    private void verifyActiveData(int totalEntries) {
         for (Table<Sample.StringKey, ValueFieldTagOne, Sample.Metadata> map : mapNameToMapActiveTypeA.values()) {
             assertThat(map.count()).isEqualTo(totalEntries);
         }
@@ -441,7 +441,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         }
     }
 
-    public void verifyDataOnStandby(int expectedConsecutiveWrites) {
+    public void verifyStandbyData(int expectedConsecutiveWrites) {
         for (Map.Entry<String, Table<Sample.StringKey, ValueFieldTagOne, Sample.Metadata>> entry : mapNameToMapStandbyTypeA.entrySet()) {
 
             log.debug("Verify Data on Standby's Table {}", entry.getKey());

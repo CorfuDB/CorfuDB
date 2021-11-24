@@ -154,11 +154,10 @@ public class LogReplicationAbstractIT extends AbstractIT {
     }
 
     public void testEndToEndSnapshotAndLogEntrySyncUFO(int totalNumMaps) throws Exception {
-        // For the purpose of this test, standby should only update status 3 times:
-        // (1) When initializing LR : is_data_consistent = false
-        // (2) When starting snapshot sync apply : is_data_consistent = false
-        // (3) When completing snapshot sync apply : is_data_consistent = true
-        final int totalStandbyStatusUpdates = 3;
+        // For the purpose of this test, standby should only update status 2 times:
+        // (1) When starting snapshot sync apply : is_data_consistent = false
+        // (2) When completing snapshot sync apply : is_data_consistent = true
+        final int totalStandbyStatusUpdates = 2;
 
         try {
             log.debug("Setup active and standby Corfu's");
@@ -206,8 +205,10 @@ public class LogReplicationAbstractIT extends AbstractIT {
             verifyDataOnStandby((numWrites + (numWrites / 2)));
 
             // Verify Standby Status Listener received all expected updates (is_data_consistent)
+            log.debug("Wait ... Replication status UPDATE ...");
             statusUpdateLatch.await();
             assertThat(standbyListener.getAccumulatedStatus().size()).isEqualTo(totalStandbyStatusUpdates);
+            // Confirm last updates are set to true (corresponding to snapshot sync completed and log entry sync started)
             assertThat(standbyListener.getAccumulatedStatus().get(standbyListener.getAccumulatedStatus().size() - 1)).isTrue();
             assertThat(standbyListener.getAccumulatedStatus()).contains(false);
         } finally {
