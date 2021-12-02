@@ -38,7 +38,7 @@ import java.util.concurrent.TimeUnit;
  * all states in which the leader node on the active cluster can be.
  *
  *
- *                                                       R-LEADER_LOSS
+ *                                                  R-LEADER_LOSS / NOT_FOUND
  *                                             +-------------------------------+
  *                              ON_CONNECTION  |                               |    ON_CONNECTION_DOWN
  *                                    UP       |       ON_CONNECTION_DOWN      |       (NON_LEADER)

@@ -14,6 +14,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * This class represents the WaitSnapshotApply state of the Log Replication State Machine.
@@ -54,6 +55,8 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     private long baseSnapshotTimestamp;
 
     private ScheduledExecutorService snapshotSyncApplyMonitorExecutor;
+
+    private volatile AtomicBoolean stopSnapshotApply = new AtomicBoolean(false);
 
     /**
      * Constructor
@@ -117,6 +120,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                 return this;
             case REPLICATION_STOP:
                 log.debug("Stop Log Replication while waiting for snapshot sync apply to complete id={}", transitionEventId);
+                stopSnapshotApply.set(true);
                 return fsm.getStates().get(LogReplicationStateType.INITIALIZED);
             case REPLICATION_SHUTDOWN:
                 log.debug("Shutdown Log Replication while waiting for snapshot sync apply to complete id={}", transitionEventId);
@@ -132,6 +136,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     public void onEntry(LogReplicationState from) {
         log.info("OnEntry :: wait snapshot apply state");
         if (from.getType().equals(LogReplicationStateType.INITIALIZED)) {
+            stopSnapshotApply.set(false);
             fsm.getAckReader().markSnapshotSyncInfoOngoing();
         }
         this.fsm.getLogReplicationFSMWorkers().submit(this::verifyStatusOfSnapshotSyncApply);
@@ -158,9 +163,11 @@ public class WaitSnapshotApplyState implements LogReplicationState {
             } else {
                 log.debug("Snapshot sync apply is still in progress, appliedTs={}, baseTs={}, sync_id={}", metadataResponse.getSnapshotApplied(),
                         baseSnapshotTimestamp, transitionEventId);
-                // Schedule a one time action which will verify the snapshot apply status after a given delay
-                this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
-                        TimeUnit.MILLISECONDS);
+                if (!stopSnapshotApply.get()) {
+                    // Schedule a one time action which will verify the snapshot apply status after a given delay
+                    this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
+                            TimeUnit.MILLISECONDS);
+                }
             }
         } catch (TimeoutException te) {
             log.error("Snapshot sync apply verification timed out.", te);

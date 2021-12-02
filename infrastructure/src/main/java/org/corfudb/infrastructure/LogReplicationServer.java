@@ -111,7 +111,7 @@ public class LogReplicationServer extends AbstractServer {
                                       @Nonnull IServerRouter router) {
         log.trace("Log Replication Entry received by Server.");
 
-        if (isLeader(request, ctx, router)) {
+        if (isLeader(request, ctx, router, true)) {
             // Forward the received message to the Sink Manager for apply
             LogReplicationEntryMsg ack =
                     sinkManager.receive(request.getPayload().getLrEntry());
@@ -148,7 +148,7 @@ public class LogReplicationServer extends AbstractServer {
                                        @Nonnull IServerRouter router) {
         log.info("Log Replication Metadata Request received by Server.");
 
-        if (isLeader(request, ctx, router)) {
+        if (isLeader(request, ctx, router, false)) {
             LogReplicationMetadataManager metadataMgr = sinkManager.getLogReplicationMetadataManager();
             ResponseMsg response = metadataMgr.getMetadataResponse(getHeaderMsg(request.getHeader()));
             log.info("Send Metadata response :: {}", TextFormat.shortDebugString(response.getPayload()));
@@ -197,13 +197,23 @@ public class LogReplicationServer extends AbstractServer {
      */
     protected synchronized boolean isLeader(@Nonnull RequestMsg request,
                                             @Nonnull ChannelHandlerContext ctx,
-                                            @Nonnull IServerRouter router) {
+                                            @Nonnull IServerRouter router, boolean isLogEntry) {
         // If the current cluster has switched to the active role (no longer the receiver) or it is no longer the leader,
         // skip message processing (drop received message) and nack on leadership (loss of leadership)
         // This will re-trigger leadership discovery on the sender.
         boolean lostLeadership = isActive.get() || !isLeader.get();
 
         if (lostLeadership) {
+
+            // TODO: remove this part of the code, for debugging ONLY
+            if (isLogEntry) {
+                LogReplicationEntryMsg entryMsg = request.getPayload().getLrEntry();
+                LogReplicationEntryType entryType = entryMsg.getMetadata().getEntryType();
+                log.warn("Received message of type {} while NOT LEADER. snapshotSyncSeqNumber={}, ts={}, syncRequestId={}", entryType,
+                        entryMsg.getMetadata().getSnapshotSyncSeqNum(), entryMsg.getMetadata().getTimestamp(),
+                        entryMsg.getMetadata().getSyncRequestId());
+            }
+
             log.warn("This node has changed, active={}, leader={}. Dropping message type={}, id={}", isActive.get(),
                     isLeader.get(), request.getPayload().getPayloadCase(), request.getHeader().getRequestId());
             HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
