@@ -17,8 +17,9 @@ import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -57,7 +58,7 @@ public class LogReplicationServerTest {
     }
 
     /**
-     * MAke sure that the server will process {@link LogReplicationMetadataRequestMsg}
+     * Make sure that the server will process {@link LogReplicationMetadataRequestMsg}
      * and provide an appropriate {@link ResponseMsg} message.
      */
     @Test
@@ -69,19 +70,19 @@ public class LogReplicationServerTest {
                 .setLrMetadataRequest(metadataRequest).build());
         final ResponseMsg response = ResponseMsg.newBuilder().build();
 
-        doReturn(true).when(lrServer).isLeader(same(request), any(), any());
+        doReturn(true).when(lrServer).isLeader(same(request), any(), any(), anyBoolean());
         doReturn(metadataManager).when(sinkManager).getLogReplicationMetadataManager();
         doReturn(response).when(metadataManager).getMetadataResponse(any());
 
         lrServer.createHandlerMethods().handle(request, mockHandlerContext, mockServerRouter);
 
-        verify(lrServer).isLeader(same(request), any(), any());
+        verify(lrServer).isLeader(same(request), any(), any(), anyBoolean());
         verify(sinkManager).getLogReplicationMetadataManager();
         verify(metadataManager).getMetadataResponse(any());
     }
 
     /**
-     * MAke sure that the server will process {@link LogReplicationLeadershipRequestMsg}
+     * Make sure that the server will process {@link LogReplicationLeadershipRequestMsg}
      * and provide an appropriate {@link ResponseMsg} message.
      */
     @Test
@@ -114,7 +115,7 @@ public class LogReplicationServerTest {
                         .setLrEntry(logEntry).build());
         final LogReplicationEntryMsg ack = LogReplicationEntryMsg.newBuilder().build();
 
-        doReturn(true).when(lrServer).isLeader(same(request), any(), any());
+        doReturn(true).when(lrServer).isLeader(same(request), any(), any(), anyBoolean());
         doReturn(ack).when(sinkManager).receive(same(request.getPayload().getLrEntry()));
 
         lrServer.createHandlerMethods().handle(request, mockHandlerContext, mockServerRouter);

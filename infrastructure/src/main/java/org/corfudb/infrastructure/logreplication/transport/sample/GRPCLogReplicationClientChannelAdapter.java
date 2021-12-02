@@ -46,7 +46,6 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     private StreamObserver<RequestMsg> requestObserver;
     private StreamObserver<ResponseMsg> responseObserver;
 
-
     /** A {@link CompletableFuture} which is completed when a connection to a remote leader is set,
      * and  messages can be sent to the remote node.
      */
@@ -227,4 +226,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         });
     }
 
+    @Override
+    public void resetRemoteLeader() {
+        // No-op
+    }
 }
