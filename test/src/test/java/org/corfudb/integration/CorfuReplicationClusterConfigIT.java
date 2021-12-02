@@ -10,11 +10,18 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Re
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataVal;
+import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.ExampleSchemas.ClusterUuidMsg;
+import org.corfudb.runtime.MultiCheckpointWriter;
+import org.corfudb.runtime.collections.CorfuDynamicKey;
+import org.corfudb.runtime.collections.CorfuDynamicRecord;
+import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.Table;
@@ -22,7 +29,12 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.SMRObject;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.Sleep;
+import org.corfudb.util.serializer.DynamicProtobufSerializer;
+import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.ProtobufSerializer;
 import org.corfudb.utils.lock.LockDataTypes;
 import org.junit.After;
 import org.junit.Before;
@@ -31,6 +43,8 @@ import org.junit.Test;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.IntPredicate;
@@ -85,6 +99,13 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     private CorfuStore standbyCorfuStore;
     private Table<ClusterUuidMsg, ClusterUuidMsg, ClusterUuidMsg> configTable;
     private Table<LockDataTypes.LockId, LockDataTypes.LockData, Message> activeLockTable;
+
+    public Map<String, Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata>> mapNameToMapActive;
+    public Map<String, Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata>> mapNameToMapStandby;
+
+    public static final String TABLE_PREFIX = "Table00";
+
+    public static final String NAMESPACE = "LR-Test";
 
     @Before
     public void setUp() throws Exception {
@@ -370,6 +391,269 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
         assertThat(replicationStatusVal.getSnapshotSyncInfo().getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
+    }
+
+    @Test
+    public void testDataConsistentForEmptyStreams() throws Exception {
+        // Open 2/10 tables to be replicated on the active and write data
+        // to it
+        openMapsOnCluster(true, 2, 1);
+        writeToActive(0, firstBatch);
+
+        // Open another(different) table on standby.  This is also one of
+        // the tables to replicate.  Write data to it.
+        openMapsOnCluster(false, 1, 5);
+        writeToStandby(0, firstBatch);
+
+        // Start LR on both active and standby clusters
+        activeReplicationServer = runReplicationServer(activeReplicationServerPort, nettyPluginPath);
+        standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, nettyPluginPath);
+
+        log.info("Replication servers started, and replication is in progress...");
+        sleepUninterruptibly(20);
+
+        // Verify that the replicated table opened on standby has no
+        // data after snapshot sync
+        verifyNoDataOnStandbyOpenedTables();
+
+        LogReplicationMetadata.ReplicationStatusKey key =
+            LogReplicationMetadata.ReplicationStatusKey
+                .newBuilder()
+                .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                .build();
+        ReplicationStatusVal replicationStatusVal;
+        try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+            txn.commit();
+        }
+        assertThat(replicationStatusVal.getSyncType())
+            .isEqualTo(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
+        assertThat(replicationStatusVal.getStatus())
+            .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
+
+        assertThat(replicationStatusVal.getSnapshotSyncInfo().getType())
+            .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
+        assertThat(replicationStatusVal.getSnapshotSyncInfo().getStatus())
+            .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
+        log.info("Snapshot Sync successful");
+    }
+
+    private void verifyNoDataOnStandbyOpenedTables() {
+        for(Map.Entry<String, Table<Sample.StringKey, Sample.IntValueTag,
+            Sample.Metadata>> entry : mapNameToMapStandby.entrySet()) {
+            Table<Sample.StringKey, Sample.IntValueTag,
+                Sample.Metadata> map = entry.getValue();
+            assertThat(map.count()).isEqualTo(0);
+        }
+    }
+
+    @Test
+    public void testSnapshotSyncOfUnopenedTrimmedStreams() {
+        try {
+            // Open 2/10 tables to be replicated on the active
+            openMapsOnCluster(true, 2, 1);
+
+            // Write data to the 2 tables
+            writeToActive(0, firstBatch);
+
+            // Start LR on both active and standby clusters
+            activeReplicationServer = runReplicationServer(activeReplicationServerPort, nettyPluginPath);
+            standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, nettyPluginPath);
+
+            log.info("Replication servers started, and replication is in progress...");
+            sleepUninterruptibly(20);
+
+            // Verify snapshot sync completes as expected
+            LogReplicationMetadata.ReplicationStatusKey key =
+                LogReplicationMetadata.ReplicationStatusKey
+                    .newBuilder()
+                    .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                    .build();
+            ReplicationStatusVal replicationStatusVal;
+            try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+                txn.commit();
+            }
+            assertThat(replicationStatusVal.getSyncType())
+                .isEqualTo(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
+            assertThat(replicationStatusVal.getStatus())
+                .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
+
+            assertThat(replicationStatusVal.getSnapshotSyncInfo().getType())
+                .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
+            assertThat(replicationStatusVal.getSnapshotSyncInfo().getStatus())
+                .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
+            log.info("Snapshot Sync successful");
+
+
+            // Checkpoint and trim the maps on both active and standby
+            checkpointAndTrim(true);
+            checkpointAndTrim(false);
+
+            // Perform Switchover and verify it succeeds
+            try (TxnContext txn = activeCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+                txn.putRecord(configTable, DefaultClusterManager.OP_SWITCH, DefaultClusterManager.OP_SWITCH, DefaultClusterManager.OP_SWITCH);
+                txn.commit();
+            }
+            assertThat(configTable.count()).isOne();
+            sleepUninterruptibly(10);
+
+            // Verify snapshot sync completes as expected
+            key = LogReplicationMetadata.ReplicationStatusKey
+                .newBuilder()
+                .setClusterId(DefaultClusterConfig.getActiveClusterId())
+                .build();
+            try (TxnContext txn =
+                     standbyCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+                txn.commit();
+            }
+
+            assertThat(replicationStatusVal.getSnapshotSyncInfo().getType())
+                .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
+            assertThat(replicationStatusVal.getSnapshotSyncInfo().getStatus())
+                .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
+
+            assertThat(replicationStatusVal.getSyncType())
+                .isEqualTo(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
+            assertThat(replicationStatusVal.getStatus())
+                .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
+            log.info("Snapshot Sync successful after CP/Trim and Switchover");
+        } catch (Exception e) {
+            log.error("Exception ", e);
+        }
+    }
+
+    private void openMapsOnCluster(boolean isActive, int mapCount,
+        int startIndex) throws Exception {
+        mapNameToMapActive = new HashMap<>();
+        mapNameToMapStandby = new HashMap<>();
+
+        for(int i=startIndex; i <= mapCount; i++) {
+            String mapName = TABLE_PREFIX + i;
+
+            if (isActive) {
+                Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapActive = activeCorfuStore.openTable(
+                    NAMESPACE, mapName, Sample.StringKey.class, Sample.IntValueTag.class, Sample.Metadata.class,
+                    TableOptions.fromProtoSchema(Sample.IntValueTag.class));
+                mapNameToMapActive.put(mapName, mapActive);
+                assertThat(mapActive.count()).isEqualTo(0);
+            } else {
+                Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapStandby = standbyCorfuStore.openTable(
+                    NAMESPACE, mapName, Sample.StringKey.class, Sample.IntValueTag.class, Sample.Metadata.class,
+                    TableOptions.fromProtoSchema(Sample.IntValueTag.class));
+                mapNameToMapStandby.put(mapName, mapStandby);
+                assertThat(mapStandby.count()).isEqualTo(0);
+            }
+        }
+    }
+
+    private void writeToActive(int startIndex, int totalEntries) {
+        int maxIndex = totalEntries + startIndex;
+        for(Map.Entry<String, Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata>> entry : mapNameToMapActive.entrySet()) {
+
+            log.debug(">>> Write to active cluster, map={}", entry.getKey());
+
+            Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map = entry.getValue();
+            for (int i = startIndex; i < maxIndex; i++) {
+                Sample.StringKey stringKey = Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build();
+                Sample.IntValueTag IntValueTag = Sample.IntValueTag.newBuilder().setValue(i).build();
+                Sample.Metadata metadata = Sample.Metadata.newBuilder().setMetadata("Metadata_" + i).build();
+                try (TxnContext txn = activeCorfuStore.txn(NAMESPACE)) {
+                    txn.putRecord(map, stringKey, IntValueTag, metadata);
+                    txn.commit();
+                }
+            }
+            assertThat(map.count()).isEqualTo(totalEntries);
+        }
+    }
+
+    private void writeToStandby(int startIndex, int totalEntries) {
+        int maxIndex = totalEntries + startIndex;
+        for(Map.Entry<String, Table<Sample.StringKey, Sample.IntValueTag,
+            Sample.Metadata>> entry : mapNameToMapStandby.entrySet()) {
+
+            log.debug(">>> Write to standby cluster, map={}", entry.getKey());
+
+            Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map = entry.getValue();
+            for (int i = startIndex; i < maxIndex; i++) {
+                Sample.StringKey stringKey = Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build();
+                Sample.IntValueTag IntValueTag = Sample.IntValueTag.newBuilder().setValue(i).build();
+                Sample.Metadata metadata = Sample.Metadata.newBuilder().setMetadata("Metadata_" + i).build();
+                try (TxnContext txn = standbyCorfuStore.txn(NAMESPACE)) {
+                    txn.putRecord(map, stringKey, IntValueTag, metadata);
+                    txn.commit();
+                }
+            }
+            assertThat(map.count()).isEqualTo(totalEntries);
+        }
+    }
+
+    private void checkpointAndTrim(boolean active) {
+        CorfuRuntime cpRuntime;
+
+        if (active) {
+            cpRuntime = new CorfuRuntime(activeCorfuEndpoint).connect();
+        } else {
+            cpRuntime = new CorfuRuntime(standbyCorfuEndpoint).connect();
+        }
+        checkpointAndTrimCorfuStore(cpRuntime);
+    }
+
+    private void checkpointAndTrimCorfuStore(CorfuRuntime cpRuntime) {
+        // Open Table Registry
+        TableRegistry tableRegistry = cpRuntime.getTableRegistry();
+        CorfuTable<CorfuStoreMetadata.TableName, CorfuRecord<CorfuStoreMetadata.TableDescriptors,
+            CorfuStoreMetadata.TableMetadata>> tableRegistryCT = tableRegistry.getRegistryTable();
+
+        // Save the regular serializer first..
+        ISerializer protoBufSerializer = cpRuntime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
+
+        // Must register dynamicProtoBufSerializer *AFTER* the getTableRegistry() call to ensure that
+        // the serializer does not go back to the regular ProtoBufSerializer
+        ISerializer dynamicProtoBufSerializer = new DynamicProtobufSerializer(cpRuntime);
+        cpRuntime.getSerializers().registerSerializer(dynamicProtoBufSerializer);
+
+        // First checkpoint the TableRegistry system table
+        MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
+
+        Token trimMark = null;
+
+        for (CorfuStoreMetadata.TableName tableName : tableRegistry.listTables(null)) {
+            String fullTableName = TableRegistry.getFullyQualifiedTableName(
+                tableName.getNamespace(), tableName.getTableName()
+            );
+            SMRObject.Builder<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> corfuTableBuilder = cpRuntime.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
+                .setStreamName(fullTableName)
+                .setSerializer(dynamicProtoBufSerializer);
+
+            log.info("Checkpointing - {}", fullTableName);
+            mcw = new MultiCheckpointWriter<>();
+            mcw.addMap(corfuTableBuilder.open());
+
+            Token token = mcw.appendCheckpoints(cpRuntime, "checkpointer");
+            trimMark = trimMark == null ? token : Token.min(trimMark, token);
+        }
+
+        // Finally checkpoint the TableRegistry system table itself..
+        mcw.addMap(tableRegistryCT);
+        Token token = mcw.appendCheckpoints(cpRuntime, "checkpointer");
+        trimMark = trimMark != null ? Token.min(trimMark, token) : token;
+
+        cpRuntime.getAddressSpaceView().prefixTrim(trimMark);
+        cpRuntime.getAddressSpaceView().gc();
+
+        // Lastly restore the regular protoBuf serializer and undo the dynamic protoBuf serializer
+        // otherwise the test cannot continue beyond this point.
+        cpRuntime.getSerializers().registerSerializer(protoBufSerializer);
+
+        // Trim
+        log.debug("**** Trim Log @address=" + trimMark);
+        cpRuntime.getAddressSpaceView().prefixTrim(trimMark);
+        cpRuntime.getAddressSpaceView().invalidateClientCache();
+        cpRuntime.getAddressSpaceView().invalidateServerCaches();
+        cpRuntime.getAddressSpaceView().gc();
     }
 
     /**

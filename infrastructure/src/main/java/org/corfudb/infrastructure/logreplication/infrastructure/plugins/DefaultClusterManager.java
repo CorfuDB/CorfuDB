@@ -435,7 +435,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
 
         @Override
         public void onError(Throwable throwable) {
-            // Ignore
+            log.info("Error Received");
         }
     }
 

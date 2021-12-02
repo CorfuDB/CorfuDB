@@ -308,6 +308,31 @@ public class LogReplicationAbstractIT extends AbstractIT {
         }
     }
 
+    public void openMapsOnCluster(boolean isActive, int mapCount,
+                                  int startIndex) throws Exception {
+        mapNameToMapActive = new HashMap<>();
+        mapNameToMapStandby = new HashMap<>();
+
+        for(int i=startIndex; i <= mapCount; i++) {
+            String mapName = TABLE_PREFIX + i;
+
+            if (isActive) {
+                Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapActive = corfuStoreActive.openTable(
+                    NAMESPACE, mapName, Sample.StringKey.class, Sample.IntValueTag.class, Sample.Metadata.class,
+                    TableOptions.fromProtoSchema(Sample.IntValueTag.class));
+                mapNameToMapActive.put(mapName, mapActive);
+                assertThat(mapActive.count()).isEqualTo(0);
+            } else {
+
+                Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapStandby = corfuStoreStandby.openTable(
+                    NAMESPACE, mapName, Sample.StringKey.class, Sample.IntValueTag.class, Sample.Metadata.class,
+                    TableOptions.fromProtoSchema(Sample.IntValueTag.class));
+                mapNameToMapStandby.put(mapName, mapStandby);
+                assertThat(mapStandby.count()).isEqualTo(0);
+            }
+        }
+    }
+
     public void openMap() {
         // Write to StreamA on Active Site
         mapA = activeRuntime.getObjectsView()
@@ -356,15 +381,37 @@ public class LogReplicationAbstractIT extends AbstractIT {
         }
     }
 
+    public void writeToStandby(int startIndex, int totalEntries) {
+        int maxIndex = totalEntries + startIndex;
+        for(Map.Entry<String, Table<Sample.StringKey, Sample.IntValueTag,
+            Sample.Metadata>> entry : mapNameToMapStandby.entrySet()) {
+
+            log.debug(">>> Write to standby cluster, map={}", entry.getKey());
+
+            Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map = entry.getValue();
+            for (int i = startIndex; i < maxIndex; i++) {
+                Sample.StringKey stringKey = Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build();
+                Sample.IntValueTag IntValueTag = Sample.IntValueTag.newBuilder().setValue(i).build();
+                Sample.Metadata metadata = Sample.Metadata.newBuilder().setMetadata("Metadata_" + i).build();
+                try (TxnContext txn = corfuStoreStandby.txn(NAMESPACE)) {
+                    txn.putRecord(map, stringKey, IntValueTag, metadata);
+                    txn.commit();
+                }
+            }
+        }
+    }
+
     public void startLogReplicatorServers() {
         try {
             if (runProcess) {
                 // Start Log Replication Server on Active Site
-                activeReplicationServer = runReplicationServer(activeReplicationServerPort, pluginConfigFilePath,
+                activeReplicationServer =
+                    runReplicationServer(activeReplicationServerPort, pluginConfigFilePath,
                         lockLeaseDuration);
 
                 // Start Log Replication Server on Standby Site
-                standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, pluginConfigFilePath,
+                standbyReplicationServer =
+                    runReplicationServer(standbyReplicationServerPort, pluginConfigFilePath,
                         lockLeaseDuration);
             } else {
                 executorService.submit(() -> {
@@ -593,10 +640,12 @@ public class LogReplicationAbstractIT extends AbstractIT {
                     .setStreamName(fullTableName)
                     .setSerializer(dynamicProtoBufSerializer);
 
+            log.info("Checkpointing - {}", fullTableName);
             mcw = new MultiCheckpointWriter<>();
             mcw.addMap(corfuTableBuilder.open());
+
             Token token = mcw.appendCheckpoints(cpRuntime, "checkpointer");
-            trimMark = token;
+            trimMark = trimMark == null ? token : Token.min(trimMark, token);
         }
 
         // Finally checkpoint the TableRegistry system table itself..
