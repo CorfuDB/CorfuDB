@@ -139,4 +139,6 @@ public abstract class IClientChannelAdapter {
     public Optional<String> getRemoteLeader() {
         return getRouter().getRemoteLeaderNodeId();
     }
+
+    public abstract void resetRemoteLeader();
 }
