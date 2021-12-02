@@ -443,7 +443,7 @@ public class LogReplicationMetadataManager {
      *
      * @param clusterId standby cluster id
      */
-    public void updateSnapshotSyncStatusCompleted(String clusterId, long remainingEntriesToSend) {
+    public void updateSnapshotSyncStatusCompleted(String clusterId, long remainingEntriesToSend, long baseSnapshot) {
         Instant time = Instant.now();
         Timestamp timestamp = Timestamp.newBuilder().setSeconds(time.getEpochSecond())
                 .setNanos(time.getNano()).build();
@@ -459,6 +459,7 @@ public class LogReplicationMetadataManager {
 
                 SnapshotSyncInfo currentSyncInfo = previousSyncInfo.toBuilder()
                         .setStatus(SyncStatus.COMPLETED)
+                        .setBaseSnapshot(baseSnapshot)
                         .setCompletedTime(timestamp)
                         .build();
 

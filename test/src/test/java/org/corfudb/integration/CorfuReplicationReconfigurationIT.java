@@ -1,8 +1,13 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultLogReplicationConfigAdapter;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
+import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -13,6 +18,7 @@ import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.test.SampleSchema.ValueFieldTagOne;
@@ -37,6 +43,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 
 /**
  * This suite of tests validates the behavior of Log Replication
@@ -59,6 +66,10 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             new HashMap<>();
     private Map<String, Table<Sample.StringKey, ValueFieldTagOneAndTwo, Sample.Metadata>> mapNameToMapStandbyTypeB =
             new HashMap<>();
+
+    private volatile AtomicBoolean stopWrites = new AtomicBoolean(false);
+
+    private Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> noisyMap;
 
     /**
      * Sets the plugin path before starting any test
@@ -117,6 +128,9 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
      */
     @Test
     public void testActiveClusterReset() throws Exception {
+
+        final int delta = 5;
+
         // (1) Snapshot and Log Entry Sync
         log.debug(">>> (1) Start Snapshot and Log Entry Sync");
         testEndToEndSnapshotAndLogEntrySyncUFO();
@@ -143,6 +157,111 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         // (6) Verify Data on Standby after Restart
         log.debug(">>> (6) Verify Data on Standby");
         verifyStandbyData((numWrites*2 + numWrites/2));
+
+        // (7) Verify replication status after all data has been replicated (no further data)
+        corfuStoreActive.openTable(LogReplicationMetadataManager.NAMESPACE,
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class,
+                null,
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+
+        // Wait the polling period time before verifying sync status (to make sure it was updated)
+        Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + 1));
+
+        long remainingEntriesToSend = verifyReplicationStatus(ReplicationStatusVal.SyncType.LOG_ENTRY,
+                LogReplicationMetadata.SyncStatus.ONGOING, LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
+                LogReplicationMetadata.SyncStatus.COMPLETED);
+       assertThat(remainingEntriesToSend).isEqualTo(0L);
+
+        // (8) Keep writing data into the TX stream (but with data not intended for replication) while
+        // checking the status, confirm, remainingEntriesToSend is '0'
+        writerService.submit(() -> {
+            try {
+                openNonReplicatedTable();
+                while (!stopWrites.get()) {
+                    writeNonReplicatedTable(numWrites);
+                }
+            } catch (Exception e) {
+                fail("Failed Test!");
+            }
+        });
+
+        // Wait the polling period time and verify sync status again (to make sure it was not erroneously updated)
+        Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + 1));
+
+        // While the TX log is growing, the remaining entries to send can be changing during this time, as it is computed
+        // wrt. the tail of the log and this varies depending on how fast we are catching the tail of the log.
+        verifyReplicationStatus(ReplicationStatusVal.SyncType.LOG_ENTRY,
+                LogReplicationMetadata.SyncStatus.ONGOING, LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
+                LogReplicationMetadata.SyncStatus.COMPLETED);
+
+        stopWrites.set(true);
+
+        // (9) Stop active LR again, so server restarts from Log Entry Sync, with no actual deltas (as there is no new data)
+        // and verify remainingEntriesToSend is still '0'
+        stopActiveLogReplicator();
+        startActiveLogReplicator();
+
+        // Wait the polling period time and verify sync status again (to make sure it was not erroneously updated)
+        Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + delta));
+
+        remainingEntriesToSend = verifyReplicationStatus(ReplicationStatusVal.SyncType.LOG_ENTRY,
+                LogReplicationMetadata.SyncStatus.ONGOING, LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
+                LogReplicationMetadata.SyncStatus.COMPLETED);
+        assertThat(remainingEntriesToSend).isEqualTo(0L);
+    }
+
+    private long verifyReplicationStatus(ReplicationStatusVal.SyncType targetSyncType,
+                                         LogReplicationMetadata.SyncStatus targetSyncStatus,
+                                         LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType targetSnapshotSyncType,
+                                         LogReplicationMetadata.SyncStatus targetSnapshotSyncStatus) {
+
+        LogReplicationMetadata.ReplicationStatusKey key =
+                LogReplicationMetadata.ReplicationStatusKey
+                        .newBuilder()
+                        .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                        .build();
+
+        ReplicationStatusVal replicationStatusVal;
+        try (TxnContext txn = corfuStoreActive.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            replicationStatusVal = (ReplicationStatusVal)txn.getRecord(LogReplicationMetadataManager.REPLICATION_STATUS_TABLE, key).getPayload();
+            txn.commit();
+        }
+
+        log.info("ReplicationStatusVal: RemainingEntriesToSend: {}, SyncType: {}, Status: {}",
+                replicationStatusVal.getRemainingEntriesToSend(), replicationStatusVal.getSyncType(),
+                replicationStatusVal.getStatus());
+
+        log.info("ReplicationStatusVal: Base: {}, Type: {}, Status: {}, CompletedTime: {}",
+                replicationStatusVal.getSnapshotSyncInfo().getBaseSnapshot(), replicationStatusVal.getSnapshotSyncInfo().getType(),
+                replicationStatusVal.getSnapshotSyncInfo().getStatus(), replicationStatusVal.getSnapshotSyncInfo().getCompletedTime());
+
+        assertThat(replicationStatusVal.getSyncType()).isEqualTo(targetSyncType);
+        assertThat(replicationStatusVal.getStatus()).isEqualTo(targetSyncStatus);
+        assertThat(replicationStatusVal.getSnapshotSyncInfo().getType()).isEqualTo(targetSnapshotSyncType);
+        assertThat(replicationStatusVal.getSnapshotSyncInfo().getStatus()).isEqualTo(targetSnapshotSyncStatus);
+        assertThat(replicationStatusVal.getSnapshotSyncInfo().getBaseSnapshot()).isGreaterThan(Address.NON_ADDRESS);
+
+        return replicationStatusVal.getRemainingEntriesToSend();
+    }
+
+    private void openNonReplicatedTable() throws Exception {
+        noisyMap = corfuStoreActive.openTable(
+                NAMESPACE, "noisyMap", Sample.StringKey.class, Sample.IntValueTag.class, Sample.Metadata.class,
+                TableOptions.fromProtoSchema(Sample.IntValueTag.class));
+    }
+
+    private void writeNonReplicatedTable(int numWrites) {
+        for (int i = 0; i < numWrites; i++) {
+            Sample.StringKey stringKey = Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build();
+            Sample.IntValueTag intValueTag = Sample.IntValueTag.newBuilder().setValue(i).build();
+            Sample.Metadata metadata = Sample.Metadata.newBuilder().setMetadata("Metadata_" + i).build();
+            try (TxnContext txn = corfuStoreActive.txn(NAMESPACE)) {
+                txn.putRecord(noisyMap, stringKey, intValueTag, metadata);
+                txn.commit();
+            }
+        }
     }
 
     @Test
