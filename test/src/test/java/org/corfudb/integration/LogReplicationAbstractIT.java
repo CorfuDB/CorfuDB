@@ -360,11 +360,13 @@ public class LogReplicationAbstractIT extends AbstractIT {
         try {
             if (runProcess) {
                 // Start Log Replication Server on Active Site
-                activeReplicationServer = runReplicationServer(activeReplicationServerPort, pluginConfigFilePath,
+                activeReplicationServer =
+                    runReplicationServer(activeReplicationServerPort, pluginConfigFilePath,
                         lockLeaseDuration);
 
                 // Start Log Replication Server on Standby Site
-                standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, pluginConfigFilePath,
+                standbyReplicationServer =
+                    runReplicationServer(standbyReplicationServerPort, pluginConfigFilePath,
                         lockLeaseDuration);
             } else {
                 executorService.submit(() -> {
@@ -592,11 +594,12 @@ public class LogReplicationAbstractIT extends AbstractIT {
                     .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
                     .setStreamName(fullTableName)
                     .setSerializer(dynamicProtoBufSerializer);
-
+            
             mcw = new MultiCheckpointWriter<>();
             mcw.addMap(corfuTableBuilder.open());
+
             Token token = mcw.appendCheckpoints(cpRuntime, "checkpointer");
-            trimMark = token;
+            trimMark = trimMark == null ? token : Token.min(trimMark, token);
         }
 
         // Finally checkpoint the TableRegistry system table itself..

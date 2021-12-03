@@ -6,6 +6,8 @@ import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
@@ -25,12 +27,14 @@ import org.corfudb.util.serializer.Serializers;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.lang.reflect.Array;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
@@ -65,6 +69,10 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     private final LogReplicationMetadataManager logReplicationMetadataManager;
     // Mapping from regular stream Id to shadow stream Id
     private final HashMap<UUID, UUID> regularToShadowStreamId;
+
+    // Represents the actual replicated streams from active. This is a subset of all regular streams in
+    // regularToShadowStreamId map
+    private Set<UUID> replicatedStreamIds = new HashSet<>();
 
     @Getter
     private Phase phase;
@@ -114,78 +122,6 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     }
 
     /**
-     * Clear all tables registered
-     **/
-    private void clearTables() {
-
-        long persistedTopologyConfigId;
-        long persistedSnapshotStart;
-        long persistedTransferredSequenceNum;
-
-        try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
-            Map<LogReplicationMetadataType, Long> metadataMap = logReplicationMetadataManager.queryMetadata(txnContext,
-                    LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED,
-                    LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER);
-            persistedTopologyConfigId = metadataMap.get(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
-            persistedSnapshotStart = metadataMap.get(LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
-            persistedTransferredSequenceNum = metadataMap.get(LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER);
-            txnContext.commit();
-        }
-
-        // For transfer phase start
-        if (topologyConfigId != persistedTopologyConfigId || srcGlobalSnapshot != persistedSnapshotStart ||
-                (persistedTransferredSequenceNum + 1) != recvSeq) {
-            log.warn("Skip clearing shadow streams. Current topologyConfigId={}, srcGlobalSnapshot={}, currentSeqNum={}, " +
-                    "persistedTopologyConfigId={}, persistedSnapshotStart={}, persistedLastTransferredSequenceNum={}", topologyConfigId,
-                    srcGlobalSnapshot, recvSeq, persistedTopologyConfigId, persistedSnapshotStart, persistedTransferredSequenceNum);
-            return;
-        }
-
-        if (phase == Phase.APPLY_PHASE) {
-            log.debug("Clear regular streams, count={}", streamViewMap.size());
-        } else {
-            log.debug("Clear shadow streams, count={}", streamViewMap.size());
-        }
-
-        clearStreams();
-    }
-
-    private void clearStreams() {
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
-                    logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
-                    clearStreams(txnContext);
-                    txnContext.commit();
-                } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to clear tables.", tae);
-                    throw new RetryNeededException();
-                }
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to clear tables.", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
-        }
-    }
-
-    private void clearStreams(TxnContext txnContext) {
-        for (UUID streamID : streamViewMap.keySet()) {
-            UUID streamToClear = streamID;
-            if (phase == Phase.TRANSFER_PHASE) {
-                streamToClear = regularToShadowStreamId.get(streamID);
-            }
-
-            if (mergeOnlyStreams.contains(streamToClear)) {
-                continue;
-            }
-
-            SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
-            txnContext.logUpdate(streamToClear, entry, dataStreamToTagsMap.get(streamID));
-        }
-    }
-
-    /**
      * If the metadata has wrong message type or baseSnapshot, throw an exception
      * @param metadata
      */
@@ -211,7 +147,6 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         srcGlobalSnapshot = snapshot;
         recvSeq = 0;
         phase = Phase.TRANSFER_PHASE;
-        clearTables();
         snapshotSyncStartMarker = Optional.empty();
     }
 
@@ -304,10 +239,55 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             log.error("The opaqueEntry has more than one entry {}", opaqueEntry);
             return;
         }
-        UUID uuid = opaqueEntry.getEntries().keySet().stream().findFirst().get();
-        processUpdatesShadowStream(opaqueEntry.getEntries().get(uuid), message.getMetadata().getSnapshotSyncSeqNum(),
-                regularToShadowStreamId.get(uuid), getUUID(message.getMetadata().getSyncRequestId()));
+        UUID regularStreamId = opaqueEntry.getEntries().keySet().stream().findFirst().get();
+
+        // Clear regular stream on-demand (i.e., as streams come) and only on the first occurrence
+        if (!replicatedStreamIds.contains(regularStreamId)) {
+            // Note: we should not clear the shadow stream as this could overwrite our mergeOnlyStreams when
+            // shadow stream is applied to the regular stream. Shadow streams are seeked on each replication cycle
+            // and are GC'ed by the checkpoint / trim.
+            clearRegularStream(regularStreamId);
+            replicatedStreamIds.add(regularStreamId);
+        }
+        processUpdatesShadowStream(opaqueEntry.getEntries().get(regularStreamId), message.getMetadata().getSnapshotSyncSeqNum(),
+                regularToShadowStreamId.get(regularStreamId), getUUID(message.getMetadata().getSyncRequestId()));
         recvSeq++;
+    }
+
+    /**
+     * Clear regular stream and its corresponding shadow stream
+     *
+     * @param streamId
+     */
+    private void clearRegularStream(UUID streamId) {
+        try {
+            boolean mergeOnlyStream = mergeOnlyStreams.contains(streamId);
+
+            if (!mergeOnlyStream) {
+                IRetry.build(IntervalRetry.class, () -> {
+                    try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
+                        logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
+                        clearStream(streamId, txnContext);
+                        CorfuStoreMetadata.Timestamp ts = txnContext.commit();
+                        log.trace("Clear {} committed at :: {}", streamId, ts.getSequence());
+                    } catch (TransactionAbortedException tae) {
+                        log.error("Error while attempting to clear tables.", tae);
+                        throw new RetryNeededException();
+                    }
+                    return null;
+                }).run();
+            } else {
+                log.debug("Do not clear stream={} (merge stream)", streamId);
+            }
+        } catch(InterruptedException e){
+            log.error("Unrecoverable exception when attempting to clear tables.", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
+    }
+
+    private void clearStream(UUID streamId, TxnContext txnContext) {
+        SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
+        txnContext.logUpdate(streamId, entry, dataStreamToTagsMap.get(streamId));
     }
 
     @Override
@@ -325,6 +305,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      */
     private void applyShadowStream(UUID streamId, long snapshot) {
         log.debug("Apply shadow stream for stream {}, snapshot={}", streamId, snapshot);
+        log.debug("Current addresses of stream {} :: {}", streamId,
+                rt.getSequencerView().getStreamAddressSpace(new StreamAddressRange(streamId, Long.MAX_VALUE, Address.NON_ADDRESS)));
         UUID shadowStreamId = regularToShadowStreamId.get(streamId);
 
         // In order to avoid data loss as part of a plugin failing to successfully
@@ -353,7 +335,9 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
 
             try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
                 updateLog(txnContext, smrEntries, streamId);
-                txnContext.commit();
+                CorfuStoreMetadata.Timestamp ts = txnContext.commit();
+                log.debug("Applied shadow stream for stream {} on address :: {}", streamId, ts.getSequence());
+                smrEntries.forEach(e -> log.debug("Applied shadow stream for {}, SMR Entry :: method {}, updates {}", streamId, e.getSMRMethod(), e.getSMRUpdates(streamId)));
             }
 
             log.debug("Process entries count={}", smrEntries.size());
@@ -365,13 +349,13 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      */
     public void applyShadowStreams() {
         long snapshot = rt.getAddressSpaceView().getLogTail();
-        clearTables();
         log.debug("Apply Shadow Streams, total={}", streamViewMap.size());
-        for (UUID uuid : streamViewMap.keySet()) {
-            applyShadowStream(uuid, snapshot);
+        for (UUID regularStreamId : streamViewMap.keySet()) {
+            applyShadowStream(regularStreamId, snapshot);
         }
         // Invalidate client cache after snapshot sync is completed, as shadow streams are no longer useful in the cache
         rt.getAddressSpaceView().invalidateClientCache();
+        replicatedStreamIds.clear();
     }
 
     /**
@@ -389,7 +373,67 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             applyShadowStreams();
         }
     }
-    
+
+    /**
+     * Clear local updated streams for which no data was transferred from active
+     * (hence were not cleared on the replication/transfer path)
+     *
+     * Note: streams could be locally written while this node had no assigned role.
+     */
+    public void clearLocalStreams() {
+        // Iterate over all streams to replicate (as obtained from configuration) and accumulate
+        // those for which no data came from active, to make a single call
+        // to the sequencer for log tails and discover those with local writes, to be cleared.
+
+        // Note: we cannot clear any stream which has not evidenced updates either on active or standby because
+        // we would be enforcing an update without opening the stream, hence, leading to "apparent" data loss as
+        // checkpoint won't run on these streams
+        Set<UUID> streamsToQuery = streamViewMap.keySet().stream()
+                .filter(id -> !replicatedStreamIds.contains(id))
+                .collect(Collectors.toCollection(HashSet::new));
+
+        log.debug("Total of {} streams were replicated from active out of {}, sequencer query for {}, streamsToQuery={}",
+                replicatedStreamIds.size(), streamViewMap.size(), streamsToQuery.size(), streamsToQuery);
+        Set<UUID> streamsToClear = new HashSet<>();
+        TokenResponse tokenResponse = rt.getSequencerView().query(streamsToQuery.toArray(new UUID[0]));
+        streamsToQuery.forEach(streamId -> {
+            if (tokenResponse.getStreamTail(streamId) != Address.NON_EXIST) {
+                streamsToClear.add(streamId);
+            }
+        });
+
+        if (!streamsToClear.isEmpty()) {
+            log.debug("Clear streams with local writes, total={}, streams={}", streamsToClear.size(), streamsToClear);
+            clearStreams(streamsToClear);
+        } else {
+            log.debug("No local written streams were found, nothing to clear.");
+        }
+    }
+
+    private void clearStreams(Set<UUID> streamsToClear) {
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
+                    logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
+                    streamsToClear.forEach(streamId -> {
+                        if (!mergeOnlyStreams.contains(streamId)) {
+                            clearStream(streamId, txnContext);
+                        }
+                    });
+                    CorfuStoreMetadata.Timestamp ts = txnContext.commit();
+                    log.trace("Clear {} streams committed at :: {}", streamsToClear.size(), ts.getSequence());
+                } catch (TransactionAbortedException tae) {
+                    log.error("Error while attempting to clear locally written streams.", tae);
+                    throw new RetryNeededException();
+                }
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when attempting to clear locally written streams.", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
+    }
+
     enum Phase {
         TRANSFER_PHASE,
         APPLY_PHASE

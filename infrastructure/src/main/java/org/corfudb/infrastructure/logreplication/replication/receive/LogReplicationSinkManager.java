@@ -454,7 +454,10 @@ public class LogReplicationSinkManager implements DataReceiver {
                 break;
             case SNAPSHOT_END:
                 if (snapshotWriter.getPhase() != StreamsSnapshotWriter.Phase.APPLY_PHASE) {
-                    // Mark Snapshot Sync Transfer as complete and return ACK right away
+                    // Once snapshot transfer has completed, clear any streams that have been locally written
+                    // (aimed for replication) but yet were not replicated from active to standby (empty on active)
+                    // Note: these streams must be cleared or we could pollute the state of the DB
+                    snapshotWriter.clearLocalStreams();
                     completeSnapshotTransfer(entry);
                     startSnapshotApplyAsync(entry);
                 }

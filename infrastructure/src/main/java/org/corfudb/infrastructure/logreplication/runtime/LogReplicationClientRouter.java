@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure.logreplication.runtime;
 
-import com.google.protobuf.TextFormat;
 import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.Setter;
@@ -382,7 +381,8 @@ public class LogReplicationClientRouter implements IClientRouter {
 
             // If it is a Leadership Loss Message re-trigger leadership discovery
             if (msg.getPayload().getPayloadCase() == PayloadCase.LR_LEADERSHIP_LOSS) {
-                runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
+                String nodeId = msg.getPayload().getLrLeadershipLoss().getNodeId();
+                runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, nodeId));
                 return;
             }
 
@@ -494,4 +494,12 @@ public class LogReplicationClientRouter implements IClientRouter {
     public Optional<String> getRemoteLeaderNodeId() {
         return runtimeFSM.getRemoteLeaderNodeId();
     }
+
+    public void resetRemoteLeader() {
+        if (channelAdapter != null) {
+            log.debug("Reset remote leader from channel adapter.");
+            channelAdapter.resetRemoteLeader();
+        }
+    }
+
 }
