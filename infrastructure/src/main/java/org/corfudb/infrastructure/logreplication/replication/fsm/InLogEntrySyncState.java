@@ -144,6 +144,7 @@ public class InLogEntrySyncState implements LogReplicationState {
                 // on the tx stream, regardless of ACKs or updates being processed for the tx stream
                 fsm.getAckReader().setSyncType(SyncType.LOG_ENTRY);
                 logEntrySender.reset(fsm.getBaseSnapshot(), fsm.getAckedTimestamp());
+                fsm.getAckReader().setBaseSnapshot(fsm.getAckedTimestamp());
                 fsm.getAckReader().markSnapshotSyncInfoCompleted();
             }
 

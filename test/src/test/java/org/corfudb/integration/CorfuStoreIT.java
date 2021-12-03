@@ -24,6 +24,7 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SMRObject;
@@ -483,6 +484,7 @@ public class CorfuStoreIT extends AbstractIT {
         final String tableName1 = "Community-EventInfo";
         final String tableName2 = "Work-EventInfo";
         final String tableName3 = "Empty-EventInfo";
+        final String tableNameNoWrites = "NoWritesTable";
         final int numUpdates = 2;
         final long OFFSET = 5L;
 
@@ -541,6 +543,21 @@ public class CorfuStoreIT extends AbstractIT {
             assertThat(tx.getTable(tableName2).count()).isEqualTo(numUpdates);
             Timestamp readTx = tx.commit();
             assertThat(readTx.getSequence()).isEqualTo(maxGlobalAddress);
+        }
+
+        corfuStore.openTable(
+                namespace,
+                tableNameNoWrites,
+                Uuid.class,
+                SampleSchema.EventInfo.class,
+                ManagedResources.class,
+                TableOptions.builder().build());
+
+        // Start READ tx on a table never written to (to confirm the read timestamp corresponds to init of the log)
+        try (TxnContext tx = corfuStore.txn(namespace)) {
+            assertThat(tx.getTable(tableNameNoWrites).count()).isEqualTo(0);
+            Timestamp readTx = tx.commit();
+            assertThat(readTx.getSequence()).isEqualTo(Address.NON_ADDRESS);
         }
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();

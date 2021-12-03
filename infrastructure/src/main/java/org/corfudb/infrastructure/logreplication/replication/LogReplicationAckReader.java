@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
@@ -28,6 +29,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+@ToString
 @Slf4j
 public class LogReplicationAckReader {
     private final LogReplicationMetadataManager metadataManager;
@@ -206,6 +208,9 @@ public class LogReplicationAckReader {
      * (despite the current processed not requiring ACk, there might be entries between lastAcked and currentProcessed
      * which still have not been acknowledged so we check sender's pendingQueue's size
      *          remainingEntries = entriesBetween(60, 70] + pendingQueueSize = 1 + 1 = 2
+     *
+     * Special case for Case 1, when  currentTxStreamProcessedTs = -1 which basically means no log entry has been processed,
+     * in this case we should return 0.
 
      * Case 2.0: Log Entry Sync Up to Date
      *          - lastAckedTimestamp = 70
@@ -279,18 +284,26 @@ public class LogReplicationAckReader {
             return noRemainingEntriesToSend;
         }
 
-        // (Cases 1)
-        // The currentTxStreamProcessedTs must be not less than lastAckedTs.
-
+        // (Case 1)
         long currentTxStreamProcessed = currentTxStreamProcessedTs.getTimestamp();
-        long remainingEntries = getTxStreamTotalEntries(currentTxStreamProcessed, txStreamTail);
-        if (logEntrySender != null) {
-            remainingEntries += logEntrySender.getPendingACKQueueSize();
+        long remainingEntries = 0;
+
+        // If currentTxStreamProcessedTs is the default (NON_ADDRESS), it means no log entry (delta) has been found
+        // hence there is no remaining entries to replicate
+        if (currentTxStreamProcessed != Address.NON_ADDRESS) {
+
+            remainingEntries = getTxStreamTotalEntries(currentTxStreamProcessed, txStreamTail);
+
+            if (logEntrySender != null) {
+                remainingEntries += logEntrySender.getPendingACKQueueSize();
+            }
         }
 
         if (log.isTraceEnabled()) {
-            log.trace("Log Entry Sync pending entries for processing, lastAckedTs={}, txStreamTail={}, currentTxProcessedTs={}, containsEntries={}, remaining={}", lastAckedTs,
-                    txStreamTail, currentTxStreamProcessedTs.getTimestamp(), currentTxStreamProcessedTs.isStreamsToReplicatePresent(), remainingEntries);
+            log.trace("Log Entry Sync pending entries for processing, lastAckedTs={}, txStreamTail={}, " +
+                            "currentTxProcessedTs={}, containsEntries={}, remaining={}", lastAckedTs,
+                    txStreamTail, currentTxStreamProcessedTs.getTimestamp(),
+                    currentTxStreamProcessedTs.isStreamsToReplicatePresent(), remainingEntries);
         }
 
         return remainingEntries;
@@ -336,7 +349,7 @@ public class LogReplicationAckReader {
                 try {
                     lock.lock();
                     metadataManager.updateSnapshotSyncStatusCompleted(remoteClusterId,
-                            calculateRemainingEntriesToSend(baseSnapshotTimestamp));
+                            calculateRemainingEntriesToSend(baseSnapshotTimestamp), baseSnapshotTimestamp);
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to markSnapshotSyncInfoCompleted for remote cluster {}.", remoteClusterId, tae);
                     throw new RetryNeededException();
