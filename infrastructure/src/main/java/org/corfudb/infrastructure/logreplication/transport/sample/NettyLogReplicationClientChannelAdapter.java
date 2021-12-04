@@ -90,4 +90,9 @@ public class NettyLogReplicationClientChannelAdapter extends IClientChannelAdapt
     public void completeExceptionally(Exception exception) {
         getRouter().completeAllExceptionally(exception);
     }
+
+    @Override
+    public void resetRemoteLeader() {
+        // No-op
+    }
 }
