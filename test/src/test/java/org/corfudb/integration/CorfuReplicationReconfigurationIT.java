@@ -55,6 +55,7 @@ import static org.assertj.core.api.Assertions.fail;
 public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT {
 
     private static final int SLEEP_DURATION = 5;
+    private static final int WAIT_DELTA = 50;
 
     private AtomicBoolean replicationEnded = new AtomicBoolean(false);
 
@@ -496,16 +497,26 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             // Start LR
             startLogReplicatorServers();
 
+            // Wait until snapshot sync has completed
+            // Open replication status table and monitor completion field
+            corfuStoreActive.openTable(LogReplicationMetadataManager.NAMESPACE,
+                    LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                    LogReplicationMetadata.ReplicationStatusKey.class,
+                    LogReplicationMetadata.ReplicationStatusVal.class,
+                    null,
+                    TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+            blockUntilSnapshotSyncCompleted();
+
             // Verify Snapshot has successfully replicated
             verifyStandbyData(totalEntries);
-
-            // Verify both extra and local table are opened on Standby
-            verifyTableOpened(corfuStoreStandby, "local");
-            verifyTableOpened(corfuStoreStandby, "extra");
 
             log.info("** Wait for data change notifications (snapshot)");
             streamingStandbySnapshotCompletion.await();
             assertThat(listener.messages.size()).isEqualTo(totalEntries*2 + tablesToListen.size());
+
+            // Verify both extra and local table are opened on Standby
+            verifyTableOpened(corfuStoreStandby, "local");
+            verifyTableOpened(corfuStoreStandby, "extra");
 
             // Attach new listener for deltas (the same listener could be used) but simplifying the use of the latch
             CountDownLatch streamingStandbyDeltaCompletion = new CountDownLatch(totalEntries*2);
@@ -528,6 +539,11 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             log.info("** Wait for data change notifications (delta)");
             streamingStandbyDeltaCompletion.await();
             assertThat(listenerDeltas.messages.size()).isEqualTo(totalEntries*2);
+
+            // Add a delta to a 'mergeOnly' stream and confirm it is replicated. RegistryTable is a 'mergeOnly' stream
+            openTable(corfuStoreActive, "extra_delta");
+            verifyTableOpened(corfuStoreStandby, "extra_delta");
+
         } finally {
             executorService.shutdownNow();
 
@@ -548,6 +564,34 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             }
         }
 
+    }
+
+    private void blockUntilSnapshotSyncCompleted() {
+        LogReplicationMetadata.ReplicationStatusKey key =
+                LogReplicationMetadata.ReplicationStatusKey
+                        .newBuilder()
+                        .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                        .build();
+
+        ReplicationStatusVal replicationStatusVal;
+        boolean snapshotSyncCompleted = false;
+
+        while (snapshotSyncCompleted) {
+            try (TxnContext txn = corfuStoreActive.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                replicationStatusVal = (ReplicationStatusVal) txn.getRecord(LogReplicationMetadataManager.REPLICATION_STATUS_TABLE, key).getPayload();
+                txn.commit();
+            }
+
+            log.info("ReplicationStatusVal: RemainingEntriesToSend: {}, SyncType: {}, Status: {}",
+                    replicationStatusVal.getRemainingEntriesToSend(), replicationStatusVal.getSyncType(),
+                    replicationStatusVal.getStatus());
+
+            log.info("ReplicationStatusVal: Base: {}, Type: {}, Status: {}, CompletedTime: {}",
+                    replicationStatusVal.getSnapshotSyncInfo().getBaseSnapshot(), replicationStatusVal.getSnapshotSyncInfo().getType(),
+                    replicationStatusVal.getSnapshotSyncInfo().getStatus(), replicationStatusVal.getSnapshotSyncInfo().getCompletedTime());
+
+            snapshotSyncCompleted = replicationStatusVal.getSnapshotSyncInfo().getStatus() == LogReplicationMetadata.SyncStatus.COMPLETED;
+        }
     }
 
     private void verifyActiveData(int totalEntries) {
@@ -621,6 +665,12 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
                 .setNamespace(NAMESPACE)
                 .setTableName(tableName)
                 .build();
+
+        while (!corfuStore.getRuntime().getTableRegistry().listTables().contains(key)) {
+            // Wait for delta replication
+            log.trace("Wait for delta replication...");
+            Sleep.sleepUninterruptibly(Duration.ofMillis(WAIT_DELTA));
+        }
 
         assertThat(corfuStore.getRuntime().getTableRegistry().listTables())
                 .contains(key);
@@ -715,7 +765,12 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             results.getEntries().forEach((schema, entries) -> {
                 if (tablesToListenTo.contains(CorfuRuntime.getStreamID(NAMESPACE + "$" + schema.getTableName()))) {
                     messages.addAll(entries);
-                    entries.forEach(e -> updatesLatch.countDown());
+                    entries.forEach(e -> {
+                        if (e.getOperation() == CorfuStreamEntry.OperationType.CLEAR) {
+                            System.out.println("Clear operation for :: " + schema.getTableName() + " on address :: " + results.getTimestamp().getSequence() + " key :: " + e.getKey());
+                        }
+                        updatesLatch.countDown();
+                    });
                 }
             });
         }

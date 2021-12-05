@@ -434,6 +434,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 input(new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.UPGRADE));
             }
 
+            log.info("Merge-only stream IDs :: {}", mergeOnlyStreams);
+
             return new LogReplicationConfig(streamsToReplicate,
                     streamingConfigSink,
                     mergeOnlyStreams,

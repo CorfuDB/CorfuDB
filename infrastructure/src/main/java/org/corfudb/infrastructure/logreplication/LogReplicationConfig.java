@@ -45,8 +45,9 @@ public class LogReplicationConfig {
     // Streaming tags on Sink/Standby (map data stream id to list of tags associated to it)
     private Map<UUID, List<UUID>> dataStreamToTagsMap = new HashMap<>();
 
-    // Merge only streams - We do not clear table when we apply shadow streams, in order to
-    // prevent data loss from local data (i.e., data that is not replicated but local to the site)
+    // Set of streams that shouldn't be cleared on snapshot apply phase, as these
+    // streams should be the result of "merging" the replicated data (from active) + local data (on standby).
+    // For instance, RegistryTable (to avoid losing local opened tables on standby)
     private Set<UUID> mergeOnlyStreams = new HashSet<>();
 
     // Snapshot Sync Batch Size(number of messages)

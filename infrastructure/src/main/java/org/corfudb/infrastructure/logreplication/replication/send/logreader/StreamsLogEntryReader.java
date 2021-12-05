@@ -115,7 +115,6 @@ public class StreamsLogEntryReader implements LogEntryReader {
                 .setSnapshotSyncSeqNum(sequence)
                 .build();
 
-
         LogReplicationEntryMsg txMessage = getLrEntryMsg(unsafeWrap(generatePayload(opaqueEntryList)), metadata);
 
         preMsgTs = currentMsgTs;
