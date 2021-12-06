@@ -50,7 +50,7 @@ class HealingAgentTest {
                 .build();
 
         when(adviserMock.healedServer(isA(ClusterState.class))).thenReturn(Optional.empty());
-        CompletableFuture<DetectorTask> skipped = agent.detectHealing(mock(PollReport.class), mock(Layout.class));
+        CompletableFuture<DetectorTask> skipped = agent.detectAndHandleHealing(mock(PollReport.class), mock(Layout.class));
 
         assertEquals(DetectorTask.SKIPPED, skipped.join());
     }
@@ -99,7 +99,7 @@ class HealingAgentTest {
                 .when(agentSpy)
                 .handleHealing(any(PollReport.class), any(Layout.class), anySet());
 
-        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectHealing(pollReportMock, mock(Layout.class));
+        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectAndHandleHealing(pollReportMock, mock(Layout.class));
 
         verify(agentSpy, times(1))
                 .handleHealing(any(PollReport.class), any(Layout.class), anySet());

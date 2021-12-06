@@ -74,7 +74,7 @@ public class HealingAgent {
      * @param pollReport poll report
      * @param layout     current layout
      */
-    public CompletableFuture<DetectorTask> detectHealing(PollReport pollReport, Layout layout) {
+    public CompletableFuture<DetectorTask> detectAndHandleHealing(PollReport pollReport, Layout layout) {
         log.trace("Handle healing, layout: {}", layout);
 
         Optional<NodeRankByResourceQuota> fsHealth = fsAdvisor.healedServer(pollReport.getClusterState());

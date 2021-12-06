@@ -390,7 +390,7 @@ public class RemoteMonitoringService implements ManagementService {
                 return DetectorTask.COMPLETED;
             }
 
-            DetectorTask healing = healingAgent.detectHealing(pollReport, ourLayout).join();
+            DetectorTask healing = healingAgent.detectAndHandleHealing(pollReport, ourLayout).join();
 
             //If local node healed it causes change in the cluster state which means the layout is changed also.
             //If the cluster status is changed let failure detector detect the change on next iteration and
