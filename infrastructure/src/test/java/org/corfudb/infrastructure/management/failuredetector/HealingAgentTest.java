@@ -61,6 +61,72 @@ class HealingAgentTest {
         final String localEndpoint = NodeNames.C;
         final long epoch = 0;
 
+        HealingAgent agentSpy = getHealingAgentSpy(localEndpoint);
+        ClusterState clusterState = getClusterState(localEndpoint, epoch);
+        PollReport pollReportMock = getPollReportMock(clusterState);
+        Layout layoutMock = mock(Layout.class);
+
+        CompletableFuture<Boolean> handle = new CompletableFuture<>();
+        handle.completeExceptionally(new FailureDetectorException("err"));
+        doReturn(handle)
+                .when(agentSpy)
+                .handleHealing(same(pollReportMock), same(layoutMock), anySet());
+
+        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectAndHandleHealing(pollReportMock, layoutMock);
+
+        verify(agentSpy, times(1))
+                .handleHealing(same(pollReportMock), same(layoutMock), anySet());
+
+        assertEquals(DetectorTask.NOT_COMPLETED, healingFailed.join());
+    }
+
+    @Test
+    void detectHealingAFullyConnectedNode() {
+        final String localEndpoint = NodeNames.C;
+        final long epoch = 0;
+
+        HealingAgent agentSpy = getHealingAgentSpy(localEndpoint);
+        ClusterState clusterState = getClusterState(localEndpoint, epoch);
+        PollReport pollReportMock = getPollReportMock(clusterState);
+        Layout layoutMock = mock(Layout.class);
+
+        CompletableFuture<Boolean> handle = CompletableFuture.completedFuture(true);
+        doReturn(handle)
+                .when(agentSpy)
+                .handleHealing(same(pollReportMock), same(layoutMock), anySet());
+
+        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectAndHandleHealing(pollReportMock, layoutMock);
+
+        verify(agentSpy, times(1))
+                .handleHealing(same(pollReportMock), same(layoutMock), anySet());
+
+        assertEquals(DetectorTask.COMPLETED, healingFailed.join());
+    }
+
+    private PollReport getPollReportMock(ClusterState clusterState) {
+        PollReport pollReportMock = mock(PollReport.class);
+        when(pollReportMock.getClusterState()).thenReturn(clusterState);
+        return pollReportMock;
+    }
+
+    private ClusterState getClusterState(String localEndpoint, long epoch) {
+        return buildClusterState(
+                localEndpoint,
+                ImmutableList.of(localEndpoint),
+                nodeState(NodeNames.A, epoch, OK, OK, OK),
+                nodeState(NodeNames.B, epoch, OK, OK, OK),
+                nodeState(localEndpoint, epoch, Optional.of(getFileSystemStats()), OK, OK, OK)
+        );
+    }
+
+    private FileSystemStats getFileSystemStats() {
+        final int limit = 100;
+        final int used = 80;
+        ResourceQuotaStats quota = new ResourceQuotaStats(limit, used);
+        return new FileSystemStats(quota, Mockito.mock(PartitionAttributeStats.class));
+    }
+
+    private HealingAgent getHealingAgentSpy(String localEndpoint) {
         CompleteGraphAdvisor advisor = new CompleteGraphAdvisor(localEndpoint);
         FileSystemAdvisor fsAdvisor = new FileSystemAdvisor();
         FailureDetectorDataStore dataStoreMock = mock(FailureDetectorDataStore.class);
@@ -76,37 +142,6 @@ class HealingAgentTest {
                 .runtimeSingleton(runtimeMock)
                 .build();
 
-        HealingAgent agentSpy = spy(agent);
-
-        final int limit = 100;
-        final int used = 80;
-        ResourceQuotaStats quota = new ResourceQuotaStats(limit, used);
-        FileSystemStats fsStats = new FileSystemStats(quota, Mockito.mock(PartitionAttributeStats.class));
-
-        ClusterState clusterState = buildClusterState(
-                localEndpoint,
-                ImmutableList.of(localEndpoint),
-                nodeState(NodeNames.A, epoch, OK, OK, OK),
-                nodeState(NodeNames.B, epoch, OK, OK, OK),
-                nodeState(localEndpoint, epoch, Optional.of(fsStats), OK, OK, OK)
-        );
-
-        PollReport pollReportMock = mock(PollReport.class);
-        when(pollReportMock.getClusterState()).thenReturn(clusterState);
-
-        Layout layoutMock = mock(Layout.class);
-
-        CompletableFuture<Boolean> handle = new CompletableFuture<>();
-        handle.completeExceptionally(new FailureDetectorException("err"));
-        doReturn(handle)
-                .when(agentSpy)
-                .handleHealing(same(pollReportMock), same(layoutMock), anySet());
-
-        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectAndHandleHealing(pollReportMock, layoutMock);
-
-        verify(agentSpy, times(1))
-                .handleHealing(same(pollReportMock), same(layoutMock), anySet());
-
-        assertEquals(DetectorTask.NOT_COMPLETED, healingFailed.join());
+        return spy(agent);
     }
 }
