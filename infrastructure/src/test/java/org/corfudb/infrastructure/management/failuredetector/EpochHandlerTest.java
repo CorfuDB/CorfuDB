@@ -154,7 +154,6 @@ class EpochHandlerTest extends LayoutBasedTestHelper {
 
     @Test
     void commitLayoutConnectionError() {
-        final boolean commitResult = true;
         EpochHandler handlerSpy = Mockito.spy(buildHandler());
 
         CompletableFuture<Boolean> asyncCommit = new CompletableFuture<>();
