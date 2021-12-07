@@ -753,7 +753,7 @@ public class LogReplicationMetadataManager {
      * Retrieve the current snapshot sync cycle Id
      */
     public long getCurrentSnapshotSyncCycleId() {
-        return queryMetadata( LogReplicationMetadataType.CURRENT_SNAPSHOT_CYCLE_ID);
+        return queryMetadata(LogReplicationMetadataType.CURRENT_SNAPSHOT_CYCLE_ID);
     }
 
     /**
