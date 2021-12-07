@@ -1,10 +1,10 @@
 package org.corfudb.infrastructure.management;
 
-import javax.annotation.Nonnull;
-
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
+
+import javax.annotation.Nonnull;
 
 /**
  * Detection Executors.

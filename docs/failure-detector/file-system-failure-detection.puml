@@ -1,0 +1,34 @@
+@startuml
+title FileSystem Failure Detection
+
+box Local Node
+participant RemoteMonitoringService
+participant NodeState
+participant FileSystemStats
+participant FileSystem
+participant FileSystemAgent
+participant StreamLogFiles
+end box
+
+box Cluster
+participant Cluster
+participant Layout
+end box
+
+
+StreamLogFiles --> FileSystemAgent: on each write:\n update resource quota usage
+
+FileSystemAgent -->FileSystem: scheduler: get filesystem info
+FileSystemAgent -> FileSystemStats: update: \n - filesystem/partition attributes\n - resource quota
+
+
+loop failure detection iteration
+ RemoteMonitoringService -> FileSystemStats : get fs statistics
+ FileSystemStats --> RemoteMonitoringService: provide FS stats
+ RemoteMonitoringService-->RemoteMonitoringService: check resource quota/filesystem status
+ RemoteMonitoringService->NodeState: in case of a failure:\n - quota exceeds limits\n - read only FS\n - other fs issues\n **Update Node State**
+end
+
+Cluster -> NodeState: Get node state
+Cluster -> Layout: a failed node detected
+@enduml

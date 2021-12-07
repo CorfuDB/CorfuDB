@@ -7,6 +7,9 @@ import lombok.ToString;
 import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegment;
 import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.Layout.LayoutSegment;
+import org.corfudb.runtime.view.Layout.LayoutStripe;
+import org.corfudb.runtime.view.Layout.ReplicationMode;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -15,40 +18,51 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static org.corfudb.infrastructure.NodeNames.ABC_NODES;
 import static org.corfudb.runtime.view.Layout.ReplicationMode.CHAIN_REPLICATION;
 
 public class LayoutBasedTestHelper {
-    private static String servers = "A|B|C";
 
-    public Layout createTestLayout(List<Layout.LayoutSegment> segments){
 
-        List<String> s = Arrays.stream(servers.split("|")).collect(Collectors.toList());
+    public Layout createTestLayout(List<LayoutSegment> segments) {
+
         long epoch = 0L;
         UUID uuid = UUID.randomUUID();
-        return new Layout(s, s, segments, new ArrayList<>(), epoch, uuid);
+        return new Layout(ABC_NODES, ABC_NODES, segments, new ArrayList<>(), epoch, uuid);
     }
 
     @AllArgsConstructor
     @EqualsAndHashCode
     @ToString
-    public class MockedSegment {
+    public static class MockedSegment {
         public final long startAddress;
         public final long endAddress;
         public TransferSegmentStatus status;
     }
 
-    public Layout createNonPresentLayout() {
-        Layout.LayoutStripe stripe1 = new Layout.LayoutStripe(Arrays.asList("A", "B"));
-        Layout.LayoutStripe stripe2 = new Layout.LayoutStripe(Arrays.asList("A", "B"));
-        Layout.LayoutStripe stripe3 = new Layout.LayoutStripe(Arrays.asList("localhost", "A", "B"));
+    public Layout buildSimpleLayout() {
+        return buildSimpleLayout(0);
+    }
 
-        Layout.LayoutSegment segment1 = new Layout.LayoutSegment(CHAIN_REPLICATION, 0L, 2L,
+    public Layout buildSimpleLayout(long epoch) {
+        List<LayoutStripe> stripes = Collections.singletonList(new LayoutStripe(ABC_NODES));
+        LayoutSegment segment = new LayoutSegment(ReplicationMode.CHAIN_REPLICATION, 0L, -1L, stripes);
+        List<LayoutSegment> segments = Collections.singletonList(segment);
+        return new Layout(ABC_NODES, ABC_NODES, segments, epoch, UUID.randomUUID());
+    }
+
+    public Layout createNonPresentLayout() {
+        LayoutStripe stripe1 = new LayoutStripe(Arrays.asList("A", "B"));
+        LayoutStripe stripe2 = new LayoutStripe(Arrays.asList("A", "B"));
+        LayoutStripe stripe3 = new LayoutStripe(Arrays.asList("localhost", "A", "B"));
+
+        LayoutSegment segment1 = new LayoutSegment(CHAIN_REPLICATION, 0L, 2L,
                 Collections.singletonList(stripe1));
 
-        Layout.LayoutSegment segment2 = new Layout.LayoutSegment(CHAIN_REPLICATION, 2L, 4L,
+        LayoutSegment segment2 = new LayoutSegment(CHAIN_REPLICATION, 2L, 4L,
                 Collections.singletonList(stripe2));
 
-        Layout.LayoutSegment segment3 = new Layout.LayoutSegment(CHAIN_REPLICATION, 4L, -1L,
+        LayoutSegment segment3 = new LayoutSegment(CHAIN_REPLICATION, 4L, -1L,
                 Collections.singletonList(stripe3));
 
         return createTestLayout(Arrays.asList(segment1, segment2, segment3));
@@ -57,9 +71,9 @@ public class LayoutBasedTestHelper {
     public Layout createPresentLayout() {
 
         Layout layout = createNonPresentLayout();
-        Layout.LayoutStripe stripe2 = new Layout.LayoutStripe(Arrays.asList("localhost", "A", "B"));
+        LayoutStripe stripe2 = new LayoutStripe(Arrays.asList("localhost", "A", "B"));
 
-        Layout.LayoutSegment segment2 = new Layout.LayoutSegment(CHAIN_REPLICATION, 2L, 4L,
+        LayoutSegment segment2 = new LayoutSegment(CHAIN_REPLICATION, 2L, 4L,
                 Collections.singletonList(stripe2));
 
         return createTestLayout(Arrays.asList(layout.getSegment(0L),
@@ -71,7 +85,11 @@ public class LayoutBasedTestHelper {
     }
 
     public ImmutableList<MockedSegment> transformListToMock(List<TransferSegment> segments) {
-        return ImmutableList.copyOf(segments.stream().map(this::transformToMock).collect(Collectors.toList()));
+        List<MockedSegment> mockedSegments = segments.stream()
+                .map(this::transformToMock)
+                .collect(Collectors.toList());
+
+        return ImmutableList.copyOf(mockedSegments);
     }
 
 }

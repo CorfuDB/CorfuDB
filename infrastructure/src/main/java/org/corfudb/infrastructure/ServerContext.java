@@ -31,7 +31,6 @@ import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
-import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -80,9 +79,6 @@ public class ServerContext implements AutoCloseable {
     private static final String PREFIX_MANAGEMENT = "MANAGEMENT";
     private static final String MANAGEMENT_LAYOUT = "LAYOUT";
 
-    // Failure detector
-    private static final String PREFIX_FAILURE_DETECTOR = "FAILURE_DETECTOR";
-
     // LogUnit Server
     private static final String PREFIX_LOGUNIT = "LOGUNIT";
     private static final String EPOCH_WATER_MARK = "EPOCH_WATER_MARK";
@@ -109,7 +105,7 @@ public class ServerContext implements AutoCloseable {
             KEY_SEQUENCER, PREFIX_SEQUENCER_EPOCH, Long.class
     );
 
-    private static final KvRecord<Layout> MANAGEMENT_LAYOUT_RECORD = KvRecord.of(
+    public static final KvRecord<Layout> MANAGEMENT_LAYOUT_RECORD = KvRecord.of(
             PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT, Layout.class
     );
 
@@ -470,7 +466,7 @@ public class ServerContext implements AutoCloseable {
      * @return The current stored {@link Layout}
      */
     public Layout getCurrentLayout() {
-        return getDataStore().get(CURR_LAYOUT_RECORD);
+        return dataStore.get(CURR_LAYOUT_RECORD);
     }
 
     /**
@@ -568,63 +564,6 @@ public class ServerContext implements AutoCloseable {
 
         return currentLayout;
 
-    }
-
-    /**
-     * Save detected failure in a history. History represents all cluster state changes.
-     * Disabled by default.
-     *
-     * @param detector failure detector state
-     */
-    public synchronized void saveFailureDetectorMetrics(FailureDetectorMetrics detector) {
-        boolean enabled = Boolean.parseBoolean(System.getProperty("corfu.failuredetector", Boolean.FALSE.toString()));
-        if (!enabled){
-            return;
-        }
-
-        KvRecord<FailureDetectorMetrics> fdRecord = KvRecord.of(
-                PREFIX_FAILURE_DETECTOR,
-                String.valueOf(getManagementLayout().getEpoch()),
-                FailureDetectorMetrics.class
-        );
-
-        dataStore.put(fdRecord, detector);
-    }
-
-    /**
-     * Get latest change in a cluster state saved in data store. Or provide default value if history is disabled.
-     *
-     * @return latest failure saved in the history
-     */
-    public FailureDetectorMetrics getFailureDetectorMetrics() {
-        boolean enabled = Boolean.parseBoolean(System.getProperty("corfu.failuredetector", Boolean.FALSE.toString()));
-        if(!enabled){
-            return getDefaultFailureDetectorMetric(getManagementLayout());
-        }
-
-        KvRecord<FailureDetectorMetrics> fdRecord = KvRecord.of(
-                PREFIX_FAILURE_DETECTOR,
-                String.valueOf(getManagementLayout().getEpoch()),
-                FailureDetectorMetrics.class
-        );
-
-        return Optional
-                .ofNullable(dataStore.get(fdRecord))
-                .orElseGet(() -> getDefaultFailureDetectorMetric(getManagementLayout()));
-    }
-
-    /**
-     * Provide default metric.
-     * @param layout current layout
-     * @return default value
-     */
-    private FailureDetectorMetrics getDefaultFailureDetectorMetric(Layout layout) {
-        return FailureDetectorMetrics.builder()
-                .localNode(getLocalEndpoint())
-                .layout(layout.getLayoutServers())
-                .unresponsiveNodes(layout.getUnresponsiveServers())
-                .epoch(layout.getEpoch())
-                .build();
     }
 
     /**

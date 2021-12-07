@@ -58,8 +58,8 @@ public class ReconfigurationEventHandlerTest extends AbstractViewTest {
         failedServers.add(getEndpoint(SERVERS.PORT_2));
 
         IReconfigurationHandlerPolicy failureHandlerPolicy = new ConservativeFailureHandlerPolicy();
-        boolean succeed = ReconfigurationEventHandler.handleFailure(failureHandlerPolicy,
-                originalLayout, corfuRuntime, failedServers);
+        boolean succeed = ReconfigurationEventHandler
+                .handleFailure(failureHandlerPolicy, originalLayout, corfuRuntime, failedServers);
 
         // Verify that handleFailure correctly returns true.
         assertThat(succeed).isEqualTo(true);

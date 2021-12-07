@@ -1,18 +1,16 @@
 package org.corfudb.infrastructure.management;
 
-import java.time.Duration;
-import java.util.Set;
-
-import javax.annotation.Nonnull;
-
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
+
+import javax.annotation.Nonnull;
+import java.time.Duration;
+import java.util.Set;
 
 /**
  * The ReconfigurationEventHandler handles the trigger provided by any source
@@ -50,11 +48,12 @@ public class ReconfigurationEventHandler {
                                         @Nonnull CorfuRuntime corfuRuntime,
                                         @Nonnull Set<String> failedServers) {
         try {
-            corfuRuntime.getLayoutManagementView().handleFailure(failureHandlerPolicy,
-                    currentLayout, failedServers);
+            corfuRuntime
+                    .getLayoutManagementView()
+                    .handleFailure(failureHandlerPolicy, currentLayout, failedServers);
             return true;
         } catch (Exception e) {
-            log.error("Error: handleFailure: {}", e);
+            log.error("Error: handleFailure", e);
             return false;
         }
     }
@@ -116,7 +115,7 @@ public class ReconfigurationEventHandler {
             }
             return true;
         } catch (Exception e) {
-            log.error("Error: handleHealing: {}", e);
+            log.error("Error: handleHealing", e);
             return false;
         }
     }
