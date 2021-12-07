@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.management.failuredetector;
 import com.google.common.collect.ImmutableList;
 import org.corfudb.infrastructure.NodeNames;
 import org.corfudb.infrastructure.RemoteMonitoringService.DetectorTask;
-import org.corfudb.infrastructure.management.ClusterAdvisor;
 import org.corfudb.infrastructure.management.CompleteGraphAdvisor;
 import org.corfudb.infrastructure.management.FileSystemAdvisor;
 import org.corfudb.infrastructure.management.PollReport;
@@ -26,7 +25,6 @@ import static org.corfudb.protocols.wireprotocol.ClusterState.buildClusterState;
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.OK;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.anySet;
-import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -36,25 +34,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class HealingAgentTest {
-
-    @Test
-    void detectHealingNoFailedNodes() {
-        ClusterAdvisor adviserMock = mock(ClusterAdvisor.class);
-
-        HealingAgent agent = HealingAgent.builder()
-                .dataStore(mock(FailureDetectorDataStore.class))
-                .advisor(adviserMock)
-                .fsAdvisor(mock(FileSystemAdvisor.class))
-                .failureDetectorWorker(mock(ExecutorService.class))
-                .localEndpoint(NodeNames.A)
-                .runtimeSingleton(mock(SingletonResource.class))
-                .build();
-
-        when(adviserMock.healedServer(isA(ClusterState.class))).thenReturn(Optional.empty());
-        CompletableFuture<DetectorTask> skipped = agent.detectAndHandleHealing(mock(PollReport.class), mock(Layout.class));
-
-        assertEquals(DetectorTask.SKIPPED, skipped.join());
-    }
 
     @Test
     void detectHealingAFailedNode() {
