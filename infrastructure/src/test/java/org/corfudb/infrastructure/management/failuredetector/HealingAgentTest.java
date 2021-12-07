@@ -9,6 +9,7 @@ import org.corfudb.infrastructure.management.FileSystemAdvisor;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttributeStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.ResourceQuotaStats;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
@@ -24,9 +25,9 @@ import static org.corfudb.infrastructure.management.NodeStateTestUtil.nodeState;
 import static org.corfudb.protocols.wireprotocol.ClusterState.buildClusterState;
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.OK;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -80,9 +81,8 @@ class HealingAgentTest {
         final int limit = 100;
         final int used = 80;
         ResourceQuotaStats quota = new ResourceQuotaStats(limit, used);
-        FileSystemStats fsStats = new FileSystemStats(quota, Mockito.mock(FileSystemStats.PartitionAttributeStats.class));
+        FileSystemStats fsStats = new FileSystemStats(quota, Mockito.mock(PartitionAttributeStats.class));
 
-        PollReport pollReportMock = mock(PollReport.class);
         ClusterState clusterState = buildClusterState(
                 localEndpoint,
                 ImmutableList.of(localEndpoint),
@@ -91,18 +91,21 @@ class HealingAgentTest {
                 nodeState(localEndpoint, epoch, Optional.of(fsStats), OK, OK, OK)
         );
 
+        PollReport pollReportMock = mock(PollReport.class);
         when(pollReportMock.getClusterState()).thenReturn(clusterState);
+
+        Layout layoutMock = mock(Layout.class);
 
         CompletableFuture<Boolean> handle = new CompletableFuture<>();
         handle.completeExceptionally(new FailureDetectorException("err"));
         doReturn(handle)
                 .when(agentSpy)
-                .handleHealing(any(PollReport.class), any(Layout.class), anySet());
+                .handleHealing(same(pollReportMock), same(layoutMock), anySet());
 
-        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectAndHandleHealing(pollReportMock, mock(Layout.class));
+        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectAndHandleHealing(pollReportMock, layoutMock);
 
         verify(agentSpy, times(1))
-                .handleHealing(any(PollReport.class), any(Layout.class), anySet());
+                .handleHealing(same(pollReportMock), same(layoutMock), anySet());
 
         assertEquals(DetectorTask.NOT_COMPLETED, healingFailed.join());
     }
