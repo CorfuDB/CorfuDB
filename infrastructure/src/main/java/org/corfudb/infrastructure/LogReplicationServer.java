@@ -229,6 +229,10 @@ public class LogReplicationServer extends AbstractServer {
         isLeader.set(leader);
     }
 
+    public void stopSink() {
+        sinkManager.stopOnLeadershipLoss();
+    }
+
     public synchronized void setActive(boolean active) {
         isActive.set(active);
     }
