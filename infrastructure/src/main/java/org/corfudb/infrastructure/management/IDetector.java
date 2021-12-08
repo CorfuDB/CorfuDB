@@ -9,7 +9,7 @@ import javax.annotation.Nonnull;
 
 /**
  * Detection Executors.
- *
+ * <p>
  * Created by zlokhandwala on 9/29/16.
  */
 public interface IDetector {

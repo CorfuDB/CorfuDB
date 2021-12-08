@@ -57,6 +57,7 @@ public class ClusterGraph {
 
     @NonNull
     private final ImmutableList<String> unresponsiveNodes;
+
     /**
      * Transform a cluster state to the cluster graph.
      * ClusterState contains some extra information, cluster graph is a pure representation of a graph of nodes.
@@ -239,7 +240,7 @@ public class ClusterGraph {
     /**
      * See if the node is fully connected.
      *
-     * @param endpoint          local node name
+     * @param endpoint local node name
      * @return local node rank
      */
     public Optional<NodeRank> findFullyConnectedNode(String endpoint) {

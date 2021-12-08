@@ -12,7 +12,7 @@ import java.util.Optional;
  * (failed or healed) in a given {@link Layout} and for a specific view of the cluster
  * captured in a {@link ClusterState}. Decisions are dependent on the concrete underlying algorithm
  * corresponding to a {@link ClusterType}.
- *
+ * <p>
  * Created by Sam Behnam on 10/19/18.
  */
 public interface ClusterAdvisor {
@@ -52,6 +52,7 @@ public interface ClusterAdvisor {
 
     /**
      * Provides a cluster graph generated from the {@link ClusterState}
+     *
      * @return
      */
     ClusterGraph getGraph(ClusterState clusterState);

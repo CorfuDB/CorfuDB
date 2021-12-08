@@ -4,7 +4,7 @@ package org.corfudb.infrastructure.management;
 /**
  * This is a factory for creating concrete {@link ClusterAdvisor}s based on
  * the requested {@link ClusterType}s.
- *
+ * <p>
  * Created by Sam Behnam on 10/19/18.
  */
 public class ClusterAdvisorFactory {
@@ -18,8 +18,8 @@ public class ClusterAdvisorFactory {
      * {@link ClusterType}.
      *
      * @param strategy a {@link ClusterType} representing desired
-     *               algorithm to be used for determining failure and healing status of Corfu
-     *               servers.
+     *                 algorithm to be used for determining failure and healing status of Corfu
+     *                 servers.
      * @return a concrete instance of {@link ClusterAdvisor} specific to the
      * provided strategy.
      */

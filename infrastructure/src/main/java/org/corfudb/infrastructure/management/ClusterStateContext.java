@@ -41,9 +41,10 @@ public class ClusterStateContext {
 
     /**
      * Returns current cluster state.
+     *
      * @return current cluster state
      */
-    public ClusterState getClusterView(){
+    public ClusterState getClusterView() {
         return clusterView.get();
     }
 }

@@ -22,7 +22,7 @@ import java.util.concurrent.CompletableFuture;
  * Collects information about cluster state.
  * Provides list of servers in the cluster with higher epochs.
  * Builds the {@link ClusterState} and local {@link NodeState}.
- *
+ * <p>
  * The collector navigates via list of requests represented as CompletableFuture-s
  * and collecting information about cluster.
  */
@@ -39,7 +39,8 @@ public class ClusterStateCollector {
 
     /**
      * Provides cluster state
-     * @param epoch current epoch
+     *
+     * @param epoch            current epoch
      * @param sequencerMetrics sequencer metrics
      * @return cluster state
      */
@@ -79,7 +80,7 @@ public class ClusterStateCollector {
             }
         });
 
-        return  ImmutableMap.copyOf(wrongEpochs);
+        return ImmutableMap.copyOf(wrongEpochs);
     }
 
     private Map<String, NodeState> collectRemoteStates() {

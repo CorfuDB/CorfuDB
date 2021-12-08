@@ -46,7 +46,7 @@ public class FailureDetectorException extends RuntimeException {
     public static FailureDetectorException disconnected(List<String> layoutServers, Map<String, Long> wrongEpochs) {
         String err = String.format(
                 "Can't get a layout from any server in the cluster. Local node is disconnected. " +
-                "Layout servers: %s, wrong epochs: %s",
+                        "Layout servers: %s, wrong epochs: %s",
                 layoutServers, wrongEpochs
         );
         return new FailureDetectorException(err);

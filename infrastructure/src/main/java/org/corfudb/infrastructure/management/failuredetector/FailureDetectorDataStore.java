@@ -34,7 +34,7 @@ public class FailureDetectorDataStore {
      */
     public synchronized void saveFailureDetectorMetrics(FailureDetectorMetrics detector) {
         boolean enabled = Boolean.parseBoolean(System.getProperty("corfu.failuredetector", Boolean.FALSE.toString()));
-        if (!enabled){
+        if (!enabled) {
             return;
         }
 
@@ -54,7 +54,7 @@ public class FailureDetectorDataStore {
      */
     public FailureDetectorMetrics getFailureDetectorMetrics() {
         boolean enabled = Boolean.parseBoolean(System.getProperty("corfu.failuredetector", Boolean.FALSE.toString()));
-        if(!enabled){
+        if (!enabled) {
             return getDefaultFailureDetectorMetric(getManagementLayout());
         }
 
@@ -80,6 +80,7 @@ public class FailureDetectorDataStore {
 
     /**
      * Provide default metric.
+     *
      * @param layout current layout
      * @return default value
      */

@@ -47,8 +47,8 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
      * - find a failed node. Check if decision maker is not equal to failed node and failed node is not in unresponsive
      * servers already.
      *
-     * @param clusterState        represents the state of connectivity amongst the Corfu cluster
-     *                            nodes from a node's perspective.
+     * @param clusterState represents the state of connectivity amongst the Corfu cluster
+     *                     nodes from a node's perspective.
      * @return a server considered as failed according to the underlying strategy.
      */
     @Override
@@ -105,8 +105,8 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
      * node in the layout. It helps us to simplify analysis/debugging process and brings simple and reliable algorithm
      * for healing process.
      *
-     * @param clusterState        represents the state of connectivity amongst the Corfu cluster
-     *                            nodes from a node's perspective.
+     * @param clusterState represents the state of connectivity amongst the Corfu cluster
+     *                     nodes from a node's perspective.
      * @return a {@link List} of servers considered as healed according to the underlying
      * {@link ClusterType}.
      */

@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.management.failuredetector;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.util.CFUtils;
 
 import java.util.concurrent.CompletableFuture;
 
