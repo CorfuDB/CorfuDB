@@ -8,15 +8,19 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.runtime.exceptions.LogUnitException;
 
 import java.io.IOException;
-import java.nio.file.*;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 @Slf4j
-public class FileSystemAgent {
-    private static Optional<FileSystemAgent> INSTANCE = Optional.empty();
+public final class FileSystemAgent {
+    private static Optional<FileSystemAgent> instance = Optional.empty();
 
     private final ResourceQuotaConfig config;
     // Resource quota to track the log size
@@ -43,16 +47,16 @@ public class FileSystemAgent {
     }
 
     public static void init(ResourceQuotaConfig config) {
-        INSTANCE = Optional.of(new FileSystemAgent(config));
+        instance = Optional.of(new FileSystemAgent(config));
     }
 
     public static boolean configured(){
-        return INSTANCE.isPresent();
+        return instance.isPresent();
     }
 
     public static ResourceQuota getResourceQuota() {
         Supplier<IllegalStateException> err = () -> new IllegalStateException("ResourceQuota not configured");
-        return INSTANCE.orElseThrow(err).logSizeQuota;
+        return instance.orElseThrow(err).logSizeQuota;
     }
 
     /**
