@@ -338,7 +338,6 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
                 updateLog(txnContext, smrEntries, streamId);
                 CorfuStoreMetadata.Timestamp ts = txnContext.commit();
                 log.debug("Applied shadow stream for stream {} on address :: {}", streamId, ts.getSequence());
-                smrEntries.forEach(e -> log.debug("Applied shadow stream for {}, SMR Entry :: method {}, updates {}", streamId, e.getSMRMethod(), e.getSMRUpdates(streamId)));
             }
 
             log.debug("Process entries count={}", smrEntries.size());

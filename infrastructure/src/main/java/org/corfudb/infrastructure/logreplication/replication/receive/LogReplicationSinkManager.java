@@ -326,7 +326,7 @@ public class LogReplicationSinkManager implements DataReceiver {
     private void processSnapshotSyncApplied(LogReplication.LogReplicationEntryMsg entry) {
         long lastAppliedBaseSnapshotTimestamp = logReplicationMetadataManager.getLastAppliedSnapshotTimestamp();
         long latestSnapshotSyncCycleId = logReplicationMetadataManager.getCurrentSnapshotSyncCycleId();
-        long ackSnapshotSyncCycleId = entry.getMetadata().getSyncRequestId().getLsb() & Long.MAX_VALUE;
+        long ackSnapshotSyncCycleId = entry.getMetadata().getSyncRequestId().getMsb() & Long.MAX_VALUE;
         // Verify this snapshot ACK corresponds to the last initialized/valid snapshot sync
         // as a previous one could have been canceled but still processed due to messages being out of order
         if ((ackSnapshotSyncCycleId == latestSnapshotSyncCycleId) &&
@@ -338,8 +338,10 @@ public class LogReplicationSinkManager implements DataReceiver {
             snapshotSyncPlugin.onSnapshotSyncEnd(runtime);
             log.info("Exit onSnapshotSyncEnd :: {}", snapshotSyncPlugin.getClass().getSimpleName());
         } else {
-            log.warn("SNAPSHOT_SYNC has completed for {}, but new ongoing SNAPSHOT_SYNC is {}",
-                    entry.getMetadata().getSnapshotTimestamp(), lastAppliedBaseSnapshotTimestamp);
+            log.warn("SNAPSHOT_SYNC has completed for {}, but new ongoing SNAPSHOT_SYNC is {}. Id mismatch :: " +
+                            "current_snapshot_cycle_id={}, ack_cycle_id={}",
+                    entry.getMetadata().getSnapshotTimestamp(), lastAppliedBaseSnapshotTimestamp, latestSnapshotSyncCycleId,
+                    ackSnapshotSyncCycleId);
         }
     }
 
@@ -576,6 +578,27 @@ public class LogReplicationSinkManager implements DataReceiver {
                 .setSnapshotTimestamp(snapshotTransferTs)
                 .setSyncRequestId(getUuidMsg(snapshotSyncId)).build();
         startSnapshotApplyAsync(getLrEntryAckMsg(metadata));
+    }
+
+    /**
+     * Stop any functions on Sink Manager when leadership is lost
+     */
+    public void stopOnLeadershipLoss() {
+        // If current sink/standby is in TRANSFER phase, trigger end of snapshot sync (unfreeze checkpoint) as we
+        // don't know when snapshot sync might be started again.
+        // If in APPLY phase do not unfreeze or shadow streams could be lost. This change was done near the release
+        // date we don't know if we would be able to recover from this (test this scenario)
+        // TODO: check if we'd recover from trim in shadow streams by the protocol itself
+        if (snapshotWriter.getPhase() == StreamsSnapshotWriter.Phase.TRANSFER_PHASE) {
+            log.warn("Leadership lost while in TRANSFER phase. Trigger snapshot sync plugin end, to avoid effects of" +
+                    "delayed restarts of snapshot sync.");
+            log.info("Run onSnapshotSyncEnd :: {}", snapshotSyncPlugin.getClass().getSimpleName());
+            snapshotSyncPlugin.onSnapshotSyncEnd(runtime);
+            log.info("Completed onSnapshotSyncEnd :: {}", snapshotSyncPlugin.getClass().getSimpleName());
+        } else {
+            log.warn("Leadership lost while in APPLY phase. Note that snapshot sync end plugin might not " +
+                    "have been ran.");
+        }
     }
 
     enum RxState {
