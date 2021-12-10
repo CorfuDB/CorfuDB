@@ -35,7 +35,7 @@ public class FileSystemStats {
         }
 
         public long available() {
-            return limit - used;
+            return Math.max(0, limit - used);
         }
     }
 
