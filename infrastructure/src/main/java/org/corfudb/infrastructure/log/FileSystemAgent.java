@@ -25,8 +25,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 @Slf4j
-public class FileSystemAgent {
-    private static Optional<FileSystemAgent> INSTANCE = Optional.empty();
+public final class FileSystemAgent {
+    private static Optional<FileSystemAgent> instance = Optional.empty();
 
     private final FileSystemConfig config;
     // Resource quota to track the log size
@@ -58,21 +58,21 @@ public class FileSystemAgent {
     }
 
     public static void init(FileSystemConfig config) {
-        INSTANCE = Optional.of(new FileSystemAgent(config));
+        instance = Optional.of(new FileSystemAgent(config));
     }
 
     public static boolean configured(){
-        return INSTANCE.isPresent();
+        return instance.isPresent();
     }
 
     public static ResourceQuota getResourceQuota() {
         Supplier<IllegalStateException> err = () -> new IllegalStateException("FileSystemAgent not configured");
-        return INSTANCE.orElseThrow(err).logSizeQuota;
+        return instance.orElseThrow(err).logSizeQuota;
     }
 
     public static PartitionAttribute getPartition() {
         Supplier<IllegalStateException> err = () -> new IllegalStateException("FileSystemAgent not configured");
-        return INSTANCE.orElseThrow(err).partitionAttribute;
+        return instance.orElseThrow(err).partitionAttribute;
     }
 
     /**
