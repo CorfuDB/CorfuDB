@@ -19,6 +19,11 @@ message Uuid {
     fixed64 lsb = 2;
 }
 
+message SnapshotSyncPluginValue {
+    option (org.corfudb.runtime.table_schema).stream_tag = "snapshotSyncPlugin";
+    string value = 1;
+}
+
 message ClusterUuidMsg {
     option (org.corfudb.runtime.table_schema).stream_tag = "cluster_manager_test";
     fixed64 msb = 1;
