@@ -7,6 +7,7 @@ import static org.junit.Assert.fail;
 import com.google.common.reflect.TypeToken;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -20,25 +21,35 @@ import java.util.concurrent.Executors;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultSnapshotSyncPlugin;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.ExampleSchemas.SnapshotSyncPluginValue;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.util.Sleep;
+import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.IntervalRetry;
+import org.corfudb.util.retry.RetryNeededException;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
@@ -47,6 +58,8 @@ import org.corfudb.util.serializer.ProtobufSerializer;
 public class LogReplicationAbstractIT extends AbstractIT {
 
     private static final int MSG_SIZE = 65536;
+
+    private static final int SHORT_SLEEP_TIME = 10;
 
     public static final String TABLE_PREFIX = "Table00";
 
@@ -160,8 +173,13 @@ public class LogReplicationAbstractIT extends AbstractIT {
         final int totalStandbyStatusUpdates = 2;
 
         try {
-            log.debug("Setup active and standby Corfu's");
+            log.info(">> Setup active and standby Corfu's");
             setupActiveAndStandbyCorfu();
+
+            // Two updates are expected onStart of snapshot sync and onEnd.
+            CountDownLatch latchSnapshotSyncPlugin = new CountDownLatch(2);
+            SnapshotSyncPluginListener snapshotSyncPluginListener = new SnapshotSyncPluginListener(latchSnapshotSyncPlugin);
+            subscribeToSnapshotSyncPluginTable(snapshotSyncPluginListener);
 
             // Subscribe to replication status table on Standby (to be sure data change on status are captured)
             corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
@@ -176,10 +194,10 @@ public class LogReplicationAbstractIT extends AbstractIT {
             corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
                     LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
-            log.debug("Open map(s) on active and standby");
+            log.info(">> Open map(s) on active and standby");
             openMaps(totalNumMaps);
 
-            log.debug("Write data to active CorfuDB before LR is started ...");
+            log.info(">> Write data to active CorfuDB before LR is started ...");
             // Add Data for Snapshot Sync
             writeToActive(0, numWrites);
 
@@ -195,17 +213,28 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
             startLogReplicatorServers();
 
-            log.debug("Wait ... Snapshot log replication in progress ...");
+            log.info(">> Wait ... Snapshot log replication in progress ...");
             verifyDataOnStandby(numWrites);
 
+            // Confirm replication status reflects snapshot sync completed
+            log.info(">> Verify replication status completed on active");
+            verifyReplicationStatusFromActive();
+
+            // Wait until both plugin updates
+            log.info(">> Wait snapshot sync plugin updates received");
+            latchSnapshotSyncPlugin.await();
+            // Confirm snapshot sync plugin was triggered on start and on end
+            validateSnapshotSyncPlugin(snapshotSyncPluginListener);
+
             // Add Delta's for Log Entry Sync
+            log.info(">> Write deltas");
             writeToActive(numWrites, numWrites / 2);
 
-            log.debug("Wait ... Delta log replication in progress ...");
+            log.info(">> Wait ... Delta log replication in progress ...");
             verifyDataOnStandby((numWrites + (numWrites / 2)));
 
             // Verify Standby Status Listener received all expected updates (is_data_consistent)
-            log.debug("Wait ... Replication status UPDATE ...");
+            log.info(">> Wait ... Replication status UPDATE ...");
             statusUpdateLatch.await();
             assertThat(standbyListener.getAccumulatedStatus().size()).isEqualTo(totalStandbyStatusUpdates);
             // Confirm last updates are set to true (corresponding to snapshot sync completed and log entry sync started)
@@ -232,6 +261,78 @@ public class LogReplicationAbstractIT extends AbstractIT {
         }
     }
 
+    private void verifyReplicationStatusFromActive() throws Exception {
+        Table<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, LogReplicationMetadata.ReplicationStatusVal>
+                replicationStatusTable = corfuStoreActive.openTable(LogReplicationMetadataManager.NAMESPACE,
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class,
+                null,
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+
+        IRetry.build(IntervalRetry.class, () -> {
+            try(TxnContext txn = corfuStoreActive.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                List<CorfuStoreEntry<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, LogReplicationMetadata.ReplicationStatusVal>>
+                        entries = txn.executeQuery(replicationStatusTable, all -> true);
+                assertThat(entries.size()).isNotZero();
+                if (entries.get(0).getPayload().getSnapshotSyncInfo().getStatus() != LogReplicationMetadata.SyncStatus.COMPLETED) {
+                    Sleep.sleepUninterruptibly(Duration.ofMillis(SHORT_SLEEP_TIME));
+                    txn.commit();
+                    throw new RetryNeededException();
+                }
+                assertThat(entries.get(0).getPayload().getSnapshotSyncInfo().getStatus()).isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
+                assertThat(entries.get(0).getPayload().getSnapshotSyncInfo().getType()).isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
+                assertThat(entries.get(0).getPayload().getSnapshotSyncInfo().getBaseSnapshot()).isNotEqualTo(Address.NON_ADDRESS);
+                txn.commit();
+            } catch (TransactionAbortedException tae) {
+                log.error("Error while attempting to connect to update dummy table in onSnapshotSyncStart.", tae);
+                throw new RetryNeededException();
+            }
+            return null;
+        }).run();
+    }
+
+    private void validateSnapshotSyncPlugin(SnapshotSyncPluginListener listener) {
+        assertThat(listener.getUpdates().size()).isEqualTo(2);
+        assertThat(listener.getUpdates()).contains(DefaultSnapshotSyncPlugin.ON_START_VALUE);
+        assertThat(listener.getUpdates()).contains(DefaultSnapshotSyncPlugin.ON_END_VALUE);
+    }
+
+    private void subscribeToSnapshotSyncPluginTable(SnapshotSyncPluginListener listener) {
+        try {
+            corfuStoreStandby.openTable(DefaultSnapshotSyncPlugin.NAMESPACE,
+                    DefaultSnapshotSyncPlugin.TABLE_NAME, ExampleSchemas.Uuid.class, SnapshotSyncPluginValue.class,
+                    SnapshotSyncPluginValue.class, TableOptions.fromProtoSchema(SnapshotSyncPluginValue.class));
+            corfuStoreStandby.subscribeListener(listener, DefaultSnapshotSyncPlugin.NAMESPACE, DefaultSnapshotSyncPlugin.TAG);
+        } catch (Exception e) {
+            fail("Exception while attempting to subscribe to snapshot sync plugin table");
+        }
+    }
+
+    private class SnapshotSyncPluginListener implements StreamListener {
+
+        @Getter
+        List<String> updates = new ArrayList<>();
+
+        private final CountDownLatch countDownLatch;
+
+        public SnapshotSyncPluginListener(CountDownLatch countdownLatch) {
+            this.countDownLatch = countdownLatch;
+        }
+
+        @Override
+        public void onNext(CorfuStreamEntries results) {
+            results.getEntries().forEach((schema, entries) -> entries.forEach(e ->
+                    updates.add(((SnapshotSyncPluginValue)e.getPayload()).getValue())));
+            countDownLatch.countDown();
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            fail("onError for SnapshotSyncPluginListener");
+        }
+    }
+
     private class ReplicationStatusListener implements StreamListener {
 
         @Getter
@@ -252,7 +353,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
         @Override
         public void onError(Throwable throwable) {
-            fail();
+            fail("onError for ReplicationStatusListener");
         }
     }
 
@@ -527,14 +628,14 @@ public class LogReplicationAbstractIT extends AbstractIT {
     public void verifyDataOnStandby(int expectedConsecutiveWrites) {
         for(Map.Entry<String, Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata>> entry : mapNameToMapStandby.entrySet()) {
 
-            log.debug("Verify Data on Standby's Table {}", entry.getKey());
+            log.info("Verify Data on Standby's Table {}", entry.getKey());
 
             // Wait until data is fully replicated
             while (entry.getValue().count() != expectedConsecutiveWrites) {
                 // Block until expected number of entries is reached
             }
 
-            log.debug("Number updates on Standby Map {} :: {} ", entry.getKey(), expectedConsecutiveWrites);
+            log.info("Number updates on Standby Map {} :: {} ", entry.getKey(), expectedConsecutiveWrites);
 
             // Verify data is present in Standby Site
             assertThat(entry.getValue().count()).isEqualTo(expectedConsecutiveWrites);
