@@ -14,7 +14,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.infrastructure.log.FileSystemAgent.ResourceQuotaConfig;
+import org.corfudb.infrastructure.log.FileSystemAgent.FileSystemConfig;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
@@ -49,7 +49,7 @@ public class InMemoryStreamLog implements StreamLog {
         committedTail = new AtomicLong(Address.NON_ADDRESS);
 
         Path dummyLogDir = new File(".").toPath().toAbsolutePath();
-        ResourceQuotaConfig config = new ResourceQuotaConfig(dummyLogDir, 100);
+        FileSystemConfig config = new FileSystemConfig(dummyLogDir, 100);
         FileSystemAgent.init(config);
     }
 
