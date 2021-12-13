@@ -41,7 +41,7 @@ public class ClusterGraphTest {
                 .fileSystem(Optional.empty())
                 .build();
 
-        NodeState c = unavailableNodeState(C);
+        NodeState c = NodeState.getUnavailableNodeState(C);
 
         ImmutableMap<String, NodeState> nodes = ImmutableMap.of(A, a, B, b, C, c);
         ClusterState clusterState = ClusterState.builder()
@@ -202,13 +202,5 @@ public class ClusterGraphTest {
 
         assertTrue(responsiveNode.isPresent());
         assertEquals(new NodeRank(C, 2), responsiveNode.get());
-    }
-
-    private NodeState unavailableNodeState(String endpoint) {
-        return new NodeState(
-                unavailable(endpoint),
-                Optional.empty(),
-                SequencerMetrics.UNKNOWN
-        );
     }
 }

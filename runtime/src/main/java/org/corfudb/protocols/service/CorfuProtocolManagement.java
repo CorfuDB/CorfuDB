@@ -1,8 +1,5 @@
 package org.corfudb.protocols.service;
 
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
@@ -27,6 +24,10 @@ import org.corfudb.runtime.proto.service.Management.ReportFailureRequestMsg;
 import org.corfudb.runtime.proto.service.Management.ReportFailureResponseMsg;
 import org.corfudb.runtime.view.Layout;
 
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+
 import static org.corfudb.protocols.CorfuProtocolCommon.getLayoutMsg;
 import static org.corfudb.protocols.CorfuProtocolCommon.getSequencerMetrics;
 import static org.corfudb.protocols.CorfuProtocolCommon.getSequencerMetricsMsg;
@@ -49,12 +50,13 @@ import static org.corfudb.protocols.CorfuProtocolWorkflows.getRestoreRedundancyM
 @Slf4j
 public final class CorfuProtocolManagement {
     // Prevent class from being instantiated
-    private CorfuProtocolManagement() {}
+    private CorfuProtocolManagement() {
+    }
 
     /**
      * Returns a QUERY_NODE request message that can be sent by the client.
      *
-     * @return   a RequestPayloadMsg containing the QUERY_NODE request
+     * @return a RequestPayloadMsg containing the QUERY_NODE request
      */
     public static RequestPayloadMsg getQueryNodeRequestMsg() {
         return RequestPayloadMsg.newBuilder()
@@ -65,8 +67,8 @@ public final class CorfuProtocolManagement {
     /**
      * Returns a QUERY_NODE response message that can be sent by the server.
      *
-     * @param nodeState   the current node state provided by the failure detector
-     * @return            a ResponsePayloadMsg containing the QUERY_NODE response
+     * @param nodeState the current node state provided by the failure detector
+     * @return a ResponsePayloadMsg containing the QUERY_NODE response
      */
     public static ResponsePayloadMsg getQueryNodeResponseMsg(NodeState nodeState) {
         QueryNodeResponseMsg.Builder responseBuilder = QueryNodeResponseMsg.newBuilder()
@@ -80,10 +82,10 @@ public final class CorfuProtocolManagement {
                     .build();
             PartitionAttributeStatsMsg partitionAttributeStatsMsg =
                     PartitionAttributeStatsMsg.newBuilder()
-                    .setIsReadOnly(fsStats.getPartitionAttributeStats().isReadOnly())
-                    .setAvailableSpace(fsStats.getPartitionAttributeStats().getAvailableSpace())
-                    .setTotalSpace(fsStats.getPartitionAttributeStats().getTotalSpace())
-                    .build();
+                            .setIsReadOnly(fsStats.getPartitionAttributeStats().isReadOnly())
+                            .setAvailableSpace(fsStats.getPartitionAttributeStats().getAvailableSpace())
+                            .setTotalSpace(fsStats.getPartitionAttributeStats().getTotalSpace())
+                            .build();
             FileSystemStatsMsg fsStatsMsg = FileSystemStatsMsg.newBuilder()
                     .setResourceQuotaStats(resourceQuotaStatsMsg)
                     .setPartitionAttributeStats(partitionAttributeStatsMsg)
@@ -102,12 +104,12 @@ public final class CorfuProtocolManagement {
     /**
      * Returns a NodeState object from its Protobuf representation.
      *
-     * @param msg   the desired Protobuf QueryNodeResponse message
-     * @return      an equivalent Java NodeState object
+     * @param msg the desired Protobuf QueryNodeResponse message
+     * @return an equivalent Java NodeState object
      */
     public static NodeState getNodeState(QueryNodeResponseMsg msg) {
         Optional<FileSystemStats> maybeFsStats;
-        if(msg.hasFileSystem()){
+        if (msg.hasFileSystem()) {
             ResourceQuotaStatsMsg quotaMsg = msg.getFileSystem().getResourceQuotaStats();
             ResourceQuotaStats quotaStats = new ResourceQuotaStats(quotaMsg.getLimit(), quotaMsg.getUsed());
 
@@ -134,9 +136,9 @@ public final class CorfuProtocolManagement {
     /**
      * Returns a REPORT_FAILURE request message that can be sent by the client.
      *
-     * @param epoch         the epoch in which the polling was conducted
-     * @param failedNodes   the set of failed nodes
-     * @return              a RequestPayloadMsg containing the REPORT_FAILURE request
+     * @param epoch       the epoch in which the polling was conducted
+     * @param failedNodes the set of failed nodes
+     * @return a RequestPayloadMsg containing the REPORT_FAILURE request
      */
     public static RequestPayloadMsg getReportFailureRequestMsg(long epoch, Set<String> failedNodes) {
         return RequestPayloadMsg.newBuilder()
@@ -150,8 +152,8 @@ public final class CorfuProtocolManagement {
     /**
      * Returns a REPORT_FAILURE response message that can be sent by the server.
      *
-     * @param handlingSuccessful   true if the failures were handled successfully
-     * @return                     a ResponsePayloadMsg containing the REPORT_FAILURE response
+     * @param handlingSuccessful true if the failures were handled successfully
+     * @return a ResponsePayloadMsg containing the REPORT_FAILURE response
      */
     public static ResponsePayloadMsg getReportFailureResponseMsg(boolean handlingSuccessful) {
         return ResponsePayloadMsg.newBuilder()
@@ -164,9 +166,9 @@ public final class CorfuProtocolManagement {
     /**
      * Returns a HEAL_FAILURE request message that can be sent by the client.
      *
-     * @param epoch         the epoch in which the polling was conducted
-     * @param healedNodes   the set of nodes to try healing
-     * @return              a RequestPayloadMsg containing the HEAL_FAILURE request
+     * @param epoch       the epoch in which the polling was conducted
+     * @param healedNodes the set of nodes to try healing
+     * @return a RequestPayloadMsg containing the HEAL_FAILURE request
      */
     public static RequestPayloadMsg getHealFailureRequestMsg(long epoch, Set<String> healedNodes) {
         return RequestPayloadMsg.newBuilder()
@@ -180,8 +182,8 @@ public final class CorfuProtocolManagement {
     /**
      * Returns a HEAL_FAILURE response message that can be sent by the server.
      *
-     * @param handlingSuccessful   true if the healing was handled successfully
-     * @return                     a ResponsePayloadMsg containing the HEAL_FAILURE response
+     * @param handlingSuccessful true if the healing was handled successfully
+     * @return a ResponsePayloadMsg containing the HEAL_FAILURE response
      */
     public static ResponsePayloadMsg getHealFailureResponseMsg(boolean handlingSuccessful) {
         return ResponsePayloadMsg.newBuilder()
@@ -194,8 +196,8 @@ public final class CorfuProtocolManagement {
     /**
      * Returns a BOOTSTRAP_MANAGEMENT request message that can be sent by the client.
      *
-     * @param layout   the Layout to bootstrap with
-     * @return         a RequestPayloadMsg containing the BOOTSTRAP_MANAGEMENT request
+     * @param layout the Layout to bootstrap with
+     * @return a RequestPayloadMsg containing the BOOTSTRAP_MANAGEMENT request
      */
     public static RequestPayloadMsg getBootstrapManagementRequestMsg(Layout layout) {
         return RequestPayloadMsg.newBuilder()
@@ -209,8 +211,8 @@ public final class CorfuProtocolManagement {
     /**
      * Returns a BOOTSTRAP_MANAGEMENT response message that can be sent by the server.
      *
-     * @param bootstrapped   true if the bootstrap was successful but false otherwise
-     * @return               a ResponsePayloadMsg containing the BOOTSTRAP_MANAGEMENT response
+     * @param bootstrapped true if the bootstrap was successful but false otherwise
+     * @return a ResponsePayloadMsg containing the BOOTSTRAP_MANAGEMENT response
      */
     public static ResponsePayloadMsg getBootstrapManagementResponseMsg(boolean bootstrapped) {
         return ResponsePayloadMsg.newBuilder()
@@ -224,7 +226,7 @@ public final class CorfuProtocolManagement {
     /**
      * Returns a MANAGEMENT_LAYOUT request message that can be sent by the client.
      *
-     * @return   a RequestPayloadMsg containing the MANAGEMENT_LAYOUT request
+     * @return a RequestPayloadMsg containing the MANAGEMENT_LAYOUT request
      */
     public static RequestPayloadMsg getManagementLayoutRequestMsg() {
         return RequestPayloadMsg.newBuilder()
@@ -235,8 +237,8 @@ public final class CorfuProtocolManagement {
     /**
      * Returns a MANAGEMENT_LAYOUT response message that can be sent by the server.
      *
-     * @param layout   the Management Layout
-     * @return         a ResponsePayloadMsg containing the MANAGEMENT_LAYOUT response
+     * @param layout the Management Layout
+     * @return a ResponsePayloadMsg containing the MANAGEMENT_LAYOUT response
      */
     public static ResponsePayloadMsg getManagementLayoutResponseMsg(Layout layout) {
         return ResponsePayloadMsg.newBuilder()
@@ -254,8 +256,8 @@ public final class CorfuProtocolManagement {
      * can be sent by the client. Used to query the status of a particular workflow
      * on the Orchestrator.
      *
-     * @param workflowId   the id of the workflow being queried
-     * @return             a RequestPayloadMsg containing the ORCHESTRATOR request
+     * @param workflowId the id of the workflow being queried
+     * @return a RequestPayloadMsg containing the ORCHESTRATOR request
      */
     public static RequestPayloadMsg getQueryWorkflowRequestMsg(UUID workflowId) {
         return RequestPayloadMsg.newBuilder()
@@ -270,8 +272,8 @@ public final class CorfuProtocolManagement {
      * that can be sent by the client. Used to initiate a workflow that adds a
      * new node to the cluster.
      *
-     * @param endpoint   the endpoint to try adding to the cluster
-     * @return           a RequestPayloadMsg containing the ORCHESTRATOR request
+     * @param endpoint the endpoint to try adding to the cluster
+     * @return a RequestPayloadMsg containing the ORCHESTRATOR request
      */
     public static RequestPayloadMsg getAddNodeRequestMsg(String endpoint) {
         return RequestPayloadMsg.newBuilder()
@@ -286,8 +288,8 @@ public final class CorfuProtocolManagement {
      * that can be sent by the client. Used to initiate a workflow that removes a
      * node from the cluster, if it exists.
      *
-     * @param endpoint   the endpoint to try removing from the cluster
-     * @return           a RequestPayloadMsg containing the ORCHESTRATOR request
+     * @param endpoint the endpoint to try removing from the cluster
+     * @return a RequestPayloadMsg containing the ORCHESTRATOR request
      */
     public static RequestPayloadMsg getRemoveNodeRequestMsg(String endpoint) {
         return RequestPayloadMsg.newBuilder()
@@ -302,12 +304,12 @@ public final class CorfuProtocolManagement {
      * that can be sent by the client. Used to initiate a workflow that heals an
      * existing unresponsive node back into the cluster.
      *
-     * @param endpoint      the endpoint to try healing back into the cluster
-     * @param stripeIndex   the stripe index of the node if it is a LogUnit server
-     * @param isLayout      true if the node is a Layout server
-     * @param isSequencer   true if the node is a Sequencer server
-     * @param isLogUnit     true if the node is a LogUnit server
-     * @return              a RequestPayloadMsg containing the ORCHESTRATOR request
+     * @param endpoint    the endpoint to try healing back into the cluster
+     * @param stripeIndex the stripe index of the node if it is a LogUnit server
+     * @param isLayout    true if the node is a Layout server
+     * @param isSequencer true if the node is a Sequencer server
+     * @param isLogUnit   true if the node is a LogUnit server
+     * @return a RequestPayloadMsg containing the ORCHESTRATOR request
      */
     public static RequestPayloadMsg getHealNodeRequestMsg(String endpoint, int stripeIndex, boolean isLayout,
                                                           boolean isSequencer, boolean isLogUnit) {
@@ -323,8 +325,8 @@ public final class CorfuProtocolManagement {
      * that can be sent by the client. Used to initiate a workflow that removes an
      * endpoint from the cluster forcefully by bypassing consensus.
      *
-     * @param endpoint   the endpoint to forcefully remove from the cluster
-     * @return           a RequestPayloadMsg containing the ORCHESTRATOR request
+     * @param endpoint the endpoint to forcefully remove from the cluster
+     * @return a RequestPayloadMsg containing the ORCHESTRATOR request
      */
     public static RequestPayloadMsg getForceRemoveNodeRequestMsg(String endpoint) {
         return RequestPayloadMsg.newBuilder()
@@ -339,8 +341,8 @@ public final class CorfuProtocolManagement {
      * that can be sent by the client. Used to initiate a workflow to restore all redundancies and
      * merge all segments.
      *
-     * @param endpoint   the endpoint to restore redundancy to
-     * @return           a RequestPayloadMsg containing the ORCHESTRATOR request
+     * @param endpoint the endpoint to restore redundancy to
+     * @return a RequestPayloadMsg containing the ORCHESTRATOR request
      */
     public static RequestPayloadMsg getRestoreRedundancyMergeSegmentsRequestMsg(String endpoint) {
         return RequestPayloadMsg.newBuilder()
@@ -355,8 +357,8 @@ public final class CorfuProtocolManagement {
      * can be sent by the server. Used to indicate the status of a previously queried
      * workflow.
      *
-     * @param active   indicates whether the queried workflow is still active
-     * @return         a ResponsePayloadMsg containing the ORCHESTRATOR response
+     * @param active indicates whether the queried workflow is still active
+     * @return a ResponsePayloadMsg containing the ORCHESTRATOR response
      */
     public static ResponsePayloadMsg getQueriedWorkflowResponseMsg(boolean active) {
         return ResponsePayloadMsg.newBuilder()
@@ -371,8 +373,8 @@ public final class CorfuProtocolManagement {
      * can be sent by the server. Used to indicate to the client that a corresponding
      * workflow was created. The id can be used by the client to query its status.
      *
-     * @param workflowId   the id of the newly created workflow
-     * @return             a ResponsePayloadMsg containing the ORCHESTRATOR response
+     * @param workflowId the id of the newly created workflow
+     * @return a ResponsePayloadMsg containing the ORCHESTRATOR response
      */
     public static ResponsePayloadMsg getCreatedWorkflowResponseMsg(UUID workflowId) {
         return ResponsePayloadMsg.newBuilder()

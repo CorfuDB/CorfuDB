@@ -11,8 +11,16 @@ class FileSystemStatsTest {
     public void testExceeded() {
         final long limit = 100;
         final long used = 200;
+
         ResourceQuotaStats stats = new ResourceQuotaStats(limit, used);
         assertTrue(stats.isExceeded());
+
+        stats = new ResourceQuotaStats(limit, limit);
+        assertFalse(stats.isExceeded());
+
+        final long extraLimit = 500;
+        stats = new ResourceQuotaStats(extraLimit, used);
+        assertFalse(stats.isExceeded());
     }
 
     @Test

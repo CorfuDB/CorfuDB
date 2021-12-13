@@ -1,11 +1,9 @@
 package org.corfudb.protocols.wireprotocol.failuredetector;
 
-import io.netty.buffer.ByteBuf;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
-import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttributeStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.ResourceQuotaStats;
 
@@ -49,11 +47,6 @@ public class NodeRank implements Comparable<NodeRank>, NodeRanking {
 
     public boolean is(String endpoint) {
         return this.endpoint.equals(endpoint);
-    }
-
-    public NodeRank(ByteBuf buf) {
-        endpoint = CorfuProtocolCommon.fromBuffer(buf, String.class);
-        numConnections = CorfuProtocolCommon.fromBuffer(buf, Integer.class);
     }
 
     @AllArgsConstructor
