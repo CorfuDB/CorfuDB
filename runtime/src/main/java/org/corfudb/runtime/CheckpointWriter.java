@@ -176,8 +176,9 @@ public class CheckpointWriter<T extends StreamingMap> {
             finishCheckpoint();
             MicroMeterUtils.time(Duration.ofMillis(System.currentTimeMillis() - start), "checkpoint.timer",
                     "type", streamId.toString());
-            MicroMeterUtils.measure(numBytes, "checkpoint.write.size");
-            MicroMeterUtils.measure(numEntries, "checkpoint.write.entries");
+            MicroMeterUtils.counterIncrement(numBytes, "checkpoint.write.size", streamId.toString());
+            MicroMeterUtils.counterIncrement(numEntries, "checkpoint.write.entries", streamId.toString());
+            MicroMeterUtils.functionCounter("checkpoint.table.count");
             log.info("appendCheckpoint: completed checkpoint for {}, entries({}), " +
                             "cpSize({}) bytes at snapshot {}", streamId, entryCount, numBytes, snapshotTimestamp);
         } finally {
