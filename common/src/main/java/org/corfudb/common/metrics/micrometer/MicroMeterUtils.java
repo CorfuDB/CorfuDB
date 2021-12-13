@@ -3,6 +3,7 @@ package org.corfudb.common.metrics.micrometer;
 import com.google.common.collect.ImmutableSet;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.FunctionCounter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -25,6 +26,7 @@ public class MicroMeterUtils {
 
     private static final double[] PERCENTILES = new double[]{0.5, 0.99};
     private static final boolean PUBLISH_HISTOGRAM = true;
+    private static final double INC_COUNTER = 1.0;
     /**
      * A list of server metrics that will be ignored.
      */
@@ -131,6 +133,9 @@ public class MicroMeterUtils {
     }
 
     public static void measure(double measuredValue, String name, String... tags) {
+        if (tags == null) {
+            tags = new String[]{"tags"};
+        }
         Optional<DistributionSummary> summary = createOrGetDistSummary(name, tags);
         summary.ifPresent(s -> s.record(measuredValue));
     }
@@ -189,6 +194,10 @@ public class MicroMeterUtils {
 
     public static void counterIncrement(double value, String name, String... tags) {
         filterGetInstance(name).ifPresent(registry -> registry.counter(name, tags).increment(value));
+    }
+
+    public static Optional<FunctionCounter> functionCounter(String name, String... tags) {
+        return filterGetInstance(name).map(registry -> registry.more().counter(name, (Iterable)Tags.of(tags), INC_COUNTER));
     }
 
     public static <T> CompletableFuture<T> timeWhenCompletes(CompletableFuture<T> future,

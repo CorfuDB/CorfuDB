@@ -2,6 +2,7 @@ package org.corfudb.runtime;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -76,6 +77,7 @@ public class MultiCheckpointWriter<T extends StreamingMap> {
                                     "Aborting.", numRetries);
                             throw new IllegalStateException(msg);
                         }
+                        MicroMeterUtils.functionCounter("checkpoint.error.count");
                     }
                 }
 
