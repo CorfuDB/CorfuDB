@@ -55,7 +55,6 @@ public class ClusterStateTest {
                 .sequencerMetrics(SequencerMetrics.READY)
                 .connectivity(connectivity(A, ImmutableMap.of(A, OK, B, OK, C, OK)))
                 .fileSystem(Optional.empty())
-                .fileSystem(Optional.empty())
                 .build();
 
         NodeState b = NodeState.builder()
