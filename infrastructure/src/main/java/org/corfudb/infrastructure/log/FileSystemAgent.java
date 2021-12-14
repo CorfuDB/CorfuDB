@@ -61,10 +61,6 @@ public final class FileSystemAgent {
         instance = Optional.of(new FileSystemAgent(config));
     }
 
-    public static boolean configured(){
-        return instance.isPresent();
-    }
-
     public static ResourceQuota getResourceQuota() {
         Supplier<IllegalStateException> err = () -> new IllegalStateException("FileSystemAgent not configured");
         return instance.orElseThrow(err).logSizeQuota;

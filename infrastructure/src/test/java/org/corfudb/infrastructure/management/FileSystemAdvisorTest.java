@@ -18,9 +18,34 @@ import static org.corfudb.protocols.wireprotocol.ClusterState.buildClusterState;
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.FAILED;
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.OK;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FileSystemAdvisorTest {
+
+    @Test
+    void noResourceQuotaExceeded() {
+        final long epoch = 0;
+        final String localEndpoint = NodeNames.A;
+
+        FileSystemStats fsStats = new FileSystemStats(
+                NodeStateTestUtil.buildRegularQuota(),
+                Mockito.mock(PartitionAttributeStats.class)
+        );
+
+        ClusterState cluster = buildClusterState(
+                localEndpoint,
+                ImmutableList.of(),
+                nodeState(localEndpoint, epoch, Optional.of(fsStats), OK, OK, OK),
+                nodeState(NodeNames.B, epoch, Optional.of(fsStats), OK, OK, OK),
+                nodeState(NodeNames.C, epoch, Optional.of(fsStats), OK, OK, OK)
+        );
+
+        FileSystemAdvisor advisor = new FileSystemAdvisor();
+        Optional<NodeRankByResourceQuota> maybeFailedNode = advisor.findFailedNodeByResourceQuota(cluster);
+
+        assertFalse(maybeFailedNode.isPresent());
+    }
 
     @Test
     void findFailedNodeByResourceQuota() {
@@ -43,6 +68,28 @@ class FileSystemAdvisorTest {
 
         assertTrue(maybeFailedNode.isPresent());
         assertEquals(NodeNames.B, maybeFailedNode.get().getEndpoint());
+    }
+
+    @Test
+    public void noHealedServer() {
+        final long epoch = 0;
+        final String localEndpoint = NodeNames.C;
+        ResourceQuotaStats quota = NodeStateTestUtil.buildRegularQuota();
+        FileSystemStats fsStats = new FileSystemStats(quota, Mockito.mock(PartitionAttributeStats.class));
+
+        ClusterState cluster = buildClusterState(
+                localEndpoint,
+                ImmutableList.of(localEndpoint),
+                nodeState(NodeNames.A, epoch, Optional.of(fsStats), OK, OK, FAILED),
+                nodeState(NodeNames.B, epoch, OK, OK, OK),
+                nodeState(localEndpoint, epoch, Optional.of(fsStats), FAILED, OK, OK)
+        );
+
+        FileSystemAdvisor advisor = new FileSystemAdvisor();
+        Optional<NodeRankByResourceQuota> maybeHealedNode = advisor.healedServer(cluster);
+
+        assertTrue(maybeHealedNode.isPresent());
+        assertEquals(new NodeRankByResourceQuota(localEndpoint, quota), maybeHealedNode.get());
     }
 
     @Test
