@@ -4,10 +4,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttributeStats;
-import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.ResourceQuotaStats;
 import org.corfudb.runtime.proto.FileSystemStats.FileSystemStatsMsg;
 import org.corfudb.runtime.proto.FileSystemStats.PartitionAttributeStatsMsg;
-import org.corfudb.runtime.proto.FileSystemStats.ResourceQuotaStatsMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import org.corfudb.runtime.proto.service.Management.BootstrapManagementRequestMsg;
@@ -76,10 +74,6 @@ public final class CorfuProtocolManagement {
                 .setSequencerMetrics(getSequencerMetricsMsg(nodeState.getSequencerMetrics()));
 
         nodeState.getFileSystem().ifPresent(fsStats -> {
-            ResourceQuotaStatsMsg resourceQuotaStatsMsg = ResourceQuotaStatsMsg.newBuilder()
-                    .setLimit(fsStats.getResourceQuotaStats().getLimit())
-                    .setUsed(fsStats.getResourceQuotaStats().getUsed())
-                    .build();
             PartitionAttributeStatsMsg partitionAttributeStatsMsg =
                     PartitionAttributeStatsMsg.newBuilder()
                             .setIsReadOnly(fsStats.getPartitionAttributeStats().isReadOnly())
@@ -87,7 +81,6 @@ public final class CorfuProtocolManagement {
                             .setTotalSpace(fsStats.getPartitionAttributeStats().getTotalSpace())
                             .build();
             FileSystemStatsMsg fsStatsMsg = FileSystemStatsMsg.newBuilder()
-                    .setResourceQuotaStats(resourceQuotaStatsMsg)
                     .setPartitionAttributeStats(partitionAttributeStatsMsg)
                     .build();
 
@@ -110,9 +103,6 @@ public final class CorfuProtocolManagement {
     public static NodeState getNodeState(QueryNodeResponseMsg msg) {
         Optional<FileSystemStats> maybeFsStats;
         if (msg.hasFileSystem()) {
-            ResourceQuotaStatsMsg quotaMsg = msg.getFileSystem().getResourceQuotaStats();
-            ResourceQuotaStats quotaStats = new ResourceQuotaStats(quotaMsg.getLimit(), quotaMsg.getUsed());
-
             PartitionAttributeStatsMsg partitionAttributeStatsMsg = msg.getFileSystem().getPartitionAttributeStats();
             PartitionAttributeStats partitionAttributeStats = new PartitionAttributeStats(
                     partitionAttributeStatsMsg.getIsReadOnly(),
@@ -120,7 +110,7 @@ public final class CorfuProtocolManagement {
                     partitionAttributeStatsMsg.getTotalSpace()
             );
 
-            FileSystemStats fsStats = new FileSystemStats(quotaStats, partitionAttributeStats);
+            FileSystemStats fsStats = new FileSystemStats(partitionAttributeStats);
             maybeFsStats = Optional.of(fsStats);
         } else {
             maybeFsStats = Optional.empty();

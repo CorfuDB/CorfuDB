@@ -30,11 +30,8 @@ import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics.FailureDetectorAction;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttributeStats;
-import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.ResourceQuotaStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank.NodeRankByPartitionAttributes;
-import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank.NodeRankByResourceQuota;
-import org.corfudb.protocols.wireprotocol.failuredetector.NodeRanking;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.LambdaUtils;
@@ -297,9 +294,6 @@ public class RemoteMonitoringService implements ManagementService {
 
     private CompletableFuture<PollReport> pollReport(Layout layout, SequencerMetrics sequencerMetrics) {
         return CompletableFuture.supplyAsync(() -> {
-            ResourceQuota quota = FileSystemAgent.getResourceQuota();
-            ResourceQuotaStats quotaStats = new ResourceQuotaStats(quota.getLimit(), quota.getUsed().get());
-
             PartitionAttribute partition = FileSystemAgent.getPartition();
             PartitionAttributeStats partitionStats = new PartitionAttributeStats(
                     partition.isReadOnly(),
@@ -307,7 +301,7 @@ public class RemoteMonitoringService implements ManagementService {
                     partition.getTotalSpace()
             );
 
-            FileSystemStats fsStats = new FileSystemStats(quotaStats, partitionStats);
+            FileSystemStats fsStats = new FileSystemStats(partitionStats);
 
             CorfuRuntime corfuRuntime = getCorfuRuntime();
 
@@ -452,22 +446,6 @@ public class RemoteMonitoringService implements ManagementService {
 
             if (maybeFailedNodeByPartitionAttr.isPresent()) {
                 NodeRankByPartitionAttributes failedNode = maybeFailedNodeByPartitionAttr.get();
-
-                if (decisionMaker.equals(failedNode.getEndpoint())) {
-                    log.error("Decision maker and failed node are the same node: {}", decisionMakerAgent);
-                    return DetectorTask.NOT_COMPLETED;
-                }
-
-                Set<String> failedNodes = new HashSet<>();
-                failedNodes.add(failedNode.getEndpoint());
-                return detectFailure(layout, failedNodes, pollReport).join();
-            }
-
-            Optional<NodeRankByResourceQuota> maybeFailedNodeByQuota = fsAdvisor
-                    .findFailedNodeByResourceQuota(clusterState);
-
-            if (maybeFailedNodeByQuota.isPresent()) {
-                NodeRankByResourceQuota failedNode = maybeFailedNodeByQuota.get();
 
                 if (decisionMaker.equals(failedNode.getEndpoint())) {
                     log.error("Decision maker and failed node are the same node: {}", decisionMakerAgent);

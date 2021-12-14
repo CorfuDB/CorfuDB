@@ -13,31 +13,7 @@ import lombok.ToString;
 public class FileSystemStats {
 
     @NonNull
-    private final ResourceQuotaStats resourceQuotaStats;
-
-    @NonNull
     private final PartitionAttributeStats partitionAttributeStats;
-
-    @AllArgsConstructor
-    @EqualsAndHashCode
-    @Getter
-    @ToString
-    public static class ResourceQuotaStats {
-        private final long limit;
-        private final long used;
-
-        public boolean isExceeded() {
-            return used > limit;
-        }
-
-        public boolean isNotExceeded(){
-            return !isExceeded();
-        }
-
-        public long available() {
-            return Math.max(0, limit - used);
-        }
-    }
 
     @AllArgsConstructor
     @Getter

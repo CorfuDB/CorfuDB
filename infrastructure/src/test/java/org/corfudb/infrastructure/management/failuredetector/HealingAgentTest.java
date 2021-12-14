@@ -9,7 +9,6 @@ import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttributeStats;
-import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.ResourceQuotaStats;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.concurrent.SingletonResource;
@@ -99,10 +98,7 @@ class HealingAgentTest {
     }
 
     private FileSystemStats getFileSystemStats() {
-        final int limit = 100;
-        final int used = 80;
-        ResourceQuotaStats quota = new ResourceQuotaStats(limit, used);
-        return new FileSystemStats(quota, Mockito.mock(PartitionAttributeStats.class));
+        return new FileSystemStats(Mockito.mock(PartitionAttributeStats.class));
     }
 
     private HealingAgent getHealingAgentSpy(String localEndpoint) {

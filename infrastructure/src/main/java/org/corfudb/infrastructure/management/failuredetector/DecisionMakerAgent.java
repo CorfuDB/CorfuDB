@@ -8,10 +8,8 @@ import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttributeStats;
-import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.ResourceQuotaStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank.NodeRankByPartitionAttributes;
-import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank.NodeRankByResourceQuota;
 
 import java.util.NavigableSet;
 import java.util.Optional;
@@ -36,49 +34,16 @@ public class DecisionMakerAgent {
         Optional<String> partitionDm = findPartitionAttributesDecisionMaker()
                 .map(NodeRankByPartitionAttributes::getEndpoint);
 
-        Optional<String> quotaDm = findResourceQuotaDecisionMaker()
-                .map(NodeRankByResourceQuota::getEndpoint);
-
         Optional<String> clusterDm = clusterAdvisor.findDecisionMaker(clusterState)
                 .map(NodeRank::getEndpoint);
 
         //Only completely healthy nodes can update cluster layout
-        if (clusterDm.equals(partitionDm) && clusterDm.equals(quotaDm)) {
+        if (clusterDm.equals(partitionDm)) {
             return clusterDm;
         }
 
         log.trace("Decision maker not found");
         return Optional.empty();
-    }
-
-    @VisibleForTesting
-    Optional<NodeRankByResourceQuota> findResourceQuotaDecisionMaker() {
-        NavigableSet<NodeRankByResourceQuota> set = new TreeSet<>();
-
-        for (NodeState node : clusterState.getNodes().values()) {
-            String nodeEndpoint = node.getConnectivity().getEndpoint();
-            node.getFileSystem()
-                    .map(FileSystemStats::getResourceQuotaStats)
-                    //nodes with exceeded quota can't be decision makers
-                    .filter(ResourceQuotaStats::isNotExceeded)
-                    .map(quota -> new NodeRankByResourceQuota(nodeEndpoint, quota))
-                    .ifPresent(set::add);
-        }
-
-        Optional<NodeRankByResourceQuota> maybeDecisionMaker = Optional.ofNullable(set.pollFirst());
-
-        return maybeDecisionMaker
-                //give up if a decision maker is not a local node, then the decision maker not found
-                .filter(decisionMaker -> {
-                    String dmEndpoint = decisionMaker.getEndpoint();
-                    boolean isDmALocalNode = dmEndpoint.equals(clusterState.getLocalEndpoint());
-                    if (!isDmALocalNode) {
-                        String message = "The node can't be a decision maker, skip operation. Decision maker node is: {}";
-                        log.trace(message, decisionMaker);
-                    }
-
-                    return isDmALocalNode;
-                });
     }
 
     @VisibleForTesting

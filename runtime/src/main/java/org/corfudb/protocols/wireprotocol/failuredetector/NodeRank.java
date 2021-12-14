@@ -5,7 +5,6 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttributeStats;
-import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.ResourceQuotaStats;
 
 /**
  * The rank of the node in a graph. Sorting nodes according to rank used to search for
@@ -47,32 +46,6 @@ public class NodeRank implements Comparable<NodeRank>, NodeRanking {
 
     public boolean is(String endpoint) {
         return this.endpoint.equals(endpoint);
-    }
-
-    @AllArgsConstructor
-    @EqualsAndHashCode
-    @Getter
-    @ToString
-    public static class NodeRankByResourceQuota implements Comparable<NodeRankByResourceQuota>, NodeRanking {
-        public static final NodeRankByResourceQuota MIN_QUOTA_RANK = new NodeRankByResourceQuota(
-                "--",
-                new ResourceQuotaStats(0, Long.MAX_VALUE)
-        );
-
-        private final String endpoint;
-        private final ResourceQuotaStats quota;
-
-        @Override
-        public int compareTo(NodeRankByResourceQuota other) {
-            //Descending order
-            int quotaExceeded = Boolean.compare(other.quota.isNotExceeded(), quota.isNotExceeded());
-            if (quotaExceeded != 0) {
-                return quotaExceeded;
-            }
-
-            //Ascending order
-            return endpoint.compareTo(other.endpoint);
-        }
     }
 
     @AllArgsConstructor

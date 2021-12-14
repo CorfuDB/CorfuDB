@@ -13,7 +13,7 @@ import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
-import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank.NodeRankByResourceQuota;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank.NodeRankByPartitionAttributes;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.concurrent.SingletonResource;
@@ -77,9 +77,9 @@ public class HealingAgent {
     public CompletableFuture<DetectorTask> detectAndHandleHealing(PollReport pollReport, Layout layout) {
         log.trace("Handle healing, layout: {}", layout);
 
-        Optional<NodeRankByResourceQuota> fsHealth = fsAdvisor.healedServer(pollReport.getClusterState());
+        Optional<NodeRankByPartitionAttributes> fsHealth = fsAdvisor.healedServer(pollReport.getClusterState());
         if (!fsHealth.isPresent()){
-            log.trace("Unhealthy node. No free space. Quota limit exceeded");
+            log.trace("Unhealthy node. Read only partition");
             return skippedTask;
         }
 
