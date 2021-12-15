@@ -13,7 +13,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.concurrent.SingletonResource;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -32,10 +31,10 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-class HealingAgentTest {
+public class HealingAgentTest {
 
     @Test
-    void detectHealingAFailedNode() {
+    void unsuccessfulHealingOfAFailedNode() {
         final String localEndpoint = NodeNames.C;
         final long epoch = 0;
 
@@ -59,7 +58,7 @@ class HealingAgentTest {
     }
 
     @Test
-    void detectHealingAFullyConnectedNode() {
+    void detectAndHandleHealingAFullyConnectedNode() {
         final String localEndpoint = NodeNames.C;
         final long epoch = 0;
 
@@ -98,7 +97,8 @@ class HealingAgentTest {
     }
 
     private FileSystemStats getFileSystemStats() {
-        return new FileSystemStats(Mockito.mock(PartitionAttributeStats.class));
+        PartitionAttributeStats attributes = new PartitionAttributeStats(false, 100, 200);
+        return new FileSystemStats(attributes);
     }
 
     private HealingAgent getHealingAgentSpy(String localEndpoint) {

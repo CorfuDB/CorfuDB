@@ -15,6 +15,7 @@ import static org.corfudb.protocols.wireprotocol.ClusterState.buildClusterState;
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.FAILED;
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.OK;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FileSystemAdvisorTest {
@@ -37,8 +38,7 @@ class FileSystemAdvisorTest {
         FileSystemAdvisor advisor = new FileSystemAdvisor();
         Optional<NodeRankByPartitionAttributes> maybeHealedNode = advisor.healedServer(cluster);
 
-        assertTrue(maybeHealedNode.isPresent());
-        assertEquals(new NodeRankByPartitionAttributes(localEndpoint, attributes), maybeHealedNode.get());
+        assertFalse(maybeHealedNode.isPresent());
     }
 
     @Test

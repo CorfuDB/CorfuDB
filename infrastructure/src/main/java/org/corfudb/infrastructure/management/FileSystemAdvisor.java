@@ -47,10 +47,7 @@ public class FileSystemAdvisor {
         Optional<FileSystemStats> maybeFileSystem = getFileSystemStats(clusterState);
 
         return maybeFileSystem
-                .filter(fileSystem -> {
-                    log.trace("No node to heal, quota is exceeded");
-                    return fileSystem.getPartitionAttributeStats().isWritable();
-                })
+                .filter(fileSystem -> fileSystem.getPartitionAttributeStats().isWritable())
                 .map(fileSystem -> new NodeRankByPartitionAttributes(
                         clusterState.getLocalEndpoint(),
                         fileSystem.getPartitionAttributeStats()
