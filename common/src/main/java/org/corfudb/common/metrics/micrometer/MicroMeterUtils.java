@@ -26,7 +26,6 @@ public class MicroMeterUtils {
 
     private static final double[] PERCENTILES = new double[]{0.5, 0.99};
     private static final boolean PUBLISH_HISTOGRAM = true;
-    private static final double INC_COUNTER = 1.0;
     /**
      * A list of server metrics that will be ignored.
      */
@@ -191,10 +190,6 @@ public class MicroMeterUtils {
 
     public static void counterIncrement(double value, String name, String... tags) {
         filterGetInstance(name).ifPresent(registry -> registry.counter(name, tags).increment(value));
-    }
-
-    public static Optional<FunctionCounter> functionCounter(String name, String... tags) {
-        return filterGetInstance(name).map(registry -> registry.more().counter(name, (Iterable)Tags.of(tags), INC_COUNTER));
     }
 
     public static <T> CompletableFuture<T> timeWhenCompletes(CompletableFuture<T> future,

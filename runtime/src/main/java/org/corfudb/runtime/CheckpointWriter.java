@@ -38,7 +38,6 @@ import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
-
 /** Checkpoint writer for CorfuTables: take a snapshot of the
  *  object via TXBegin(), then dump the frozen object's
  *  state into CheckpointEntry records into the object's
@@ -176,9 +175,8 @@ public class CheckpointWriter<T extends StreamingMap> {
             finishCheckpoint();
             MicroMeterUtils.time(Duration.ofMillis(System.currentTimeMillis() - start), "checkpoint.timer",
                     "type", streamId.toString());
-            MicroMeterUtils.counterIncrement(numBytes, "checkpoint.write.size", streamId.toString());
-            MicroMeterUtils.counterIncrement(numEntries, "checkpoint.write.entries", streamId.toString());
-            MicroMeterUtils.functionCounter("checkpoint.table.count");
+            MicroMeterUtils.counterIncrement(numBytes, "checkpoint.write.size", "streamId", streamId.toString());
+            MicroMeterUtils.counterIncrement(numEntries, "checkpoint.write.entries", "streamId", streamId.toString());
             log.info("appendCheckpoint: completed checkpoint for {}, entries({}), " +
                             "cpSize({}) bytes at snapshot {}", streamId, entryCount, numBytes, snapshotTimestamp);
         } finally {

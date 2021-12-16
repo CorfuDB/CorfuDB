@@ -707,8 +707,8 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                         });
         MicroMeterUtils.time(syncStreamRunnable, "vlo.sync.timer",
                 "streamId", getID().toString());
-        MicroMeterUtils.counterIncrement(numBytes.longValue(), "vlo.sync.read_size", getID().toString());
-        MicroMeterUtils.counterIncrement(numEntries.longValue(), "vlo.sync.read_entries", getID().toString());
+        MicroMeterUtils.counterIncrement(numBytes.longValue(), "vlo.sync.read_size", "streamId", getID().toString());
+        MicroMeterUtils.counterIncrement(numEntries.longValue(), "vlo.sync.read_entries", "streamId", getID().toString());
     }
 
     /**
