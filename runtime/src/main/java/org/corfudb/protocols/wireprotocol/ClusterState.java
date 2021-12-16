@@ -42,6 +42,7 @@ public class ClusterState {
     private final ImmutableMap<String, NodeState> nodes;
 
     @NonNull
+    @Singular
     private final ImmutableList<String> unresponsiveNodes;
 
     @NonNull

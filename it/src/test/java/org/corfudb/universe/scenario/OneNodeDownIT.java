@@ -19,7 +19,6 @@ import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.universe.scenario.fixture.Fixture;
 import org.corfudb.universe.universe.UniverseParams;
 import org.junit.Test;
-import org.slf4j.event.Level;
 
 import java.time.Duration;
 import java.util.Map;

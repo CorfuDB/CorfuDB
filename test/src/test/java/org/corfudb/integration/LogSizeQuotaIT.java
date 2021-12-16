@@ -175,9 +175,6 @@ public class LogSizeQuotaIT extends AbstractIT {
     }
 
     @Test
-    @Ignore("Failure detection mechanism has changed, this test disabled until next PR. " +
-            "In the next pr this test will be changed"
-    )
     public void clusteringTest() throws Exception {
 
         long maxLogSize = FileUtils.ONE_MB / 2;

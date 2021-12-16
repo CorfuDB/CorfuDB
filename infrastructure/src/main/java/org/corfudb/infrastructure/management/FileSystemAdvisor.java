@@ -22,8 +22,6 @@ public class FileSystemAdvisor {
         NavigableSet<NodeRankByPartitionAttributes> set = new TreeSet<>();
 
         for (NodeState node : clusterState.getNodes().values()) {
-            String localEndpoint = node.getConnectivity().getEndpoint();
-
             String nodeEndpoint = node.getConnectivity().getEndpoint();
 
             ImmutableList<String> unresponsiveNodes = clusterState.getUnresponsiveNodes();
@@ -35,7 +33,7 @@ public class FileSystemAdvisor {
             node.getFileSystem()
                     .map(FileSystemStats::getPartitionAttributeStats)
                     .filter(PartitionAttributeStats::isReadOnly)
-                    .map(attr -> new NodeRankByPartitionAttributes(localEndpoint, attr))
+                    .map(attr -> new NodeRankByPartitionAttributes(nodeEndpoint, attr))
                     .ifPresent(set::add);
         }
 
@@ -43,6 +41,11 @@ public class FileSystemAdvisor {
     }
 
     public Optional<NodeRankByPartitionAttributes> healedServer(ClusterState clusterState) {
+
+        ImmutableList<String> unresponsiveNodes = clusterState.getUnresponsiveNodes();
+        if (!unresponsiveNodes.contains(clusterState.getLocalEndpoint())) {
+            return Optional.empty();
+        }
 
         Optional<FileSystemStats> maybeFileSystem = getFileSystemStats(clusterState);
 

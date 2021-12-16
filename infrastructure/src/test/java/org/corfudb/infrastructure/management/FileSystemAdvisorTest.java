@@ -85,4 +85,26 @@ class FileSystemAdvisorTest {
         assertTrue(maybeFailedNode.isPresent());
         assertEquals(new NodeRankByPartitionAttributes(NodeNames.A, attributes), maybeFailedNode.get());
     }
+
+    @Test
+    public void failedNodeByPartitionAttributesIsUnresponsive() {
+        final long epoch = 0;
+        final String localEndpoint = NodeNames.C;
+
+        PartitionAttributeStats attributes = new PartitionAttributeStats(true, 100, 200);
+        FileSystemStats fsStats = new FileSystemStats(attributes);
+
+        ClusterState cluster = buildClusterState(
+                localEndpoint,
+                ImmutableList.of(localEndpoint),
+                nodeState(NodeNames.A, epoch, OK, OK, OK),
+                nodeState(NodeNames.B, epoch, OK, OK, OK),
+                nodeState(localEndpoint, epoch, Optional.of(fsStats), OK, OK, OK)
+        );
+
+        FileSystemAdvisor advisor = new FileSystemAdvisor();
+        Optional<NodeRankByPartitionAttributes> maybeFailedNode = advisor.findFailedNodeByPartitionAttributes(cluster);
+
+        assertFalse(maybeFailedNode.isPresent());
+    }
 }

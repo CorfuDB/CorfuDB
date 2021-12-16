@@ -15,9 +15,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 
 public class NodeRankTest {
-    private static final int ONE_HUNDRED = 100;
-    private static final int TEN = 10;
-    private static final int THOUSAND = 1000;
 
     @Test
     public void testSortingByNumberOfConnections() {
