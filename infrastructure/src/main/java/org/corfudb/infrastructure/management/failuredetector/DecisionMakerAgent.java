@@ -11,8 +11,10 @@ import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.Partit
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank.NodeRankByPartitionAttributes;
 
+import java.util.HashSet;
 import java.util.NavigableSet;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeSet;
 
 @AllArgsConstructor
@@ -34,7 +36,7 @@ public class DecisionMakerAgent {
         Optional<String> partitionDm = findPartitionAttributesDecisionMaker()
                 .map(NodeRankByPartitionAttributes::getEndpoint);
 
-        Optional<String> clusterDm = clusterAdvisor.findDecisionMaker(clusterState)
+        Optional<String> clusterDm = clusterAdvisor.findDecisionMaker(clusterState, unhealthyNodes())
                 .map(NodeRank::getEndpoint);
 
         //Only completely healthy nodes can update cluster layout
@@ -74,5 +76,19 @@ public class DecisionMakerAgent {
 
                     return isDmALocalNode;
                 });
+    }
+
+    private Set<String> unhealthyNodes() {
+        Set<String> unhealthyNodes = new HashSet<>();
+
+        for (NodeState node : clusterState.getNodes().values()) {
+            node.getFileSystem().ifPresent(fsStats -> {
+                if (fsStats.getPartitionAttributeStats().isReadOnly()) {
+                    unhealthyNodes.add(node.getConnectivity().getEndpoint());
+                }
+            });
+        }
+
+        return unhealthyNodes;
     }
 }

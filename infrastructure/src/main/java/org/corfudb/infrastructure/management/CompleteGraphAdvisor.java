@@ -9,6 +9,7 @@ import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * This class is an implementation of {@link ClusterType} where the ideal state
@@ -56,7 +57,7 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
 
         log.trace("Detecting failed nodes for: ClusterState= {}", clusterState);
 
-        ClusterGraph symmetric =  ClusterGraph
+        ClusterGraph symmetric = ClusterGraph
                 .toClusterGraph(clusterState)
                 .toSymmetric();
 
@@ -128,11 +129,11 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
     }
 
     @Override
-    public Optional<NodeRank> findDecisionMaker(ClusterState clusterState) {
-        ClusterGraph symmetric =  ClusterGraph
+    public Optional<NodeRank> findDecisionMaker(ClusterState clusterState, Set<String> unhealthyNodes) {
+        ClusterGraph symmetric = ClusterGraph
                 .toClusterGraph(clusterState)
                 .toSymmetric();
 
-        return symmetric.getDecisionMaker();
+        return symmetric.getDecisionMaker(unhealthyNodes);
     }
 }

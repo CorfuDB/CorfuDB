@@ -6,6 +6,7 @@ import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.corfudb.runtime.view.Layout;
 
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * {@link ClusterAdvisor} provides methods to decide the status of Corfu servers
@@ -57,5 +58,5 @@ public interface ClusterAdvisor {
      */
     ClusterGraph getGraph(ClusterState clusterState);
 
-    Optional<NodeRank> findDecisionMaker(ClusterState clusterState);
+    Optional<NodeRank> findDecisionMaker(ClusterState clusterState, Set<String> unhealthyNodes);
 }
