@@ -48,7 +48,7 @@ public final class FileSystemAgent {
         partitionAttribute = new PartitionAgent(config).getPartitionAttribute();
 
         logSizeQuota.consume(initialLogSize);
-        log.info("StreamLogFiles: {} size is {} bytes, limit {}", config.logDir, initialLogSize, logSizeLimit);
+        log.info("FileSystemAgent: {} size is {} bytes, limit {}", config.logDir, initialLogSize, logSizeLimit);
     }
 
     private long getLogSizeLimit() {
