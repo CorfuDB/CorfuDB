@@ -180,6 +180,7 @@ public class RemoteMonitoringService implements ManagementService {
                 .fdDataStore(fdDataStore)
                 .advisor(advisor)
                 .fsAdvisor(fsAdvisor)
+                .runtimeSingleton(runtimeSingletonResource)
                 .build();
     }
 
