@@ -185,11 +185,6 @@ public class ClusterGraph {
                 .filter(nodeRank -> healthyNodes.contains(nodeRank.getEndpoint()))
                 .collect(Collectors.toCollection(TreeSet::new));
 
-        if (healthyDecisionMakers.isEmpty()) {
-            log.error("Empty graph. Can't provide decision maker");
-            return Optional.empty();
-        }
-
         Optional<NodeRank> maybeDecisionMaker = Optional.ofNullable(healthyDecisionMakers.pollFirst());
 
         if (!maybeDecisionMaker.isPresent()) {
