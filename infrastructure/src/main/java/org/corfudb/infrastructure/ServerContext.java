@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -679,16 +680,25 @@ public class ServerContext implements AutoCloseable {
         CorfuRuntimeParameters params = getManagementRuntimeParameters();
         // Shutdown the active event loops unless they were provided to us
         if (!getChannelImplementation().equals(ChannelImplementation.LOCAL)) {
-            clientGroup.shutdownGracefully(
+            try {
+                clientGroup.shutdownGracefully(
                     params.getNettyShutdownQuitePeriod(),
                     params.getNettyShutdownTimeout(),
                     TimeUnit.MILLISECONDS
-            );
-            workerGroup.shutdownGracefully(
+                ).get();
+            } catch (InterruptedException | ExecutionException e) {
+                log.error("Exception when shutting down client group", e);
+            }
+
+            try {
+                workerGroup.shutdownGracefully(
                     params.getNettyShutdownQuitePeriod(),
                     params.getNettyShutdownTimeout(),
                     TimeUnit.MILLISECONDS
-            );
+                ).get();
+            } catch (InterruptedException | ExecutionException e) {
+                log.error("Exception when shutting down worker group", e);
+            }
         }
     }
 }

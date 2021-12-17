@@ -275,7 +275,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         }
 
         log.info("main: Server exiting due to shutdown");
-        flushAsyncLogAppender();
+        //flushAsyncLogAppender();
     }
 
     private ServerContext getServerContext(Map<String, Object> opts) {
@@ -334,6 +334,9 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
         final Level level = Level.toLevel(((String) opts.get("--log-level")).toUpperCase());
         root.setLevel(level);
+
+        LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
+        loggerContext.start();
     }
 
     public static void configureMetrics(Map<String, Object> opts, String localEndpoint) {
@@ -361,7 +364,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         if (replicationDiscoveryService != null) {
             replicationDiscoveryService.shutdown();
         }
-        flushAsyncLogAppender();
+        //flushAsyncLogAppender();
     }
 
     /**

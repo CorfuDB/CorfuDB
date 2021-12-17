@@ -168,7 +168,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     private LogReplicationContext replicationContext;
 
-    private boolean shouldRun = true;
+    private volatile boolean shouldRun = true;
 
     @Getter
     private final AtomicBoolean isLeader;
@@ -330,8 +330,22 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         // such as streams to replicate and version
         LogReplicationConfig logReplicationConfig = getLogReplicationConfiguration(getCorfuRuntime());
 
-        logReplicationMetadataManager = new LogReplicationMetadataManager(getCorfuRuntime(),
-            topologyDescriptor.getTopologyConfigId(), localClusterDescriptor.getClusterId());
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    logReplicationMetadataManager = new LogReplicationMetadataManager(getCorfuRuntime(),
+                        topologyDescriptor.getTopologyConfigId(), localClusterDescriptor.getClusterId());
+                } catch(Exception e) {
+                    log.error("Error when creating the Metadata Manager");
+                    throw new RetryNeededException();
+                }
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when creating the Metadata " +
+                "Manager", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
 
         logReplicationServerHandler = new LogReplicationServer(serverContext, logReplicationConfig,
             logReplicationMetadataManager, localCorfuEndpoint, topologyDescriptor.getTopologyConfigId(), localNodeId);
@@ -414,36 +428,44 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * a cluster's role.
      */
     private LogReplicationConfig getLogReplicationConfiguration(CorfuRuntime runtime) {
-
         try {
-            LogReplicationStreamNameTableManager replicationStreamNameTableManager =
-                new LogReplicationStreamNameTableManager(runtime, serverContext.getPluginConfigFilePath());
+            return IRetry.build(IntervalRetry.class, () -> {
+                Set<String> streamsToReplicate;
+                Map<UUID, List<UUID>> streamingConfigSink;
+                Set<UUID> mergeOnlyStreams;
 
-            Set<String> streamsToReplicate = replicationStreamNameTableManager.getStreamsToReplicate();
+                try {
+                    LogReplicationStreamNameTableManager replicationStreamNameTableManager =
+                        new LogReplicationStreamNameTableManager(runtime, serverContext.getPluginConfigFilePath());
 
-            Map<UUID, List<UUID>> streamingConfigSink = replicationStreamNameTableManager.getStreamingConfigOnSink();
+                    streamsToReplicate = replicationStreamNameTableManager.getStreamsToReplicate();
 
-            Set<UUID> mergeOnlyStreams = LogReplicationStreamNameTableManager.getMergeOnlyStreamIdList();
+                    streamingConfigSink = replicationStreamNameTableManager.getStreamingConfigOnSink();
 
-            // TODO pankti: Check if version does not match. If it does not, create an event for site discovery to
-            //  do a snapshot sync.
-            boolean upgraded = replicationStreamNameTableManager.isUpgraded();
+                    mergeOnlyStreams =
+                        LogReplicationStreamNameTableManager.getMergeOnlyStreamIdList();
 
-            if (upgraded) {
-                input(new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.UPGRADE));
-            }
+                    // TODO pankti: Check if version does not match. If it does not, create an event for site discovery to
+                    //  do a snapshot sync.
+                    boolean upgraded = replicationStreamNameTableManager.isUpgraded();
 
-            log.info("Merge-only stream IDs :: {}", mergeOnlyStreams);
-
-            return new LogReplicationConfig(streamsToReplicate,
+                    if (upgraded) {
+                        input(new DiscoveryServiceEvent(DiscoveryServiceEventType.UPGRADE));
+                    }
+                    log.info("Merge-only stream IDs :: {}", mergeOnlyStreams);
+                } catch (Exception e) {
+                    throw new RetryNeededException();
+                }
+                return new LogReplicationConfig(streamsToReplicate,
                     streamingConfigSink,
                     mergeOnlyStreams,
                     serverContext.getLogReplicationMaxNumMsgPerBatch(),
                     serverContext.getLogReplicationMaxDataMessageSize(),
                     serverContext.getLogReplicationCacheMaxSize());
-        } catch (Throwable t) {
-            log.error("Exception when fetching the Replication Config", t);
-            throw t;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Exception when fetching the Replication Config", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
 
@@ -491,7 +513,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private void onLeadershipAcquire() {
         switch (localClusterDescriptor.getRole()) {
             case ACTIVE:
-                log.info("Start as Source (sender/replicator)");
+                log.info("Start as Source (sender/replicator).  Node id = {}", localNodeId);
                 if (replicationManager == null) {
                     replicationManager = new CorfuReplicationManager(replicationContext,
                             localNodeDescriptor, logReplicationMetadataManager, serverContext.getPluginConfigFilePath(),
@@ -505,7 +527,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 break;
             case STANDBY:
                 // Standby Site : the LogReplicationServer (server handler) will initiate the LogReplicationSinkManager
-                log.info("Start as Sink (receiver)");
+                log.info("Start as Sink (receiver).  Node id = {}", localNodeId);
                 interClusterReplicationService.getLogReplicationServer().getSinkManager().reset();
                 interClusterReplicationService.getLogReplicationServer().setLeadership(true);
                 statusFlag = false;
@@ -854,12 +876,14 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     public void shutdown() {
+        log.info("DiscoveryService Shutdown");
+        shouldRun = false;
         if (logReplicationEventListener != null) {
             logReplicationEventListener.stop();
         }
 
         if (replicationManager != null) {
-            replicationManager.stop();
+            replicationManager.shutdown();
         }
 
         if (clusterManagerAdapter != null) {

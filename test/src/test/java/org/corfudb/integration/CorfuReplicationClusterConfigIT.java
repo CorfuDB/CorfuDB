@@ -588,7 +588,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         for(Map.Entry<String, Table<Sample.StringKey, Sample.IntValueTag,
             Sample.Metadata>> entry : map.entrySet()) {
 
-            log.debug(">>> Write to active cluster, map={}", entry.getKey());
+            log.debug(">>> Write to cluster, map={}.  Active = {}",
+                entry.getKey(), active);
 
             Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> table =
                 entry.getValue();

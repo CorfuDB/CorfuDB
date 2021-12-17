@@ -84,6 +84,18 @@ public class CorfuReplicationManager {
         runtimeToRemoteCluster.clear();
     }
 
+    public void shutdown() {
+        runtimeToRemoteCluster.values().forEach(runtime -> {
+            try {
+                log.info("Stop log replication runtime to remote cluster id={}", runtime.getRemoteClusterId());
+                runtime.shutdown();
+            } catch (Exception e) {
+                log.warn("Failed to stop log replication runtime to remote cluster id={}", runtime.getRemoteClusterId());
+            }
+        });
+        runtimeToRemoteCluster.clear();
+
+    }
     /**
      * Restart connection to remote cluster
      */

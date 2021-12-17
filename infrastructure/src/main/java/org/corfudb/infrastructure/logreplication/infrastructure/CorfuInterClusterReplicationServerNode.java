@@ -97,9 +97,9 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
         }
 
         log.info("close: Shutting down Log Replication server and cleaning resources");
-        serverContext.close();
 
         this.router.getServerAdapter().stop();
+        serverContext.close();
         this.getLogReplicationServer().getSinkManager().shutdown();
 
         // A executor service to create the shutdown threads

@@ -589,15 +589,22 @@ public class LogReplicationSinkManager implements DataReceiver {
         // If in APPLY phase do not unfreeze or shadow streams could be lost. This change was done near the release
         // date we don't know if we would be able to recover from this (test this scenario)
         // TODO: check if we'd recover from trim in shadow streams by the protocol itself
-        if (snapshotWriter.getPhase() == StreamsSnapshotWriter.Phase.TRANSFER_PHASE) {
-            log.warn("Leadership lost while in TRANSFER phase. Trigger snapshot sync plugin end, to avoid effects of" +
+        if (rxState == RxState.SNAPSHOT_SYNC) {
+            if (snapshotWriter.getPhase() == StreamsSnapshotWriter.Phase.TRANSFER_PHASE) {
+                log.warn("Leadership lost while in TRANSFER phase. Trigger " +
+                    "snapshot sync plugin end, to avoid effects of" +
                     "delayed restarts of snapshot sync.");
-            log.info("Run onSnapshotSyncEnd :: {}", snapshotSyncPlugin.getClass().getSimpleName());
-            snapshotSyncPlugin.onSnapshotSyncEnd(runtime);
-            log.info("Completed onSnapshotSyncEnd :: {}", snapshotSyncPlugin.getClass().getSimpleName());
-        } else {
-            log.warn("Leadership lost while in APPLY phase. Note that snapshot sync end plugin might not " +
+                log.info("Run onSnapshotSyncEnd :: {}",
+                    snapshotSyncPlugin.getClass().getSimpleName());
+                snapshotSyncPlugin.onSnapshotSyncEnd(runtime);
+                log.info("Completed onSnapshotSyncEnd :: {}",
+                    snapshotSyncPlugin.getClass().getSimpleName());
+            } else {
+                log.warn("Leadership lost while in APPLY phase. Note that snapshot sync end plugin might not " +
                     "have been ran.");
+            }
+        } else {
+            log.info("Leadership lost while in Log Entry Sync State");
         }
     }
 

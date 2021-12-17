@@ -4,6 +4,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Message;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.*;
@@ -45,6 +46,7 @@ public class LockStore {
 
     private final Uuid clientId;
     // Corfu store to access data from the Lock table.
+    @Getter
     private final CorfuStore corfuStore;
 
     /**

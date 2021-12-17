@@ -308,4 +308,11 @@ public class CorfuLogReplicationRuntime {
     public void stop() {
         input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS));
     }
+
+    public void shutdown() {
+        input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS));
+        sourceManager.shutdownCompletely();
+        communicationFSMWorkers.shutdown();
+        communicationFSMConsumer.shutdown();
+    }
 }

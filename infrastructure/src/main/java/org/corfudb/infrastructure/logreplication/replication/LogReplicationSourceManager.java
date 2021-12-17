@@ -52,6 +52,8 @@ public class LogReplicationSourceManager {
 
     private final LogReplicationAckReader ackReader;
 
+    private final ExecutorService logReplicationFSMWorkers;
+
     @VisibleForTesting
     private int countACKs = 0;
 
@@ -98,7 +100,7 @@ public class LogReplicationSourceManager {
             throw new IllegalArgumentException("Invalid Log Replication: Streams to replicate is EMPTY");
         }
 
-        ExecutorService logReplicationFSMWorkers = Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
+        logReplicationFSMWorkers = Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
                 ThreadFactoryBuilder().setNameFormat("state-machine-worker").build());
         ReadProcessor readProcessor = new DefaultReadProcessor(runtime);
         this.metadataManager = metadataManager;
@@ -195,6 +197,11 @@ public class LogReplicationSourceManager {
         log.info("Shutdown Log Replication.");
         logReplicationFSM.shutdown();
         runtime.shutdown();
+    }
+
+    public void shutdownCompletely() {
+        shutdown();
+        logReplicationFSMWorkers.shutdown();
     }
 
     /**
