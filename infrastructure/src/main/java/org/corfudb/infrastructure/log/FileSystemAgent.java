@@ -26,6 +26,8 @@ import java.util.function.Supplier;
 
 @Slf4j
 public final class FileSystemAgent {
+    private static final String NOT_CONFIGURED_ERR_MSG = "FileSystemAgent not configured";
+
     private static Optional<FileSystemAgent> instance = Optional.empty();
 
     private final FileSystemConfig config;
@@ -62,12 +64,12 @@ public final class FileSystemAgent {
     }
 
     public static ResourceQuota getResourceQuota() {
-        Supplier<IllegalStateException> err = () -> new IllegalStateException("FileSystemAgent not configured");
+        Supplier<IllegalStateException> err = () -> new IllegalStateException(NOT_CONFIGURED_ERR_MSG);
         return instance.orElseThrow(err).logSizeQuota;
     }
 
     public static PartitionAttribute getPartition() {
-        Supplier<IllegalStateException> err = () -> new IllegalStateException("FileSystemAgent not configured");
+        Supplier<IllegalStateException> err = () -> new IllegalStateException(NOT_CONFIGURED_ERR_MSG);
         return instance.orElseThrow(err).partitionAttribute;
     }
 
@@ -159,8 +161,9 @@ public final class FileSystemAgent {
         private PartitionAttribute partitionAttribute;
         private final Path logPartition;
         private final FileSystemConfig config;
+
         public PartitionAgent(FileSystemConfig config) {
-            this.config =  config;
+            this.config = config;
             logPartition = Paths.get(config.logDir.getRoot().toString(), config.logDir.subpath(0, 1).toString());
             partitionAttribute = setPartitionAttribute();
             //we need a scheduler

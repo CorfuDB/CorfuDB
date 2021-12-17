@@ -7,9 +7,7 @@ import org.corfudb.infrastructure.management.CompleteGraphAdvisor;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttributeStats;
-import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
 import java.util.Optional;
 

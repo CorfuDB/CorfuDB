@@ -126,7 +126,7 @@ public class FailureDetectorTestContext {
 
             nodes.put(NodeNames.A, nodeState(NodeNames.A, epoch, Optional.of(fsStats), OK, OK, OK));
             nodes.put(NodeNames.B, nodeState(NodeNames.B, epoch, Optional.of(fsStats), OK, OK, OK));
-            nodes.put(NodeNames.C, nodeState(localEndpoint, epoch, Optional.of(fsStats), OK, OK, OK));
+            nodes.put(NodeNames.C, nodeState(NodeNames.C, epoch, Optional.of(fsStats), OK, OK, OK));
         }
 
         public void setupNodes(NodeState... states) {

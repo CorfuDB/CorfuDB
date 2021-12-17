@@ -1,11 +1,8 @@
 package org.corfudb.infrastructure.management.failuredetector;
 
-import com.google.common.annotations.VisibleForTesting;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.RemoteMonitoringService;
 import org.corfudb.infrastructure.RemoteMonitoringService.DetectorTask;
 import org.corfudb.infrastructure.management.ClusterAdvisor;
 import org.corfudb.infrastructure.management.FileSystemAdvisor;

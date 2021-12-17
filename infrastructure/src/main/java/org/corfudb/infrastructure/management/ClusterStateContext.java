@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.management;
 
 import lombok.Builder;
-import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ClusterState;

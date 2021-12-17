@@ -44,7 +44,7 @@ public class HealingAgentTest {
             clusterStateCtx.setupNodes(
                     nodeState(NodeNames.A, epoch, Optional.of(fsStats), OK, OK, OK),
                     nodeState(NodeNames.B, epoch, Optional.of(fsStats), OK, OK, OK),
-                    nodeState(NodeNames.C, epoch, Optional.of(fsStats), OK, OK, OK)
+                    nodeState(localEndpoint, epoch, Optional.of(fsStats), OK, OK, OK)
             );
         });
 

@@ -16,11 +16,9 @@ import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeC
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.corfudb.util.JsonUtils;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.Optional;
@@ -177,31 +175,22 @@ public class ClusterGraph {
      * - ClusterGraph is empty, which is an invalid state.
      * - the decision maker doesn't have connections, which is also impossible.
      *
-     * @param unhealthyNodes the list of unhealthy nodes from other detectors/agents (like read-only file system)
+     * @param healthyNodes the list of unhealthy nodes from other detectors/agents (like read-only file system)
      * @return a decision maker node
      */
     public Optional<NodeRank> getDecisionMaker(Set<String> healthyNodes) {
         log.trace("Get decision maker");
 
-        NavigableSet<NodeRank> nodes = getNodeRanks();
+        NavigableSet<NodeRank> healthyDecisionMakers = getNodeRanks().stream()
+                .filter(nodeRank -> healthyNodes.contains(nodeRank.getEndpoint()))
+                .collect(Collectors.toCollection(TreeSet::new));
 
-        List<NodeRank> unhealthyDecisionMakers = new ArrayList<>();
-        for (NodeRank node : nodes) {
-            if (!healthyNodes.contains(node.getEndpoint())) {
-                unhealthyDecisionMakers.add(node);
-            }
-        }
-
-        for (NodeRank unhealthyDecisionMaker : unhealthyDecisionMakers) {
-            nodes.remove(unhealthyDecisionMaker);
-        }
-
-        if (nodes.isEmpty()) {
+        if (healthyDecisionMakers.isEmpty()) {
             log.error("Empty graph. Can't provide decision maker");
             return Optional.empty();
         }
 
-        Optional<NodeRank> maybeDecisionMaker = Optional.ofNullable(nodes.pollFirst());
+        Optional<NodeRank> maybeDecisionMaker = Optional.ofNullable(healthyDecisionMakers.pollFirst());
 
         if (!maybeDecisionMaker.isPresent()) {
             log.error("Decision maker not found for graph: {}", toJson());

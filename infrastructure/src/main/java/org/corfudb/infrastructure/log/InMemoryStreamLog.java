@@ -1,19 +1,6 @@
 package org.corfudb.infrastructure.log;
 
-import java.io.File;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
-
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.infrastructure.log.FileSystemAgent.FileSystemConfig;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
@@ -22,6 +9,17 @@ import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
+
+import java.io.File;
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * This class implements the StreamLog interface using a Java hash map.
