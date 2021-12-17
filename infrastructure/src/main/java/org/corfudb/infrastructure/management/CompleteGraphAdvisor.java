@@ -129,10 +129,11 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
     }
 
     @Override
-    public Optional<NodeRank> findDecisionMaker(ClusterState clusterState) {
-        return ClusterGraph
+    public Optional<NodeRank> findDecisionMaker(ClusterState clusterState, Set<String> healthyNodes) {
+        ClusterGraph symmetric = ClusterGraph
                 .toClusterGraph(clusterState)
-                .toSymmetric()
-                .getDecisionMaker();
+                .toSymmetric();
+
+        return symmetric.getDecisionMaker(healthyNodes);
     }
 }

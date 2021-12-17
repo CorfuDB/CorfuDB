@@ -31,7 +31,8 @@ public class DecisionMakerAgent {
 
         Set<String> writableNodes = writableNodes();
 
-        return clusterAdvisor.findDecisionMaker(clusterState)
+        return clusterAdvisor
+                .findDecisionMaker(clusterState, writableNodes)
                 .map(NodeRank::getEndpoint)
                 //filter out read-only nodes
                 .filter(writableNodes::contains)

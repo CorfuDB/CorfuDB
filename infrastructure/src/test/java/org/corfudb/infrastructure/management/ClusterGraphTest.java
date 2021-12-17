@@ -11,6 +11,7 @@ import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
@@ -121,10 +122,24 @@ public class ClusterGraphTest {
         NodeConnectivity c = connectivity(C, ImmutableMap.of(A, OK, B, FAILED, C, OK));
 
         ClusterGraph graph = cluster(A, ImmutableList.of(), a, b, c);
-        Optional<NodeRank> decisionMaker = graph.toSymmetric().getDecisionMaker();
+        Set<String> allHealthyNodes = new HashSet<>(Arrays.asList(A, B, C));
+        Optional<NodeRank> decisionMaker = graph.toSymmetric().getDecisionMaker(allHealthyNodes);
 
         assertTrue(decisionMaker.isPresent());
         assertEquals(decisionMaker.get(), new NodeRank(A, 2));
+    }
+
+    @Test
+    public void testUnhealthyDecisionMaker() {
+        NodeConnectivity a = connectivity(A, ImmutableMap.of(A, OK, B, OK, C, OK));
+        NodeConnectivity b = connectivity(B, ImmutableMap.of(A, FAILED, B, OK, C, OK));
+        NodeConnectivity c = connectivity(C, ImmutableMap.of(A, OK, B, FAILED, C, OK));
+
+        ClusterGraph graph = cluster(A, ImmutableList.of(), a, b, c);
+        Set<String> healthyNodes = ImmutableSet.of(B, C);
+        Optional<NodeRank> decisionMaker = graph.toSymmetric().getDecisionMaker(healthyNodes);
+
+        assertFalse(decisionMaker.isPresent());
     }
 
     @Test
