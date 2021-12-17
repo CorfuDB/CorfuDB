@@ -43,8 +43,8 @@ public class HealingAgentTest {
             FileSystemStats fsStats = clusterStateCtx.getFsStats();
             clusterStateCtx.setupNodes(
                     nodeState(NodeNames.A, epoch, Optional.of(fsStats), OK, OK, OK),
-                    nodeState(NodeNames.A, epoch, Optional.of(fsStats), OK, OK, OK),
-                    nodeState(NodeNames.A, epoch, Optional.of(fsStats), OK, OK, OK)
+                    nodeState(NodeNames.B, epoch, Optional.of(fsStats), OK, OK, OK),
+                    nodeState(NodeNames.C, epoch, Optional.of(fsStats), OK, OK, OK)
             );
         });
 

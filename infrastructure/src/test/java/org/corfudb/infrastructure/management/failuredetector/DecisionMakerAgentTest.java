@@ -22,35 +22,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class DecisionMakerAgentTest {
 
     @Test
-    public void testFindPartitionAttributesDecisionMaker() {
-        final long epoch = 0;
-        final String localEndpoint = NodeNames.A;
-
-        FileSystemStats readOnlyFsStats = new FileSystemStats(
-                new PartitionAttributeStats(true, 0, 0)
-        );
-
-        FileSystemStats writableFsStats = new FileSystemStats(
-                new PartitionAttributeStats(false, 0, 0)
-        );
-
-        ClusterState cluster = buildClusterState(
-                localEndpoint,
-                ImmutableList.of(),
-                nodeState(localEndpoint, epoch, Optional.of(writableFsStats), OK, OK, OK),
-                nodeState(NodeNames.B, epoch, Optional.of(readOnlyFsStats), OK, OK, OK),
-                nodeState(NodeNames.C, epoch, Optional.of(readOnlyFsStats), OK, OK, OK)
-        );
-
-        DecisionMakerAgent decisionMakerAgent = new DecisionMakerAgent(cluster, Mockito.mock(ClusterAdvisor.class));
-        Optional<NodeRank.NodeRankByPartitionAttributes> quotaDecisionMaker = decisionMakerAgent
-                .findPartitionAttributesDecisionMaker();
-
-        assertTrue(quotaDecisionMaker.isPresent());
-        assertEquals(localEndpoint, quotaDecisionMaker.get().getEndpoint());
-    }
-
-    @Test
     public void testFindDecisionMaker() {
         final long epoch = 0;
         final String localEndpoint = NodeNames.A;

@@ -121,24 +121,10 @@ public class ClusterGraphTest {
         NodeConnectivity c = connectivity(C, ImmutableMap.of(A, OK, B, FAILED, C, OK));
 
         ClusterGraph graph = cluster(A, ImmutableList.of(), a, b, c);
-        Set<String> emptyUnhealthyList = new HashSet<>();
-        Optional<NodeRank> decisionMaker = graph.toSymmetric().getDecisionMaker(emptyUnhealthyList);
+        Optional<NodeRank> decisionMaker = graph.toSymmetric().getDecisionMaker();
 
         assertTrue(decisionMaker.isPresent());
         assertEquals(decisionMaker.get(), new NodeRank(A, 2));
-    }
-
-    @Test
-    public void testUnhealthyDecisionMaker() {
-        NodeConnectivity a = connectivity(A, ImmutableMap.of(A, OK, B, OK, C, OK));
-        NodeConnectivity b = connectivity(B, ImmutableMap.of(A, FAILED, B, OK, C, OK));
-        NodeConnectivity c = connectivity(C, ImmutableMap.of(A, OK, B, FAILED, C, OK));
-
-        ClusterGraph graph = cluster(A, ImmutableList.of(), a, b, c);
-        Set<String> unhealthyList = ImmutableSet.of(A);
-        Optional<NodeRank> decisionMaker = graph.toSymmetric().getDecisionMaker(unhealthyList);
-
-        assertFalse(decisionMaker.isPresent());
     }
 
     @Test

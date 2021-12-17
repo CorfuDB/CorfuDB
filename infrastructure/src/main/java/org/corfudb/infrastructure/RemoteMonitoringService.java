@@ -16,22 +16,17 @@ import org.corfudb.infrastructure.management.ClusterType;
 import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.FileSystemAdvisor;
 import org.corfudb.infrastructure.management.PollReport;
-import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
-import org.corfudb.infrastructure.management.failuredetector.DecisionMakerAgent;
 import org.corfudb.infrastructure.management.failuredetector.EpochHandler;
 import org.corfudb.infrastructure.management.failuredetector.FailureDetectorDataStore;
 import org.corfudb.infrastructure.management.failuredetector.FailureDetectorException;
 import org.corfudb.infrastructure.management.failuredetector.FailureDetectorHelper;
+import org.corfudb.infrastructure.management.failuredetector.FailuresAgent;
 import org.corfudb.infrastructure.management.failuredetector.HealingAgent;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
-import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
-import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics.FailureDetectorAction;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttributeStats;
-import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
-import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank.NodeRankByPartitionAttributes;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.LambdaUtils;
@@ -39,9 +34,7 @@ import org.corfudb.util.concurrent.SingletonResource;
 
 import java.time.Duration;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -98,9 +91,9 @@ public class RemoteMonitoringService implements ManagementService {
 
     private final ClusterAdvisor advisor;
 
-    private final FileSystemAdvisor fsAdvisor;
-
     private final HealingAgent healingAgent;
+
+    private final FailuresAgent failuresAgent;
 
     private final FailureDetectorDataStore fdDataStore;
 
@@ -151,8 +144,6 @@ public class RemoteMonitoringService implements ManagementService {
                 serverContext.getLocalEndpoint()
         );
 
-        this.fsAdvisor = new FileSystemAdvisor();
-
         this.detectionTasksScheduler = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
                         .setDaemon(true)
@@ -173,13 +164,22 @@ public class RemoteMonitoringService implements ManagementService {
                 .dataStore(serverContext.getDataStore())
                 .build();
 
+        FileSystemAdvisor fsAdvisor = new FileSystemAdvisor();
+
         healingAgent = HealingAgent.builder()
                 .advisor(advisor)
-                .fsAdvisor(new FileSystemAdvisor())
+                .fsAdvisor(fsAdvisor)
                 .localEndpoint(serverContext.getLocalEndpoint())
                 .runtimeSingleton(runtimeSingletonResource)
                 .failureDetectorWorker(failureDetectorWorker)
                 .dataStore(fdDataStore)
+                .build();
+
+        failuresAgent = FailuresAgent.builder()
+                .localEndpoint(serverContext.getLocalEndpoint())
+                .fdDataStore(fdDataStore)
+                .advisor(advisor)
+                .fsAdvisor(fsAdvisor)
                 .build();
     }
 
@@ -355,7 +355,7 @@ public class RemoteMonitoringService implements ManagementService {
                 if (unfilledSlot.isPresent()) {
                     log.info("Trying to fill an unfilled slot {}. PollReport: {}",
                             unfilledSlot.get(), pollReport);
-                    detectFailure(latestLayout, Collections.emptySet(), pollReport).join();
+                    failuresAgent.handleFailure(latestLayout, Collections.emptySet(), pollReport).join();
                     return DetectorTask.COMPLETED;
                 }
 
@@ -394,7 +394,7 @@ public class RemoteMonitoringService implements ManagementService {
             }
 
             // Analyze the poll report and trigger failure handler if needed.
-            DetectorTask handleFailure = detectFailure(pollReport, ourLayout);
+            DetectorTask handleFailure = failuresAgent.detectAndHandleFailure(pollReport, ourLayout);
 
             //If a failure is detected (which means we have updated a layout)
             // then don't try to heal anything, wait for next iteration.
@@ -410,85 +410,6 @@ public class RemoteMonitoringService implements ManagementService {
             return DetectorTask.COMPLETED;
 
         }, failureDetectorWorker);
-    }
-
-    /**
-     * Analyzes the poll report and triggers the failure handler if node failure detected.
-     * ClusterAdvisor provides a failed node in the cluster.
-     * If a failed node have found:
-     * - save detected failure in the history
-     * - handle failure
-     *
-     * @param pollReport Poll report obtained from failure detection policy.
-     * @return boolean result if failure was handled. False if there is no failure
-     */
-    private DetectorTask detectFailure(PollReport pollReport, Layout layout) {
-        log.trace("Handle failures for the report: {}", pollReport);
-
-        try {
-            ClusterState clusterState = pollReport.getClusterState();
-
-            if (clusterState.size() != layout.getAllServers().size()) {
-                throw FailureDetectorException.layoutMismatch(clusterState, layout);
-            }
-
-            DecisionMakerAgent decisionMakerAgent = new DecisionMakerAgent(clusterState, advisor);
-            Optional<String> maybeDecisionMaker = decisionMakerAgent.findDecisionMaker();
-
-            if (!maybeDecisionMaker.isPresent()) {
-                return DetectorTask.NOT_COMPLETED;
-            }
-
-            String decisionMaker = maybeDecisionMaker.get();
-
-            Optional<NodeRankByPartitionAttributes> maybeFailedNodeByPartitionAttr = fsAdvisor
-                    .findFailedNodeByPartitionAttributes(clusterState);
-
-            if (maybeFailedNodeByPartitionAttr.isPresent()) {
-                NodeRankByPartitionAttributes failedNode = maybeFailedNodeByPartitionAttr.get();
-
-                if (decisionMaker.equals(failedNode.getEndpoint())) {
-                    log.error("Decision maker and failed node are the same node: {}", decisionMakerAgent);
-                    return DetectorTask.NOT_COMPLETED;
-                }
-
-                Set<String> failedNodes = new HashSet<>();
-                failedNodes.add(failedNode.getEndpoint());
-                return detectFailure(layout, failedNodes, pollReport).join();
-            }
-
-            Optional<NodeRank> maybeFailedNode = advisor.failedServer(clusterState);
-
-            if (maybeFailedNode.isPresent()) {
-                NodeRank failedNode = maybeFailedNode.get();
-
-                if (decisionMaker.equals(failedNode.getEndpoint())) {
-                    log.error("Decision maker and failed node are the same node: {}", decisionMakerAgent);
-                    return DetectorTask.NOT_COMPLETED;
-                }
-
-                //Collect failures history
-                FailureDetectorMetrics history = FailureDetectorMetrics.builder()
-                        .localNode(serverContext.getLocalEndpoint())
-                        .graph(advisor.getGraph(pollReport.getClusterState()).connectivityGraph())
-                        .healed(failedNode)
-                        .action(FailureDetectorAction.FAIL)
-                        .unresponsiveNodes(layout.getUnresponsiveServers())
-                        .layout(layout.getLayoutServers())
-                        .epoch(layout.getEpoch())
-                        .build();
-
-                fdDataStore.saveFailureDetectorMetrics(history);
-
-                Set<String> failedNodes = new HashSet<>();
-                failedNodes.add(failedNode.getEndpoint());
-                return detectFailure(layout, failedNodes, pollReport).join();
-            }
-        } catch (Exception e) {
-            log.error("Exception invoking failure handler", e);
-        }
-
-        return DetectorTask.NOT_COMPLETED;
     }
 
     /**
@@ -530,29 +451,6 @@ public class RemoteMonitoringService implements ManagementService {
         return getCorfuRuntime()
                 .getLayoutManagementView()
                 .asyncSequencerBootstrap(layout, failureDetectorWorker)
-                .thenApply(DetectorTask::fromBool);
-    }
-
-    /**
-     * Handle failures, sending message with detected failure to relevant management server.
-     *
-     * @param failedNodes list of failed nodes
-     * @param pollReport  poll report
-     */
-    private CompletableFuture<DetectorTask> detectFailure(
-            Layout layout, Set<String> failedNodes, PollReport pollReport) {
-
-        ClusterGraph graph = advisor.getGraph(pollReport.getClusterState());
-
-        log.info("Detected failed nodes in node responsiveness: Failed:{}, is slot unfilled: {}, clusterState:{}",
-                failedNodes, pollReport.getLayoutSlotUnFilled(layout), graph.toJson()
-        );
-
-        return getCorfuRuntime()
-                .getLayoutView()
-                .getRuntimeLayout(layout)
-                .getManagementClient(serverContext.getLocalEndpoint())
-                .handleFailure(layout.getEpoch(), failedNodes)
                 .thenApply(DetectorTask::fromBool);
     }
 

@@ -58,5 +58,5 @@ public interface ClusterAdvisor {
      */
     ClusterGraph getGraph(ClusterState clusterState);
 
-    Optional<NodeRank> findDecisionMaker(ClusterState clusterState, Set<String> unhealthyNodes);
+    Optional<NodeRank> findDecisionMaker(ClusterState clusterState);
 }

@@ -7,10 +7,12 @@ import org.corfudb.infrastructure.management.ClusterAdvisor;
 import org.corfudb.infrastructure.management.CompleteGraphAdvisor;
 import org.corfudb.infrastructure.management.FileSystemAdvisor;
 import org.corfudb.infrastructure.management.PollReport;
+import org.corfudb.infrastructure.management.failuredetector.FailuresAgent.FailuresAgentBuilder;
 import org.corfudb.infrastructure.management.failuredetector.HealingAgent.HealingAgentBuilder;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttributeStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
@@ -42,6 +44,8 @@ public class FailureDetectorTestContext {
 
     private HealingAgentBuilder healingAgent;
 
+    private FailuresAgentBuilder failuresAgent;
+
     private ClusterStateTestContext clusterStateContext;
 
     public FailureDetectorTestContext(String localEndpoint) {
@@ -54,12 +58,20 @@ public class FailureDetectorTestContext {
         advisor = new CompleteGraphAdvisor(localEndpoint);
         fsAdvisor = new FileSystemAdvisor();
 
-        healingAgent = HealingAgent.builder();
-        healingAgent
-                .dataStore(fdDataStoreBuilder.build())
+        FailureDetectorDataStore fdDatastore = fdDataStoreBuilder.build();
+
+        healingAgent = HealingAgent.builder()
+                .dataStore(fdDatastore)
                 .advisor(advisor)
                 .fsAdvisor(fsAdvisor)
                 .failureDetectorWorker(fdWorkerMock)
+                .localEndpoint(localEndpoint)
+                .runtimeSingleton(runtimeMock);
+
+        failuresAgent = FailuresAgent.builder()
+                .fdDataStore(fdDatastore)
+                .advisor(advisor)
+                .fsAdvisor(fsAdvisor)
                 .localEndpoint(localEndpoint)
                 .runtimeSingleton(runtimeMock);
 
@@ -76,6 +88,10 @@ public class FailureDetectorTestContext {
 
     public HealingAgent getHealingAgentSpy() {
         return spy(healingAgent.build());
+    }
+
+    public FailuresAgent getFailuresAgentSpy() {
+        return spy(failuresAgent.build());
     }
 
     public ClusterState getClusterState() {
@@ -130,7 +146,7 @@ public class FailureDetectorTestContext {
         }
 
         private FileSystemStats getFileSystemStats() {
-            FileSystemStats.PartitionAttributeStats attributes = new FileSystemStats.PartitionAttributeStats(false, 100, 200);
+            PartitionAttributeStats attributes = new PartitionAttributeStats(false, 100, 200);
             return new FileSystemStats(attributes);
         }
 
