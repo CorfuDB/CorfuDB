@@ -160,6 +160,16 @@ public class CorfuStore {
     }
 
     /**
+     *
+     * @param namespace namespace this table belongs to
+     * @param tableName name of table
+     * @throws java.util.NoSuchElementException thrown if table was not found.
+     */
+    public void closeTable(String namespace, String tableName) {
+        runtime.getTableRegistry().closeTable(namespace, tableName);
+    }
+
+    /**
      * Deletes a table instance. [NOT SUPPORTED.]
      *
      * @param namespace Namespace of the table.
