@@ -548,6 +548,27 @@ public class TableRegistry {
     }
 
     /**
+     * Close a table that is already opened.
+     *
+     * @param namespace Namespace of the table.
+     * @param tableName Name of the table.
+     * @throws NoSuchElementException - if the table does not exist.
+     */
+    public void closeTable(String namespace, String tableName) {
+        String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
+        Table<Message, Message, Message> table = tableMap.get(fullyQualifiedTableName);
+        if (table == null) {
+            throw new NoSuchElementException("closeTable: Did not find any table "+ fullyQualifiedTableName);
+        }
+        tableMap.remove(fullyQualifiedTableName);
+        ObjectsView.ObjectID oid = new ObjectsView.ObjectID(table.getStreamUUID(), CorfuTable.class);
+        Object tableObject = runtime.getObjectsView().getObjectCache().remove(oid);
+        if (tableObject == null) {
+            throw new NoSuchElementException("closeTable: No object cache entry for "+ fullyQualifiedTableName);
+        }
+    }
+
+    /**
      * Only clears a table, DOES not delete its file descriptors from metadata.
      * This is because if the purpose of the delete is to upgrade from an old schema to a new schema
      * Then we must first purge all SMR entries of the current (old) format from corfu stream.

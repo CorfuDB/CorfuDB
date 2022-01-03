@@ -151,6 +151,74 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     }
 
     /**
+     * Test that closeTable works and removes table from cache
+     *
+     * @throws Exception exception
+     */
+    @Test
+    public void checkCloseTable() throws Exception {
+
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getTestRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "ManagedMetadata";
+
+        // Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        Table<UuidMsg, ManagedMetadata, ManagedMetadata> table = shimStore.openTable(
+                someNamespace,
+                tableName,
+                UuidMsg.class,
+                ManagedMetadata.class,
+                ManagedMetadata.class,
+                // TableOptions includes option to choose - Memory/Disk based corfu table.
+                TableOptions.builder().build());
+
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LARGE; i++) {
+            UUID uuid1 = UUID.nameUUIDFromBytes("1".getBytes());
+            UuidMsg key = UuidMsg.newBuilder().setMsb(i)
+                    .build();
+            ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
+
+            ManagedTxnContext txn = shimStore.tx(someNamespace);
+            txn.putRecord(tableName, key,
+                    ManagedMetadata.newBuilder().setCreateUser("abc").build(),
+                    user_1);
+            txn.commit();
+        }
+
+        shimStore.closeTable(someNamespace, tableName);
+        // Now re-open a table after it is closed to check that it works..
+        table = shimStore.openTable(
+                someNamespace,
+                tableName,
+                UuidMsg.class,
+                ManagedMetadata.class,
+                ManagedMetadata.class,
+                // TableOptions includes option to choose - Memory/Disk based corfu table.
+                TableOptions.builder().build());
+
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LARGE; i++) {
+            UUID uuid1 = UUID.nameUUIDFromBytes("1".getBytes());
+            UuidMsg key = UuidMsg.newBuilder().setMsb(i)
+                    .build();
+            ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
+
+            ManagedTxnContext txn = shimStore.tx(someNamespace);
+            txn.putRecord(table, key,
+                    ManagedMetadata.newBuilder().setCreateUser("abc").build(),
+                    user_1);
+            txn.commit();
+        }
+    }
+
+    /**
      * CorfuStore stores 3 pieces of information - key, value and metadata
      * This test demonstrates how metadata field options especially "version" can be used and verified.
      *
