@@ -25,6 +25,7 @@ import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.test.SampleSchema;
@@ -36,6 +37,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Random;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -193,7 +195,15 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             txn.commit();
         }
 
+        assertThatThrownBy(() -> shimStore.closeTable("non", "existent"))
+                .isExactlyInstanceOf(NoSuchElementException.class);
+
         shimStore.closeTable(someNamespace, tableName);
+
+        // Validate externally that the entry vanishes from corfu's object cache
+        ObjectsView.ObjectID oid = new ObjectsView.ObjectID(table.getStreamUUID(), CorfuTable.class);
+        assertThat(corfuRuntime.getObjectsView().getObjectCache().containsKey(oid)).isFalse();
+
         // Now re-open a table after it is closed to check that it works..
         table = shimStore.openTable(
                 someNamespace,
@@ -216,6 +226,12 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                     user_1);
             txn.commit();
         }
+
+        // By some future bug should the table disappear from the object cache ensure that
+        // the method still fails gracefully with a NoSuchElementException
+        corfuRuntime.getObjectsView().getObjectCache().remove(oid);
+        assertThatThrownBy(() -> shimStore.closeTable(someNamespace, tableName))
+                .isExactlyInstanceOf(NoSuchElementException.class);
     }
 
     /**
