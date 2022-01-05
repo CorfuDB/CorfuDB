@@ -201,7 +201,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         // Instantiate Snapshot Sync Plugin, this is an external service which will be triggered on start and end
         // of a snapshot sync.
-        snapshotSyncPlugin = getSnapshotPlugin();
+        snapshotSyncPlugin = getOnSnapshotSyncPlugin();
 
         snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadataManager);
         logEntryWriter = new LogEntryWriter(config, logReplicationMetadataManager);
@@ -212,15 +212,15 @@ public class LogReplicationSinkManager implements DataReceiver {
                 logReplicationMetadataManager.getLastProcessedLogEntryTimestamp(), this);
     }
 
-    private ISnapshotSyncPlugin getSnapshotPlugin() {
+    private ISnapshotSyncPlugin getOnSnapshotSyncPlugin() {
         LogReplicationPluginConfig config = new LogReplicationPluginConfig(pluginConfigFilePath);
         File jar = new File(config.getSnapshotSyncPluginJARPath());
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
             Class plugin = Class.forName(config.getSnapshotSyncPluginCanonicalName(), true, child);
             return (ISnapshotSyncPlugin) plugin.getDeclaredConstructor().newInstance();
-        } catch (Exception e) {
-            log.error("Fatal error: Failed to get Snapshot Sync Plugin", e);
-            throw new UnrecoverableCorfuError(e);
+        } catch (Throwable t) {
+            log.error("Fatal error: Failed to get snapshot sync plugin {}", config.getSnapshotSyncPluginCanonicalName(), t);
+            throw new UnrecoverableCorfuError(t);
         }
     }
 

@@ -160,6 +160,20 @@ public class CorfuStore {
     }
 
     /**
+     * This api is to optimize the use of memory by removing a table from the object cache
+     * so that its entries can be garbage collected.
+     * Note that the table entries in the AddressSpaceView's cache may still linger around until
+     * timeout or eviction as this method only removes references from ObjectViewCache
+     *
+     * @param namespace namespace this table belongs to
+     * @param tableName name of table
+     * @throws java.util.NoSuchElementException thrown if table was not found.
+     */
+    public void closeTable(String namespace, String tableName) {
+        runtime.getTableRegistry().closeTable(namespace, tableName);
+    }
+
+    /**
      * Deletes a table instance. [NOT SUPPORTED.]
      *
      * @param namespace Namespace of the table.

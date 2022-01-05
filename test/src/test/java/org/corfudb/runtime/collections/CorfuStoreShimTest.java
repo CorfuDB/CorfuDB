@@ -25,6 +25,7 @@ import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.test.SampleSchema;
@@ -36,6 +37,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Random;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -148,6 +150,88 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             assertThatThrownBy( () -> readWriteTxn.putRecord(tableName, key2, null, null))
                     .isExactlyInstanceOf(IllegalArgumentException.class);
         }
+    }
+
+    /**
+     * Test that closeTable works and removes table from cache
+     *
+     * @throws Exception exception
+     */
+    @Test
+    public void checkCloseTable() throws Exception {
+
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getTestRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "ManagedMetadata";
+
+        // Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        Table<UuidMsg, ManagedMetadata, ManagedMetadata> table = shimStore.openTable(
+                someNamespace,
+                tableName,
+                UuidMsg.class,
+                ManagedMetadata.class,
+                ManagedMetadata.class,
+                // TableOptions includes option to choose - Memory/Disk based corfu table.
+                TableOptions.builder().build());
+
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LARGE; i++) {
+            UUID uuid1 = UUID.nameUUIDFromBytes("1".getBytes());
+            UuidMsg key = UuidMsg.newBuilder().setMsb(i)
+                    .build();
+            ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
+
+            ManagedTxnContext txn = shimStore.tx(someNamespace);
+            txn.putRecord(tableName, key,
+                    ManagedMetadata.newBuilder().setCreateUser("abc").build(),
+                    user_1);
+            txn.commit();
+        }
+
+        assertThatThrownBy(() -> shimStore.closeTable("non", "existent"))
+                .isExactlyInstanceOf(NoSuchElementException.class);
+
+        shimStore.closeTable(someNamespace, tableName);
+
+        // Validate externally that the entry vanishes from corfu's object cache
+        ObjectsView.ObjectID oid = new ObjectsView.ObjectID(table.getStreamUUID(), CorfuTable.class);
+        assertThat(corfuRuntime.getObjectsView().getObjectCache().containsKey(oid)).isFalse();
+
+        // Now re-open a table after it is closed to check that it works..
+        table = shimStore.openTable(
+                someNamespace,
+                tableName,
+                UuidMsg.class,
+                ManagedMetadata.class,
+                ManagedMetadata.class,
+                // TableOptions includes option to choose - Memory/Disk based corfu table.
+                TableOptions.builder().build());
+
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LARGE; i++) {
+            UUID uuid1 = UUID.nameUUIDFromBytes("1".getBytes());
+            UuidMsg key = UuidMsg.newBuilder().setMsb(i)
+                    .build();
+            ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
+
+            ManagedTxnContext txn = shimStore.tx(someNamespace);
+            txn.putRecord(table, key,
+                    ManagedMetadata.newBuilder().setCreateUser("abc").build(),
+                    user_1);
+            txn.commit();
+        }
+
+        // By some future bug should the table disappear from the object cache ensure that
+        // the method still fails gracefully with a NoSuchElementException
+        corfuRuntime.getObjectsView().getObjectCache().remove(oid);
+        assertThatThrownBy(() -> shimStore.closeTable(someNamespace, tableName))
+                .isExactlyInstanceOf(NoSuchElementException.class);
     }
 
     /**

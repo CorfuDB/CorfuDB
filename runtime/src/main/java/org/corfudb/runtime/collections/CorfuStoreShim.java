@@ -101,6 +101,16 @@ public class CorfuStoreShim {
     }
 
     /**
+     *
+     * @param namespace the namespace this table belongs to
+     * @param tableName name of the table
+     * @throws java.util.NoSuchElementException if the table does not exist.
+     */
+    public void closeTable(String namespace, String tableName) {
+        corfuStore.closeTable(namespace, tableName);
+    }
+
+    /**
      * Lists all the tables in a particular namespace.
      * Lists all the tables in the database if namespace is null.
      *
