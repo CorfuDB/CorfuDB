@@ -8,19 +8,21 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 /**
  * Collects information about cluster state.
  * Provides list of servers in the cluster with higher epochs.
  * Builds the {@link ClusterState} and local {@link NodeState}.
- *
+ * <p>
  * The collector navigates via list of requests represented as CompletableFuture-s
  * and collecting information about cluster.
  */
@@ -32,19 +34,21 @@ public class ClusterStateCollector {
     @NonNull
     private final Map<String, CompletableFuture<NodeState>> clusterState;
 
+    @NonNull
+    private final FileSystemStats localNodeFileSystem;
+
     /**
      * Provides cluster state
-     * @param epoch current epoch
+     *
      * @param sequencerMetrics sequencer metrics
      * @return cluster state
      */
     public ClusterState collectClusterState(
-            long epoch, ImmutableList<String> unresponsiveNodes,
-            SequencerMetrics sequencerMetrics) {
+            ImmutableList<String> unresponsiveNodes, SequencerMetrics sequencerMetrics) {
 
         Map<String, NodeState> nodeStates = new HashMap<>();
 
-        nodeStates.put(localEndpoint, collectLocalNodeState(epoch, sequencerMetrics));
+        nodeStates.put(localEndpoint, collectLocalNodeState(sequencerMetrics));
         nodeStates.putAll(collectRemoteStates());
 
         return ClusterState.builder()
@@ -74,7 +78,7 @@ public class ClusterStateCollector {
             }
         });
 
-        return  ImmutableMap.copyOf(wrongEpochs);
+        return ImmutableMap.copyOf(wrongEpochs);
     }
 
     private Map<String, NodeState> collectRemoteStates() {
@@ -100,7 +104,7 @@ public class ClusterStateCollector {
         return nodeStates;
     }
 
-    private NodeState collectLocalNodeState(long epoch, SequencerMetrics sequencerMetrics) {
+    private NodeState collectLocalNodeState(SequencerMetrics sequencerMetrics) {
         log.trace("Get local node state");
 
         Map<String, ConnectionStatus> localNodeConnections = new HashMap<>();
@@ -129,6 +133,7 @@ public class ClusterStateCollector {
         return NodeState.builder()
                 .connectivity(localConnectivity)
                 .sequencerMetrics(sequencerMetrics)
+                .fileSystem(Optional.of(localNodeFileSystem))
                 .build();
     }
 }

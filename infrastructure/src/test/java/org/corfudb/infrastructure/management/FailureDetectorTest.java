@@ -3,8 +3,10 @@ package org.corfudb.infrastructure.management;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import java.time.Duration;
 import java.util.HashMap;
@@ -35,8 +37,9 @@ public class FailureDetectorTest {
         ImmutableList<String> responsiveServers = ImmutableList.of("a", "b");
 
         long start = System.currentTimeMillis();
+        FileSystemStats fsStats = Mockito.mock(FileSystemStats.class);
         PollReport report = failureDetector.pollRound(
-                epoch, clusterId, allServers, routerMap, metrics, responsiveServers
+                epoch, clusterId, allServers, routerMap, metrics, responsiveServers, fsStats
         );
         Duration time = Duration.ofMillis(System.currentTimeMillis() - start);
         assertThat(time).isGreaterThan(Duration.ofMillis(450));

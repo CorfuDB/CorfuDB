@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.management;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
@@ -10,7 +11,10 @@ import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.junit.Test;
 
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.management.NodeStateTestUtil.A;
@@ -32,14 +36,16 @@ public class ClusterGraphTest {
         NodeState a = NodeState.builder()
                 .sequencerMetrics(SequencerMetrics.READY)
                 .connectivity(connectivity(A, ImmutableMap.of(A, OK, B, OK, C, FAILED)))
+                .fileSystem(Optional.empty())
                 .build();
 
         NodeState b = NodeState.builder()
                 .sequencerMetrics(SequencerMetrics.READY)
                 .connectivity(connectivity(B, ImmutableMap.of(A, OK, B, OK, C, FAILED)))
+                .fileSystem(Optional.empty())
                 .build();
 
-        NodeState c = unavailableNodeState(C);
+        NodeState c = NodeState.getUnavailableNodeState(C);
 
         ImmutableMap<String, NodeState> nodes = ImmutableMap.of(A, a, B, b, C, c);
         ClusterState clusterState = ClusterState.builder()
@@ -116,10 +122,24 @@ public class ClusterGraphTest {
         NodeConnectivity c = connectivity(C, ImmutableMap.of(A, OK, B, FAILED, C, OK));
 
         ClusterGraph graph = cluster(A, ImmutableList.of(), a, b, c);
-        Optional<NodeRank> decisionMaker = graph.toSymmetric().getDecisionMaker();
+        Set<String> allHealthyNodes = new HashSet<>(Arrays.asList(A, B, C));
+        Optional<NodeRank> decisionMaker = graph.toSymmetric().getDecisionMaker(allHealthyNodes);
 
         assertTrue(decisionMaker.isPresent());
         assertEquals(decisionMaker.get(), new NodeRank(A, 2));
+    }
+
+    @Test
+    public void testUnhealthyDecisionMaker() {
+        NodeConnectivity a = connectivity(A, ImmutableMap.of(A, OK, B, OK, C, OK));
+        NodeConnectivity b = connectivity(B, ImmutableMap.of(A, FAILED, B, OK, C, OK));
+        NodeConnectivity c = connectivity(C, ImmutableMap.of(A, OK, B, FAILED, C, OK));
+
+        ClusterGraph graph = cluster(A, ImmutableList.of(), a, b, c);
+        Set<String> healthyNodes = ImmutableSet.of(B, C);
+        Optional<NodeRank> decisionMaker = graph.toSymmetric().getDecisionMaker(healthyNodes);
+
+        assertFalse(decisionMaker.isPresent());
     }
 
     @Test
@@ -200,12 +220,5 @@ public class ClusterGraphTest {
 
         assertTrue(responsiveNode.isPresent());
         assertEquals(new NodeRank(C, 2), responsiveNode.get());
-    }
-
-    private NodeState unavailableNodeState(String endpoint) {
-        return new NodeState(
-                unavailable(endpoint),
-                SequencerMetrics.UNKNOWN
-        );
     }
 }

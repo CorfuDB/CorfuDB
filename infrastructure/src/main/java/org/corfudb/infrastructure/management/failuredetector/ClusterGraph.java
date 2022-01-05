@@ -57,6 +57,7 @@ public class ClusterGraph {
 
     @NonNull
     private final ImmutableList<String> unresponsiveNodes;
+
     /**
      * Transform a cluster state to the cluster graph.
      * ClusterState contains some extra information, cluster graph is a pure representation of a graph of nodes.
@@ -174,27 +175,43 @@ public class ClusterGraph {
      * - ClusterGraph is empty, which is an invalid state.
      * - the decision maker doesn't have connections, which is also impossible.
      *
+     * @param healthyNodes the list of unhealthy nodes from other detectors/agents (like read-only file system)
      * @return a decision maker node
      */
-    public Optional<NodeRank> getDecisionMaker() {
+    public Optional<NodeRank> getDecisionMaker(Set<String> healthyNodes) {
         log.trace("Get decision maker");
 
-        NavigableSet<NodeRank> nodes = getNodeRanks();
+        NavigableSet<NodeRank> healthyDecisionMakers = getNodeRanks().stream()
+                .filter(nodeRank -> healthyNodes.contains(nodeRank.getEndpoint()))
+                .collect(Collectors.toCollection(TreeSet::new));
 
-        if (nodes.isEmpty()) {
-            log.error("Empty graph. Can't provide decision maker");
+        Optional<NodeRank> maybeDecisionMaker = Optional.ofNullable(healthyDecisionMakers.pollFirst());
+
+        if (!maybeDecisionMaker.isPresent()) {
+            log.error("Decision maker not found for graph: {}", toJson());
             return Optional.empty();
         }
 
-        NodeRank decisionMaker = nodes.first();
+        return maybeDecisionMaker
+                //filter out completely disconnected decision maker
+                .filter(decisionMaker -> {
+                    boolean isConnected = decisionMaker.getNumConnections() >= 1;
+                    if (!isConnected) {
+                        log.trace("The node is fully disconnected from the graph. Decision maker doesn't exists");
+                    }
 
-        if (decisionMaker.getNumConnections() < 1) {
-            log.trace("The node is fully disconnected from the graph. Decision maker doesn't exists");
-            return Optional.empty();
-        }
+                    return isConnected;
+                })
+                //Give up if the local node is not a decision maker
+                .filter(decisionMaker -> {
+                    boolean isLocalNodeADecisionMaker = decisionMaker.is(localNode);
+                    if (!isLocalNodeADecisionMaker) {
+                        String message = "The node can't be a decision maker, skip operation. Decision maker node is: {}";
+                        log.trace(message, decisionMaker);
+                    }
 
-        log.trace("Decision maker has found: {}, all node ranks: {}", decisionMaker, nodes);
-        return Optional.of(decisionMaker);
+                    return isLocalNodeADecisionMaker;
+                });
     }
 
     /**
@@ -239,7 +256,7 @@ public class ClusterGraph {
     /**
      * See if the node is fully connected.
      *
-     * @param endpoint          local node name
+     * @param endpoint local node name
      * @return local node rank
      */
     public Optional<NodeRank> findFullyConnectedNode(String endpoint) {

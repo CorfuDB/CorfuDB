@@ -2,79 +2,117 @@ package org.corfudb.infrastructure.management.failuredetector;
 
 import org.corfudb.infrastructure.NodeNames;
 import org.corfudb.infrastructure.RemoteMonitoringService.DetectorTask;
-import org.corfudb.infrastructure.management.ClusterAdvisor;
+import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.protocols.wireprotocol.ClusterState;
-import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.util.concurrent.SingletonResource;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
 
+import static org.corfudb.infrastructure.management.NodeStateTestUtil.nodeState;
+import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.OK;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anySet;
-import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
-class HealingAgentTest {
-
-    @Test
-    void detectHealingNoFailedNodes() {
-        ClusterAdvisor adviserMock = mock(ClusterAdvisor.class);
-
-        HealingAgent agent = HealingAgent.builder()
-                .dataStore(mock(FailureDetectorDataStore.class))
-                .advisor(adviserMock)
-                .failureDetectorWorker(mock(ExecutorService.class))
-                .localEndpoint(NodeNames.A)
-                .runtimeSingleton(mock(SingletonResource.class))
-                .build();
-
-        when(adviserMock.healedServer(isA(ClusterState.class))).thenReturn(Optional.empty());
-        CompletableFuture<DetectorTask> skipped = agent.detectHealing(mock(PollReport.class), mock(Layout.class));
-
-        assertEquals(DetectorTask.SKIPPED, skipped.join());
-    }
+public class HealingAgentTest {
 
     @Test
-    void detectHealingAFailedNode() {
-        ClusterAdvisor adviserMock = mock(ClusterAdvisor.class);
-        NodeRank failedNode = new NodeRank(NodeNames.A, 3);
-        when(adviserMock.healedServer(any(ClusterState.class))).thenReturn(Optional.of(failedNode));
+    void unsuccessfulHealingOfAFailedNode() {
+        final String localEndpoint = NodeNames.C;
 
-        HealingAgent agent = HealingAgent.builder()
-                .dataStore(mock(FailureDetectorDataStore.class))
-                .advisor(adviserMock)
-                .failureDetectorWorker(mock(ExecutorService.class))
-                .localEndpoint(NodeNames.A)
-                .runtimeSingleton(mock(SingletonResource.class))
-                .build();
+        FailureDetectorTestContext ctx = new FailureDetectorTestContext(localEndpoint);
 
-        HealingAgent agentSpy = spy(agent);
+        //an example how "setup" function can be used to customize FD test context
+        ctx.setupDataStore(fsDs -> {
+            DataStore dsMock = mock(DataStore.class);
+            fsDs.dataStore(dsMock);
+        });
 
-        PollReport pollReportMock = mock(PollReport.class);
-        when(pollReportMock.getClusterState()).thenReturn(mock(ClusterState.class));
+        ctx.setupClusterState(clusterStateCtx -> {
+            clusterStateCtx.unresponsiveNodes(ctx.localEndpoint);
+
+            final long epoch = 0;
+            FileSystemStats fsStats = clusterStateCtx.getFsStats();
+            clusterStateCtx.setupNodes(
+                    nodeState(NodeNames.A, epoch, Optional.of(fsStats), OK, OK, OK),
+                    nodeState(NodeNames.B, epoch, Optional.of(fsStats), OK, OK, OK),
+                    nodeState(localEndpoint, epoch, Optional.of(fsStats), OK, OK, OK)
+            );
+        });
+
+        HealingAgent agentSpy = ctx.getHealingAgentSpy();
+        ClusterState clusterState = ctx.getClusterState();
+        PollReport pollReportMock = ctx.getPollReportMock(clusterState);
+        Layout layoutMock = ctx.getLayoutMock();
 
         CompletableFuture<Boolean> handle = new CompletableFuture<>();
         handle.completeExceptionally(new FailureDetectorException("err"));
+
         doReturn(handle)
                 .when(agentSpy)
-                .handleHealing(any(PollReport.class), any(Layout.class), anySet());
+                .handleHealing(same(pollReportMock), same(layoutMock), anySet());
 
-        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectHealing(pollReportMock, mock(Layout.class));
+        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectAndHandleHealing(pollReportMock, layoutMock);
 
         verify(agentSpy, times(1))
-                .handleHealing(any(PollReport.class), any(Layout.class), anySet());
+                .handleHealing(same(pollReportMock), same(layoutMock), anySet());
 
         assertEquals(DetectorTask.NOT_COMPLETED, healingFailed.join());
+    }
+
+    @Test
+    void noNodesToHeal() {
+        final String localEndpoint = NodeNames.C;
+
+        FailureDetectorTestContext ctx = new FailureDetectorTestContext(localEndpoint);
+
+        HealingAgent agentSpy = ctx.getHealingAgentSpy();
+        ClusterState clusterState = ctx.getClusterState();
+        PollReport pollReportMock = ctx.getPollReportMock(clusterState);
+        Layout layoutMock = ctx.getLayoutMock();
+
+        CompletableFuture<Boolean> handle = CompletableFuture.completedFuture(true);
+        doReturn(handle)
+                .when(agentSpy)
+                .handleHealing(same(pollReportMock), same(layoutMock), anySet());
+
+        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectAndHandleHealing(pollReportMock, layoutMock);
+
+        assertEquals(DetectorTask.SKIPPED, healingFailed.join());
+    }
+
+    @Test
+    void detectAndHandleHealingAFullyConnectedNode() {
+        final String localEndpoint = NodeNames.C;
+
+        FailureDetectorTestContext ctx = new FailureDetectorTestContext(localEndpoint);
+        ctx.setupClusterState(clusterStateCtx -> {
+            clusterStateCtx.unresponsiveNodes(ctx.localEndpoint);
+        });
+
+        HealingAgent agentSpy = ctx.getHealingAgentSpy();
+        ClusterState clusterState = ctx.getClusterState();
+        PollReport pollReportMock = ctx.getPollReportMock(clusterState);
+        Layout layoutMock = ctx.getLayoutMock();
+
+        CompletableFuture<Boolean> handle = CompletableFuture.completedFuture(true);
+        doReturn(handle)
+                .when(agentSpy)
+                .handleHealing(same(pollReportMock), same(layoutMock), anySet());
+
+        CompletableFuture<DetectorTask> healingFailed = agentSpy.detectAndHandleHealing(pollReportMock, layoutMock);
+
+        verify(agentSpy, times(1))
+                .handleHealing(same(pollReportMock), same(layoutMock), anySet());
+
+        assertEquals(DetectorTask.COMPLETED, healingFailed.join());
     }
 }

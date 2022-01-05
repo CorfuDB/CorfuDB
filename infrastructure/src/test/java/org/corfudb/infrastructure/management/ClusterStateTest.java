@@ -8,6 +8,8 @@ import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
+import java.util.Optional;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.management.NodeStateTestUtil.A;
 import static org.corfudb.infrastructure.management.NodeStateTestUtil.B;
@@ -52,16 +54,19 @@ public class ClusterStateTest {
         NodeState a = NodeState.builder()
                 .sequencerMetrics(SequencerMetrics.READY)
                 .connectivity(connectivity(A, ImmutableMap.of(A, OK, B, OK, C, OK)))
+                .fileSystem(Optional.empty())
                 .build();
 
         NodeState b = NodeState.builder()
                 .sequencerMetrics(SequencerMetrics.READY)
                 .connectivity(connectivity(B, ImmutableMap.of(A, OK, B, OK, C, OK)))
+                .fileSystem(Optional.empty())
                 .build();
 
         NodeState c = NodeState.builder()
                 .sequencerMetrics(SequencerMetrics.READY)
                 .connectivity(connectivity(B, ImmutableMap.of(A, OK, B, OK, C, OK)))
+                .fileSystem(Optional.empty())
                 .build();
 
         ImmutableMap<String, NodeState> nodes = ImmutableMap.of(A, a, B, b, C, c);

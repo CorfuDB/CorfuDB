@@ -7,16 +7,19 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.RemoteMonitoringService.DetectorTask;
 import org.corfudb.infrastructure.management.ClusterAdvisor;
+import org.corfudb.infrastructure.management.FileSystemAdvisor;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank.NodeRankByPartitionAttributes;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.concurrent.SingletonResource;
 
 import java.time.Duration;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -38,6 +41,9 @@ public class HealingAgent {
 
     @NonNull
     private final ClusterAdvisor advisor;
+
+    @NonNull
+    private final FileSystemAdvisor fsAdvisor;
 
     @NonNull
     private final String localEndpoint;
@@ -68,8 +74,14 @@ public class HealingAgent {
      * @param pollReport poll report
      * @param layout     current layout
      */
-    public CompletableFuture<DetectorTask> detectHealing(PollReport pollReport, Layout layout) {
+    public CompletableFuture<DetectorTask> detectAndHandleHealing(PollReport pollReport, Layout layout) {
         log.trace("Handle healing, layout: {}", layout);
+
+        Optional<NodeRankByPartitionAttributes> fsHealth = fsAdvisor.healedServer(pollReport.getClusterState());
+        if (!fsHealth.isPresent()) {
+            log.trace("Unhealthy node. Read only partition");
+            return skippedTask;
+        }
 
         return advisor
                 .healedServer(pollReport.getClusterState())

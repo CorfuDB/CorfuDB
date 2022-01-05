@@ -17,6 +17,7 @@ import org.corfudb.common.compression.Codec;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.log.FileSystemAgent.FileSystemConfig;
 import org.corfudb.infrastructure.log.LogFormat.CheckpointEntryType;
 import org.corfudb.infrastructure.log.LogFormat.DataType;
 import org.corfudb.infrastructure.log.LogFormat.LogEntry;
@@ -42,15 +43,11 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.FileAlreadyExistsException;
-import java.nio.file.FileStore;
 import java.nio.file.FileSystems;
-import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -109,12 +106,8 @@ public class StreamLogFiles implements StreamLog {
     // the files of the old instance
     private LogMetadata logMetadata;
 
-    // Derived size in bytes that normal writes to the log unit are capped at.
-    // This is derived as a percentage of the log's filesystem capacity.
-    private final long logSizeLimit;
-
     // Resource quota to track the log size
-    private ResourceQuota logSizeQuota;
+    private final ResourceQuota logSizeQuota;
 
     private final String logUnitSizeMetricName = "logunit.size";
     private final String logUnitTrimMarkMetricName = "logunit.trimmark";
@@ -138,25 +131,17 @@ public class StreamLogFiles implements StreamLog {
         this.verify = !noVerify;
         this.dataStore = new StreamLogDataStore(serverContext.getDataStore());
 
-        String logSizeLimitPercentageParam = (String) serverContext.getServerConfig().get("--log-size-quota-percentage");
-        final double logSizeLimitPercentage = Double.parseDouble(logSizeLimitPercentageParam);
-        if (logSizeLimitPercentage < 0.0 || 100.0 < logSizeLimitPercentage) {
-            String msg = String.format("Invalid quota: quota(%f)%% must be between 0-100%%",
-                    logSizeLimitPercentage);
-            throw new LogUnitException(msg);
-        }
+        initStreamLogDirectory();
 
-        long fileSystemCapacity = initStreamLogDirectory();
-        logSizeLimit = (long) (fileSystemCapacity * logSizeLimitPercentage / 100.0);
+        FileSystemConfig config = new FileSystemConfig(serverContext);
+        FileSystemAgent.init(config);
 
         logUnitSizeBytes = MicroMeterUtils.gauge(logUnitSizeMetricName + ".bytes", new AtomicDouble(0));
         logUnitSizeEntries = MicroMeterUtils.gauge(logUnitSizeMetricName + ".entries", new AtomicLong(0L));
         openSegments = MicroMeterUtils.gauge(logUnitSizeMetricName + ".segments", new AtomicLong(0L));
         currentTrimMark = MicroMeterUtils.gauge(logUnitTrimMarkMetricName, new AtomicLong(getTrimMark()));
-        long initialLogSize = estimateSize(logDir);
-        log.info("StreamLogFiles: {} size is {} bytes, limit {}", logDir, initialLogSize, logSizeLimit);
-        logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
-        logSizeQuota.consume(initialLogSize);
+        logSizeQuota = FileSystemAgent.getResourceQuota();
+
 
         verifyLogs();
         // Starting address initialization should happen before
@@ -179,19 +164,14 @@ public class StreamLogFiles implements StreamLog {
     /**
      * Create stream log directory if not exists
      *
-     * @return total capacity of the file system that owns the log files.
      */
-    private long initStreamLogDirectory() {
-        long fileSystemCapacity;
-
+    private void initStreamLogDirectory() {
         try {
             if (!logDir.toFile().exists()) {
                 Files.createDirectories(logDir);
             }
 
             String corfuDir = logDir.getParent().toString();
-            FileStore corfuDirBackend = Files.getFileStore(Paths.get(corfuDir));
-
             File corfuDirFile = new File(corfuDir);
             if (!corfuDirFile.canWrite()) {
                 throw new LogUnitException("Corfu directory is not writable " + corfuDir);
@@ -201,14 +181,11 @@ public class StreamLogFiles implements StreamLog {
             if (!logDirectory.canWrite()) {
                 throw new LogUnitException("Stream log directory not writable in " + corfuDir);
             }
-
-            fileSystemCapacity = corfuDirBackend.getTotalSpace();
         } catch (IOException ioe) {
             throw new LogUnitException(ioe);
         }
 
         log.info("initStreamLogDirectory: initialized {}", logDir);
-        return fileSystemCapacity;
     }
 
     /**
@@ -1351,7 +1328,7 @@ public class StreamLogFiles implements StreamLog {
             dataStore.resetTailSegment();
             logMetadata = new LogMetadata();
             removeLocalGauges();
-            logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
+            logSizeQuota.reset();
 
             log.info("reset: Completed");
         } finally {
@@ -1401,36 +1378,6 @@ public class StreamLogFiles implements StreamLog {
         public static int getChecksum(int num) {
             Hasher hasher = Hashing.crc32c().newHasher();
             return hasher.putInt(num).hash().asInt();
-        }
-    }
-
-    /**
-     * Estimate the size (in bytes) of a directory.
-     * From https://stackoverflow.com/a/19869323
-     */
-    @VisibleForTesting
-    static long estimateSize(Path directoryPath) {
-        final AtomicLong size = new AtomicLong(0);
-        try {
-            Files.walkFileTree(directoryPath, new SimpleFileVisitor<Path>() {
-                @Override
-                public FileVisitResult visitFile(Path file,
-                                                 BasicFileAttributes attrs) {
-                    size.addAndGet(attrs.size());
-                    return FileVisitResult.CONTINUE;
-                }
-
-                @Override
-                public FileVisitResult visitFileFailed(Path file, IOException exc) {
-                    // Skip folders that can't be traversed
-                    log.error("skipped: {}", file, exc);
-                    return FileVisitResult.CONTINUE;
-                }
-            });
-
-            return size.get();
-        } catch (IOException ioe) {
-            throw new IllegalStateException(ioe);
         }
     }
 }

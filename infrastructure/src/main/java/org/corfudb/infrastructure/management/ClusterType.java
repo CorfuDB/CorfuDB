@@ -4,7 +4,7 @@ package org.corfudb.infrastructure.management;
  * {@link ClusterType} is the enumeration of policies each of which representing
  * specific algorithms for evaluating the cluster and providing recommendation on the failure or
  * healing status of nodes in a Corfu server cluster.
- *
+ * <p>
  * Created by Sam Behnam on 10/19/18.
  */
 public enum ClusterType {
@@ -15,7 +15,7 @@ public enum ClusterType {
      * healthy servers in the cluster.
      * Determines a node to have healed when the given node is FULLY connected to all the healthy
      * servers in the cluster.
-     *
+     * <p>
      * After applying this strategy, the resulting graph of cluster nodes will resemble a Complete
      * Graph.
      */
@@ -27,7 +27,7 @@ public enum ClusterType {
      * CENTRAL node which in turn is connected to all the healthy servers in the cluster.
      * Determines a node to have healed when the given node is connected to at least one
      * CENTRAL node which in turn is connected to all the healthy servers in the cluster.
-     *
+     * <p>
      * After applying this strategy, the resulting graph of cluster nodes will resemble a Star
      * Topology Graph.
      */
