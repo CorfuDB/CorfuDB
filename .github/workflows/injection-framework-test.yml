@@ -45,6 +45,10 @@ jobs:
         working-directory: ./universe
         run: rm -rf ~/.m2/repository/org/corfudb && ./gradlew clean publishToMavenLocal
 
+      - name: Set corfu server version
+        working-directory: ./tests
+        run: ./gradlew setCorfuServerVersion -Pcorfu.server.version=$(./mvnw -q -Dexec.executable=echo -Dexec.args='${project.version}' --non-recursive exec:exec)
+
       - name: Run injection framework with universe framework
         working-directory: ./tests
         run: ./gradlew clean test -Dtags=longevity-docker
