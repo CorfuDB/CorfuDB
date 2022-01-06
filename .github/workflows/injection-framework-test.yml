@@ -37,6 +37,9 @@ jobs:
       - name: Prepare top of trunk docker image
         run: ./mvnw clean package -DskipTests -Pdocker -Dmaven.javadoc.skip=true -T 1C
 
+      - name: Set corfu server version env variable
+        run: echo "CORFU_SERVER_VERSION=$(./mvnw -q -Dexec.executable=echo -Dexec.args='${project.version}' --non-recursive exec:exec)" >> $GITHUB_ENV
+
       - uses: actions/checkout@v2
         with:
           repository: 'CorfuDB/corfudb-cloud'
@@ -47,7 +50,7 @@ jobs:
 
       - name: Set corfu server version
         working-directory: ./tests
-        run: ./gradlew setCorfuServerVersion -Pcorfu.server.version=$(./mvnw -q -Dexec.executable=echo -Dexec.args='${project.version}' --non-recursive exec:exec)
+        run: ./gradlew setCorfuServerVersion -Pcorfu.server.version=${{ env.CORFU_SERVER_VERSION }}
 
       - name: Run injection framework with universe framework
         working-directory: ./tests
