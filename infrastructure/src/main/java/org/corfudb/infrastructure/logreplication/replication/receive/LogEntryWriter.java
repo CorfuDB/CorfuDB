@@ -77,12 +77,11 @@ public class LogEntryWriter {
             long topologyConfigId = txMessage.getMetadata().getTopologyConfigID();
             long baseSnapshotTs = txMessage.getMetadata().getSnapshotTimestamp();
             long entryTs = txMessage.getMetadata().getTimestamp();
-            long prevTs = txMessage.getMetadata().getPreviousTimestamp();
 
             lastMsgTs = Math.max(persistedLogTs, lastMsgTs);
 
             if (topologyConfigId != persistedTopologyConfigId || baseSnapshotTs != persistedSnapshotStart ||
-                    baseSnapshotTs != persistedSnapshotDone || prevTs != persistedLogTs) {
+                    baseSnapshotTs != persistedSnapshotDone) {
                 log.warn("Message metadata mismatch. Skip applying message {}, persistedTopologyConfigId={}, persistedSnapshotStart={}, " +
                                 "persistedSnapshotDone={}, persistedLogTs={}", txMessage.getMetadata(), persistedTopologyConfigId,
                         persistedSnapshotStart, persistedSnapshotDone, persistedLogTs);
@@ -148,21 +147,14 @@ public class LogEntryWriter {
 
         // Skip entries that have already been processed
         if (msg.getMetadata().getTimestamp() <= lastMsgTs) {
-            log.warn("Ignore Log Entry. Received message with snapshot {} is smaller than lastMsgTs {}.",
-                    msg.getMetadata().getSnapshotTimestamp(), lastMsgTs);
+            log.warn("Ignore Log Entry. Received message with timestamp {} is smaller than lastMsgTs {}.",
+                    msg.getMetadata().getTimestamp(), lastMsgTs);
             return Address.NON_ADDRESS;
-        }
-
-        //If the entry is the expecting entry, process it and process
-        //the messages in the queue.
-        if (msg.getMetadata().getPreviousTimestamp() == lastMsgTs) {
+        } else {
+            //process the new entries, i.e., msg.timestamp > lastMsgTs
             processMsg(msg);
             return lastMsgTs;
         }
-
-        log.warn("Log entry {} was not processed, prevTs={}, lastMsgTs={}, srcGlobalSnapshot={}", msg.getMetadata().getTimestamp(),
-                msg.getMetadata().getPreviousTimestamp(), lastMsgTs, srcGlobalSnapshot);
-        return Address.NON_ADDRESS;
     }
 
     /**

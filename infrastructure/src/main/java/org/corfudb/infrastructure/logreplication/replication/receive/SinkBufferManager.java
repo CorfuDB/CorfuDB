@@ -134,9 +134,10 @@ public abstract class SinkBufferManager {
         // This message contains entries that haven't been applied yet
         if (preTs <= lastProcessedSeq && currentTs > lastProcessedSeq) {
             log.debug("Received in order message={}, lastProcessed={}", currentTs, lastProcessedSeq);
-            sinkManager.processMessage(dataMessage);
-            ackCnt++;
-            lastProcessedSeq = getCurrentSeq(dataMessage);
+            if (sinkManager.processMessage(dataMessage)) {
+                ackCnt++;
+                lastProcessedSeq = getCurrentSeq(dataMessage);
+            }
             processBuffer();
         } else if (currentTs > lastProcessedSeq && buffer.size() < maxSize) {
             log.debug("Received unordered message, currentTs={}, lastProcessed={}", currentTs, lastProcessedSeq);

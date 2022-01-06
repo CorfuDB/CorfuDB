@@ -14,6 +14,7 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
@@ -355,8 +356,39 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
             log.debug("msgQ is EMPTY");
         }
 
-        for (LogReplicationEntryMsg msg : msgQ) {
+        Iterator<LogReplicationEntryMsg> msgQIterator = msgQ.iterator();
+        LogReplicationEntryMsg msg = null;
+        //Scenario 1: sink process the msg normally
+        if (msgQIterator.hasNext()) {
+            msg = msgQIterator.next();
             writer.apply(msg);
+        }
+
+        // Scenario 2: Sink processes the previous msg, but Source is unware due to an interruption which causes LR to stop and start
+        // thereby resetting the Source's metadata to reflect the last ACK.Which means, the metadata on Source and Sink may not match.
+        // The source now resends the same data + new data that was written in the meanwhile, and sink filters and process only the new data.
+
+        if (msgQIterator.hasNext()) {
+            LogReplicationEntryMsg oldMsg = msg;
+            msg = msgQIterator.next();
+            // changing the metadata of the msg to simulate Scenario 2
+            LogReplication.LogReplicationEntryMetadataMsg newMetadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
+                    .mergeFrom(msg.getMetadata())
+                    .setPreviousTimestamp(0)
+                    .build();
+            LogReplicationEntryMsg newMsg = LogReplicationEntryMsg.newBuilder()
+                    .mergeFrom(msg)
+                    .setMetadata(newMetadata)
+                    .build();
+            
+            writer.apply(newMsg);
+
+            // Scenario 2, ii: source sends an old data, sink ignores it
+            writer.apply(oldMsg);
+        }
+
+        while (msgQIterator.hasNext()) {
+            writer.apply(msgQIterator.next());
         }
     }
 
