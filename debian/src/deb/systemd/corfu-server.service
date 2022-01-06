@@ -1,19 +1,28 @@
 [Unit]
 Description=Corfu Infrastructure Server
+SourcePath=/etc/init.d/corfu-server
 Documentation=https://github.com/corfudb/corfudb
-After=remote-fs.target systemd-journald-dev-log.socket
+Before=shutdown.target
+Conflicts=shutdown.target
+After=remote-fs.target
+After=network-online.target
+After=systemd-journald-dev-log.socket
+After=nsx-custom.target
 
 [Service]
+Nice=-10
 Type=forking
-PIDFile=/var/run/corfu.pid
+Restart=no
+TimeoutSec=5min
+IgnoreSIGPIPE=no
+KillMode=control-group
+GuessMainPID=no
+User=corfu
+ExecStartPre=+/etc/init.d/corfu-server prestart
 ExecStart=/etc/init.d/corfu-server start
 ExecStop=/etc/init.d/corfu-server stop
+ExecStopPost=+/etc/init.d/corfu-server poststop
 ExecReload=/etc/init.d/corfu-server restart
-KillMode=process
-Restart=on-failure
-RestartSec=10
-RemainAfterExit=no
 
 [Install]
-WantedBy=multi-user.target
-WantedBy=graphical.target
+WantedBy=nsx-custom.target

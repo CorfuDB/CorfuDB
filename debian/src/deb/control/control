@@ -1,9 +1,9 @@
-Package: corfu-server
+Package: nsx-corfu-server
 Version: [[version]]
 Section: misc
 Priority: optional
 Architecture: all
-Depends: java-runtime-headless
+Depends: oracle-java8-jre, wrapper-linux-x86-64, libapr1
 Maintainer: Michael Wei <mwei@cs.ucsd.edu>
 Description: Corfu is a consistency platform designed around the abstraction of a shared log.
 Distribution: development
