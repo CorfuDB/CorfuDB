@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.log;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
@@ -21,8 +22,12 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributeView;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Optional;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
+
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 @Slf4j
 public final class FileSystemAgent {
@@ -32,10 +37,9 @@ public final class FileSystemAgent {
 
     private final FileSystemConfig config;
     // Resource quota to track the log size
-    @Getter
+
     private final ResourceQuota logSizeQuota;
 
-    @Getter
     private final PartitionAttribute partitionAttribute;
 
     private FileSystemAgent(FileSystemConfig config) {
@@ -68,7 +72,7 @@ public final class FileSystemAgent {
         return instance.orElseThrow(err).logSizeQuota;
     }
 
-    public static PartitionAttribute getPartition() {
+    public static PartitionAttribute getPartitionAttribute() {
         Supplier<IllegalStateException> err = () -> new IllegalStateException(NOT_CONFIGURED_ERR_MSG);
         return instance.orElseThrow(err).partitionAttribute;
     }
@@ -116,18 +120,6 @@ public final class FileSystemAgent {
         }
     }
 
-    private BasicFileAttributes setFileAttributes() {
-        BasicFileAttributeView fileAttributeView = Files.getFileAttributeView(
-                config.logDir, BasicFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
-        BasicFileAttributes basicFileAttributes = null;
-        try {
-            basicFileAttributes = fileAttributeView.readAttributes();
-        } catch (Exception e) {
-            log.error("getPartitionStats: Error while reading from filesystem", e);
-        }
-        return basicFileAttributes;
-    }
-
     public static class FileSystemConfig {
         private final Path logDir;
         private final double limitPercentage;
@@ -156,42 +148,86 @@ public final class FileSystemAgent {
         }
     }
 
+    /**
+     * This class provides resources required for PartitionAttribute and its usages.
+     * PartitionAttribute has attributes related to the partition containing the log files like
+     * readOnly, availableSpace and totalSpace that are refreshed every
+     * {@link PartitionAttribute#UPDATE_INTERVAL} seconds using the
+     * {@link PartitionAttribute#scheduler}.
+     */
     public static class PartitionAgent {
+
+        // Interval when the PartitionAttribute values are reset by the scheduler
+        private static final int UPDATE_INTERVAL = 5;
+
+        // We don't need any delay for the scheduler
+        private static final int NO_DELAY = 0;
+
+        // This contains the attribute values of the log partition
         @Getter
-        private PartitionAttribute partitionAttribute;
+        private volatile PartitionAttribute partitionAttribute;
+
+        // Path of the log partition, for example /config
         private final Path logPartition;
         private final FileSystemConfig config;
 
+        // A single thread scheduler that has a single instance of execution at any given time.
+        private static final ScheduledExecutorService scheduler =
+                Executors.newSingleThreadScheduledExecutor();
+
         public PartitionAgent(FileSystemConfig config) {
             this.config = config;
-            logPartition = Paths.get(config.logDir.getRoot().toString(), config.logDir.subpath(0, 1).toString());
-            partitionAttribute = setPartitionAttribute();
-            //we need a scheduler
+            // Joins root directory with its first sub path to get log partition.
+            // For example, "/" + "config"
+            logPartition = Paths.get(config.logDir.getRoot().toString(),
+                    config.logDir.subpath(0, 1).toString());
+            initializeScheduler();
+            setPartitionAttribute();
         }
 
-        private PartitionAttribute setPartitionAttribute() {
+        /**
+         * Resets PartitionAttribute's fields every {@link PartitionAttribute#UPDATE_INTERVAL}
+         * seconds after the previous set task is completed.
+         */
+        private void initializeScheduler(){
+            scheduler.scheduleWithFixedDelay(
+                    this::setPartitionAttribute, NO_DELAY, UPDATE_INTERVAL, SECONDS
+            );
+        }
+
+        /**
+         * Sets PartitionAttribute's fields with the values from log file and the log partition.
+         */
+        private void setPartitionAttribute() {
+            log.info("setPartitionAttribute: fetching PartitionAttribute.");
             try {
+                // Log path to check if it is in readOnly mode
                 File logDirectoryFile = config.logDir.toFile();
-                FileStore fileStore = Files.getFileStore(config.logDir);
+
+                // Partition of the log to fetch total and available space, and check readOnly
+                FileStore fileStore = Files.getFileStore(logPartition);
                 partitionAttribute = new PartitionAttribute(
                         fileStore.isReadOnly() || !logDirectoryFile.canWrite(),
                         fileStore.getUsableSpace(),
                         fileStore.getTotalSpace()
                 );
+                log.info("setPartitionAttribute: fetched PartitionAttribute successfully. " +
+                        "{}", partitionAttribute);
             } catch (IOException e) {
-                log.error("setPartitionStats: Error while getting PartitionStats", e);
+                log.error("setPartitionAttribute: Error while fetching PartitionAttributes. " +
+                        "Reinitializing the scheduler.", e);
+                initializeScheduler();
             }
-
-            return partitionAttribute;
         }
 
-        public PartitionAttribute resetPartitionInfo() {
-            partitionAttribute = setPartitionAttribute();
-            return partitionAttribute;
-        }
-
+        /**
+         * This class contains the current state of the log partition.
+         * Its values are reset every {@link PartitionAttribute#UPDATE_INTERVAL} seconds
+         * using the {@link PartitionAttribute#scheduler}.
+         */
         @AllArgsConstructor
         @Getter
+        @ToString
         public static class PartitionAttribute {
             private final boolean readOnly;
             private final long availableSpace;

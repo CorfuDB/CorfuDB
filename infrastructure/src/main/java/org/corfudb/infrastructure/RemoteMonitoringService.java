@@ -295,14 +295,14 @@ public class RemoteMonitoringService implements ManagementService {
 
     private CompletableFuture<PollReport> pollReport(Layout layout, SequencerMetrics sequencerMetrics) {
         return CompletableFuture.supplyAsync(() -> {
-            PartitionAttribute partition = FileSystemAgent.getPartition();
-            PartitionAttributeStats partitionStats = new PartitionAttributeStats(
+            PartitionAttribute partition = FileSystemAgent.getPartitionAttribute();
+            PartitionAttributeStats partitionAttributeStats = new PartitionAttributeStats(
                     partition.isReadOnly(),
                     partition.getAvailableSpace(),
                     partition.getTotalSpace()
             );
 
-            FileSystemStats fsStats = new FileSystemStats(partitionStats);
+            FileSystemStats fsStats = new FileSystemStats(partitionAttributeStats);
 
             CorfuRuntime corfuRuntime = getCorfuRuntime();
 
