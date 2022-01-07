@@ -697,8 +697,8 @@ public class CorfuStoreIT extends AbstractIT {
             // Stream tags for tableA
             expectedTableUpdates.add(TableRegistry.getStreamIdForStreamTag(namespace, "sample_streamer_1"));
             expectedTableUpdates.add(TableRegistry.getStreamIdForStreamTag(namespace, "sample_streamer_2"));
-            expectedTableUpdates.add(ObjectsView.TRANSACTION_STREAM_ID);
-
+            // This is a federated table so add Log Replicator Stream Id
+            expectedTableUpdates.add(ObjectsView.getLogReplicatorStreamId());
             assertThat(expectedTableUpdates.size()).isEqualTo(backpointerMap.size());
             expectedTableUpdates.forEach(table -> assertThat(backpointerMap.keySet()).contains(table));
         } finally {

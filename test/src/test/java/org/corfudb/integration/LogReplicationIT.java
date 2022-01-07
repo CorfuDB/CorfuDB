@@ -195,7 +195,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 .builder()
                 .build();
 
-        srcDataRuntime = CorfuRuntime.fromParameters(params).setTransactionLogging(true);
+        srcDataRuntime = CorfuRuntime.fromParameters(params);
         srcDataRuntime.parseConfigurationString(SOURCE_ENDPOINT);
         srcDataRuntime.connect();
 
@@ -255,6 +255,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             CorfuTable<Long, Long> table = rt.getObjectsView()
                     .build()
                     .setStreamName(name)
+                    .setStreamTags(ObjectsView.getLogReplicatorStreamId())
                     .setTypeToken(new TypeToken<CorfuTable<Long, Long>>() {
                     })
                     .setSerializer(Serializers.PRIMITIVE)

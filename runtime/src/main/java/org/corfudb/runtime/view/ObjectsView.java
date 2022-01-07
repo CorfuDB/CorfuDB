@@ -39,18 +39,12 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class ObjectsView extends AbstractView {
 
-    /**
-     * The Transaction stream is used to log/write successful transactions from different clients.
-     * Transaction data and meta data can be obtained by reading this stream.
-     */
-    @Deprecated
-    public static final UUID TRANSACTION_STREAM_ID = CorfuRuntime.getStreamID("Transaction_Stream");
+    private static final String LOG_REPLICATOR_STREAM_NAME =
+        "LR_Transaction_Stream";
 
-    // We are temporarily naming this stream with the same name as TRANSACTION_STREAM_ID to avoid breaking LR code
-    // while transition to UFO is completed (once migration is complete to UFO this stream can be renamed)
-    // add a prefix to the name: e.g., org.corfudb.logreplication.transactionstream
     public static final StreamTagInfo LOG_REPLICATOR_STREAM_INFO =
-            new StreamTagInfo("Transaction_Stream", CorfuRuntime.getStreamID("Transaction_Stream"));
+            new StreamTagInfo(LOG_REPLICATOR_STREAM_NAME,
+                CorfuRuntime.getStreamID(LOG_REPLICATOR_STREAM_NAME));
 
     /**
      * @return the ID of the log replicator stream.
@@ -58,10 +52,6 @@ public class ObjectsView extends AbstractView {
     public static UUID getLogReplicatorStreamId() {
         return LOG_REPLICATOR_STREAM_INFO.getStreamId();
     }
-
-    @Getter
-    @Setter
-    boolean transactionLogging = false;
 
     @Getter
     Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();

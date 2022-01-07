@@ -109,27 +109,27 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
         srcDataRuntime = CorfuRuntime.fromParameters(params);
         srcDataRuntime.parseConfigurationString(DEFAULT_ENDPOINT);
-        srcDataRuntime.setTransactionLogging(true).connect();
+        srcDataRuntime.connect();
 
         srcTestRuntime = CorfuRuntime.fromParameters(params);
         srcTestRuntime.parseConfigurationString(DEFAULT_ENDPOINT);
-        srcTestRuntime.setTransactionLogging(true).connect();
+        srcTestRuntime.connect();
 
         readerRuntime = CorfuRuntime.fromParameters(params);
         readerRuntime.parseConfigurationString(DEFAULT_ENDPOINT);
-        readerRuntime.setTransactionLogging(true).connect();
+        readerRuntime.connect();
 
         writerRuntime = CorfuRuntime.fromParameters(params);
         writerRuntime.parseConfigurationString(WRITER_ENDPOINT);
-        writerRuntime.setTransactionLogging(true).connect();
+        writerRuntime.connect();
 
         dstDataRuntime = CorfuRuntime.fromParameters(params);
         dstDataRuntime.parseConfigurationString(WRITER_ENDPOINT);
-        dstDataRuntime.setTransactionLogging(true).connect();
+        dstDataRuntime.connect();
 
         dstTestRuntime = CorfuRuntime.fromParameters(params);
         dstTestRuntime.parseConfigurationString(WRITER_ENDPOINT);
-        dstTestRuntime.setTransactionLogging(true).connect();
+        dstTestRuntime.connect();
     }
 
     public static void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt) {
@@ -150,6 +150,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
             CorfuTable<Long, Long> table = rt.getObjectsView()
                     .build()
                     .setStreamName(name)
+                    .setStreamTags(ObjectsView.getLogReplicatorStreamId())
                     .setTypeToken(new TypeToken<CorfuTable<Long, Long>>() {
                     })
                     .setSerializer(serializer)
@@ -439,7 +440,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         openStreams(srcTables, srcDataRuntime);
         generateTransactions(srcTables, srcHashMap, NUM_TRANSACTIONS, srcDataRuntime, NUM_KEYS);
 
-        // Open a tx stream
+        // Open the log replication stream
         IStreamView txStream = srcTestRuntime.getStreamsView().get(ObjectsView.getLogReplicatorStreamId());
         long tail = srcDataRuntime.getAddressSpaceView().getLogTail();
         Stream<ILogData> stream = txStream.streamUpTo(tail);

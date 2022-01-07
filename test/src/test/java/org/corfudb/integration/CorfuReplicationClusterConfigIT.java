@@ -115,15 +115,16 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .builder()
                 .build();
 
-        activeRuntime = CorfuRuntime.fromParameters(params).setTransactionLogging(true);
+        activeRuntime = CorfuRuntime.fromParameters(params);
         activeRuntime.parseConfigurationString(activeCorfuEndpoint).connect();
 
-        standbyRuntime = CorfuRuntime.fromParameters(params).setTransactionLogging(true);
+        standbyRuntime = CorfuRuntime.fromParameters(params);
         standbyRuntime.parseConfigurationString(standbyCorfuEndpoint).connect();
 
         mapActive = activeRuntime.getObjectsView()
                 .build()
                 .setStreamName(streamName)
+                .setStreamTags(ObjectsView.getLogReplicatorStreamId())
                 .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {
                 })
                 .open();
@@ -131,6 +132,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         mapStandby = standbyRuntime.getObjectsView()
                 .build()
                 .setStreamName(streamName)
+                .setStreamTags(ObjectsView.getLogReplicatorStreamId())
                 .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {
                 })
                 .open();
@@ -762,6 +764,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         CorfuTable<String, Integer> noisyMap = activeRuntime.getObjectsView()
                 .build()
                 .setStreamName(streamName+"noisy")
+                .setStreamTags(ObjectsView.getLogReplicatorStreamId())
                 .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {
                 })
                 .open();
@@ -1464,12 +1467,13 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .builder()
                 .build();
 
-        CorfuRuntime backupRuntime = CorfuRuntime.fromParameters(params).setTransactionLogging(true);
+        CorfuRuntime backupRuntime = CorfuRuntime.fromParameters(params);
         backupRuntime.parseConfigurationString(backupCorfuEndpoint).connect();
 
         CorfuTable<String, Integer> mapBackup = backupRuntime.getObjectsView()
                 .build()
                 .setStreamName(streamName)
+                .setStreamTags(ObjectsView.getLogReplicatorStreamId())
                 .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {
                 })
                 .open();

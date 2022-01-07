@@ -81,7 +81,6 @@ public class TransactionStreamIT extends AbstractIT {
 
             CorfuRuntime consumerRt = CorfuRuntime.fromParameters(params)
                     .parseConfigurationString(DEFAULT_ENDPOINT)
-                    .setTransactionLogging(true)
                     .connect();
 
             consumerRts.add(consumerRt);
@@ -117,7 +116,6 @@ public class TransactionStreamIT extends AbstractIT {
 
         CorfuRuntime producersRt = CorfuRuntime.fromParameters(params)
                 .parseConfigurationString(DEFAULT_ENDPOINT)
-                .setTransactionLogging(true)
                 .connect();
 
         // Spawn writers, where each thread creates a table and starts
