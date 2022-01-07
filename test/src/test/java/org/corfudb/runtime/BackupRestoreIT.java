@@ -104,25 +104,21 @@ public class BackupRestoreIT extends AbstractIT {
 
         srcDataRuntime = CorfuRuntime
                 .fromParameters(params)
-                .setTransactionLogging(true)
                 .parseConfigurationString(SOURCE_ENDPOINT)
                 .connect();
 
         backupRuntime = CorfuRuntime
                 .fromParameters(params)
-                .setTransactionLogging(true)
                 .parseConfigurationString(SOURCE_ENDPOINT)
                 .connect();
 
         restoreRuntime = CorfuRuntime
                 .fromParameters(params)
-                .setTransactionLogging(true)
                 .parseConfigurationString(DESTINATION_ENDPOINT)
                 .connect();
 
         destDataRuntime = CorfuRuntime
                 .fromParameters(params)
-                .setTransactionLogging(true)
                 .parseConfigurationString(DESTINATION_ENDPOINT)
                 .connect();
     }
@@ -666,7 +662,7 @@ public class BackupRestoreIT extends AbstractIT {
         assertThat(ex.getCause().getClass()).isEqualTo(TransactionAbortedException.class);
         assertThat(ex.getCause().getCause().getClass()).isEqualTo(TrimmedException.class);
 
-        // Verify that backup tar file exists
+        // Verify that backup tar file does not exist
         File backupTarFile = new File(BACKUP_TAR_FILE_PATH);
         assertThat(backupTarFile).doesNotExist();
 

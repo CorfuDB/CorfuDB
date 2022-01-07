@@ -39,7 +39,7 @@ public class WriteAfterWriteTransactionContextTest extends AbstractTransactionCo
     @Test
     public void concurrentModificationsCauseAbort()
     {
-        getRuntime().setTransactionLogging(true);
+        getRuntime();
 
         getMap();
 

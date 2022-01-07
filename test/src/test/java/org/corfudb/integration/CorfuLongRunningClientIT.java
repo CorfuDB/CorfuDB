@@ -219,11 +219,11 @@ public class CorfuLongRunningClientIT extends AbstractIT {
                     .builder()
                     .build();
 
-            client1 = CorfuRuntime.fromParameters(params).setTransactionLogging(true);
+            client1 = CorfuRuntime.fromParameters(params);
             client1.parseConfigurationString(DEFAULT_HOST + ":" + DEFAULT_PORT);
             client1.connect();
 
-            client2 = CorfuRuntime.fromParameters(params).setTransactionLogging(true);
+            client2 = CorfuRuntime.fromParameters(params);
             client2.parseConfigurationString(DEFAULT_HOST + ":" + DEFAULT_PORT);
             client2.connect();
 

@@ -132,7 +132,10 @@ public class StreamViewTest extends AbstractViewTest {
                 .isCheckpointCapable(false)
                 .build();
 
-        IStreamView txStream = runtime.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID, options);
+        String streamTag = "tx_stream";
+        UUID streamTagId = CorfuRuntime.getStreamID(streamTag);
+        IStreamView txStream = runtime.getStreamsView().get(streamTagId,
+            options);
         final int firstIter = 50;
         for (int x = 0; x < firstIter; x++) {
             byte[] data = "Hello World!".getBytes();
@@ -157,7 +160,7 @@ public class StreamViewTest extends AbstractViewTest {
         CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
                                         .connect();
         IStreamView txStream2 = rt2.getStreamsView()
-                 .get(ObjectsView.TRANSACTION_STREAM_ID, options);
+                 .get(streamTagId, options);
         assertThatThrownBy(() -> txStream2.remaining())
                 .isInstanceOf(TrimmedException.class);
 
@@ -480,20 +483,22 @@ public class StreamViewTest extends AbstractViewTest {
      */
     @Test
     public void txLogTrim() {
+        final String streamTag = "tx_stream_tag";
+        final UUID tagId = CorfuRuntime.getStreamID(streamTag);
         final CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
                 .builder()
                 .build();
         final CorfuRuntime localRuntime = CorfuRuntime.fromParameters(params)
-                .setTransactionLogging(true)
                 .parseConfigurationString(getDefaultConfigurationString())
                 .connect();
         final CorfuTable<String, String>
                 instance1 = localRuntime.getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("txTestMap")
+                .setStreamTags(tagId)
                 .open();
 
-        // Populate the Transaction Stream up to NUM_ITERATIONS_LOW entries.
+        // Populate the Stream up to NUM_ITERATIONS_LOW entries.
         IntStream.range(0, PARAMETERS.NUM_ITERATIONS_LOW).forEach(idx -> {
             localRuntime.getObjectsView().TXBegin();
             instance1.put(String.valueOf(idx), String.valueOf(idx));
@@ -508,8 +513,7 @@ public class StreamViewTest extends AbstractViewTest {
         localRuntime.getAddressSpaceView().invalidateServerCaches();
         localRuntime.getAddressSpaceView().invalidateClientCache();
 
-        IStreamView txStream = localRuntime.getStreamsView()
-                .get(ObjectsView.TRANSACTION_STREAM_ID);
+        IStreamView txStream = localRuntime.getStreamsView().get(tagId);
 
         // If the current pointer is below the trim point, we should see the TrimmedException.
         assertThatThrownBy(() -> txStream.remaining()).isInstanceOf(TrimmedException.class);

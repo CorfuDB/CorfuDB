@@ -44,6 +44,7 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.Sleep;
@@ -370,11 +371,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
                     .builder()
                     .build();
 
-            activeRuntime = CorfuRuntime.fromParameters(params).setTransactionLogging(true);
+            activeRuntime = CorfuRuntime.fromParameters(params);
             activeRuntime.parseConfigurationString(activeEndpoint);
             activeRuntime.connect();
 
-            standbyRuntime = CorfuRuntime.fromParameters(params).setTransactionLogging(true);
+            standbyRuntime = CorfuRuntime.fromParameters(params);
             standbyRuntime.parseConfigurationString(standbyEndpoint);
             standbyRuntime.connect();
 
@@ -414,6 +415,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         mapA = activeRuntime.getObjectsView()
                 .build()
                 .setStreamName(streamA)
+                .setStreamTags(ObjectsView.getLogReplicatorStreamId())
                 .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {
                 })
                 .open();
@@ -421,6 +423,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         mapAStandby = standbyRuntime.getObjectsView()
                 .build()
                 .setStreamName(streamA)
+                .setStreamTags(ObjectsView.getLogReplicatorStreamId())
                 .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {
                 })
                 .open();
@@ -695,7 +698,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
                     .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
                     .setStreamName(fullTableName)
                     .setSerializer(dynamicProtoBufSerializer);
-            
+
             mcw = new MultiCheckpointWriter<>();
             mcw.addMap(corfuTableBuilder.open());
 

@@ -21,7 +21,6 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
@@ -243,7 +242,7 @@ public class StreamingIT extends AbstractIT {
 
         // Subscribe to streaming updates from the table using customized buffer size.
         StreamListenerImpl listener1 = new StreamListenerImpl("stream_listener_1");
-        store.subscribeListener(listener1, "test_namespace", "sample_streamer_1",
+        store.subscribeListener(listener1, "test_namespace", defaultTag,
                 Collections.singletonList("tableA"), ts1, bufferSize);
 
         // After a brief wait verify that the listener gets all the updates.
@@ -268,7 +267,7 @@ public class StreamingIT extends AbstractIT {
 
         // Add another subscriber to the same table starting now.
         StreamListenerImpl listener2 = new StreamListenerImpl("stream_listener_2");
-        store.subscribeListener(listener2, "test_namespace", "sample_streamer_1",
+        store.subscribeListener(listener2, "test_namespace", defaultTag,
                 Collections.singletonList("tableA"), null);
 
         TxnContext tx = store.txn("test_namespace");
@@ -344,7 +343,6 @@ public class StreamingIT extends AbstractIT {
 
         // Start a Corfu runtime.
         runtime = createRuntime(singleNodeEndpoint);
-        runtime.setTransactionLogging(true);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -487,7 +485,7 @@ public class StreamingIT extends AbstractIT {
         CountDownLatch latch = new CountDownLatch(numRecords);
         // Subscribe to streaming updates from tableA using listenerCommon
         PrevValueStreamer listenerCommon = new PrevValueStreamer<Uuid, SampleTableAMsg, Uuid>(store, ns, tn, latch);
-        store.subscribeListener(listenerCommon, ns, "sample_streamer_1",
+        store.subscribeListener(listenerCommon, ns, defaultTag,
                 Collections.singletonList(tn));
         for (int i = 0; i < numRecords; i++) {
             try (TxnContext tx = store.txn(namespace)) {
@@ -518,7 +516,6 @@ public class StreamingIT extends AbstractIT {
         // Start a Corfu runtime.
         runtime = createRuntime(singleNodeEndpoint);
 
-        runtime.setTransactionLogging(true);
         CorfuStore store = new CorfuStore(runtime);
 
         // Record the initial timestamp.
@@ -641,7 +638,6 @@ public class StreamingIT extends AbstractIT {
         // Start a Corfu runtime.
         runtime = createRuntime(singleNodeEndpoint);
 
-        runtime.setTransactionLogging(true);
         CorfuStore store = new CorfuStore(runtime);
 
         // Record the initial timestamp.
@@ -679,7 +675,7 @@ public class StreamingIT extends AbstractIT {
             } else {
                 listeners[i] = new StreamListenerImpl("listener" + i);
             }
-            store.subscribeListener(listeners[i], "test_namespace", "sample_streamer_1",
+            store.subscribeListener(listeners[i], "test_namespace", defaultTag,
                     Collections.singletonList("tableA"), ts1, bufferSize);
         }
 
@@ -731,13 +727,13 @@ public class StreamingIT extends AbstractIT {
 
         // Subscribe to streaming updates, while table has not been yet updated
         StreamListenerImpl listener1 = new StreamListenerImpl("stream_listener_1");
-        store.subscribeListener(listener1, namespace, "sample_streamer_1",
+        store.subscribeListener(listener1, namespace, defaultTag,
                 Collections.singletonList(tableName), ts1);
 
         // Wait for a while, so we are sure the subscriber poller has run
         TimeUnit.MILLISECONDS.sleep(sleepTime);
 
-        assertThatThrownBy(() -> store.subscribeListener(listener1, namespace, "sample_streamer_1",
+        assertThatThrownBy(() -> store.subscribeListener(listener1, namespace, defaultTag,
                 Collections.singletonList(tableName), ts1)).isExactlyInstanceOf(StreamingException.class);
 
         // Make some updates to the table
@@ -811,14 +807,14 @@ public class StreamingIT extends AbstractIT {
         // onwards (no data loss or need to sync a full snapshot)
         CountDownLatch latch = new CountDownLatch(1);
         StreamListenerImpl listener1 = new StreamListenerImpl("stream_listener_1", numUpdates/2, latch);
-        store.subscribeListener(listener1, namespace, "sample_streamer_1",
+        store.subscribeListener(listener1, namespace, defaultTag,
                 Collections.singletonList(tableNameA), ts1);
 
         // Wait for a while, so we are sure the subscriber poller has run
         TimeUnit.MILLISECONDS.sleep(sleepTime);
 
         // Confirm subscribe was successful
-        assertThatThrownBy(() -> store.subscribeListener(listener1, namespace, "sample_streamer_1",
+        assertThatThrownBy(() -> store.subscribeListener(listener1, namespace, defaultTag,
                 Collections.singletonList(tableNameA), ts1)).isExactlyInstanceOf(StreamingException.class);
 
         // Make some updates to both tables
@@ -856,7 +852,7 @@ public class StreamingIT extends AbstractIT {
         }
 
         // Re-subscribe from the last synced point and verify we catch up on the correct differential
-        store.subscribeListener(listener1, namespace, "sample_streamer_1",
+        store.subscribeListener(listener1, namespace, defaultTag,
                 Collections.singletonList(tableNameA), listener1.getTimestamp());
 
         // Wait for a while, so we are sure the subscriber poller has run
@@ -896,7 +892,6 @@ public class StreamingIT extends AbstractIT {
         // Start a Corfu runtime.
         runtime = createRuntime(singleNodeEndpoint);
 
-        runtime.setTransactionLogging(true);
         CorfuStore store = new CorfuStore(runtime);
 
         // Record the initial timestamp.
@@ -1251,7 +1246,6 @@ public class StreamingIT extends AbstractIT {
 
         // Start a Corfu runtime.
         runtime = createRuntime(singleNodeEndpoint);
-        runtime.setTransactionLogging(true);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -1269,7 +1263,8 @@ public class StreamingIT extends AbstractIT {
 
         // Subscribe to streaming updates
         StreamListenerImpl listener = new StreamListenerImpl("stream_listener");
-        store.subscribeListener(listener, namespace, "sample_streamer_1", Collections.singletonList(tableName));
+        store.subscribeListener(listener, namespace, defaultTag,
+            Collections.singletonList(tableName));
 
         // Update same key multiple times within the same transaction
         try (TxnContext tx = store.txn(namespace)) {

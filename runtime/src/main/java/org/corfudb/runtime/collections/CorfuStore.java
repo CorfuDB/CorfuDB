@@ -49,22 +49,10 @@ public class CorfuStore {
     /**
      * Creates a new CorfuStore.
      *
-     * @param runtime Connected instance of the Corfu Runtime.
+     * @param runtime         Connected instance of the Corfu Runtime.
      */
     @Nonnull
     public CorfuStore(@Nonnull final CorfuRuntime runtime) {
-        this(runtime, true);
-    }
-
-    /**
-     * Creates a new CorfuStore.
-     *
-     * @param runtime         Connected instance of the Corfu Runtime.
-     * @param enableTxLogging
-     */
-    @Nonnull
-    public CorfuStore(@Nonnull final CorfuRuntime runtime, boolean enableTxLogging) {
-        runtime.setTransactionLogging(enableTxLogging);
         this.runtime = runtime;
         this.corfuStoreMetrics = new CorfuStoreMetrics();
     }

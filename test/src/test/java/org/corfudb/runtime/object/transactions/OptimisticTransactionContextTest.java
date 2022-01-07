@@ -31,7 +31,6 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
 
 
 /**
@@ -958,11 +957,12 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
     }
 
     /**
-     * Test that transactions can correctly capture stream tags.
+     * Test that transactions can correctly capture stream tags
      */
     @Test
     public void testAffectedStreamsWithStreamTags() {
-        CorfuRuntime rt = getDefaultRuntime().setTransactionLogging(true).connect();
+        CorfuRuntime rt =
+            getDefaultRuntime().connect();
 
         final UUID streamId1 = CorfuRuntime.getStreamID("test-stream-1");
         final UUID streamId2 = CorfuRuntime.getStreamID("test-stream-2");
@@ -973,26 +973,26 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         // Create a table with 2 stream tags.
         Map<String, String> testMap1 = rt.getObjectsView()
-                .build()
-                .setStreamID(streamId1)
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setStreamTags(streamTag1, streamTag2)
-                .open();
+            .build()
+            .setStreamID(streamId1)
+            .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+            .setStreamTags(streamTag1, streamTag2)
+            .open();
 
         // Create another table with 2 stream tags.
         Map<String, String> testMap2 = rt.getObjectsView()
-                .build()
-                .setStreamID(streamId2)
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setStreamTags(streamTag2, streamTag3)
-                .open();
+            .build()
+            .setStreamID(streamId2)
+            .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+            .setStreamTags(streamTag2, streamTag3)
+            .open();
 
         // Create third table with no stream tag.
         Map<String, String> testMap3 = rt.getObjectsView()
-                .build()
-                .setStreamID(streamId3)
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .open();
+            .build()
+            .setStreamID(streamId3)
+            .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+            .open();
 
         t1(() -> rt.getObjectsView().TXBegin());
         t2(() -> rt.getObjectsView().TXBegin());
@@ -1006,40 +1006,40 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         t1(() -> {
             OptimisticTransactionalContext context =
-                    (OptimisticTransactionalContext) TransactionalContext.getCurrentContext();
+                (OptimisticTransactionalContext) TransactionalContext.getCurrentContext();
             assertThat(context.getWriteSetInfo().getStreamTags())
-                    .containsExactlyInAnyOrder(streamTag1, streamTag2);
+                .containsExactlyInAnyOrder(streamTag1, streamTag2);
         });
         t2(() -> {
             OptimisticTransactionalContext context =
-                    (OptimisticTransactionalContext) TransactionalContext.getCurrentContext();
+                (OptimisticTransactionalContext) TransactionalContext.getCurrentContext();
             assertThat(context.getWriteSetInfo().getStreamTags())
-                    .containsExactlyInAnyOrder(streamTag2, streamTag3);
+                .containsExactlyInAnyOrder(streamTag2, streamTag3);
         });
 
         t1(() -> rt.getObjectsView().TXEnd());
         t2(() -> rt.getObjectsView().TXEnd());
 
-        // Poll from the transaction streams and verify LogData contains stream tags in metadata.
-        CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).setTransactionLogging(true).connect();
+        // Poll from the streams corresponding to tags and verify LogData
+        // contains stream tags in metadata.
+        CorfuRuntime rt2 =
+            getNewRuntime(getDefaultNode()).connect();
 
-        IStreamView txStream = rt2.getStreamsView().get(TRANSACTION_STREAM_ID);
         IStreamView txStream1 = rt2.getStreamsView().get(streamTag1);
         IStreamView txStream2 = rt2.getStreamsView().get(streamTag2);
 
-        List<ILogData> txDataList = txStream.remaining();
         List<ILogData> txDataList1 = txStream1.remaining();
         List<ILogData> txDataList2 = txStream2.remaining();
 
-        assertThat(txDataList).hasSize(2);
         assertThat(txDataList1).hasSize(1);
         assertThat(txDataList2).hasSize(2);
 
         assertThat(txDataList1.get(0).getBackpointerMap().keySet()).containsExactlyInAnyOrder(
-                streamId1, streamId3, streamTag1, streamTag2, TRANSACTION_STREAM_ID);
+            streamId1, streamId3, streamTag1, streamTag2);
         assertThat(txDataList2.get(0).getBackpointerMap().keySet()).containsExactlyInAnyOrder(
-                streamId1, streamId3, streamTag1, streamTag2, TRANSACTION_STREAM_ID);
+            streamId1, streamId3, streamTag1, streamTag2);
         assertThat(txDataList2.get(1).getBackpointerMap().keySet()).containsExactlyInAnyOrder(
-                streamId2, streamTag2, streamTag3, TRANSACTION_STREAM_ID);
+            streamId2, streamTag2, streamTag3);
+
     }
 }
