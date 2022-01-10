@@ -15,11 +15,9 @@ import java.io.IOException;
 import java.nio.file.FileStore;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
-import java.nio.file.attribute.BasicFileAttributeView;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Optional;
 import java.util.concurrent.Executors;
@@ -213,10 +211,8 @@ public final class FileSystemAgent {
                 );
                 log.info("setPartitionAttribute: fetched PartitionAttribute successfully. " +
                         "{}", partitionAttribute);
-            } catch (IOException e) {
-                log.error("setPartitionAttribute: Error while fetching PartitionAttributes. " +
-                        "Reinitializing the scheduler.", e);
-                initializeScheduler();
+            } catch (Exception ex) {
+                log.error("setPartitionAttribute: Error while fetching PartitionAttributes.", ex);
             }
         }
 
