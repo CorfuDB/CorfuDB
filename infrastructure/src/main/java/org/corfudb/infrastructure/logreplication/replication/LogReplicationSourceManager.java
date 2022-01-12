@@ -93,8 +93,6 @@ public class LogReplicationSourceManager {
 
         this.config = parameters.getReplicationConfig();
 
-        log.debug("{}", config);
-
         if (config.getStreamsToReplicate() == null || config.getStreamsToReplicate().isEmpty()) {
             // Avoid FSM being initialized if there are no streams to replicate
             throw new IllegalArgumentException("Invalid Log Replication: Streams to replicate is EMPTY");
@@ -127,6 +125,13 @@ public class LogReplicationSourceManager {
         return startSnapshotSync(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST), false);
     }
 
+    private UUID startSnapshotSync(LogReplicationEvent snapshotSyncRequest, boolean forced) {
+        log.info("Start Snapshot Sync, requestId={}, forced={}", snapshotSyncRequest.getEventId(), forced);
+        // Enqueue snapshot sync request into Log Replication FSM
+        logReplicationFSM.input(snapshotSyncRequest);
+        return snapshotSyncRequest.getEventId();
+    }
+
     /**
      * Signal start of a forced snapshot sync
      *
@@ -136,12 +141,6 @@ public class LogReplicationSourceManager {
         startSnapshotSync(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, snapshotSyncRequestId), true);
     }
 
-    private UUID startSnapshotSync(LogReplicationEvent snapshotSyncRequest, boolean forced) {
-        log.info("Start Snapshot Sync, requestId={}, forced={}", snapshotSyncRequest.getEventId(), forced);
-        // Enqueue snapshot sync request into Log Replication FSM
-        logReplicationFSM.input(snapshotSyncRequest);
-        return snapshotSyncRequest.getEventId();
-    }
 
     /**
      * Signal start of replication.

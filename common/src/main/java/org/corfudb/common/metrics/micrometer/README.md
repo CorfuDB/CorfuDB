@@ -16,7 +16,7 @@
 *   **logreplication.snapshot.duration.seconds**: Duration of completing a snapshot sync in seconds (throughput, mean and max).
 *   **logreplication.acks**: Number of acks, distinguished by replication type (snapshot, logentry).
 *   **logreplication.messages**: Number of messages sent, distinguished by replication type (snapshot, logentry).
-*   **logreplication.opaque.count\_valid**: Number of opaque entries per message (rate, mean, max).
+*   **logreplication.opaque.count_per_message**: Number of opaque entries per message (rate, mean, max).
 *   **logreplication.opaque.count\_total**: Number of overall opaque entries (rate, mean, max).
 *   **logreplication.opaque.count\_valid**: Number of valid opaque entries (rate, mean, max).
 

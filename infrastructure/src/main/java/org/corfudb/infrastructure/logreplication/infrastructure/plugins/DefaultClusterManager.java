@@ -85,13 +85,15 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
 
     private ConfigStreamListener configStreamListener;
 
+    private String corfuEndpoint = "localhost:9000";
+
     public void start() {
         configId = 0L;
         shutdown = false;
         topologyConfig = constructTopologyConfigMsg();
         clusterManagerCallback = new ClusterManagerCallback(this);
         corfuRuntime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
-                .parseConfigurationString("localhost:9000")
+                .parseConfigurationString(corfuEndpoint)
                 .connect();
         corfuStore = new CorfuStore(corfuRuntime);
         long trimMark = Address.NON_ADDRESS;
@@ -112,6 +114,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
             );
             table.clearAll();
         } catch (Exception e) {
+            log.error("Exception caught while opening {} table", CONFIG_TABLE_NAME);
             throw new RuntimeException(e);
         }
         configStreamListener = new ConfigStreamListener(this);
