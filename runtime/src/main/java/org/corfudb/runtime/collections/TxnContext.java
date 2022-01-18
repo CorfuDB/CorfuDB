@@ -351,7 +351,7 @@ public class TxnContext implements AutoCloseable {
     /**
      * Clears the entire table.
      *
-     * @param table Table object to perform the delete on.
+     * @param table Table object to perform the clear on.
      * @param <K>   Type of Key.
      * @param <V>   Type of Value.
      * @param <M>   Type of Metadata.
