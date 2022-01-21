@@ -22,6 +22,8 @@ import org.corfudb.runtime.view.Address;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 /**
  * This is an implementation of the DataSender (data path layer) used for testing purposes.
  *
@@ -29,7 +31,7 @@ import java.util.concurrent.CompletableFuture;
  * (for processing).
  */
 @Slf4j
-public class SourceForwardingDataSender implements DataSender {
+public class SourceForwardingDataSender extends AbstractIT implements DataSender {
 
     private final static int DROP_INCREMENT = 4;
 
@@ -60,7 +62,11 @@ public class SourceForwardingDataSender implements DataSender {
 
     private int ifDropMsg;
 
+    private int dropACKLevel;
+
     private int droppingNum = 2;
+
+    private int droppingAcksNum = 2;
 
     private int msgCnt = 0;
 
@@ -69,14 +75,18 @@ public class SourceForwardingDataSender implements DataSender {
     private int countDelayedApplyCycles = 0;
     private boolean timeoutMetadataResponse = false;
 
+    private LogReplicationIT.TransitionSource callbackFunction;
+
     @Getter
     private ObservableValue errors = new ObservableValue(errorCount);
 
     private ObservableValue<LogReplicationMetadataResponseMsg> metadataResponseObservable;
 
+    private long lastAckDropped;
+
     public SourceForwardingDataSender(String destinationEndpoint, LogReplicationConfig config, LogReplicationIT.TestConfig testConfig,
                                       LogReplicationMetadataManager metadataManager,
-                                      String pluginConfigFilePath) {
+                                      String pluginConfigFilePath, LogReplicationIT.TransitionSource function) {
         this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
                 .parseConfigurationString(destinationEndpoint)
                 .connect();
@@ -87,12 +97,15 @@ public class SourceForwardingDataSender implements DataSender {
         this.delayedApplyCycles = testConfig.getDelayedApplyCycles();
         this.metadataResponseObservable = new ObservableValue<>(null);
         this.timeoutMetadataResponse = testConfig.isTimeoutMetadataResponse();
+        this.dropACKLevel = testConfig.getDropAckLevel();
+        this.callbackFunction = function;
+        this.lastAckDropped = Long.MAX_VALUE;
     }
 
     @Override
     public CompletableFuture<LogReplicationEntryMsg> send(LogReplicationEntryMsg message) {
         log.trace("Send message: " + message.getMetadata().getEntryType() + " for:: " + message.getMetadata().getTimestamp());
-        if (ifDropMsg > 0 && msgCnt == droppingNum) {
+        if (ifDropMsg > 0 && msgCnt == droppingNum || (dropACKLevel == 2 && message.getMetadata().getTimestamp() >= lastAckDropped)) {
             log.info("****** Drop msg {} log entry ts {}",  msgCnt, message.getMetadata().getTimestamp());
             if (ifDropMsg == DROP_MSG_ONCE) {
                 droppingNum += DROP_INCREMENT;
@@ -102,9 +115,19 @@ public class SourceForwardingDataSender implements DataSender {
         }
 
         final CompletableFuture<LogReplicationEntryMsg> cf = new CompletableFuture<>();
+        LogReplicationEntryMsg ack;
 
         // Emulate Channel by directly accepting from the destination, whatever is sent by the source manager
-        LogReplicationEntryMsg ack = destinationLogReplicationManager.receive(message);
+        if (dropACKLevel == 2 && lastAckDropped == message.getMetadata().getTimestamp()) {
+            ack = destinationLogReplicationManager.receive(changeMsgMetadata(message));
+        } else {
+            ack = destinationLogReplicationManager.receive(message);
+        }
+
+        if (dropAck(ack, message)) {
+            return cf;
+        }
+
         if (ack != null) {
             cf.complete(ack);
         }
@@ -216,5 +239,50 @@ public class SourceForwardingDataSender implements DataSender {
 
     public ObservableValue<LogReplicationMetadataResponseMsg> getMetadataResponses() {
         return metadataResponseObservable;
+    }
+
+    private boolean dropAck(LogReplicationEntryMsg ack, LogReplicationEntryMsg message){
+        if (dropACKLevel > 0 && msgCnt == droppingAcksNum) {
+            log.info("****** Drop ACK {} for log entry ts {}", ack, message.getMetadata().getTimestamp());
+            if (dropACKLevel == DROP_MSG_ONCE) {
+                droppingAcksNum += DROP_INCREMENT;
+            }
+
+            if (dropACKLevel == 2) {
+                lastAckDropped = message.getMetadata().getTimestamp();
+                callbackFunction.changeState();
+            }
+            return true;
+        }
+        return false;
+    }
+
+    /** This is a part of the flow where the Source missed an ACK and log_entry sync is restarted, and the
+     * Source reads a new log_entry into the (ACK missed) message before resending it to destination.
+     * The Destination filters out the new log_entry from the message and only processes that.
+     **/
+    private LogReplicationEntryMsg changeMsgMetadata(LogReplicationEntryMsg message) {
+        LogReplicationEntryMsg newMessage = LogReplicationEntryMsg.newBuilder().mergeFrom(message)
+                .setMetadata(LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
+                        .setTimestamp(lastAckDropped + 1).build())
+                .build();
+
+        assertThat(destinationLogReplicationManager.getLogReplicationMetadataManager()
+                .getLastProcessedLogEntryTimestamp())
+                .isGreaterThanOrEqualTo(newMessage.getMetadata().getPreviousTimestamp());
+        assertThat(destinationLogReplicationManager.getLogReplicationMetadataManager()
+                .getLastProcessedLogEntryTimestamp())
+                .isLessThan(newMessage.getMetadata().getTimestamp());
+
+        lastAckDropped = Long.MAX_VALUE;
+
+        return newMessage;
+    }
+
+    public void resetTestConfig(LogReplicationIT.TestConfig testConfig) {
+        this.ifDropMsg = testConfig.getDropMessageLevel();
+        this.delayedApplyCycles = testConfig.getDelayedApplyCycles();
+        this.timeoutMetadataResponse = testConfig.isTimeoutMetadataResponse();
+        this.dropACKLevel = testConfig.getDropAckLevel();
     }
 }

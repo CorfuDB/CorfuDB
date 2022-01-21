@@ -145,16 +145,8 @@ public class LogEntryWriter {
             lastMsgTs = srcGlobalSnapshot;
         }
 
-        // Skip entries that have already been processed
-        if (msg.getMetadata().getTimestamp() <= lastMsgTs) {
-            log.warn("Ignore Log Entry. Received message with timestamp {} is smaller than lastMsgTs {}.",
-                    msg.getMetadata().getTimestamp(), lastMsgTs);
-            return Address.NON_ADDRESS;
-        } else {
-            //process the new entries, i.e., msg.timestamp > lastMsgTs
-            processMsg(msg);
-            return lastMsgTs;
-        }
+        processMsg(msg);
+        return lastMsgTs;
     }
 
     /**
