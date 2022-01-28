@@ -105,7 +105,7 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
     @Override
     public CompletableFuture<LogReplicationEntryMsg> send(LogReplicationEntryMsg message) {
         log.trace("Send message: " + message.getMetadata().getEntryType() + " for:: " + message.getMetadata().getTimestamp());
-        if (ifDropMsg > 0 && msgCnt == droppingNum || (dropACKLevel == 2 && message.getMetadata().getTimestamp() >= lastAckDropped)) {
+        if (ifDropMsg > 0 && msgCnt == droppingNum || dropACKLevel == 2 && message.getMetadata().getTimestamp() >= lastAckDropped) {
             log.info("****** Drop msg {} log entry ts {}",  msgCnt, message.getMetadata().getTimestamp());
             if (ifDropMsg == DROP_MSG_ONCE) {
                 droppingNum += DROP_INCREMENT;
