@@ -7,6 +7,7 @@ import io.netty.buffer.Unpooled;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -25,6 +26,7 @@ import org.corfudb.util.serializer.ProtobufSerializer;
 import org.corfudb.util.serializer.Serializers;
 
 import java.nio.ByteBuffer;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -173,6 +175,10 @@ public class CheckpointWriter<T extends StreamingMap> {
             int entryCount = appendObjectState(entries);
             finishCheckpoint();
             long cpDuration = System.currentTimeMillis() - start;
+            MicroMeterUtils.time(Duration.ofMillis(cpDuration), "checkpoint.timer",
+                    "streamId", streamId.toString());
+            MicroMeterUtils.measure(numBytes, "checkpoint.write_size");
+            MicroMeterUtils.measure(entryCount, "checkpoint.write_entries");
             log.info("appendCheckpoint: completed checkpoint for {}, entries({}), " +
                             "cpSize({}) bytes at snapshot {} in {} ms",
                     streamId, entryCount, numBytes, snapshotTimestamp, cpDuration);

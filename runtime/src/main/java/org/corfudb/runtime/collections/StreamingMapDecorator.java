@@ -1,7 +1,9 @@
 package org.corfudb.runtime.collections;
 
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.util.ImmutableListSetWrapper;
 
+import java.time.Duration;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -81,7 +83,8 @@ public class StreamingMapDecorator<K, V> implements ContextAwareMap<K, V> {
      */
     @Override
     public V get(Object key) {
-        return mapImpl.get(key);
+        return MicroMeterUtils.time(() -> mapImpl.get(key), "corfu_table.read.timer",
+                "diskBacked", "false");
     }
 
     /**
@@ -89,7 +92,8 @@ public class StreamingMapDecorator<K, V> implements ContextAwareMap<K, V> {
      */
     @Override
     public V put(K key, V value) {
-        return mapImpl.put(key, value);
+        return MicroMeterUtils.time(() -> mapImpl.put(key, value), "corfu_table.write.timer",
+                "diskBacked", "false");
     }
 
     /**

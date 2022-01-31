@@ -219,6 +219,7 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     @Override
     @Accessor
     public V get(@ConflictParameter Object key) {
+
         return mainMap.get(key);
     }
 
