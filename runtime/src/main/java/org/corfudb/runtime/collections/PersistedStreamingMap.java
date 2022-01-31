@@ -39,6 +39,9 @@ import java.util.stream.StreamSupport;
 @Slf4j
 public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
 
+    public static final String DISK_BACKED = "diskBacked";
+    public static final String TRUE = "true";
+
     static {
         RocksDB.loadLibrary();
     }
@@ -159,7 +162,7 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
         } finally {
             keyPayload.release();
             MicroMeterUtils.time(Duration.ofMillis(System.currentTimeMillis() - start), "corfu_table.read.timer",
-                    "diskBacked", "true");
+                    DISK_BACKED, TRUE);
         }
     }
 
@@ -193,7 +196,7 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
             valuePayload.release();
         }
         MicroMeterUtils.time(Duration.ofMillis(System.currentTimeMillis() - start), "corfu_table.write.timer",
-                "diskBacked", "true");
+                DISK_BACKED, TRUE);
         return value;
     }
 

@@ -696,10 +696,10 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                                     upcallResults.put(entry.getGlobalAddress(), res == null
                                             ? NullValue.NULL_VALUE : res);
                                     pendingUpcalls.remove(entry.getGlobalAddress());
-                                    numEntries.getAndIncrement();
-                                    numBytes.getAndAdd(entry.getSerializedSize()==null ? 0: entry.getSerializedSize());
                                 }
                                 entry.setUpcallResult(res);
+                                numEntries.getAndIncrement();
+                                numBytes.getAndAdd(entry.getSerializedSize()==null ? 0: entry.getSerializedSize());
                             } catch (Exception e) {
                                 log.error("Sync[{}] Error: Couldn't execute upcall due to {}", this, e);
                                 throw new UnrecoverableCorfuError(e);
@@ -709,8 +709,6 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                 "streamId", getID().toString());
         MicroMeterUtils.measure(numBytes.longValue(), "vlo.sync.read_size");
         MicroMeterUtils.measure(numEntries.longValue(), "vlo.sync.read_entries");
-        log.info("Sync completed for {}, entries({}), size({}) bytes" +
-                getID().toString(), numEntries.longValue(), numBytes.longValue());
     }
 
     /**
