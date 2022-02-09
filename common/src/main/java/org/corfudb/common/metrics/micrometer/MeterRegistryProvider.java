@@ -24,9 +24,10 @@ import java.util.function.Supplier;
 @Slf4j
 public class MeterRegistryProvider {
     @Getter
-    private static final CompositeMeterRegistry meterRegistry = new CompositeMeterRegistry();
+    private static CompositeMeterRegistry meterRegistry;
     @Getter
     private static Optional<String> id = Optional.empty();
+    @Getter
     private static Optional<MetricType> metricType = Optional.empty();
     private static Optional<RegistryProvider> provider = Optional.empty();
 
@@ -34,7 +35,7 @@ public class MeterRegistryProvider {
 
     }
 
-    static enum MetricType {
+    public static enum MetricType {
         SERVER,
         CLIENT
     }
@@ -43,6 +44,21 @@ public class MeterRegistryProvider {
      * Class that initializes the Meter Registry.
      */
     public static class MeterRegistryInitializer extends MeterRegistryProvider {
+
+        private static synchronized void initMetrics(Logger logger, Duration loggingInterval, String identifier, MetricType type) {
+            if (metricType.isPresent()) {
+                log.warn("Registry has already been initialized with a type: " + metricType.get());
+                return;
+            }
+
+            meterRegistry = new CompositeMeterRegistry();
+            metricType = Optional.of(type);
+            id = Optional.of(identifier);
+
+            initLoggingRegistry(logger, loggingInterval, identifier);
+            registerProvidedRegistries();
+        }
+
         /**
          * Configure the meter registry for Corfu server.
          * All the metrics will be exported to the logging registry and optionally to any third party provided registries.
@@ -52,9 +68,8 @@ public class MeterRegistryProvider {
          * @param identifier      A global identifier to tag every metric with.
          */
         public static void initServerMetrics(Logger logger, Duration loggingInterval, String identifier) {
-            metricType = Optional.of(MetricType.SERVER);
-            initLoggingRegistry(logger, loggingInterval, identifier);
-            registerProvidedRegistries();
+            initMetrics(logger, loggingInterval, identifier, MetricType.SERVER);
+            log.info("Server metrics initialized");
         }
 
         /**
@@ -65,10 +80,9 @@ public class MeterRegistryProvider {
          * @param loggingInterval A duration between log appends for every metric.
          * @param identifier      A global identifier to tag every metric with.
          */
-        public static void initClientMetrics(Logger logger, Duration loggingInterval, String identifier) {
-            metricType = Optional.of(MetricType.CLIENT);
-            initLoggingRegistry(logger, loggingInterval, identifier);
-            registerProvidedRegistries();
+        public static synchronized void initClientMetrics(Logger logger, Duration loggingInterval, String identifier) {
+            initMetrics(logger, loggingInterval, identifier, MetricType.CLIENT);
+            log.info("Client metrics initialized");
         }
 
         private static synchronized void initLoggingRegistry(Logger logger, Duration loggingInterval, String identifier) {
@@ -77,7 +91,6 @@ public class MeterRegistryProvider {
                 LoggingMeterRegistryWithHistogramSupport registry =
                         new LoggingMeterRegistryWithHistogramSupport(config, logger::debug);
                 registry.config().commonTags("id", identifier);
-                id = Optional.of(identifier);
                 Optional<MeterRegistry> ret = Optional.of(registry);
                 JVMMetrics.register(ret);
                 return ret;
@@ -104,21 +117,11 @@ public class MeterRegistryProvider {
 
         private static void addToCompositeRegistry(Supplier<Optional<MeterRegistry>> meterRegistrySupplier) {
             Optional<MeterRegistry> componentRegistry = meterRegistrySupplier.get();
-            componentRegistry.ifPresent(registry -> {
-                if (containsRegistry(registry)) {
-                    log.warn("Registry has already been initialized.");
-                    removeRegistry(registry);
-                }
-                addRegistry(registry);
-            });
+            componentRegistry.ifPresent(MeterRegistryInitializer::addRegistry);
         }
 
         private static void addRegistry(MeterRegistry componentRegistry) {
             meterRegistry.add(componentRegistry);
-        }
-
-        private static void removeRegistry(MeterRegistry componentRegistry) {
-            meterRegistry.remove(componentRegistry);
         }
     }
 
@@ -147,7 +150,7 @@ public class MeterRegistryProvider {
      * @return An optional configured meter registry.
      */
     public static synchronized Optional<MeterRegistry> getInstance() {
-        return Optional.of(meterRegistry);
+        return Optional.ofNullable(meterRegistry);
     }
 
     /**
@@ -155,8 +158,11 @@ public class MeterRegistryProvider {
      */
     public static synchronized void close() {
         meterRegistry.close();
-        meterRegistry.getRegistries().forEach(meterRegistry::remove);
+        meterRegistry.getRegistries().forEach(registry -> meterRegistry.remove(registry));
         provider.ifPresent(RegistryProvider::close);
+        provider = Optional.empty();
+        metricType = Optional.empty();
+        id = Optional.empty();
     }
 
     /**

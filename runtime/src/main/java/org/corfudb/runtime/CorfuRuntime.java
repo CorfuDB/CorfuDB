@@ -955,7 +955,13 @@ public class CorfuRuntime {
         if (parameters.shutdownNettyEventLoop) {
             nettyEventLoop.shutdownGracefully();
         }
-        MeterRegistryProvider.close();
+
+        // If it's the client who initialized the registry - shut it down
+        MeterRegistryProvider.getMetricType().ifPresent(type -> {
+            if (type == MeterRegistryProvider.MetricType.CLIENT) {
+                MeterRegistryProvider.close();
+            }
+        });
     }
 
     /**
