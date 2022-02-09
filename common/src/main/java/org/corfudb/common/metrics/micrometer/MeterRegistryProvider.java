@@ -155,6 +155,7 @@ public class MeterRegistryProvider {
      */
     public static synchronized void close() {
         meterRegistry.close();
+        meterRegistry.getRegistries().forEach(meterRegistry::remove);
         provider.ifPresent(RegistryProvider::close);
     }
 

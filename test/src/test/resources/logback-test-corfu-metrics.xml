@@ -30,7 +30,7 @@
         </triggeringPolicy>
         <encoder>
             <pattern>
-                %msg%n%xException
+                %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %msg%n%xException
             </pattern>
         </encoder>
     </appender>
@@ -51,11 +51,7 @@
     <logger name="io.netty.util.internal" level="INFO"/>
     <logger name="io.netty.buffer" level="INFO"/>
 
-    <logger name="org.corfudb.metricsdata" level="INFO">
-        <!--<appender-ref ref="MetricsRollingFile" />-->
-    </logger>
-
-    <logger name="org.corfudb.metricsdata1" level="DEBUG" additivity="false">
+    <logger name="org.corfudb.metricsdata" level="DEBUG" additivity="false">
         <appender-ref ref="AsyncMetricsRollingFile" />
     </logger>
 
