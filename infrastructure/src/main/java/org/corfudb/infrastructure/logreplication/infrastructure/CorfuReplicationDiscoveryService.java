@@ -20,7 +20,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationStreamNameTableManager;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationStreamInfoManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -30,6 +30,7 @@ import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
+import org.corfudb.utils.LogReplicationStreams.TableInfo;
 import org.corfudb.utils.lock.Lock;
 import org.corfudb.utils.lock.LockClient;
 import org.corfudb.utils.lock.LockListener;
@@ -43,7 +44,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.HashMap;
-import java.util.List;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -328,7 +329,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private void bootstrapLogReplicationService() {
         // Through LogReplicationConfigAdapter retrieve system-specific configurations
         // such as streams to replicate and version
-        LogReplicationConfig logReplicationConfig = getLogReplicationConfiguration(getCorfuRuntime());
+        LogReplicationConfig logReplicationConfig = getLogReplicationConfiguration(getCorfuRuntimeForConfig());
 
         logReplicationMetadataManager = new LogReplicationMetadataManager(getCorfuRuntime(),
             topologyDescriptor.getTopologyConfigId(), localClusterDescriptor.getClusterId());
@@ -355,10 +356,30 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     /**
+     * Retrieve a Corfu Runtime exclusively for Log Replication config, which should have cache
+     * disabled for iterating registry table.
+     */
+    private CorfuRuntime getCorfuRuntimeForConfig() {
+            log.debug("Connecting to local Corfu {}", localCorfuEndpoint);
+
+        return CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
+                        .trustStore((String) serverContext.getServerConfig().get("--truststore"))
+                        .tsPasswordFile((String) serverContext.getServerConfig().get("--truststore-password-file"))
+                        .keyStore((String) serverContext.getServerConfig().get("--keystore"))
+                        .ksPasswordFile((String) serverContext.getServerConfig().get("--keystore-password-file"))
+                        .tlsEnabled((Boolean) serverContext.getServerConfig().get("--enable-tls"))
+                        .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
+                        // Cache needs to be disabled to properly read registry table
+                        .cacheDisabled(true)
+                        .build())
+                .parseConfigurationString(localCorfuEndpoint).connect();
+    }
+
+    /**
      * Retrieve a Corfu Runtime to connect to the local Corfu Datastore.
      */
     private CorfuRuntime getCorfuRuntime() {
-        // Avoid multiple runtime's
+        // Avoid multiple runtimes
         if (runtime == null) {
             log.debug("Connecting to local Corfu {}", localCorfuEndpoint);
             runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
@@ -417,18 +438,19 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private LogReplicationConfig getLogReplicationConfiguration(CorfuRuntime runtime) {
 
         try {
-            LogReplicationStreamNameTableManager replicationStreamNameTableManager =
-                new LogReplicationStreamNameTableManager(runtime, serverContext.getPluginConfigFilePath());
+            LogReplicationStreamInfoManager replicationStreamInfoManager =
+                new LogReplicationStreamInfoManager(runtime, serverContext.getPluginConfigFilePath());
 
-            Set<String> streamsToReplicate = replicationStreamNameTableManager.getStreamsToReplicate();
+            Set<TableInfo> streamsToReplicate = new HashSet<>();
+            if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
+                streamsToReplicate = replicationStreamInfoManager.getStreamsToReplicate();
+            }
 
-            Map<UUID, List<UUID>> streamingConfigSink = replicationStreamNameTableManager.getStreamingConfigOnSink();
-
-            Set<UUID> mergeOnlyStreams = LogReplicationStreamNameTableManager.getMergeOnlyStreamIdList();
+            Set<UUID> mergeOnlyStreams = LogReplicationStreamInfoManager.getMergeOnlyStreamIdList();
 
             // TODO pankti: Check if version does not match. If it does not, create an event for site discovery to
             //  do a snapshot sync.
-            boolean upgraded = replicationStreamNameTableManager.isUpgraded();
+            boolean upgraded = replicationStreamInfoManager.isUpgraded();
 
             if (upgraded) {
                 input(new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.UPGRADE));
@@ -437,11 +459,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             log.info("Merge-only stream IDs :: {}", mergeOnlyStreams);
 
             return new LogReplicationConfig(streamsToReplicate,
-                    streamingConfigSink,
                     mergeOnlyStreams,
                     serverContext.getLogReplicationMaxNumMsgPerBatch(),
                     serverContext.getLogReplicationMaxDataMessageSize(),
-                    serverContext.getLogReplicationCacheMaxSize());
+                    serverContext.getLogReplicationCacheMaxSize(),
+                    replicationStreamInfoManager);
         } catch (Throwable t) {
             log.error("Exception when fetching the Replication Config", t);
             throw t;
@@ -498,6 +520,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                             localNodeDescriptor, logReplicationMetadataManager, serverContext.getPluginConfigFilePath(),
                             getCorfuRuntime());
                 }
+                // Always sync stream list with metadata table. This will prevent a miss
+                // on recently discovered streams when there is leadership change.
+                replicationContext.getConfig().getStreamsInfo().syncWithInfoTable();
                 replicationManager.setTopology(topologyDescriptor);
                 replicationManager.start();
                 updateReplicationStatus();

@@ -13,7 +13,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
-import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -21,8 +20,10 @@ import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.IStreamView;
-import org.corfudb.test.SampleSchema.ValueFieldTagOne;
-import org.corfudb.test.SampleSchema.ValueFieldTagOneAndTwo;
+import org.corfudb.test.SampleSchema.ValueField;
+import org.corfudb.test.SampleSchema.OptionTagOneAndTwo;
+import org.corfudb.test.SampleSchema.OptionTagOne;
+
 import org.corfudb.util.Sleep;
 import org.junit.Before;
 import org.junit.Test;
@@ -57,18 +58,18 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     private static final int SLEEP_DURATION = 5;
     private static final int WAIT_DELTA = 50;
 
-    private AtomicBoolean replicationEnded = new AtomicBoolean(false);
+    private final AtomicBoolean replicationEnded = new AtomicBoolean(false);
 
-    private Map<String, Table<Sample.StringKey, ValueFieldTagOne, Sample.Metadata>> mapNameToMapActiveTypeA
+    private final Map<String, Table<Sample.StringKey, ValueField, Sample.Metadata>> mapNameToMapActiveTypeA
             = new HashMap<>();
-    private Map<String, Table<Sample.StringKey, ValueFieldTagOne, Sample.Metadata>> mapNameToMapStandbyTypeA =
+    private final Map<String, Table<Sample.StringKey, ValueField, Sample.Metadata>> mapNameToMapStandbyTypeA =
             new HashMap<>();
-    private Map<String, Table<Sample.StringKey, ValueFieldTagOneAndTwo, Sample.Metadata>> mapNameToMapActiveTypeB =
+    private final Map<String, Table<Sample.StringKey, ValueField, Sample.Metadata>> mapNameToMapActiveTypeB =
             new HashMap<>();
-    private Map<String, Table<Sample.StringKey, ValueFieldTagOneAndTwo, Sample.Metadata>> mapNameToMapStandbyTypeB =
+    private final Map<String, Table<Sample.StringKey, ValueField, Sample.Metadata>> mapNameToMapStandbyTypeB =
             new HashMap<>();
 
-    private volatile AtomicBoolean stopWrites = new AtomicBoolean(false);
+    private final AtomicBoolean stopWrites = new AtomicBoolean(false);
 
     private Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> noisyMap;
 
@@ -466,9 +467,10 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
             Set<UUID> tablesToListen = new DefaultLogReplicationConfigAdapter().getStreamingConfigOnSink().keySet();
 
-            // Start Listener on the 'stream_tag' of interest, on standby site + tables to listen (which accounts
-            // for the notification for 'clear' table)
-            CountDownLatch streamingStandbySnapshotCompletion = new CountDownLatch(totalEntries*2 + tablesToListen.size());
+            // Start Listener on the 'stream_tag' of interest on standby site
+            // Note that we now don't include notification for 'clear' table as in transfer phase
+            // (during which apply to shadow streams) the stream to tags map has not been built yet.
+            CountDownLatch streamingStandbySnapshotCompletion = new CountDownLatch(totalEntries * 2);
             StreamingStandbyListener listener = new StreamingStandbyListener(streamingStandbySnapshotCompletion,
                     tablesToListen);
             corfuStoreStandby.subscribeListener(listener, NAMESPACE, DefaultLogReplicationConfigAdapter.TAG_ONE);
@@ -511,8 +513,9 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             verifyStandbyData(totalEntries);
 
             log.info("** Wait for data change notifications (snapshot)");
+
             streamingStandbySnapshotCompletion.await();
-            assertThat(listener.messages.size()).isEqualTo(totalEntries*2 + tablesToListen.size());
+            assertThat(listener.messages.size()).isEqualTo(totalEntries * 2);
 
             // Verify both extra and local table are opened on Standby
             verifyTableOpened(corfuStoreStandby, "local");
@@ -529,7 +532,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             openTable(corfuStoreActive, "extra_delta");
 
             // Verify Delta's are replicated to standby
-            verifyStandbyData((totalEntries*2));
+            verifyStandbyData(totalEntries*2);
 
             // Verify tableRegistry's delta is replicated to Standby
             verifyTableOpened(corfuStoreStandby, "extra_delta");
@@ -595,17 +598,17 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     }
 
     private void verifyActiveData(int totalEntries) {
-        for (Table<Sample.StringKey, ValueFieldTagOne, Sample.Metadata> map : mapNameToMapActiveTypeA.values()) {
+        for (Table<Sample.StringKey, ValueField, Sample.Metadata> map : mapNameToMapActiveTypeA.values()) {
             assertThat(map.count()).isEqualTo(totalEntries);
         }
 
-        for (Table<Sample.StringKey, ValueFieldTagOneAndTwo, Sample.Metadata> map : mapNameToMapActiveTypeB.values()) {
+        for (Table<Sample.StringKey, ValueField, Sample.Metadata> map : mapNameToMapActiveTypeB.values()) {
             assertThat(map.count()).isEqualTo(totalEntries);
         }
     }
 
     public void verifyStandbyData(int expectedConsecutiveWrites) {
-        for (Map.Entry<String, Table<Sample.StringKey, ValueFieldTagOne, Sample.Metadata>> entry : mapNameToMapStandbyTypeA.entrySet()) {
+        for (Map.Entry<String, Table<Sample.StringKey, ValueField, Sample.Metadata>> entry : mapNameToMapStandbyTypeA.entrySet()) {
 
             log.debug("Verify Data on Standby's Table {}", entry.getKey());
 
@@ -628,7 +631,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             }
         }
 
-        for (Map.Entry<String, Table<Sample.StringKey, ValueFieldTagOneAndTwo, Sample.Metadata>> entry : mapNameToMapStandbyTypeB.entrySet()) {
+        for (Map.Entry<String, Table<Sample.StringKey, ValueField, Sample.Metadata>> entry : mapNameToMapStandbyTypeB.entrySet()) {
 
             log.debug("Verify Data on Standby's Table {}", entry.getKey());
 
@@ -681,25 +684,25 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             String mapName = DefaultLogReplicationConfigAdapter.TABLE_PREFIX + i;
 
             if (i % 2 == 0) {
-                Table<Sample.StringKey, ValueFieldTagOne, Sample.Metadata> mapActive = corfuStoreActive.openTable(
-                        NAMESPACE, mapName, Sample.StringKey.class, ValueFieldTagOne.class, Sample.Metadata.class,
-                        TableOptions.fromProtoSchema(ValueFieldTagOne.class));
+                Table<Sample.StringKey, ValueField, Sample.Metadata> mapActive = corfuStoreActive.openTable(
+                        NAMESPACE, mapName, Sample.StringKey.class, ValueField.class, Sample.Metadata.class,
+                        TableOptions.fromProtoSchema(OptionTagOne.class));
                 mapNameToMapActiveTypeA.put(mapName, mapActive);
 
-                Table<Sample.StringKey, ValueFieldTagOne, Sample.Metadata> mapStandby = corfuStoreStandby.openTable(
-                        NAMESPACE, mapName, Sample.StringKey.class, ValueFieldTagOne.class, Sample.Metadata.class,
-                        TableOptions.fromProtoSchema(ValueFieldTagOne.class));
+                Table<Sample.StringKey, ValueField, Sample.Metadata> mapStandby = corfuStoreStandby.openTable(
+                        NAMESPACE, mapName, Sample.StringKey.class, ValueField.class, Sample.Metadata.class,
+                        TableOptions.fromProtoSchema(OptionTagOne.class));
                 mapNameToMapStandbyTypeA.put(mapName, mapStandby);
 
             } else {
-                Table<Sample.StringKey, ValueFieldTagOneAndTwo , Sample.Metadata> mapActive = corfuStoreActive.openTable(
-                        NAMESPACE, mapName, Sample.StringKey.class, ValueFieldTagOneAndTwo.class, Sample.Metadata.class,
-                        TableOptions.fromProtoSchema(ValueFieldTagOneAndTwo.class));
+                Table<Sample.StringKey, ValueField, Sample.Metadata> mapActive = corfuStoreActive.openTable(
+                        NAMESPACE, mapName, Sample.StringKey.class, ValueField.class, Sample.Metadata.class,
+                        TableOptions.fromProtoSchema(OptionTagOneAndTwo.class));
                 mapNameToMapActiveTypeB.put(mapName, mapActive);
 
-                Table<Sample.StringKey, ValueFieldTagOneAndTwo, Sample.Metadata> mapStandby = corfuStoreStandby.openTable(
-                        NAMESPACE, mapName, Sample.StringKey.class, ValueFieldTagOneAndTwo.class, Sample.Metadata.class,
-                        TableOptions.fromProtoSchema(ValueFieldTagOneAndTwo.class));
+                Table<Sample.StringKey, ValueField, Sample.Metadata> mapStandby = corfuStoreStandby.openTable(
+                        NAMESPACE, mapName, Sample.StringKey.class, ValueField.class, Sample.Metadata.class,
+                        TableOptions.fromProtoSchema(OptionTagOneAndTwo.class));
                 mapNameToMapStandbyTypeB.put(mapName, mapStandby);
             }
         }
@@ -712,13 +715,13 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
     public void writeToActiveDifferentTypes(int startIndex, int totalEntries) {
         int maxIndex = totalEntries + startIndex;
-        for(Map.Entry<String, Table<Sample.StringKey, ValueFieldTagOne, Sample.Metadata>> entry : mapNameToMapActiveTypeA.entrySet()) {
+        for(Map.Entry<String, Table<Sample.StringKey, ValueField, Sample.Metadata>> entry : mapNameToMapActiveTypeA.entrySet()) {
 
-            Table<Sample.StringKey, ValueFieldTagOne, Sample.Metadata> map = entry.getValue();
+            Table<Sample.StringKey, ValueField, Sample.Metadata> map = entry.getValue();
 
             for (int i = startIndex; i < maxIndex; i++) {
                 Sample.StringKey stringKey = Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build();
-                ValueFieldTagOne value = ValueFieldTagOne.newBuilder().setPayload(Integer.toString(i)).build();
+                ValueField value = ValueField.newBuilder().setPayload(Integer.toString(i)).build();
                 Sample.Metadata metadata = Sample.Metadata.newBuilder().setMetadata("Metadata_" + i).build();
                 try (TxnContext txn = corfuStoreActive.txn(NAMESPACE)) {
                     txn.putRecord(map, stringKey, value, metadata);
@@ -727,57 +730,19 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             }
         }
 
-        for(Map.Entry<String, Table<Sample.StringKey, ValueFieldTagOneAndTwo, Sample.Metadata>> entry : mapNameToMapActiveTypeB.entrySet()) {
+        for(Map.Entry<String, Table<Sample.StringKey, ValueField, Sample.Metadata>> entry : mapNameToMapActiveTypeB.entrySet()) {
 
-            Table<Sample.StringKey, ValueFieldTagOneAndTwo, Sample.Metadata> map = entry.getValue();
+            Table<Sample.StringKey, ValueField, Sample.Metadata> map = entry.getValue();
 
             for (int i = startIndex; i < maxIndex; i++) {
                 Sample.StringKey stringKey = Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build();
-                ValueFieldTagOneAndTwo value = ValueFieldTagOneAndTwo.newBuilder().setPayload(Integer.toString(i)).build();
+                ValueField value = ValueField.newBuilder().setPayload(Integer.toString(i)).build();
                 Sample.Metadata metadata = Sample.Metadata.newBuilder().setMetadata("Metadata_" + i).build();
                 try (TxnContext txn = corfuStoreActive.txn(NAMESPACE)) {
                     txn.putRecord(map, stringKey, value, metadata);
                     txn.commit();
                 }
             }
-        }
-    }
-
-    /**
-     * Stream Listener used for testing streaming on standby site. This listener decreases a latch
-     * until all expected updates are received/
-     */
-    public static class StreamingStandbyListener implements StreamListener {
-
-        private final CountDownLatch updatesLatch;
-        public List<CorfuStreamEntry> messages = new ArrayList<>();
-        private final Set<UUID> tablesToListenTo;
-
-        public StreamingStandbyListener(CountDownLatch updatesLatch, Set<UUID> tablesToListenTo) {
-            this.updatesLatch = updatesLatch;
-            this.tablesToListenTo = tablesToListenTo;
-        }
-
-        @Override
-        public synchronized void onNext(CorfuStreamEntries results) {
-            log.info("StreamingStandbyListener:: onNext {} with entry size {}", results, results.getEntries().size());
-
-            results.getEntries().forEach((schema, entries) -> {
-                if (tablesToListenTo.contains(CorfuRuntime.getStreamID(NAMESPACE + "$" + schema.getTableName()))) {
-                    messages.addAll(entries);
-                    entries.forEach(e -> {
-                        if (e.getOperation() == CorfuStreamEntry.OperationType.CLEAR) {
-                            System.out.println("Clear operation for :: " + schema.getTableName() + " on address :: " + results.getTimestamp().getSequence() + " key :: " + e.getKey());
-                        }
-                        updatesLatch.countDown();
-                    });
-                }
-            });
-        }
-
-        @Override
-        public void onError(Throwable throwable) {
-            log.error("ERROR :: unsubscribed listener");
         }
     }
 }

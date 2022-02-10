@@ -93,7 +93,7 @@ public class LogReplicationSourceManager {
 
         this.config = parameters.getReplicationConfig();
 
-        if (config.getStreamsToReplicate() == null || config.getStreamsToReplicate().isEmpty()) {
+        if (config.getStreamsInfo().getStreamIds().isEmpty()) {
             // Avoid FSM being initialized if there are no streams to replicate
             throw new IllegalArgumentException("Invalid Log Replication: Streams to replicate is EMPTY");
         }

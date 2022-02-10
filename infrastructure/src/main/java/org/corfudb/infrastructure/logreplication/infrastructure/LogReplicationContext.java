@@ -15,16 +15,16 @@ import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
 public class LogReplicationContext {
 
     @Getter
-    private LogReplicationConfig config;
+    private final LogReplicationConfig config;
 
     @Getter
-    private TopologyDescriptor topology;
+    private final TopologyDescriptor topology;
 
     @Getter
-    private String localCorfuEndpoint;
+    private final String localCorfuEndpoint;
 
     @Getter
-    private IChannelContext channelContext;
+    private final IChannelContext channelContext;
 
     /**
      * Constructor

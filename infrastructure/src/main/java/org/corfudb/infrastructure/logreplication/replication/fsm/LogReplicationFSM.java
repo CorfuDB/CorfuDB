@@ -255,7 +255,8 @@ public class LogReplicationFSM {
 
         logReplicationFSMConsumer.submit(this::consume);
 
-        log.info("Log Replication FSM initialized, replicate to remote cluster {}", remoteCluster.getClusterId());
+        log.info("Log Replication FSM initialized, streams to replicate {} to remote cluster {}",
+                config.getStreamsInfo().getStreamIds(), remoteCluster.getClusterId());
     }
 
     /**

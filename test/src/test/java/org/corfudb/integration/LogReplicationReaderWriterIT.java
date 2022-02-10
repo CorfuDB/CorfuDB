@@ -25,6 +25,7 @@ import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
+import org.corfudb.utils.LogReplicationStreams.TableInfo;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -33,6 +34,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
@@ -218,11 +220,11 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         }
     }
 
-    public static void verifyTable(String tag, HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, CorfuTable<Long, Long>> hashMap) {
+    public static void verifyTable(String tag, Map<String, CorfuTable<Long, Long>> dstTables, Map<String, CorfuTable<Long, Long>> srcTables) {
         log.debug("\n" + tag);
-        for (String name : hashMap.keySet()) {
-            CorfuTable<Long, Long> table = tables.get(name);
-            CorfuTable<Long, Long> mapKeys = hashMap.get(name);
+        for (String name : srcTables.keySet()) {
+            CorfuTable<Long, Long> table = dstTables.get(name);
+            CorfuTable<Long, Long> mapKeys = srcTables.get(name);
             log.debug("table " + name + " key size " + table.keySet().size() +
                     " hashMap size " + mapKeys.size());
 
@@ -262,7 +264,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
     public static void readSnapLogMsgs(List<LogReplicationEntryMsg> msgQ, Set<String> streams, CorfuRuntime rt, boolean blockOnSem)  {
         int cnt = 0;
-        LogReplicationConfig config = new LogReplicationConfig(streams, BATCH_SIZE, MAX_MSG_SIZE);
+        LogReplicationConfig config = new LogReplicationConfig(convertStreamNameToInfo(streams), BATCH_SIZE, MAX_MSG_SIZE);
         StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config);
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
@@ -291,7 +293,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     }
 
     public static void writeSnapLogMsgs(List<LogReplicationEntryMsg> msgQ, Set<String> streams, CorfuRuntime rt) {
-        LogReplicationConfig config = new LogReplicationConfig(streams, BATCH_SIZE, MAX_MSG_SIZE);
+        LogReplicationConfig config = new LogReplicationConfig(convertStreamNameToInfo(streams), BATCH_SIZE, MAX_MSG_SIZE);
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataManager);
 
@@ -317,7 +319,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
     public static void readLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, Set<String> streams, CorfuRuntime rt, boolean blockOnce) throws
             TrimmedException {
-        LogReplicationConfig config = new LogReplicationConfig(streams, BATCH_SIZE, MAX_MSG_SIZE);
+        LogReplicationConfig config = new LogReplicationConfig(convertStreamNameToInfo(streams), BATCH_SIZE, MAX_MSG_SIZE);
         StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, config);
         reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
 
@@ -347,9 +349,9 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     }
 
     public static void writeLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, Set<String> streams, CorfuRuntime rt) {
-        LogReplicationConfig config = new LogReplicationConfig(streams);
+        LogReplicationConfig config = new LogReplicationConfig(convertStreamNameToInfo(streams));
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
-        LogEntryWriter writer = new LogEntryWriter(config, logReplicationMetadataManager);
+        LogEntryWriter writer = new LogEntryWriter(config, logReplicationMetadataManager, rt);
 
         if (msgQ.isEmpty()) {
             log.debug("msgQ is EMPTY");
@@ -428,6 +430,19 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         } catch (Exception e) {
             log.debug("caught an exception " + e);
         }
+    }
+
+    private static Set<TableInfo> convertStreamNameToInfo(Set<String> streams) {
+        Set<TableInfo> infoSet = new HashSet<>();
+
+        for (String streamName : streams) {
+            TableInfo info = TableInfo.newBuilder()
+                    .setName(streamName)
+                    .build();
+            infoSet.add(info);
+        }
+
+        return infoSet;
     }
 
     /**

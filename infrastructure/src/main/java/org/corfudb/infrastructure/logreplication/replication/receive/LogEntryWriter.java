@@ -6,20 +6,35 @@ import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
+import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
+import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType;
+import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.util.serializer.Serializers;
 
 import javax.annotation.concurrent.NotThreadSafe;
+import java.lang.reflect.Array;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.extractOpaqueEntries;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.corfudb.runtime.view.TableRegistry.REGISTRY_TABLE_NAME;
+import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 
 
 /**
@@ -29,19 +44,28 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.extractO
 @Slf4j
 public class LogEntryWriter {
     private final LogReplicationMetadataManager logReplicationMetadataManager;
-    private final HashMap<UUID, String> streamMap; //the set of streams that log entry writer will work on.
+    private final LogReplicationConfig config;
+    private final Map<UUID, List<SMREntry>> pendingEntries;
+    private final CorfuRuntime rt;
+    // Set of streams newly opened and replicated from ACTIVE, need to clear local
+    // writes to avoid polluting those streams.
+    private final Set<UUID> streamsToClear;
+    private Set<UUID> streamsSet; //the set of streams that log entry writer will work on.
     private long srcGlobalSnapshot; //the source snapshot that the transaction logs are based
     private long lastMsgTs; //the timestamp of the last message processed.
-    private Map<UUID, List<UUID>> dataStreamToTagsMap;
+    private Map<UUID, Set<UUID>> dataStreamToTagsMap;
+    private boolean handlePendingEntries;
 
-    public LogEntryWriter(LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager) {
+    public LogEntryWriter(LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager,
+                          CorfuRuntime rt) {
         this.logReplicationMetadataManager = logReplicationMetadataManager;
+        this.config = config;
+        this.streamsToClear = new HashSet<>();
         this.srcGlobalSnapshot = Address.NON_ADDRESS;
         this.lastMsgTs = Address.NON_ADDRESS;
-        this.streamMap = new HashMap<>();
-        this.dataStreamToTagsMap = config.getDataStreamToTagsMap();
-
-        config.getStreamsToReplicate().stream().forEach(stream -> streamMap.put(CorfuRuntime.getStreamID(stream), stream));
+        this.handlePendingEntries = false;
+        this.pendingEntries = new HashMap<>();
+        this.rt = rt;
     }
 
     /**
@@ -65,6 +89,8 @@ public class LogEntryWriter {
      */
     private boolean processMsg(LogReplicationEntryMsg txMessage) {
         List<OpaqueEntry> opaqueEntryList = extractOpaqueEntries(txMessage);
+        UUID registryTableId = CorfuRuntime.getStreamID(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+                REGISTRY_TABLE_NAME));
 
         try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
 
@@ -93,29 +119,114 @@ public class LogEntryWriter {
             // Skip Opaque entries with timestamp that are not larger than persistedTs
             OpaqueEntry[] newOpaqueEntryList = opaqueEntryList.stream().filter(x -> x.getVersion() > persistedLogTs).toArray(OpaqueEntry[]::new);
 
-            // Check that all opaque entries contain the correct streams
-            for (OpaqueEntry opaqueEntry : newOpaqueEntryList) {
-                if (!streamMap.keySet().containsAll(opaqueEntry.getEntries().keySet())) {
-                    log.error("txMessage contains noisy streams {}, expecting {}", opaqueEntry.getEntries().keySet(), streamMap);
-                    throw new ReplicationWriterException("Wrong streams set");
-                }
-            }
-
             logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
             logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED, entryTs);
 
             for (OpaqueEntry opaqueEntry : newOpaqueEntryList) {
+
+                // Sync with state in LogReplicationConfig after each update
+                this.streamsSet = new HashSet<>(config.getStreamsInfo().getStreamIds());
+                this.dataStreamToTagsMap = new HashMap<>(config.getDataStreamToTagsMap());
                 for (UUID streamId : opaqueEntry.getEntries().keySet()) {
+                    if (streamId.equals(registryTableId)) {
+                        handlePendingEntries = true;
+                    }
+
+                    if (!streamsSet.contains(streamId)) {
+                        log.debug("Stream with id {} created during log entry sync and arrived before Registry Table," +
+                                "temporarily added to pending entries", streamId);
+                        // At this point we know that all the entries are valid to apply. If we cannot get stream tags from
+                        // the map, it means this is a newly opened stream during delta sync and the registry table on standby
+                        // side don't have records. We mark them as pending entries and apply after registry table is updated.
+                        pendingEntries.putIfAbsent(streamId, new ArrayList<>());
+                        pendingEntries.get(streamId).addAll(opaqueEntry.getEntries().get(streamId));
+                        streamsToClear.add(streamId);
+                        continue;
+                    }
+
                     for (SMREntry smrEntry : opaqueEntry.getEntries().get(streamId)) {
-                        // If stream tags exist for the current stream, it means its intended for streaming on the Sink (receiver)
-                        txnContext.logUpdate(streamId, smrEntry, dataStreamToTagsMap.get(streamId));
+                        // If stream tags exist for the current stream, it means it's intended for streaming on the Sink (receiver)
+                        List<UUID> streamTags = new ArrayList<>();
+                        if (dataStreamToTagsMap.containsKey(streamId)) {
+                            streamTags.addAll(dataStreamToTagsMap.get(streamId));
+                        }
+                        txnContext.logUpdate(streamId, smrEntry, streamTags);
                     }
                 }
             }
             txnContext.commit();
-
             lastMsgTs = Math.max(entryTs, lastMsgTs);
-            return true;
+        }
+
+        if (handlePendingEntries) {
+            updateLogReplicationConfig();
+            this.streamsSet = new HashSet<>(config.getStreamsInfo().getStreamIds());
+            this.dataStreamToTagsMap = new HashMap<>(config.getDataStreamToTagsMap());
+            clearNewStreamsWithLocalWrites();
+            if (!pendingEntries.isEmpty()) {
+                try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
+                    pendingEntries.entrySet().removeIf(mapEntry -> {
+                        UUID streamId = mapEntry.getKey();
+                        boolean toRemove = streamsSet.contains(streamId);
+                        if (toRemove) {
+                            log.info("Handle pending entry for stream id: {}", streamId);
+                            for (SMREntry smrEntry : pendingEntries.get(streamId)) {
+                                List<UUID> streamTags = new ArrayList<>();
+                                if (dataStreamToTagsMap.containsKey(streamId)) {
+                                    streamTags.addAll(dataStreamToTagsMap.get(streamId));
+                                }
+                                txnContext.logUpdate(streamId, smrEntry, streamTags);
+                            }
+                        }
+                        return toRemove;
+                    });
+                    txnContext.commit();
+                }
+            }
+            handlePendingEntries = false;
+        }
+
+        return true;
+    }
+
+    private void updateLogReplicationConfig() {
+        CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>
+                registryTable = rt.getTableRegistry().getRegistryTable();
+        Set<UUID> updatedStreamSet = registryTable.entryStream()
+                .filter(entry -> entry.getValue().getMetadata().getTableOptions().getIsFederated())
+                .map(entry -> CorfuRuntime.getStreamID(getFullyQualifiedTableName(entry.getKey())))
+                .collect(Collectors.toSet());
+        Map<UUID, Set<UUID>> updatedStreamTagsMap = new HashMap<>();
+        registryTable.forEach((tableName, tableRecord) -> {
+            UUID streamId = CorfuRuntime.getStreamID(getFullyQualifiedTableName(tableName));
+            updatedStreamTagsMap.putIfAbsent(streamId, new HashSet<>());
+            updatedStreamTagsMap.get(streamId).addAll(
+                    tableRecord.getMetadata()
+                            .getTableOptions()
+                            .getStreamTagList()
+                            .stream()
+                            .map(streamTag -> TableRegistry.getStreamIdForStreamTag(tableName.getNamespace(), streamTag))
+                            .collect(Collectors.toList()));
+        });
+        this.config.updateDataStreamToTagsMap(updatedStreamTagsMap, false);
+        this.config.getStreamsInfo().updateStreamIdsOnStandby(updatedStreamSet, false);
+    }
+
+    private void clearNewStreamsWithLocalWrites() {
+        try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
+            for (UUID streamId : streamsToClear) {
+                long streamTail = rt.getSequencerView().query(streamId);
+                if (streamTail != Address.NON_EXIST) {
+                    SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
+                    List<UUID> streamTags = new ArrayList<>();
+                    if (dataStreamToTagsMap.containsKey(streamId)) {
+                        streamTags.addAll(dataStreamToTagsMap.get(streamId));
+                    }
+                    txnContext.logUpdate(streamId, entry, streamTags);
+                }
+            }
+            streamsToClear.clear();
+            txnContext.commit();
         }
     }
 
@@ -170,5 +281,8 @@ public class LogEntryWriter {
     public void reset(long snapshot, long ackTimestamp) {
         srcGlobalSnapshot = snapshot;
         lastMsgTs = ackTimestamp;
+        handlePendingEntries = false;
+        pendingEntries.clear();
+        streamsToClear.clear();
     }
 }

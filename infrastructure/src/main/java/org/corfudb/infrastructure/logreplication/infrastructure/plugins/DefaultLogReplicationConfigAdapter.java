@@ -39,12 +39,6 @@ public class DefaultLogReplicationConfigAdapter implements ILogReplicationConfig
         }
     }
 
-    // Provides the fully qualified names of streams to replicate
-    @Override
-    public Set<String> fetchStreamsToReplicate() {
-        return streamsToReplicate;
-    }
-
     @Override
     public String getVersion() {
         return "version_latest";

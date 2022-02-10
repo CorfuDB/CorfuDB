@@ -12,12 +12,16 @@ import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 
 import javax.annotation.concurrent.NotThreadSafe;
@@ -47,11 +51,16 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     private final LogReplicationEntryType MSG_TYPE = LogReplicationEntryType.LOG_ENTRY_MESSAGE;
 
-    // Set of UUIDs for the corresponding streams
-    private Set<UUID> streamUUIDs;
+    private final Set<UUID> streamUUIDs;
+
+    private final Set<UUID> confirmedNoisyStreams;
+
+    private final CorfuRuntime runtime;
+
+    private final LogReplicationConfig config;
 
     // Opaque Stream wrapper for the transaction stream
-    private TxOpaqueStream txOpaqueStream;
+    private final TxOpaqueStream txOpaqueStream;
 
     // Snapshot Timestamp on which the log entry reader is based on
     private long globalBaseSnapshot;
@@ -82,20 +91,18 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
         runtime.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
+        this.runtime = runtime;
+        this.config = config;
         this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
         this.deltaCounter = configureDeltaCounter();
         this.validDeltaCounter = configureValidDeltaCounter();
         this.opaqueEntryCounter = configureOpaqueEntryCounter();
-        Set<String> streams = config.getStreamsToReplicate();
+        this.streamUUIDs = new HashSet<>(config.getStreamsInfo().getStreamIds());
+        this.confirmedNoisyStreams = new HashSet<>();
 
-        streamUUIDs = new HashSet<>();
-        for (String s : streams) {
-            streamUUIDs.add(CorfuRuntime.getStreamID(s));
-        }
-
-        log.debug("Streams to replicate total={}, stream_names={}, stream_ids={}", streamUUIDs.size(), streams, streamUUIDs);
+        log.debug("Streams to replicate total={}, stream_ids={}", streamUUIDs.size(), streamUUIDs);
 
         //create an opaque stream for transaction stream
         txOpaqueStream = new TxOpaqueStream(runtime);
@@ -124,6 +131,46 @@ public class StreamsLogEntryReader implements LogEntryReader {
         return txMessage;
     }
 
+    private void checkStreams(Set<UUID> txEntryStreamIds) {
+        // Get the set of stream ids that we encounter for the first time. i.e. Neither recorded
+        // in LogReplicationConfig nor marked as noisy.
+        Set<UUID> checkIdSet = txEntryStreamIds.stream()
+                .filter(id -> !streamUUIDs.contains(id) && !confirmedNoisyStreams.contains(id))
+                .collect(Collectors.toSet());
+
+        if (checkIdSet.isEmpty()) {
+            return;
+        }
+
+        // Get registry table for checking is_federated flag.
+        CorfuTable<CorfuStoreMetadata.TableName,
+                CorfuRecord<CorfuStoreMetadata.TableDescriptors, CorfuStoreMetadata.TableMetadata>>
+                registryTable = runtime.getTableRegistry().getRegistryTable();
+
+        Set<CorfuStoreMetadata.TableName> checkNameSet = registryTable.keySet().stream()
+                .filter(tableName -> {
+                    UUID streamID = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(tableName));
+                    return checkIdSet.contains(streamID);
+                }).collect(Collectors.toSet());
+
+        Set<UUID> discoveredNewStreams = new HashSet<>();
+        for (CorfuStoreMetadata.TableName tableName : checkNameSet) {
+            CorfuRecord<CorfuStoreMetadata.TableDescriptors, CorfuStoreMetadata.TableMetadata> tableRecord = registryTable.get(tableName);
+
+            UUID discoveredStreamID = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(tableName));
+            if (tableRecord.getMetadata().getTableOptions().getIsFederated()) {
+                streamUUIDs.add(discoveredStreamID);
+                discoveredNewStreams.add(discoveredStreamID);
+            } else {
+                confirmedNoisyStreams.add(discoveredStreamID);
+            }
+        }
+
+        if (!discoveredNewStreams.isEmpty()) {
+            config.getStreamsInfo().addStreams(discoveredNewStreams);
+        }
+    }
+
     /**
      * Verify the transaction entry is valid, i.e., if the entry contains any
      * of the streams to be replicated.
@@ -146,6 +193,10 @@ public class StreamsLogEntryReader implements LogEntryReader {
             return false;
         }
 
+        // For all stream ids present in the transaction stream, inspect those observed for the first
+        // time, and query through table registry whether they are intended to be replicated or not
+        // i.e., whether 'is_federated' flag is set or not.
+        checkStreams(txEntryStreamIds);
         // If none of the streams in the transaction entry are specified to be replicated, this is an invalid entry, skip
         if (Collections.disjoint(streamUUIDs, txEntryStreamIds)) {
             log.trace("TX Stream entry[{}] :: contains none of the streams of interest, streams={} [ignored]", entry.getVersion(), txEntryStreamIds);
