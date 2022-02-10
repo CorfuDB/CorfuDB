@@ -199,7 +199,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         snapshotSyncPlugin = getOnSnapshotSyncPlugin();
 
         snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadataManager);
-        logEntryWriter = new LogEntryWriter(config, logReplicationMetadataManager);
+        logEntryWriter = new LogEntryWriter(config, logReplicationMetadataManager, runtime);
         logEntryWriter.reset(logReplicationMetadataManager.getLastAppliedSnapshotTimestamp(),
                 logReplicationMetadataManager.getLastProcessedLogEntryTimestamp());
 
@@ -394,6 +394,9 @@ public class LogReplicationSinkManager implements DataReceiver {
         // Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
         snapshotWriter.reset(topologyId, timestamp);
 
+        // Signal the snapshot writer to collect streams for replication with local writes
+        snapshotWriter.addLocalStreamsToClear();
+
         // Update lastTransferDone with the new snapshot transfer timestamp.
         baseSnapshotTimestamp = entry.getMetadata().getSnapshotTimestamp();
 
@@ -447,7 +450,7 @@ public class LogReplicationSinkManager implements DataReceiver {
     private void processSnapshotMessage(LogReplication.LogReplicationEntryMsg entry) {
         switch (entry.getMetadata().getEntryType()) {
             case SNAPSHOT_MESSAGE:
-                snapshotWriter.apply(entry);
+                snapshotWriter.applyToShadowStreams(entry);
                 break;
             case SNAPSHOT_END:
                 if (snapshotWriter.getPhase() != StreamsSnapshotWriter.Phase.APPLY_PHASE) {

@@ -5,15 +5,20 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ILogReplicationConfigAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
@@ -30,15 +35,12 @@ import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
-import static org.corfudb.runtime.view.ObjectsView.LOG_REPLICATOR_STREAM_INFO;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 
@@ -50,7 +52,7 @@ import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 @Slf4j
 public class LogReplicationConfigManager {
 
-    public static final String LOG_REPLICATION_STREAMS_NAME_TABLE = "LogReplicationStreams";
+    public static final String LOG_REPLICATION_STREAMS_INFO_TABLE = "LogReplicationStreams";
     public static final String LOG_REPLICATION_PLUGIN_VERSION_TABLE = "LogReplicationPluginVersion";
     public static final String VERSION_PLUGIN_KEY = "VERSION";
     private static final String EMPTY_STR = "";
@@ -68,6 +70,8 @@ public class LogReplicationConfigManager {
 
     private final CorfuStore corfuStore;
 
+    private final CorfuRuntime runtime;
+
     private static final CommonTypes.Uuid defaultMetadata =
         CommonTypes.Uuid.newBuilder().setLsb(0).setMsb(0).build();
 
@@ -81,7 +85,7 @@ public class LogReplicationConfigManager {
     @Getter
     private static String currentVersion;
 
-    private Table<TableInfo, Namespace, CommonTypes.Uuid> streamsNameTable;
+    private Table<TableInfo, Namespace, CommonTypes.Uuid> streamsInfoTable;
 
     private Table<VersionString, Version, CommonTypes.Uuid> pluginVersionTable;
 
@@ -91,12 +95,14 @@ public class LogReplicationConfigManager {
     @VisibleForTesting
     public LogReplicationConfigManager(CorfuRuntime runtime) {
         this.corfuStore = new CorfuStore(runtime);
+        this.runtime = runtime;
         this.pluginConfigFilePath = EMPTY_STR;
     }
 
     public LogReplicationConfigManager(CorfuRuntime runtime, String pluginConfigFilePath) {
         this.pluginConfigFilePath = pluginConfigFilePath;
         this.corfuStore = new CorfuStore(runtime);
+        this.runtime = runtime;
 
         initStreamNameFetcherPlugin();
         openTables();
@@ -104,8 +110,8 @@ public class LogReplicationConfigManager {
 
     private void openTables() {
         try {
-            streamsNameTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    LOG_REPLICATION_STREAMS_NAME_TABLE, TableInfo.class,
+            streamsInfoTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                    LOG_REPLICATION_STREAMS_INFO_TABLE, TableInfo.class,
                     Namespace.class, CommonTypes.Uuid.class, TableOptions.builder().build());
             pluginVersionTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
                     LOG_REPLICATION_PLUGIN_VERSION_TABLE, VersionString.class,
@@ -116,13 +122,19 @@ public class LogReplicationConfigManager {
         }
     }
 
-    public Set<String> getStreamsToReplicate() {
+    /**
+     * This method is for ACTIVE to fetch streams to replicate from LOG_REPLICATION_STREAMS_INFO_TABLE.
+     * If it doesn't exist, we will create info table by reading from registry table.
+     *
+     * @return Set of TableInfo for streams to replicate from ACTIVE
+     */
+    public Set<TableInfo> fetchStreamsToReplicate() {
         try {
             currentVersion = logReplicationConfigAdapter.getVersion();
-            Set<String> fetchedStreams = logReplicationConfigAdapter.fetchStreamsToReplicate();
+            Set<TableInfo> fetchedStreams = readStreamsToReplicateFromRegistry(this.runtime.getAddressSpaceView().getLogTail());
 
             return IRetry.build(IntervalRetry.class, () -> {
-                Set<String> streams = new HashSet<>();
+                Set<TableInfo> streamsInfo = new HashSet<>();
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                     VersionResult result = verifyVersionResult(txn);
                     if (result.equals(VersionResult.UNSET) || result.equals(VersionResult.CHANGE)) {
@@ -130,10 +142,10 @@ public class LogReplicationConfigManager {
                         // Case of upgrade or initial boot: clear table entries and sync with plugin info
                         clearTables();
                         updateVersionTable(txn, isUpgraded);
-                        streams = updateStreamsTable(txn, fetchedStreams);
+                        streamsInfo = updateStreamsTable(txn, fetchedStreams);
                     }
                     txn.commit();
-                    return streams.isEmpty() ? readStreamsToReplicateFromTable() : streams;
+                    return streamsInfo.isEmpty() ? readStreamsToReplicateFromTable() : streamsInfo;
                 } catch (TransactionAbortedException e) {
                     log.warn("Exception on getStreamsToReplicate()", e);
                     throw new RetryNeededException();
@@ -143,6 +155,18 @@ public class LogReplicationConfigManager {
             log.error("Unrecoverable exception when updating Config Tables", e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
+    }
+
+    public Set<UUID> fetchNoisyStreams() {
+        CorfuTable<CorfuStoreMetadata.TableName, CorfuRecord<CorfuStoreMetadata.TableDescriptors,
+                CorfuStoreMetadata.TableMetadata>>
+                registryTable = runtime.getTableRegistry().getRegistryTable();
+
+        // Get streams to replicate from registry table and add to tableInfoSet.
+        return registryTable.entryStream()
+                .filter(entry -> !entry.getValue().getMetadata().getTableOptions().getIsFederated())
+                .map(entry -> CorfuRuntime.getStreamID(getFullyQualifiedTableName(entry.getKey())))
+                .filter(streamId -> !MERGE_ONLY_STREAM_ID_LIST.contains(streamId)).collect(Collectors.toSet());
     }
 
     private void initStreamNameFetcherPlugin() {
@@ -178,7 +202,7 @@ public class LogReplicationConfigManager {
 
     private void clearTables() {
         log.info("Clearing streams name table and plugin version table");
-        streamsNameTable.clearAll();
+        streamsInfoTable.clearAll();
         pluginVersionTable.clearAll();
     }
 
@@ -192,41 +216,40 @@ public class LogReplicationConfigManager {
         txn.putRecord(pluginVersionTable, versionString, version, defaultMetadata);
     }
 
-    private Set<String> updateStreamsTable(TxnContext txn, Set<String> streams) {
-        // Add registryTable to the streams
-        String registryTable = getFullyQualifiedTableName(
+    private Set<TableInfo> updateStreamsTable(TxnContext txn, Set<TableInfo> streamsInfo) {
+        // add registryTable to the streams
+        String registryTableName = getFullyQualifiedTableName(
                 CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME);
-        streams.add(registryTable);
+        TableInfo registryTable = TableInfo.newBuilder().setName(registryTableName).build();
+        streamsInfo.add(registryTable);
 
-        // Add protoBufDescriptorTable to the streams
-        String protoTable = getFullyQualifiedTableName(
+        // add protobufDescriptorTable to the streams
+        String protoTableName = getFullyQualifiedTableName(
                 CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME);
-        streams.add(protoTable);
+        TableInfo protoTable = TableInfo.newBuilder().setName(protoTableName).build();
+        streamsInfo.add(protoTable);
 
         // Copy all stream names to the stream names table.  Each name is
         // a fully qualified stream name
-        for (String entry : streams) {
-            LogReplicationStreams.TableInfo tableInfo = TableInfo.newBuilder()
-                    .setName(entry)
-                    .build();
+        for (TableInfo tableInfo : streamsInfo) {
             // As each name is fully qualified, no need to insert the
             // namespace.  Simply insert an empty string there.
-            // Note: Ideally the namespace protoBuf can be removed but it
+            // Note: Ideally the namespace protoBuf can be removed, but it
             // will involve data migration on upgrade as it is a schema change
-            txn.putRecord(streamsNameTable, tableInfo, defaultNamespace, defaultMetadata);
+            txn.putRecord(streamsInfoTable, tableInfo, defaultNamespace, defaultMetadata);
         }
 
-        return streams;
+        return streamsInfo;
     }
 
-    private Set<String> readStreamsToReplicateFromTable() {
-        Set<String> tableNames = new HashSet<>();
+    private Set<TableInfo> readStreamsToReplicateFromTable() {
+        Set<TableInfo> streamsInfo = new HashSet<>();
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            Set<TableInfo> tables = txn.keySet(LOG_REPLICATION_STREAMS_NAME_TABLE);
-            tables.forEach(table -> tableNames.add(table.getName()));
+            Set<TableInfo> tables = txn.keySet(LOG_REPLICATION_STREAMS_INFO_TABLE);
+            streamsInfo.addAll(tables);
             txn.commit();
         }
-        return tableNames;
+        return streamsInfo;
     }
 
     /**
@@ -281,26 +304,72 @@ public class LogReplicationConfigManager {
         }
     }
 
-    /**
-     * Get stream tags to send data change notifications to on the receiver (sink / standby site)
-     *
-     * Stream tags will be read from a static configuration file. This file should contain not only
-     * the stream tag of interest (namespace, tag), i.e., the stream tag we wish to receive notifications on
-     * but also the table names of interest within that tag.
-     *
-     * Note that, we need the mapping as we cannot infer the stream tag from the replicated data on the sink.
-     * Data is replicated at the stream level and not deserialized, hence we cannot infer from the transferred log
-     * entries, the tags associated to them.
-     *
-     * @return map of stream tag UUID to data streams UUIDs.
-     */
-    public Map<UUID, List<UUID>> getStreamingConfigOnSink() {
-        Map<UUID, List<UUID>> streamingConfig = logReplicationConfigAdapter.getStreamingConfigOnSink();
-        for (UUID id : MERGE_ONLY_STREAM_ID_LIST) {
-            streamingConfig.put(id,
-                    Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId()));
+    public void addStreamsToInfoTable(Set<UUID> streamIdSet) {
+        try {
+            Table<TableInfo, Namespace, CommonTypes.Uuid> streamsInfoTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                    LOG_REPLICATION_STREAMS_INFO_TABLE,
+                    TableInfo.class, Namespace.class, CommonTypes.Uuid.class,
+                    TableOptions.builder().build());
+
+            addStreamsToInfoTableWithRetry(streamIdSet, streamsInfoTable);
+        } catch (Exception e) {
+            log.warn("Exception when opening LR stream info table ", e);
         }
-        return streamingConfig;
+    }
+
+    private void addStreamsToInfoTable(Set<UUID> streamIdSet,
+                                       Table<TableInfo, Namespace, CommonTypes.Uuid> streamsInfoTable)
+            throws RetryNeededException {
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            for (UUID id : streamIdSet) {
+                TableInfo tableInfo = TableInfo.newBuilder().setId(id.toString()).build();
+                Namespace namespace = Namespace.newBuilder().setName(EMPTY_STR).build();
+                txn.putRecord(streamsInfoTable, tableInfo, namespace, defaultMetadata);
+            }
+            txn.commit();
+        } catch (TransactionAbortedException tae) {
+            throw new RetryNeededException();
+        }
+    }
+
+    private void addStreamsToInfoTableWithRetry(Set<UUID> streamIdSet,
+                                                Table<TableInfo, Namespace, CommonTypes.Uuid> streamsInfoTable) {
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                addStreamsToInfoTable(streamIdSet, streamsInfoTable);
+                log.debug("Successfully added streams {} to the info table.", streamIdSet);
+                return null;
+            }).run();
+        } catch (InterruptedException ie) {
+            log.error("Unrecoverable exception when attempting to add streams.", ie);
+            throw new UnrecoverableCorfuInterruptedError(ie);
+        }
+    }
+
+    public Set<TableInfo> readStreamsToReplicateFromRegistry(long ts) {
+
+        Set<TableInfo> tableInfoSet = new HashSet<>();
+        CorfuTable<CorfuStoreMetadata.TableName, CorfuRecord<CorfuStoreMetadata.TableDescriptors,
+                CorfuStoreMetadata.TableMetadata>>
+                registryTable = runtime.getTableRegistry().getRegistryTable();
+        Token snapshotToken = Token.of(0L, ts);
+        runtime.getObjectsView().TXBuild()
+                .type(TransactionType.SNAPSHOT)
+                .snapshot(snapshotToken)
+                .build()
+                .begin();
+
+        // Get streams to replicate from registry table and add to tableInfoSet.
+        registryTable.entryStream()
+                .filter(entry -> entry.getValue().getMetadata().getTableOptions().getIsFederated())
+                .map(entry -> TableInfo
+                        .newBuilder()
+                        .setName(getFullyQualifiedTableName(entry.getKey()))
+                        .build())
+                .forEachOrdered(tableInfoSet::add);
+        runtime.getObjectsView().TXEnd();
+
+        return tableInfoSet;
     }
 
     public static Set<UUID> getMergeOnlyStreamIdList() {

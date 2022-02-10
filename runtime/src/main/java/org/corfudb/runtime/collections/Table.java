@@ -40,6 +40,7 @@ import java.util.stream.Stream;
 @Slf4j
 public class Table<K extends Message, V extends Message, M extends Message> {
 
+    @Getter
     private CorfuTable<K, CorfuRecord<V, M>> corfuTable;
 
     /**
@@ -141,7 +142,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      * @return Corfu Record for key.
      */
     @Nullable
-    CorfuRecord<V, M> get(@Nonnull final K key) {
+    public CorfuRecord<V, M> get(@Nonnull final K key) {
         return corfuTable.get(key);
     }
 
@@ -358,6 +359,17 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      */
     public int count() {
         return corfuTable.size();
+    }
+
+
+    /**
+     * Check if current table contains the given key.
+     *
+     * @param key Key
+     * @return True if current Table contains the given key, and false otherwise.
+     */
+    public boolean containsKey(@Nonnull final K key) {
+        return corfuTable.containsKey(key);
     }
 
     /**

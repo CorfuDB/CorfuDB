@@ -10,7 +10,5 @@ import java.util.List;
  */
 public interface SnapshotWriter {
     // The snapshot full sync engine will pass a message to the snapshot writer
-    void apply(LogReplicationEntryMsg message) throws Exception;
-
-    void apply(List<LogReplicationEntryMsg> messages) throws Exception;
+    void applyToShadowStreams(LogReplicationEntryMsg message) throws Exception;
 }

@@ -14,13 +14,13 @@ import java.util.UUID;
  * (2) System's version
  */
 public interface ILogReplicationConfigAdapter {
-
     /**
-     * Returns a set of fully qualified stream names to replicate
+     * Get the version of the product that Log Replicator works for, which should be provided
+     * by an external static file.
      */
-    Set<String> fetchStreamsToReplicate();
-
     String getVersion();
+
+
 
     /**
      * Returns configuration for streaming on sink (standby)

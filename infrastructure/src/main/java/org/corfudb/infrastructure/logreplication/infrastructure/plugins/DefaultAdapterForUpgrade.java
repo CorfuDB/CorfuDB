@@ -33,34 +33,6 @@ public abstract class DefaultAdapterForUpgrade implements ILogReplicationConfigA
     String versionString = "version_latest";
     CorfuStore corfuStore;
 
-
-    // Provides the fully qualified names of streams to replicate
-    @Override
-    @SuppressWarnings("checkstyle:printLine")
-    public Set<String> fetchStreamsToReplicate() {
-        if (corfuStore != null) {
-            try {
-                corfuStore.openTable(NAMESPACE, STREAMS_TEST_TABLE,
-                        LogReplicationStreams.TableInfo.class,
-                        LogReplicationStreams.Namespace.class, CommonTypes.Uuid.class,
-                        TableOptions.builder().build());
-            } catch (Exception e) {
-                // Just for wrap this up
-            }
-
-            try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-                Set<LogReplicationStreams.TableInfo> tables = txn.keySet(STREAMS_TEST_TABLE);
-                tables.forEach(table -> streamsToReplicate.add(table.getName()));
-                txn.commit();
-            }
-        } else {
-            for (int i = 1; i <= MAP_COUNT; i++) {
-                streamsToReplicate.add(NAMESPACE + SEPARATOR + TABLE_PREFIX + i);
-            }
-        }
-        return streamsToReplicate;
-    }
-
     @Override
     public String getVersion() {
         if (corfuStore != null) {
