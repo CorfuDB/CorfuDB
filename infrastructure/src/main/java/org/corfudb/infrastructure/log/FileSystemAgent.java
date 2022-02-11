@@ -109,6 +109,10 @@ public final class FileSystemAgent {
         }
     }
 
+    public static void main(String[] args) {
+
+    }
+
     /**
      * Get corfu log dir partition size
      *
@@ -117,8 +121,8 @@ public final class FileSystemAgent {
     private long getFileSystemCapacity() {
         Path logDir = config.logDir;
         Path corfuDir = logDir.getParent();
-        log.info("Log dir: {}", logDir);
-        log.info("Corfu dir: {}", corfuDir);
+        log.error("Log dir: {}", logDir);
+        log.error("Corfu dir: {}", corfuDir);
 
         execute("pwd");
         execute("df -h");
@@ -140,7 +144,7 @@ public final class FileSystemAgent {
             String output = new BufferedReader(new InputStreamReader(process.getInputStream()))
                     .lines()
                     .collect(Collectors.joining("\n"));
-            log.info("executed: {}\nresult: {}", command, output);
+            log.error("executed: {}\nresult: {}", command, output);
         } catch (IOException e) {
             log.error("Error executing shell command", e);
         }
