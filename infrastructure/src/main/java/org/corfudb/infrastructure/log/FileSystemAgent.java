@@ -121,8 +121,8 @@ public final class FileSystemAgent {
     private long getFileSystemCapacity() {
         Path logDir = config.logDir;
         Path corfuDir = logDir.getParent();
-        log.error("Log dir: {}", logDir);
-        log.error("Corfu dir: {}", corfuDir);
+        System.out.println("Log dir: " + logDir);
+        System.out.println("Corfu dir: " + corfuDir);
 
         execute("pwd");
         execute("df -h");
@@ -144,9 +144,10 @@ public final class FileSystemAgent {
             String output = new BufferedReader(new InputStreamReader(process.getInputStream()))
                     .lines()
                     .collect(Collectors.joining("\n"));
-            log.error("executed: {}\nresult: {}", command, output);
+            System.out.println("executed: " + command + "\nresult: " + output);
         } catch (IOException e) {
-            log.error("Error executing shell command", e);
+            System.out.println("Error executing shell command");
+            e.printStackTrace();
         }
     }
 

@@ -54,23 +54,6 @@
             <property name="ignoreComments" value="true"/>
         </module>
 
-        <module name="RegexpSinglelineJava">
-            <!-- Check for System.out.println().-->
-            <property name="id" value="printLine"/>
-            <property name="severity" value="error"/>
-            <property name="format" value="System\.out\.println\("/>
-            <property name="message" value="Using System.out.println() is forbidden. Use a logger or output utility."/>
-            <property name="ignoreComments" value="true"/>
-        </module>
-
-        <module name="RegexpSinglelineJava">
-            <!-- Check for System.out.print().-->
-            <property name="id" value="print"/>
-            <property name="severity" value="error"/>
-            <property name="format" value="System\.out\.print\("/>
-            <property name="message" value="Using System.out.print() is forbidden. Use a logger or output utility."/>
-            <property name="ignoreComments" value="true"/>
-        </module>
 
         <module name="OuterTypeFilename"/>
         <module name="IllegalTokenText">
