@@ -156,7 +156,12 @@ public class CorfuServerNode implements AutoCloseable {
 
         CompletableFuture.allOf(shutdownFutures).join();
         shutdownService.shutdown();
-        MeterRegistryProvider.close();
+        // If it's the server who initialized the registry - shut it down
+        MeterRegistryProvider.getMetricType().ifPresent(type -> {
+            if (type == MeterRegistryProvider.MetricType.SERVER) {
+                MeterRegistryProvider.close();
+            }
+        });
         log.info("close: Server shutdown and resources released");
     }
 
