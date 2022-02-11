@@ -16,7 +16,7 @@
 *   **logreplication.snapshot.duration.seconds**: Duration of completing a snapshot sync in seconds (throughput, mean and max).
 *   **logreplication.acks**: Number of acks, distinguished by replication type (snapshot, logentry).
 *   **logreplication.messages**: Number of messages sent, distinguished by replication type (snapshot, logentry).
-*   **logreplication.opaque.count_per_message**: Number of opaque entries per message (rate, mean, max).
+*   **logreplication.opaque.count\_per\_message**: Number of opaque entries per message (rate, mean, max).
 *   **logreplication.opaque.count\_total**: Number of overall opaque entries (rate, mean, max).
 *   **logreplication.opaque.count\_valid**: Number of valid opaque entries (rate, mean, max).
 
@@ -36,11 +36,13 @@
 *   **vlo.no\_rollback\_exception.count**: Number of times we were unable to roll back the particular stream by applying undo records in the reverse order.
 *   <del>**vlo.sync.rate**: Rate of updates applied/unapplied (mean, max and throughput) to a particular stream, distinguished by a type of update (apply and undo).</del>
 *   <del>**vlo.read.rate**: Rate of access to the internal state of the corfu object (mean, max and throughput) backed by a particular stream, distinguished by a type of access (optimistic and pessimistic).</del>
-*   **address_space.read_cache.avg_entry_size**: The estimated average size of an entry in the address space cache, in bytes.
+*   **vlo.sync.read\_entries**: A distribution summary (mean, max, 0.50p, 0.95p, 0.99p) of the number of updates of a stream to be sync'd.
+*   **vlo.sync.read\_size**: A distribution summary (mean, max, 0.50p, 0.95p, 0.99p) of the total size of the updates of a stream to be sync'd.
+*   **address\_space.read\_cache.avg\_entry\_size**: The estimated average size of an entry in the address space cache, in bytes.
 *   <del>**address\_space.read\_cache.miss\_ratio**: Ratio of cache read requests which were misses to the Corfu client address space.</del>
 *   <del>**address\_space.read\_cache.load\_count**: The total number of times that Corfu client address space cache reads resulted in the load of new values.</del>
 *   <del>**address\_space.read\_cache.load\_exception\_count**: The number of times Corfu client address space cache lookups threw an exception while loading a new value.</del>
-*   **address_space.read_cache.size**: The number of entries in the address space cache.
+*   **address\_space.read\_cache.size**: The number of entries in the address space cache.
 *   **address\_space.read\_cache.hit\_ratio**: The hit ratio of Corfu client address space cache.
 *   <del>**address\_space.read.latency**: Time in microseconds (mean, max, sum, 0.50p, 0.99p) it takes a client to read an object from an address or a range of addresses.</del>
 *   <del>**address\_space.write.latency**: Time in microseconds (mean, max, sum, 0.50p, 0.99p) it takes a client to write the given log data using a token.</del>
@@ -53,6 +55,8 @@
 *   **stream.notify.duration**: Time in microseconds(mean, max, sum, 0.50p, 0.99p) it takes to send notification to client with the pre-registered callback
 *   <del>**vlo.sync.timer**: Time in microseconds(mean, max, sum, 0.50p, 0.99p) it takes to sync a stream.</del>
 *   **stream\_sub.queueDuration.timer**: Time in microseconds(mean, max, sum, 0.50p, 0.99p) it takes to wait in the queue.
+*   **corfu\_table.read.timer**: Time in microseconds(mean, max, sum, 0.50p, 0.99p) it takes to read from the corfu table's map.
+*   **corfu\_table.write.timer**: Time in microseconds(mean, max, sum, 0.50p, 0.99p) it takes to write to the corfu table's map.
 
 ### Current metrics collected for Corfu Server:
 
@@ -99,3 +103,9 @@
 *   **writeTxn**: Time in microseconds (mean, max, sum, 0.50p, 0.99p) it takes to do this write-only transaction.
 *   **readTxn**: Time in microseconds (mean, max, sum, 0.50p, 0.99p) it takes to do this read-only transaction.
 *   **readWriteTxn**: Time in microseconds (mean, max, sum, 0.50p, 0.99p) it takes to do this read/write transaction.
+
+### Current metrics collected for Corfu Compactor
+
+*   **checkpoint.timer**: Time in microseconds (mean, max, sum, 0.5p, 0.95p, 0.99p) it takes for a single stream to be checkpointed.
+*   **checkpoint.write\_entries**: A distribution summary (mean, max, 0.50p, 0.95p, 0.99p) of the number of entries of a stream that are checkpointed.
+*   **checkpoint.write\_size**: A distribution summary (mean, max, 0.50p, 0.95p, 0.99p) of the total size of the entries of a stream that are checkpointed.
