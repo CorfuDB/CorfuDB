@@ -10,20 +10,25 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.log.FileSystemAgent.PartitionAgent.PartitionAttribute;
 import org.corfudb.runtime.exceptions.LogUnitException;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.file.FileStore;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributeView;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 
@@ -110,11 +115,34 @@ public final class FileSystemAgent {
      * @return total capacity of the file system that owns the log files.
      */
     private long getFileSystemCapacity() {
-        Path corfuDir = config.logDir.getParent();
+        Path logDir = config.logDir;
+        Path corfuDir = logDir.getParent();
+        log.info("Log dir: {}", logDir);
+        log.info("Corfu dir: {}", corfuDir);
+
+        execute("pwd");
+        execute("df -h");
+
         try {
+            if (!logDir.toFile().exists()) {
+                Files.createDirectories(logDir);
+            }
             return Files.getFileStore(corfuDir).getTotalSpace();
         } catch (IOException e) {
             throw new IllegalStateException("Failed reading corfu log directory, path: " + corfuDir, e);
+        }
+    }
+
+    private void execute(String command) {
+        try {
+            Runtime runtime = Runtime.getRuntime();
+            Process process = runtime.exec(command);
+            String output = new BufferedReader(new InputStreamReader(process.getInputStream()))
+                    .lines()
+                    .collect(Collectors.joining("\n"));
+            log.info("executed: {}\nresult: {}", command, output);
+        } catch (IOException e) {
+            log.error("Error executing shell command", e);
         }
     }
 
@@ -211,8 +239,10 @@ public final class FileSystemAgent {
                 );
                 log.info("setPartitionAttribute: fetched PartitionAttribute successfully. " +
                         "{}", partitionAttribute);
-            } catch (Exception ex) {
-                log.error("setPartitionAttribute: Error while fetching PartitionAttributes.", ex);
+            } catch (IOException e) {
+                log.error("setPartitionAttribute: Error while fetching PartitionAttributes. " +
+                        "Reinitializing the scheduler.", e);
+                initializeScheduler();
             }
         }
 
@@ -231,3 +261,4 @@ public final class FileSystemAgent {
         }
     }
 }
+
