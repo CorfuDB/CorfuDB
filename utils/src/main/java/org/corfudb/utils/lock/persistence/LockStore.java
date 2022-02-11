@@ -4,10 +4,12 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Message;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.*;
 import org.corfudb.utils.CommonTypes.Uuid;
+import org.corfudb.utils.lock.LockDataTypes;
 import org.corfudb.utils.lock.LockDataTypes.LockData;
 import org.corfudb.utils.lock.LockDataTypes.LockId;
 
@@ -45,6 +47,7 @@ public class LockStore {
 
     private final Uuid clientId;
     // Corfu store to access data from the Lock table.
+    @Getter
     private final CorfuStore corfuStore;
 
     /**
@@ -67,7 +70,7 @@ public class LockStore {
                 LockId.class,
                 LockData.class,
                 null,
-                TableOptions.builder().build());
+                TableOptions.fromProtoSchema(LockDataTypes.LockData.class));
 
         this.clientId = Uuid.newBuilder()
                 .setMsb(clientUuid.getMostSignificantBits())
@@ -89,38 +92,47 @@ public class LockStore {
      * @throws LockStoreException
      */
     public boolean acquire(LockId lockId) throws LockStoreException {
-        Optional<LockData> lockInDatastore = get(lockId);
-
-        if (!lockInDatastore.isPresent()) {
-            LockData newLockData = LockData.newBuilder()
+        try (TxnContext txnContext = corfuStore.txn(NAMESPACE)) {
+            Optional<LockData> lockInDatastore = get(lockId, txnContext);
+            if (!lockInDatastore.isPresent()) {
+                LockData newLockData = LockData.newBuilder()
                     .setLockId(lockId)
                     .setLeaseOwnerId(clientId)
                     .setLeaseRenewalNumber(0)
                     .setLeaseAcquisitionNumber(0)
                     .build();
-            // if no lock present acquire(create) the lock in datastore
-            create(lockId, newLockData);
-            log.debug("Lock: {} Client:{} acquired lock. No pre-existing lease in datastore.", lockId, clientId);
-            return true;
-        } else {
-            if (isRevocable(lockId)) {
-                LockData newLockData = LockData.newBuilder()
+                // if no lock present acquire(create) the lock in datastore
+                log.info("LockStore: create lock record for : {}",
+                    lockId.getLockName());
+                putLockRecord(lockId, newLockData, txnContext);
+                txnContext.commit();
+                log.debug("Lock: {} Client:{} acquired lock. No pre-existing lease in datastore.", lockId, clientId);
+                return true;
+            } else {
+                if (isRevocable(lockId, lockInDatastore)) {
+                    LockData newLockData = LockData.newBuilder()
                         .setLockId(lockId)
                         .setLeaseOwnerId(clientId)
                         .setLeaseRenewalNumber(0)
                         .setLeaseAcquisitionNumber(lockInDatastore.get().getLeaseAcquisitionNumber() + 1)
                         .build();
-                // acquire(update) the lock in data store if it is stale
-                update(lockId, newLockData);
-                log.debug("Lock: {} Client:{} acquired lock {}. Expired lease in datastore: {} ", lockId, clientId, newLockData, lockInDatastore.get());
-                return true;
-            } else {
-                // cannot acquire if some other client holds the lock (non stale)
-                log.debug("Lock: {} Client:{} could not acquire lock. Lease in datastore: {}", lockId, clientId, lockInDatastore.get());
-                return false;
+                    // acquire(update) the lock in data store if it is stale
+                    putLockRecord(lockId, newLockData, txnContext);
+                    txnContext.commit();
+                    log.debug("Lock: {} Client:{} acquired lock {}. Expired lease in datastore: {} ", lockId, clientId, newLockData, lockInDatastore.get());
+                    return true;
+                } else {
+                    // cannot acquire if some other client holds the lock (non stale)
+                    log.debug("Lock: {} Client:{} could not acquire lock. Lease in datastore: {}", lockId, clientId, lockInDatastore.get());
+                    return false;
+                }
             }
+        } catch (Exception e) {
+            log.error("Exception during acquire of lock" + lockId, e);
+            throw new LockStoreException("Exception during lock acquire", e);
         }
     }
+
 
     /**
      * A client can renew it's lease if it is still the owner of
@@ -131,26 +143,34 @@ public class LockStore {
      * @throws LockStoreException
      */
     public boolean renew(LockId lockId) throws LockStoreException {
-        Optional<LockData> lockInDatastore = get(lockId);
+        try (TxnContext txnContext = corfuStore.txn(NAMESPACE)) {
+            Optional<LockData> lockInDatastore = get(lockId, txnContext);
 
-        if (!lockInDatastore.isPresent()) {
-            // client had never acquire the lock. This should not happen!
-            log.debug("Lock: {} Client:{} could not renew lease. No lock in database.", lockId, clientId);
-            return false;
-        } else if (!lockInDatastore.get().getLeaseOwnerId().equals(clientId)) {
-            // the lease was revoked by another client
-            log.debug("Lock: {} Client:{} could not renew lease.Lease in datastore: {}", lockId, clientId, lockInDatastore.get());
-            return false;
-        } else {
-            // renew the lease
-            LockData newLockData = LockData.newBuilder()
+            if (!lockInDatastore.isPresent()) {
+                // client had never acquire the lock. This should not happen!
+                log.debug("Lock: {} Client:{} could not renew lease. No lock in database.", lockId, clientId);
+                return false;
+            } else if (!lockInDatastore.get().getLeaseOwnerId().equals(clientId)) {
+                // the lease was revoked by another client
+                log.debug("Lock: {} Client:{} could not renew lease.Lease in datastore: {}", lockId, clientId, lockInDatastore.get());
+                return false;
+            } else {
+                // renew the lease
+                LockData newLockData = LockData.newBuilder()
                     .setLockId(lockId)
                     .setLeaseOwnerId(lockInDatastore.get().getLeaseOwnerId())
                     .setLeaseRenewalNumber(lockInDatastore.get().getLeaseRenewalNumber() + 1)
+                    .setLeaseAcquisitionNumber(lockInDatastore.get().getLeaseAcquisitionNumber())
                     .build();
-            update(lockId, newLockData);
-            log.debug("Lock: {} Client:{} renewed lease, new lock is {}.", lockId, clientId, newLockData);
-            return true;
+                putLockRecord(lockId, newLockData, txnContext);
+                txnContext.commit();
+                log.debug("Lock: {} Client:{} renewed lease, new lock is {}.",
+                    lockId, clientId, newLockData);
+                return true;
+            }
+        } catch (Exception e) {
+            log.error("Exception during renewal of lock" + lockId, e);
+            throw new LockStoreException("Exception during lock renewal", e);
         }
     }
 
@@ -164,16 +184,18 @@ public class LockStore {
      */
     public Collection<LockId> filterLocksWithExpiredLeases(Collection<LockId> lockIds) throws LockStoreException {
         Collection<LockId> revocableLeases = new ArrayList<>();
-        try {
-            // find the leases that can be revoked
-            for (LockId lockId: lockIds) {
-                if (isRevocable(lockId)) {
+
+        for (LockId lockId : lockIds) {
+            try (TxnContext txnContext = corfuStore.txn(NAMESPACE)) {
+                Optional<LockData> lockInDataStore = get(lockId, txnContext);
+                if (isRevocable(lockId, lockInDataStore)) {
                     revocableLeases.add(lockId);
                 }
+            } catch (Exception e) {
+                log.error("Client: {} Exception.", clientId, e);
+                throw new LockStoreException(
+                    "Exception while getting expired leases for client " + clientId, e);
             }
-        } catch (Exception e) {
-            log.error("Client: {} Exception.", clientId, e);
-            throw new LockStoreException("Exception while getting expired leases for client " + clientId, e);
         }
         return revocableLeases;
     }
@@ -181,38 +203,15 @@ public class LockStore {
     /***** HELPER METHODS ******/
 
     /**
-     * Creates a lock record.
+     * Creates or Updates a lock record.
      *
      * @param lockId
      * @param lockMetaData
      * @throws LockStoreException
      */
-    private void create(LockId lockId, LockData lockMetaData) throws LockStoreException {
-        try (TxnContext txnContext = corfuStore.txn(NAMESPACE)) {
-            log.info("LockStore: create lock record for : {}", lockId.getLockName());
-            txnContext.putRecord(table, lockId, lockMetaData, null);
-            txnContext.commit();
-        } catch (Exception e) {
-            log.error("Lock: {} Exception during create.", lockId, e);
-            throw new LockStoreException("Exception while creating lock " + lockId, e);
-        }
-    }
-
-    /**
-     * Updates a lock record.
-     *
-     * @param lockId
-     * @param lockMetaData
-     * @throws LockStoreException
-     */
-    private void update(LockId lockId, LockData lockMetaData) throws LockStoreException {
-        try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-            txn.putRecord(table, lockId, lockMetaData, null);
-            txn.commit();
-        } catch (Exception e) {
-            log.error("Lock: {} Exception during update.", lockId, e);
-            throw new LockStoreException("Exception while updating lock " + lockId, e);
-        }
+    private void putLockRecord(LockId lockId, LockData lockMetaData,
+        TxnContext txnContext) {
+        txnContext.putRecord(table, lockId, lockMetaData, null);
     }
 
     /**
@@ -223,18 +222,12 @@ public class LockStore {
      * @throws LockStoreException
      */
     @VisibleForTesting
-    public Optional<LockData> get(LockId lockId) throws LockStoreException {
-        try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-            CorfuStoreEntry record = txn.getRecord(TABLE_NAME, lockId);
-            txn.commit();
-            if (record.getPayload() != null) {
-                return Optional.of((LockData) record.getPayload());
-            } else {
-                return Optional.empty();
-            }
-        } catch (Exception e) {
-            log.error("Lock: {} Exception during get.", lockId, e);
-            throw new LockStoreException("Exception while getting data for lock " + lockId, e);
+    public Optional<LockData> get(LockId lockId, TxnContext txn) {
+        CorfuStoreEntry record = txn.getRecord(TABLE_NAME, lockId);
+        if (record.getPayload() != null) {
+            return Optional.of((LockData) record.getPayload());
+        } else {
+            return Optional.empty();
         }
     }
 
@@ -245,30 +238,26 @@ public class LockStore {
      * @return
      * @throws LockStoreException
      */
-    private boolean isRevocable(LockId lockId) throws LockStoreException {
-        Optional<LockData> lockInDatastore = get(lockId);
-        if (lockInDatastore.isPresent()) {
-            ObservedLock observedLock = observedLocks.get(lockId);
-            if ((observedLock == null) || (!observedLock.lockData.equals(lockInDatastore.get()))) {
-                // If the lock has not been observed before or the lock in data store
-                // is not the same as the previously observed lock for that key, update the observation
-                // lease is not expired yet.
-                log.info("LockStore: new observed lock");
-                observedLocks.put(lockId, new ObservedLock(lockInDatastore.get(), Instant.now()));
-                return false;
-            } else {
-                // check if the lease has expired
-                boolean leaseExpired = observedLock.timestamp.isBefore(Instant.now().minusSeconds(leaseDuration));
-                log.info("LockStore: check if lease is expired : {}", leaseExpired);
-                if (leaseExpired) {
-                    log.debug("LockStore: lock {} lease is expired, leaseDuration={}, timestamp={}, and now={}",
-                            lockId, leaseDuration, observedLock.timestamp, Instant.now());
-                }
-                return leaseExpired;
-            }
+    private boolean isRevocable(LockId lockId,
+                                Optional<LockData> lockDataOptional) {
+        ObservedLock observedLock = observedLocks.get(lockId);
+        if ((observedLock == null) || (!observedLock.lockData.equals(lockDataOptional.get()))) {
+            // If the lock has not been observed before or the lock in data store
+            // is not the same as the previously observed lock for that key, update the observation
+            // lease is not expired yet.
+            log.info("LockStore: new observed lock");
+            observedLocks.put(lockId, new ObservedLock(lockDataOptional.get(),
+                Instant.now()));
+            return false;
         } else {
-            log.info("LockStore: lockId {} not present in store", lockId.getLockName());
-            return true;
+            // check if the lease has expired
+            boolean leaseExpired = observedLock.timestamp.isBefore(Instant.now().minusSeconds(leaseDuration));
+            log.info("LockStore: check if lease is expired : {}", leaseExpired);
+            if (leaseExpired) {
+                log.debug("LockStore: lock {} lease is expired, leaseDuration={}, timestamp={}, and now={}",
+                    lockId, leaseDuration, observedLock.timestamp, Instant.now());
+            }
+            return leaseExpired;
         }
     }
 

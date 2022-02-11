@@ -41,7 +41,7 @@
             <artifactId>protobuf-java</artifactId>
             <version>3.6.1</version>
         </dependency>
- 
+
     </dependencies>
 
     <build>
@@ -60,9 +60,13 @@
                             <protocVersion>3.6.1</protocVersion>
                             <includeStdTypes>true</includeStdTypes>
                             <addProtoSources>inputs</addProtoSources>
-                                <includeMavenTypes>direct</includeMavenTypes>
+                            <includeMavenTypes>direct</includeMavenTypes>
+                            <includeDirectories>
+                                <includeDirectory>../runtime/proto</includeDirectory>
+                            </includeDirectories>
                             <inputDirectories>
                                 <inputDirectory>proto</inputDirectory>
+                                <include>../runtime/proto</include>
                             </inputDirectories>
                             <outputDirectory>
                                 target/generated-sources

@@ -3,6 +3,7 @@ syntax = "proto3";
 package org.corfudb.utils.lock;
 option java_package = "org.corfudb.utils.lock";
 import "common_types.proto";
+import "corfu_options.proto";
 
 // lock identifier
 message LockId {
@@ -11,6 +12,7 @@ message LockId {
 }
 // metadata associated with the lock
 message LockData {
+    option (org.corfudb.runtime.table_schema).stream_tag = "lock_data";
     LockId lock_id = 1;
     // current lease owner
     Uuid lease_owner_id = 2;

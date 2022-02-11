@@ -559,7 +559,7 @@ public class LogReplicationMetadataManager {
                 txn.putRecord(replicationStatusTable, key, current, null);
                 txn.commit();
             }
-            
+
             log.debug("syncStatusPoller :: Log Entry status set to ONGOING, clusterId: {}, remainingEntries: {}, " +
                             "snapshotSyncInfo: {}", clusterId, remainingEntries, snapshotStatus);
         } else if (type == SyncType.SNAPSHOT) {
