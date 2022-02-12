@@ -3,12 +3,14 @@ package org.corfudb.infrastructure.log;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.log.FileSystemAgent.PartitionAgent.PartitionAttribute;
 import org.corfudb.runtime.exceptions.LogUnitException;
+import org.corfudb.util.JsonUtils;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -121,11 +123,14 @@ public final class FileSystemAgent {
     private long getFileSystemCapacity() {
         Path logDir = config.logDir;
         Path corfuDir = logDir.getParent();
-        System.out.println("Log dir: " + logDir);
-        System.out.println("Corfu dir: " + corfuDir);
+        String pwdResult = execute("pwd");
+        String dfResult = execute("df -h");
 
-        execute("pwd");
-        execute("df -h");
+        StatsStats stats = new StatsStats();
+        stats.logDir = logDir.toString();
+        stats.corfuDir = corfuDir.toString();
+        stats.pwdResult = pwdResult;
+        stats.dfResult = dfResult;
 
         try {
             if (!logDir.toFile().exists()) {
@@ -133,21 +138,30 @@ public final class FileSystemAgent {
             }
             return Files.getFileStore(corfuDir).getTotalSpace();
         } catch (IOException e) {
-            throw new IllegalStateException("Failed reading corfu log directory, path: " + corfuDir, e);
+            String jsonStats = JsonUtils.toJson(stats);
+            throw new IllegalStateException("Failed reading corfu log directory, stats: " + jsonStats, e);
         }
     }
 
-    private void execute(String command) {
+    @Getter
+    @Setter
+    private static class StatsStats {
+        String logDir;
+        String corfuDir;
+        String pwdResult;
+        String dfResult;
+    }
+
+    private String execute(String command) {
         try {
             Runtime runtime = Runtime.getRuntime();
             Process process = runtime.exec(command);
             String output = new BufferedReader(new InputStreamReader(process.getInputStream()))
                     .lines()
                     .collect(Collectors.joining("\n"));
-            System.out.println("executed: " + command + "\nresult: " + output);
+            return output;
         } catch (IOException e) {
-            System.out.println("Error executing shell command");
-            e.printStackTrace();
+            return "Error: " + e;
         }
     }
 
