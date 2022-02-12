@@ -22,10 +22,15 @@ import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.IntervalRetry;
+import org.corfudb.util.retry.RetryNeededException;
 
 import java.time.Instant;
 import java.util.Collections;
@@ -225,18 +230,30 @@ public class LogReplicationMetadataManager {
             return;
         }
 
-        try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-            for (LogReplicationMetadataType type : LogReplicationMetadataType.values()) {
-                long val = Address.NON_ADDRESS;
-                if (type == LogReplicationMetadataType.TOPOLOGY_CONFIG_ID) {
-                    val = topologyConfigId;
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
+                    for (LogReplicationMetadataType type : LogReplicationMetadataType.values()) {
+                        long val = Address.NON_ADDRESS;
+                        if (type == LogReplicationMetadataType.TOPOLOGY_CONFIG_ID) {
+                            val = topologyConfigId;
+                        }
+                        appendUpdate(txn, type, val);
+                    }
+                    txn.commit();
+                } catch (TransactionAbortedException e) {
+                    log.error("Exception when updating the topology config id",
+                        e);
+                    throw new RetryNeededException();
                 }
-                appendUpdate(txn, type, val);
-            }
-            txn.commit();
+                log.info("Update topologyConfigId, new metadata {}", this);
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when updating the topology " +
+                "config id", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
         }
-
-        log.info("Update topologyConfigId, new metadata {}", this);
     }
 
     public void updateVersion(String version) {
