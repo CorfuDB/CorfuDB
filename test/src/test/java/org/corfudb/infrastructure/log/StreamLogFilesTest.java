@@ -748,10 +748,11 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
 
         final double limit = 100.0;
-        FileSystemAgent.init(new FileSystemConfig(parentDir.toPath(), limit));
+        final boolean memoryMode = false;
+        FileSystemAgent.init(new FileSystemConfig(parentDir.toPath(), limit, memoryMode));
         long parentSize = FileSystemAgent.getResourceQuota().getUsed().get();
 
-        FileSystemAgent.init(new FileSystemConfig(childDir.toPath(), limit));
+        FileSystemAgent.init(new FileSystemConfig(childDir.toPath(), limit, memoryMode));
         long childDirSize = FileSystemAgent.getResourceQuota().getUsed().get();
 
         assertThat(parentSize).isEqualTo(parentDirFilePayloadSize + childDirFilePayloadSize);
