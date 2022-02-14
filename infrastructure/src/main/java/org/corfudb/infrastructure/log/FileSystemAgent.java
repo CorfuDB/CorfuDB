@@ -5,6 +5,8 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.LogUnitServer;
+import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.log.FileSystemAgent.PartitionAgent.PartitionAttribute;
@@ -43,13 +45,23 @@ public final class FileSystemAgent {
     private FileSystemAgent(FileSystemConfig config) {
         this.config = config;
 
-        long initialLogSize = estimateSize();
-        long logSizeLimit = getLogSizeLimit();
+        long initialLogSize;
+        long logSizeLimit;
+        if (config.memoryMode) {
+            initialLogSize = 0;
+            logSizeLimit = Long.MAX_VALUE;
+
+            partitionAttribute = new PartitionAttribute(false, Long.MAX_VALUE, Long.MAX_VALUE);
+        } else {
+            initialLogSize = estimateSize();
+            logSizeLimit = getLogSizeLimit();
+
+            partitionAttribute = new PartitionAgent(config).getPartitionAttribute();
+        }
 
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
-        partitionAttribute = new PartitionAgent(config).getPartitionAttribute();
-
         logSizeQuota.consume(initialLogSize);
+
         log.info("FileSystemAgent: {} size is {} bytes, limit {}", config.logDir, initialLogSize, logSizeLimit);
     }
 
@@ -121,6 +133,7 @@ public final class FileSystemAgent {
     public static class FileSystemConfig {
         private final Path logDir;
         private final double limitPercentage;
+        private final boolean memoryMode;
 
         public FileSystemConfig(ServerContext serverContext) {
             String limitParam = serverContext.getServerConfig(String.class, "--log-size-quota-percentage");
@@ -130,11 +143,15 @@ public final class FileSystemAgent {
 
             String logPath = serverContext.getServerConfig(String.class, "--log-path");
             logDir = Paths.get(logPath, "log");
+
+            LogUnitServerConfig luConfig = LogUnitServerConfig.parse(serverContext.getServerConfig());
+            memoryMode = luConfig.isMemoryMode();
         }
 
-        public FileSystemConfig(Path logDir, double limitPercentage) {
+        public FileSystemConfig(Path logDir, double limitPercentage, boolean memoryMode) {
             this.logDir = logDir;
             this.limitPercentage = limitPercentage;
+            this.memoryMode = memoryMode;
             checkLimits();
         }
 
