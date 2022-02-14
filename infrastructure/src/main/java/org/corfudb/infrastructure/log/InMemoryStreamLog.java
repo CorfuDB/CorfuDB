@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.log;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.log.FileSystemAgent.FileSystemConfig;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
@@ -10,8 +9,6 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
-import java.io.File;
-import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -45,10 +42,6 @@ public class InMemoryStreamLog implements StreamLog {
         startingAddress = 0;
         logMetadata = new LogMetadata();
         committedTail = new AtomicLong(Address.NON_ADDRESS);
-
-        Path dummyLogDir = new File(".").toPath().toAbsolutePath();
-        FileSystemConfig config = new FileSystemConfig(dummyLogDir, 100);
-        FileSystemAgent.init(config);
     }
 
     @Override
