@@ -5,11 +5,11 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.log.FileSystemAgent.PartitionAgent.PartitionAttribute;
+import org.corfudb.infrastructure.log.StreamLog.PersistenceMode;
 import org.corfudb.runtime.exceptions.LogUnitException;
 
 import java.io.File;
@@ -47,7 +47,7 @@ public final class FileSystemAgent {
 
         long initialLogSize;
         long logSizeLimit;
-        if (config.memoryMode) {
+        if (config.mode == PersistenceMode.MEMORY) {
             initialLogSize = 0;
             logSizeLimit = Long.MAX_VALUE;
 
@@ -133,7 +133,7 @@ public final class FileSystemAgent {
     public static class FileSystemConfig {
         private final Path logDir;
         private final double limitPercentage;
-        private final boolean memoryMode;
+        private final PersistenceMode mode;
 
         public FileSystemConfig(ServerContext serverContext) {
             String limitParam = serverContext.getServerConfig(String.class, "--log-size-quota-percentage");
@@ -145,13 +145,13 @@ public final class FileSystemAgent {
             logDir = Paths.get(logPath, "log");
 
             LogUnitServerConfig luConfig = LogUnitServerConfig.parse(serverContext.getServerConfig());
-            memoryMode = luConfig.isMemoryMode();
+            mode = PersistenceMode.fromBool(luConfig.isMemoryMode());
         }
 
-        public FileSystemConfig(Path logDir, double limitPercentage, boolean memoryMode) {
+        public FileSystemConfig(Path logDir, double limitPercentage, PersistenceMode mode) {
             this.logDir = logDir;
             this.limitPercentage = limitPercentage;
-            this.memoryMode = memoryMode;
+            this.mode = mode;
             checkLimits();
         }
 

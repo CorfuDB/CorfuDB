@@ -26,6 +26,7 @@ import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.log.FileSystemAgent.FileSystemConfig;
+import org.corfudb.infrastructure.log.StreamLog.PersistenceMode;
 import org.corfudb.infrastructure.log.StreamLogFiles.Checksum;
 import org.corfudb.infrastructure.log.LogFormat.Metadata;
 import org.corfudb.infrastructure.log.LogFormat.LogHeader;
@@ -748,11 +749,11 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
 
         final double limit = 100.0;
-        final boolean memoryMode = false;
-        FileSystemAgent.init(new FileSystemConfig(parentDir.toPath(), limit, memoryMode));
+        final PersistenceMode mode = PersistenceMode.DISK;
+        FileSystemAgent.init(new FileSystemConfig(parentDir.toPath(), limit, mode));
         long parentSize = FileSystemAgent.getResourceQuota().getUsed().get();
 
-        FileSystemAgent.init(new FileSystemConfig(childDir.toPath(), limit, memoryMode));
+        FileSystemAgent.init(new FileSystemConfig(childDir.toPath(), limit, mode));
         long childDirSize = FileSystemAgent.getResourceQuota().getUsed().get();
 
         assertThat(parentSize).isEqualTo(parentDirFilePayloadSize + childDirFilePayloadSize);

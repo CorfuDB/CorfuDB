@@ -1,19 +1,6 @@
 package org.corfudb.integration;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.fail;
-
-
 import com.google.common.reflect.TypeToken;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
@@ -33,6 +20,14 @@ import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Utils;
 import org.junit.Test;
 
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
 
 /**
  * This class provides a set of tests to:
@@ -46,10 +41,15 @@ import org.junit.Test;
  */
 @Slf4j
 public class StreamAddressDiscoveryIT extends AbstractIT {
+    private final TypeToken<CorfuTable<Integer, String>> typeToken = new TypeToken<CorfuTable<Integer, String>>() {
+    };
+
+    private final TypeToken<CorfuTable<String, String>> typeTokenStr = new TypeToken<CorfuTable<String, String>>() {
+    };
 
     private CorfuRuntime createDefaultRuntimeUsingAddressMaps() {
         CorfuRuntime runtime = createRuntime(DEFAULT_ENDPOINT)
-        .setCacheDisabled(false);
+                .setCacheDisabled(false);
         runtime.getParameters().setStreamBatchSize(PARAMETERS.NUM_ITERATIONS_LOW);
         return runtime;
     }
@@ -61,8 +61,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
     private long readFromNewRuntime(CorfuRuntime rt, String streamName, int expectedSize) {
         try {
             CorfuTable<Integer, String> table = rt.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
-                    })
+                    .setTypeToken(typeToken)
                     .setStreamName(streamName)
                     .open();
 
@@ -92,7 +91,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      * Compare times for both mechanisms, ensure stream maps is faster than following backpointers
      * (which will single step through 10.000 entries)
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void benchMarkStreamRebuiltInPresenceOfHoles() throws Exception {
@@ -107,8 +106,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         try {
             // Write 10K entries on S1 & S2
             CorfuTable<Integer, String> table1 = runtime.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
-                    })
+                    .setTypeToken(typeToken)
                     .setStreamName(stream1Name)
                     .open();
 
@@ -118,8 +116,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // Write 10K entries on S2
             CorfuTable<Integer, String> table2 = runtime.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
-                    })
+                    .setTypeToken(typeToken)
                     .setStreamName(stream2Name)
                     .open();
 
@@ -163,7 +160,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      *  CP1: Checkpoint S1
      *  CP2: Checkpoint S2
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void checkpointAndTrimAtDifferentPoint() throws Exception {
@@ -177,14 +174,12 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             final int sizeMap2 = 6;
 
             StreamingMap<String, String> map1 = defaultRT.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                    })
+                    .setTypeToken(typeTokenStr)
                     .setStreamName("stream1")
                     .open();
 
             StreamingMap<String, String> map2 = defaultRT.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                    })
+                    .setTypeToken(typeTokenStr)
                     .setStreamName("stream2")
                     .open();
 
@@ -197,7 +192,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             transactionalWrite(defaultRT, map1, "5", "5");
 
             // Checkpoint S1
-            MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
+            MultiCheckpointWriter<StreamingMap<String, String>> mcw1 = new MultiCheckpointWriter<>();
             mcw1.addMap(map1);
             Token minCheckpointAddress = mcw1.appendCheckpoints(defaultRT, "author");
 
@@ -206,7 +201,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             transactionalWrite(defaultRT, map2, "11", "11");
 
             // Checkpoint S2
-            MultiCheckpointWriter mcw2 = new MultiCheckpointWriter();
+            MultiCheckpointWriter<StreamingMap<String, String>> mcw2 = new MultiCheckpointWriter<>();
             mcw2.addMap(map2);
             Token maxCheckpointAddress = mcw2.appendCheckpoints(defaultRT, "author");
 
@@ -220,21 +215,17 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // New runtime read s1, read s2 (from checkpoint)
             Map<String, String> map1rt = rt.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                    })
+                    .setTypeToken(typeTokenStr)
                     .setStreamName("stream1")
                     .open();
 
             Map<String, String> map2rt = rt.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                    })
+                    .setTypeToken(typeTokenStr)
                     .setStreamName("stream2")
                     .open();
 
             assertThat(map1rt.size()).isEqualTo(sizeMap1);
             assertThat(map2rt.size()).isEqualTo(sizeMap2);
-        } catch (Exception e) {
-            fail("Exception thrown", e);
         } finally {
             defaultRT.shutdown();
             rt.shutdown();
@@ -267,7 +258,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      *  CP1: Checkpoint 1 to S1
      *  CP2: Checkpoint 2 to S1
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void checkpointAndTrimAtDifferentPointSnapshot() throws Exception {
@@ -283,8 +274,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             final int sizeAtSnapshot = 6;
 
             StreamingMap<String, String> map1 = writeRuntime.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                    })
+                    .setTypeToken(typeTokenStr)
                     .setStreamName("stream1")
                     .open();
 
@@ -293,7 +283,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             }
 
             // Checkpoint 1
-            MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
+            MultiCheckpointWriter<StreamingMap<String, String>> mcw1 = new MultiCheckpointWriter<>();
             mcw1.addMap(map1);
             Token minCheckpointAddress = mcw1.appendCheckpoints(writeRuntime, "author");
 
@@ -302,7 +292,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             }
 
             // Checkpoint 2
-            MultiCheckpointWriter mcw2 = new MultiCheckpointWriter();
+            MultiCheckpointWriter<StreamingMap<String, String>> mcw2 = new MultiCheckpointWriter<>();
             mcw2.addMap(map1);
             Token maxCheckpointAddress = mcw2.appendCheckpoints(writeRuntime, "author");
 
@@ -313,8 +303,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // New runtime
             Map<String, String> map1rt = readRuntime.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                    })
+                    .setTypeToken(typeTokenStr)
                     .setStreamName("stream1")
                     .open();
 
@@ -326,8 +315,6 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             assertThat(map1rt).hasSize(sizeAtSnapshot);
             readRuntime.getObjectsView()
                     .TXEnd();
-        } catch (Exception e) {
-            fail("Exception thrown", e);
         } finally {
             writeRuntime.shutdown();
             readRuntime.shutdown();
@@ -388,13 +375,17 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             }
 
             // Start checkpoint with snapshot time 9 for mapA
-            CheckpointWriter cpw = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(stream1),
-                    "checkpointer-test", mapA);
+            CheckpointWriter<StreamingMap<String, Integer>> cpw = new CheckpointWriter<>(
+                    runtime, CorfuRuntime.getStreamID(stream1),
+                    "checkpointer-test", mapA
+            );
             Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress));
 
             // Start checkpoint with snapshot time 9 for mapB
-            CheckpointWriter cpwB = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(stream2),
-                    "checkpointer-test", mapB);
+            CheckpointWriter<StreamingMap<String, Integer>> cpwB = new CheckpointWriter<>(
+                    runtime, CorfuRuntime.getStreamID(stream2),
+                    "checkpointer-test", mapB
+            );
             cpwB.appendCheckpoint(new Token(0, snapshotAddress));
 
             // Trim the log
@@ -462,7 +453,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      *                             ^
      *                           TRIM
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testStreamRebuiltWithHoleAsFirstEntryAfterTrim() throws Exception {
@@ -512,7 +503,8 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // Start checkpoint with snapshot time (right before the hole) - Ignore the fact the entry from streamB is lost
             // we're interested in verifying the behaviour of streamA with end address != trim address.
-            CheckpointWriter cpw = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(streamNameA),
+            CheckpointWriter<StreamingMap<String, Integer>> cpw = new CheckpointWriter<>(
+                    runtime, CorfuRuntime.getStreamID(streamNameA),
                     "checkpoint-test", mapA);
             Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress));
 
@@ -571,7 +563,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      *                                ^
      *                              TRIM
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testStreamRebuiltWithHoleAsFirstEntryAfterTrimNoCP() throws Exception {
@@ -612,7 +604,8 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             }
 
             // Checkpoint A with snapshot @ 9
-            CheckpointWriter cpw = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(streamNameA),
+            CheckpointWriter<StreamingMap<String, Integer>> cpw = new CheckpointWriter<>(
+                    runtime, CorfuRuntime.getStreamID(streamNameA),
                     "checkpointer-test", mapA);
             Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress - 1));
 
@@ -722,12 +715,14 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             }
 
             // Start a CheckpointWriter for streamA
-            CheckpointWriter cpwA = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(streamA),
+            CheckpointWriter<StreamingMap<String, Integer>> cpwA = new CheckpointWriter<>(
+                    runtime, CorfuRuntime.getStreamID(streamA),
                     "checkpointer-Test", mA);
             Token cpTokenA = cpwA.appendCheckpoint();
 
             // Start a CheckpointWriter for streamB
-            CheckpointWriter cpwB = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(streamB),
+            CheckpointWriter<StreamingMap<String, Integer>> cpwB = new CheckpointWriter<>(
+                    runtime, CorfuRuntime.getStreamID(streamB),
                     "checkpointer-Test", mB);
             cpwB.appendCheckpoint();
 
@@ -776,7 +771,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      * This test creates an empty checkpoint (for an empty stream) and resets the server to verify
      * that sequencer bootstrap is correct and stream is correctly built from checkpoint.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testEmptyCheckpointRebuiltOnRestart() throws Exception {
@@ -795,7 +790,8 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             StreamingMap<String, Integer> map = createMap(runtime, streamA);
 
             // Start a CheckpointWriter for streamA (empty)
-            CheckpointWriter cpwA = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(streamA),
+            CheckpointWriter<StreamingMap<String, Integer>> cpwA = new CheckpointWriter<>(
+                    runtime, CorfuRuntime.getStreamID(streamA),
                     "checkpointer-Test", map);
             Token cpToken = cpwA.appendCheckpoint();
 
@@ -854,7 +850,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      * 6. Verify Stream Maps from log unit and sequencer tails (both regular stream and checkpoint
      * stream should be present).
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testCheckpointEmptyMapAndSequencerFailover() throws Exception {
@@ -864,7 +860,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
     /**
      * This test is similar to the previous, but enforces the hole from a reader, as reader hole fill
      * does not contain stream information to build address map.
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testCheckpointEmptyMapWithReaderHoleAndSequencerFailover() throws Exception {
@@ -919,7 +915,8 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             }
 
             // Start a CheckpointWriter for streamA
-            CheckpointWriter cpwA = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(streamA),
+            CheckpointWriter<StreamingMap<String, Integer>> cpwA = new CheckpointWriter<>(
+                    runtime, CorfuRuntime.getStreamID(streamA),
                     "checkpointer-Test", mA);
             Token cpTokenA = cpwA.appendCheckpoint();
 

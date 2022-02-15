@@ -1,15 +1,15 @@
 package org.corfudb.infrastructure.log;
 
-import java.io.IOException;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
-
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.TrimmedException;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * An interface definition that specifies an api to interact with a StreamLog.
@@ -167,5 +167,17 @@ public interface StreamLog {
      */
     default long quotaLimitInBytes() {
         return Long.MAX_VALUE;
+    }
+
+    enum PersistenceMode {
+        DISK, MEMORY;
+
+        public static PersistenceMode fromBool(boolean isMemoryMode) {
+            if (isMemoryMode) {
+                return MEMORY;
+            } else {
+                return DISK;
+            }
+        }
     }
 }
