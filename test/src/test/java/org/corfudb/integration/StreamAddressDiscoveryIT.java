@@ -47,6 +47,8 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
     private final TypeToken<CorfuTable<String, String>> typeTokenStr = new TypeToken<CorfuTable<String, String>>() {
     };
 
+    private final String cpAuthor = "checkpointer-test";
+
     private CorfuRuntime createDefaultRuntimeUsingAddressMaps() {
         CorfuRuntime runtime = createRuntime(DEFAULT_ENDPOINT)
                 .setCacheDisabled(false);
@@ -377,14 +379,14 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Start checkpoint with snapshot time 9 for mapA
             CheckpointWriter<StreamingMap<String, Integer>> cpw = new CheckpointWriter<>(
                     runtime, CorfuRuntime.getStreamID(stream1),
-                    "checkpointer-test", mapA
+                    cpAuthor, mapA
             );
             Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress));
 
             // Start checkpoint with snapshot time 9 for mapB
             CheckpointWriter<StreamingMap<String, Integer>> cpwB = new CheckpointWriter<>(
                     runtime, CorfuRuntime.getStreamID(stream2),
-                    "checkpointer-test", mapB
+                    cpAuthor, mapB
             );
             cpwB.appendCheckpoint(new Token(0, snapshotAddress));
 
@@ -605,8 +607,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // Checkpoint A with snapshot @ 9
             CheckpointWriter<StreamingMap<String, Integer>> cpw = new CheckpointWriter<>(
-                    runtime, CorfuRuntime.getStreamID(streamNameA),
-                    "checkpointer-test", mapA);
+                    runtime, CorfuRuntime.getStreamID(streamNameA), cpAuthor, mapA);
             Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress - 1));
 
             // Trim the log
@@ -716,14 +717,12 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // Start a CheckpointWriter for streamA
             CheckpointWriter<StreamingMap<String, Integer>> cpwA = new CheckpointWriter<>(
-                    runtime, CorfuRuntime.getStreamID(streamA),
-                    "checkpointer-Test", mA);
+                    runtime, CorfuRuntime.getStreamID(streamA), cpAuthor, mA);
             Token cpTokenA = cpwA.appendCheckpoint();
 
             // Start a CheckpointWriter for streamB
             CheckpointWriter<StreamingMap<String, Integer>> cpwB = new CheckpointWriter<>(
-                    runtime, CorfuRuntime.getStreamID(streamB),
-                    "checkpointer-Test", mB);
+                    runtime, CorfuRuntime.getStreamID(streamB), cpAuthor, mB);
             cpwB.appendCheckpoint();
 
             // Add an update to streamA after checkpoint
@@ -792,7 +791,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Start a CheckpointWriter for streamA (empty)
             CheckpointWriter<StreamingMap<String, Integer>> cpwA = new CheckpointWriter<>(
                     runtime, CorfuRuntime.getStreamID(streamA),
-                    "checkpointer-Test", map);
+                    cpAuthor, map);
             Token cpToken = cpwA.appendCheckpoint();
 
             // Verify Checkpoint Token
@@ -917,7 +916,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Start a CheckpointWriter for streamA
             CheckpointWriter<StreamingMap<String, Integer>> cpwA = new CheckpointWriter<>(
                     runtime, CorfuRuntime.getStreamID(streamA),
-                    "checkpointer-Test", mA);
+                    cpAuthor, mA);
             Token cpTokenA = cpwA.appendCheckpoint();
 
             // Verify Address Maps from Log Unit and Sequencer Tails (first node)
