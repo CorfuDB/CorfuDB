@@ -29,9 +29,27 @@ public interface ICorfuSMR<T>
         throw new IllegalStateException("ObjectAnnotationProcessor Issue.");
     }
 
+    /**
+     * Set the proxy for this wrapper, to manage the state of the object.
+     * @param proxy The proxy to set for this wrapper.
+     * @param <R> The type used for managing underlying versions.
+     */
+    default <R> void setProxy$CORFUSMR(ICorfuSMRProxy<R> proxy) {
+        throw new IllegalStateException("ObjectAnnotationProcessor Issue.");
+    }
+
     /** Get a map from strings (function names) to SMR upcalls.
      * @return The SMR upcall map. */
     default Map<String, ICorfuSMRUpcallTarget<T>> getCorfuSMRUpcallMap() {
+        throw new IllegalStateException("ObjectAnnotationProcessor Issue.");
+    }
+
+    /**
+     * Get a map from strings (function names) to SMR upcalls.
+     * @param <R> The return type for ICorfuSMRUpcallTargets
+     * @return A map from function names to SMR upcalls
+     */
+    default <R> Map<String, ICorfuSMRUpcallTarget<R>> getSMRUpcallMap() {
         throw new IllegalStateException("ObjectAnnotationProcessor Issue.");
     }
 
@@ -59,6 +77,29 @@ public interface ICorfuSMR<T>
      * @return The stream ID this object belongs to. */
     default UUID getCorfuStreamID() {
         return getCorfuSMRProxy().getStreamID();
+    }
+
+    /**
+     * Javadoc comment.
+     * Specify Object type?
+     * @param obj Javadoc.
+     */
+    default void setImmutableState(Object obj) {
+    }
+
+    /**
+     * Javadoc comment.
+     * Specify Object type?
+     * @return Javadoc.
+     */
+    default Object getImmutableState() {
+        return null;
+    }
+
+    /**
+     *
+     */
+    default void reset() {
     }
 
     /**

@@ -43,7 +43,7 @@ public class FailureDetectorTest {
         );
         Duration time = Duration.ofMillis(System.currentTimeMillis() - start);
         assertThat(time).isGreaterThan(Duration.ofMillis(450));
-        assertThat(time).isLessThan(Duration.ofSeconds(2));
+        assertThat(time).isLessThan(Duration.ofSeconds(10));
 
         assertThat(report.getReachableNodes()).isEmpty();
         assertThat(report.getFailedNodes()).containsExactly("a", "b", "c");

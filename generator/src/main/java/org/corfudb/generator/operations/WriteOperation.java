@@ -26,7 +26,7 @@ public class WriteOperation extends Operation {
 
             String key = state.getKeys().sample();
             String val = UUID.randomUUID().toString();
-            state.getMap(CorfuRuntime.getStreamID(streamId)).put(key, val);
+            state.getMap(CorfuRuntime.getStreamID(streamId)).insert(key, val);
 
             String correctnessRecord = String.format("%s, %s:%s=%s", shortName, streamId, key, val);
             Correctness.recordOperation(correctnessRecord, TransactionalContext.isInTransaction());

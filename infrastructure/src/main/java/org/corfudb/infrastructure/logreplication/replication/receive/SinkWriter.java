@@ -10,6 +10,7 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.util.ArrayList;
@@ -27,7 +28,7 @@ public abstract class SinkWriter {
     final CorfuRuntime rt;
 
     // Registry table for verifying replicated entries from Source side.
-    final CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable;
+    final ICorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable;
 
     // Limit the initialization of this class only to its children classes.
     SinkWriter(CorfuRuntime rt) {

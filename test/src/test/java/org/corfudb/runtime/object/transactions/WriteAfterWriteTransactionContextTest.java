@@ -8,11 +8,10 @@ import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
@@ -55,9 +54,7 @@ public class WriteAfterWriteTransactionContextTest extends AbstractTransactionCo
               .assertThrows()
               .isInstanceOf(TransactionAbortedException.class);
 
-        assertThat(getMap())
-                .containsEntry("k", "v2")
-                .doesNotContainEntry("k", "v3");
+        assertThat(getMap().get("k")).isEqualTo("v2");
 
         IStreamView txStream = getRuntime().getStreamsView()
                 .get(CorfuRuntime.getStreamID(txnStreamName));
@@ -86,7 +83,8 @@ public class WriteAfterWriteTransactionContextTest extends AbstractTransactionCo
         if (testMap == null) {
             Object obj = getRuntime().getObjectsView().build()
                 .setStreamName(streamName)
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamTags(getRuntime().getStreamID(txnStreamName))
                 .open();
             testMap = (ICorfuTable<String, String>) obj;

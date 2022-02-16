@@ -81,7 +81,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     private static final int NUM_RECORDS = 100;
 
     private static final Double logSizeLimitPercentageFull = 100.0;
-    private static final Double logSizeLimitPercentageLow = 0.0002;
+    private static final Double logSizeLimitPercentageLow = 0.00002;
 
     private final InvokeCheckpointingJvm mockInvokeJvm0 = mock(InvokeCheckpointingJvm.class);
     private final InvokeCheckpointingJvm mockInvokeJvm1 = mock(InvokeCheckpointingJvm.class);
