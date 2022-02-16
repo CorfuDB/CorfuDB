@@ -15,6 +15,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.CacheOption;
@@ -22,7 +23,6 @@ import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
-import org.corfudb.util.serializer.ProtobufSerializer;
 import org.corfudb.util.serializer.Serializers;
 
 import java.nio.ByteBuffer;
@@ -46,7 +46,7 @@ import java.util.stream.Stream;
  *  TODO: Generalize to all SMR objects.
  */
 @Slf4j
-public class CheckpointWriter<T extends StreamingMap> {
+public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
     /** Metadata to be stored in the CP's 'dict' map.
      */
     private final UUID streamId;
@@ -107,7 +107,7 @@ public class CheckpointWriter<T extends StreamingMap> {
     /** Local ref to the object that we're dumping.
      *  TODO: generalize to all SMR objects.
      */
-    private final T map;
+    private final T corfuTable;
 
     @Getter
     @Setter
@@ -117,13 +117,13 @@ public class CheckpointWriter<T extends StreamingMap> {
      * @param rt object's runtime
      * @param streamId unique identifier of stream to checkpoint
      * @param author checkpoint initiator
-     * @param map local reference of the map to checkpoint
+     * @param corfuTable local reference of the PersistentCorfuTable to checkpoint
      */
-    public CheckpointWriter(CorfuRuntime rt, UUID streamId, String author, T map) {
+    public CheckpointWriter(CorfuRuntime rt, UUID streamId, String author, T corfuTable) {
         this.rt = rt;
         this.streamId = streamId;
         this.author = author;
-        this.map = map;
+        this.corfuTable = corfuTable;
         checkpointId = UUID.randomUUID();
         checkpointStreamID = CorfuRuntime.getCheckpointStreamIdFromId(streamId);
         sv = rt.getStreamsView();
@@ -164,7 +164,7 @@ public class CheckpointWriter<T extends StreamingMap> {
 
         log.info("appendCheckpoint: Started checkpoint for {} at snapshot {}", streamId, snapshotTimestamp);
         
-        try (Stream<Map.Entry> entries = this.map.entryStream()) {
+        try (Stream<? extends Map.Entry<?, ?>> entries = this.corfuTable.entryStream()) {
             // A checkpoint writer will do two accesses one to obtain the object
             // vlo version and to get a shallow copy of the entry set
             // The vloVersion which will determine the checkpoint START_LOG_ADDRESS (last observed update for this
@@ -304,7 +304,7 @@ public class CheckpointWriter<T extends StreamingMap> {
      *
      * @return Stream of global log addresses of the CONTINUATION records written.
      */
-    public int appendObjectState(Stream<Map.Entry> entryStream) {
+    public int appendObjectState(Stream<? extends Map.Entry<?, ?>> entryStream) {
         int maxWriteSizeLimit = (int) (batchThresholdPercentage * getMaxWriteSize());
         ImmutableMap<CheckpointEntry.CheckpointDictKey,String> kvCopy =
                 ImmutableMap.copyOf(this.mdkv);
@@ -315,9 +315,9 @@ public class CheckpointWriter<T extends StreamingMap> {
         ByteBuf inputBuffer = Unpooled.buffer();
         MultiSMREntry smrEntries = new MultiSMREntry();
 
-        Iterator<Map.Entry> iterator = entryStream.iterator();
+        Iterator<? extends Map.Entry<?, ?>> iterator = entryStream.iterator();
         while (iterator.hasNext()) {
-            Map.Entry entry = iterator.next();
+            Map.Entry<?, ?> entry = iterator.next();
             SMREntry smrPutEntry = new SMREntry("put",
                     new Object[]{keyMutator.apply(entry.getKey()),
                             valueMutator.apply(entry.getValue())},

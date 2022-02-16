@@ -25,6 +25,8 @@ import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.object.ICorfuSMRSnapshotProxy;
+import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.object.transactions.TransactionalContext.PreCommitListener;
 import org.corfudb.runtime.view.Address;
@@ -130,6 +132,9 @@ public abstract class AbstractTransactionalContext implements
     @Getter
     private final ConflictSetInfo readSetInfo = new ConflictSetInfo();
 
+    // TODO: Make into a class?
+    protected final Map<ICorfuSMRProxyInternal<?>, ICorfuSMRSnapshotProxy<?>> snapshotProxyMap = new HashMap<>();
+
     /**
      * Cache of last known position of streams accessed in this transaction.
      */
@@ -141,6 +146,18 @@ public abstract class AbstractTransactionalContext implements
         this.startTime = System.currentTimeMillis();
         this.parentContext = TransactionalContext.getCurrentContext();
         AbstractTransactionalContext.log.debug("TXBegin[{}]", this);
+    }
+
+    protected <T extends ICorfuSMR<T>> ICorfuSMRSnapshotProxy<T> getAndCacheSnapshotProxy(ICorfuSMRProxyInternal<T> proxy, long ts) {
+        // TODO: Refactor me to avoid casting on ICorfuSMRProxyInternal type.
+        ICorfuSMRSnapshotProxy<T> snapshotProxy = (ICorfuSMRSnapshotProxy<T>) snapshotProxyMap.get(proxy);
+        final MVOCorfuCompileProxy<T> persistentProxy = (MVOCorfuCompileProxy<T>) proxy;
+        if (snapshotProxy == null) {
+            snapshotProxy = persistentProxy.getUnderlyingMVO().getSnapshotProxy(ts);
+            snapshotProxyMap.put(proxy, snapshotProxy);
+        }
+
+        return snapshotProxy;
     }
 
     protected void updateKnownStreamPosition(UUID streamId, long position) {

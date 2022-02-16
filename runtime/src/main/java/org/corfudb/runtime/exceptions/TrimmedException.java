@@ -31,7 +31,11 @@ public class TrimmedException extends LogUnitException {
     }
 
     public TrimmedException(long trimmed) {
-        super(String.format("Trimmed address: %s", trimmed));
+        this(trimmed, String.format("Trimmed address: %s", trimmed));
+    }
+
+    public TrimmedException(long trimmed, String message) {
+        super(message);
         trimmedAddresses = Collections.singletonList(trimmed);
     }
 

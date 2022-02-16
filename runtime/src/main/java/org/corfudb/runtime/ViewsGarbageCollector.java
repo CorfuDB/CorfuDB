@@ -45,9 +45,9 @@ public class ViewsGarbageCollector {
 
     public void start() {
         gcThread.scheduleAtFixedRate(() -> runRuntimeGC(),
-                runtime.getParameters().getRuntimeGCPeriod().toMinutes(),
-                runtime.getParameters().getRuntimeGCPeriod().toMinutes(),
-                TimeUnit.MINUTES);
+                runtime.getParameters().getRuntimeGCPeriod().toMillis(),
+                runtime.getParameters().getRuntimeGCPeriod().toMillis(),
+                TimeUnit.MILLISECONDS);
         this.started = true;
     }
 

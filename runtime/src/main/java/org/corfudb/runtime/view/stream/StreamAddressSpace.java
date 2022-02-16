@@ -127,7 +127,7 @@ final public class StreamAddressSpace {
      * Get the first address in this bitmap.
      * @return first address in the bitmap if its not empty, otherwise returns the trim mark
      */
-    private long getFirst() {
+    public long getFirst() {
         if (bitmap.isEmpty()) {
             return trimMark;
         }
@@ -322,6 +322,23 @@ final public class StreamAddressSpace {
      */
     public long[] toArray() {
         return bitmap.toArray();
+    }
+
+    /**
+     * Given an address, computes the largest address A in the bitmap,
+     * such that A is less than or equal to the given address.
+     * @param address The address to perform the floor query on.
+     * @return The largest address in the bitmap that is less than or
+     * equal to the given address.
+     */
+    public long floor(long address) {
+        final long rank = bitmap.rankLong(address);
+
+        if (rank == 0) {
+            return Address.NON_ADDRESS;
+        }
+
+        return bitmap.select(rank - 1);
     }
 
     @Override

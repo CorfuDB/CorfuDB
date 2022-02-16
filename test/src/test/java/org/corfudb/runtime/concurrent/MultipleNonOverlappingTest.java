@@ -1,12 +1,11 @@
 package org.corfudb.runtime.concurrent;
 
-import java.util.Map;
-
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
+import org.corfudb.runtime.view.SMRObject;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -38,8 +37,8 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
     @Test
     public void testStress() throws Exception {
 
-        String mapName = "testMapA";
-        Map<Long, Long> testMap = instantiateCorfuObject(CorfuTable.class, mapName);
+        String tableName = "testTableA";
+        PersistentCorfuTable<Long, Long> testTable = instantiateCorfuObject(PersistentCorfuTable.class, tableName);
 
         final int VAL = 1;
 
@@ -60,11 +59,9 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
             executeScheduled(THREAD_NUM, PARAMETERS.TIMEOUT_NORMAL);
         }
 
-        Assert.assertEquals(testMap.size(), FINAL_SUM);
-        for (Long value : testMap.values()) {
-            Assert.assertEquals((long) FINAL_SUM, (long) value);
-        }
-
+        Assert.assertEquals(testTable.size(), FINAL_SUM);
+        testTable.entryStream()
+                .forEach(kvp -> Assert.assertEquals((long) FINAL_SUM, (long) kvp.getValue()));
     }
 
     /**
@@ -74,10 +71,10 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
     @Test
     public void testStress2() throws Exception {
 
-        String mapName1 = "testMapA";
-        Map<Long, Long> testMap1 = instantiateCorfuObject(CorfuTable.class, mapName1);
-        String mapName2 = "testMapB";
-        Map<Long, Long> testMap2 = instantiateCorfuObject(CorfuTable.class, mapName2);
+        String tableName1 = "testTableA";
+        PersistentCorfuTable<Long, Long> testTable1 = instantiateCorfuObject(PersistentCorfuTable.class, tableName1);
+        String tableName2 = "testTableB";
+        PersistentCorfuTable<Long, Long> testTable2 = instantiateCorfuObject(PersistentCorfuTable.class, tableName2);
 
 
         final int VAL = 1;
@@ -101,25 +98,24 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
 
         }
 
-        Assert.assertEquals(testMap2.size(), FINAL_SUM1);
+        Assert.assertEquals(testTable2.size(), FINAL_SUM1);
         for (long i = 0; i < OBJECT_NUM; i++) {
-            log.debug("final testmap1.get({}) = {}", i, testMap1.get(i));
-            log.debug("final testmap2.get({}) = {}", i, testMap2.get(i));
+            log.debug("final testmap1.get({}) = {}", i, testTable1.get(i));
+            log.debug("final testmap2.get({}) = {}", i, testTable2.get(i));
             if (i % 2 == 0)
-                Assert.assertEquals((long)testMap2.get(i), (long) FINAL_SUM2);
+                Assert.assertEquals((long)testTable2.get(i), (long) FINAL_SUM2);
             else
-                Assert.assertEquals((long)testMap2.get(i), (long) FINAL_SUM1);
+                Assert.assertEquals((long)testTable2.get(i), (long) FINAL_SUM1);
         }
-
     }
 
 
     public class NonOverlappingWriter {
 
-        String mapName1 = "testMapA";
-        Map<Long, Long> testMap1 = instantiateCorfuObject(CorfuTable.class, mapName1);
-        String mapName2 = "testMapB";
-        Map<Long, Long> testMap2 = instantiateCorfuObject(CorfuTable.class, mapName2);
+        String tableName1 = "testTableA";
+        PersistentCorfuTable<Long, Long> testTable1 = instantiateCorfuObject(PersistentCorfuTable.class, tableName1);
+        String tableName2 = "testTableB";
+        PersistentCorfuTable<Long, Long> testTable2 = instantiateCorfuObject(PersistentCorfuTable.class, tableName2);
 
 
         int start;
@@ -162,20 +158,20 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
 
             TXBegin();
 
-            if (!testMap1.containsKey(idx)) {
+            if (!testTable1.containsKey(idx)) {
                 if (expectedSum - 1 > 0)
                     log.debug("OBJ FAIL {} doesn't exist expected={}",
                             idx, expectedSum);
                 log.debug("OBJ {} PUT {}", idx, val);
-                testMap1.put(idx, val);
+                testTable1.insert(idx, val);
             } else {
                 log.debug("OBJ {} GET", idx);
-                Long value = testMap1.get(idx);
+                Long value = testTable1.get(idx);
                 if (value != (expectedSum - 1))
                     log.debug("OBJ FAIL {} value={} expected={}", idx, value,
                             expectedSum - 1);
                 log.debug("OBJ {} PUT {}+{}", idx, value, val);
-                testMap1.put(idx, value + val);
+                testTable1.insert(idx, value + val);
             }
 
             TXEnd();
@@ -191,39 +187,39 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
 
             TXBegin();
 
-            if (!testMap1.containsKey(idx)) {
+            if (!testTable1.containsKey(idx)) {
                 if (expectedSum - 1 > 0)
                     log.debug("OBJ FAIL {} doesn't exist expected={}",
                             idx, expectedSum);
                 log.debug("OBJ {} PUT {}", idx, val);
-                testMap1.put(idx, val);
-                testMap2.put(idx, val);
+                testTable1.insert(idx, val);
+                testTable2.insert(idx, val);
             } else {
                 log.debug("OBJ {} GET", idx);
-                Long value = testMap1.get(idx);
+                Long value = testTable1.get(idx);
                 if (value != (expectedSum - 1))
                     log.debug("OBJ FAIL {} value={} expected={}", idx, value,
                             expectedSum - 1);
                 log.debug("OBJ {} PUT {}+{}", idx, value, val);
-                testMap1.put(idx, value + val);
+                testTable1.insert(idx, value + val);
 
                 // in map 2, on even rounds, do this on for every other entry
                 log.debug("OBJ2 {} GET", idx);
-                Long value2 = testMap2.get(idx);
+                Long value2 = testTable2.get(idx);
                 if (idx % 2 == 0) {
                     if (value2 != (expectedSum/2))
                         log.debug("OBJ2 FAIL {} value={} expected={}", idx, value2,
                                 expectedSum/2);
                     if (expectedSum % 2 == 0) {
                         log.debug("OBJ2 {} PUT {}+{}", idx, value2, val);
-                        testMap2.put(idx, value2 + val);
+                        testTable2.insert(idx, value2 + val);
                     }
                 } else {
                     if (value2 != (expectedSum - 1))
                         log.debug("OBJ2 FAIL {} value={} expected={}", idx, value2,
                                 expectedSum - 1);
                     log.debug("OBJ2 {} PUT {}+{}", idx, value2, val);
-                    testMap2.put(idx, value2 + val);
+                    testTable2.insert(idx, value2 + val);
                 }
             }
 
@@ -238,6 +234,7 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
         return getRuntime().getObjectsView().TXEnd();
     }
 
+    @Override
     protected <T extends ICorfuSMR> T instantiateCorfuObject(Class<T> tClass, String name) {
 
         // TODO: Does not work at the moment.
@@ -248,6 +245,7 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
                 .getObjectsView()
                 .build()
                 .setStreamName(name)     // stream name
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT) // use PersistentCorfuTable
                 .setType(tClass)        // object class backed by this stream\
                 .open();                // instantiate the object!
     }

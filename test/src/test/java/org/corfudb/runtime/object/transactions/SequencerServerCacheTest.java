@@ -8,9 +8,11 @@ import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.SequencerServerCache;
 import org.corfudb.infrastructure.SequencerServerCache.ConflictTxStream;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.object.AbstractObjectTest;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.SMRObject;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -32,11 +34,12 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
 
         getDefaultRuntime();
 
-        Map<Integer, Integer> map = getDefaultRuntime()
+        ICorfuTable<Integer, Integer> map = getDefaultRuntime()
                 .getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {
+                .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {
                 })
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
@@ -44,7 +47,7 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         final Token trimAddress = new Token(getDefaultRuntime().getLayoutView().getLayout().getEpoch(), 250);
         for (int x = 0; x < numTxn; x++) {
             getRuntime().getObjectsView().TXBegin();
-            map.put(x, x);
+            map.insert(x, x);
             getRuntime().getObjectsView().TXEnd();
         }
 

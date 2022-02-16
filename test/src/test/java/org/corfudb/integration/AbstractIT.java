@@ -2,16 +2,21 @@ package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
+import org.corfudb.runtime.view.SMRObject;
+import org.corfudb.util.serializer.ISerializer;
 import org.junit.After;
 import org.junit.Before;
 
@@ -52,6 +57,8 @@ public class AbstractIT extends AbstractCorfuTest {
 
     static final String CORFU_PROJECT_DIR = new File("..").getAbsolutePath() + File.separator;
     static final String CORFU_LOG_PATH = PARAMETERS.TEST_TEMP_DIR;
+
+    static final long DEFAULT_MVO_CACHE_SIZE = 100;
 
     private static final String KILL_COMMAND = "pkill -9 -P ";
     // FIXME: if jps doesn't exist tear down will fail silently
@@ -162,9 +169,7 @@ public class AbstractIT extends AbstractCorfuTest {
         }
     }
 
-    public void restartServer(
-            CorfuRuntime corfuRuntime, String endpoint) throws InterruptedException {
-
+    public void restartServer(CorfuRuntime corfuRuntime, String endpoint) throws InterruptedException {
         corfuRuntime.invalidateLayout();
         RuntimeLayout runtimeLayout = corfuRuntime.getLayoutView().getRuntimeLayout();
         try {
@@ -263,7 +268,6 @@ public class AbstractIT extends AbstractCorfuTest {
         }
     }
 
-
     public static long getPid(Process p) {
         long pid = -1;
 
@@ -361,12 +365,12 @@ public class AbstractIT extends AbstractCorfuTest {
                 .runServer();
     }
 
-
     public static CorfuRuntime createRuntime(String endpoint) {
-        CorfuRuntime rt = new CorfuRuntime(endpoint)
-                .setCacheDisabled(true)
-                .connect();
-        return rt;
+        return createRuntime(endpoint, true, CorfuRuntime.CorfuRuntimeParameters.builder());
+    }
+
+    public static CorfuRuntime createRuntime(String endpoint, CorfuRuntimeParametersBuilder parametersBuilder) {
+        return createRuntime(endpoint, true, parametersBuilder);
     }
 
     public static CorfuRuntime createRuntimeWithCache() {
@@ -374,19 +378,40 @@ public class AbstractIT extends AbstractCorfuTest {
     }
 
     public static CorfuRuntime createRuntimeWithCache(String endpoint) {
-        CorfuRuntime rt = new CorfuRuntime(endpoint)
-                .setCacheDisabled(false)
-                .connect();
-        return rt;
+        return createRuntime(endpoint, false, CorfuRuntime.CorfuRuntimeParameters.builder());
     }
 
-    public static StreamingMap<String, Integer> createMap(CorfuRuntime rt, String streamName) {
-        StreamingMap<String, Integer> map = rt.getObjectsView()
+    private static CorfuRuntime createRuntime(String endpoint, boolean cacheDisabled,
+                                              CorfuRuntimeParametersBuilder parametersBuilder) {
+        return CorfuRuntime.fromParameters(
+                parametersBuilder.maxMvoCacheEntries(DEFAULT_MVO_CACHE_SIZE)
+                        .cacheDisabled(cacheDisabled)
+                        .build())
+                .parseConfigurationString(endpoint)
+                .connect();
+    }
+
+    public static <K, V> PersistentCorfuTable<K, V> createCorfuTable(@NonNull CorfuRuntime rt,
+                                                                     @NonNull String streamName) {
+        return rt.getObjectsView()
                 .build()
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName(streamName)
-                .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<K, V>>() {})
                 .open();
-        return map;
+    }
+
+    public static <K, V> PersistentCorfuTable<K, V> createCorfuTable(@NonNull CorfuRuntime rt,
+                                                                     @NonNull String streamName,
+                                                                     @NonNull ISerializer serializer) {
+        // Serializer should be registered with the runtime separately
+        return rt.getObjectsView()
+                .build()
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setStreamName(streamName)
+                .setSerializer(serializer)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<K, V>>() {})
+                .open();
     }
 
     public static class StreamGobbler implements Runnable {

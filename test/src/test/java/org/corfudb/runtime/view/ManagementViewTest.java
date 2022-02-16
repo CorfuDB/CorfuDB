@@ -14,8 +14,8 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -547,11 +547,20 @@ public class ManagementViewTest extends AbstractViewTest {
     }
 
     protected <T extends ICorfuSMR> Object instantiateCorfuObject(TypeToken<T> tType, String name) {
-        return getCorfuRuntime().getObjectsView()
-                .build()
-                .setStreamName(name)     // stream name
-                .setTypeToken(tType)    // a TypeToken of the specified class
-                .open();                // instantiate the object!
+        if (tType.getRawType() == PersistentCorfuTable.class) {
+            return getCorfuRuntime().getObjectsView()
+                    .build()
+                    .setStreamName(name)     // stream name
+                    .setTypeToken(tType)    // a TypeToken of the specified class
+                    .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                    .open();                // instantiate the object!
+        } else {
+            return getCorfuRuntime().getObjectsView()
+                    .build()
+                    .setStreamName(name)     // stream name
+                    .setTypeToken(tType)    // a TypeToken of the specified class
+                    .open();                // instantiate the object!
+        }
     }
 
 
@@ -559,7 +568,7 @@ public class ManagementViewTest extends AbstractViewTest {
         ICorfuTable<Integer, String> testMap;
 
         testMap = (ICorfuTable<Integer, String>) instantiateCorfuObject(
-                new TypeToken<CorfuTable<Integer, String>>() {
+                new TypeToken<PersistentCorfuTable<Integer, String>>() {
                 }, "test stream"
         );
 
@@ -582,7 +591,7 @@ public class ManagementViewTest extends AbstractViewTest {
         // setup 3-Corfu node cluster
         getManagementTestLayout();
 
-        Map<Integer, String> map = getMap();
+        ICorfuTable<Integer, String> map = getMap();
 
         // start a transaction and force it to obtain snapshot timestamp
         // preceding the sequencer failover
@@ -597,7 +606,7 @@ public class ManagementViewTest extends AbstractViewTest {
         // in another thread, fill the log with a few entries
         t(1, () -> {
             for (int i = 0; i < nUpdates; i++)
-                map.put(i, payload);
+                map.insert(i, payload);
         });
 
         // now, the tail of the log is at nUpdates;
@@ -608,7 +617,7 @@ public class ManagementViewTest extends AbstractViewTest {
         induceSequencerFailureAndWait();
         t(0, () -> {
             boolean commit = true;
-            map.put(nUpdates + 1, payload); // should not conflict
+            map.insert(nUpdates + 1, payload); // should not conflict
             try {
                 TXEnd();
             } catch (TransactionAbortedException ta) {
@@ -628,12 +637,12 @@ public class ManagementViewTest extends AbstractViewTest {
         // in another thread, fill the log with a few entries
         t(1, () -> {
             for (int i = 0; i < nUpdates; i++)
-                map.put(i, payload + 1);
+                map.insert(i, payload + 1);
         });
 
         t(0, () -> {
             boolean commit = true;
-            map.put(nUpdates + 1, payload); // should not conflict
+            map.insert(nUpdates + 1, payload); // should not conflict
             try {
                 TXEnd();
             } catch (TransactionAbortedException ta) {
@@ -652,12 +661,12 @@ public class ManagementViewTest extends AbstractViewTest {
     public void ckSequencerFailoverTXResolution1() throws Exception {
         getManagementTestLayout();
 
-        Map<Integer, String> map = getMap();
+        ICorfuTable<Integer, String> map = getMap();
         final String payload = "hello";
         final int nUpdates = 5;
 
         for (int i = 0; i < nUpdates; i++)
-            map.put(i, payload);
+            map.insert(i, payload);
 
         // start a transaction and force it to obtain snapshot timestamp
         // preceding the sequencer failover
@@ -669,7 +678,7 @@ public class ManagementViewTest extends AbstractViewTest {
         // in another thread, fill the log with a few entries
         t(1, () -> {
             for (int i = 0; i < nUpdates; i++)
-                map.put(i, payload + 1);
+                map.insert(i, payload + 1);
         });
 
         // now, the tail of the log is at nUpdates;
@@ -681,7 +690,7 @@ public class ManagementViewTest extends AbstractViewTest {
 
         t(0, () -> {
             boolean commit = true;
-            map.put(nUpdates + 1, payload); // should not conflict
+            map.insert(nUpdates + 1, payload); // should not conflict
             try {
                 TXEnd();
             } catch (TransactionAbortedException ta) {
@@ -701,12 +710,12 @@ public class ManagementViewTest extends AbstractViewTest {
         // in another thread, fill the log with a few entries
         t(1, () -> {
             for (int i = 0; i < nUpdates; i++)
-                map.put(i, payload + 2);
+                map.insert(i, payload + 2);
         });
 
         t(0, () -> {
             boolean commit = true;
-            map.put(nUpdates + 1, payload); // should not conflict
+            map.insert(nUpdates + 1, payload); // should not conflict
             try {
                 TXEnd();
             } catch (TransactionAbortedException ta) {
@@ -1578,10 +1587,10 @@ public class ManagementViewTest extends AbstractViewTest {
      *
      * @param table CorfuTable to populate.
      */
-    private void writeRandomEntryToTable(CorfuTable table) {
+    private void writeRandomEntryToTable(ICorfuTable table) {
         Random r = new Random();
         corfuRuntime.getObjectsView().TXBegin();
-        table.put(r.nextInt(), r.nextInt());
+        table.insert(r.nextInt(), r.nextInt());
         corfuRuntime.getObjectsView().TXEnd();
     }
 
@@ -1596,10 +1605,11 @@ public class ManagementViewTest extends AbstractViewTest {
     public void testSequencerCacheOverflowOnFailover() throws Exception {
         corfuRuntime = getDefaultRuntime();
 
-        CorfuTable<String, String> table = corfuRuntime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+        ICorfuTable<String, String> table = corfuRuntime.getObjectsView().build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
                 })
                 .setStreamName("test")
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         writeRandomEntryToTable(table);
