@@ -1,11 +1,12 @@
 package org.corfudb.runtime.concurrent;
 
+import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
+import org.corfudb.runtime.view.SMRObject;
 import org.junit.Test;
 
-import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
 
@@ -28,8 +29,14 @@ public class MapsAsMQsTest extends AbstractTransactionsTest {
      */
     @Test
     public void useMapsAsMQs() throws Exception {
-        String mapName1 = "testMapA";
-        Map<Long, Long> testMap1 = instantiateCorfuObject(CorfuTable.class, mapName1);
+        String tableName1 = "testTableA";
+        PersistentCorfuTable<Long, Long> testTable = getRuntime()
+                .getObjectsView()
+                .build()
+                .setStreamName(tableName1)
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
+                .open();
 
         final int nThreads = 4;
         CountDownLatch barrier = new CountDownLatch(nThreads-1);
@@ -47,7 +54,7 @@ public class MapsAsMQsTest extends AbstractTransactionsTest {
             for (int i = 0; i < numIterations; i++) {
                 // place a value in the map
                 log.debug("- sending 1st trigger {}", i);
-                testMap1.put(1L, (long) i);
+                testTable.insert(1L, (long) i);
 
                 // await for the consumer condition to circulate back
                 s2.acquire();
@@ -65,7 +72,7 @@ public class MapsAsMQsTest extends AbstractTransactionsTest {
             int busyDelay = 1; // millisecs
 
             for (int i = 0; i < numIterations; i++) {
-                while (testMap1.get(1L) == null || testMap1.get(1L) != (long) i) {
+                while (testTable.get(1L) == null || testTable.get(1L) != (long) i) {
                     log.debug( "- wait for 1st trigger {}", i);
                     Thread.sleep(busyDelay);
                 }
@@ -94,7 +101,7 @@ public class MapsAsMQsTest extends AbstractTransactionsTest {
 
                 // produce another tigger value
                 log.debug( "- sending 2nd trigger {}", i);
-                testMap1.put(2L, (long) i);
+                testTable.insert(2L, (long) i);
                 TXEnd();
             }
         });
@@ -108,7 +115,7 @@ public class MapsAsMQsTest extends AbstractTransactionsTest {
             int busyDelay = 1; // millisecs
 
             for (int i = 0; i < numIterations; i++) {
-                while (testMap1.get(2L) == null || testMap1.get(2L) != (long) i)
+                while (testTable.get(2L) == null || testTable.get(2L) != (long) i)
                     Thread.sleep(busyDelay);
                 log.debug( "- received 2nd trigger {}", i);
 

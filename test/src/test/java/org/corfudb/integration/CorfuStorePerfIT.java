@@ -7,19 +7,19 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import com.google.common.reflect.TypeToken;
 import org.apache.commons.io.FileUtils;
 
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.view.SMRObject;
 import org.junit.jupiter.api.Test;
 
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.test.SampleSchema;
@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Simple performance test to insert data into corfu via regular table.put() and CorfuStore protobufs
  */
-public class CorfuStorePerfIT extends  AbstractIT {
+public class CorfuStorePerfIT extends AbstractIT {
 
     @Test
     public void corfuStorePerfComparisonTest() throws Exception {
@@ -60,10 +60,11 @@ public class CorfuStorePerfIT extends  AbstractIT {
     private void addObjectsToTable(CorfuRuntime rt, final int count) {
         System.out.println("Start Writing Java Obj" + System.currentTimeMillis());
         long start = System.currentTimeMillis();
-        Map<UUID, Event> map = rt.getObjectsView()
+        ICorfuTable<UUID, Event> map = rt.getObjectsView()
             .build()
             .setStreamName("s1")
-            .setTypeToken(new TypeToken<CorfuTable<UUID, Event>>() {})
+            .setTypeToken(new TypeToken<PersistentCorfuTable<UUID, Event>>() {})
+            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
             .open();
 
         Event event;
@@ -72,7 +73,7 @@ public class CorfuStorePerfIT extends  AbstractIT {
                 eventTime, randomFreq
             );
             rt.getObjectsView().TXBegin();
-            map.put(UUID.randomUUID(), event);
+            map.insert(UUID.randomUUID(), event);
             rt.getObjectsView().TXEnd();
         }
         long end = System.currentTimeMillis();

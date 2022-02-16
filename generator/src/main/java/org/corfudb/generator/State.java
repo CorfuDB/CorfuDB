@@ -9,8 +9,9 @@ import org.corfudb.generator.distributions.Streams;
 import org.corfudb.generator.util.StringIndexer;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.runtime.view.SMRObject;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -42,7 +43,7 @@ public class State {
     @Getter
     private final CorfuRuntime runtime;
 
-    private final Map<UUID, CorfuTable<String, String>> maps;
+    private final Map<UUID, PersistentCorfuTable<String, String>> maps;
 
     @Getter
     private final StateContext ctx = new StateContext();
@@ -77,26 +78,27 @@ public class State {
     private void openObjects() {
         for (String id : streams.getDataSet()) {
             UUID uuid = CorfuRuntime.getStreamID(id);
-            CorfuTable<String, String> map = runtime.getObjectsView()
+            PersistentCorfuTable<String, String> map = runtime.getObjectsView()
                     .build()
                     .setStreamID(uuid)
-                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                    .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                     .setArguments(new StringIndexer())
+                    .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                     .open();
 
             maps.put(uuid, map);
         }
     }
 
-    public CorfuTable<String, String> getMap(UUID uuid) {
-        CorfuTable<String, String> map = maps.get(uuid);
+    public PersistentCorfuTable<String, String> getMap(UUID uuid) {
+        PersistentCorfuTable<String, String> map = maps.get(uuid);
         if (map == null) {
             throw new IllegalStateException("Map doesn't exist");
         }
         return maps.get(uuid);
     }
 
-    public Collection<CorfuTable<String, String>> getMaps() {
+    public Collection<PersistentCorfuTable<String, String>> getMaps() {
         return maps.values();
     }
 

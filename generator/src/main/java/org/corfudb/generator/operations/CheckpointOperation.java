@@ -5,6 +5,7 @@ import org.corfudb.generator.State;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.AddressSpaceView;
 
 import java.util.concurrent.TimeUnit;
@@ -22,7 +23,7 @@ public class CheckpointOperation extends Operation {
     @Override
     public void execute() {
         try {
-            MultiCheckpointWriter<CorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();
+            MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();
             mcw.addAllMaps(state.getMaps());
             Token trimAddress = mcw.appendCheckpoints(state.getRuntime(), "checkpointer");
             state.updateTrimMark(trimAddress);

@@ -3,10 +3,10 @@ package org.corfudb.runtime;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.collections.StreamingMap;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.util.ArrayList;
@@ -19,21 +19,21 @@ import java.util.UUID;
  * Checkpoint multiple CorfuTables serially as a prerequisite for a later log trim.
  */
 @Slf4j
-public class MultiCheckpointWriter<T extends StreamingMap> {
+public class MultiCheckpointWriter<T extends ICorfuTable<?, ?>> {
     @Getter
-    private List<ICorfuSMR<T>> maps = new ArrayList<>();
+    private List<ICorfuSMR<T>> tables = new ArrayList<>();
 
-    /** Add a map to the list of maps to be checkpointed by this class. */
+    /** Add a table to the list of tables to be checkpointed by this class. */
     @SuppressWarnings("unchecked")
-    public void addMap(T map) {
-        maps.add((ICorfuSMR<T>) map);
+    public void addMap(T table) {
+        this.tables.add((ICorfuSMR<T>) table);
     }
 
-    /** Add map(s) to the list of maps to be checkpointed by this class. */
+    /** Add table(s) to the list of tables to be checkpointed by this class. */
 
-    public void addAllMaps(Collection<T> maps) {
-        for (T map : maps) {
-            addMap(map);
+    public void addAllMaps(Collection<T> tables) {
+        for (T table : tables) {
+            addMap(table);
         }
     }
 
@@ -51,12 +51,11 @@ public class MultiCheckpointWriter<T extends StreamingMap> {
         Token minSnapshot = Token.UNINITIALIZED;
 
         try {
-            for (ICorfuSMR<T> map : maps) {
-                UUID streamId = map.getCorfuStreamID();
+            for (ICorfuSMR<T> table : tables) {
+                UUID streamId = table.getCorfuStreamID();
 
-                CheckpointWriter<T> cpw = new CheckpointWriter(rt, streamId, author, (T) map);
-                ISerializer serializer = ((CorfuCompileProxy) map.getCorfuSMRProxy())
-                        .getSerializer();
+                CheckpointWriter<T> cpw = new CheckpointWriter<>(rt, streamId, author, (T) table);
+                ISerializer serializer = ((ICorfuSMRProxyInternal) table.getCorfuSMRProxy()).getSerializer();
                 cpw.setSerializer(serializer);
 
                 Token minCPSnapshot = Token.UNINITIALIZED;

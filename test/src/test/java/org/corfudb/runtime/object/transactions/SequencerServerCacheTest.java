@@ -9,9 +9,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.SequencerServerCache;
 import org.corfudb.infrastructure.SequencerServerCache.ConflictTxStream;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.object.AbstractObjectTest;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.SMRObject;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -100,19 +102,20 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
     public void testSequencerCacheSameKey() {
         getDefaultRuntime();
 
-        Map<Integer, Integer> map = getDefaultRuntime()
+        ICorfuTable<Integer, Integer> map = getDefaultRuntime()
                 .getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {
+                .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {
                 })
                 .setStreamName(TEST_STREAM)
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         final int key = 0xBEEF;
 
         for (int x = 0; x < cacheSize; x++) {
             getRuntime().getObjectsView().TXBegin();
-            map.put(key, x);
+            map.insert(key, x);
             getRuntime().getObjectsView().TXEnd();
         }
 
@@ -127,11 +130,12 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
     public void testSequencerCacheTrim() {
         getDefaultRuntime();
 
-        Map<Integer, Integer> map = getDefaultRuntime()
+        ICorfuTable<Integer, Integer> map = getDefaultRuntime()
                 .getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {
+                .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {
                 })
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName(TEST_STREAM)
                 .open();
 
@@ -140,7 +144,7 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
 
         for (int x = 0; x < numTxn; x++) {
             getRuntime().getObjectsView().TXBegin();
-            map.put(x, x);
+            map.insert(x, x);
             getRuntime().getObjectsView().TXEnd();
         }
 

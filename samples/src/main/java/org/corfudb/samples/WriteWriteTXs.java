@@ -7,6 +7,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -134,9 +135,9 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
         /**
          * Instantiate three streams with three SMRmap objects
          */
-        map1 = instantiateCorfuObject(new TypeToken<CorfuTable<String, Integer>>() {}, "A");
-        map2 = instantiateCorfuObject(new TypeToken<CorfuTable<String, Integer>>() {}, "B");
-        map3 = instantiateCorfuObject(new TypeToken<CorfuTable<String, Integer>>() {}, "C");
+        map1 = instantiateCorfuObject(new TypeToken<PersistentCorfuTable<String, Integer>>() {}, "A");
+        map2 = instantiateCorfuObject(new TypeToken<PersistentCorfuTable<String, Integer>>() {}, "B");
+        map3 = instantiateCorfuObject(new TypeToken<PersistentCorfuTable<String, Integer>>() {}, "C");
 
         // populate maps
         System.out.print("generating maps..");
@@ -144,9 +145,9 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
             System.out.print(".");
             TXBegin();
             for (int j = 0; j < BATCH_SZ; j++) {
-                map1.put("m1" + (i * BATCH_SZ + j), i);
-                map2.put("m2" + (i * BATCH_SZ + j), i);
-                map3.put("m3" + (i * BATCH_SZ + j), i);
+                map1.insert("m1" + (i * BATCH_SZ + j), i);
+                map2.insert("m2" + (i * BATCH_SZ + j), i);
+                map3.insert("m3" + (i * BATCH_SZ + j), i);
             }
             TXEnd();
         }
@@ -192,9 +193,9 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
                 // otherwise, perform a random put()
                 else {
                     if (rand.nextInt(2) == 1)
-                        map2.put("m2" + rand.nextInt(numTasks), accumulator);
+                        map2.insert("m2" + rand.nextInt(numTasks), accumulator);
                     else
-                        map3.put("m3" + rand.nextInt(numTasks), accumulator);
+                        map3.insert("m3" + rand.nextInt(numTasks), accumulator);
                 }
             }
 

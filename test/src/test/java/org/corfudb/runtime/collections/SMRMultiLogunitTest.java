@@ -7,14 +7,17 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.SMRObject;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Created by kjames88 on 3/23/17.
@@ -23,7 +26,6 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
     public static final int ONE_THOUSAND = 1000;
     public static final int ONE_HUNDRED = 100;
     public CorfuRuntime runtime;
-
 
     @Before
     public void setRuntime() {
@@ -54,14 +56,16 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
      */
     @Test
     public void simpleWriteRead() {
-        Map<String, String> testMap = getRuntime()
+        PersistentCorfuTable<String, String> testTable = getRuntime()
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
-        assertEquals(testMap.put("1", "a"), null);
-        assertEquals(testMap.get("1"), "a");
+
+        testTable.insert("1", "a");
+        assertEquals(testTable.get("1"), "a");
     }
 
     /**
@@ -71,22 +75,28 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
      */
     @Test
     public void writeDualRead() {
-        Map<String, String> testMap = getRuntime()
+        PersistentCorfuTable<String, String> testTable = getRuntime()
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
-        assertEquals(null, testMap.put("1", "a"));
-        assertEquals("a", testMap.get("1"));
-        Map<String, String> anotherMap = getRuntime()
+
+        testTable.insert("1", "a");
+        assertEquals("a", testTable.get("1"));
+
+        PersistentCorfuTable<String, String> anotherTable = getRuntime()
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
-        assertEquals("a", anotherMap.put("1", "b"));
-        assertEquals("b", testMap.get("1"));
+
+        assertEquals("a", anotherTable.get("1"));
+        anotherTable.insert("1", "b");
+        assertEquals("b", testTable.get("1"));
     }
 
     /**
@@ -95,28 +105,31 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
      */
     @Test
     public void manyWritesThenRead() {
-        Map<String, String> testMap = getRuntime()
+        PersistentCorfuTable<String, String> testTable = getRuntime()
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
         for (int i=0; i < ONE_THOUSAND; i++) {
             String key = "key" + String.valueOf(i);
             String val = "value" + String.valueOf(i);
-            assertEquals(null, testMap.put(key, val));
+
+            testTable.insert(key, val);
         }
         // change to another map just to be sure Corfu is doing something
-        Map<String, String> anotherMap = getRuntime()
+        PersistentCorfuTable<String, String> anotherTable = getRuntime()
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
         for (int i=0; i < ONE_THOUSAND; i++) {
             String key = "key" + String.valueOf(i);
             String val = "value" + String.valueOf(i);
-            assertEquals(val, anotherMap.get(key));
+            assertEquals(val, anotherTable.get(key));
         }
     }
 
@@ -133,11 +146,12 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
         ObjectsView view = getRuntime().getObjectsView();
         final CountDownLatch barrier = new CountDownLatch(2);
 
-        Map<String, String> testMap = getRuntime()
+        PersistentCorfuTable<String, String> testTable = getRuntime()
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
         // concurrently run two conflicting transactions:  one or the other should succeed without overlap
@@ -146,7 +160,8 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
             for (int i=0; i < numKeys; i++) {
                 String key = "key" + String.valueOf(i);
                 String val = "value0_" + String.valueOf(i);
-                testMap.put(key, val);
+                testTable.insert(key, val);
+                assertEquals(val, testTable.get(key)); // Generate conflict information since insert has no upcall
                 if (i == 0) {
                     barrier.countDown();
                     barrier.await();
@@ -163,7 +178,8 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
             for (int i = 0; i < numKeys; i++) {
                 String key = "key" + String.valueOf(i);
                 String val = "value1_" + String.valueOf(i);
-                testMap.put(key, val);
+                testTable.insert(key, val);
+                assertEquals(val, testTable.get(key)); // Generate conflict information since insert has no upcall
                 if (i == 0) {
                     barrier.countDown();
                     barrier.await();
@@ -186,7 +202,7 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
         String base = "invalid";
         for (int i = 0; i < numKeys; i++) {
             String key = "key" + i;
-            String val = testMap.get(key);
+            String val = testTable.get(key);
             assertNotNull(val);
             if (i == 0) {
                 int underscore = val.indexOf("_");
@@ -207,11 +223,12 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
     public void multiThreadedManyWritesThenRead() {
         int numKeys = ONE_THOUSAND;
         ObjectsView view = getRuntime().getObjectsView();
-        Map<String, String> testMap = getRuntime()
+        PersistentCorfuTable<String, String> testTable = getRuntime()
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
         AtomicInteger threadsComplete = new AtomicInteger(0);
@@ -219,7 +236,7 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
             for (int i=0; i < numKeys; i++) {
                 String key = "key" + String.valueOf(i);
                 String val = "value" + String.valueOf(step) + "_" + String.valueOf(i);
-                testMap.put(key, val);
+                testTable.insert(key, val);
                 if (i % ONE_HUNDRED == 0) {
                     Thread.yield();
                 }
@@ -234,7 +251,7 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
         assertEquals(2, threadsComplete.get());
         for (int i=0; i < numKeys; i++) {
             String key = "key" + String.valueOf(i);
-            String val = testMap.get(key);
+            String val = testTable.get(key);
             assertNotNull(val);
         }
     }

@@ -1,13 +1,12 @@
 package org.corfudb.integration;
 
-import com.google.common.reflect.TypeToken;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.collections.StreamingMap;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -19,7 +18,6 @@ import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Duration;
-import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -69,18 +67,12 @@ public class LogSizeQuotaIT extends AbstractIT {
         long maxLogSize = FileUtils.ONE_MB / 2;
         Process server_1 = runServerWithQuota(DEFAULT_PORT, maxLogSize, true);
 
+        CorfuRuntime rt = createRuntime(DEFAULT_ENDPOINT);
 
-        CorfuRuntime rt = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
-
-        Map<String, String> map = rt.getObjectsView()
-                .build()
-                .setStreamName("s1")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .open();
-
-        // Create a map
-        map.put("k1", "v1");
-        map.put("k2", "v2");
+        // Create a table
+        PersistentCorfuTable<String, String> table = createCorfuTable(rt, "s1");
+        table.insert("k1", "v1");
+        table.insert("k2", "v2");
 
         // Create a stream and keep writing data till the quota is exhausted
         // quota is exhausted
@@ -93,7 +85,7 @@ public class LogSizeQuotaIT extends AbstractIT {
         boolean txnAborted = false;
         try {
             rt.getObjectsView().TXBegin();
-            map.put("largeEntry", "Val");
+            table.insert("largeEntry", "Val");
             rt.getObjectsView().TXEnd();
         } catch (TransactionAbortedException tae) {
             assertThat(tae.getAbortCause()).isEqualTo(AbortCause.QUOTA_EXCEEDED);
@@ -109,49 +101,37 @@ public class LogSizeQuotaIT extends AbstractIT {
         }
 
         // Create a privileged client to checkpoint and compact
-        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
-                .builder()
-                .priorityLevel(PriorityLevel.HIGH)
-                .build();
+        CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder paramsBuilder =
+                CorfuRuntime.CorfuRuntimeParameters.builder().priorityLevel(PriorityLevel.HIGH);
 
-        CorfuRuntime privilegedRt = CorfuRuntime.fromParameters(params);
+        CorfuRuntime privilegedRt = createRuntime(DEFAULT_ENDPOINT, paramsBuilder);
         privilegedRt.parseConfigurationString(DEFAULT_ENDPOINT);
         privilegedRt.connect();
 
+        PersistentCorfuTable<String, String> table2 = createCorfuTable(privilegedRt, "s1");
 
-        StreamingMap<String, String> map2 = privilegedRt.getObjectsView()
-                .build()
-                .setStreamName("s1")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .open();
-
-        // Verify that a high priority client can write to a map
-        map2.put("k4", "v4");
+        // Verify that a high priority client can write to a table
+        table2.insert("k4", "v4");
 
         // Verify that the high priority client can checkpoint/trim
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap(map2);
+        MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();
+        mcw.addMap(table2);
         Token token = mcw.appendCheckpoints(privilegedRt, "privilegedWriter");
         privilegedRt.getAddressSpaceView().prefixTrim(token);
         privilegedRt.getAddressSpaceView().gc();
 
         // Now verify that the original client (i.e. has a normal priority) is
         // able to write after some of the quota has been freed
-        map.put("k3", "v3");
-
+        table.insert("k3", "v3");
 
         // Now verify that all those changes can be observed from a new client
-        CorfuRuntime rt3 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
-        Map<String, String> map3 = rt3.getObjectsView()
-                .build()
-                .setStreamName("s1")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .open();
+        CorfuRuntime rt3 = createRuntime(DEFAULT_ENDPOINT);
+        PersistentCorfuTable<String, String> table3 = createCorfuTable(rt3, "s1");
 
-        assertThat(map3.get("k1")).isEqualTo("v1");
-        assertThat(map3.get("k2")).isEqualTo("v2");
-        assertThat(map3.get("k3")).isEqualTo("v3");
-        assertThat(map3.get("k4")).isEqualTo("v4");
+        assertThat(table3.get("k1")).isEqualTo("v1");
+        assertThat(table3.get("k2")).isEqualTo("v2");
+        assertThat(table3.get("k3")).isEqualTo("v3");
+        assertThat(table3.get("k4")).isEqualTo("v4");
     }
 
     @Test
@@ -160,7 +140,7 @@ public class LogSizeQuotaIT extends AbstractIT {
         long maxLogSize = FileUtils.ONE_MB / 2;
         Process server_1 = runServerWithQuota(DEFAULT_PORT, maxLogSize, true);
 
-        CorfuRuntime rt = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+        CorfuRuntime rt = createDefaultRuntime();
         UUID streamId = UUID.randomUUID();
         IStreamView sv = rt.getStreamsView().get(streamId);
         exhaustQuota(sv);
@@ -175,7 +155,6 @@ public class LogSizeQuotaIT extends AbstractIT {
 
     @Test
     public void clusteringTest() throws Exception {
-
         long maxLogSize = FileUtils.ONE_MB / 2;
         int n1Port = DEFAULT_PORT;
         int n2Port = DEFAULT_PORT + 1;
@@ -184,7 +163,7 @@ public class LogSizeQuotaIT extends AbstractIT {
         Process server_2 = runServerWithQuota(n2Port, maxLogSize, false);
         Process server_3 = runServerWithQuota(n3Port, maxLogSize, false);
 
-        CorfuRuntime rt = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+        CorfuRuntime rt = createDefaultRuntime();
         IStreamView sv = rt.getStreamsView().get(UUID.randomUUID());
         exhaustQuota(sv);
 
@@ -206,14 +185,11 @@ public class LogSizeQuotaIT extends AbstractIT {
                 .isInstanceOf(QuotaExceededException.class);
 
         // Verify that high priority clients can still write to the cluster
-        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
+        CorfuRuntimeParametersBuilder paramsBuilder = CorfuRuntime.CorfuRuntimeParameters
                 .builder()
-                .priorityLevel(PriorityLevel.HIGH)
-                .build();
+                .priorityLevel(PriorityLevel.HIGH);
 
-        CorfuRuntime privilegedRt = CorfuRuntime.fromParameters(params);
-        privilegedRt.parseConfigurationString(DEFAULT_ENDPOINT);
-        privilegedRt.connect();
+        CorfuRuntime privilegedRt = createRuntime(DEFAULT_ENDPOINT, paramsBuilder);
 
         IStreamView sv2 = privilegedRt.getStreamsView().get(UUID.randomUUID());
         long currTail = privilegedRt.getSequencerView().query().getSequence();

@@ -26,6 +26,8 @@ import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.object.ICorfuSMRSnapshotProxy;
+import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.object.transactions.TransactionalContext.PreCommitListener;
 import org.corfudb.runtime.view.Address;
@@ -138,10 +140,15 @@ public abstract class AbstractTransactionalContext implements
     @Getter
     private final ConflictSetInfo readSetInfo = new ConflictSetInfo();
 
+    // TODO: Make into a class?
+    protected final Map<ICorfuSMRProxyInternal<?>, ICorfuSMRSnapshotProxy<?>> snapshotProxyMap = new HashMap<>();
+
     /**
      * Cache of last known position of streams accessed in this transaction.
      */
     protected final Map<UUID, Long> knownStreamsPosition = new HashMap<>();
+
+    public long dbNanoTime = 0;
 
     AbstractTransactionalContext(Transaction transaction) {
         transactionID = Utils.genPseudorandomUUID();
@@ -151,26 +158,27 @@ public abstract class AbstractTransactionalContext implements
         AbstractTransactionalContext.log.trace("TXBegin[{}]", this);
     }
 
+    protected <T extends ICorfuSMR<T>> ICorfuSMRSnapshotProxy<T> getAndCacheSnapshotProxy(ICorfuSMRProxyInternal<T> proxy, long ts) {
+        // TODO: Refactor me to avoid casting on ICorfuSMRProxyInternal type.
+        ICorfuSMRSnapshotProxy<T> snapshotProxy = (ICorfuSMRSnapshotProxy<T>) snapshotProxyMap.get(proxy);
+        final MVOCorfuCompileProxy<T> persistentProxy = (MVOCorfuCompileProxy<T>) proxy;
+        if (snapshotProxy == null) {
+            snapshotProxy = persistentProxy.getUnderlyingMVO().getSnapshotProxy(ts);
+            snapshotProxyMap.put(proxy, snapshotProxy);
+        }
+
+        return snapshotProxy;
+    }
+
     protected void updateKnownStreamPosition(@NonNull ICorfuSMRProxyInternal<?> proxy, long position) {
-        final boolean isMonotonicObject = proxy.getUnderlyingObject().isMonotonicObject();
         Long val = knownStreamsPosition.get(proxy.getStreamID());
 
         if (val != null) {
-            if (isMonotonicObject) {
-                Preconditions.checkState(val <= position,
-                        "new stream position %s has decreased from %s", position, val);
-            } else {
-                // This precondition is not valid for monotonic objects since multiple accesses
-                // performed by a transaction may not always see the same stream position.
-                // This can occur if another thread performs accesses at a later snapshot and
-                // interleaves with this transaction.
-                Preconditions.checkState(val == position,
-                        "inconsistent stream positions %s and %s", val, position);
-                return;
-            }
+            Preconditions.checkState(val <= position,
+                    "new stream position %s has decreased from %s", position, val);
         }
 
-        hasAccessedMonotonicObject = hasAccessedMonotonicObject || isMonotonicObject;
+        hasAccessedMonotonicObject = true;
         knownStreamsPosition.put(proxy.getStreamID(), position);
     }
 
@@ -327,29 +335,34 @@ public abstract class AbstractTransactionalContext implements
      * @return the current global tail
      */
     private Token obtainSnapshotTimestamp() {
-        final AbstractTransactionalContext parentCtx = getParentContext();
-        final Token txnBuilderTs = getTransaction().getSnapshot();
-        if (parentCtx != null) {
-            // If we're in a nested transaction, the first read timestamp
-            // needs to come from the root.
-            Token parentTimestamp = parentCtx.getSnapshotTimestamp();
-            log.trace("obtainSnapshotTimestamp: inheriting parent snapshot" +
-                    " SnapshotTimestamp[{}] {}", this, parentTimestamp);
-            return parentTimestamp;
-        } else if (!txnBuilderTs.equals(Token.UNINITIALIZED)) {
-            log.trace("obtainSnapshotTimestamp: using user defined snapshot" +
-                    " SnapshotTimestamp[{}] {}", this, txnBuilderTs);
-            return txnBuilderTs;
-        } else {
-            // Otherwise, fetch a read token from the sequencer the linearize
-            // ourselves against.
-            Token timestamp = getTransaction()
-                    .getRuntime()
-                    .getSequencerView()
-                    .query()
-                    .getToken();
-            log.trace("obtainSnapshotTimestamp: sequencer SnapshotTimestamp[{}] {}", this, timestamp);
-            return timestamp;
+        long startSnapshotTime = System.nanoTime();
+        try {
+            final AbstractTransactionalContext parentCtx = getParentContext();
+            final Token txnBuilderTs = getTransaction().getSnapshot();
+            if (parentCtx != null) {
+                // If we're in a nested transaction, the first read timestamp
+                // needs to come from the root.
+                Token parentTimestamp = parentCtx.getSnapshotTimestamp();
+                log.trace("obtainSnapshotTimestamp: inheriting parent snapshot" +
+                        " SnapshotTimestamp[{}] {}", this, parentTimestamp);
+                return parentTimestamp;
+            } else if (!txnBuilderTs.equals(Token.UNINITIALIZED)) {
+                log.trace("obtainSnapshotTimestamp: using user defined snapshot" +
+                        " SnapshotTimestamp[{}] {}", this, txnBuilderTs);
+                return txnBuilderTs;
+            } else {
+                // Otherwise, fetch a read token from the sequencer the linearize
+                // ourselves against.
+                Token timestamp = getTransaction()
+                        .getRuntime()
+                        .getSequencerView()
+                        .query()
+                        .getToken();
+                log.trace("obtainSnapshotTimestamp: sequencer SnapshotTimestamp[{}] {}", this, timestamp);
+                return timestamp;
+            }
+        } finally {
+            dbNanoTime += (System.nanoTime() - startSnapshotTime);
         }
     }
 
