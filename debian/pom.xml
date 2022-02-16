@@ -103,16 +103,6 @@
                                         <filemode>755</filemode>
                                     </mapper>
                                 </data>
-                                <!-- clojure scripts -->
-                                <data>
-                                    <src>${session.executionRootDirectory}/corfu_scripts</src>
-                                    <type>directory</type>
-                                    <mapper>
-                                        <type>perm</type>
-                                        <prefix>/usr/share/corfu/corfu_scripts</prefix>
-                                        <filemode>755</filemode>
-                                    </mapper>
-                                </data>
                                 <!-- control scripts -->
                                 <data>
                                     <src>${session.executionRootDirectory}/scripts</src>

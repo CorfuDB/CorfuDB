@@ -85,11 +85,6 @@
 
     <repositories>
         <repository>
-            <id>clojars.org</id>
-            <url>https://clojars.org/repo</url>
-        </repository>
-
-        <repository>
             <snapshots/>
             <id>snapshots</id>
             <name>libs-snapshot</name>

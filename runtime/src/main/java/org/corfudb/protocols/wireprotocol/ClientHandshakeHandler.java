@@ -114,7 +114,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
             return;
         }
 
-        log.info("channelRead: Handshake Response received. Removing {} from pipeline.", READ_TIMEOUT_HANDLER);
+        log.debug("channelRead: Handshake Response received. Removing {} from pipeline.", READ_TIMEOUT_HANDLER);
 
         // Remove the handler from the pipeline. Also remove the reference of the context from
         // the handler so that it does not disconnect the channel.
@@ -142,7 +142,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         requestMessages.clear();
 
         // Remove this handler from the pipeline; handshake is completed.
-        log.info("channelRead: Removing handshake handler from pipeline.");
+        log.debug("channelRead: Removing handshake handler from pipeline.");
         ctx.pipeline().remove(this);
         this.fireHandshakeSucceeded(ctx);
     }
@@ -154,7 +154,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
      */
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
-        log.info("channelActive: Outgoing connection established to: {} from id={}",
+        log.debug("channelActive: Outgoing connection established to: {} from id={}",
                 ctx.channel().remoteAddress(), ctx.channel().localAddress());
 
         // Note: Some fields in the header are unused during the handshake process.

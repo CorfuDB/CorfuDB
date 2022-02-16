@@ -36,6 +36,10 @@
     </module>
 
     <module name="TreeWalker">
+        <module name="UncommentedMain">
+            <property name="excludedClasses" value="\.Main$"/>
+        </module>
+        
         <module name="RegexpSinglelineJava">
             <property name="severity" value="error"/>
             <property name="id" value="ThreadSleep"/>
