@@ -14,8 +14,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.collections.StreamingMap;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -23,6 +22,7 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.ObjectOpenOption;
+import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
@@ -33,36 +33,38 @@ public class CheckpointTrimTest extends AbstractViewTest {
 
     @Test
     public void testCheckpointTrim() throws Exception {
-        Map<String, String> testMap = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                })
+        PersistentCorfuTable<String, String> testTable = getDefaultRuntime().getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
         // Place 3 entries into the map
-        testMap.put("a", "a");
-        testMap.put("b", "b");
-        testMap.put("c", "c");
+        testTable.insert("a", "a");
+        testTable.insert("b", "b");
+        testTable.insert("c", "c");
 
         // Insert a checkpoint
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap((CorfuTable) testMap);
+        MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();
+        mcw.addMap(testTable);
         Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
 
         // Trim the log
         trim(checkpointAddress);
 
         // Ok, get a new view of the map
-        Map<String, String> newTestMap = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                })
+        PersistentCorfuTable<String, String> newTestTable = getDefaultRuntime().getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .option(ObjectOpenOption.NO_CACHE)
                 .setStreamName("test")
                 .open();
 
         // Reading an entry from scratch should be ok
-        assertThat(newTestMap)
-                .containsKeys("a", "b", "c");
+        assertThat(newTestTable.entryStream().map(Map.Entry::getKey))
+                .containsExactlyInAnyOrder("a", "b", "c");
     }
 
     /**
@@ -71,15 +73,16 @@ public class CheckpointTrimTest extends AbstractViewTest {
      */
     @Test
     public void ensureMCWUsesRealTail() throws Exception {
-        StreamingMap<String, String> map = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                })
+        PersistentCorfuTable<String, String> table = getDefaultRuntime().getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
         final int initMapSize = 10;
         for (int x = 0; x < initMapSize; x++) {
-            map.put(String.valueOf(x), String.valueOf(x));
+            table.insert(String.valueOf(x), String.valueOf(x));
         }
 
         // move the sequencer tail forward
@@ -87,8 +90,8 @@ public class CheckpointTrimTest extends AbstractViewTest {
             getDefaultRuntime().getSequencerView().next();
         }
 
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap(map);
+        MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();
+        mcw.addMap(table);
         Token trimAddress = mcw.appendCheckpoints(getRuntime(), "author");
         Token staleTrimAddress = new Token(trimAddress.getEpoch() - 1, trimAddress.getSequence());
 
@@ -130,9 +133,10 @@ public class CheckpointTrimTest extends AbstractViewTest {
         final int nCheckpoints = 2;
         final long ckpointGap = 5;
 
-        Map<String, String> testMap = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                })
+        PersistentCorfuTable<String, String> testTable = getDefaultRuntime().getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
@@ -140,13 +144,13 @@ public class CheckpointTrimTest extends AbstractViewTest {
         // generate two successive checkpoints
         for (int ckpoint = 0; ckpoint < nCheckpoints; ckpoint++) {
             // Place 3 entries into the map
-            testMap.put("a", "a" + ckpoint);
-            testMap.put("b", "b" + ckpoint);
-            testMap.put("c", "c" + ckpoint);
+            testTable.insert("a", "a" + ckpoint);
+            testTable.insert("b", "b" + ckpoint);
+            testTable.insert("c", "c" + ckpoint);
 
             // Insert a checkpoint
-            MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-            mcw.addMap((CorfuTable) testMap);
+            MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();
+            mcw.addMap(testTable);
             checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
         }
 
@@ -155,9 +159,10 @@ public class CheckpointTrimTest extends AbstractViewTest {
         trim(token);
 
         // Ok, get a new view of the map
-        Map<String, String> newTestMap = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                })
+        PersistentCorfuTable<String, String> newTestMap = getDefaultRuntime().getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .option(ObjectOpenOption.NO_CACHE)
                 .setStreamName("test")
                 .open();
@@ -187,24 +192,27 @@ public class CheckpointTrimTest extends AbstractViewTest {
         final int CHECKPOINT_SIZE = 3;
         final String CHECKPOINT_AUTHOR = "Author";
         final String tableName = "test";
-        final CorfuTable<Integer, Integer> map = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {})
+        final PersistentCorfuTable<Integer, Integer> table = getDefaultRuntime().getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName(tableName)
                 .open();
 
-        final MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter();
-        mcw.addMap(map);
+        final MultiCheckpointWriter<PersistentCorfuTable<Integer, Integer>> mcw = new MultiCheckpointWriter<>();
+        mcw.addMap(table);
 
-        IntStream.range(0, BATCH_SIZE).forEach(idx -> map.put(idx, idx));
+        IntStream.range(0, BATCH_SIZE).forEach(idx -> table.insert(idx, idx));
         Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), CHECKPOINT_AUTHOR);
-        IntStream.range(0, BATCH_SIZE * 2).forEach(idx -> map.put(idx, idx));
+        IntStream.range(0, BATCH_SIZE * 2).forEach(idx -> table.insert(idx, idx));
 
         trim(checkpointAddress);
 
         CorfuRuntime newRuntime = getNewRuntime(getDefaultNode()).connect();
-        Map<Integer, Integer> newMap = newRuntime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {
-                })
+        PersistentCorfuTable<Integer, Integer> newTable = newRuntime.getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName(tableName)
                 .open();
 
@@ -219,7 +227,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
                 .isEqualTo(BATCH_SIZE * 2);
 
         trim(mcw.appendCheckpoints(getRuntime(), CHECKPOINT_AUTHOR));
-        IntStream.range(0, BATCH_SIZE).forEach(idx -> newMap.put(idx, idx));
+        IntStream.range(0, BATCH_SIZE).forEach(idx -> newTable.insert(idx, idx));
         Assertions.assertThatThrownBy(() -> stream.remainingUpTo(Long.MAX_VALUE))
                 .isInstanceOf(TrimmedException.class);
     }
@@ -234,17 +242,19 @@ public class CheckpointTrimTest extends AbstractViewTest {
         final int CHECKPOINT_SIZE = 3;
         final String CHECKPOINT_AUTHOR = "Author";
         final String tableName = "test";
-        final CorfuTable<Integer, Integer> map = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {})
+        final PersistentCorfuTable<Integer, Integer> table = getDefaultRuntime().getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName(tableName)
                 .open();
 
-        final MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter();
-        mcw.addMap(map);
+        final MultiCheckpointWriter<PersistentCorfuTable<Integer, Integer>> mcw = new MultiCheckpointWriter<>();
+        mcw.addMap(table);
 
-        IntStream.range(0, BATCH_SIZE).forEach(idx -> map.put(idx, idx));
+        IntStream.range(0, BATCH_SIZE).forEach(idx -> table.insert(idx, idx));
         trim(mcw.appendCheckpoints(getRuntime(), CHECKPOINT_AUTHOR));
-        IntStream.range(0, BATCH_SIZE).forEach(idx -> map.put(idx, idx));
+        IntStream.range(0, BATCH_SIZE).forEach(idx -> table.insert(idx, idx));
 
         CorfuRuntime newRuntime = getNewRuntime(getDefaultNode()).connect();
 
@@ -260,12 +270,12 @@ public class CheckpointTrimTest extends AbstractViewTest {
 
         // Create a new checkpoint, produce some data and immediately consume it.
         Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), CHECKPOINT_AUTHOR);
-        IntStream.range(0, BATCH_SIZE).forEach(idx -> map.put(idx, idx));
+        IntStream.range(0, BATCH_SIZE).forEach(idx -> table.insert(idx, idx));
         Assertions.assertThat(Stream.of(stream.remainingUpTo(Long.MAX_VALUE))
                 .map(List::size).mapToInt(Integer::intValue).sum())
                 .isEqualTo(BATCH_SIZE);
 
-        IntStream.range(0, BATCH_SIZE).forEach(idx -> map.put(idx, idx));
+        IntStream.range(0, BATCH_SIZE).forEach(idx -> table.insert(idx, idx));
         trim(checkpointAddress);
         stream.gc(checkpointAddress.getSequence());
         Assertions.assertThat(Stream.of(stream.remainingUpTo(Long.MAX_VALUE))
@@ -278,12 +288,14 @@ public class CheckpointTrimTest extends AbstractViewTest {
     public void rawStreamSeekBeyondTrimNoCheckpoint() {
         final int BATCH_SIZE = 10;
         final String tableName = "test";
-        final CorfuTable<String, String> map = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+        final PersistentCorfuTable<String, String> table = getDefaultRuntime().getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName(tableName)
                 .open();
 
-        IntStream.range(0, BATCH_SIZE).forEach(idx -> map.put(String.valueOf(idx), String.valueOf(idx)));
+        IntStream.range(0, BATCH_SIZE).forEach(idx -> table.insert(String.valueOf(idx), String.valueOf(idx)));
         // Trim with no checkpoint
         trim(new Token(0, BATCH_SIZE-1));
 
@@ -314,19 +326,20 @@ public class CheckpointTrimTest extends AbstractViewTest {
         final int EMPTY = 0;
         final String CHECKPOINT_AUTHOR = "Author";
         final String tableName = "test";
-        final CorfuTable<Integer, Integer> map = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {
-                })
+        final PersistentCorfuTable<Integer, Integer> table = getDefaultRuntime().getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName(tableName)
                 .open();
 
         final IStreamView stream = getDefaultRuntime().getStreamsView()
                         .get(CorfuRuntime.getStreamID(tableName));
-        final MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter();
-        mcw.addMap(map);
+        final MultiCheckpointWriter<PersistentCorfuTable<Integer, Integer>> mcw = new MultiCheckpointWriter<>();
+        mcw.addMap(table);
 
         // Produce BATCH_SIZE data.
-        IntStream.range(0, BATCH_SIZE).forEach(idx -> map.put(idx, idx));
+        IntStream.range(0, BATCH_SIZE).forEach(idx -> table.insert(idx, idx));
         // Consume it via the streaming layer.
         Assertions.assertThat(Stream.of(stream.remainingUpTo(Long.MAX_VALUE))
                 .map(List::size).mapToInt(Integer::intValue).sum())
@@ -347,7 +360,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
 
         // Write some data and immediately consume it. Our pointer should be at
         // at the trim mark.
-        IntStream.range(0, BATCH_SIZE * 2).forEach(idx -> map.put(idx, idx));
+        IntStream.range(0, BATCH_SIZE * 2).forEach(idx -> table.insert(idx, idx));
         Assertions.assertThat(Stream.of(stream.remainingUpTo(Long.MAX_VALUE))
                 .map(List::size).mapToInt(Integer::intValue).sum())
                 .isEqualTo(BATCH_SIZE * 2);
@@ -380,21 +393,23 @@ public class CheckpointTrimTest extends AbstractViewTest {
 
     @Test
     public void testCheckpointTrimDuringPlayback() throws Exception {
-        Map<String, String> testMap = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                })
+        PersistentCorfuTable<String, String> testTable = getDefaultRuntime().getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
         // Place 3 entries into the map
-        testMap.put("a", "a");
-        testMap.put("b", "b");
-        testMap.put("c", "c");
+        testTable.insert("a", "a");
+        testTable.insert("b", "b");
+        testTable.insert("c", "c");
 
         // Ok, get a new view of the map
-        Map<String, String> newTestMap = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                })
+        PersistentCorfuTable<String, String> newTestTable = getDefaultRuntime().getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .option(ObjectOpenOption.NO_CACHE)
                 .setStreamName("test")
                 .open();
@@ -407,15 +422,15 @@ public class CheckpointTrimTest extends AbstractViewTest {
                 .build()
                 .begin();
 
-        assertThat(newTestMap)
-                .containsKeys("a", "b")
+        assertThat(newTestTable.entryStream().map(Map.Entry::getKey))
+                .containsExactlyInAnyOrder("a", "b")
                 .hasSize(2);
 
         getRuntime().getObjectsView().TXEnd();
 
         // Insert a checkpoint
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap((CorfuTable) testMap);
+        MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();
+        mcw.addMap(testTable);
         Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
 
         // Trim the log
@@ -423,8 +438,8 @@ public class CheckpointTrimTest extends AbstractViewTest {
 
 
         // Sync should encounter trim exception, reset, and use checkpoint
-        assertThat(newTestMap)
-                .containsKeys("a", "b", "c");
+        assertThat(newTestTable.entryStream().map(Map.Entry::getKey))
+                .containsExactlyInAnyOrder("a", "b", "c");
     }
 
     /**
@@ -434,10 +449,11 @@ public class CheckpointTrimTest extends AbstractViewTest {
      */
     @Test
     public void testTrimRetryServerEpochChange() throws Exception{
-        // Initialize map.
-        Map<String, String> testMap = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                })
+        // Initialize table.
+        PersistentCorfuTable<String, String> testMap = getDefaultRuntime().getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 

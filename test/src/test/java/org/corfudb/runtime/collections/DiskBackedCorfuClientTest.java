@@ -245,7 +245,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
             Assertions.assertEquals(intended.size(), table.size());
 
             executeTx(() -> {
-                final Set<String> persisted = new HashSet<>(table.scanAndFilter(entry -> true));
+                final Set<String> persisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
                 Assertions.assertEquals(intended, persisted);
                 Assertions.assertEquals(table.size(), persisted.size());
             });
@@ -263,7 +263,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
             intended.forEach(value -> table.put(value, value));
             Assertions.assertEquals(intended.size(), table.size());
 
-            final Set<String> persisted = new HashSet<>(table.scanAndFilter(entry -> true));
+            final Set<String> persisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
             Assertions.assertEquals(intended, persisted);
             Assertions.assertEquals(table.size(), persisted.size());
         }
@@ -281,7 +281,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
             intended.forEach(value -> Assertions.assertEquals(table.get(value), value));
             intended.forEach(value -> Assertions.assertEquals(table.remove(value), value));
 
-            final Set<String> persisted = new HashSet<>(table.scanAndFilter(entry -> true));
+            final Set<String> persisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
             Assertions.assertTrue(persisted.isEmpty());
         }
     }
@@ -301,7 +301,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
             });
 
             executeTx(() -> {
-                final Set<String> persisted = new HashSet<>(table.scanAndFilter(entry -> true));
+                final Set<String> persisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
                 Assertions.assertTrue(persisted.isEmpty());
             });
         }
@@ -331,7 +331,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
             executeTx(() ->  intended.forEach(table::delete));
 
             executeTx(() -> {
-                final Set<String> persisted = new HashSet<>(table.scanAndFilter(entry -> true));
+                final Set<String> persisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
                 Assertions.assertTrue(persisted.isEmpty());
             });
         }
@@ -349,7 +349,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
             intended.forEach(table::delete);
 
             executeTx(() -> {
-                final Set<String> persisted = new HashSet<>(table.scanAndFilter(entry -> true));
+                final Set<String> persisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
                 Assertions.assertTrue(persisted.isEmpty());
             });
         }
@@ -366,7 +366,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
             Assertions.assertEquals(table.size(), intended.size());
             table.clear();
 
-            final Set<String> persisted = new HashSet<>(table.scanAndFilter(entry -> true));
+            final Set<String> persisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
             Assertions.assertEquals(persisted.size(), 0);
             Assertions.assertEquals(table.size(), 0);
         }
@@ -384,7 +384,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
             executeTx(table::clear);
 
             executeTx(() -> {
-                final Set<String> persisted = new HashSet<>(table.scanAndFilter(entry -> true));
+                final Set<String> persisted = table.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet());
                 Assertions.assertEquals(persisted.size(), 0);
                 Assertions.assertEquals(table.size(), 0);
             });

@@ -12,9 +12,11 @@ import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AppendException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 
 
 /** A Corfu optimistic transaction context.
@@ -69,41 +71,49 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                                                 ICorfuSMRAccess<R, T> accessFunction,
                                                 Object[] conflictObject) {
         log.debug("Access[{},{}] conflictObj={}", this, proxy, conflictObject);
+
         // First, we add this access to the read set
         addToReadSet(proxy, conflictObject);
 
-        // Next, we sync the object, which will bring the object
-        // to the correct version, reflecting any optimistic
-        // updates.
         // Get snapshot timestamp in advance so it is not performed under the VLO lock
         long ts = getSnapshotTimestamp().getSequence();
-        return proxy
-                .getUnderlyingObject()
-                .access(o -> {
-                            WriteSetSMRStream stream = o.getOptimisticStreamUnsafe();
 
-                            // Obtain the stream position as when transaction context last
-                            // remembered it.
-                            long streamReadPosition = knownStreamsPosition.getOrDefault(proxy.getStreamID(), ts);
+        // TODO: better proxy type check, or refactor to avoid.
+        if (proxy instanceof CorfuCompileProxy) {
+            // Next, we sync the object, which will bring the object
+            // to the correct version, reflecting any optimistic
+            // updates.
+            return proxy
+                    .getUnderlyingObject()
+                    .access(o -> {
+                                WriteSetSMRStream stream = o.getOptimisticStreamUnsafe();
 
-                            return (
-                                    (stream == null || stream.isStreamCurrentContextThreadCurrentContext())
-                                    && (stream != null && getWriteSetEntrySize(proxy.getStreamID()) == stream.pos() + 1
-                                       || (getWriteSetEntrySize(proxy.getStreamID()) == 0 /* No updates. */
-                                          && o.getVersionUnsafe() == streamReadPosition) /* Match timestamp. */
-                                    )
-                            );
-                        },
-                        o -> {
-                            // inside syncObjectUnsafe, depending on the object
-                            // version, we may need to undo or redo
-                            // committed changes, or apply forward committed changes.
-                            syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy,
-                                    o::setUncommittedChanges);
-                        },
-                        accessFunction::access,
-                        version -> updateKnownStreamPosition(proxy.getStreamID(), version)
-        );
+                                // Obtain the stream position as when transaction context last
+                                // remembered it.
+                                long streamReadPosition = knownStreamsPosition.getOrDefault(proxy.getStreamID(), ts);
+
+                                return (
+                                        (stream == null || stream.isStreamCurrentContextThreadCurrentContext())
+                                                && (stream != null && getWriteSetEntrySize(proxy.getStreamID()) == stream.pos() + 1
+                                                || (getWriteSetEntrySize(proxy.getStreamID()) == 0 /* No updates. */
+                                                && o.getVersionUnsafe() == streamReadPosition) /* Match timestamp. */
+                                        )
+                                );
+                            },
+                            o -> {
+                                // inside syncObjectUnsafe, depending on the object
+                                // version, we may need to undo or redo
+                                // committed changes, or apply forward committed changes.
+                                syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy,
+                                        o::setUncommittedChanges);
+                            },
+                            accessFunction::access,
+                            version -> updateKnownStreamPosition(proxy.getStreamID(), version)
+                    );
+        } else {
+            return getAndCacheSnapshotProxy(proxy, ts)
+                    .access(accessFunction, version -> updateKnownStreamPosition(proxy.getStreamID(), version));
+        }
     }
 
     /**
@@ -168,8 +178,15 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                 this, proxy, updateEntry.getSMRMethod(),
                 updateEntry.getSMRArguments(), conflictObjects);
 
+        // TODO: better proxy type check, or refactor to avoid.
+        if (proxy instanceof MVOCorfuCompileProxy) {
+            getAndCacheSnapshotProxy(proxy, getSnapshotTimestamp().getSequence()).logUpdate(updateEntry);
+        }
+
         return addToWriteSet(proxy, updateEntry, conflictObjects);
     }
+
+    // TODO: below logUpdate methods.
 
     @Override
     public void logUpdate(UUID streamId, SMREntry updateEntry) {

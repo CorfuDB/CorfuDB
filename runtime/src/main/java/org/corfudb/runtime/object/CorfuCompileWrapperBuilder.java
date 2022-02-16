@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.SMRObject;
+import org.corfudb.runtime.view.SMRObject.VersioningMechanism;
 import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.serializer.ISerializer;
 
@@ -34,7 +35,26 @@ public class CorfuCompileWrapperBuilder {
     private static <T extends ICorfuSMR<T>> T getWrapper(Class<T> type, CorfuRuntime rt,
                                                          UUID streamID, Object[] args,
                                                          ISerializer serializer,
-                                                         Set<UUID> streamTags) throws Exception {
+                                                         Set<UUID> streamTags,
+                                                         VersioningMechanism versioningMechanism) throws Exception {
+
+        if (versioningMechanism == VersioningMechanism.PERSISTENT) {
+            // TODO: make general - This should get cleaned up
+            Class<T> immutableClass = (Class<T>)
+                    Class.forName("org.corfudb.runtime.collections.ImmutableCorfuTable");
+
+            Class<ICorfuSMR<T>> wrapperClass = (Class<ICorfuSMR<T>>) Class.forName(type.getName());
+
+            // Instantiate a new instance of this class.
+            ICorfuSMR<T> wrapperObject = (ICorfuSMR<T>) ReflectionUtils.
+                    findMatchingConstructor(wrapperClass.getDeclaredConstructors(), new Object[0]);
+
+            // Note: args are used when invoking the internal immutable data structure constructor
+            wrapperObject.setProxy$CORFUSMR(new MVOCorfuCompileProxy<>(rt, streamID,
+                    immutableClass, args, serializer, streamTags, wrapperObject));
+            return (T) wrapperObject;
+        }
+
         // Do we have a compiled wrapper for this type?
         Class<ICorfuSMR<T>> wrapperClass = (Class<ICorfuSMR<T>>)
                 Class.forName(type.getName() + ICorfuSMR.CORFUSMR_SUFFIX);
@@ -48,11 +68,6 @@ public class CorfuCompileWrapperBuilder {
         wrapperObject.setCorfuSMRProxy(new CorfuCompileProxy<>(rt, streamID,
                 type, args, serializer, streamTags, wrapperObject));
 
-        if (wrapperObject instanceof ICorfuSMRProxyWrapper) {
-            ((ICorfuSMRProxyWrapper) wrapperObject)
-                    .setProxy$CORFUSMR(wrapperObject.getCorfuSMRProxy());
-        }
-
         return (T) wrapperObject;
     }
 
@@ -62,6 +77,7 @@ public class CorfuCompileWrapperBuilder {
                 smrObject.getStreamID(),
                 smrObject.getArguments(),
                 smrObject.getSerializer(),
-                smrObject.getStreamTags());
+                smrObject.getStreamTags(),
+                smrObject.getVersioningMechanism());
     }
 }

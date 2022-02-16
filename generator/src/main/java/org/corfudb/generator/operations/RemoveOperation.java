@@ -22,7 +22,7 @@ public class RemoveOperation extends Operation {
         if (TransactionalContext.isInTransaction()) {
             String streamId = state.getStreams().sample();
             String key = state.getKeys().sample();
-            state.getMap(CorfuRuntime.getStreamID(streamId)).remove(key);
+            state.getMap(CorfuRuntime.getStreamID(streamId)).delete(key);
 
             String correctnessRecord = String.format("%s, %s:%s", shortName, streamId, key);
             Correctness.recordOperation(correctnessRecord, TransactionalContext.isInTransaction());

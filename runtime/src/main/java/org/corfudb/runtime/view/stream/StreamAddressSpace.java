@@ -47,11 +47,12 @@ final public class StreamAddressSpace {
     }
 
     public StreamAddressSpace() {
-        this(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf());
+        this(Address.NON_ADDRESS, new Roaring64NavigableMap(false, false));
     }
 
     public StreamAddressSpace(long trimMark, Set<Long> addresses) {
-        this(trimMark, Roaring64NavigableMap.bitmapOf(Longs.toArray(addresses)));
+        this(trimMark, new Roaring64NavigableMap(false, false));
+        this.bitmap.add(Longs.toArray(addresses));
     }
 
     public StreamAddressSpace(Set<Long> addresses) {
@@ -127,7 +128,7 @@ final public class StreamAddressSpace {
      * Get the first address in this bitmap.
      * @return first address in the bitmap if its not empty, otherwise returns the trim mark
      */
-    private long getFirst() {
+    public long getFirst() {
         if (bitmap.isEmpty()) {
             return trimMark;
         }
@@ -193,7 +194,7 @@ final public class StreamAddressSpace {
             return;
         }
 
-        Roaring64NavigableMap trimmedBitmap = new Roaring64NavigableMap();
+        Roaring64NavigableMap trimmedBitmap = new Roaring64NavigableMap(false, false);
         LongIterator iterator = this.bitmap.getReverseLongIterator();
         while (iterator.hasNext()) {
             long current = iterator.next();
@@ -229,7 +230,7 @@ final public class StreamAddressSpace {
      * @return Bitmap with addresses in this range.
      */
     public StreamAddressSpace getAddressesInRange(StreamAddressRange range) {
-        Roaring64NavigableMap addressesInRange = new Roaring64NavigableMap();
+        Roaring64NavigableMap addressesInRange = new Roaring64NavigableMap(false, false);
 
         if (range.getStart() <= range.getEnd()) {
             throw new IllegalArgumentException("Invalid range (" + range.getEnd() + ", " + range.getStart() + "]");
@@ -311,7 +312,7 @@ final public class StreamAddressSpace {
      */
     public static StreamAddressSpace deserialize(DataInputStream in) throws IOException {
         long trimMark = in.readLong();
-        Roaring64NavigableMap map = new Roaring64NavigableMap();
+        Roaring64NavigableMap map = new Roaring64NavigableMap(false, false);
         map.deserialize(in);
         return new StreamAddressSpace(trimMark, map);
     }
@@ -322,6 +323,23 @@ final public class StreamAddressSpace {
      */
     public long[] toArray() {
         return bitmap.toArray();
+    }
+
+    /**
+     * Given an address, computes the largest address A in the bitmap,
+     * such that A is less than or equal to the given address.
+     * @param address The address to perform the floor query on.
+     * @return The largest address in the bitmap that is less than or
+     * equal to the given address.
+     */
+    public long floor(long address) {
+        final long rank = bitmap.rankLong(address);
+
+        if (rank == 0) {
+            return Address.NON_ADDRESS;
+        }
+
+        return bitmap.select(rank - 1);
     }
 
     @Override

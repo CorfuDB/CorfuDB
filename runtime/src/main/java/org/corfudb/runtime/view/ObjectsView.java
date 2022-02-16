@@ -20,6 +20,8 @@ import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.MVOCache;
+import org.corfudb.runtime.object.MultiVersionObject;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.Transaction;
 import org.corfudb.runtime.object.transactions.Transaction.TransactionBuilder;
@@ -56,6 +58,10 @@ public class ObjectsView extends AbstractView {
     @Getter
     Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();
 
+    @Getter
+    @Setter
+    MVOCache mvoCache = new MVOCache(runtime);
+
     public ObjectsView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
     }
@@ -66,7 +72,8 @@ public class ObjectsView extends AbstractView {
      * @return An object builder to open an object with.
      */
     public SMRObject.Builder<?> build() {
-        return new SMRObject.Builder<>().runtime(runtime);
+        return new SMRObject.Builder<>().runtime(runtime)
+                .setVersioningMechanism(SMRObject.VersioningMechanism.VERSION_LOCKED);
     }
 
     /**
@@ -220,9 +227,15 @@ public class ObjectsView extends AbstractView {
      */
     public void gc(long trimMark) {
         for (Object obj : getObjectCache().values()) {
-            ((CorfuCompileProxy) ((ICorfuSMR) obj).
-                    getCorfuSMRProxy()).getUnderlyingObject().gc(trimMark);
+            if (((ICorfuSMR) obj).getCorfuSMRProxy() instanceof CorfuCompileProxy) {
+                ((CorfuCompileProxy) ((ICorfuSMR) obj).
+                        getCorfuSMRProxy()).getUnderlyingObject().gc(trimMark);
+            }
         }
+
+        mvoCache.getAllMVOs().forEach((uuid, mvo) -> {
+            ((MultiVersionObject) mvo).gc(trimMark);
+        });
     }
 
     @Data

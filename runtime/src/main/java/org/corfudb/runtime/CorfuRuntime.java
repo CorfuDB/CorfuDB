@@ -25,6 +25,7 @@ import org.corfudb.runtime.clients.SequencerHandler;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.object.MVOCache;
 import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.Layout;
@@ -229,9 +230,14 @@ public class CorfuRuntime {
         boolean cacheDisabled = false;
 
         /*
-         * The maximum number of entries in the cache.
+         * The maximum number of entries in the AddressSpaceView cache.
          */
-        long maxCacheEntries;
+        long maxCacheEntries = 5000;
+
+        /*
+         * The maximum number of entries in the MVOCache.
+         */
+        long maxMvoCacheEntries = 5000;
 
         /*
          * The max in-memory size of the cache in bytes
@@ -247,9 +253,14 @@ public class CorfuRuntime {
         int cacheConcurrencyLevel = 0;
 
         /*
-         * Sets expireAfterAccess and expireAfterWrite in seconds.
+         * Sets expireAfterAccess and expireAfterWrite for the AddressSpaceView cache in seconds.
          */
         long cacheExpiryTime = Long.MAX_VALUE;
+
+        /*
+         * Sets expireAfterAccess and expireAfterWrite for the MVOCache in seconds.
+         */
+        long mvoCacheExpiryTime = 300;
         // endregion
 
         // region Stream Parameters
@@ -402,10 +413,12 @@ public class CorfuRuntime {
             private Duration holeFillTimeout = Duration.ofSeconds(10);
             private boolean cacheEntryMetricsDisabled = true;
             private boolean cacheDisabled = false;
-            private long maxCacheEntries;
+            private long maxCacheEntries=5000;
+            private long maxMvoCacheEntries = 5000;
             private long maxCacheWeight;
             private int cacheConcurrencyLevel = 0;
             private long cacheExpiryTime = Long.MAX_VALUE;
+            private long mvoCacheExpiryTime = 300;
             private boolean holeFillingDisabled = false;
             private int writeRetry = 5;
             private int trimRetry = 2;
@@ -415,6 +428,7 @@ public class CorfuRuntime {
             private int streamBatchSize = 10;
             private int checkpointReadBatchSize = 5;
             private Duration runtimeGCPeriod = Duration.ofMinutes(20);
+            private Duration mvoAutoSyncPeriod = Duration.ofMinutes(5);
             private UUID clusterId = null;
             private int systemDownHandlerTriggerLimit = 20;
             private List<NodeLocator> layoutServers = new ArrayList<>();
@@ -608,6 +622,11 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder maxMvoCacheEntries(long maxCacheEntries) {
+                this.maxMvoCacheEntries = maxCacheEntries;
+                return this;
+            }
+
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder maxCacheWeight(long maxCacheWeight) {
                 this.maxCacheWeight = maxCacheWeight;
                 return this;
@@ -620,6 +639,11 @@ public class CorfuRuntime {
 
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder cacheExpiryTime(long cacheExpiryTime) {
                 this.cacheExpiryTime = cacheExpiryTime;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder mvoCacheExpiryTime(long cacheExpiryTime) {
+                this.mvoCacheExpiryTime = cacheExpiryTime;
                 return this;
             }
 
@@ -670,6 +694,11 @@ public class CorfuRuntime {
 
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder runtimeGCPeriod(Duration runtimeGCPeriod) {
                 this.runtimeGCPeriod = runtimeGCPeriod;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder mvoAutoSyncPeriod(Duration mvoAutoSyncPeriod) {
+                this.mvoAutoSyncPeriod = mvoAutoSyncPeriod;
                 return this;
             }
 
@@ -742,9 +771,11 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setCacheEntryMetricsDisabled(cacheEntryMetricsDisabled);
                 corfuRuntimeParameters.setCacheDisabled(cacheDisabled);
                 corfuRuntimeParameters.setMaxCacheEntries(maxCacheEntries);
+                corfuRuntimeParameters.setMaxMvoCacheEntries(maxMvoCacheEntries);
                 corfuRuntimeParameters.setMaxCacheWeight(maxCacheWeight);
                 corfuRuntimeParameters.setCacheConcurrencyLevel(cacheConcurrencyLevel);
                 corfuRuntimeParameters.setCacheExpiryTime(cacheExpiryTime);
+                corfuRuntimeParameters.setMvoCacheExpiryTime(mvoCacheExpiryTime);
                 corfuRuntimeParameters.setHoleFillingDisabled(holeFillingDisabled);
                 corfuRuntimeParameters.setWriteRetry(writeRetry);
                 corfuRuntimeParameters.setTrimRetry(trimRetry);
@@ -947,6 +978,10 @@ public class CorfuRuntime {
     public void shutdown() {
         // Stopping async task from fetching layout.
         isShutdown = true;
+
+        // Shutdown the mvoCache sync thread
+        getObjectsView().getMvoCache().shutdown();
+
         TableRegistry tableRegistryObj = tableRegistry.get();
         if (tableRegistryObj != null) {
             tableRegistryObj.shutdown();

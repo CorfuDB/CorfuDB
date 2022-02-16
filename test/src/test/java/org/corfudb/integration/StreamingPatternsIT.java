@@ -1,7 +1,6 @@
 package org.corfudb.integration;
 
 import com.google.common.collect.Iterables;
-import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -12,7 +11,7 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StreamListenerResumeOrDefault;
 import org.corfudb.runtime.collections.StreamListenerResumeOrFullSync;
 import org.corfudb.runtime.collections.Table;
@@ -298,14 +297,12 @@ public class StreamingPatternsIT extends AbstractIT {
 
         // Trim the log on the last processed entry + delta, to confirm it is not able to resume and it runs the
         // default policy (skipping several entries)
-        MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
+        MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
         List<String> tablesToCheckpoint = Arrays.asList(defaultTableName);
         tablesToCheckpoint.forEach(tableName -> {
-            CorfuTable<Uuid, CorfuRecord<EventInfo, ManagedResources>> corfuTable = runtime.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<Uuid, CorfuRecord<EventInfo, ManagedResources>>>() {
-                    })
-                    .setStreamName(TableRegistry.getFullyQualifiedTableName(namespace, tableName))
-                    .open();
+            PersistentCorfuTable<Uuid, CorfuRecord<EventInfo, ManagedResources>> corfuTable =
+                    createCorfuTable(runtime, TableRegistry.getFullyQualifiedTableName(namespace, tableName));
+
             mcw.addMap(corfuTable);
         });
 
@@ -439,14 +436,12 @@ public class StreamingPatternsIT extends AbstractIT {
 
         // Trim the log on the last processed entry + delta, to confirm it is not able to resume and it runs the
         // default policy (skipping several entries)
-        MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
+        MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
         List<String> tablesToCheckpoint = Arrays.asList(defaultTableName);
         tablesToCheckpoint.forEach(tableName -> {
-            CorfuTable<Uuid, CorfuRecord<EventInfo, ManagedResources>> corfuTable = runtime.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<Uuid, CorfuRecord<EventInfo, ManagedResources>>>() {
-                    })
-                    .setStreamName(TableRegistry.getFullyQualifiedTableName(namespace, tableName))
-                    .open();
+            PersistentCorfuTable<Uuid, CorfuRecord<EventInfo, ManagedResources>> corfuTable =
+                    createCorfuTable(runtime, TableRegistry.getFullyQualifiedTableName(namespace, tableName));
+
             mcw.addMap(corfuTable);
         });
 
@@ -519,14 +514,12 @@ public class StreamingPatternsIT extends AbstractIT {
 
         // Trim the log on the last processed entry + delta, to confirm it is not able to resume and it runs the
         // default policy (skipping several entries)
-        MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
+        MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
         List<String> tablesToCheckpoint = Arrays.asList(defaultTableName);
         tablesToCheckpoint.forEach(tableName -> {
-            CorfuTable<Uuid, CorfuRecord<EventInfo, ManagedResources>> corfuTable = runtime.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<Uuid, CorfuRecord<EventInfo, ManagedResources>>>() {
-                    })
-                    .setStreamName(TableRegistry.getFullyQualifiedTableName(namespace, tableName))
-                    .open();
+            PersistentCorfuTable<Uuid, CorfuRecord<EventInfo, ManagedResources>> corfuTable =
+                    createCorfuTable(runtime, TableRegistry.getFullyQualifiedTableName(namespace, tableName));
+
             mcw.addMap(corfuTable);
         });
 
@@ -609,5 +602,4 @@ public class StreamingPatternsIT extends AbstractIT {
                 .setSingle(true)
                 .runServer();
     }
-
 }
