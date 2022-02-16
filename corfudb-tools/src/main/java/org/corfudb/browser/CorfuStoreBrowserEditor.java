@@ -16,6 +16,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -41,7 +42,9 @@ import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.Table;
@@ -118,20 +121,27 @@ public class CorfuStoreBrowserEditor {
      * @param tableName Tablename
      * @return CorfuTable
      */
-    public CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> getTable(
+    public ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> getTable(
         String namespace, String tableName) {
         System.out.println("Namespace: " + namespace);
         System.out.println("TableName: " + tableName);
 
         String fullTableName = TableRegistry.getFullyQualifiedTableName(namespace, tableName);
 
-        SMRObject.Builder<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> corfuTableBuilder =
-        runtime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
-                .setStreamName(fullTableName)
-                .setSerializer(dynamicProtobufSerializer);
-
-        if (diskPath != null) {
+        if (diskPath == null) {
+            SMRObject.Builder<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> corfuTableBuilder =
+                    runtime.getObjectsView().build()
+                            .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
+                            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                            .setStreamName(fullTableName)
+                            .setSerializer(dynamicProtobufSerializer);
+            return corfuTableBuilder.open();
+        } else {
+            SMRObject.Builder<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> corfuTableBuilder =
+                    runtime.getObjectsView().build()
+                            .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
+                            .setStreamName(fullTableName)
+                            .setSerializer(dynamicProtobufSerializer);
             final Options options = new Options().setCreateIfMissing(true);
             final Supplier<StreamingMap<CorfuDynamicKey, CorfuDynamicRecord>> mapSupplier = () ->
                     new PersistedStreamingMap<>(
@@ -139,8 +149,8 @@ public class CorfuStoreBrowserEditor {
                             options,
                             dynamicProtobufSerializer, runtime);
             corfuTableBuilder.setArguments(mapSupplier, ICorfuVersionPolicy.MONOTONIC);
+            return corfuTableBuilder.open();
         }
-        return corfuTableBuilder.open();
     }
 
     /**
@@ -157,7 +167,8 @@ public class CorfuStoreBrowserEditor {
             // So to work around this bug, avoid dumping the TableDescriptor table directly.
             return printTableRegistry();
         }
-        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
+
+        ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
             getTable(namespace, tablename);
         int size = table.size();
         final int batchSize = 50;
@@ -286,7 +297,7 @@ public class CorfuStoreBrowserEditor {
         System.out.println("\n======================\n");
         String fullName = TableRegistry.getFullyQualifiedTableName(namespace, tablename);
         UUID streamUUID = UUID.nameUUIDFromBytes(fullName.getBytes());
-        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
+        ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
             getTable(namespace, tablename);
         int tableSize = table.size();
         System.out.println("Table " + tablename + " in namespace " + namespace +
@@ -338,7 +349,7 @@ public class CorfuStoreBrowserEditor {
         UUID streamUUID = UUID.nameUUIDFromBytes(fullName.getBytes());
         try {
             runtime.getObjectsView().TXBegin();
-            CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
+            ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
                 getTable(namespace, tablename);
             int tableSize = table.size();
             System.out.println("Table " + tablename + " in namespace " + namespace
@@ -417,10 +428,10 @@ public class CorfuStoreBrowserEditor {
                 defaultMetadataAny.getTypeUrl(), newMetadataMsg);
 
         try {
-            CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
+            ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
                 getTable(namespace, tableName);
             runtime.getObjectsView().TXBegin();
-            table.put(dynamicKey, dynamicRecord);
+            table.insert(dynamicKey, dynamicRecord);
             runtime.getObjectsView().TXEnd();
             System.out.println("\n======================\n");
             return dynamicRecord;
@@ -476,10 +487,11 @@ public class CorfuStoreBrowserEditor {
             new CorfuDynamicKey(defaultKeyAny.getTypeUrl(), keyMsg);
 
         try {
-            CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
-                    getTable(namespace, tableName);
             runtime.getObjectsView().TXBegin();
             CorfuDynamicRecord editedRecord = null;
+
+            ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
+                getTable(namespace, tableName);
             if (table.containsKey(dynamicKey)) {
                 CorfuDynamicRecord oldRecord = table.get(dynamicKey);
 
@@ -497,7 +509,7 @@ public class CorfuStoreBrowserEditor {
                     DynamicMessage metadata = oldRecord.getMetadata();
                     editedRecord = new CorfuDynamicRecord(payloadTypeUrl,
                         newValueMsg, metadataTypeUrl, metadata);
-                    table.put(dynamicKey, editedRecord);
+                    table.insert(dynamicKey, editedRecord);
                 }
             } else {
                 log.warn("Record with key {} not found in table {} and namespace {}. " +
@@ -529,7 +541,6 @@ public class CorfuStoreBrowserEditor {
         String fullName = TableRegistry.getFullyQualifiedTableName(namespace,
                 tableName);
         UUID streamUUID = CorfuRuntime.getStreamID(fullName);
-
         TableName tableNameProto = TableName.newBuilder().setTableName(tableName)
                 .setNamespace(namespace).build();
 
@@ -542,7 +553,7 @@ public class CorfuStoreBrowserEditor {
 
         CorfuDynamicKey dynamicKey =
                 new CorfuDynamicKey(defaultKeyAny.getTypeUrl(), keyMsg);
-        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
+        ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
                 getTable(namespace, tableName);
         int numKeysDeleted = -1;
         try {
@@ -580,7 +591,7 @@ public class CorfuStoreBrowserEditor {
      * @return - number of entries in the table
      */
     public int loadTable(String namespace, String tableName, int numItems, int batchSize, int itemSize) {
-        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
+        ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
                 getTable(namespace, tableName);
         int size = table.size();
         if (size == 0) {
@@ -595,7 +606,7 @@ public class CorfuStoreBrowserEditor {
             while (itemsRemaining > 0) {
                 runtime.getObjectsView().TXBegin();
                 for (int j = batchSize; j > 0 && itemsRemaining > 0; j--, itemsRemaining--) {
-                    table.put(oneKey, oneRecord);
+                    table.insert(oneKey, oneRecord);
                 }
                 final long address = runtime.getObjectsView().TXEnd();
                 System.out.println("loadTable: Txn at address "

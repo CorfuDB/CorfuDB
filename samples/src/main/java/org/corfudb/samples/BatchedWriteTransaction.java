@@ -6,6 +6,9 @@ import java.util.Map;
 
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.view.SMRObject;
 
 /**
  * Sometimes developers may group mutator operations into transactions for performance reasons.
@@ -68,16 +71,17 @@ public class BatchedWriteTransaction extends BaseCorfuAppUtils {
         /**
          * Instantiate a Corfu Stream named "A" dedicated to an SMRmap object
          */
-        Map<String, Integer> map = getCorfuRuntime().getObjectsView()
+        ICorfuTable<String, Integer> map = getCorfuRuntime().getObjectsView()
                 .build()
                 .setStreamName("A")     // stream name
-                .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, Integer>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();                // instantiate the object!
 
         // populate map: sequentially
         long startt = System.currentTimeMillis();
         for (int i = 0; i < numTasks; i++) {
-            map.put("k1" + i, i);
+            map.insert("k1" + i, i);
         }
         long endt = System.currentTimeMillis();
         System.out.println("time to populate map sequentially (msecs): " + (endt - startt) );
@@ -87,7 +91,7 @@ public class BatchedWriteTransaction extends BaseCorfuAppUtils {
         for (int i = 0; i < numBatches; i++) {
             getCorfuRuntime().getObjectsView().TXBegin();
             for (int j = 0; j < batchSize; j++)
-                map.put("k2" + (i * batchSize + j), i);
+                map.insert("k2" + (i * batchSize + j), i);
             getCorfuRuntime().getObjectsView().TXEnd();
         }
         endt = System.currentTimeMillis();
@@ -99,13 +103,14 @@ public class BatchedWriteTransaction extends BaseCorfuAppUtils {
         /**
          * Instantiate a collection of Corfu streams, each one dedicated to an SMRmap instance
          */
-        List<Map<String, Integer>> maparray = new ArrayList<Map<String, Integer>>(numBatches);
+        List<ICorfuTable<String, Integer>> maparray = new ArrayList<>(numBatches);
         for (int m = 0; m < numBatches; m++) {
             maparray.add(m,
                     getCorfuRuntime().getObjectsView()
                             .build()
                             .setStreamName("C" + m)
-                            .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {})
+                            .setTypeToken(new TypeToken<PersistentCorfuTable<String, Integer>>() {})
+                            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                             .open()
             );
         }
@@ -114,7 +119,7 @@ public class BatchedWriteTransaction extends BaseCorfuAppUtils {
         for (int i = 0; i < batchSize; i++) {
             getCorfuRuntime().getObjectsView().TXBegin();
             for (int j = 0; j < numBatches; j++)
-                maparray.get(j).put("k2"+(i*numBatches + j), i);
+                maparray.get(j).insert("k2"+(i*numBatches + j), i);
             getCorfuRuntime().getObjectsView().TXEnd();
         }
         long endt = System.currentTimeMillis();

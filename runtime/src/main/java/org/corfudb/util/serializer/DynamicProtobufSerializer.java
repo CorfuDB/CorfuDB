@@ -26,15 +26,18 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuRecord;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.SerializerException;
+import org.corfudb.runtime.object.MVOCache;
 import org.corfudb.runtime.view.ObjectOpenOption;
+import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ProtobufSerializer.MessageType;
 
 import java.io.IOException;
 import java.util.ArrayList;
 
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -115,51 +118,62 @@ public class DynamicProtobufSerializer implements ISerializer {
         }
 
         // Open the Registry Table and cache its contents
-        CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable =
+        PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable =
             corfuRuntime.getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<CorfuTable<TableName,
+                .setTypeToken(new TypeToken<PersistentCorfuTable<TableName,
                     CorfuRecord<TableDescriptors, TableMetadata>>>() {
                 })
                 .setStreamName(
                    getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
                        REGISTRY_TABLE_NAME))
                 .setSerializer(protobufSerializer)
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
-        registryTable.forEach((tableName, descriptors) ->
-            cachedRegistryTable.put(tableName, descriptors));
+
+        Iterator<Map.Entry<TableName, CorfuRecord<TableDescriptors, TableMetadata>>> registryIt = registryTable.entryStream().iterator();
+        while (registryIt.hasNext()) {
+            Map.Entry<TableName, CorfuRecord<TableDescriptors, TableMetadata>> entry = registryIt.next();
+            cachedRegistryTable.put(entry.getKey(), entry.getValue());
+        }
 
         // Open the Protobuf Descriptor Table.
-        CorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> descriptorTable = corfuRuntime.getObjectsView()
+        PersistentCorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> descriptorTable = corfuRuntime.getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<CorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>>() {
+                .setTypeToken(new TypeToken<PersistentCorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>>() {
                 })
                 .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
                         PROTOBUF_DESCRIPTOR_TABLE_NAME))
                 .setSerializer(protobufSerializer)
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
 
         // Cache the FileDescriptorProtos from the protobuf descriptor table.
-        descriptorTable.forEach((fdName, fileDescriptorProto) -> {
-            String protoFileName = fileDescriptorProto.getPayload().getFileDescriptor().getName();
+        Iterator<Map.Entry<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>> descriptorIt = descriptorTable.entryStream().iterator();
+        while (descriptorIt.hasNext()) {
+            Map.Entry<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> entry = descriptorIt.next();
+
+            String protoFileName = entry.getValue().getPayload().getFileDescriptor().getName();
             // Since corfu_options is something within repo, the path gets truncated on insert.
             // However dynamicProtobufSerializer fails since the full path is needed.
             if (protoFileName.equals("corfu_options.proto")) {
-                fdProtoMap.putIfAbsent(protoFileName, fileDescriptorProto.getPayload().getFileDescriptor());
+                fdProtoMap.putIfAbsent(protoFileName, entry.getValue().getPayload().getFileDescriptor());
                 // Until the truncating issue can be addressed, manually add both paths.
                 protoFileName = "corfudb/runtime/corfu_options.proto";
             }
-            fdProtoMap.putIfAbsent(protoFileName, fileDescriptorProto.getPayload().getFileDescriptor());
-            identifyMessageTypesinFileDescriptorProto(fileDescriptorProto.getPayload().getFileDescriptor());
+            fdProtoMap.putIfAbsent(protoFileName, entry.getValue().getPayload().getFileDescriptor());
+            identifyMessageTypesinFileDescriptorProto(entry.getValue().getPayload().getFileDescriptor());
 
             // cache the entry
-            cachedProtobufDescriptorTable.put(fdName, fileDescriptorProto);
-        });
+            cachedProtobufDescriptorTable.put(entry.getKey(), entry.getValue());
+        }
 
-        // Remove the protobuf serializer
+        // Remove the protobuf serializer and reset the cache
         corfuRuntime.getSerializers().clearCustomSerializers();
+        corfuRuntime.getObjectsView().getMvoCache().shutdown();
+        corfuRuntime.getObjectsView().setMvoCache(new MVOCache(corfuRuntime));
     }
 
     /**
@@ -432,4 +446,3 @@ public class DynamicProtobufSerializer implements ISerializer {
         return stringBuilder.toString();
     }
 }
-

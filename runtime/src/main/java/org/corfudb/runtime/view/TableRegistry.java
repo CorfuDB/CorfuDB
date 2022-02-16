@@ -16,17 +16,15 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileName;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileDescriptor;
 import org.corfudb.runtime.collections.CorfuRecord;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
-import org.corfudb.runtime.collections.StreamingMapDecorator;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableParameters;
 import org.corfudb.runtime.collections.streaming.StreamingManager;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.ObjectsView.StreamTagInfo;
@@ -102,17 +100,17 @@ public class TableRegistry {
     private final ISerializer protobufSerializer;
 
     /**
-     * This {@link CorfuTable} holds the schemas of the key, payload and metadata for every table created.
+     * This {@link PersistentCorfuTable} holds the schemas of the key, payload and metadata for every table created.
      */
     @Getter
-    private final CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable;
+    private final PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable;
 
     /**
      * To avoid duplicating the protobuf file descriptors that repeat across different tables store all
      * descriptors in a single table indexed by its protobuf file name.
      */
     @Getter
-    private final CorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> protobufDescriptorTable;
+    private final PersistentCorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> protobufDescriptorTable;
 
     public TableRegistry(CorfuRuntime runtime) {
         this.runtime = runtime;
@@ -131,19 +129,21 @@ public class TableRegistry {
         }
         this.protobufSerializer = protoSerializer;
         this.registryTable = this.runtime.getObjectsView().build()
-            .setTypeToken(new TypeToken<CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>>() {
+            .setTypeToken(new TypeToken<PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>>() {
             })
             .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, REGISTRY_TABLE_NAME))
             .setSerializer(this.protobufSerializer)
             .setStreamTags(LOG_REPLICATOR_STREAM_INFO.getStreamId())
+            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
             .open();
 
         this.protobufDescriptorTable = this.runtime.getObjectsView().build()
-            .setTypeToken(new TypeToken<CorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>>() {
+            .setTypeToken(new TypeToken<PersistentCorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>>() {
             })
             .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, PROTOBUF_DESCRIPTOR_TABLE_NAME))
             .setSerializer(this.protobufSerializer)
             .setStreamTags(LOG_REPLICATOR_STREAM_INFO.getStreamId())
+            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
             .open();
 
         // Register the table schemas to schema table.
@@ -257,7 +257,7 @@ public class TableRegistry {
                 boolean protoFileChanged = tryUpdateTableSchemas(allDescriptors);
                 CorfuRecord<TableDescriptors, TableMetadata> oldRecord = this.registryTable.get(tableNameKey);
                 if (oldRecord == null || protoFileChanged) {
-                    this.registryTable.put(tableNameKey,
+                    this.registryTable.insert(tableNameKey,
                         new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
                 }
                 this.runtime.getObjectsView().TXEnd();
@@ -309,7 +309,7 @@ public class TableRegistry {
                 continue; // old schema is same as the new schema, avoid doing an expensive I/O
             } // else this process is running a new code version, conservatively update the schemas
             schemaChangeDetected = true;
-            this.protobufDescriptorTable.put(protoName, newProtoFd);
+            this.protobufDescriptorTable.insert(protoName, newProtoFd);
             if (currentSchema != null) {
                 log.info("Schema change in {}: {} -> {}", protoName,
                         currentSchema.getPayload().getVersion(), newProtoFd.getPayload().getVersion());
@@ -477,10 +477,8 @@ public class TableRegistry {
 
         String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
 
-        ICorfuVersionPolicy.VersionPolicy versionPolicy = ICorfuVersionPolicy.DEFAULT;
-        Supplier<StreamingMap<K, V>> mapSupplier = () -> new StreamingMapDecorator();
+        Supplier<StreamingMap<K, V>> mapSupplier = null;
         if (tableOptions.getPersistentDataPath().isPresent()) {
-            versionPolicy = ICorfuVersionPolicy.MONOTONIC;
             mapSupplier = () -> new PersistedStreamingMap<>(
                     tableOptions.getPersistentDataPath().get(),
                     PersistedStreamingMap.getPersistedStreamingMapOptions(),
@@ -526,9 +524,8 @@ public class TableRegistry {
                         .build(),
                 this.runtime,
                 this.protobufSerializer,
-                mapSupplier,
-                versionPolicy,
-                streamTagIdsForTable);
+                streamTagIdsForTable,
+                mapSupplier);
         tableMap.put(fullyQualifiedTableName, (Table<Message, Message, Message>) table);
 
         registerTable(namespace, tableName, kClass, vClass, mClass, tableOptions);

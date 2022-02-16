@@ -4,11 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
 
 import java.util.ArrayList;
-import java.util.Map;
 import java.util.UUID;
 
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.view.SMRObject;
 import org.junit.Test;
 
 /**
@@ -102,12 +103,12 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
 
     @Test
     public void checkRollbackNested()  throws Exception {
-        ArrayList<Map> maps = new ArrayList<>();
+        ArrayList<ICorfuTable> maps = new ArrayList<>();
 
         final int nmaps = 2;
         for (int i = 0; i < nmaps; i++)
-            maps.add( (CorfuTable<Integer, String>) instantiateCorfuObject(
-                    new TypeToken<CorfuTable<Integer, String>>() {}, "test stream" + i)
+            maps.add( (ICorfuTable<Integer, String>) instantiateCorfuObject(
+                    new TypeToken<PersistentCorfuTable<Integer, String>>() {}, "test stream" + i)
             );
         final int key1 = 1, key2 = 2, key3 = 3;
         final String tst1 = "foo", tst2 = "bar";
@@ -124,9 +125,9 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
         t(2, () -> {
             for (int i = 0; i < nNests; i++) {
                 TXBegin();
-                maps.get((i%nmaps)).put(key1, (i % nmaps) == 0 ? tst1 : tst2);
-                maps.get((i%nmaps)).put(key2, (i % nmaps) == 0 ? tst1 : tst2);
-                maps.get((i%nmaps)).put(key3, (i % nmaps) == 0 ? tst1 : tst2);
+                maps.get((i%nmaps)).insert(key1, (i % nmaps) == 0 ? tst1 : tst2);
+                maps.get((i%nmaps)).insert(key2, (i % nmaps) == 0 ? tst1 : tst2);
+                maps.get((i%nmaps)).insert(key3, (i % nmaps) == 0 ? tst1 : tst2);
             }
         });
 
@@ -153,18 +154,19 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
         // Confirm key1 and key2 hash codes actually conflict
         assertThat(key1.hashCode()).isEqualTo(key2.hashCode());
 
-        Map<UUID, String> mapTest = getRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<UUID, String>>() {})
+        ICorfuTable<UUID, String> mapTest = getRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<UUID, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamID(streamID)
                 .open();
         mapTest.clear();
 
         t(1, this::TXBegin);
 
-        t(1, () -> mapTest.put(key1, "v1"));
+        t(1, () -> mapTest.insert(key1, "v1"));
 
         t(2, this::TXBegin);
-        t(2, () -> mapTest.put(key2, "v2"));
+        t(2, () -> mapTest.insert(key2, "v2"));
 
         t(1, this::TXEnd);
         t(2, this::TXEnd)

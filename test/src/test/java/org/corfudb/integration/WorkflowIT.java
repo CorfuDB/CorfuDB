@@ -1,16 +1,14 @@
 package org.corfudb.integration;
 
 import static org.assertj.core.api.Assertions.*;
-
-import com.google.common.reflect.TypeToken;
-import lombok.extern.slf4j.Slf4j;
-
 import static org.corfudb.integration.Harness.run;
+
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.integration.cluster.Harness.Node;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.Sleep;
@@ -62,17 +60,11 @@ public class WorkflowIT extends AbstractIT {
         final int n3Port = 9002;
         Process server_3 = runServer(n3Port, false);
 
-        runtime = new CorfuRuntime(getConnectionString(n1Port))
-                .setCacheDisabled(true).connect();
-
-        CorfuTable<String, String> table = runtime.getObjectsView()
-                .build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setStreamName(streamName)
-                .open();
+        runtime = createRuntime(getConnectionString(n1Port));
+        PersistentCorfuTable<String, String> table = createCorfuTable(runtime, streamName);
 
         for (int x = 0; x < numIter; x++) {
-            table.put(String.valueOf(x), String.valueOf(x));
+            table.insert(String.valueOf(x), String.valueOf(x));
         }
 
         runtime.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry,
@@ -83,13 +75,12 @@ public class WorkflowIT extends AbstractIT {
         waitForLayoutChange(layout -> layout.getAllServers().size() == clusterSizeN2
                 && layout.getSegments().size() == 1, runtime);
 
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();
         mcw.addMap(table);
 
         Token prefix = mcw.appendCheckpoints(runtime, "checkpointer");
 
         runtime.getAddressSpaceView().prefixTrim(prefix);
-
         runtime.getAddressSpaceView().invalidateClientCache();
         runtime.getAddressSpaceView().invalidateServerCaches();
         runtime.getAddressSpaceView().gc();
@@ -138,7 +129,7 @@ public class WorkflowIT extends AbstractIT {
                 && layout.getSegments().size() == 1, runtime);
 
         for (int x = 0; x < numIter; x++) {
-            String v = (String) table.get(String.valueOf(x));
+            String v = table.get(String.valueOf(x));
             assertThat(v).isEqualTo(String.valueOf(x));
         }
 
@@ -165,14 +156,12 @@ public class WorkflowIT extends AbstractIT {
         Process p1 = runServer(n1Port, false);
         Process p2 = runServer(n2Port, false);
 
-        runtime = new CorfuRuntime(getConnectionString(n0Port)).connect();
-        CorfuTable<String, String> table = runtime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setStreamName("table1").open();
+        runtime = createRuntimeWithCache(getConnectionString(n0Port));
+        PersistentCorfuTable<String, String> table = createCorfuTable(runtime, "table1");
 
         final int iter = 1000;
         for (int x = 0; x < iter; x++) {
-            table.put(String.valueOf(x), String.valueOf(x));
+            table.insert(String.valueOf(x), String.valueOf(x));
         }
 
         runtime.getManagementView().addNode(getConnectionString(n1Port), workflowNumRetry,
@@ -225,14 +214,12 @@ public class WorkflowIT extends AbstractIT {
         Process p1 = runServer(n1Port, false);
         Process p2 = runServer(n2Port, false);
 
-        runtime = new CorfuRuntime(getConnectionString(n0Port)).connect();
-        CorfuTable<String, String> table = runtime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setStreamName("table1").open();
+        runtime = createRuntimeWithCache(getConnectionString(n0Port));
+        PersistentCorfuTable<String, String> table = createCorfuTable(runtime, "table1");
 
         final int iter = 100;
         for (int x = 0; x < iter; x++) {
-            table.put(String.valueOf(x), String.valueOf(x));
+            table.insert(String.valueOf(x), String.valueOf(x));
         }
 
         runtime.getManagementView().addNode(getConnectionString(n1Port), workflowNumRetry,
@@ -285,21 +272,19 @@ public class WorkflowIT extends AbstractIT {
         Node n2 = harness.deployUnbootstrappedNode(PORT_2);
 
         runtime = harness.createRuntimeForNode(n0);
+        runtime.getParameters().setMaxMvoCacheEntries(DEFAULT_MVO_CACHE_SIZE);
+
         final String streamName = "test";
-        CorfuTable<String, Integer> table = runtime.getObjectsView()
-                .build()
-                .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {})
-                .setStreamName(streamName)
-                .open();
         final int entriesCount = 1_000;
+        PersistentCorfuTable<String, Integer> table = createCorfuTable(runtime, streamName);
 
         // Write 1_000 entries.
         for (int i = 0; i < entriesCount; i++) {
-            table.put(Integer.toString(i), i);
+            table.insert(Integer.toString(i), i);
         }
 
         // Checkpoint and trim the entries.
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        MultiCheckpointWriter<PersistentCorfuTable<String, Integer>> mcw = new MultiCheckpointWriter<>();
         mcw.addMap(table);
         Token prefixTrimAddress = mcw.appendCheckpoints(runtime, "author");
         runtime.getAddressSpaceView().prefixTrim(prefixTrimAddress);
@@ -316,7 +301,7 @@ public class WorkflowIT extends AbstractIT {
 
         // Write another batch of 1_000 entries.
         for (int i = 0; i < entriesCount; i++) {
-            table.put(Integer.toString(i), i);
+            table.insert(Integer.toString(i), i);
         }
         final long streamTail = entriesCount + checkpointEntriesCount + entriesCount - 1;
 
@@ -407,28 +392,24 @@ public class WorkflowIT extends AbstractIT {
         final int numDataEntries = 10;
 
         // (1)
-        CorfuTable<Integer, String> table = runtime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
-                })
-                .setStreamName("test")
-                .open();
+        PersistentCorfuTable<Integer, String> table = createCorfuTable(runtime, "test");
 
         // (2)
         for (int i = 0; i < numDataEntries - 2; i++) {
             runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
-            table.put(i, String.valueOf(i));
+            table.insert(i, String.valueOf(i));
             runtime.getObjectsView().TXEnd();
         }
 
         // (3)
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        MultiCheckpointWriter<PersistentCorfuTable<Integer, String>> mcw = new MultiCheckpointWriter<>();
         mcw.addMap(table);
         Token prefixTrim = mcw.appendCheckpoints(runtime, "author");
 
         // (4)
         for (int i = numDataEntries - 2; i < numDataEntries; i++) {
             runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
-            table.put(i, String.valueOf(i));
+            table.insert(i, String.valueOf(i));
             runtime.getObjectsView().TXEnd();
         }
 
@@ -448,7 +429,7 @@ public class WorkflowIT extends AbstractIT {
         runtime.getGarbageCollector().runRuntimeGC();
 
         // (8)
-        assertThat(table).hasSize(numDataEntries);
+        assertThat(table.size()).isEqualTo(numDataEntries);
         for(int i = 0; i < numDataEntries; i++) {
             assertThat(table.get(i)).isEqualTo(String.valueOf(i));
         }
@@ -471,7 +452,7 @@ public class WorkflowIT extends AbstractIT {
 //                .hasCauseInstanceOf(TrimmedException.class);
 
         // (11)
-        assertThat(table).hasSize(numDataEntries);
+        assertThat(table.size()).isEqualTo(numDataEntries);
         for(int i = 0; i < numDataEntries; i++) {
             assertThat(table.get(i)).isEqualTo(String.valueOf(i));
         }
@@ -536,15 +517,11 @@ public class WorkflowIT extends AbstractIT {
         final int numDataEntries = 10;
 
         // (1)
-        CorfuTable<Integer, String> table = runtime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
-                })
-                .setStreamName("test")
-                .open();
+        PersistentCorfuTable<Integer, String> table = createCorfuTable(runtime, "test");
 
         // (2)
         runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
-        table.put(initKey, String.valueOf(initKey));
+        table.insert(initKey, String.valueOf(initKey));
         runtime.getObjectsView().TXEnd();
 
         initKey++;
@@ -556,7 +533,7 @@ public class WorkflowIT extends AbstractIT {
         Thread t = new Thread(() -> {
             // (3)
             runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
-            table.put(numDataEntries, String.valueOf(numDataEntries));
+            table.insert(numDataEntries, String.valueOf(numDataEntries));
                     countDownLatch1.countDown();
             try {
                 countDownLatch2.await();
@@ -578,19 +555,19 @@ public class WorkflowIT extends AbstractIT {
         // (4)
         for (int i = initKey; i < numDataEntries - 2; i++) {
             runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
-            table.put(i, String.valueOf(i));
+            table.insert(i, String.valueOf(i));
             runtime.getObjectsView().TXEnd();
         }
 
         // (5)
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        MultiCheckpointWriter<PersistentCorfuTable<Integer, String>> mcw = new MultiCheckpointWriter<>();
         mcw.addMap(table);
         Token prefixTrim = mcw.appendCheckpoints(runtime, "author");
 
         // (6)
         for (int i = numDataEntries - 2; i < numDataEntries; i++) {
             runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
-            table.put(i, String.valueOf(i));
+            table.insert(i, String.valueOf(i));
             runtime.getObjectsView().TXEnd();
         }
 
@@ -605,7 +582,7 @@ public class WorkflowIT extends AbstractIT {
         runtime.getGarbageCollector().runRuntimeGC();
 
         // (10)
-        assertThat(table).hasSize(numDataEntries + 1);
+        assertThat(table.size()).isEqualTo(numDataEntries + 1);
         for(int i = 0; i <= numDataEntries; i++) {
             assertThat(table.get(i)).isEqualTo(String.valueOf(i));
         }
@@ -626,7 +603,7 @@ public class WorkflowIT extends AbstractIT {
 //        }).isInstanceOf(TransactionAbortedException.class).hasCauseInstanceOf((TrimmedException.class));
 
         // (12)
-        assertThat(table).hasSize(numDataEntries + 1);
+        assertThat(table.size()).isEqualTo(numDataEntries + 1);
         for(int i = 0; i <= numDataEntries; i++) {
             assertThat(table.get(i)).isEqualTo(String.valueOf(i));
         }
@@ -671,21 +648,17 @@ public class WorkflowIT extends AbstractIT {
         final int numDataEntries = 5;
 
         // (1) Open table backed by stream 'test'
-        CorfuTable<Integer, String> table = runtime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
-                })
-                .setStreamName("test")
-                .open();
+        PersistentCorfuTable<Integer, String> table = createCorfuTable(runtime, "test");
 
         // (2) Add 5 entries
         for (int i = 0; i < numDataEntries; i++) {
             runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
-            table.put(i, String.valueOf(i));
+            table.insert(i, String.valueOf(i));
             runtime.getObjectsView().TXEnd();
         }
 
         // (3) Checkpoint 'table'
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        MultiCheckpointWriter<PersistentCorfuTable<Integer, String>> mcw = new MultiCheckpointWriter<>();
         mcw.addMap(table);
         Token prefixTrim = mcw.appendCheckpoints(runtime, "author");
 

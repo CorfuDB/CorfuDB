@@ -5,7 +5,7 @@ import org.corfudb.generator.Correctness;
 import org.corfudb.generator.State;
 import org.corfudb.generator.util.StringIndexer;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 
 /**
@@ -28,7 +28,7 @@ public class ReadOperation extends Operation {
         Correctness.recordOperation(correctnessRecord, TransactionalContext.isInTransaction());
 
         // Accessing secondary objects
-        CorfuTable<String, String> corfuMap = state.getMap((CorfuRuntime.getStreamID(streamId)));
+        PersistentCorfuTable<String, String> corfuMap = state.getMap((CorfuRuntime.getStreamID(streamId)));
 
         corfuMap.getByIndex(StringIndexer.BY_FIRST_CHAR, "a");
         corfuMap.getByIndex(StringIndexer.BY_VALUE, val);

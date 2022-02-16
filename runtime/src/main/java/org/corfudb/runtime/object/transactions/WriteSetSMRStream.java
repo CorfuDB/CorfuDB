@@ -242,6 +242,11 @@ public class WriteSetSMRStream implements ISMRStream {
     }
 
     @Override
+    public Stream<SingleAddressUpdates> streamUpToInList(long maxGlobal) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public long append(SMREntry entry,
                        Function<TokenResponse, Boolean> acquisitionCallback,
                        Function<TokenResponse, Boolean> deacquisitionCallback) {

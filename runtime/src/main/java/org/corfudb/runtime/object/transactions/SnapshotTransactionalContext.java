@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
@@ -31,15 +32,22 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     public <R, T extends ICorfuSMR<T>> R access(ICorfuSMRProxyInternal<T> proxy,
                                                 ICorfuSMRAccess<R, T> accessFunction,
                                                 Object[] conflictObject) {
-        // In snapshot transactions, there are no conflicts.
-        // Hence, we do not need to add this access to a conflict set
-        // do not add: addToReadSet(proxy, conflictObject);
-        return proxy.getUnderlyingObject().access(o -> o.getVersionUnsafe()
-                        == getSnapshotTimestamp().getSequence()
-                        && !o.isOptimisticallyModifiedUnsafe(),
-                o -> syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy, null),
-                accessFunction::access,
-                version -> updateKnownStreamPosition(proxy.getStreamID(), version));
+        // TODO: better proxy type check, or refactor to avoid.
+        if (proxy instanceof CorfuCompileProxy) {
+            // In snapshot transactions, there are no conflicts.
+            // Hence, we do not need to add this access to a conflict set
+            // do not add: addToReadSet(proxy, conflictObject);
+            return proxy.getUnderlyingObject().access(o -> o.getVersionUnsafe()
+                            == getSnapshotTimestamp().getSequence()
+                            && !o.isOptimisticallyModifiedUnsafe(),
+                    o -> syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy, null),
+                    accessFunction::access,
+                    version -> updateKnownStreamPosition(proxy.getStreamID(), version));
+        } else {
+            return getAndCacheSnapshotProxy(proxy, getSnapshotTimestamp().getSequence())
+                    .access(accessFunction, version -> updateKnownStreamPosition(proxy.getStreamID(), version));
+
+        }
     }
 
     /**

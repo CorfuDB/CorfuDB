@@ -7,7 +7,8 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.junit.Test;
 
 /**
@@ -22,9 +23,9 @@ public class WriteWriteTXConcurrencyTest extends TXConflictScenariosTest {
     public void simpleWWTest() {
 
          //Instantiate a Corfu Stream named "A" dedicated to an SMRmap object.
-        CorfuTable<String, Integer> map = ( CorfuTable<String, Integer>)
+        ICorfuTable<String, Integer> map = ( ICorfuTable<String, Integer>)
                 instantiateCorfuObject(
-                        new TypeToken<CorfuTable<String, Integer> >() { },
+                        new TypeToken<PersistentCorfuTable<String, Integer>>() { },
                         "A"
                 );
         AtomicInteger
@@ -33,8 +34,8 @@ public class WriteWriteTXConcurrencyTest extends TXConflictScenariosTest {
 
 
         t(0, () -> WWTXBegin());
-        t(0, () -> map.put("a", 1));
-        t(0, () -> map.put("b", 1));
+        t(0, () -> map.insert("a", 1));
+        t(0, () -> map.insert("b", 1));
 
         t(1, () -> WWTXBegin());
         t(1, () -> {

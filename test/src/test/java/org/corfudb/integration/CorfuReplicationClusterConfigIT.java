@@ -22,7 +22,7 @@ import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
@@ -91,8 +91,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
     private CorfuRuntime activeRuntime;
     private CorfuRuntime standbyRuntime;
-    private CorfuTable<String, Integer> mapActive;
-    private CorfuTable<String, Integer> mapStandby;
+    private PersistentCorfuTable<String, Integer> mapActive;
+    private PersistentCorfuTable<String, Integer> mapStandby;
 
     private CorfuStore activeCorfuStore;
     private CorfuStore standbyCorfuStore;
@@ -125,16 +125,16 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .build()
                 .setStreamName(streamName)
                 .setStreamTags(ObjectsView.getLogReplicatorStreamId())
-                .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {
-                })
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, Integer>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         mapStandby = standbyRuntime.getObjectsView()
                 .build()
                 .setStreamName(streamName)
                 .setStreamTags(ObjectsView.getLogReplicatorStreamId())
-                .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {
-                })
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, Integer>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         assertThat(mapActive.size()).isZero();
@@ -205,7 +205,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Write 10 entries to active map
         for (int i = 0; i < firstBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
+            mapActive.insert(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(firstBatch);
@@ -230,7 +230,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Write 5 entries to active map
         for (int i = firstBatch; i < secondBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
+            mapActive.insert(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(secondBatch);
@@ -291,7 +291,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Write 5 more entries to mapStandby
         for (int i = secondBatch; i < thirdBatch; i++) {
             standbyRuntime.getObjectsView().TXBegin();
-            mapStandby.put(String.valueOf(i), i);
+            mapStandby.insert(String.valueOf(i), i);
             standbyRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapStandby.size()).isEqualTo(thirdBatch);
@@ -352,7 +352,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Write 5 more entries to mapStandby
         for (int i = thirdBatch; i < fourthBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
+            mapActive.insert(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(fourthBatch);
@@ -609,9 +609,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         CorfuRuntime cpRuntime;
 
         if (active) {
-            cpRuntime = new CorfuRuntime(activeCorfuEndpoint).connect();
+            cpRuntime = createRuntimeWithCache(activeCorfuEndpoint);
         } else {
-            cpRuntime = new CorfuRuntime(standbyCorfuEndpoint).connect();
+            cpRuntime = createRuntimeWithCache(standbyCorfuEndpoint);
         }
         checkpointAndTrimCorfuStore(cpRuntime);
     }
@@ -619,7 +619,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     private void checkpointAndTrimCorfuStore(CorfuRuntime cpRuntime) {
         // Open Table Registry
         TableRegistry tableRegistry = cpRuntime.getTableRegistry();
-        CorfuTable<CorfuStoreMetadata.TableName, CorfuRecord<CorfuStoreMetadata.TableDescriptors,
+        PersistentCorfuTable<CorfuStoreMetadata.TableName, CorfuRecord<CorfuStoreMetadata.TableDescriptors,
             CorfuStoreMetadata.TableMetadata>> tableRegistryCT = tableRegistry.getRegistryTable();
 
         // Save the regular serializer first..
@@ -631,7 +631,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         cpRuntime.getSerializers().registerSerializer(dynamicProtoBufSerializer);
 
         // First checkpoint the TableRegistry system table
-        MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
+        MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
 
         String author = "checkpointer";
         Token trimMark = null;
@@ -640,14 +640,13 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             String fullTableName = TableRegistry.getFullyQualifiedTableName(
                 tableName.getNamespace(), tableName.getTableName()
             );
-            SMRObject.Builder<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> corfuTableBuilder = cpRuntime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
-                .setStreamName(fullTableName)
-                .setSerializer(dynamicProtoBufSerializer);
+
+            PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord> corfuTable =
+                    createCorfuTable(cpRuntime, fullTableName, dynamicProtoBufSerializer);
 
             log.info("Checkpointing - {}", fullTableName);
             mcw = new MultiCheckpointWriter<>();
-            mcw.addMap(corfuTableBuilder.open());
+            mcw.addMap(corfuTable);
 
             Token token = mcw.appendCheckpoints(cpRuntime, author);
             trimMark = trimMark == null ? token : Token.min(trimMark, token);
@@ -689,7 +688,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Write 'N' entries to active map (to ensure nothing happens wrt. the status, as LR is not started on active)
         for (int i = 0; i < firstBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
+            mapActive.insert(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(firstBatch);
@@ -761,16 +760,17 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // (4) Write noisy streams and check remaining entries
         // Write 'N' entries to active noisy map
         long txTail = activeRuntime.getSequencerView().query(ObjectsView.getLogReplicatorStreamId());
-        CorfuTable<String, Integer> noisyMap = activeRuntime.getObjectsView()
+        PersistentCorfuTable<String, Integer> noisyMap = activeRuntime.getObjectsView()
                 .build()
                 .setStreamName(streamName+"noisy")
                 .setStreamTags(ObjectsView.getLogReplicatorStreamId())
-                .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, Integer>>() {
                 })
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
         for (int i = 0; i < firstBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
-            noisyMap.put(String.valueOf(i), i);
+            noisyMap.insert(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(noisyMap.size()).isEqualTo(firstBatch);
@@ -815,7 +815,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Write 50 entry to active map
         for (int i = 0; i < largeBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
+            mapActive.insert(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(largeBatch);
@@ -869,7 +869,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Write 50 entry to active map
         for (int i = 0; i < largeBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
+            mapActive.insert(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(largeBatch);
@@ -930,7 +930,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Write 10 entries to active map
         for (int i = 0; i < firstBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
+            mapActive.insert(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(firstBatch);
@@ -955,7 +955,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Write 5 entries to active map
         for (int i = firstBatch; i < secondBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
+            mapActive.insert(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(secondBatch);
@@ -985,7 +985,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Append to mapActive
         for (int i = secondBatch; i < thirdBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
+            mapActive.insert(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(thirdBatch);
@@ -1018,7 +1018,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Write 10 entries to active map
         for (int i = 0; i < firstBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
+            mapActive.insert(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(firstBatch);
@@ -1043,7 +1043,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Write 5 entries to active map
         for (int i = firstBatch; i < secondBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
+            mapActive.insert(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(secondBatch);
@@ -1072,7 +1072,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         for (int i = secondBatch; i < thirdBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
+            mapActive.insert(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(thirdBatch);
@@ -1106,7 +1106,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Write 10 entries to active map
         for (int i = 0; i < firstBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
+            mapActive.insert(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(firstBatch);
@@ -1131,7 +1131,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Write 5 entries to active map
         for (int i = firstBatch; i < secondBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
+            mapActive.insert(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(secondBatch);
@@ -1161,7 +1161,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Append to mapActive
         for (int i = secondBatch; i < thirdBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
+            mapActive.insert(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(thirdBatch);
@@ -1233,7 +1233,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Write 10 entries to active map
         for (int i = 0; i < firstBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
+            mapActive.insert(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(firstBatch);
@@ -1292,7 +1292,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Write 5 entries to active map
         for (int i = firstBatch; i < secondBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
+            mapActive.insert(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(secondBatch);
@@ -1312,7 +1312,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Append to mapActive
         for (int i = secondBatch; i < thirdBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
+            mapActive.insert(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(thirdBatch);
@@ -1371,7 +1371,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Write 10 entries to active map
         for (int i = 0; i < firstBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
+            mapActive.insert(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(firstBatch);
@@ -1396,7 +1396,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Write 5 entries to active map
         for (int i = firstBatch; i < secondBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
+            mapActive.insert(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(secondBatch);
@@ -1431,7 +1431,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         for (int i = secondBatch; i < thirdBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
-            mapActive.put(String.valueOf(i), i);
+            mapActive.insert(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(thirdBatch);
@@ -1462,19 +1462,14 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     public void testBackupRestoreWorkflow() throws Exception {
         Process backupCorfu = runServer(backupClusterCorfuPort, true);
         Process backupReplicationServer = runReplicationServer(backupReplicationServerPort, nettyPluginPath);
+        CorfuRuntime backupRuntime = createRuntimeWithCache(backupCorfuEndpoint);
 
-        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
-                .builder()
-                .build();
-
-        CorfuRuntime backupRuntime = CorfuRuntime.fromParameters(params);
-        backupRuntime.parseConfigurationString(backupCorfuEndpoint).connect();
-
-        CorfuTable<String, Integer> mapBackup = backupRuntime.getObjectsView()
+        PersistentCorfuTable<String, Integer> mapBackup = backupRuntime.getObjectsView()
                 .build()
                 .setStreamName(streamName)
                 .setStreamTags(ObjectsView.getLogReplicatorStreamId())
-                .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, Integer>>() {
                 })
                 .open();
 
@@ -1555,7 +1550,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         shutdownCorfuServer(backupReplicationServer);
     }
 
-    private void waitForReplication(IntPredicate verifier, CorfuTable table, int expected) {
+    private void waitForReplication(IntPredicate verifier, PersistentCorfuTable<?, ?> table, int expected) {
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             log.info("Waiting for replication, table size is {}, expected size is {}", table.size(), expected);
             if (verifier.test(table.size())) {
@@ -1575,10 +1570,10 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     }
 
     private void writeEntries(CorfuRuntime runtime,
-                              int startIdx, int endIdx, CorfuTable<String, Integer> table) {
+                              int startIdx, int endIdx, PersistentCorfuTable<String, Integer> table) {
         for (int i = startIdx; i < endIdx; i++) {
             runtime.getObjectsView().TXBegin();
-            table.put(String.valueOf(i), i);
+            table.insert(String.valueOf(i), i);
             runtime.getObjectsView().TXEnd();
         }
     }

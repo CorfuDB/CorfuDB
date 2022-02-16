@@ -5,16 +5,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
 
-import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Predicate;
 import java.util.stream.IntStream;
 
 import lombok.Data;
@@ -26,6 +21,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOption;
+import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
@@ -47,209 +43,135 @@ public class SMRMapTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void canReadWriteToSingle()
-            throws Exception {
-        Map<String, String> testMap = getRuntime()
+    public void canReadWriteToSingle() throws Exception {
+        PersistentCorfuTable<String, String> testTable = getRuntime()
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
-        testMap.clear();
-        assertThat(testMap.put("a", "a"))
-                .isNull();
-        assertThat(testMap.put("a", "b"))
-                .isEqualTo("a");
-        assertThat(testMap.get("a"))
-                .isEqualTo("b");
+        testTable.clear();
+        assertThat(testTable.get("a")).isNull();
+        testTable.insert("a", "a");
+        assertThat(testTable.get("a")).isEqualTo("a");
+        testTable.insert("a", "b");
+        assertThat(testTable.get("a")).isEqualTo("b");
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    public void canReadWriteToSinglePrimitive()
-            throws Exception {
+    public void canReadWriteToSinglePrimitive() throws Exception {
         getRuntime().setCacheDisabled(true);
-        Map<Long, Double> testMap = getRuntime()
+        PersistentCorfuTable<Long, Double> testTable = getRuntime()
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setSerializer(Serializers.PRIMITIVE)
-                .setTypeToken(new TypeToken<CorfuTable<Long, Double>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Double>>() {})
                 .open();
 
         final double PRIMITIVE_1 = 2.4;
         final double PRIMITIVE_2 = 4.5;
 
-        testMap.clear();
-        assertThat(testMap.put(1L, PRIMITIVE_1))
-                .isNull();
-        assertThat(testMap.put(1L, PRIMITIVE_2))
-                .isEqualTo(PRIMITIVE_1);
-        assertThat(testMap.get(1L))
-                .isEqualTo(PRIMITIVE_2);
+        testTable.clear();
+        assertThat(testTable.get(1L)).isNull();
+        testTable.insert(1L, PRIMITIVE_1);
+        assertThat(testTable.get(1L)).isEqualTo(PRIMITIVE_1);
+        testTable.clear();
+        assertThat(testTable.get(1L)).isNull();
+        testTable.insert(1L, PRIMITIVE_2);
+        assertThat(testTable.get(1L)).isEqualTo(PRIMITIVE_2);
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    public void canWriteScanAndFilterToSingle()
-            throws Exception {
-        Map<String, String> corfuInstancesMap = getRuntime()
-                .getObjectsView()
-                .build()
-                .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .open();
-
-        corfuInstancesMap.clear();
-        assertThat(corfuInstancesMap.put("a", "CorfuServer"))
-                .isNull();
-        assertThat(corfuInstancesMap.put("b", "CorfuClient"))
-                .isNull();
-        assertThat(corfuInstancesMap.put("c", "CorfuClient"))
-                .isNull();
-        assertThat(corfuInstancesMap.put("d", "CorfuServer"))
-                .isNull();
-
-        // ScanAndFilterByEntry
-        Predicate<Map.Entry<String, String>> valuePredicate =
-                p -> p.getValue().equals("CorfuServer");
-        Collection<Map.Entry<String, String>> filteredMap = ((CorfuTable)corfuInstancesMap)
-                .scanAndFilterByEntry(valuePredicate);
-
-        assertThat(filteredMap.size()).isEqualTo(2);
-
-        for(Map.Entry<String, String> corfuInstance : filteredMap) {
-            assertThat(corfuInstance.getValue()).isEqualTo("CorfuServer");
-        }
-
-        // ScanAndFilter (Deprecated Method)
-        List<String> corfuServerList = ((CorfuTable)corfuInstancesMap)
-                .scanAndFilter(p -> p.equals("CorfuServer"));
-
-        assertThat(corfuServerList.size()).isEqualTo(2);
-
-        for(String corfuInstance : corfuServerList) {
-            assertThat(corfuInstance).isEqualTo("CorfuServer");
-        }
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    public void canGetID()
-            throws Exception {
+    public void canGetID() throws Exception {
         UUID id = UUID.randomUUID();
-        ICorfuSMR testMap = (ICorfuSMR) getRuntime().getObjectsView()
+        ICorfuSMR testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamID(id)
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
-        assertThat(id)
-                .isEqualTo(testMap.getCorfuStreamID());
+        assertThat(id).isEqualTo(testTable.getCorfuStreamID());
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    public void loadsFollowedByGets()
-            throws Exception {
-        Map<String, String> testMap = getRuntime().getObjectsView()
+    public void loadsFollowedByGets() throws Exception {
+        PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
-        testMap.clear();
+        testTable.clear();
+
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
-            assertThat(testMap.put(Integer.toString(i), Integer.toString(i)))
-                    .isNull();
+            testTable.insert(Integer.toString(i), Integer.toString(i));
         }
+
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
-            assertThat(testMap.get(Integer.toString(i)))
-                    .isEqualTo(Integer.toString(i));
+            assertThat(testTable.get(Integer.toString(i))).isEqualTo(Integer.toString(i));
         }
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    public void canContainOtherCorfuObjects()
-            throws Exception {
-        Map<String, String> testMap = getRuntime().getObjectsView()
+    public void canContainOtherCorfuObjects() throws Exception {
+        PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test 1")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
-        testMap.clear();
-        testMap.put("z", "e");
-        Map<String, Map<String, String>> testMap2 = getRuntime().getObjectsView()
+        testTable.clear();
+        testTable.insert("z", "e");
+        PersistentCorfuTable<String, PersistentCorfuTable<String, String>> testTable2 = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test 2")
-                .setTypeToken(new TypeToken<CorfuTable<String, Map<String, String>>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, PersistentCorfuTable<String, String>>>() {})
                 .open();
-        testMap2.put("a", testMap);
+        testTable2.insert("a", testTable);
 
-        assertThat(testMap2.get("a").get("z"))
-                .isEqualTo("e");
+        assertThat(testTable2.get("a").get("z")).isEqualTo("e");
 
-        testMap2.get("a").put("y", "f");
+        testTable2.get("a").insert("y", "f");
 
-        assertThat(testMap.get("y"))
-                .isEqualTo("f");
+        assertThat(testTable.get("y")).isEqualTo("f");
 
-        Map<String, String> testMap3 = getRuntime().getObjectsView()
+        PersistentCorfuTable<String, String> testTable3 = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test 1")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
-        assertThat(testMap3.get("y"))
-                .isEqualTo("f");
-
+        assertThat(testTable3.get("y")).isEqualTo("f");
     }
 
     @Test
-    @SuppressWarnings("unchecked")
-    public void canContainNullObjects()
-            throws Exception {
-        Map<String, String> testMap = getRuntime().getObjectsView()
-                .build()
-                .setStreamName("a")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .open();
-
-        testMap.clear();
-        testMap.put("z", null);
-        assertThat(testMap.get("z"))
-                .isEqualTo(null);
-        Map<String, String> testMap2 = getRuntime()
-                .getObjectsView()
-                .build()
-                .setStreamName("a")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .open();
-
-        assertThat(testMap2.get("z"))
-                .isEqualTo(null);
-    }
-
-    @Test
-    public void loadsFollowedByGetsConcurrent()
-            throws Exception {
-        Map<String, String> testMap = getRuntime().getObjectsView()
+    public void loadsFollowedByGetsConcurrent() throws Exception {
+        PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamID(UUID.randomUUID())
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
         final int num_threads = PARAMETERS.CONCURRENCY_SOME;
         final int num_records = PARAMETERS.NUM_ITERATIONS_LOW;
-        testMap.clear();
+        testTable.clear();
 
         scheduleConcurrently(num_threads, threadNumber -> {
             int base = threadNumber * num_records;
             for (int i = base; i < base + num_records; i++) {
-                assertThat(testMap.put(Integer.toString(i), Integer.toString(i)))
-                        .isEqualTo(null);
+                testTable.insert(Integer.toString(i), Integer.toString(i));
             }
         });
 
@@ -260,8 +182,7 @@ public class SMRMapTest extends AbstractViewTest {
         scheduleConcurrently(num_threads, threadNumber -> {
             int base = threadNumber * num_records;
             for (int i = base; i < base + num_records; i++) {
-                assertThat(testMap.get(Integer.toString(i)))
-                        .isEqualTo(Integer.toString(i));
+                assertThat(testTable.get(Integer.toString(i))).isEqualTo(Integer.toString(i));
             }
         });
 
@@ -273,8 +194,7 @@ public class SMRMapTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void loadsFollowedByGetsConcurrentMultiView()
-            throws Exception {
+    public void loadsFollowedByGetsConcurrentMultiView() throws Exception {
         // Increasing hole fill delay to avoid intermittent AppendExceptions.
         final int longHoleFillRetryLimit = 50;
         r.getParameters().setHoleFillRetry(longHoleFillRetryLimit);
@@ -282,24 +202,23 @@ public class SMRMapTest extends AbstractViewTest {
         final int num_threads = 5;
         final int num_records = 1000;
 
-        Map<String, String>[] testMap =
+        PersistentCorfuTable<String, String>[] testTables =
                 IntStream.range(0, num_threads)
-                .mapToObj(i -> {
-                    return getRuntime().getObjectsView()
-                            .build()
-                            .setStreamID(UUID.randomUUID())
-                            .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                            })
-                            .option(ObjectOpenOption.NO_CACHE)
-                            .open();
-                })
-                .toArray(Map[]::new);
+                .mapToObj(i -> getRuntime().getObjectsView()
+                        .build()
+                        .setStreamID(UUID.randomUUID())
+                        .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                        .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
+                        })
+                        .option(ObjectOpenOption.NO_CACHE)
+                        .open())
+                .toArray(PersistentCorfuTable[]::new);
 
         scheduleConcurrently(num_threads, threadNumber -> {
             int base = threadNumber * num_records;
             for (int i = base; i < base + num_records; i++) {
-                assertThat(testMap[threadNumber].put(Integer.toString(i), Integer.toString(i)))
-                        .isEqualTo(null);
+                assertThat(testTables[threadNumber].get(Integer.toString(i))).isNull();
+                testTables[threadNumber].insert(Integer.toString(i), Integer.toString(i));
             }
         });
 
@@ -310,7 +229,7 @@ public class SMRMapTest extends AbstractViewTest {
         scheduleConcurrently(num_threads, threadNumber -> {
             int base = threadNumber * num_records;
             for (int i = base; i < base + num_records; i++) {
-                assertThat(testMap[threadNumber].get(Integer.toString(i)))
+                assertThat(testTables[threadNumber].get(Integer.toString(i)))
                         .isEqualTo(Integer.toString(i));
             }
         });
@@ -320,46 +239,25 @@ public class SMRMapTest extends AbstractViewTest {
         calculateRequestsPerSecond("RPS", num_records * num_threads, startTime);
     }
 
+    /*
     @Test
     @SuppressWarnings("unchecked")
-    public void collectionsStreamInterface()
-            throws Exception {
-        Map<String, String> testMap = getRuntime().getObjectsView()
-                .build()
-                .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .open();
-
-        testMap.put("a", "b");
-        getRuntime().getObjectsView().TXBegin();
-        if (testMap.values().stream().anyMatch(x -> x.equals("c"))) {
-            throw new Exception("test");
-        }
-        testMap.compute("b",
-                (k, v) -> "c");
-        getRuntime().getObjectsView().TXEnd();
-        assertThat(testMap)
-                .containsEntry("b", "c");
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    public void readSetDiffFromWriteSet()
-            throws Exception {
-        Map<String, String> testMap = getRuntime().getObjectsView()
+    @Ignore // PersistentCorfuTable does not implement compute
+    public void readSetDiffFromWriteSet() throws Exception {
+        CorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test1")
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
-        Map<String, String> testMap2 = getRuntime().getObjectsView()
+        CorfuTable<String, String> testTable2 = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test2")
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
-        testMap.put("a", "b");
-        testMap2.put("a", "c");
+        testTable.insert("a", "b");
+        testTable2.insert("a", "c");
 
         Semaphore s1 = new Semaphore(0);
         Semaphore s2 = new Semaphore(0);
@@ -367,14 +265,15 @@ public class SMRMapTest extends AbstractViewTest {
             s1.tryAcquire(PARAMETERS.TIMEOUT_NORMAL.toMillis(),
                     TimeUnit.MILLISECONDS);
             getRuntime().getObjectsView().TXBegin();
-            testMap2.put("a", "d");
+            testTable2.insert("a", "d");
             getRuntime().getObjectsView().TXEnd();
             s2.release();
         });
 
         scheduleConcurrently(1, threadNumber -> {
             getRuntime().getObjectsView().TXBegin();
-            testMap.compute("b", (k, v) -> testMap2.get("a"));
+            // PersistentCorfuTable does not implement compute
+            testTable.compute("b", (k, v) -> testTable2.get("a"));
             s1.release();
             s2.tryAcquire(PARAMETERS.TIMEOUT_NORMAL.toMillis(),
                     TimeUnit.MILLISECONDS);
@@ -383,211 +282,197 @@ public class SMRMapTest extends AbstractViewTest {
         });
         executeScheduled(PARAMETERS.CONCURRENCY_TWO, PARAMETERS.TIMEOUT_NORMAL);
     }
+    */
 
    @Test
     @SuppressWarnings("unchecked")
-    public void canUpdateSingleObjectTransactionally()
-            throws Exception {
-        Map<String, String> testMap = getRuntime().getObjectsView()
-                .build()
-                .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .open();
+    public void canUpdateSingleObjectTransactionally() throws Exception {
+       PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
+               .build()
+               .setStreamName("test")
+               .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+               .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+               .open();
 
-        getRuntime().getObjectsView().TXBegin();
-        assertThat(testMap.put("a", "a"))
-                .isNull();
-        assertThat(testMap.put("a", "b"))
-                .isEqualTo("a");
-        assertThat(testMap.get("a"))
-                .isEqualTo("b");
-        getRuntime().getObjectsView().TXEnd();
-        assertThat(testMap.get("a"))
-                .isEqualTo("b");
+       getRuntime().getObjectsView().TXBegin();
+       assertThat(testTable.get("a")).isNull();
+       testTable.insert("a", "a");
+       assertThat(testTable.get("a")).isEqualTo("a");
+       testTable.delete("a");
+       assertThat(testTable.get("a")).isNull();
+       testTable.insert("a", "b");
+       assertThat(testTable.get("a")).isEqualTo("b");
+       getRuntime().getObjectsView().TXEnd();
+
+       assertThat(testTable.get("a")).isEqualTo("b");
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    public void multipleTXesAreApplied()
-            throws Exception {
-
-        Map<String, String> testMap = getRuntime().getObjectsView()
+    public void multipleTXesAreApplied() throws Exception {
+        PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
         IntStream.range(0, PARAMETERS.NUM_ITERATIONS_LOW).asLongStream()
 
                 .forEach(l -> {
                     try {
-                        assertThat(testMap)
-                                .hasSize((int) l);
+                        assertThat(testTable.size()).isEqualTo(l);
                         getRuntime().getObjectsView().TXBegin();
-                        assertThat(testMap.put(Long.toString(l), Long.toString(l)))
-                                .isNull();
-                        assertThat(testMap)
-                                .hasSize((int) l + 1);
+                        testTable.insert(Long.toString(l), Long.toString(l));
+                        assertThat(testTable.size()).isEqualTo(l + 1);
                         getRuntime().getObjectsView().TXEnd();
-                        assertThat(testMap)
-                                .hasSize((int) l + 1);
+                        assertThat(testTable.size()).isEqualTo(l + 1);
                     } catch (TransactionAbortedException tae) {
                         throw new RuntimeException(tae);
                     }
                 });
 
-        assertThat(testMap)
-                .hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
+        assertThat(testTable.size()).isEqualTo(PARAMETERS.NUM_ITERATIONS_LOW);
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    public void multipleTXesAreAppliedWOAccessors()
-            throws Exception {
-
-        Map<String, String> testMap = getRuntime().getObjectsView()
+    public void multipleTXesAreAppliedWOAccessors() throws Exception {
+        PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
         IntStream.range(0, PARAMETERS.NUM_ITERATIONS_LOW).asLongStream()
                 .forEach(l -> {
                     try {
                         getRuntime().getObjectsView().TXBegin();
-                        assertThat(testMap.put(Long.toString(l), Long.toString(l)))
-                                .isNull();
+                        testTable.insert(Long.toString(l), Long.toString(l));
                         getRuntime().getObjectsView().TXEnd();
                     } catch (TransactionAbortedException tae) {
                         throw new RuntimeException(tae);
                     }
                 });
 
-        assertThat(testMap)
-                .hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
+        assertThat(testTable.size()).isEqualTo(PARAMETERS.NUM_ITERATIONS_LOW);
     }
 
 
     @Test
     @SuppressWarnings("unchecked")
-    public void mutatorFollowedByATransaction()
-            throws Exception {
-        Map<String, String> testMap = getRuntime().getObjectsView()
+    public void mutatorFollowedByATransaction() throws Exception {
+        PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
-        testMap.clear();
+        testTable.clear();
         getRuntime().getObjectsView().TXBegin();
-        assertThat(testMap.put("a", "a"))
-                .isNull();
-        assertThat(testMap.put("a", "b"))
-                .isEqualTo("a");
-        assertThat(testMap.get("a"))
-                .isEqualTo("b");
+        assertThat(testTable.get("a")).isNull();
+        testTable.insert("a", "a");
+        assertThat(testTable.get("a")).isEqualTo("a");
+        testTable.insert("a", "b");
+        assertThat(testTable.get("a")).isEqualTo("b");
         getRuntime().getObjectsView().TXEnd();
-        assertThat(testMap.get("a"))
-                .isEqualTo("b");
+
+        assertThat(testTable.get("a")).isEqualTo("b");
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    public void objectViewCorrectlyReportsInsideTX()
-            throws Exception {
-        assertThat(getRuntime().getObjectsView().TXActive())
-                .isFalse();
+    public void objectViewCorrectlyReportsInsideTX() throws Exception {
+        assertThat(getRuntime().getObjectsView().TXActive()).isFalse();
         getRuntime().getObjectsView().TXBegin();
-        assertThat(getRuntime().getObjectsView().TXActive())
-                .isTrue();
+        assertThat(getRuntime().getObjectsView().TXActive()).isTrue();
         getRuntime().getObjectsView().TXEnd();
-        assertThat(getRuntime().getObjectsView().TXActive())
-                .isFalse();
+        assertThat(getRuntime().getObjectsView().TXActive()).isFalse();
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    public void canUpdateSingleObjectTransactionallyWhenCached()
-            throws Exception {
+    public void canUpdateSingleObjectTransactionallyWhenCached() throws Exception {
         r.setCacheDisabled(false);
 
-        Map<String, String> testMap = getRuntime().getObjectsView()
+        PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
         getRuntime().getObjectsView().TXBegin();
-        assertThat(testMap.put("a", "a"))
-                .isNull();
-        assertThat(testMap.put("a", "b"))
-                .isEqualTo("a");
-        assertThat(testMap.get("a"))
-                .isEqualTo("b");
+        assertThat(testTable.get("a")).isNull();
+        testTable.insert("a", "a");
+        assertThat(testTable.get("a")).isEqualTo("a");
+        testTable.insert("a", "b");
+        assertThat(testTable.get("a")).isEqualTo("b");
         getRuntime().getObjectsView().TXEnd();
-        assertThat(testMap.get("a"))
-                .isEqualTo("b");
+
+        assertThat(testTable.get("a")).isEqualTo("b");
     }
 
 
     @Test
     @SuppressWarnings("unchecked")
-    public void abortedTransactionsCannotBeReadOnSingleObject()
-            throws Exception {
-        Map<String, String> testMap = getRuntime().getObjectsView()
+    public void abortedTransactionsCannotBeReadOnSingleObject() throws Exception {
+        PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
-        testMap.clear();
-        testMap.put("z", "z");
-        assertThat(testMap.size())
-                .isEqualTo(1);
-
+        testTable.clear();
+        testTable.insert("z", "z");
+        assertThat(testTable.size()).isEqualTo(1);
 
         getRuntime().getObjectsView().TXBegin();
-        assertThat(testMap.put("a", "a"))
-                .isNull();
-        assertThat(testMap.put("a", "b"))
-                .isEqualTo("a");
-        assertThat(testMap.get("a"))
-                .isEqualTo("b");
-        testMap.clear();
+        assertThat(testTable.get("a")).isNull();
+        testTable.insert("a", "a");
+        assertThat(testTable.get("a")).isEqualTo("a");
+        testTable.insert("a", "b");
+        assertThat(testTable.get("a")).isEqualTo("b");
+        testTable.clear();
+        assertThat(testTable.get("a")).isNull();
         getRuntime().getObjectsView().TXAbort();
-        assertThat(testMap.size())
-                .isEqualTo(1);
+        assertThat(testTable.size()).isEqualTo(1);
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    public void modificationDuringTransactionCausesAbort()
-            throws Exception {
-        Map<String, String> testMap = getRuntime().getObjectsView()
+    public void modificationDuringTransactionCausesAbort() throws Exception {
+        PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("A")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
-        assertThat(testMap.put("a", "z"));
+        assertThat(testTable.get("a")).isNull();
+        testTable.insert("a", "z");
         getRuntime().getObjectsView().TXBegin();
-        assertThat(testMap.put("a", "a"))
-                .isEqualTo("z");
-        assertThat(testMap.put("a", "b"))
-                .isEqualTo("a");
-        assertThat(testMap.get("a"))
-                .isEqualTo("b");
+        assertThat(testTable.get("a")).isEqualTo("z");
+        testTable.insert("a", "a");
+        assertThat(testTable.get("a")).isEqualTo("a");
+        testTable.insert("a", "b");
+        assertThat(testTable.get("a")).isEqualTo("b");
+
         CompletableFuture cf = CompletableFuture.runAsync(() -> {
-            Map<String, String> testMap2 = getRuntime().getObjectsView()
+            PersistentCorfuTable<String, String> testTable2 = getRuntime().getObjectsView()
                     .build()
                     .setStreamName("A")
+                    .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                     .setSerializer(Serializers.getDefaultSerializer())
                     .option(ObjectOpenOption.NO_CACHE)
-                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                    .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                     .open();
 
             getRuntime().getObjectsView().TXBegin();
-            testMap2.put("a", "f");
+            testTable2.insert("a", "f");
             getRuntime().getObjectsView().TXEnd();
         });
         cf.join();
@@ -597,42 +482,38 @@ public class SMRMapTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void smrMapCanContainCustomObjects()
-            throws Exception {
-        Map<String, TestObject> testMap = getRuntime().getObjectsView()
+    public void smrMapCanContainCustomObjects() throws Exception {
+        PersistentCorfuTable<String, TestObject> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("A")
-                .setTypeToken(new TypeToken<CorfuTable<String, TestObject>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, TestObject>>() {})
                 .open();
 
-        testMap.put("A", new TestObject("A", 2, ImmutableMap.of("A", "B")));
-        assertThat(testMap.get("A").getTestString())
-                .isEqualTo("A");
-        assertThat(testMap.get("A").getTestInt())
-                .isEqualTo(2);
+        testTable.insert("A", new TestObject("A", 2, ImmutableMap.of("A", "B")));
+        assertThat(testTable.get("A").getTestString()).isEqualTo("A");
+        assertThat(testTable.get("A").getTestInt()).isEqualTo(2);
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    public void smrMapCanContainCustomObjectsInsideTXes()
-            throws Exception {
-        Map<String, TestObject> testMap = getRuntime().getObjectsView()
+    public void smrMapCanContainCustomObjectsInsideTXes() throws Exception {
+        PersistentCorfuTable<String, TestObject> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("A")
-                .setTypeToken(new TypeToken<CorfuTable<String, TestObject>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, TestObject>>() {})
                 .open();
 
         IntStream.range(0, PARAMETERS.NUM_ITERATIONS_LOW)
                 .forEach(l -> {
                     try {
                         getRuntime().getObjectsView().TXBegin();
-                        testMap.put(Integer.toString(l),
+                        testTable.insert(Integer.toString(l),
                                 new TestObject(Integer.toString(l), l,
-                                        ImmutableMap.of(
-                                Integer.toString(l), l)));
+                                        ImmutableMap.of(Integer.toString(l), l)));
                         if (l > 0) {
-                            assertThat(testMap.get(Integer.toString(l - 1)).getTestInt())
-                                    .isEqualTo(l - 1);
+                            assertThat(testTable.get(Integer.toString(l - 1)).getTestInt()).isEqualTo(l - 1);
                         }
                         getRuntime().getObjectsView().TXEnd();
                     } catch (TransactionAbortedException tae) {
@@ -640,23 +521,8 @@ public class SMRMapTest extends AbstractViewTest {
                     }
                 });
 
-        assertThat(testMap.get("3").getTestString())
-                .isEqualTo("3");
-        assertThat(testMap.get("3").getTestInt())
-                .isEqualTo(Integer.parseInt("3"));
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    public void unusedMutatorAccessor()
-            throws Exception {
-        Map<String, String> testMap = getRuntime().getObjectsView()
-                .build()
-                .setStreamName("A")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .open();
-
-        testMap.put("a", "z");
+        assertThat(testTable.get("3").getTestString()).isEqualTo("3");
+        assertThat(testTable.get("3").getTestInt()).isEqualTo(Integer.parseInt("3"));
     }
 
     AtomicInteger aborts;
@@ -664,18 +530,17 @@ public class SMRMapTest extends AbstractViewTest {
     void getMultiViewSM(int numThreads) {
 
         UUID mapStream = UUID.randomUUID();
-        Map<String, String>[] testMap =
+        PersistentCorfuTable<String, String>[] testTables =
                 IntStream.range(0, numThreads)
-                        .mapToObj(i -> {
-                            return getRuntime().getObjectsView()
-                                    .build()
-                                    .setStreamID(mapStream)
-                                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                                    })
-                                    .option(ObjectOpenOption.NO_CACHE)
-                                    .open();
-                        })
-                        .toArray(Map[]::new);
+                        .mapToObj(i -> getRuntime().getObjectsView()
+                                .build()
+                                .setStreamID(mapStream)
+                                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
+                                })
+                                .option(ObjectOpenOption.NO_CACHE)
+                                .open())
+                        .toArray(PersistentCorfuTable[]::new);
 
         // # keys indicate how much contention there will be
         final int numKeys = numThreads * 5;
@@ -691,8 +556,11 @@ public class SMRMapTest extends AbstractViewTest {
         addTestStep( (task_num) -> {
             final int putKey = r.nextInt(numKeys);
             final int getKey = r.nextInt(numKeys);
-            testMap[task_num%numThreads].put(Integer.toString(putKey),
-                    testMap[task_num%numThreads].get(Integer.toString(getKey)));
+
+            testTables[task_num%numThreads].insert(Integer.toString(putKey),
+                    testTables[task_num%numThreads].get(Integer.toString(getKey)));
+
+            testTables[task_num%numThreads].get(Integer.toString(putKey)); // Generate conflict information since insert has no upcall
         });
 
         // state 2 (final): ask to commit the transaction
@@ -703,16 +571,13 @@ public class SMRMapTest extends AbstractViewTest {
                 aborts.incrementAndGet();
             }
         });
-
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    public void concurrentAbortMultiViewInterleaved()
-            throws Exception {
+    public void concurrentAbortMultiViewInterleaved() throws Exception {
         final int numThreads = PARAMETERS.CONCURRENCY_SOME;
         final int numRecords = PARAMETERS.NUM_ITERATIONS_LOW;
-
 
         long startTime = System.currentTimeMillis();
         aborts = new AtomicInteger();
@@ -728,8 +593,7 @@ public class SMRMapTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void concurrentAbortMultiViewThreaded()
-            throws Exception {
+    public void concurrentAbortMultiViewThreaded() throws Exception {
         final int numThreads = PARAMETERS.CONCURRENCY_SOME;
         final int numRecords = PARAMETERS.NUM_ITERATIONS_LOW;
 
@@ -747,34 +611,32 @@ public class SMRMapTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void bulkReads()
-            throws Exception {
+    public void bulkReads() throws Exception {
         UUID stream = UUID.randomUUID();
-        Map<String, String> testMap = getRuntime()
+        PersistentCorfuTable<String, String> testTable = getRuntime()
                 .getObjectsView()
                 .build()
                 .setStreamID(stream)
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
-        testMap.clear();
+        testTable.clear();
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
-            assertThat(testMap.put(Integer.toString(i), Integer.toString(i)))
-                    .isNull();
+            assertThat(testTable.get(Integer.toString(i))).isNull();
+            testTable.insert(Integer.toString(i), Integer.toString(i));
         }
 
         // Do a bulk read of the stream by initializing a new view.
-        final int num_threads = 1;
-
         long startTime = System.nanoTime();
-        Map<String, String> testMap2 = getRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+        PersistentCorfuTable<String, String> testTable2 = getRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .setStreamID(stream)
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .option(ObjectOpenOption.NO_CACHE)
                 .open();
         // Do a get to prompt the sync
-        assertThat(testMap2.get(Integer.toString(0)))
-                .isEqualTo(Integer.toString(0));
+        assertThat(testTable2.get(Integer.toString(0))).isEqualTo(Integer.toString(0));
         long endTime = System.nanoTime();
 
         final int MILLISECONDS_TO_MICROSECONDS = 1000;
