@@ -185,6 +185,11 @@
             <artifactId>commons-collections</artifactId>
             <version>3.2.2</version>
         </dependency>
+        <dependency>
+            <groupId>io.vavr</groupId>
+            <artifactId>vavr</artifactId>
+            <version>1.0.0-alpha-4</version>
+        </dependency>
     </dependencies>
 
 </project>
