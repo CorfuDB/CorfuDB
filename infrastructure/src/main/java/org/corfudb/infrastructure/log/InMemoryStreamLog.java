@@ -47,7 +47,8 @@ public class InMemoryStreamLog implements StreamLog {
         committedTail = new AtomicLong(Address.NON_ADDRESS);
 
         Path dummyLogDir = new File(".").toPath().toAbsolutePath();
-        FileSystemConfig config = new FileSystemConfig(dummyLogDir, 100);
+        double unlimited = 100;
+        FileSystemConfig config = new FileSystemConfig(dummyLogDir, unlimited, PersistenceMode.MEMORY);
         FileSystemAgent.init(config);
     }
 

@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
@@ -25,7 +26,6 @@ import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Utils;
 import org.junit.Test;
 
-
 /**
  * This class provides a set of tests to:
  *
@@ -38,6 +38,7 @@ import org.junit.Test;
  */
 @Slf4j
 public class StreamAddressDiscoveryIT extends AbstractIT {
+    private final String cpAuthor = "checkpointer-test";
 
     private CorfuRuntime createDefaultRuntimeUsingAddressMaps() {
         CorfuRuntime runtime = createDefaultRuntime().setCacheDisabled(false);
@@ -78,7 +79,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      * Compare times for both mechanisms, ensure stream maps is faster than following backpointers
      * (which will single step through 10.000 entries)
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void benchMarkStreamRebuiltInPresenceOfHoles() throws Exception {
@@ -137,7 +138,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      *  CP1: Checkpoint S1
      *  CP2: Checkpoint S2
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void checkpointAndTrimAtDifferentPoint() throws Exception {
@@ -164,6 +165,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Checkpoint S1
             MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw1 = new MultiCheckpointWriter<>();
             mcw1.addMap(table1);
+
             Token minCheckpointAddress = mcw1.appendCheckpoints(defaultRT, "author");
 
             transactionalWrite(defaultRT, table1, "9", "9");
@@ -173,6 +175,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Checkpoint S2
             MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw2 = new MultiCheckpointWriter<>();
             mcw2.addMap(table2);
+
             Token maxCheckpointAddress = mcw2.appendCheckpoints(defaultRT, "author");
 
             transactionalWrite(defaultRT, table2, "15", "15");
@@ -223,7 +226,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      *  CP1: Checkpoint 1 to S1
      *  CP2: Checkpoint 2 to S1
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void checkpointAndTrimAtDifferentPointSnapshot() throws Exception {
@@ -246,6 +249,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Checkpoint 1
             MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw1 = new MultiCheckpointWriter<>();
             mcw1.addMap(table1);
+
             Token minCheckpointAddress = mcw1.appendCheckpoints(writeRuntime, "author");
 
             for (int i = batchWrite; i < 2 * batchWrite; i++) {
@@ -255,6 +259,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Checkpoint 2
             MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw2 = new MultiCheckpointWriter<>();
             mcw2.addMap(table1);
+
             Token maxCheckpointAddress = mcw2.appendCheckpoints(writeRuntime, "author");
 
             assertThat(table1.size()).isEqualTo(2 * batchWrite);
@@ -406,7 +411,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      *                             ^
      *                           TRIM
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testStreamRebuiltWithHoleAsFirstEntryAfterTrim() throws Exception {
@@ -458,6 +463,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // we're interested in verifying the behaviour of streamA with end address != trim address.
             CheckpointWriter<PersistentCorfuTable<String, Integer>> cpw =
                     new CheckpointWriter<>(runtime, CorfuRuntime.getStreamID(streamNameA), "checkpoint-test", tableA);
+
             Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress));
 
             // Trim the log
@@ -514,7 +520,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      *                                ^
      *                              TRIM
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testStreamRebuiltWithHoleAsFirstEntryAfterTrimNoCP() throws Exception {
@@ -557,6 +563,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Checkpoint A with snapshot @ 9
             CheckpointWriter<PersistentCorfuTable<String, Integer>> cpw =
                     new CheckpointWriter<>(runtime, CorfuRuntime.getStreamID(streamNameA), "checkpointer-test", tableA);
+
             Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress - 1));
 
             // Trim the log
@@ -719,7 +726,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      * This test creates an empty checkpoint (for an empty stream) and resets the server to verify
      * that sequencer bootstrap is correct and stream is correctly built from checkpoint.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testEmptyCheckpointRebuiltOnRestart() throws Exception {
@@ -796,7 +803,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      * 6. Verify Stream Maps from log unit and sequencer tails (both regular stream and checkpoint
      * stream should be present).
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testCheckpointEmptyMapAndSequencerFailover() throws Exception {
@@ -806,7 +813,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
     /**
      * This test is similar to the previous, but enforces the hole from a reader, as reader hole fill
      * does not contain stream information to build address map.
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testCheckpointEmptyMapWithReaderHoleAndSequencerFailover() throws Exception {

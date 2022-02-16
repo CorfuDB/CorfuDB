@@ -151,7 +151,7 @@ public class AbstractIT extends AbstractCorfuTest {
 
             ProcessBuilder builder = new ProcessBuilder();
             for (Long pid : pidList) {
-                builder.command("sh", "-c", KILL_COMMAND + pid.longValue());
+                builder.command("sh", "-c", KILL_COMMAND + pid);
                 Process p = builder.start();
                 p.waitFor();
             }
