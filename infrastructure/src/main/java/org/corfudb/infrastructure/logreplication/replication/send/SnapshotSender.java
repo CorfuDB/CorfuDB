@@ -53,6 +53,7 @@ public class SnapshotSender {
 
     private CorfuRuntime runtime;
     private SnapshotReader snapshotReader;
+    @Getter
     private SenderBufferManager dataSenderBufferManager;
     private LogReplicationFSM fsm;
 

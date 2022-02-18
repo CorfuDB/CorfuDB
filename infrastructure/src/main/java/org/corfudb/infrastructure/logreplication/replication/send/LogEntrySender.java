@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication.send;
 
 import io.micrometer.core.instrument.Tag;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
@@ -34,6 +35,7 @@ public class LogEntrySender {
     /*
      * Implementation of buffering messages and sending/resending messages
      */
+    @Getter
     private final SenderBufferManager dataSenderBufferManager;
 
     /*

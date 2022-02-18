@@ -193,6 +193,7 @@ public class InSnapshotSyncState implements LogReplicationState {
      */
     private void cancelSnapshotSync(String cancelCause) {
         snapshotSender.stop();
+        snapshotSender.getDataSenderBufferManager().getPendingMessages().clear();
         if (!transmitFuture.isDone()) {
             try {
                 transmitFuture.get();
