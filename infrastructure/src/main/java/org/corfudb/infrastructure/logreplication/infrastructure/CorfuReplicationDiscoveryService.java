@@ -336,6 +336,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         logReplicationServerHandler = new LogReplicationServer(serverContext, logReplicationConfig,
             logReplicationMetadataManager, localCorfuEndpoint, topologyDescriptor.getTopologyConfigId(), localNodeId);
         logReplicationServerHandler.setActive(localClusterDescriptor.getRole().equals(ClusterRole.ACTIVE));
+        logReplicationServerHandler.setStandby(localClusterDescriptor.getRole().equals(ClusterRole.STANDBY));
 
         interClusterReplicationService = new CorfuInterClusterReplicationServerNode(serverContext,
             logReplicationServerHandler, logReplicationConfig);
@@ -637,6 +638,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
         // Update replication server, in case there is a role change
         logReplicationServerHandler.setActive(localClusterDescriptor.getRole().equals(ClusterRole.ACTIVE));
+        logReplicationServerHandler.setStandby(localClusterDescriptor.getRole().equals(ClusterRole.STANDBY));
 
         // On Topology Config Change, only if this node is the leader take action
         if (isLeader.get()) {
