@@ -57,6 +57,11 @@ public class ManagementAgent {
     private static final Duration AUTO_COMMIT_INTERVAL = Duration.ofSeconds(15);
 
     /**
+     * Interval of executing the CompactionService.
+     */
+    private static final Duration COMPACTION_INTERVAL = Duration.ofMinutes(15);
+
+    /**
      * To dispatch initialization tasks for recovery and sequencer bootstrap.
      */
     private final Thread initializationTaskThread;
@@ -85,6 +90,12 @@ public class ManagementAgent {
      */
     @Getter
     private final AutoCommitService autoCommitService;
+
+    /**
+     * CompactorService to periodically orchestrate distributed compaction.
+     */
+    @Getter
+    private final CompactorService compactorService;
 
     /**
      * Checks and restores if a layout is present in the local datastore to recover from.
@@ -127,6 +138,8 @@ public class ManagementAgent {
         );
 
         this.autoCommitService = new AutoCommitService(serverContext, runtimeSingletonResource);
+
+        this.compactorService = new CompactorService(serverContext, runtimeSingletonResource);
 
         // Creating the initialization task thread.
         // This thread pool is utilized to dispatch one time recovery and sequencer bootstrap tasks.
@@ -208,6 +221,11 @@ public class ManagementAgent {
             } else {
                 log.info("Auto commit service disabled.");
             }
+            if (serverContext.getServerConfig(String.class, "--compactor-command") != null) {
+                compactorService.start(COMPACTION_INTERVAL);
+            } else {
+                log.info("Compaction Service disabled");
+            }
         }
     }
 
@@ -238,6 +256,7 @@ public class ManagementAgent {
         remoteMonitoringService.shutdown();
         localMonitoringService.shutdown();
         autoCommitService.shutdown();
+        compactorService.shutdown();
 
         log.info("Management Agent shutting down.");
     }

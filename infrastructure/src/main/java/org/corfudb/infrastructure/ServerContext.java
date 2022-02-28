@@ -86,7 +86,6 @@ public class ServerContext implements AutoCloseable {
     // Corfu Replication Server
     public static final String PLUGIN_CONFIG_FILE_PATH = "../resources/corfu_plugin_config.properties";
 
-
     /** The node Id, stored as a base64 string. */
     private static final String NODE_ID = "NODE_ID";
 
@@ -191,6 +190,11 @@ public class ServerContext implements AutoCloseable {
     public int getManagementServerThreadCount() {
         Optional<String> threadCount = getServerConfig("--management-server-threads");
         return threadCount.map(Integer::parseInt).orElse(4);
+    }
+
+    public String getCompactorCommand() {
+        String compactorCommandPath = getServerConfig(String.class, "--compactor-command");
+        return compactorCommandPath;
     }
 
     public String getPluginConfigFilePath() {
