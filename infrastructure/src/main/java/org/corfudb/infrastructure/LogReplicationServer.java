@@ -55,6 +55,7 @@ public class LogReplicationServer extends AbstractServer {
 
     private final AtomicBoolean isLeader = new AtomicBoolean(false);
     private final AtomicBoolean isActive = new AtomicBoolean(false);
+    private final AtomicBoolean isStandby = new AtomicBoolean(false);
 
     /**
      * RequestHandlerMethods for the LogReplication server
@@ -98,7 +99,8 @@ public class LogReplicationServer extends AbstractServer {
     /* ************ Server Handlers ************ */
 
     /**
-     * Given a log-entry request message, send back the log-data entries.
+     * Given a log-entry request message, send back an acknowledgement
+     * after processing the message.
      *
      * @param request leadership query
      * @param ctx     enables a {@link ChannelHandler} to interact with its
@@ -111,7 +113,7 @@ public class LogReplicationServer extends AbstractServer {
                                       @Nonnull IServerRouter router) {
         log.trace("Log Replication Entry received by Server.");
 
-        if (isLeader(request, ctx, router, true)) {
+        if (isStandby.get() && isLeader(request, ctx, router, true)) {
             // Forward the received message to the Sink Manager for apply
             LogReplicationEntryMsg ack =
                     sinkManager.receive(request.getPayload().getLrEntry());
@@ -128,6 +130,8 @@ public class LogReplicationServer extends AbstractServer {
                 ResponseMsg response = getResponseMsg(responseHeader, payload);
                 router.sendResponse(response, ctx);
             }
+        } else if (!isStandby.get()) {
+            log.warn("Dropping log replication entry as this cluster's role is not Standby");
         } else {
             log.warn("Dropping log replication entry as this node is not the leader.");
         }
@@ -148,7 +152,7 @@ public class LogReplicationServer extends AbstractServer {
                                        @Nonnull IServerRouter router) {
         log.info("Log Replication Metadata Request received by Server.");
 
-        if (isLeader(request, ctx, router, false)) {
+        if (isStandby.get() && isLeader(request, ctx, router, false)) {
             LogReplicationMetadataManager metadataMgr = sinkManager.getLogReplicationMetadataManager();
             ResponseMsg response = metadataMgr.getMetadataResponse(getHeaderMsg(request.getHeader()));
             log.info("Send Metadata response :: {}", TextFormat.shortDebugString(response.getPayload()));
@@ -158,6 +162,8 @@ public class LogReplicationServer extends AbstractServer {
             if (isSnapshotApplyPending(metadataMgr) && !sinkManager.getOngoingApply().get()) {
                 sinkManager.resumeSnapshotApply();
             }
+        } else if (!isStandby.get()) {
+            log.warn("Dropping metadata request as this cluster's role is not Standby");
         } else {
             log.warn("Dropping metadata request as this node is not the leader.");
         }
@@ -177,6 +183,10 @@ public class LogReplicationServer extends AbstractServer {
                                                      @Nonnull ChannelHandlerContext ctx,
                                                      @Nonnull IServerRouter router) {
         log.debug("Log Replication Query Leadership Request received by Server.");
+        if (!isStandby.get()) {
+            log.warn("Dropping the leadership query request as this cluster's role is not Standby");
+            return;
+        }
         HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
         ResponseMsg response = getLeadershipResponse(responseHeader, isLeader.get(), localNodeId);
         router.sendResponse(response, ctx);
@@ -235,5 +245,9 @@ public class LogReplicationServer extends AbstractServer {
 
     public synchronized void setActive(boolean active) {
         isActive.set(active);
+    }
+
+    public synchronized void setStandby(boolean standby) {
+        isStandby.set(standby);
     }
 }
