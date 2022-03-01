@@ -495,22 +495,22 @@ public class LogReplicationSinkManager implements DataReceiver {
     /**
      * While processing an in order message, the buffer will callback and process the message
      * @param message
+     * @return true if msg was processed else false.
      */
-    public void processMessage(LogReplication.LogReplicationEntryMsg message) {
+    public boolean processMessage(LogReplication.LogReplicationEntryMsg message) {
         log.trace("Received dataMessage by Sink Manager. Total [{}]", rxMessageCounter);
 
         switch (rxState) {
             case LOG_ENTRY_SYNC:
-                logEntryWriter.apply(message);
-                break;
+                return logEntryWriter.apply(message);
 
             case SNAPSHOT_SYNC:
                 processSnapshotMessage(message);
-                break;
+                return true;
 
             default:
                 log.error("Wrong state {}.", rxState);
-                break;
+                return false;
         }
     }
 
