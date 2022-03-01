@@ -134,9 +134,10 @@ public abstract class SinkBufferManager {
         // This message contains entries that haven't been applied yet
         if (preTs <= lastProcessedSeq && currentTs > lastProcessedSeq) {
             log.debug("Received in order message={}, lastProcessed={}", currentTs, lastProcessedSeq);
-            sinkManager.processMessage(dataMessage);
-            ackCnt++;
-            lastProcessedSeq = getCurrentSeq(dataMessage);
+            if (sinkManager.processMessage(dataMessage)) {
+                ackCnt++;
+                lastProcessedSeq = getCurrentSeq(dataMessage);
+            }
             processBuffer();
         } else if (currentTs > lastProcessedSeq && buffer.size() < maxSize) {
             log.debug("Received unordered message, currentTs={}, lastProcessed={}", currentTs, lastProcessedSeq);
@@ -147,6 +148,11 @@ public abstract class SinkBufferManager {
          * Send Ack with lastProcessedSeq
          */
         if (shouldAck()) {
+            //TODO: we create an ACK using the metadata of the last recevied msg, and then override
+            // the timestamp with lastProcessedTs. So the rest of the ACK metadata does not match
+            // with the ACK.Timestamp().
+            // Currently its fine since active only consumes the ACK.timestamp()...but if the behaviour
+            // changes on active, we need to change it here as well
             LogReplicationEntryMetadataMsg metadata = generateAckMetadata(dataMessage);
             log.trace("Sending an ACK {}", metadata);
             return getLrEntryAckMsg(metadata);
