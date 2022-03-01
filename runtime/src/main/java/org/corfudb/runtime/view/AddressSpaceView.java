@@ -3,6 +3,7 @@ package org.corfudb.runtime.view;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
 import com.google.common.cache.RemovalNotification;
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
@@ -51,6 +52,7 @@ import java.util.Map.Entry;
 import java.util.NavigableSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
@@ -77,6 +79,8 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
             .clientCacheable(true)
             .serverCacheable(true)
             .build();
+
+    private final Cache<Long, ILogData> streamCache;
 
     private final String hitRatioName = "address_space.read_cache.hit_ratio";
     private final String sizeName = "address_space.read_cache.size";
@@ -118,8 +122,18 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
                 .recordStats()
                 .build();
 
+        streamCache = CacheBuilder.newBuilder()
+                .maximumSize(1000)
+                //.expireAfterAccess(60, TimeUnit.SECONDS)
+                //.expireAfterWrite(60, TimeUnit.SECONDS)
+                .softValues()
+                .recordStats()
+                .build();
+
+
         Optional<MeterRegistry> metricsRegistry = MeterRegistryProvider.getInstance();
         metricsRegistry.map(registry -> GuavaCacheMetrics.monitor(registry, readCache, "address_space.read_cache"));
+        metricsRegistry.map(registry -> GuavaCacheMetrics.monitor(registry, streamCache, "address_space.stream_cache"));
         MicroMeterUtils.gauge(hitRatioName, readCache, cache -> cache.stats().hitRate());
 
         if (!runtime.getParameters().isCacheEntryMetricsDisabled()) {
@@ -329,6 +343,37 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
      */
     public @NonNull ILogData read(long address) {
         return read(address, defaultReadOptions);
+    }
+
+    public ILogData readForStream(long address, @NonNull ReadOptions options) {
+        Callable<ILogData> logDataSupplier = () -> {
+            ILogData data = readCache.getIfPresent(address);
+            if (data == null) {
+                // Loading a value without the cache loader can result in
+                // redundant loading calls (i.e. multiple threads try to
+                // load the same value), but currently a redundant RPC
+                // is much cheaper than the cost of a NoRollBackException, therefore
+                // this trade-off is reasonable
+                return fetch(address);
+
+            }
+            return data;
+        };
+
+
+        try {
+            return streamCache.get(address, logDataSupplier);
+        } catch (ExecutionException | UncheckedExecutionException e) {
+            // Guava wraps the exceptions thrown from the lower layers, therefore
+            // we need to unwrap them before throwing them to the upper layers that
+            // don't understand the guava exceptions
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            } else {
+                throw new RuntimeException(cause);
+            }
+        }
     }
 
     /**

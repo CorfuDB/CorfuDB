@@ -217,7 +217,7 @@ public class DeltaStream {
         }
 
         long startRead = System.nanoTime();
-        ILogData logData = addressSpaceView.read(readAddress, options);
+        ILogData logData = addressSpaceView.readForStream(readAddress, options);
         MicroMeterUtils.time(Duration.ofNanos(System.nanoTime() - startRead),"delta_stream.read");
 
         if (!logData.isHole()) {
