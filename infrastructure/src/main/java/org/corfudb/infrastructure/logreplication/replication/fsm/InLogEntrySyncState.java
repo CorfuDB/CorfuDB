@@ -121,6 +121,7 @@ public class InLogEntrySyncState implements LogReplicationState {
         // as snapshot sync is triggered by the app which handles separate listeners
         // for log entry sync and snapshot sync (app can handle this)
         logEntrySender.stop();
+        logEntrySender.getDataSenderBufferManager().getPendingMessages().clear();
         if (!logEntrySyncFuture.isDone()) {
             try {
                 logEntrySyncFuture.get();

@@ -61,8 +61,9 @@ public class LogEntryWriter {
     /**
      * Convert message data to an MultiObjectSMREntry and write to log.
      * @param txMessage
+     * @return true when the msg is appended to the log
      */
-    private void processMsg(LogReplicationEntryMsg txMessage) {
+    private boolean processMsg(LogReplicationEntryMsg txMessage) {
         List<OpaqueEntry> opaqueEntryList = extractOpaqueEntries(txMessage);
 
         try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
@@ -86,7 +87,7 @@ public class LogEntryWriter {
                 log.warn("Message metadata mismatch. Skip applying message {}, persistedTopologyConfigId={}, persistedSnapshotStart={}, " +
                                 "persistedSnapshotDone={}, persistedLogTs={}", txMessage.getMetadata(), persistedTopologyConfigId,
                         persistedSnapshotStart, persistedSnapshotDone, persistedLogTs);
-                return;
+                return false;
             }
 
             // Skip Opaque entries with timestamp that are not larger than persistedTs
@@ -114,6 +115,7 @@ public class LogEntryWriter {
             txnContext.commit();
 
             lastMsgTs = Math.max(entryTs, lastMsgTs);
+            return true;
         }
     }
 
@@ -121,10 +123,10 @@ public class LogEntryWriter {
      * Apply message at the destination Corfu Cluster
      *
      * @param msg
-     * @return last processed message timestamp
+     * @return true when the msg is appended to the log
      * @throws ReplicationWriterException
      */
-    public long apply(LogReplicationEntryMsg msg) throws ReplicationWriterException {
+    public boolean apply(LogReplicationEntryMsg msg) throws ReplicationWriterException {
 
         log.debug("Apply log entry {}", msg.getMetadata().getTimestamp());
 
@@ -134,7 +136,7 @@ public class LogEntryWriter {
         if (msg.getMetadata().getSnapshotTimestamp() < srcGlobalSnapshot) {
             log.warn("Ignore Log Entry. Received message with snapshot {} is smaller than current snapshot {}",
                     msg.getMetadata().getSnapshotTimestamp(), srcGlobalSnapshot);
-            return Address.NON_ADDRESS;
+            return false;
         }
 
         // A new Delta sync is triggered, setup the new srcGlobalSnapshot and msgQ
@@ -146,23 +148,15 @@ public class LogEntryWriter {
             lastMsgTs = srcGlobalSnapshot;
         }
 
-        // Skip entries that have already been processed
-        if (msg.getMetadata().getTimestamp() <= lastMsgTs) {
-            log.warn("Ignore Log Entry. Received message with snapshot {} is smaller than lastMsgTs {}.",
-                    msg.getMetadata().getSnapshotTimestamp(), lastMsgTs);
-            return Address.NON_ADDRESS;
-        }
-
         //If the entry is the expecting entry, process it and process
         //the messages in the queue.
         if (msg.getMetadata().getPreviousTimestamp() == lastMsgTs) {
-            processMsg(msg);
-            return lastMsgTs;
+            return processMsg(msg);
         }
 
         log.warn("Log entry {} was not processed, prevTs={}, lastMsgTs={}, srcGlobalSnapshot={}", msg.getMetadata().getTimestamp(),
                 msg.getMetadata().getPreviousTimestamp(), lastMsgTs, srcGlobalSnapshot);
-        return Address.NON_ADDRESS;
+        return false;
     }
 
     /**
