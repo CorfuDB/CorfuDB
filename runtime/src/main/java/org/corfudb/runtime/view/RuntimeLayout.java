@@ -15,6 +15,7 @@ import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
+import org.corfudb.util.NodeLocator;
 
 import javax.annotation.Nonnull;
 import java.lang.reflect.Constructor;
@@ -24,6 +25,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * This is a wrapper over the layout to provide the clients required to communicate with the nodes.
@@ -79,15 +81,7 @@ public class RuntimeLayout {
         log.debug("Layout has been sealed.");
     }
 
-
-    /**
-     * Sender Client Map.
-     * map(client type -> map(Endpoint -> senderClient))
-     * This ensures that a client for a particular endpoint stamped with the required epoch is
-     * created only once.
-     */
-    private final Map<Class<? extends IClient>,
-            Map<String, IClient>> senderClientMap = new ConcurrentHashMap<>();
+    private final Map<String, Map<Integer, EndpointClients>> clientsPool = new ConcurrentHashMap<>();
 
     /**
      * Updates the local map of clients.
@@ -95,33 +89,33 @@ public class RuntimeLayout {
      * This ensures that a client for a particular endpoint stamped with the required epoch is
      * created only once.
      *
-     * @param clientClass Class of client to be fetched.
+     * @param clientType Class of client to be fetched.
      * @param endpoint    Router endpoint to create the client.
      * @return client
      */
-    private IClient getClient(final Class<? extends IClient> clientClass,
-                              final String endpoint) {
-        return senderClientMap.compute(clientClass, (senderClass, stringEntryMap) -> {
-            Map<String, IClient> endpointClientMap = stringEntryMap;
-            if (endpointClientMap == null) {
-                endpointClientMap = new HashMap<>();
-            }
 
-            endpointClientMap.computeIfAbsent(endpoint, s -> {
-                try {
-                    Constructor<? extends IClient> ctor =
-                            clientClass.getDeclaredConstructor(IClientRouter.class, long.class, UUID.class);
-                    IClient inst = ctor.newInstance(getRuntime()
-                            .getRouter(endpoint), layout.getEpoch(), layout.getClusterId());
-                    inst.setPriorityLevel(getRuntime().getParameters().getPriorityLevel());
-                    return inst;
-                } catch (NoSuchMethodException | IllegalAccessException | InstantiationException
-                        | InvocationTargetException e) {
-                    throw new UnrecoverableCorfuError(e);
-                }
-            });
-            return endpointClientMap;
-        }).get(endpoint);
+    private IClient getClient(final Class<? extends IClient> clientType,
+                              final String endpoint) {
+
+        Map<Integer, EndpointClients> endpointClients = clientsPool.computeIfAbsent(endpoint, k -> new ConcurrentHashMap<>());
+        int idx = ThreadLocalRandom.current().nextInt(0, runtime.getNodeRouterPool().getMaxNumConnectionsPerNode());
+        EndpointClients endpointChannel = endpointClients.computeIfAbsent(idx, k -> new EndpointClients(runtime
+                .getNodeRouterPool()
+                .getRouter(NodeLocator.parseString(endpoint), k)));
+
+        if (clientType == BaseClient.class) {
+            return endpointChannel.getBaseClient();
+        } else if (clientType == LayoutClient.class) {
+            return endpointChannel.getLayoutClient();
+        }  else if (clientType == SequencerClient.class) {
+            return endpointChannel.getSequencerClient();
+        }  else if (clientType == LogUnitClient.class) {
+            return endpointChannel.getLogUnitClient();
+        }  else if (clientType == ManagementClient.class) {
+            return endpointChannel.getManagementClient();
+        } else {
+            throw new IllegalArgumentException("unknown client type: " + clientType.getSimpleName());
+        }
     }
 
     public BaseClient getBaseClient(String endpoint) {
@@ -150,5 +144,28 @@ public class RuntimeLayout {
 
     public ManagementClient getManagementClient(String endpoint) {
         return (ManagementClient) getClient(ManagementClient.class, endpoint);
+    }
+
+    class EndpointClients {
+        private final IClientRouter router;
+
+        @Getter(lazy = true)
+        private final BaseClient baseClient = new BaseClient(router, layout.getEpoch(), layout.getClusterId());
+
+        @Getter(lazy = true)
+        private final LayoutClient layoutClient = new LayoutClient(router, layout.getEpoch(), layout.getClusterId());
+
+        @Getter(lazy = true)
+        private final SequencerClient sequencerClient = new SequencerClient(router, layout.getEpoch(), layout.getClusterId());
+
+        @Getter(lazy = true)
+        private final LogUnitClient logUnitClient = new LogUnitClient(router, layout.getEpoch(), layout.getClusterId());
+
+        @Getter(lazy = true)
+        private final ManagementClient managementClient = new ManagementClient(router, layout.getEpoch(), layout.getClusterId());
+
+        public EndpointClients(IClientRouter router) {
+            this.router = router;
+        }
     }
 }

@@ -3,6 +3,7 @@ package org.corfudb.runtime;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.WriteBufferWaterMark;
 import lombok.Data;
 import lombok.ToString;
 import org.corfudb.comm.ChannelImplementation;

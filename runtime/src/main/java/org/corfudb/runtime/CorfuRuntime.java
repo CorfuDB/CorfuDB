@@ -45,12 +45,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -1089,25 +1084,13 @@ public class CorfuRuntime {
      * @param layout The latest layout.
      */
     private void pruneRemovedRouters(@Nonnull Layout layout) {
-        nodeRouterPool.getNodeRouters().keySet().stream()
+        nodeRouterPool.getAllNodes().stream()
                 // Check if endpoint is present in the layout.
                 .filter(endpoint -> !layout.getAllServers()
                         // Converting to legacy endpoint format as the layout only contains
                         // legacy format - host:port.
                         .contains(endpoint.toEndpointUrl()))
-                .forEach(endpoint -> {
-                    try {
-                        IClientRouter router = nodeRouterPool.getNodeRouters().remove(endpoint);
-                        if (router != null) {
-                            // Stop the channel from keeping connecting/reconnecting to server.
-                            // Also if channel is not closed properly, router will be garbage collected.
-                            router.stop();
-                        }
-                    } catch (Exception e) {
-                        log.warn("fetchLayout: Exception in stopping and removing "
-                                + "router connection to node {} :", endpoint, e);
-                    }
-                });
+                .forEach(endpoint -> nodeRouterPool.remove(endpoint));
     }
 
     /**
