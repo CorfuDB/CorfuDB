@@ -41,7 +41,7 @@ public class NodeRouterPool {
     }
 
     NodeRouterPool(Function<String, IClientRouter> createRouterFunction) {
-        this(1, createRouterFunction);
+        this(4, createRouterFunction);
     }
 
     /**

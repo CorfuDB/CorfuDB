@@ -345,7 +345,7 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
         return read(address, defaultReadOptions);
     }
 
-    public ILogData readForStream(long address, @NonNull ReadOptions options) {
+    public ILogData readForStream0(long address, @NonNull ReadOptions options) {
         Callable<ILogData> logDataSupplier = () -> {
             ILogData data = readCache.getIfPresent(address);
             if (data == null) {
@@ -354,6 +354,7 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
                 // load the same value), but currently a redundant RPC
                 // is much cheaper than the cost of a NoRollBackException, therefore
                 // this trade-off is reasonable
+                MicroMeterUtils.time(() -> 1, "address_space.readForStream.fetch.miss");
                 return fetch(address);
 
             }
@@ -374,6 +375,10 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
                 throw new RuntimeException(cause);
             }
         }
+    }
+
+    public ILogData readForStream(long address, @NonNull ReadOptions options) {
+        return MicroMeterUtils.time(() -> readForStream0(address, options), "address_space.readForStream.latency");
     }
 
     /**
@@ -777,7 +782,7 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
      * @return a map of read addresses.
      */
     @Nonnull
-    private Map<Long, ILogData> fetchAll(Iterable<Long> addresses, ReadOptions options) {
+    private Map<Long, ILogData> fetchAll0(Iterable<Long> addresses, ReadOptions options) {
         final Map<Long, ILogData> rawData = new HashMap<>();
         if (Iterables.isEmpty(addresses)) {
             return rawData;
@@ -803,6 +808,12 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
 
         return rawData;
     }
+
+    @Nonnull
+    private Map<Long, ILogData> fetchAll(Iterable<Long> addresses0, ReadOptions options0) {
+        return MicroMeterUtils.time(() -> fetchAll(addresses0, options0), "address_space.fetchAll");
+    }
+
 
     /**
      * Given the input data, deduce which addresses have been trimmed.
@@ -848,7 +859,7 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
      * @return the log data read at address
      */
     private @Nonnull
-    ILogData fetch(final long address) {
+    ILogData fetch0(final long address) {
         ILogData result = layoutHelper(e -> e.getLayout().getReplicationMode(address)
                 .getReplicationProtocol(runtime)
                 .read(e, address)
@@ -857,6 +868,11 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
         checkLogDataThrowException(address, result);
 
         return result;
+    }
+
+    @Nonnull
+    ILogData fetch(final long address) {
+        return MicroMeterUtils.time(() -> fetch0(address), "address_space.fetch.latency");
     }
 
     private void checkLogDataThrowException(long address, ILogData result) {

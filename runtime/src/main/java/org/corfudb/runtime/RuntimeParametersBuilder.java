@@ -28,7 +28,7 @@ public class RuntimeParametersBuilder {
     protected ChannelImplementation socketType = ChannelImplementation.NIO;
     protected EventLoopGroup nettyEventLoop;
     protected String nettyEventLoopThreadFormat = "netty-%d";
-    protected int nettyEventLoopThreads = 0;
+    protected int nettyEventLoopThreads = 4;
     protected boolean shutdownNettyEventLoop = true;
     protected static final Map<ChannelOption, Object> DEFAULT_CHANNEL_OPTIONS =
             ImmutableMap.<ChannelOption, Object>builder()

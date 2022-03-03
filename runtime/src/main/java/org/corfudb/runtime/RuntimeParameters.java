@@ -132,7 +132,7 @@ public class RuntimeParameters {
          * event pool. 0 means that we will use 2x the number of processors reported in the
          * system. If you provide your own {@code nettyEventLoop}, this field is ignored.
          */
-        public int nettyEventLoopThreads = 0;
+        public int nettyEventLoopThreads = 4;
 
         /**
          * True, if the {@code NettyEventLoop} should be shutdown when the runtime is
