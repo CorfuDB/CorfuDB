@@ -399,6 +399,8 @@ public class LogReplicationSinkManager implements DataReceiver {
         // Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
         snapshotWriter.reset(topologyId, timestamp);
 
+        setDataConsistentWithRetry(false);
+
         // Update lastTransferDone with the new snapshot transfer timestamp.
         baseSnapshotTimestamp = entry.getMetadata().getSnapshotTimestamp();
 
@@ -479,7 +481,6 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     private synchronized void startSnapshotApply(LogReplication.LogReplicationEntryMsg entry) {
         log.debug("Entry Start Snapshot Sync Apply, id={}", entry.getMetadata().getSyncRequestId());
-        setDataConsistentWithRetry(false);
         snapshotWriter.startSnapshotSyncApply();
         completeSnapshotApply(entry);
         ongoingApply.set(false);
