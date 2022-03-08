@@ -399,8 +399,6 @@ public class LogReplicationSinkManager implements DataReceiver {
         // Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
         snapshotWriter.reset(topologyId, timestamp);
 
-        setDataConsistentWithRetry(false);
-
         // Update lastTransferDone with the new snapshot transfer timestamp.
         baseSnapshotTimestamp = entry.getMetadata().getSnapshotTimestamp();
 
@@ -458,10 +456,6 @@ public class LogReplicationSinkManager implements DataReceiver {
                 break;
             case SNAPSHOT_END:
                 if (snapshotWriter.getPhase() != StreamsSnapshotWriter.Phase.APPLY_PHASE) {
-                    // Once snapshot transfer has completed, clear any streams that have been locally written
-                    // (aimed for replication) but yet were not replicated from active to standby (empty on active)
-                    // Note: these streams must be cleared or we could pollute the state of the DB
-                    snapshotWriter.clearLocalStreams();
                     completeSnapshotTransfer(entry);
                     startSnapshotApplyAsync(entry);
                 }
@@ -481,6 +475,11 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     private synchronized void startSnapshotApply(LogReplication.LogReplicationEntryMsg entry) {
         log.debug("Entry Start Snapshot Sync Apply, id={}", entry.getMetadata().getSyncRequestId());
+        //set data_consistent as false and clear streams which has data to be replicated and the streams
+        // which have been locally written (aimed for replication) but yet were not replicated from active to standby (empty on active)
+        // Note: the locally updated streams must be cleared or we could pollute the state of the DB
+        setDataConsistentWithRetry(false);
+        snapshotWriter.clearLocalStreams();
         snapshotWriter.startSnapshotSyncApply();
         completeSnapshotApply(entry);
         ongoingApply.set(false);
