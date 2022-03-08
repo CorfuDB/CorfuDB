@@ -150,6 +150,10 @@ public class DynamicProtobufSerializer implements ISerializer {
                 fdProtoMap.putIfAbsent(protoFileName, fileDescriptorProto.getPayload().getFileDescriptor());
                 // Until the truncating issue can be addressed, manually add both paths.
                 protoFileName = "corfudb/runtime/corfu_options.proto";
+            } else if (protoFileName.equals("descriptor.proto")) {
+                fdProtoMap.putIfAbsent(protoFileName, fileDescriptorProto.getPayload().getFileDescriptor());
+                // Until the truncating issue can be addressed, manually add both paths.
+                protoFileName = "google/protobuf/descriptor.proto";
             }
             fdProtoMap.putIfAbsent(protoFileName, fileDescriptorProto.getPayload().getFileDescriptor());
             identifyMessageTypesinFileDescriptorProto(fileDescriptorProto.getPayload().getFileDescriptor());
