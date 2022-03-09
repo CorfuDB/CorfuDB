@@ -208,9 +208,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         dstDataRuntime = createRuntimeWithCache(DESTINATION_ENDPOINT);
         dstTestRuntime = createRuntimeWithCache(DESTINATION_ENDPOINT);
 
-        logReplicationMetadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0, ACTIVE_CLUSTER_ID);
+        logReplicationMetadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0, REMOTE_CLUSTER_ID);
         expectedAckTimestamp = new AtomicLong(Long.MAX_VALUE);
-        testConfig.clear();
+        testConfig.clear().setRemoteClusterId(REMOTE_CLUSTER_ID);
     }
 
     private void cleanEnv() {
@@ -394,6 +394,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Verify Data on Destination site
         log.debug("****** Verify Data on Destination");
 
+        //verify isDataConsistent is true
+        sourceDataSender.checkStatusOnStandby(true);
+
         // Because t2 should not have been replicated remove from expected list
         srcDataForVerification.get(t2).clear();
 
@@ -431,6 +434,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Verify Data on Destination site
         log.debug("****** Verify Data on Destination");
+
+        //verify isDataConsistent is true
+        sourceDataSender.checkStatusOnStandby(true);
         // Because t2 should not have been replicated remove from expected list
         srcDataForVerification.get(t2).clear();
         verifyData(dstCorfuTables, srcDataForVerification);
@@ -1006,6 +1012,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         log.debug("****** Snapshot Sync COMPLETE");
 
+        //verify isDataConsistent is true
+        sourceDataSender.checkStatusOnStandby(true);
+
         testConfig.setWaitOn(WAIT.ON_ACK_TS);
 
         // Verify Data on Destination site
@@ -1511,6 +1520,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         private boolean deleteOP = false;
         private WAIT waitOn = WAIT.ON_ACK;
         private boolean timeoutMetadataResponse = false;
+        private String remoteClusterId = null;
         
         public TestConfig clear() {
             dropMessageLevel = 0;
@@ -1521,6 +1531,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             writingSrc = false;
             writingDst = false;
             deleteOP = false;
+            remoteClusterId = null;
             return this;
         }
     }

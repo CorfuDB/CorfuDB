@@ -2,10 +2,12 @@ package org.corfudb.integration;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
@@ -17,6 +19,9 @@ import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.Address;
 
 import java.util.List;
@@ -84,6 +89,13 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
 
     private long lastAckDropped;
 
+    private CorfuStore standbyCorfuStore;
+
+    private final String destinationClusterID;
+
+    private static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
+
+    @SneakyThrows
     public SourceForwardingDataSender(String destinationEndpoint, LogReplicationConfig config, LogReplicationIT.TestConfig testConfig,
                                       LogReplicationMetadataManager metadataManager,
                                       String pluginConfigFilePath, LogReplicationIT.TransitionSource function) {
@@ -100,6 +112,14 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
         this.dropACKLevel = testConfig.getDropAckLevel();
         this.callbackFunction = function;
         this.lastAckDropped = Long.MAX_VALUE;
+        this.standbyCorfuStore = new CorfuStore(runtime);
+        standbyCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
+                REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class,
+                null,
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+        this.destinationClusterID = testConfig.getRemoteClusterId();
     }
 
     @Override
@@ -129,6 +149,11 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
             assertThat(ack.getMetadata().getTimestamp()).isEqualTo(message.getMetadata().getTimestamp());
         } else {
             ack = destinationLogReplicationManager.receive(message);
+        }
+
+        //check is_data_consistent flag is set to false on snapshot_start
+        if (message.getMetadata().getEntryType().equals(LogReplicationEntryType.SNAPSHOT_START)) {
+            checkStatusOnStandby(false);
         }
 
         if (dropAck(ack, message)) {
@@ -285,6 +310,19 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
         lastAckDropped = Long.MAX_VALUE;
 
         return newMessage;
+    }
+
+    public void checkStatusOnStandby(boolean expectedDataConsistent) {
+        if (destinationClusterID == null) {
+            return;
+        }
+        LogReplicationMetadata.ReplicationStatusKey standbyClusterId = LogReplicationMetadata.ReplicationStatusKey.newBuilder()
+                .setClusterId(destinationClusterID)
+                .build();
+        try (TxnContext txn = standbyCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            LogReplicationMetadata.ReplicationStatusVal standbyStatus = (LogReplicationMetadata.ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, standbyClusterId).getPayload();
+            assertThat(standbyStatus.getDataConsistent()).isEqualTo(expectedDataConsistent);
+        }
     }
 
     public void resetTestConfig(LogReplicationIT.TestConfig testConfig) {
