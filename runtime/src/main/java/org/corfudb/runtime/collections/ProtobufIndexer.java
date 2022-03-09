@@ -49,17 +49,19 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
 
     private <T> Index.Spec<Message, CorfuRecord<Message, Message>, ?>
     getNestedIndex(String indexPath, String indexName) {
+        // Separate nested fields, as full path is a 'dot' separated String,
+        // e.g., 'person.address.street'
+        String[] nestedFields = indexPath.split("\\.");
         return new Index.Spec<>(
                 () -> indexPath,
                 () -> indexName,
                 (Index.MultiValueFunction<Message, CorfuRecord<Message, Message>, T>)
-                        (key, val) -> getIndexedValues(indexPath, val.getPayload()));
+                        (key, val) -> getIndexedValues(indexPath,
+                                nestedFields,
+                                val.getPayload()));
     }
 
-    private <T> Iterable<T> getIndexedValues(String indexPath, Message messageToIndex) {
-        // Separate nested fields, as full path is a 'dot' separated String, e.g., 'person.address.street'
-        String[] nestedFields = indexPath.split("\\.");
-
+    private <T> Iterable<T> getIndexedValues(String indexPath, String[] nestedFields, Message messageToIndex) {
         // Auxiliary variables used for the case of repeated fields
         List<Message> repeatedMessages = new ArrayList<>(); // Non-Primitive Types
         List<T> repeatedValues = new ArrayList<>();         // Primitive Types
