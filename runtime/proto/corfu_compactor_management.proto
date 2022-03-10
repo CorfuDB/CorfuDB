@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime";
+
+import "rpc_common.proto";
+import "corfu_store_metadata.proto";
+
+/**
+ * Protobuf definition for Corfu Compactor.
+ */
+
+message CheckpointingStatus {
+  enum StatusType {
+    IDLE = 0;
+    INITIALIZING = 1;
+    STARTED = 2;
+    COMPLETED = 3;
+    FAILED = 4;
+  }
+  StatusType status = 1;
+  int64 liveness_timestamp = 2;
+  UuidMsg client_id = 3;
+  TokenMsg start_token = 4;
+  TokenMsg end_token = 5;
+  int64 end_timestamp = 6;
+}
+
+message StringKey{
+  string key = 1;
+}
+
+message ClientLiveness {
+  TableName tableName = 1;
+  int64 livenessCounter = 2;
+}
