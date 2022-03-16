@@ -3,36 +3,23 @@
  * ****************************************************************************/
 package org.corfudb.compactor;
 
-import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata.TableName;
-import org.corfudb.runtime.MultiCheckpointWriter;
+import org.corfudb.runtime.DistributedCompactor;
 import org.corfudb.runtime.collections.*;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.ObjectOpenOption;
-import org.corfudb.runtime.view.SMRObject;
-import org.corfudb.runtime.view.TableRegistry;
-import org.corfudb.util.serializer.KeyDynamicProtobufSerializer;
-import org.corfudb.util.serializer.ISerializer;
 
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
-
-import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 
 @Slf4j
 public class CorfuStoreCompactor {
 
     private final CorfuRuntime corfuRuntime;
+    private final CorfuRuntime cpRuntime;
     private final String thisNodeUuid;
 
     private final byte PROTOBUF_SERIALIZER_CODE = (byte) 25;
@@ -40,14 +27,18 @@ public class CorfuStoreCompactor {
     private final int CORFU_LOG_TRIM_ERROR = 2;
 
     private final boolean enableTrim;
+    private final boolean isLeader;
     private final String persistedCacheRoot;
 
     private final int txRetries = 5;
 
-    public CorfuStoreCompactor(CorfuRuntime runtime, boolean enableTrim, String persistedCacheRoot) {
+    public CorfuStoreCompactor(CorfuRuntime runtime, CorfuRuntime cpRuntime,
+                               boolean enableTrim, String persistedCacheRoot, boolean isLeader) {
         this.corfuRuntime = runtime;
+        this.cpRuntime = cpRuntime;
         this.enableTrim = enableTrim;
         this.persistedCacheRoot = persistedCacheRoot;
+        this.isLeader = isLeader;
 
         try {
             this.thisNodeUuid = CorfuRuntimeHelper.getThisNodeUuid();
@@ -76,148 +67,11 @@ public class CorfuStoreCompactor {
     }
 
     void checkpoint() {
-
-        log.info("Starting check-pointing task");
-
-        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
-
-        List<TableName> tableNames = new ArrayList<>(corfuStore.listTables(null));
-
-        ISerializer protobufSerializer = corfuRuntime.getSerializers().getSerializer(PROTOBUF_SERIALIZER_CODE);
-
-        try {
-            ISerializer keyDynamicProtobufSerializer = new KeyDynamicProtobufSerializer(corfuRuntime);
-            corfuRuntime.getSerializers().registerSerializer(keyDynamicProtobufSerializer);
-
-            // Measure time spent on check-pointing.
-            long startTime = System.nanoTime();
-
-            Token newToken = appendUfoCheckpoint(
-                    TableName.newBuilder()
-                            .setNamespace(TableRegistry.CORFU_SYSTEM_NAMESPACE)
-                            .setTableName(TableRegistry.REGISTRY_TABLE_NAME)
-                            .build(),
-                    keyDynamicProtobufSerializer,
-                    false);
-
-            if (enableTrim) {
-                // TODO: have a <K,V> type map to table name and loop/open/cp
-                // Needed by compactor
-                newToken = Token.min(
-                    appendCheckpoint(getCheckpointMap(), CorfuRuntimeHelper.CHECKPOINT),
-                    newToken
-                );
-                // Needed by compactor
-                newToken = Token.min(
-                    appendCheckpoint(getNodeTrimTokenMap(), CorfuRuntimeHelper.NODE_TOKEN),
-                    newToken
-                );
-            }
-
-            for (TableName tableName : tableNames) {
-                boolean diskBacked = persistedCacheRoot != null;
-                final Token trimToken = appendUfoCheckpoint(tableName,
-                        keyDynamicProtobufSerializer, diskBacked);
-                newToken = Token.min(newToken, trimToken);
-            }
-
-            long endTime = System.nanoTime();
-
-            for (int i = 0; i < txRetries; i++) {
-                try {
-                    try {
-                        corfuRuntime.getObjectsView().TXBegin();
-                        final String SpecialToken = "ufo";
-                        Token previousToken = getCheckpointMap().get(SpecialToken);
-                        if (previousToken == null || previousToken.getEpoch() <= newToken.getEpoch()
-                                && previousToken.getSequence() <= newToken.getSequence()) {
-                            getCheckpointMap().put(SpecialToken, newToken);
-                        } else {
-                            log.info("Previous token :{}, New minimum token: {}. Previous token is less than "
-                                    + "new checkpoint token. Skipping update.", previousToken, newToken);
-                            return;
-                        }
-                    } finally {
-                        corfuRuntime.getObjectsView().TXEnd();
-                    }
-
-                    log.info("Corfu compactor metrics: Checkpoint completed, elapsed({}s), "
-                                    + "new log address({}).",
-                            TimeUnit.NANOSECONDS.toSeconds(endTime - startTime), newToken);
-
-                    log.info("Updated checkpoint map: {}", getCheckpointMapValues(getCheckpointMap()));
-                    return;
-                } catch (TransactionAbortedException tae) {
-                    log.warn("Transaction Aborted Exception: Retries: {}, Exception: {}", i, tae);
-                }
-            }
-            log.warn("Transaction retries exhausted. Checkpoint update failed.");
-
-        } finally {
-            corfuRuntime.getSerializers().registerSerializer(protobufSerializer);
-        }
-    }
-
-    private CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> openTable(TableName tableName,
-                                                                      ISerializer serializer,
-                                                                      boolean diskBacked) {
-        log.info("Opening table {} in namespace {}. Disk-backed: {}", tableName.getTableName(), tableName.getNamespace(), diskBacked);
-        SMRObject.Builder<CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>> corfuTableBuilder = corfuRuntime.getObjectsView().build()
-            .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>() {})
-            .setStreamName(getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName()))
-            .setSerializer(serializer)
-            .addOpenOption(ObjectOpenOption.NO_CACHE);
-        if (diskBacked) {
-            if (persistedCacheRoot == null || persistedCacheRoot == "") {
-                log.warn("Table {}::{} should be opened in disk-mode, but disk cache path is invalid", tableName.getNamespace(), tableName.getTableName());
-            } else {
-                final String persistentCacheDirName = String.format("compactor_%s_%s", tableName.getNamespace(), tableName.getTableName());
-                final Path persistedCacheLocation = Paths.get(persistedCacheRoot).resolve(persistentCacheDirName);
-                final Supplier<StreamingMap<CorfuDynamicKey, OpaqueCorfuDynamicRecord>> mapSupplier = () -> new PersistedStreamingMap<>(
-                        persistedCacheLocation, PersistedStreamingMap.getPersistedStreamingMapOptions(),
-                        serializer, corfuRuntime);
-                corfuTableBuilder.setArguments(mapSupplier, ICorfuVersionPolicy.MONOTONIC);
-            }
-        }
-
-        return corfuTableBuilder.open();
-    }
-
-    private<K, V> Token appendCheckpoint(CorfuTable<K, V> corfuTable, String tableName) {
-        return appendCheckpoint(corfuTable,
-                                TableName.newBuilder()
-                                    .setNamespace("")
-                                    .setTableName(tableName)
-                                    .build());
-    }
-
-    private<K, V> Token appendCheckpoint(CorfuTable<K, V> corfuTable, TableName tableName) {
-        MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
-        mcw.addMap(corfuTable);
-
-        long tableCkptStartTime = System.currentTimeMillis();
-        log.info("Starting checkpoint namespace: {}, tableName: {}",
-                tableName.getNamespace(), tableName.getTableName());
-
-        Token trimPoint = mcw.appendCheckpoints(corfuRuntime, "checkpointer");
-
-        long tableCkptEndTime = System.currentTimeMillis();
-        log.info("Completed checkpoint namespace: {}, tableName: {}, with {} entries in {} ms",
-                tableName.getNamespace(),
-                tableName.getTableName(),
-                corfuTable.size(),
-                (tableCkptEndTime - tableCkptStartTime));
-
-        return trimPoint;
-    }
-
-    private Token appendUfoCheckpoint(TableName tableName,
-                                      ISerializer serializer,
-                                      boolean diskBacked) {
-        CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> corfuTable = openTable(tableName,
-                                                                               serializer,
-                                                                               diskBacked);
-        return appendCheckpoint(corfuTable, tableName);
+        DistributedCompactor distributedCompactor = new DistributedCompactor(corfuRuntime,
+                cpRuntime,
+                persistedCacheRoot,
+                isLeader);
+        distributedCompactor.runCompactor();
     }
 
     public void trim() {
