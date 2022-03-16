@@ -1,6 +1,5 @@
 package org.corfudb.runtime.checkpoint;
 
-import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
@@ -9,21 +8,15 @@ import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.DistributedCompactor;
-import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.*;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.AbstractObjectTest;
 import org.corfudb.runtime.proto.RpcCommon;
-import org.corfudb.test.SampleSchema;
-import org.corfudb.util.serializer.ISerializer;
 import org.junit.Before;
 import org.junit.Test;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -32,7 +25,8 @@ import java.util.stream.Collectors;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
-public class DistributedCompactorTest extends AbstractObjectTest {
+public class DistributedCompactorTestTrial extends AbstractObjectTest {
+//    private static final Logger log = LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
     private static final String COMPACTION_MANAGER_TABLE_NAME = "CompactionManager";
     private static final String CHECKPOINT_STATUS_TABLE_NAME = "CheckpointStatusTable";
     private static final StringKey COMPACTION_MANAGER_KEY =
@@ -102,19 +96,6 @@ public class DistributedCompactorTest extends AbstractObjectTest {
         txn.commit();
     }
 
-    Map<String, Long> openMap(CorfuRuntime rt, String mapName) {
-        final byte serializerByte = (byte) 20;
-        ISerializer serializer = new CPSerializer(serializerByte);
-        rt.getSerializers().registerSerializer(serializer);
-        return (CorfuTable<String, Long>)
-                instantiateCorfuObject(
-                        rt,
-                        new TypeToken<CorfuTable<String, Long>>() {
-                        },
-                        mapName,
-                        serializer);
-    }
-
     @Before
     public void instantiateMaps() {
         getDefaultRuntime();
@@ -132,7 +113,8 @@ public class DistributedCompactorTest extends AbstractObjectTest {
     public void initTest() {
         CorfuRuntime corfuRuntime = getNewRuntime();
         CorfuStore corfuStore = new CorfuStore(corfuRuntime);
-        DistributedCompactor distributedCompactor = new DistributedCompactor(corfuRuntime, null, true);
+        CorfuRuntime cpRuntime = getNewRuntime();
+        DistributedCompactor distributedCompactor = new DistributedCompactor(corfuRuntime, cpRuntime, null, true);
 
         distributedCompactor.init();
 
@@ -144,8 +126,9 @@ public class DistributedCompactorTest extends AbstractObjectTest {
     public void startCheckpointingTest() {
         CorfuRuntime corfuRuntime = getNewRuntime();
         CorfuStore corfuStore = new CorfuStore(corfuRuntime);
+        CorfuRuntime cpRuntime = getNewRuntime();
 
-        DistributedCompactor distributedCompactor = new DistributedCompactor(corfuRuntime, null, true);
+        DistributedCompactor distributedCompactor = new DistributedCompactor(corfuRuntime, cpRuntime, null, true);
 
         openStreamA(corfuStore);
         openStreamB(corfuStore);
@@ -160,8 +143,10 @@ public class DistributedCompactorTest extends AbstractObjectTest {
     public void finishCompactionCycleTest() {
         CorfuRuntime corfuRuntime = getNewRuntime();
         CorfuStore corfuStore = new CorfuStore(corfuRuntime);
+        CorfuRuntime cpRuntime = getNewRuntime();
 
-        DistributedCompactor distributedCompactor = new DistributedCompactor(corfuRuntime, null, true);
+
+        DistributedCompactor distributedCompactor = new DistributedCompactor(corfuRuntime, cpRuntime, null, true);
 
         openStreamA(corfuStore);
         openStreamB(corfuStore);
@@ -175,9 +160,10 @@ public class DistributedCompactorTest extends AbstractObjectTest {
     @Test
     public void runCompactorTest() {
         CorfuRuntime corfuRuntime = getNewRuntime();
+        CorfuRuntime cpRuntime = getNewRuntime();
         CorfuStore corfuStore = new CorfuStore(corfuRuntime);
 
-        DistributedCompactor distributedCompactor = new DistributedCompactor(corfuRuntime, null, true);
+        DistributedCompactor distributedCompactor = new DistributedCompactor(corfuRuntime, cpRuntime, null, true);
 
         openStreamA(corfuStore);
         openStreamB(corfuStore);
@@ -188,7 +174,8 @@ public class DistributedCompactorTest extends AbstractObjectTest {
     }
 
     private void executeRunCompactor(CorfuRuntime corfuRuntime, boolean isLeader) {
-        DistributedCompactor distributedCompactor = new DistributedCompactor(corfuRuntime, null, isLeader);
+        CorfuRuntime cpRuntime = getNewRuntime();
+        DistributedCompactor distributedCompactor = new DistributedCompactor(corfuRuntime, cpRuntime,null, isLeader);
         distributedCompactor.runCompactor();
     }
 
@@ -236,30 +223,16 @@ public class DistributedCompactorTest extends AbstractObjectTest {
         TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE);
         List<Object> tableNames = new ArrayList<Object>(txn.keySet(CHECKPOINT_STATUS_TABLE_NAME)
                 .stream().collect(Collectors.toList()));
+        boolean failed = false;
         for (Object table : tableNames) {
             CheckpointingStatus cpStatus = (CheckpointingStatus) txn.getRecord(CHECKPOINT_STATUS_TABLE_NAME,
                     (TableName) table).getPayload();
-            System.out.println(((TableName) table).getTableName() + " : " + cpStatus.getStatus());
+            System.out.println(((TableName) table).getTableName() + " : " + cpStatus.getStatus() + " clientId: " + cpStatus.getClientId());
             if (cpStatus.getStatus() != targetStatus) {
-                txn.close();
-                return false;
+                failed = true;
             }
         }
         txn.close();
-        return true;
-    }
-
-    private CheckpointingStatus getCheckpointingStatus(CheckpointingStatus.StatusType statusType,
-                                                                                boolean endTimestamp,
-                                                                                @Nullable RpcCommon.TokenMsg startToken,
-                                                                                @Nullable RpcCommon.TokenMsg endToken) {
-        return CheckpointingStatus.newBuilder()
-                .setStatus(statusType)
-                .setLivenessTimestamp(System.currentTimeMillis())
-                .setClientId(RpcCommon.UuidMsg.newBuilder().getDefaultInstanceForType())
-                .setStartToken(startToken == null ? RpcCommon.TokenMsg.getDefaultInstance() : startToken)
-                .setEndToken(endToken==null? RpcCommon.TokenMsg.getDefaultInstance():endToken)
-                .setEndTimestamp(endTimestamp?System.currentTimeMillis():0)
-                .build();
+        return !failed;
     }
 }

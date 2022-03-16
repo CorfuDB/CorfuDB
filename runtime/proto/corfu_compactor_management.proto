@@ -19,11 +19,9 @@ message CheckpointingStatus {
     FAILED = 4;
   }
   StatusType status = 1;
-  int64 liveness_timestamp = 2;
-  UuidMsg client_id = 3;
-  TokenMsg start_token = 4;
-  TokenMsg end_token = 5;
-  int64 end_timestamp = 6;
+  UuidMsg client_id = 2;
+  TokenMsg start_token = 3;
+  TokenMsg end_token = 4;
 }
 
 message StringKey{
