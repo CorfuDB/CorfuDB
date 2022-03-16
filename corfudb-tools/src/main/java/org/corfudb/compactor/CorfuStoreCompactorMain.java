@@ -47,13 +47,10 @@ public class CorfuStoreCompactorMain {
     private static CorfuRuntime corfuRuntime;
     private static CorfuStoreCompactor corfuCompactor;
 
-    private static final String DEFAULT_DISTRIBUTED_LOCK_KEY = "compactor-lock-key";
-
     private static final String CORFU_SYSTEM_NAMESPACE = "CorfuSystem";
 
 
     private static UUID thisNodeUuid;
-    private static final String TRIM_TOKEN_COMPACTOR_FILE = "/var/log/corfu/compaction_trim_mark.log";
 
     // Reduce checkpoint batch size due to disk-based nature and smaller compactor JVM size
     private static final int NON_CONFIG_DEFAULT_CP_MAX_WRITE_SIZE = 1 << 20;
@@ -71,8 +68,10 @@ public class CorfuStoreCompactorMain {
     private static int bulkReadSize = 10;
     private static boolean trim;
     private static boolean isUpgrade;
+    private static String trimTokenFile;
     private static boolean upgradeDescriptorTable;
     private static boolean tlsEnabled;
+    private static boolean isLeader;
 
     private static final String USAGE = "Usage: corfu-compactor --hostname=<host> " +
             "--port=<port>" +
@@ -84,7 +83,8 @@ public class CorfuStoreCompactorMain {
             "[--trim=<trim>] "+
             "[--isUpgrade=<isUpgrade>] "+
             "[--upgradeDescriptorTable=<upgradeDescriptorTable>] "+
-            "[--tlsEnabled=<tls_enabled>]\n"
+            "[--tlsEnabled=<tls_enabled>] "+
+            "[--isLeader=<isLeader>]\n"
             + "Options:\n"
             + "--hostname=<hostname>   Hostname\n"
             + "--port=<port>   Port\n"
@@ -97,15 +97,17 @@ public class CorfuStoreCompactorMain {
             + "--bulkReadSize=<bulkReadSize> Read size for chain replication\n"
             + "--trim=<trim> Should trim be performed in this run\n"
             + "--isUpgrade=<isUpgrade> Is this called during upgrade\n"
+            + "--trimTokenFile=<trimTokenFilePath> file to store the trim tokens during upgrade"
             + "--upgradeDescriptorTable=<upgradeDescriptorTable> Repopulate descriptor table?\n"
-            + "--keyToDelete=<keyToDelete> Key of the record to be deleted\n"
-            + "--tlsEnabled=<tls_enabled>";
+            + "--tlsEnabled=<tls_enabled>\n"
+            + "--isLeader=<isLeader> Is this node the compactor coordinator";
 
     public static void main(String[] args) throws Exception {
         CorfuStoreCompactorMain corfuCompactorMain = new CorfuStoreCompactorMain();
         corfuCompactorMain.getCompactorArgs(args);
 
         CorfuRuntimeHelper corfuRuntimeHelper;
+        CorfuRuntimeHelper cpRuntimeHelper;
         if (maxWriteSize == -1) {
             if (persistedCacheRoot == null) {
                 // in-memory compaction
@@ -119,12 +121,17 @@ public class CorfuStoreCompactorMain {
             corfuRuntimeHelper = new CorfuRuntimeHelper(hostname, port, maxWriteSize, bulkReadSize,
                     runtimeKeyStore, runtimeKeystorePasswordFile,
                     runtimeTrustStore, runtimeTrustStorePasswordFile);
+            cpRuntimeHelper = new CorfuRuntimeHelper(hostname, port, maxWriteSize, bulkReadSize,
+                    runtimeKeyStore, runtimeKeystorePasswordFile,
+                    runtimeTrustStore, runtimeTrustStorePasswordFile);
+
         } else {
             corfuRuntimeHelper = new CorfuRuntimeHelper(hostname, port, maxWriteSize, bulkReadSize);
+            cpRuntimeHelper = new CorfuRuntimeHelper(hostname, port, maxWriteSize, bulkReadSize);
         }
 
         corfuRuntime = corfuRuntimeHelper.getRuntime();
-        corfuCompactor = new CorfuStoreCompactor(corfuRuntime, trim, persistedCacheRoot);
+        corfuCompactor = new CorfuStoreCompactor(corfuRuntime, cpRuntimeHelper.getRuntime(), trim, persistedCacheRoot, isLeader);
         thisNodeUuid = UUID.fromString(CorfuRuntimeHelper.getThisNodeUuid());
 
         if (isCheckpointFrozen(corfuRuntime)) {
@@ -135,6 +142,7 @@ public class CorfuStoreCompactorMain {
             trimAndUpdateToken();
         }
 
+        //TODO: Write a plugin for upgrade
         if (isUpgrade) {
             log.info("Upgrade: Saving Trim Token");
 
@@ -154,7 +162,7 @@ public class CorfuStoreCompactorMain {
             final Optional<Token> minToken = getGlobalToken();
             if (minToken.isPresent()) {
                 log.info("Upgrade: Saving Trim Token {}", minToken.get());
-                FileWriter fileWriter = new FileWriter(TRIM_TOKEN_COMPACTOR_FILE, true);
+                FileWriter fileWriter = new FileWriter(trimTokenFile, true);
                 PrintWriter printWriter = new PrintWriter(fileWriter);
                 printWriter.println(minToken.get().toString());
                 printWriter.close();
@@ -162,35 +170,6 @@ public class CorfuStoreCompactorMain {
                 log.warn("Upgrade: Trying to save trim token, but got null minToken!");
             }
         }
-
-        /**
-        DistributedLockHandle lockHandle = null;
-        if (useDistributedLock) {
-            log.info("Distributed lock is enabled.");
-
-            // We're using distributed locks on the config corfu, even when compacting the non-config corfu.
-            // Since CBM monitors liveness of locks/removes stale locks only on the config corfu instance)
-            CorfuRuntime lockingCorfuRuntime = corfuRuntime;
-            if(lockCorfuHostname != null && lockCorfuPort != -1) {
-                log.info("using different corfu instance for distributed lock.");
-                CorfuRuntimeHelper lockingCorfuRuntimeHelper =
-                        new CorfuRuntimeHelper(Arrays.asList(lockCorfuHostname), lockCorfuPort);
-                lockingCorfuRuntime = lockingCorfuRuntimeHelper.getRuntime();
-            }
-
-            // 2. Try to acquire distributed lock for checkpointing.
-            distributedLockClient = new DistributedLockClientImpl(thisNodeUuid, lockingCorfuRuntime);
-
-            Optional<DistributedLockHandle> optionalHandle = acquireLock();
-            if (!optionalHandle.isPresent()) {
-                return;
-            }
-            lockHandle = optionalHandle.get();
-        } else {
-            // Skip distributed lock.
-            log.info("Distributed lock is disabled.");
-        }
-         */
 
         try {
             corfuCompactor.checkpoint();
@@ -200,8 +179,6 @@ public class CorfuStoreCompactorMain {
             // log.error(Logger.SYSLOG_MARKER, ErrorCode.CORFU_LOG_CHECKPOINT_ERROR.getCode(),
             // throwable,"Checkpoint failed for UFO data.");
             throw throwable;
-        } finally {
-            releaseLock();
         }
     }
 
@@ -241,10 +218,6 @@ public class CorfuStoreCompactorMain {
         return CorfuRuntimeHelper.getCheckpointMap(corfuRuntime).values().stream().min(Token::compareTo);
     }
 
-    private static void releaseLock() {
-        log.info("Lock released.");
-    }
-
     /**
      * 1. Trim based on this node's token, which is updated in the last round of this::trimAndUpdateToken().
      * 2. Query the latest token and update it for this node in a corfu map, this token
@@ -258,18 +231,6 @@ public class CorfuStoreCompactorMain {
         corfuCompactor.updateThisNodeTrimToken();
 
         log.info("Finished to trim and update trim token.");
-    }
-
-    /**
-     * Acquire a distributed lock described by the given lock metadata.
-     * If the acquire failed, an empty Optional is returned.
-     * If other node, who just released the lock, finished checkpoint, this node doesn't
-     * need to checkpoint again, an empty Optional is returned.
-     *
-     * @return An optional DistributedLockHandle of the acquired lock.
-     */
-    private static boolean acquireLock() {
-        return true;
     }
 
     /**
@@ -397,16 +358,22 @@ public class CorfuStoreCompactorMain {
             bulkReadSize = Integer.parseInt(opts.get("--bulkReadSize").toString());
         }
         if (opts.get("--trim") != null) {
-            trim = true;
+            trim = Boolean.valueOf(opts.get("--trim").toString());
         }
         if (opts.get("--isUpgrade") != null) {
-            isUpgrade = true;
+            isUpgrade = Boolean.valueOf(opts.get("--isUpgrade").toString());
+        }
+        if (opts.get("--trimTokenFile") != null) {
+            trimTokenFile = opts.get("--trimTokenFile").toString();
         }
         if (opts.get("--upgradeDescriptorTable") != null) {
-            upgradeDescriptorTable = true;
+            upgradeDescriptorTable = Boolean.valueOf(opts.get("--upgradeDescriptorTable").toString());
         }
         if (opts.get("--tlsEnabled") != null) {
-            tlsEnabled = true;
+            tlsEnabled = Boolean.valueOf(opts.get("--tlsEnabled").toString());
+        }
+        if (opts.get("--isLeader") != null) {
+            isLeader = Boolean.valueOf(opts.get("--isLeader").toString());
         }
     }
 }
