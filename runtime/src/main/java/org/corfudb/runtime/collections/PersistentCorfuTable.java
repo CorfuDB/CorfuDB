@@ -118,4 +118,9 @@ public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<
     public PersistentCorfuTable<K, V> getContext(Context context) {
         return this;
     }
+
+    @Override
+    public void reset() {
+        mainMap = new PersistentHashMapWrapper<>();
+    }
 }

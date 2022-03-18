@@ -16,7 +16,7 @@ import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
-import org.corfudb.runtime.object.PersistentCorfuCompileProxy;
+import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 
 
 /** A Corfu optimistic transaction context.
@@ -179,7 +179,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                 updateEntry.getSMRArguments(), conflictObjects);
 
         // TODO: better proxy type check, or refactor to avoid.
-        if (proxy instanceof PersistentCorfuCompileProxy) {
+        if (proxy instanceof MVOCorfuCompileProxy) {
             getAndCacheSnapshotProxy(proxy, getSnapshotTimestamp().getSequence()).logUpdate(updateEntry);
         }
 

@@ -4,24 +4,30 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
 @Slf4j
-public class PersistentCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxyInternal<T> {
+public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxyInternal<T> {
 
     @Getter
-    PersistentVersionLockedObject<T> underlyingPersistentObject;
+    MultiVersionObject<T> underlyingMVO;
 
     final CorfuRuntime rt;
 
@@ -37,8 +43,8 @@ public class PersistentCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICor
 
     private final Object[] args;
 
-    public PersistentCorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<T> type, Object[] args,
-                                       ISerializer serializer, Set<UUID> streamTags, ICorfuSMR<T> wrapperObject) {
+    public MVOCorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<T> type, Object[] args,
+                                ISerializer serializer, Set<UUID> streamTags, ICorfuSMR<T> wrapperObject) {
         this.rt = rt;
         this.streamID = streamID;
         this.type = type;
@@ -46,11 +52,11 @@ public class PersistentCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICor
         this.serializer = serializer;
         this.streamTags = streamTags;
 
-        // Since the VLO is thread safe we don't need to use a thread safe stream implementation
-        // because the VLO will control access to the stream
-        this.underlyingPersistentObject = new PersistentVersionLockedObject<>(this::getNewInstance,
+        this.underlyingMVO = new MultiVersionObject<>(
+                rt.getObjectsView().getMvoCache(),
+                this::getNewInstance,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
-                wrapperObject);
+                wrapperObject, streamID);
     }
 
     @Override
@@ -66,39 +72,29 @@ public class PersistentCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICor
 
     private <R> R accessInner(ICorfuSMRAccess<R, T> accessMethod,
                               Object[] conflictObject) {
+        if (TransactionalContext.isInTransaction()) {
+            try {
+                return TransactionalContext.getCurrentContext()
+                        .access(this, accessMethod, conflictObject);
+            } catch (Exception e) {
+                log.error("Access[{}]", this, e);
+                this.abortTransaction(e);
+            }
+        }
 
         // Linearize this read against a timestamp
-        AtomicLong timestamp = new AtomicLong(rt.getSequencerView().query(getStreamID()));
-
+        long timestamp = rt.getSequencerView().query(getStreamID());
         log.debug("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
 
-        Function<PersistentVersionLockedObject<T>, Boolean> directAccessCheckFunction = o -> o.containsVersion(timestamp.get());
-        Consumer<PersistentVersionLockedObject<T>> updateFunction = o -> {
-            for (int x = 0; x < rt.getParameters().getTrimRetry(); x++) {
-                try {
-                    o.syncObjectUnsafe(timestamp.get());
-                    break;
-                } catch (TrimmedException te) {
-                    log.info("accessInner: Encountered trimmed address space " +
-                                    "while accessing version {} of stream {} on attempt {}",
-                            timestamp.get(), getStreamID(), x);
-
-                    o.resetUnsafe();
-
-                    if (x == (rt.getParameters().getTrimRetry() - 1)) {
-                        throw te;
-                    }
-
-                    timestamp.set(rt.getSequencerView().query(getStreamID()));
-                }
-            }
-        };
-
         // Perform underlying access
-        return underlyingPersistentObject.access(directAccessCheckFunction,
-                updateFunction,
-                accessMethod::access,
-                a -> {});
+        R result = null;
+        try {
+            result = underlyingMVO.access(timestamp, accessMethod::access);
+        } catch (NullPointerException npe) {
+            // TODO: wrap and throw ObjectEvictedException
+            log.error("Object has been evicted!", npe);
+        }
+        return  result;
     }
 
     @Override
@@ -114,7 +110,7 @@ public class PersistentCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICor
         // If we aren't in a transaction, we can just write the modification.
         // We need to add the acquired token into the pending upcall list.
         SMREntry smrEntry = new SMREntry(smrUpdateFunction, args, serializer);
-        long address = underlyingPersistentObject.logUpdate(smrEntry);
+        long address = underlyingMVO.logUpdate(smrEntry);
         log.trace("Update[{}] {}@{} ({}) conflictObj={}",
                 this, smrUpdateFunction, address, args, conflictObject);
         return address;
@@ -171,5 +167,41 @@ public class PersistentCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICor
         } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private void abortTransaction(Exception e) {
+        final AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
+        TransactionalContext.removeContext();
+
+        // Base case: No need to translate, just throw the exception as-is.
+        if (e instanceof TransactionAbortedException) {
+            throw (TransactionAbortedException) e;
+        }
+
+        Token snapshotTimestamp = Token.UNINITIALIZED;
+        AbortCause abortCause = AbortCause.UNDEFINED;
+
+        if (e instanceof NetworkException) {
+            // If a 'NetworkException' was received within a transactional context, an attempt to
+            // 'getSnapshotTimestamp' will also fail (as it requests it to the Sequencer).
+            // A new NetworkException would prevent the earliest to be propagated and encapsulated
+            // as a TransactionAbortedException.
+            abortCause = AbortCause.NETWORK;
+        } else if (e instanceof UnsupportedOperationException) {
+            snapshotTimestamp = context.getSnapshotTimestamp();
+            abortCause = AbortCause.UNSUPPORTED;
+        } else {
+            log.error("abortTransaction[{}] Abort Transaction with Exception {}", this, e);
+            snapshotTimestamp = context.getSnapshotTimestamp();
+        }
+
+        final TxResolutionInfo txInfo = new TxResolutionInfo(
+                context.getTransactionID(), snapshotTimestamp);
+        final TransactionAbortedException tae = new TransactionAbortedException(txInfo,
+                TokenResponse.NO_CONFLICT_KEY, getStreamID(), Address.NON_ADDRESS,
+                abortCause, e, context);
+        context.abortTransaction(tae);
+
+        throw tae;
     }
 }

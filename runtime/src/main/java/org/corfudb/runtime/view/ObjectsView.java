@@ -20,6 +20,7 @@ import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.MVOCache;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.Transaction;
 import org.corfudb.runtime.object.transactions.Transaction.TransactionBuilder;
@@ -55,6 +56,9 @@ public class ObjectsView extends AbstractView {
 
     @Getter
     Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();
+
+    @Getter
+    MVOCache mvoCache = new MVOCache();
 
     public ObjectsView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);

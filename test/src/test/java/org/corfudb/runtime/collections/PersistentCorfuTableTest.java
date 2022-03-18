@@ -2,7 +2,7 @@ package org.corfudb.runtime.collections;
 
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.object.PersistentCorfuCompileProxy;
+import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.test.TestSchema;
 import org.corfudb.util.serializer.ISerializer;
@@ -31,7 +31,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         getDefaultRuntime().getSerializers().registerSerializer(protoSerializer);
 
         corfuTable = new PersistentCorfuTable$CORFUSMR<>();
-        corfuTable.setCorfuSMRProxy(new PersistentCorfuCompileProxy(
+        corfuTable.setCorfuSMRProxy(new MVOCorfuCompileProxy(
                 getDefaultRuntime(),
                 streamId,
                 typeToken.getRawType(),
