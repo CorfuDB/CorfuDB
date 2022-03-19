@@ -35,11 +35,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
@@ -227,6 +223,7 @@ public class LogReplicationClientRouter implements IClientRouter {
                 // block on connection future, this is the case of leader verification.
                 log.info("Send message to {}, type={}", nodeId, payload.getPayloadCase());
                 channelAdapter.send(nodeId, getRequestMsg(header.build(), payload));
+                log.debug("out of send");
             } catch (NetworkException ne) {
                 log.error("Caught Network Exception while trying to send message to remote leader {}", nodeId);
                 runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.ON_CONNECTION_DOWN,
@@ -252,6 +249,8 @@ public class LogReplicationClientRouter implements IClientRouter {
                 }
                 return null;
             });
+
+            log.debug("returning cf {} ", cfTimeout);
 
             return cfTimeout;
         }

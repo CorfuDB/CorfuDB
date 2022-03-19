@@ -100,6 +100,7 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
 
                 log.debug("Verify leader on remote cluster {}", fsm.getRemoteClusterId());
 
+                log.debug("the connectedNodes are: {}", fsm.getConnectedNodes());
                 try {
                     for (String nodeId : fsm.getConnectedNodes()) {
                         log.debug("Verify leadership status for node {}", nodeId);
@@ -115,10 +116,11 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
 
                     // Block until all leadership requests are completed, or a leader is discovered.
                     while (pendingLeadershipQueries.size() != 0) {
+                        log.info("Block until all leadership requests are completed");
                         LogReplicationLeadershipResponseMsg leadershipResponse = (LogReplicationLeadershipResponseMsg)
                                 CompletableFuture.anyOf(pendingLeadershipQueries.values()
                                 .toArray(new CompletableFuture<?>[pendingLeadershipQueries.size()])).get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
-
+                        log.info("got a leadership response: {}", leadershipResponse);
                         if (leadershipResponse.getIsLeader()) {
                             log.info("Received Leadership Response :: leader for remote cluster, node={}", leadershipResponse.getNodeId());
                             leader = leadershipResponse.getNodeId();
