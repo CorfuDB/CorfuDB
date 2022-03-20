@@ -3,34 +3,36 @@
  * ****************************************************************************/
 package org.corfudb.compactor;
 
+import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.DistributedCompactor;
 import org.corfudb.runtime.collections.*;
 import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.proto.RpcCommon.TokenMsg;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
 public class CorfuStoreCompactor {
 
     private final CorfuRuntime corfuRuntime;
     private final CorfuRuntime cpRuntime;
+    private final CorfuStore corfuStore;
     private final String thisNodeUuid;
-
-    private final byte PROTOBUF_SERIALIZER_CODE = (byte) 25;
+    private final StringKey previousTokenKey;
 
     private final int CORFU_LOG_TRIM_ERROR = 2;
 
     private final boolean enableTrim;
     private final boolean isLeader;
     private final String persistedCacheRoot;
-
-    private final int txRetries = 5;
 
     public CorfuStoreCompactor(CorfuRuntime runtime, CorfuRuntime cpRuntime,
                                boolean enableTrim, String persistedCacheRoot, boolean isLeader) {
@@ -40,26 +42,20 @@ public class CorfuStoreCompactor {
         this.persistedCacheRoot = persistedCacheRoot;
         this.isLeader = isLeader;
 
+        corfuStore = new CorfuStore(corfuRuntime);
+
         try {
             this.thisNodeUuid = CorfuRuntimeHelper.getThisNodeUuid();
+            this.previousTokenKey = StringKey.newBuilder().setKey("previousTokenKey").build();
         } catch(Exception e) {
             throw new RuntimeException("Failed to get node UUID", e);
         }
     }
 
-    private CorfuTable<String, Token> getCheckpointMap() {
-        return CorfuRuntimeHelper.getCheckpointMap(corfuRuntime);
-    }
-
-    private CorfuTable<String, Token> getNodeTrimTokenMap() {
-        return CorfuRuntimeHelper.getNodeTrimTokenMap(corfuRuntime);
-    }
-
-    private String getCheckpointMapValues(CorfuTable<String, Token> checkpointMap) {
+    private String getCheckpointMapValue(CorfuTable<StringKey, TokenMsg> checkpointMap) {
         return checkpointMap.entrySet().stream()
-                .sorted((Comparator<Map.Entry<?, Token>>) (o1, o2) -> o1.getValue().compareTo(o2.getValue()))
                 .map(entry -> new StringBuilder("{component: ")
-                        .append(entry.getKey())
+                        .append(entry.getKey().getKey().toString())
                         .append(", token: ")
                         .append(entry.getValue())
                         .append("}"))
@@ -104,64 +100,67 @@ public class CorfuStoreCompactor {
     private void trimLog() {
         log.info("Starting CorfuStore trimming task");
 
-        final CorfuTable<String, Token> nodeTrimTokenMap = getNodeTrimTokenMap();
-        final Token thisNodeTrimToken = nodeTrimTokenMap.get(thisNodeUuid);
+        final Table<StringKey, TokenMsg, Message> previousTrimTokenTable = CorfuStoreCompactorMain.getPreviousTrimTokenTable();
 
-        if (thisNodeTrimToken == null) {
+        final TokenMsg thisTrimToken;
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            thisTrimToken = txn.getRecord(previousTrimTokenTable, previousTokenKey).getPayload();
+            txn.commit();
+        }
+
+        if (thisTrimToken == null) {
             log.warn("Trim token is not present... skipping.");
             return;
         }
 
-        log.info("Previously computed trim token: {}", thisNodeTrimToken);
+        log.info("Previously computed trim token: {}", thisTrimToken);
 
         // Measure time spent on trimming.
         final long startTime = System.nanoTime();
         corfuRuntime.getAddressSpaceView().prefixTrim(
-                new Token(thisNodeTrimToken.getEpoch(), thisNodeTrimToken.getSequence() - 1L));
+                new Token(thisTrimToken.getEpoch(), thisTrimToken.getSequence() - 1L));
         corfuRuntime.getAddressSpaceView().gc();
         final long endTime = System.nanoTime();
 
         log.info("Trim completed, elapsed({}s), log address up to {} (exclusive).",
-                    TimeUnit.NANOSECONDS.toSeconds(endTime - startTime), thisNodeTrimToken.getSequence());
-        log.info("Current checkpoint map: {}", this.getCheckpointMapValues(getCheckpointMap()));
+                    TimeUnit.NANOSECONDS.toSeconds(endTime - startTime), thisTrimToken.getSequence());
+
+        Table<StringKey, TokenMsg, Message> checkpointMap = CorfuStoreCompactorMain.getCheckpointMap();
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            log.info("Current checkpoint map: {}", txn.getRecord(previousTrimTokenTable, previousTokenKey));
+            txn.commit();
+        }
     }
 
     public void updateThisNodeTrimToken() {
         log.info("Start to update trim token for node {}.", thisNodeUuid);
 
         // Get the smallest checkpoint address for trimming that has valid data to trim.
-        final CorfuTable<String, Token> checkpointMap = getCheckpointMap();
-        Token minToken = new Token(Long.MAX_VALUE, Long.MAX_VALUE);
-        boolean foundMinToken = false;
-        for (Map.Entry<String, Token> ck: checkpointMap.entrySet()) {
-            // While upgrading from old setups we might have some roles with no data which will never
-            // really get checkpointed. So while picking the min, let's pick the smallest non-zero value.
-            if (ck.getValue().getSequence() == Address.NON_ADDRESS) {
-                log.warn("Ignoring {} as it has no data to lose", ck.getKey());
-                continue;
-            }
-            if (ck.getValue().compareTo(minToken) < 0) {
-                minToken = ck.getValue();
-                foundMinToken = true;
-            }
+        final Table<StringKey, TokenMsg, Message> checkpointMap = CorfuStoreCompactorMain.getCheckpointMap();
+        TokenMsg ckToken;
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            ckToken = txn.getRecord(checkpointMap, DistributedCompactor.CHECKPOINT_KEY).getPayload();
+            txn.commit();
         }
-
-        if (!foundMinToken) {
+        if (ckToken == null) {
             log.warn("No values in the checkpoint map.");
             return;
         }
 
-        final CorfuTable<String, Token> nodeTrimTokenMap = getNodeTrimTokenMap();
+        final Table<StringKey, TokenMsg, Message> previousTrimTokenTable = CorfuStoreCompactorMain.getPreviousTrimTokenTable();
 
-        if (Objects.equals(nodeTrimTokenMap.get(thisNodeUuid), minToken)) {
-            // TODO: How to log this to syslog
-            log.error(
-                    "ERROR: the trim token of node {} hasn't moved forward " +
-                            "over the last compaction cycle.", thisNodeUuid);
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            TokenMsg nodeTokenVal = txn.getRecord(checkpointMap, DistributedCompactor.CHECKPOINT_KEY).getPayload();
+            if (Objects.equals(nodeTokenVal, ckToken)) {
+                // TODO: How to log this to syslog
+                log.error(
+                        "ERROR: the trim token of node {} hasn't moved forward " +
+                                "over the last compaction cycle.", thisNodeUuid);
+            }
+            txn.putRecord(previousTrimTokenTable, previousTokenKey, ckToken, null);
+            txn.commit();
         }
 
-        nodeTrimTokenMap.put(thisNodeUuid, minToken);
-
-        log.info("New trim token {} is updated for node {}.", minToken, thisNodeUuid);
+        log.info("New trim token {} is updated for node {}.", ckToken, thisNodeUuid);
     }
 }
