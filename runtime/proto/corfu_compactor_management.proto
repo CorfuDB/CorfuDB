@@ -15,8 +15,9 @@ message CheckpointingStatus {
     IDLE = 0;
     INITIALIZING = 1;
     STARTED = 2;
-    COMPLETED = 3;
-    FAILED = 4;
+    FINALIZING = 3;
+    COMPLETED = 4;
+    FAILED = 5;
   }
   StatusType status = 1;
   UuidMsg client_id = 2;
