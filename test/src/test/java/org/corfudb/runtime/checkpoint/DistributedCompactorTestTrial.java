@@ -14,7 +14,6 @@ import org.corfudb.runtime.proto.RpcCommon;
 import org.junit.Before;
 import org.junit.Test;
 
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -188,8 +187,8 @@ public class DistributedCompactorTestTrial extends AbstractObjectTest {
         openStreamB(corfuStore);
 
         ExecutorService executorService = Executors.newFixedThreadPool(N_THREADS);
-        executorService.submit(() -> executeRunCompactor(corfuRuntime, true));
         executorService.submit(() -> executeRunCompactor(getNewRuntime(), false));
+        executorService.submit(() -> executeRunCompactor(corfuRuntime, true));
         executorService.submit(() -> executeRunCompactor(getNewRuntime(), false));
 
         try {
@@ -227,7 +226,7 @@ public class DistributedCompactorTestTrial extends AbstractObjectTest {
         for (Object table : tableNames) {
             CheckpointingStatus cpStatus = (CheckpointingStatus) txn.getRecord(CHECKPOINT_STATUS_TABLE_NAME,
                     (TableName) table).getPayload();
-            System.out.println(((TableName) table).getTableName() + " : " + cpStatus.getStatus() + " clientId: " + cpStatus.getClientId());
+            System.out.println(((TableName) table).getTableName() + " : " + cpStatus.toString());
             if (cpStatus.getStatus() != targetStatus) {
                 failed = true;
             }
