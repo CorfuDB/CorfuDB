@@ -9,22 +9,21 @@ import java.util.Optional;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.DistributedCompactor;
+import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.proto.RpcCommon.TokenMsg;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 
 import com.google.protobuf.Message;
-import org.corfudb.protocols.wireprotocol.Token;
 
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileDescriptor;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileName;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
-import org.corfudb.runtime.collections.CorfuRecord;
-import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.util.serializer.ISerializer;
@@ -45,12 +44,18 @@ import static org.corfudb.runtime.view.TableRegistry.getTypeUrl;
 public class CorfuStoreCompactorMain {
 
     private static CorfuRuntime corfuRuntime;
+    private static CorfuStore corfuStore;
     private static CorfuStoreCompactor corfuCompactor;
 
     private static final String CORFU_SYSTEM_NAMESPACE = "CorfuSystem";
 
 
     private static UUID thisNodeUuid;
+
+    private static ISerializer protobufSerializer;
+
+    private static Table<StringKey, TokenMsg, Message> checkpoint;
+    private static Table<StringKey, TokenMsg, Message> previousToken;
 
     // Reduce checkpoint batch size due to disk-based nature and smaller compactor JVM size
     private static final int NON_CONFIG_DEFAULT_CP_MAX_WRITE_SIZE = 1 << 20;
@@ -131,10 +136,13 @@ public class CorfuStoreCompactorMain {
         }
 
         corfuRuntime = corfuRuntimeHelper.getRuntime();
+        corfuStore = new CorfuStore(corfuRuntime);
         corfuCompactor = new CorfuStoreCompactor(corfuRuntime, cpRuntimeHelper.getRuntime(), trim, persistedCacheRoot, isLeader);
         thisNodeUuid = UUID.fromString(CorfuRuntimeHelper.getThisNodeUuid());
 
-        if (isCheckpointFrozen(corfuRuntime)) {
+        openCompactionTables();
+
+        if (isCheckpointFrozen()) {
             return;
         }
 
@@ -142,29 +150,19 @@ public class CorfuStoreCompactorMain {
             trimAndUpdateToken();
         }
 
-        //TODO: Write a plugin for upgrade
+        //TODO: Write a plugin for upgrade?
         if (isUpgrade) {
             log.info("Upgrade: Saving Trim Token");
 
             if (upgradeDescriptorTable) {
-                log.info("Upgrade to CorfuStore v2: Deleting components inside checkpoint map except UFO");
-                final CorfuTable<String, Token> checkpointMap = CorfuRuntimeHelper.getCheckpointMap(corfuRuntime);
-                Set<String> keySet = checkpointMap.keySet();
-                for (String key : keySet) {
-                    if (!key.equals("ufo")) {
-                        log.info("Upgrade to CorfuStore 2: Deleting component {} token {} in checkpoint map",
-                                key, checkpointMap.get(key).toString());
-                        checkpointMap.delete(key);
-                    }
-                }
                 syncProtobufDescriptorTable();
             }
-            final Optional<Token> minToken = getGlobalToken();
+            final Optional<TokenMsg> minToken = getGlobalToken();
             if (minToken.isPresent()) {
                 log.info("Upgrade: Saving Trim Token {}", minToken.get());
                 FileWriter fileWriter = new FileWriter(trimTokenFile, true);
                 PrintWriter printWriter = new PrintWriter(fileWriter);
-                printWriter.println(minToken.get().toString());
+                printWriter.println(minToken.get());
                 printWriter.close();
             } else {
                 log.warn("Upgrade: Trying to save trim token, but got null minToken!");
@@ -175,11 +173,39 @@ public class CorfuStoreCompactorMain {
             corfuCompactor.checkpoint();
         } catch (Throwable throwable) {
             log.warn("CorfuStoreCompactorMain crashed with error:", throwable);
-            // TODO: Find a way to log this error into syslog..
-            // log.error(Logger.SYSLOG_MARKER, ErrorCode.CORFU_LOG_CHECKPOINT_ERROR.getCode(),
-            // throwable,"Checkpoint failed for UFO data.");
+            //TODO: Find a way to log this error into syslog..
+//            log.error(Logger.SYSLOG_MARKER, ErrorCode.CORFU_LOG_CHECKPOINT_ERROR.getCode(),
+//            throwable,"Checkpoint failed for UFO data.");
             throw throwable;
         }
+    }
+
+    private static void openCompactionTables() {
+        try {
+            checkpoint = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                    CorfuRuntimeHelper.CHECKPOINT,
+                    StringKey.class,
+                    TokenMsg.class,
+                    null,
+                    TableOptions.fromProtoSchema(TokenMsg.class));
+
+            previousToken = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                    CorfuRuntimeHelper.PREVIOUS_TOKEN,
+                    StringKey.class,
+                    TokenMsg.class,
+                    null,
+                    TableOptions.fromProtoSchema(TokenMsg.class));
+        } catch (Exception e) {
+            log.error("Caught an exception while opening Compaction management tables ", e);
+        }
+    }
+
+    public static Table<StringKey, TokenMsg, Message> getCheckpointMap() {
+        return checkpoint;
+    }
+
+    public static Table<StringKey, TokenMsg, Message> getPreviousTrimTokenTable() {
+        return previousToken;
     }
 
     /**
@@ -190,32 +216,43 @@ public class CorfuStoreCompactorMain {
      * If the freeze request is within 2 hours it will honor it and step aside.
      * Otherwise it will angrily remove the freezeToken and continue about
      * its business.
-     * @param runtime - the runtime to connect to for the checkpoint map
      * @return - true if checkpointing should be skipped, false if not.
      */
-    public static boolean isCheckpointFrozen(CorfuRuntime runtime) {
-        final String freezeCheckpointNS = "freezeCheckpointNS";
-        final CorfuTable<String, Token> chkptMap = CorfuRuntimeHelper.getCheckpointMap(corfuRuntime);
-        Token freezeToken = chkptMap.get(freezeCheckpointNS);
-        final long patience = 2 * 60 * 60 * 1000;
-        if (freezeToken != null) {
-            long now = System.currentTimeMillis();
-            long frozeAt = freezeToken.getSequence();
-            Date frozeAtDate = new Date(frozeAt);
-            if (now - frozeAt > patience) {
-                chkptMap.remove(freezeCheckpointNS);
-                log.warn("CorfuStoreCompactor asked to freeze at {} but run out of patience",
-                        frozeAtDate);
-            } else {
-                log.warn("CorfuStoreCompactor asked to freeze at {}", frozeAtDate);
-                return true;
+    public static boolean isCheckpointFrozen() {
+        final StringKey freezeCheckpointNS = StringKey.newBuilder().setKey("freezeCheckpointNS").build();
+        final Table<StringKey, TokenMsg, Message> chkptMap = getCheckpointMap();
+
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            TokenMsg freezeToken = txn.getRecord(chkptMap, freezeCheckpointNS).getPayload();
+
+            final long patience = 2 * 60 * 60 * 1000;
+            if (freezeToken != null) {
+                long now = System.currentTimeMillis();
+                long frozeAt = freezeToken.getSequence();
+                Date frozeAtDate = new Date(frozeAt);
+                if (now - frozeAt > patience) {
+                    txn.delete(chkptMap, freezeCheckpointNS);
+                    log.warn("CorfuStoreCompactor asked to freeze at {} but run out of patience",
+                            frozeAtDate);
+                } else {
+                    log.warn("CorfuStoreCompactor asked to freeze at {}", frozeAtDate);
+                    txn.commit();
+                    return true;
+                }
             }
+            txn.commit();
         }
         return false;
     }
 
-    private static Optional<Token> getGlobalToken() {
-        return CorfuRuntimeHelper.getCheckpointMap(corfuRuntime).values().stream().min(Token::compareTo);
+    private static Optional<TokenMsg> getGlobalToken() {
+        Table<StringKey, TokenMsg, Message> ckTable = getCheckpointMap();
+        TokenMsg ckToken;
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            ckToken = txn.getRecord(ckTable, DistributedCompactor.CHECKPOINT_KEY).getPayload();
+            txn.commit();
+        }
+        return Optional.of(ckToken);
     }
 
     /**
@@ -358,22 +395,22 @@ public class CorfuStoreCompactorMain {
             bulkReadSize = Integer.parseInt(opts.get("--bulkReadSize").toString());
         }
         if (opts.get("--trim") != null) {
-            trim = Boolean.valueOf(opts.get("--trim").toString());
+            trim = Boolean.parseBoolean(opts.get("--trim").toString());
         }
         if (opts.get("--isUpgrade") != null) {
-            isUpgrade = Boolean.valueOf(opts.get("--isUpgrade").toString());
+            isUpgrade = Boolean.parseBoolean(opts.get("--isUpgrade").toString());
         }
         if (opts.get("--trimTokenFile") != null) {
             trimTokenFile = opts.get("--trimTokenFile").toString();
         }
         if (opts.get("--upgradeDescriptorTable") != null) {
-            upgradeDescriptorTable = Boolean.valueOf(opts.get("--upgradeDescriptorTable").toString());
+            upgradeDescriptorTable = Boolean.parseBoolean(opts.get("--upgradeDescriptorTable").toString());
         }
         if (opts.get("--tlsEnabled") != null) {
-            tlsEnabled = Boolean.valueOf(opts.get("--tlsEnabled").toString());
+            tlsEnabled = Boolean.parseBoolean(opts.get("--tlsEnabled").toString());
         }
         if (opts.get("--isLeader") != null) {
-            isLeader = Boolean.valueOf(opts.get("--isLeader").toString());
+            isLeader = Boolean.parseBoolean(opts.get("--isLeader").toString());
         }
     }
 }

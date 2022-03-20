@@ -3,17 +3,12 @@
  * ****************************************************************************/
 package org.corfudb.compactor;
 
-import com.google.common.reflect.TypeToken;
-
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
-import org.corfudb.util.serializer.Serializers;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -38,7 +33,7 @@ public class CorfuRuntimeHelper {
     private static volatile String runtimeTrustStorePasswordFile;
     private static volatile boolean enableTls = false;
 
-    public static final String NODE_TOKEN = "node-token";
+    public static final String PREVIOUS_TOKEN = "previousTokenTable";
     public static final String CHECKPOINT = "checkpoint";
 
     private static final int systemDownHandlerTriggerLimit = 100;  // Corfu default is 20
@@ -109,24 +104,6 @@ public class CorfuRuntimeHelper {
 
     CorfuRuntime getRuntime() {
         return corfuRuntime;
-    }
-
-    public static CorfuTable<String, Token> getCheckpointMap(CorfuRuntime corfuRuntime) {
-        return corfuRuntime.getObjectsView()
-                .build()
-                .setStreamName(CHECKPOINT)
-                .setTypeToken(new TypeToken<CorfuTable<String, Token>>() {})
-                .setSerializer(Serializers.JSON)
-                .open();
-    }
-
-    static CorfuTable<String, Token> getNodeTrimTokenMap(CorfuRuntime corfuRuntime) {
-        return corfuRuntime.getObjectsView()
-                .build()
-                .setStreamName(NODE_TOKEN)
-                .setTypeToken(new TypeToken<CorfuTable<String, Token>>() {})
-                .setSerializer(Serializers.JSON)
-                .open();
     }
 
     /**
