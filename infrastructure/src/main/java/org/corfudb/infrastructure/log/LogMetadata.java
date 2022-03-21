@@ -60,7 +60,7 @@ public class LogMetadata {
         updateGlobalTail(entryAddress);
         // For every stream present in entry update stream tail
         for (UUID streamId : entry.getStreams()) {
-            updateStreamSpace(streamId, entryAddress);
+            updateStreamSpace(streamId, entryAddress, initialize);
         }
 
         // We should also consider checkpoint metadata while updating the tails and stream trim mark.
@@ -81,7 +81,7 @@ public class LogMetadata {
      * @param streamId stream identifier.
      * @param entryAddress stream address.
      */
-    private void updateStreamSpace(UUID streamId, long entryAddress) {
+    private void updateStreamSpace(UUID streamId, long entryAddress, boolean initialize) {
         // Update stream tails
         long currentStreamTail = streamTails.getOrDefault(streamId, Address.NON_ADDRESS);
         streamTails.put(streamId, Math.max(currentStreamTail, entryAddress));
@@ -94,7 +94,7 @@ public class LogMetadata {
                 // The presence of a checkpoint provides a valid trim mark for a stream.
                 return new StreamAddressSpace(Address.NON_EXIST, Collections.singleton(entryAddress));
             }
-            addressSpace.addAddress(entryAddress);
+            addressSpace.addAddress(entryAddress, initialize);
             return addressSpace;
         });
     }

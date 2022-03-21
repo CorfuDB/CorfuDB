@@ -137,13 +137,26 @@ final public class StreamAddressSpace {
 
     /**
      * Add an address to this address space.
+     * By default, the 'initialize' flag is set to false.
      *
      * @param address address to add.
      */
     public void addAddress(long address) {
+        addAddress(address, false);
+    }
+
+    /**
+     * Add an address to this address space.
+     *
+     * @param address address to add.
+     * @param initialize if it's during StreamAddressSpace initialization.
+     */
+    public void addAddress(long address, boolean initialize) {
         // Temporarily log error on trim mark comparison, as throwing an exception
         // unveils an underlying issue in the reset workflow (wipe data + data transfer in colibri)
-        if (address <= this.trimMark) {
+        // During initialization all addresses below the latest checkpoint will be regarded as
+        // trimmed, so don't log errors to avoid log spew
+        if (!initialize && address <= this.trimMark) {
             log.error("IllegalArgumentException :: Address={}, TrimMark={}", address, this.trimMark);
         }
 
