@@ -9,6 +9,7 @@ import org.corfudb.runtime.view.Address;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.ref.SoftReference;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -87,6 +88,11 @@ public class PersistentVersionLockedObject<T extends ICorfuSMR<T>> {
         } finally {
             lock.unlock(ts);
         }
+    }
+
+    // TODO: Complete implementation.
+    public SnapshotProxyAdapter<T> getSnapshotProxy(long ts) {
+        return null;
     }
 
     public void syncObjectUnsafe(long timestamp) {

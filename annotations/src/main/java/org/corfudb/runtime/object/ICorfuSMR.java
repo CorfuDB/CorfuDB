@@ -61,9 +61,20 @@ public interface ICorfuSMR<T>
         return getCorfuSMRProxy().getStreamID();
     }
 
-    default void setImmutableObject(Object obj) {}
+    /**
+     * Javadoc comment.
+     * @param obj Javadoc.
+     */
+    default void setImmutableObject(Object obj) {
+    }
 
-    default Object getImmutableObject() {return null;}
+    /**
+     * Javadoc comment.
+     * @return Javadoc.
+     */
+    default Object getImmutableObject() {
+        return null;
+    }
 
     /**
      * {@inheritDoc}

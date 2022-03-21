@@ -66,7 +66,8 @@ public class ObjectsView extends AbstractView {
      * @return An object builder to open an object with.
      */
     public SMRObject.Builder<?> build() {
-        return new SMRObject.Builder<>().runtime(runtime);
+        return new SMRObject.Builder<>().runtime(runtime)
+                .setVersioningMechanism(SMRObject.VersioningMechanism.VERSION_LOCKED);
     }
 
     /**

@@ -21,7 +21,7 @@ import java.util.function.Supplier;
 public class PersistentCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxyInternal<T> {
 
     @Getter
-    PersistentVersionLockedObject<T> underlyingObject;
+    PersistentVersionLockedObject<T> underlyingPersistentObject;
 
     final CorfuRuntime rt;
 
@@ -48,7 +48,7 @@ public class PersistentCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICor
 
         // Since the VLO is thread safe we don't need to use a thread safe stream implementation
         // because the VLO will control access to the stream
-        underlyingObject = new PersistentVersionLockedObject<T>(this::getNewInstance,
+        this.underlyingPersistentObject = new PersistentVersionLockedObject<>(this::getNewInstance,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
                 wrapperObject);
     }
@@ -95,7 +95,7 @@ public class PersistentCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICor
         };
 
         // Perform underlying access
-        return underlyingObject.access(directAccessCheckFunction,
+        return underlyingPersistentObject.access(directAccessCheckFunction,
                 updateFunction,
                 accessMethod::access,
                 a -> {});
@@ -114,7 +114,7 @@ public class PersistentCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICor
         // If we aren't in a transaction, we can just write the modification.
         // We need to add the acquired token into the pending upcall list.
         SMREntry smrEntry = new SMREntry(smrUpdateFunction, args, serializer);
-        long address = underlyingObject.logUpdate(smrEntry);
+        long address = underlyingPersistentObject.logUpdate(smrEntry);
         log.trace("Update[{}] {}@{} ({}) conflictObj={}",
                 this, smrUpdateFunction, address, args, conflictObject);
         return address;

@@ -57,6 +57,9 @@ public class SMRObject<T extends ICorfuSMR<T>> {
     @NonNull
     private final Set<UUID> streamTags;
 
+    @NonNull
+    private final VersioningMechanism versioningMechanism;
+
     public static class Builder<T extends ICorfuSMR<T>> {
 
         private ISerializer serializer = Serializers.getDefaultSerializer();
@@ -70,11 +73,17 @@ public class SMRObject<T extends ICorfuSMR<T>> {
         public UUID streamID;
         @Getter
         private Set<UUID> streamTags = new HashSet<>();
+        private VersioningMechanism versioningMechanism;
 
         private void verify() {
             if (streamName != null && !UUID.nameUUIDFromBytes(streamName.getBytes()).equals(streamID)) {
                 throw new IllegalArgumentException("Stream id must be derived from stream name");
             }
+        }
+
+        public SMRObject.Builder<T> setVersioningMechanism(VersioningMechanism versioningMechanism) {
+            this.versioningMechanism = versioningMechanism;
+            return this;
         }
 
         @SuppressWarnings("unchecked")
@@ -130,7 +139,7 @@ public class SMRObject<T extends ICorfuSMR<T>> {
             }
             verify();
             return new SMRObject<>(runtime, type, streamID, streamName,
-                serializer, option, arguments, streamTags);
+                serializer, option, arguments, streamTags, versioningMechanism);
         }
 
         public T open() {
@@ -177,4 +186,9 @@ public class SMRObject<T extends ICorfuSMR<T>> {
         }
     }
 
+    // TODO: Refactor me.
+    public enum VersioningMechanism {
+        VERSION_LOCKED,
+        PERSISTENT
+    }
 }
