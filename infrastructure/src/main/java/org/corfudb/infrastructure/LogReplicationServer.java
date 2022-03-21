@@ -5,6 +5,7 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
@@ -43,6 +44,7 @@ public class LogReplicationServer extends AbstractServer {
     // unique and immutable identifier of server's node (UUID)
     // ServerContext.getLocalEndpoint() could be IP or FQDN, which is mutable
     // node id should be the only identifier for a node in the topology
+    @Setter
     private String localNodeId;
 
     private final ExecutorService executor;
@@ -152,7 +154,7 @@ public class LogReplicationServer extends AbstractServer {
                                        @Nonnull IServerRouter router) {
         log.info("Log Replication Metadata Request received by Server.");
 
-        if (isStandby.get() && isLeader(request, ctx, router, false)) {
+        if (isLeader(request, ctx, router, false)) {
             LogReplicationMetadataManager metadataMgr = sinkManager.getLogReplicationMetadataManager();
             ResponseMsg response = metadataMgr.getMetadataResponse(getHeaderMsg(request.getHeader()));
             log.info("Send Metadata response :: {}", TextFormat.shortDebugString(response.getPayload()));
@@ -162,8 +164,6 @@ public class LogReplicationServer extends AbstractServer {
             if (isSnapshotApplyPending(metadataMgr) && !sinkManager.getOngoingApply().get()) {
                 sinkManager.resumeSnapshotApply();
             }
-        } else if (!isStandby.get()) {
-            log.warn("Dropping metadata request as this cluster's role is not Standby");
         } else {
             log.warn("Dropping metadata request as this node is not the leader.");
         }
@@ -183,12 +183,8 @@ public class LogReplicationServer extends AbstractServer {
                                                      @Nonnull ChannelHandlerContext ctx,
                                                      @Nonnull IServerRouter router) {
         log.debug("Log Replication Query Leadership Request received by Server.");
-        if (!isStandby.get()) {
-            log.warn("Dropping the leadership query request as this cluster's role is not Standby");
-            return;
-        }
         HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
-        ResponseMsg response = getLeadershipResponse(responseHeader, isLeader.get(), localNodeId);
+        ResponseMsg response = getLeadershipResponse(responseHeader, isLeader.get(), localNodeId, isStandby.get());
         router.sendResponse(response, ctx);
     }
 
