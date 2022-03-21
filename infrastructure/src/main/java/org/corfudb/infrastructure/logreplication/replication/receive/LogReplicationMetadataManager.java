@@ -2,8 +2,10 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 
 import com.google.protobuf.Message;
 import com.google.protobuf.Timestamp;
+import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataVal;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
@@ -37,6 +39,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
@@ -66,6 +69,8 @@ public class LogReplicationMetadataManager {
     private final Table<ReplicationStatusKey, ReplicationStatusVal, Message> replicationStatusTable;
     private final Table<LogReplicationMetadataKey, LogReplicationMetadataVal, Message> metadataTable;
     private final Table<ReplicationEventKey, ReplicationEvent, Message> replicationEventTable;
+
+    private Optional<Timer.Sample> snapshotSyncTimerSample = Optional.empty();
 
     public LogReplicationMetadataManager(CorfuRuntime rt, long topologyConfigId, String localClusterId) {
         this.runtime = rt;
@@ -448,6 +453,9 @@ public class LogReplicationMetadataManager {
             txn.commit();
         }
 
+        // Start the timer for log replication snapshot sync duration metrics.
+        snapshotSyncTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
+
         log.debug("syncStatus :: set snapshot sync status to ONGOING, clusterId: {}, syncInfo: [{}]",
                 clusterId, syncInfo);
     }
@@ -489,6 +497,13 @@ public class LogReplicationMetadataManager {
 
                 txn.putRecord(replicationStatusTable, key, current, null);
                 txn.commit();
+
+                snapshotSyncTimerSample
+                        .flatMap(sample -> MeterRegistryProvider.getInstance()
+                                .map(registry -> {
+                                    Timer timer = registry.timer("logreplication.snapshot.duration");
+                                    return sample.stop(timer);
+                                }));
 
                 log.debug("syncStatus :: set snapshot sync to COMPLETED and log entry ONGOING, clusterId: {}," +
                                 " syncInfo: [{}]", clusterId, currentSyncInfo);
