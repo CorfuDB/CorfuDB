@@ -19,6 +19,7 @@ import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 
 
+
 /** A Corfu optimistic transaction context.
  *
  * <p>Optimistic transactions in Corfu provide the following isolation guarantees:
