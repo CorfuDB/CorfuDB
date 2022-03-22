@@ -9,8 +9,13 @@ import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.IntervalRetry;
+import org.corfudb.util.retry.RetryNeededException;
 import org.corfudb.utils.CommonTypes;
 import org.corfudb.utils.LogReplicationStreams;
 import org.corfudb.utils.LogReplicationStreams.VersionString;
@@ -170,54 +175,76 @@ public class LogReplicationStreamNameTableManager {
     }
 
     private void createStreamNameAndVersionTables(Set<String> streams) {
+        Table<TableInfo, Namespace, CommonTypes.Uuid> streamsNameTable;
+        Table<VersionString, Version, CommonTypes.Uuid> pluginVersionTable;
         try {
-            Table<TableInfo, Namespace, CommonTypes.Uuid> streamsNameTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                LOG_REPLICATION_STREAMS_NAME_TABLE,
-                TableInfo.class, Namespace.class, CommonTypes.Uuid.class,
-                TableOptions.builder().build());
+             streamsNameTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                 LOG_REPLICATION_STREAMS_NAME_TABLE, TableInfo.class,
+                 Namespace.class, CommonTypes.Uuid.class, TableOptions.builder().build());
 
-            Table<VersionString, Version, CommonTypes.Uuid> pluginVersionTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                LOG_REPLICATION_PLUGIN_VERSION_TABLE,
-                VersionString.class, Version.class, CommonTypes.Uuid.class,
-                TableOptions.builder().build());
-
-            // add registryTable to the streams
-            String registryTable = getFullyQualifiedTableName(
-                    CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME);
-            streams.add(registryTable);
-
-            // add protobufDescriptorTable to the streams
-            String protoTable = getFullyQualifiedTableName(
-                    CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME);
-            streams.add(protoTable);
-
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                // Populate the plugin version in the version table
-                LogReplicationStreams.VersionString versionString = VersionString.newBuilder()
-                                .setName("VERSION").build();
-                LogReplicationStreams.Version version = Version.newBuilder()
-                                .setVersion(logReplicationConfigAdapter.getVersion()).build();
-                txn.putRecord(pluginVersionTable, versionString, version, defaultMetadata);
-
-                // Copy all stream names to the stream names table.  Each name is
-                // a fully qualified stream name
-                for (String entry : streams) {
-                    LogReplicationStreams.TableInfo tableInfo = TableInfo.newBuilder().setName(entry).build();
-
-                    // As each name is fully qualified, no need to insert the
-                    // namespace.  Simply insert an empty string there.
-                    // TODO: Ideally the Namespace protobuf can be removed but it
-                    //  will involve data migration on upgrade as it is a schema
-                    //  change
-                    LogReplicationStreams.Namespace namespace = Namespace.newBuilder().setName(
-                                    EMPTY_STR)
-                                    .build();
-                    txn.putRecord(streamsNameTable, tableInfo, namespace, defaultMetadata);
-                }
-                txn.commit();
-            }
+             pluginVersionTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                 LOG_REPLICATION_PLUGIN_VERSION_TABLE, VersionString.class,
+                 Version.class, CommonTypes.Uuid.class, TableOptions.builder().build());
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
-            log.warn("Exception when opening the table", e);
+            log.error("Failed to open Log Replication Config tables.", e);
+            throw new UnrecoverableCorfuError(e);
+        }
+
+        // add registryTable to the streams
+        String registryTable = getFullyQualifiedTableName(
+            CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME);
+        streams.add(registryTable);
+
+        // add protobufDescriptorTable to the streams
+        String protoTable = getFullyQualifiedTableName(
+            CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME);
+        streams.add(protoTable);
+
+        LogReplicationStreams.VersionString versionString = VersionString.newBuilder()
+            .setName("VERSION").build();
+        LogReplicationStreams.Version version = Version.newBuilder()
+            .setVersion(logReplicationConfigAdapter.getVersion()).build();
+
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                    updateStreamNameAndVersionTables(pluginVersionTable,
+                        versionString, version, streams,
+                        streamsNameTable, txn);
+                    txn.commit();
+                } catch (TransactionAbortedException e) {
+                    log.warn("Exception when writing to Config Tables", e);
+                    throw new RetryNeededException();
+                }
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when updating Config Tables", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
+    }
+
+    private void updateStreamNameAndVersionTables(
+        Table<VersionString, Version, CommonTypes.Uuid> pluginVersionTable,
+        VersionString versionString, Version version, Set<String> streams,
+        Table<TableInfo, Namespace, CommonTypes.Uuid> streamsNameTable,
+        TxnContext txn) {
+        // Populate the plugin version in the version table
+        txn.putRecord(pluginVersionTable, versionString, version, defaultMetadata);
+
+        // Copy all stream names to the stream names table.  Each name is
+        // a fully qualified stream name
+        for (String entry : streams) {
+            LogReplicationStreams.TableInfo tableInfo = TableInfo.newBuilder().setName(entry).build();
+
+            // As each name is fully qualified, no need to insert the
+            // namespace.  Simply insert an empty string there.
+            // TODO: Ideally the Namespace protobuf can be removed but it
+            //  will involve data migration on upgrade as it is a schema
+            //  change
+            LogReplicationStreams.Namespace namespace = Namespace
+                .newBuilder().setName(EMPTY_STR).build();
+            txn.putRecord(streamsNameTable, tableInfo, namespace, defaultMetadata);
         }
     }
 
