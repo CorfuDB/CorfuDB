@@ -129,9 +129,15 @@ public class StreamingIT extends AbstractIT {
         private final LinkedList<CorfuStreamEntries> updates = new LinkedList<>();
 
         private CountDownLatch latch = null;
+        private CountDownLatch updateLatch = null;
 
         StreamListenerImpl(String name) {
             this.name = name;
+        }
+
+        StreamListenerImpl(String name, CountDownLatch updateLatch) {
+            this(name);
+            this.updateLatch = updateLatch;
         }
 
         StreamListenerImpl(String name, int updatesToError, CountDownLatch latch) {
@@ -144,6 +150,9 @@ public class StreamingIT extends AbstractIT {
         public void onNext(CorfuStreamEntries results) {
             updates.add(results);
             timestamp = results.getTimestamp();
+            if (updateLatch != null) {
+                updateLatch.countDown();
+            }
             if (updates.size() == updatesToError) {
                 throw new IndexOutOfBoundsException("Artificial exception to trigger onError");
             }
@@ -1304,6 +1313,84 @@ public class StreamingIT extends AbstractIT {
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 
+    /**
+     * Validate re-generation of DCNs/stream updates when using the touch API
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testRegenarationOfStreamingUpdates() throws Exception {
+        // Run a corfu server.
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        // Start a Corfu runtime.
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStore store = new CorfuStore(runtime);
+
+        final String namespace = "test_namespace";
+        final String tableName = "table_test";
+        final int numUpdates = 5;
+
+        Table<Uuid, SampleTableAMsg, Uuid> tableA = store.openTable(
+                namespace, tableName,
+                Uuid.class, SampleTableAMsg.class, Uuid.class,
+                TableOptions.fromProtoSchema(SampleTableAMsg.class)
+        );
+
+        // CountDownLatch will track number of updates + touched entry +1
+        CountDownLatch updateCountLatch = new CountDownLatch(numUpdates + 1);
+
+        // Subscribe to streaming updates, while table has not been yet updated
+        StreamListenerImpl listener = new StreamListenerImpl("stream_listener_test", updateCountLatch);
+        store.subscribeListener(listener, namespace, defaultTag);
+
+        // Make some updates to the table
+        for (int index = 0; index < numUpdates; index++) {
+            try (TxnContext tx = store.txn(namespace)) {
+                Uuid uuid = Uuid.newBuilder().setMsb(index).setLsb(index).build();
+                SampleTableAMsg msgA = SampleTableAMsg.newBuilder().setPayload(String.valueOf(index)).build();
+                tx.putRecord(tableA, uuid, msgA, uuid);
+                tx.commit();
+            }
+        }
+
+        final int randomIndex = 2;
+        // Touch one of the updated keys
+        try (TxnContext tx = store.txn(namespace)) {
+            Uuid key = Uuid.newBuilder().setMsb(randomIndex).setLsb(randomIndex).build();
+            tx.touch(tableA, key);
+            tx.commit();
+        }
+        // Wait for listener to receive updates
+        updateCountLatch.await();
+
+        // Verify updates
+        LinkedList<CorfuStreamEntries> updates = listener.getUpdates();
+        assertThat(updates).hasSize(numUpdates + 1);
+
+        for (int index = 0; index < numUpdates; index++) {
+            assertThat(updates.get(index).getEntries()).hasSize(1);
+            List<CorfuStreamEntry> entries = updates.get(index).getEntries().values().stream().findFirst().get();
+            assertThat(entries).hasSize(1);
+            assertThat(((Uuid)entries.get(0).getKey()).getMsb()).isEqualTo(index);
+            assertThat(((SampleTableAMsg)entries.get(0).getPayload()).getPayload()).isEqualTo(String.valueOf(index));
+            assertThat(((Uuid)entries.get(0).getMetadata()).getMsb()).isEqualTo(index);
+        }
+
+        // Verify touched entry re-generates the streaming update
+        assertThat(updates.get(numUpdates).getEntries()).hasSize(1);
+        List<CorfuStreamEntry> entries = updates.get(numUpdates).getEntries().values().stream().findFirst().get();
+        assertThat(entries).hasSize(1);
+        assertThat(((Uuid)entries.get(0).getKey()).getMsb()).isEqualTo(randomIndex);
+        assertThat(((SampleTableAMsg)entries.get(0).getPayload()).getPayload()).isEqualTo(String.valueOf(randomIndex));
+        assertThat(((Uuid)entries.get(0).getMetadata()).getMsb()).isEqualTo(randomIndex);
+
+        // Verify number of actual entries is not modified due to the 'touch' API
+        assertThat(tableA.count()).isEqualTo(numUpdates);
+
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
     private void writeUpdatesToDefaultTable(int numUpdates, int offset) throws Exception {
         Table<Uuid, SampleTableAMsg, Uuid> tableA = store.openTable(
                 namespace, defaultTableName,
@@ -1350,32 +1437,6 @@ public class StreamingIT extends AbstractIT {
         corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
         runtime = createRuntime(singleNodeEndpoint);
         store = new CorfuStore(runtime);
-    }
-
-    private void readDefaultTableSnapshot(Timestamp snapshotTimestamp, int numUpdates) throws Exception {
-        CorfuRuntime readRuntime = createRuntime(singleNodeEndpoint);
-        CorfuStore readStore = new CorfuStore(readRuntime);
-
-        readStore.openTable(namespace, defaultTableName,
-                Uuid.class, SampleTableAMsg.class, Uuid.class,
-                TableOptions.fromProtoSchema(SampleTableAMsg.class)
-        );
-
-        try (TxnContext txn = readStore.txn(namespace, IsolationLevel.snapshot(snapshotTimestamp))) {
-            Table<Uuid, SampleTableAMsg, Uuid> readTable = txn.getTable(defaultTableName);
-            assertThat(readTable.count()).isEqualTo(numUpdates);
-
-            readTable.entryStream().forEach(entry -> entry.getKey().getMsb());
-
-            for (int index = 0; index < numUpdates; index++) {
-                CorfuStoreEntry<Uuid, SampleTableAMsg, Uuid> record = txn.getRecord(readTable,
-                        Uuid.newBuilder().setLsb(index).setMsb(index).build());
-                assertThat(record).isNotNull();
-                assertThat(record.getPayload().getPayload()).isEqualTo(String.valueOf(index));
-            }
-        }
-
-        readRuntime.shutdown();
     }
 
     private Token checkpointAndTrim(String namespace, List<String> tablesToCheckpoint, boolean partialTrim) {
