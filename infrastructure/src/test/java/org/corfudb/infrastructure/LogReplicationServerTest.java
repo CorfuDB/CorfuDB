@@ -25,6 +25,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.atMost;
 
 /**
  * Tests {@link LogReplicationServer} message handing.
@@ -53,7 +54,7 @@ public class LogReplicationServerTest {
         lrServer = spy(new LogReplicationServer(
                 context,
                 metadataManager,
-                sinkManager));
+                sinkManager, "nodeId"));
         mockHandlerContext = mock(ChannelHandlerContext.class);
         mockServerRouter = mock(IServerRouter.class);
     }
@@ -75,14 +76,8 @@ public class LogReplicationServerTest {
         doReturn(metadataManager).when(sinkManager).getLogReplicationMetadataManager();
         doReturn(response).when(metadataManager).getMetadataResponse(any());
 
-        // When cluster role not STANDBY, drop the request.
         lrServer.createHandlerMethods().handle(request, mockHandlerContext, mockServerRouter);
-        verifyNoInteractions(mockServerRouter);
-
-        // Set the cluster role to STANDBY, verify that the request is handled appropriately
-        lrServer.setStandby(true);
-
-        lrServer.createHandlerMethods().handle(request, mockHandlerContext, mockServerRouter);
+        
         verify(lrServer).isLeader(same(request), any(), any(), anyBoolean());
         verify(sinkManager).getLogReplicationMetadataManager();
         verify(metadataManager).getMetadataResponse(any());
@@ -102,18 +97,22 @@ public class LogReplicationServerTest {
 
         doReturn(SAMPLE_HOSTNAME).when(context).getLocalEndpoint();
 
-        // When cluster role not STANDBY, drop the request.
+        //set leadership to true
+        lrServer.setLeadership(true);
+
+        //leadership response is false when cluster role not STANDBY
         lrServer.createHandlerMethods().handle(request, mockHandlerContext, mockServerRouter);
-        verifyNoInteractions(mockServerRouter);
-
-        // Set the cluster role to STANDBY, verify that the request is handled appropriately
-        lrServer.setStandby(true);
-
-        lrServer.createHandlerMethods().handle(request, mockHandlerContext, mockServerRouter);
-
         ArgumentCaptor<ResponseMsg> argument = ArgumentCaptor.forClass(ResponseMsg.class);
         verify(mockServerRouter).sendResponse(argument.capture(), any());
         Assertions.assertThat(argument.getValue().getPayload().getLrLeadershipResponse().getIsLeader()).isFalse();
+
+        lrServer.setStandby(true);
+
+        // leadership response true, when cluster role STANDBY
+        lrServer.createHandlerMethods().handle(request, mockHandlerContext, mockServerRouter);
+        argument = ArgumentCaptor.forClass(ResponseMsg.class);
+        verify(mockServerRouter, atMost(2)).sendResponse(argument.capture(), any());
+        Assertions.assertThat(argument.getValue().getPayload().getLrLeadershipResponse().getIsLeader()).isTrue();
     }
 
     /**
