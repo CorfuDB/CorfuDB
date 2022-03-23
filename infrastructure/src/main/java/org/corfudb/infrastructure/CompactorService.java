@@ -4,20 +4,17 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.exceptions.NetworkException;
-import org.corfudb.runtime.exceptions.TrimmedException;
-import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.util.CFUtils;
 import org.corfudb.util.LambdaUtils;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.concurrent.SingletonResource;
 
 import java.time.Duration;
-import java.util.Collections;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -33,9 +30,15 @@ public class CompactorService implements ManagementService {
 
     private static final Duration CONN_RETRY_RATE = Duration.ofMillis(500);
 
+    private static final Duration TRIGGER_POLICY_RATE = Duration.ofMinutes(1);
+
     private final ServerContext serverContext;
     private final SingletonResource<CorfuRuntime> runtimeSingletonResource;
     private final ScheduledExecutorService compactionScheduler;
+    private final ICompactionTriggerPolicy compactionTriggerPolicy;
+
+    //TODO: make it a prop file and maybe pass it from the server
+    List<CorfuStoreMetadata.TableName> sensitiveTables = new ArrayList<>();
 
     CompactorService(@NonNull ServerContext serverContext,
                      @NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource) {
@@ -46,6 +49,7 @@ public class CompactorService implements ManagementService {
                         .setDaemon(true)
                         .setNameFormat(serverContext.getThreadPrefix() + "CompactorService")
                         .build());
+        this.compactionTriggerPolicy = new DynamicTriggerPolicy(runtimeSingletonResource.get(), sensitiveTables);
     }
 
     CorfuRuntime getCorfuRuntime() {
@@ -59,11 +63,16 @@ public class CompactorService implements ManagementService {
      */
     @Override
     public void start(Duration interval) {
+        // Have the trigger logic which is computed every min
         compactionScheduler.scheduleAtFixedRate(
-                () -> LambdaUtils.runSansThrow(this::runCompactionOrchestrator),
-                interval.toMillis() / 2,
-                interval.toMillis(),
-                TimeUnit.MILLISECONDS
+                () -> {
+                    if(compactionTriggerPolicy.shouldTrigger(interval.toMillis())) {
+                        runCompactionOrchestrator();
+                    }
+                },
+                TRIGGER_POLICY_RATE.toMinutes(),
+                TRIGGER_POLICY_RATE.toMinutes(),
+                TimeUnit.MINUTES
         );
     }
 
