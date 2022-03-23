@@ -413,8 +413,8 @@ public class DistributedCompactor {
                 }
             }
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                if (minToken == null || newToken != null && minToken.getEpoch() <= newToken.getEpoch() &&
-                        minToken.getSequence() <= newToken.getSequence()) {
+                if (newToken != null && (minToken == null || minToken.getEpoch() <= newToken.getEpoch() &&
+                        minToken.getSequence() <= newToken.getSequence())) {
                     txn.putRecord(checkpointTable, CHECKPOINT_KEY, newToken, null);
                 }
                 txn.putRecord(compactionManagerTable, COMPACTION_MANAGER_KEY, getCheckpointingStatus(
