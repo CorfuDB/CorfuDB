@@ -96,7 +96,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     public void testStandbyClusterReset() throws Exception {
         // (1) Snapshot and Log Entry Sync
         log.debug(">>> (1) Start Snapshot and Log Entry Sync");
-        testEndToEndSnapshotAndLogEntrySyncUFO();
+        testEndToEndSnapshotAndLogEntrySyncUFO(false);
 
         ExecutorService writerService = Executors.newSingleThreadExecutor();
 
@@ -134,7 +134,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
         // (1) Snapshot and Log Entry Sync
         log.debug(">>> (1) Start Snapshot and Log Entry Sync");
-        testEndToEndSnapshotAndLogEntrySyncUFO();
+        testEndToEndSnapshotAndLogEntrySyncUFO(false);
 
         ExecutorService writerService = Executors.newSingleThreadExecutor();
 
@@ -275,7 +275,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             setupActiveAndStandbyCorfu();
 
             log.debug("Open map on active and standby");
-            openMaps(DefaultLogReplicationConfigAdapter.MAP_COUNT);
+            openMaps(DefaultLogReplicationConfigAdapter.MAP_COUNT, false);
 
             // Subscribe to standby map 'Table002' (standbyIndex) to stop Standby LR as soon as updates are received,
             // forcing snapshot sync apply to be interrupted and resumed after LR standby is restarted
