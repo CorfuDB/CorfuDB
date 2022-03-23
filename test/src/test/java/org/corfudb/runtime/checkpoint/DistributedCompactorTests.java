@@ -428,39 +428,6 @@ public class DistributedCompactorTests extends AbstractViewTest {
     /**
      * Non-leader node is a straggler
      */
-//    @Test
-    //Incomplete
-    public void testNonLeaderStraggler() {
-        for (int i = 0; i < N_THREADS*2; i++) {
-            openStream(corfuStore, STREAM_NAME_PREFIX + i);
-            populateStream(STREAM_NAME_PREFIX + i, NUM_RECORDS);
-        }
-
-        StragglerThread thread1 = new StragglerThread(runtime1, cpRuntime1, false);
-        StragglerThread thread2 = new StragglerThread(runtime2, cpRuntime2, false);
-        StragglerThread thread3 = new StragglerThread(runtime3, cpRuntime3, true);
-        thread1.start();
-        thread2.start();
-        thread3.start();
-
-
-        try {
-            final int INITIAL_WAIT = 100;
-            final int WAIT = 10;
-            TimeUnit.MILLISECONDS.sleep(INITIAL_WAIT);
-            while (thread2.isAlive()) {
-                thread2.sleep(INITIAL_WAIT);
-                System.out.println("thread2 is sleeping");
-                TimeUnit.MILLISECONDS.sleep(WAIT);
-            }
-        } catch (InterruptedException e) {
-            log.info("Interrupted");
-        }
-
-        verifyManagerStatus(CheckpointingStatus.StatusType.COMPLETED);
-        verifyCheckpointStatusTable(CheckpointingStatus.StatusType.COMPLETED, 0);
-        log.info("verifyCheckpointTable: {}", verifyCheckpointTable());
-    }
 
     /**
      * Split brain scenario
