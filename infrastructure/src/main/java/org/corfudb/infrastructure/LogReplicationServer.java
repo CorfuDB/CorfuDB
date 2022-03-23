@@ -71,13 +71,13 @@ public class LogReplicationServer extends AbstractServer {
                                 @Nonnull LogReplicationMetadataManager metadataManager, String corfuEndpoint,
                                 long topologyConfigId, String localNodeId) {
         this(context, metadataManager, new LogReplicationSinkManager(corfuEndpoint, logReplicationConfig,
-                metadataManager, context, topologyConfigId));
-        this.localNodeId = localNodeId;
+                metadataManager, context, topologyConfigId), localNodeId);
     }
 
     public LogReplicationServer(@Nonnull ServerContext context,
                                 @Nonnull LogReplicationMetadataManager metadataManager,
-                                @Nonnull LogReplicationSinkManager sinkManager) {
+                                @Nonnull LogReplicationSinkManager sinkManager, String localNodeId) {
+        this.localNodeId = localNodeId;
         this.metadataManager = metadataManager;
         this.sinkManager = sinkManager;
         this.executor = context.getExecutorService(1, "LogReplicationServer-");
@@ -152,7 +152,7 @@ public class LogReplicationServer extends AbstractServer {
                                        @Nonnull IServerRouter router) {
         log.info("Log Replication Metadata Request received by Server.");
 
-        if (isStandby.get() && isLeader(request, ctx, router, false)) {
+        if (isLeader(request, ctx, router, false)) {
             LogReplicationMetadataManager metadataMgr = sinkManager.getLogReplicationMetadataManager();
             ResponseMsg response = metadataMgr.getMetadataResponse(getHeaderMsg(request.getHeader()));
             log.info("Send Metadata response :: {}", TextFormat.shortDebugString(response.getPayload()));
@@ -162,8 +162,6 @@ public class LogReplicationServer extends AbstractServer {
             if (isSnapshotApplyPending(metadataMgr) && !sinkManager.getOngoingApply().get()) {
                 sinkManager.resumeSnapshotApply();
             }
-        } else if (!isStandby.get()) {
-            log.warn("Dropping metadata request as this cluster's role is not Standby");
         } else {
             log.warn("Dropping metadata request as this node is not the leader.");
         }
@@ -183,12 +181,11 @@ public class LogReplicationServer extends AbstractServer {
                                                      @Nonnull ChannelHandlerContext ctx,
                                                      @Nonnull IServerRouter router) {
         log.debug("Log Replication Query Leadership Request received by Server.");
-        if (!isStandby.get()) {
-            log.warn("Dropping the leadership query request as this cluster's role is not Standby");
-            return;
+        if (!isStandby.get() && isLeader.get()) {
+            log.warn("This node is the leader but the current role of the cluster is not STANDBY");
         }
         HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
-        ResponseMsg response = getLeadershipResponse(responseHeader, isLeader.get(), localNodeId);
+        ResponseMsg response = getLeadershipResponse(responseHeader, isLeader.get(), localNodeId, isStandby.get());
         router.sendResponse(response, ctx);
     }
 
