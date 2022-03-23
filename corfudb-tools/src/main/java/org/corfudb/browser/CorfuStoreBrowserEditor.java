@@ -172,24 +172,55 @@ public class CorfuStoreBrowserEditor {
                 Iterables.partition(entryStream::iterator, batchSize);
         for (List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> partition : partitions) {
             for (Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry : partition) {
-                try {
-                    builder = new StringBuilder("\nKey:\n")
-                            .append(JsonFormat.printer().print(entry.getKey().getKey()))
-                            .append("\nPayload:\n")
-                            .append(entry.getValue() != null && entry.getValue().getPayload() != null ?
-                                    JsonFormat.printer().print(entry.getValue().getPayload())   : "")
-                            .append("\nMetadata:\n")
-                            .append(entry.getValue() != null && entry.getValue().getMetadata() != null ?
-                                    JsonFormat.printer().print(entry.getValue().getMetadata()): "")
-                            .append("\n====================\n");
-                    System.out.println(builder.toString());
-                } catch (InvalidProtocolBufferException e) {
-                    log.error("invalid protobuf: ", e);
-                }
+                printKey(entry);
+                printPayload(entry);
+                printMetadata(entry);
             }
         }
         return size;
     }
+
+    private void printKey(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
+        StringBuilder builder;
+        try {
+            builder = new StringBuilder("\nKey:\n")
+                    .append(JsonFormat.printer().print(entry.getKey().getKey()));
+            log.info(builder.toString());
+        } catch (Exception e) {
+            log.error("invalid key: ", e);
+        }
+    }
+
+    private void printPayload(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
+        StringBuilder builder;
+        if (entry.getValue().getPayload() == null) {
+            log.error("payload is NULL");
+            return;
+        }
+        try {
+            builder = new StringBuilder("\nPayload:\n")
+                    .append(JsonFormat.printer().print(entry.getValue().getPayload()));
+            log.info(builder.toString());
+        } catch (Exception e) {
+            log.error("invalid payload: ", e);
+        }
+    }
+
+    private void printMetadata(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
+        StringBuilder builder;
+        if (entry.getValue().getMetadata() == null) {
+            log.error("metadata is NULL");
+            return;
+        }
+        try {
+            builder = new StringBuilder("\nMetadata:\n")
+                    .append(JsonFormat.printer().print(entry.getValue().getMetadata()));
+            log.info(builder.toString());
+        } catch (Exception e) {
+            log.error("invalid metadata: ", e);
+        }
+    }
+
 
     /**
      * List all tables in CorfuStore
