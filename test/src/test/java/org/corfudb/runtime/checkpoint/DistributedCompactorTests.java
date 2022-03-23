@@ -411,24 +411,6 @@ public class DistributedCompactorTests extends AbstractViewTest {
         assert(!verifyCheckpointTable());
     }
 
-    public class StragglerThread extends Thread {
-        CorfuRuntime runtime;
-        CorfuRuntime cpRuntime;
-        Boolean isLeader;
-        public StragglerThread (CorfuRuntime runtime, CorfuRuntime cpRuntime, boolean isLeader) {
-            this.runtime = runtime;
-            this.cpRuntime = cpRuntime;
-            this.isLeader = isLeader;
-        }
-        public void run() {
-            executeRunCompactor(runtime, cpRuntime, isLeader);
-        }
-    }
-
-    /**
-     * Non-leader node is a straggler
-     */
-
     /**
      * Split brain scenario
      */
