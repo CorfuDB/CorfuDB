@@ -307,7 +307,7 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
                 // For nested secondary indexes, an 'index_name' (alias) is supported (it can be user-defined or
                 // defaults to the last attribute's name if not specified)
                 // e.g., nested secondary key with path 'adult.children.child.age' defaults to name/alias 'age'
-                // We keep a map of name/alias to  path, as secondary indexes can ba accessed on either one of them
+                // We keep a map of name/alias to path, as secondary indexes can ba accessed on either one of them
 
                 // Throw exception if any two secondary keys map to the same 'index_name'
                 // This implies either the developer explicitly set the same 'index_name', or the end attributes of two

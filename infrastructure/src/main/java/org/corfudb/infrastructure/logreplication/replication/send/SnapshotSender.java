@@ -135,7 +135,7 @@ public class SnapshotSender {
                 }
 
                 messagesSent += processReads(snapshotReadMessage.getMessages(), snapshotSyncEventId, completed);
-                final long  messagesSentSnapshot = messagesSent;
+                final long messagesSentSnapshot = messagesSent;
                 messageCounter.ifPresent(counter -> counter.addAndGet(messagesSentSnapshot));
                 observedCounter.setValue(messagesSent);
             }
@@ -202,13 +202,11 @@ public class SnapshotSender {
             numMessages++;
         }
 
-
         if (MeterRegistryProvider.getInstance().isPresent()) {
             dataSenderBufferManager.sendWithBuffering(logReplicationEntries,
                     "logreplication.sender.duration.seconds",
                     Tag.of("replication.type", "snapshot"));
-        }
-        else {
+        } else {
             dataSenderBufferManager.sendWithBuffering(logReplicationEntries);
         }
 
@@ -260,7 +258,7 @@ public class SnapshotSender {
      *
      * @param snapshotSyncEventId unique identifier for the completed snapshot sync.
      */
-    public void snapshotSyncTransferComplete(UUID snapshotSyncEventId) {
+    private void snapshotSyncTransferComplete(UUID snapshotSyncEventId) {
         // We need to bind the internal event (COMPLETE) to the snapshotSyncEventId that originated it, this way
         // the state machine can correlate to the corresponding state (in case of delayed events)
         fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE,
@@ -306,7 +304,6 @@ public class SnapshotSender {
      */
     public void stop() {
         stopSnapshotSync.set(true);
-
     }
 
     public void updateTopologyConfigId(long topologyConfigId) {
