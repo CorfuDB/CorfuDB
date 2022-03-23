@@ -6,6 +6,8 @@ import static org.junit.Assert.fail;
 import com.google.common.reflect.TypeToken;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -158,15 +160,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     }
 
-    public void testEndToEndSnapshotAndLogEntrySyncUFO() throws Exception {
-        // TODO: when ObjectsView.TRANSACTION_STREAM_ID is removed or LOG_REPLICATOR_STREAM_ID name is changed,
-        //  change these tests such that UFO tables used in the tests have the is_federated tag set,
-        //  as these will determine which tables will be written to the LOG_REPLICATOR_STREAM_ID
-        //  (for now, it is not required as they're written to the same TRANSACTION_STREAM_ID from legacy impl.)
-        testEndToEndSnapshotAndLogEntrySyncUFO(1);
+    public void testEndToEndSnapshotAndLogEntrySyncUFO(boolean diskBased) throws Exception {
+        testEndToEndSnapshotAndLogEntrySyncUFO(1, diskBased);
     }
 
-    public void testEndToEndSnapshotAndLogEntrySyncUFO(int totalNumMaps) throws Exception {
+    public void testEndToEndSnapshotAndLogEntrySyncUFO(int totalNumMaps, boolean diskBased) throws Exception {
         // For the purpose of this test, standby should only update status 2 times:
         // (1) When starting snapshot sync apply : is_data_consistent = false
         // (2) When completing snapshot sync apply : is_data_consistent = true
@@ -195,7 +193,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
                     LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
             log.info(">> Open map(s) on active and standby");
-            openMaps(totalNumMaps);
+            openMaps(totalNumMaps, diskBased);
 
             log.info(">> Write data to active CorfuDB before LR is started ...");
             // Add Data for Snapshot Sync
@@ -377,20 +375,27 @@ public class LogReplicationAbstractIT extends AbstractIT {
         }
     }
 
-    public void openMaps(int mapCount) throws Exception {
+    public void openMaps(int mapCount, boolean diskBased) throws Exception {
         mapNameToMapActive = new HashMap<>();
         mapNameToMapStandby = new HashMap<>();
+        Path pathActive = null;
+        Path pathStandby = null;
 
         for(int i=1; i <= mapCount; i++) {
             String mapName = TABLE_PREFIX + i;
 
+            if (diskBased) {
+                pathActive = Paths.get(com.google.common.io.Files.createTempDir().getAbsolutePath());
+                pathStandby = Paths.get(com.google.common.io.Files.createTempDir().getAbsolutePath());
+            }
+
             Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapActive = corfuStoreActive.openTable(
                     NAMESPACE, mapName, Sample.StringKey.class, Sample.IntValueTag.class, Sample.Metadata.class,
-                    TableOptions.fromProtoSchema(Sample.IntValueTag.class));
+                    TableOptions.fromProtoSchema(Sample.IntValueTag.class, TableOptions.builder().persistentDataPath(pathActive).build()));
 
             Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapStandby = corfuStoreStandby.openTable(
                     NAMESPACE, mapName, Sample.StringKey.class, Sample.IntValueTag.class, Sample.Metadata.class,
-                    TableOptions.fromProtoSchema(Sample.IntValueTag.class));
+                    TableOptions.fromProtoSchema(Sample.IntValueTag.class, TableOptions.builder().persistentDataPath(pathStandby).build()));
 
             mapNameToMapActive.put(mapName, mapActive);
             mapNameToMapStandby.put(mapName, mapStandby);
