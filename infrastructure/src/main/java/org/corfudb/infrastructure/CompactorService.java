@@ -12,6 +12,7 @@ import org.corfudb.util.LambdaUtils;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.concurrent.SingletonResource;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,7 +29,7 @@ import java.util.concurrent.TimeoutException;
 @Slf4j
 public class CompactorService implements ManagementService {
 
-    private static final Duration CONN_RETRY_RATE = Duration.ofMillis(500);
+    private static final long CONN_RETRY_DELAY_MILLISEC = 500;
 
     private static final Duration TRIGGER_POLICY_RATE = Duration.ofMinutes(1);
 
@@ -36,6 +37,7 @@ public class CompactorService implements ManagementService {
     private final SingletonResource<CorfuRuntime> runtimeSingletonResource;
     private final ScheduledExecutorService compactionScheduler;
     private final ICompactionTriggerPolicy compactionTriggerPolicy;
+    volatile Process checkpointerProcess = null;
 
     //TODO: make it a prop file and maybe pass it from the server
     List<CorfuStoreMetadata.TableName> sensitiveTables = new ArrayList<>();
@@ -85,10 +87,29 @@ public class CompactorService implements ManagementService {
             try {
                 // Do not perform compaction orchestration if current node is not primary sequencer.
                 currentLayout = updateLayoutAndGet();
-                if (!isNodePrimarySequencer(currentLayout)) {
+                boolean isLeader = isNodePrimarySequencer(currentLayout);
+                if (!isLeader) {
                     log.trace("runCompactionOrchestrator: Node not primary sequencer, stop");
-                    return;
                 }
+
+                String compactionCmd;
+                if (isLeader) {
+                    compactionCmd = serverContext.getCompactorCommand()
+                            + " --host=" + serverContext.getLocalEndpoint()
+                            + " --isLeader=true";
+                } else {
+                    compactionCmd  = serverContext.getCompactorCommand()
+                            + " --host=" + serverContext.getLocalEndpoint()
+                            + " --isLeader=false";
+
+                }
+                if (this.checkpointerProcess != null && this.checkpointerProcess.isAlive()) {
+                    this.checkpointerProcess.destroy();
+                }
+                this.checkpointerProcess = new ProcessBuilder(compactionCmd).start();
+                this.checkpointerProcess.wait();
+                this.checkpointerProcess = null;
+
                 log.debug("runCompactionOrchestrator: successfully finished a cycle");
                 break;
 
@@ -102,12 +123,16 @@ public class CompactorService implements ManagementService {
                 }
 
                 if (re instanceof NetworkException || re.getCause() instanceof TimeoutException) {
-                    Sleep.sleepUninterruptibly(CONN_RETRY_RATE);
+                    try {
+                        TimeUnit.MILLISECONDS.sleep(CONN_RETRY_DELAY_MILLISEC);
+                    } catch (InterruptedException e) {
+                        log.error("Interrupted in network retry delay sleep");
+                        break;
+                    }
                 }
-
             } catch (Throwable t) {
                 log.error("runCompactionOrchestrator: encountered unexpected exception", t);
-                throw t;
+                t.printStackTrace();
             }
         }
     }
@@ -127,6 +152,10 @@ public class CompactorService implements ManagementService {
      */
     @Override
     public void shutdown() {
+        if (this.checkpointerProcess != null && this.checkpointerProcess.isAlive()) {
+            this.checkpointerProcess.destroy();
+            this.checkpointerProcess = null;
+        }
         compactionScheduler.shutdownNow();
         log.info("Compactor Orchestrator service shutting down.");
     }
