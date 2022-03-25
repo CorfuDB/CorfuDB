@@ -13,6 +13,10 @@ import org.corfudb.util.Sleep;
 import org.corfudb.util.concurrent.SingletonResource;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -92,22 +96,24 @@ public class CompactorService implements ManagementService {
                     log.trace("runCompactionOrchestrator: Node not primary sequencer, stop");
                 }
 
-                String compactionCmd;
-                if (isLeader) {
-                    compactionCmd = serverContext.getCompactorCommand()
-                            + " --host=" + serverContext.getLocalEndpoint()
-                            + " --isLeader=true";
-                } else {
-                    compactionCmd  = serverContext.getCompactorCommand()
-                            + " --host=" + serverContext.getLocalEndpoint()
-                            + " --isLeader=false";
+                String compactionCmd =
+                        Files.readAllLines(Paths.get((String) ((ArrayList)serverContext.getCompactorCommand()).get(0)), StandardCharsets.UTF_8).get(0);
 
+                String hostName = serverContext.getLocalEndpoint().split(":")[0];
+                compactionCmd += " --host=" + hostName;
+
+                if (isLeader) {
+                    compactionCmd += " --isLeader=true";
+                } else {
+                    compactionCmd += " --isLeader=false";
                 }
+
                 if (this.checkpointerProcess != null && this.checkpointerProcess.isAlive()) {
                     this.checkpointerProcess.destroy();
                 }
-                this.checkpointerProcess = new ProcessBuilder(compactionCmd).start();
-                this.checkpointerProcess.wait();
+                this.checkpointerProcess = new ProcessBuilder("sh", "-c", compactionCmd).start();
+                log.info("runCompactionOrchestrator: started the process");
+                this.checkpointerProcess.waitFor();
                 this.checkpointerProcess = null;
 
                 log.debug("runCompactionOrchestrator: successfully finished a cycle");
@@ -132,7 +138,7 @@ public class CompactorService implements ManagementService {
                 }
             } catch (Throwable t) {
                 log.error("runCompactionOrchestrator: encountered unexpected exception", t);
-                t.printStackTrace();
+                log.error("StackTrace: {}", t.getStackTrace());
             }
         }
     }
