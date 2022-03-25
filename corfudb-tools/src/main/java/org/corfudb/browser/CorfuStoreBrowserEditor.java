@@ -31,10 +31,11 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata;
-import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileName;
+import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
+import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.ExampleSchemas.ExampleTableName;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.collections.CorfuRecord;
@@ -161,10 +162,14 @@ public class CorfuStoreBrowserEditor {
      * @return - number of entries in the table
      */
     public int printTable(String namespace, String tablename) {
-        StringBuilder builder;
-
-        ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
-            getTable(namespace, tablename);
+        if (namespace.equals(TableRegistry.CORFU_SYSTEM_NAMESPACE)
+                && tablename.equals(TableRegistry.REGISTRY_TABLE_NAME)) {
+            // TableDescriptors are an internal type that use Any protobuf.
+            // JsonFormat has a known bug where it fails to print Any protobuf payloads
+            // So to work around this bug, avoid dumping the TableDescriptor table directly.
+            return printTableRegistry();
+        }
+        ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table = getTable(namespace, tablename);
         int size = table.size();
         final int batchSize = 50;
         Stream<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> entryStream = table.entryStream();
@@ -185,7 +190,7 @@ public class CorfuStoreBrowserEditor {
         try {
             builder = new StringBuilder("\nKey:\n")
                     .append(JsonFormat.printer().print(entry.getKey().getKey()));
-            log.info(builder.toString());
+            System.out.println(builder.toString());
         } catch (Exception e) {
             log.error("invalid key: ", e);
         }
@@ -197,13 +202,45 @@ public class CorfuStoreBrowserEditor {
             log.error("payload is NULL");
             return;
         }
+
         try {
             builder = new StringBuilder("\nPayload:\n")
                     .append(JsonFormat.printer().print(entry.getValue().getPayload()));
-            log.info(builder.toString());
+            System.out.println(builder.toString());
         } catch (Exception e) {
             log.error("invalid payload: ", e);
         }
+    }
+
+    private int printTableRegistry() {
+        for (Map.Entry<TableName, CorfuRecord<TableDescriptors, TableMetadata>> entry :
+                dynamicProtobufSerializer.getCachedRegistryTable().entrySet()) {
+            try {
+                StringBuilder builder = new StringBuilder("\nKey:\n")
+                        .append(JsonFormat.printer().print(entry.getKey()));
+                System.out.println(builder.toString());
+            } catch (Exception e) {
+                log.error("Unable to print metadata entry of this registry table key {}",  entry.getKey());
+            }
+            StringBuilder builder = new StringBuilder("\nkeyType = \"");
+            builder.append("\nkeyType = \""+entry.getValue().getPayload().getKey().getTypeUrl()+"\"");
+            builder.append("\npayloadType = \""+entry.getValue().getPayload().getValue().getTypeUrl()+"\"");
+            builder.append("\nmetadataType = \""+entry.getValue().getPayload().getMetadata().getTypeUrl()+"\"");
+            builder.append("\nProtobuf Source Files: \""+
+                    entry.getValue().getPayload().getFileDescriptorsMap().keySet()
+            );
+            System.out.println(builder);
+
+            try {
+                builder = new StringBuilder("\nMetadata:\n")
+                        .append(JsonFormat.printer().print(entry.getValue().getMetadata()));
+                System.out.println(builder.toString());
+            } catch (Exception e) {
+                log.error("Unable to print metadata section of registry table");
+            }
+        }
+
+        return dynamicProtobufSerializer.getCachedRegistryTable().size();
     }
 
     private void printMetadata(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
@@ -215,12 +252,11 @@ public class CorfuStoreBrowserEditor {
         try {
             builder = new StringBuilder("\nMetadata:\n")
                     .append(JsonFormat.printer().print(entry.getValue().getMetadata()));
-            log.info(builder.toString());
+            System.out.println(builder.toString());
         } catch (Exception e) {
             log.error("invalid metadata: ", e);
         }
     }
-
 
     /**
      * List all tables in CorfuStore
@@ -673,10 +709,10 @@ public class CorfuStoreBrowserEditor {
         Set<String> tags = new HashSet<>();
         TableName tableName = TableName.newBuilder().setNamespace(namespace).setTableName(table).build();
 
-        CorfuRecord<CorfuStoreMetadata.TableDescriptors, CorfuStoreMetadata.TableMetadata> record =
+        CorfuRecord<TableDescriptors, TableMetadata> tableRecord =
             dynamicProtobufSerializer.getCachedRegistryTable().get(tableName);
-        if (record != null) {
-            tags.addAll(record.getMetadata().getTableOptions().getStreamTagList());
+        if (tableRecord != null) {
+            tags.addAll(tableRecord.getMetadata().getTableOptions().getStreamTagList());
             System.out.println("\n======================\n");
             System.out.println("table: " + namespace + "$" + table +
                 " --- Total Tags = " + tags.size() + " Tags:: " + tags);
