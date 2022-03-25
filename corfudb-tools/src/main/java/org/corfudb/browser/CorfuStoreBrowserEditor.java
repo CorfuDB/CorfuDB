@@ -3,7 +3,6 @@ package org.corfudb.browser;
 import com.google.common.collect.Iterables;
 import com.google.common.reflect.TypeToken;
 
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -13,7 +12,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -31,9 +29,9 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata;
-import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileName;
+import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
+import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.ExampleSchemas.ExampleTableName;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
@@ -48,7 +46,6 @@ import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.collections.ManagedTxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
@@ -73,6 +70,7 @@ public class CorfuStoreBrowserEditor {
     private final CorfuRuntime runtime;
     private final String diskPath;
     private final DynamicProtobufSerializer dynamicProtobufSerializer;
+    private final String QUOTE = "\"";
 
     /**
      * Creates a CorfuBrowser which connects a runtime to the server.
@@ -152,8 +150,13 @@ public class CorfuStoreBrowserEditor {
      * @return - number of entries in the table
      */
     public int printTable(String namespace, String tablename) {
-        StringBuilder builder;
-
+        if (namespace.equals(TableRegistry.CORFU_SYSTEM_NAMESPACE)
+                && tablename.equals(TableRegistry.REGISTRY_TABLE_NAME)) {
+            // TableDescriptors are an internal type that use Any protobuf.
+            // JsonFormat has a known bug where it fails to print Any protobuf payloads
+            // So to work around this bug, avoid dumping the TableDescriptor table directly.
+            return printTableRegistry();
+        }
         CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
             getTable(namespace, tablename);
         int size = table.size();
@@ -176,7 +179,7 @@ public class CorfuStoreBrowserEditor {
         try {
             builder = new StringBuilder("\nKey:\n")
                     .append(JsonFormat.printer().print(entry.getKey().getKey()));
-            log.info(builder.toString());
+            System.out.println(builder.toString());
         } catch (Exception e) {
             log.error("invalid key: ", e);
         }
@@ -188,13 +191,49 @@ public class CorfuStoreBrowserEditor {
             log.error("payload is NULL");
             return;
         }
+
         try {
             builder = new StringBuilder("\nPayload:\n")
                     .append(JsonFormat.printer().print(entry.getValue().getPayload()));
-            log.info(builder.toString());
+            System.out.println(builder.toString());
         } catch (Exception e) {
             log.error("invalid payload: ", e);
         }
+    }
+
+    private int printTableRegistry() {
+        for (Map.Entry<TableName, CorfuRecord<TableDescriptors, TableMetadata>> entry :
+                dynamicProtobufSerializer.getCachedRegistryTable().entrySet()) {
+            try {
+                StringBuilder builder = new StringBuilder("\nKey:\n")
+                        .append(JsonFormat.printer().print(entry.getKey()));
+                System.out.println(builder.toString());
+            } catch (Exception e) {
+                log.error("Unable to print tableName of this registry table key {}", entry.getKey());
+            }
+            try {
+                StringBuilder builder = new StringBuilder();
+                builder.append("\nkeyType = \"" + entry.getValue().getPayload().getKey().getTypeUrl() + QUOTE);
+                builder.append("\npayloadType = \"" + entry.getValue().getPayload().getValue().getTypeUrl() + QUOTE);
+                builder.append("\nmetadataType = \"" + entry.getValue().getPayload().getMetadata().getTypeUrl() + QUOTE);
+                builder.append("\nProtobuf Source Files: \"" +
+                        entry.getValue().getPayload().getFileDescriptorsMap().keySet()
+                );
+                System.out.println(builder.toString());
+            } catch (Exception e) {
+                log.error("Unable to extract payload fields from registry table key {}", entry.getKey());
+            }
+
+            try {
+                StringBuilder builder = new StringBuilder("\nMetadata:\n")
+                        .append(JsonFormat.printer().print(entry.getValue().getMetadata()));
+                System.out.println(builder.toString());
+            } catch (Exception e) {
+                log.error("Unable to print metadata section of registry table");
+            }
+        }
+
+        return dynamicProtobufSerializer.getCachedRegistryTable().size();
     }
 
     private void printMetadata(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
@@ -206,12 +245,11 @@ public class CorfuStoreBrowserEditor {
         try {
             builder = new StringBuilder("\nMetadata:\n")
                     .append(JsonFormat.printer().print(entry.getValue().getMetadata()));
-            log.info(builder.toString());
+            System.out.println(builder.toString());
         } catch (Exception e) {
             log.error("invalid metadata: ", e);
         }
     }
-
 
     /**
      * List all tables in CorfuStore
@@ -363,10 +401,10 @@ public class CorfuStoreBrowserEditor {
             new CorfuDynamicKey(defaultKeyAny.getTypeUrl(), keyMsg);
 
         try {
+            CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
+                    getTable(namespace, tableName);
             runtime.getObjectsView().TXBegin();
             CorfuDynamicRecord editedRecord = null;
-            CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
-                getTable(namespace, tableName);
             if (table.containsKey(dynamicKey)) {
                 CorfuDynamicRecord oldRecord = table.get(dynamicKey);
 
@@ -460,55 +498,36 @@ public class CorfuStoreBrowserEditor {
     /**
      * Loads the table with random data
      * @param namespace - the namespace where the table belongs
-     * @param tablename - table name without the namespace
+     * @param tableName - table name without the namespace
      * @param numItems - total number of items to load
      * @param batchSize - number of items in each transaction
      * @param itemSize - size of each item - a random string array
      * @return - number of entries in the table
      */
-    public int loadTable(String namespace, String tablename, int numItems, int batchSize, int itemSize) {
-        CorfuStoreShim store = new CorfuStoreShim(runtime);
+    public int loadTable(String namespace, String tableName, int numItems, int batchSize, int itemSize) {
+        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
+                getTable(namespace, tableName);
+        int size = table.size();
+        if (size == 0) {
+            log.error("Currently unable to load data into empty tables. item size = {}", itemSize);
+            return 0;
+        }
+
+        CorfuDynamicKey oneKey = table.keySet().stream().findAny().get();
+        CorfuDynamicRecord oneRecord = table.get(oneKey);
         try {
-            TableOptions.TableOptionsBuilder optionsBuilder = TableOptions.builder();
-            if (diskPath != null) {
-                optionsBuilder.persistentDataPath(Paths.get(diskPath));
-            }
-            final Table<ExampleTableName, ExampleTableName, ManagedMetadata> table = store.openTable(
-                    namespace, tablename,
-                    ExampleTableName.class,
-                    ExampleTableName.class,
-                    ManagedMetadata.class,
-                    TableOptions.fromProtoSchema(ExampleTableName.class, optionsBuilder.build())
-            );
-
-            byte[] array = new byte[itemSize];
-
-            /*
-             * Random bytes are needed to bypass the compression.
-             * If we don't use random bytes, compression will reduce the size of the payload siginficantly
-             * increasing the time it takes to load data if we are trying to fill up disk.
-             */
-            new Random().nextBytes(array);
-            ExampleTableName dummyVal = ExampleTableName.newBuilder().setNamespace(namespace+tablename)
-                    .setTableName(new String(array, StandardCharsets.UTF_16)).build();
-            System.out.println("WARNING: Loading " + numItems + " items of " + itemSize +
-                " size in " + batchSize + " batchSized transactions into " +
-                namespace + "$" + tablename);
             int itemsRemaining = numItems;
             while (itemsRemaining > 0) {
-                ManagedTxnContext tx = store.tx(namespace);
+                runtime.getObjectsView().TXBegin();
                 for (int j = batchSize; j > 0 && itemsRemaining > 0; j--, itemsRemaining--) {
-                    ExampleTableName dummyKey = ExampleTableName.newBuilder()
-                            .setNamespace(Integer.toString(itemsRemaining))
-                            .setTableName(Integer.toString(j)).build();
-                    tx.putRecord(table, dummyKey, dummyVal, ManagedMetadata.getDefaultInstance());
+                    table.put(oneKey, oneRecord);
                 }
-                Timestamp address = tx.commit();
+                final long address = runtime.getObjectsView().TXEnd();
                 System.out.println("loadTable: Txn at address "
-                    + address.getSequence() + " Items  now left " + itemsRemaining);
+                    + address + " Items  now left " + itemsRemaining);
             }
         } catch (Exception e) {
-            log.error("loadTable: {} {} {} {} failed.", namespace, tablename, numItems, batchSize, e);
+            log.error("loadTable: {} {} {} {} failed.", namespace, tableName, numItems, batchSize, e);
         }
         return (int)(Math.ceil((double)numItems/batchSize));
     }
@@ -547,6 +566,7 @@ public class CorfuStoreBrowserEditor {
 
         class StreamDumper implements StreamListener {
             @Getter
+            final
             AtomicLong txnRead;
 
             @Getter
@@ -664,10 +684,10 @@ public class CorfuStoreBrowserEditor {
         Set<String> tags = new HashSet<>();
         TableName tableName = TableName.newBuilder().setNamespace(namespace).setTableName(table).build();
 
-        CorfuRecord<CorfuStoreMetadata.TableDescriptors, CorfuStoreMetadata.TableMetadata> record =
+        CorfuRecord<TableDescriptors, TableMetadata> tableRecord =
             dynamicProtobufSerializer.getCachedRegistryTable().get(tableName);
-        if (record != null) {
-            tags.addAll(record.getMetadata().getTableOptions().getStreamTagList());
+        if (tableRecord != null) {
+            tags.addAll(tableRecord.getMetadata().getTableOptions().getStreamTagList());
             System.out.println("\n======================\n");
             System.out.println("table: " + namespace + "$" + table +
                 " --- Total Tags = " + tags.size() + " Tags:: " + tags);
