@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
@@ -9,6 +10,7 @@ import org.corfudb.runtime.view.stream.StreamAddressSpace;
 
 import java.util.*;
 
+@Slf4j
 public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
 
     private final List<UUID> sensitiveStreams = new ArrayList<>();
@@ -29,9 +31,10 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
     @Override
     public boolean shouldTrigger(long interval) {
         //1. Checks if one of the sensitive streams requires compaction
-        //2. Checks if the log size is big and requires compaction
+        //2. Checks if the address space size is bigger than previous cycle
         //3. If it has been > 30 mins since the last compaction
 
+        log.info("running shouldTrigger");
         Long currentAddressSpaceSize = corfuRuntime.getAddressSpaceView().getLogTail()
                 - corfuRuntime.getAddressSpaceView().getTrimMark().getSequence();
         boolean shouldTrigger = false;
@@ -57,6 +60,7 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
              previousTriggerMillis = System.currentTimeMillis();
          }
 
+        log.info("shouldTrigger: {}", shouldTrigger);
         return shouldTrigger;
     }
 
