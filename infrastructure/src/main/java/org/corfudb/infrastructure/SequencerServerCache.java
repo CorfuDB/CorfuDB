@@ -212,6 +212,14 @@ public class SequencerServerCache implements AutoCloseable {
         return true;
     }
 
+    /**
+     * Clear the cache
+     */
+    public void clearCache() {
+        cacheEntries.clear();
+        conflictKeys.clear();
+    }
+
     @Override
     public void close() {
         MicroMeterUtils.removeGaugesWithNoTags(windowSizeName, conflictKeysCounterName);

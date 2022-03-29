@@ -486,6 +486,7 @@ public class SequencerServer extends AbstractServer {
         // It is necessary because we reset the sequencer.
         if (!bootstrapWithoutTailsUpdate) {
             globalLogTail = req.getPayload().getBootstrapSequencerRequest().getGlobalTail();
+            cache.clearCache();
             cache = sequencerFactoryHelper.getSequencerServerCache(
                     cache.getCacheSize(),
                     globalLogTail - 1
