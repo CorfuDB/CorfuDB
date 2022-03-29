@@ -213,11 +213,40 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
      * @throws IOException
      */
     @Test
-    public void loaderTest() throws IOException {
+    public void loaderTest() throws IOException, InvocationTargetException, NoSuchMethodException, IllegalAccessException {
         final String namespace = "namespace";
         final String tableName = "table";
         runSinglePersistentServer(corfuSingleNodeHost,
                 corfuStringNodePort);
+        final long keyUuid = 10L;
+        final long ruleIdVal = 50L;
+        final long metaUuid = 100L;
+
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStore store = new CorfuStore(runtime);
+        final Table<SampleSchema.Uuid, SampleSchema.FirewallRule, SampleSchema.Uuid> table = store.openTable(
+                namespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.FirewallRule.class,
+                SampleSchema.Uuid.class,
+                TableOptions.fromProtoSchema(SampleSchema.FirewallRule.class));
+
+        SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder().setLsb(keyUuid)
+                .setMsb(keyUuid).build();
+        SampleSchema.FirewallRule firewallRuleVal = SampleSchema.FirewallRule.newBuilder()
+                .setRuleId(ruleIdVal).setRuleName("Test Rule")
+                .setInput(
+                        SampleAppliance.Appliance.newBuilder().setEndpoint("localhost"))
+                .setOutput(
+                        SampleAppliance.Appliance.newBuilder().setEndpoint("localhost"))
+                .build();
+        SampleSchema.Uuid uuidMeta = SampleSchema.Uuid.newBuilder().setLsb(metaUuid)
+                .setMsb(metaUuid).build();
+        TxnContext tx = store.txn(namespace);
+        tx.putRecord(table, uuidKey, firewallRuleVal, uuidMeta);
+        tx.commit();
+        runtime.shutdown();
 
         // Start a Corfu runtime
         runtime = createRuntime(singleNodeEndpoint);
