@@ -12,7 +12,9 @@ import org.corfudb.util.LambdaUtils;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.concurrent.SingletonResource;
 
+import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -40,7 +42,7 @@ public class CompactorService implements ManagementService {
     private final ServerContext serverContext;
     private final SingletonResource<CorfuRuntime> runtimeSingletonResource;
     private final ScheduledExecutorService compactionScheduler;
-    private final ICompactionTriggerPolicy compactionTriggerPolicy;
+    private ICompactionTriggerPolicy compactionTriggerPolicy;
     volatile Process checkpointerProcess = null;
 
     //TODO: make it a prop file and maybe pass it from the server
@@ -55,7 +57,6 @@ public class CompactorService implements ManagementService {
                         .setDaemon(true)
                         .setNameFormat(serverContext.getThreadPrefix() + "CompactorService")
                         .build());
-        this.compactionTriggerPolicy = new DynamicTriggerPolicy(runtimeSingletonResource.get(), sensitiveTables);
     }
 
     CorfuRuntime getCorfuRuntime() {
@@ -69,6 +70,7 @@ public class CompactorService implements ManagementService {
      */
     @Override
     public void start(Duration interval) {
+        this.compactionTriggerPolicy = new DynamicTriggerPolicy(getCorfuRuntime(), sensitiveTables);
         // Have the trigger logic which is computed every min
         compactionScheduler.scheduleAtFixedRate(
                 () -> {
