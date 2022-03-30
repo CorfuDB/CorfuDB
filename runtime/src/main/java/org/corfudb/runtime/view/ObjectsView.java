@@ -5,7 +5,6 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -214,8 +213,10 @@ public class ObjectsView extends AbstractView {
      */
     public void gc(long trimMark) {
         for (Object obj : getObjectCache().values()) {
-            ((CorfuCompileProxy) ((ICorfuSMR) obj).
-                    getCorfuSMRProxy()).getUnderlyingObject().gc(trimMark);
+            if (((ICorfuSMR) obj).getCorfuSMRProxy() instanceof CorfuCompileProxy) {
+                ((CorfuCompileProxy) ((ICorfuSMR) obj).
+                        getCorfuSMRProxy()).getUnderlyingObject().gc(trimMark);
+            }
         }
     }
 

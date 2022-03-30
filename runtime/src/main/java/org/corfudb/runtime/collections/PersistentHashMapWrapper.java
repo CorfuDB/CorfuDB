@@ -1,32 +1,61 @@
 package org.corfudb.runtime.collections;
 
 import io.vavr.collection.HashMap;
+import lombok.NonNull;
 
 public class PersistentHashMapWrapper<K, V> {
 
-    HashMap<K, V> mapImpl;
+    // The "main" map which contains the primary key-value mappings.
+    HashMap<K, V> mainMap;
+
+    // TODO: add secondary indices and other immutable versioned state associated with the PersistentCorfuTable
 
     public PersistentHashMapWrapper() {
-        mapImpl = HashMap.empty();
+        this.mainMap = HashMap.empty();
     }
 
-    public void setMap(HashMap<K, V> map) {
-        this.mapImpl = map;
+    /**
+     * Internal constructor used to produce new copies/versions.
+     * @param mainMap
+     */
+    private PersistentHashMapWrapper(@NonNull final HashMap<K, V> mainMap) {
+        this.mainMap = mainMap;
     }
 
-    public V get(K key) {
-        return mapImpl.get(key).getOrElse((V) null);
+    /**
+     *
+     * @param key
+     * @return
+     */
+    public V get(@NonNull K key) {
+        return mainMap.get(key).getOrElse((V) null);
     }
 
-    public V put(K key, V value) {
-        mapImpl = mapImpl.put(key, value);
-        return mapImpl.get(key).get();
+    /**
+     *
+     * @param key
+     * @param value
+     * @return
+     */
+    public PersistentHashMapWrapper<K, V> put(@NonNull K key, @NonNull V value) {
+        return new PersistentHashMapWrapper<>(mainMap.put(key, value));
     }
 
-    public V remove(K key) {
-        V oldVal = mapImpl.get(key).getOrElse((V) null);
-        mapImpl = mapImpl.remove(key);
-        return oldVal;
+    /**
+     *
+     * @param key
+     * @return
+     */
+    public PersistentHashMapWrapper<K, V> remove(@NonNull K key) {
+        // TODO: does removing a non-existing entry produce a new version?
+        return new PersistentHashMapWrapper<>(mainMap.remove(key));
     }
 
+    /**
+     *
+     * @return
+     */
+    public int size() {
+        return mainMap.size();
+    }
 }

@@ -107,6 +107,20 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
     private long logUpdateInner(String smrUpdateFunction,
                                 Object[] conflictObject, Object... args) {
 
+        // If we aren't coming from a transactional context,
+        // redirect us to a transactional context first.
+        if (TransactionalContext.isInTransaction()) {
+            try {
+                // We generate an entry to avoid exposing the serializer to the tx context.
+                SMREntry entry = new SMREntry(smrUpdateFunction, args, serializer);
+                return TransactionalContext.getCurrentContext()
+                        .logUpdate(this, entry, conflictObject);
+            } catch (Exception e) {
+                log.warn("Update[{}]", this, e);
+                this.abortTransaction(e);
+            }
+        }
+
         // If we aren't in a transaction, we can just write the modification.
         // We need to add the acquired token into the pending upcall list.
         SMREntry smrEntry = new SMREntry(smrUpdateFunction, args, serializer);

@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.SMRObject;
+import org.corfudb.runtime.view.SMRObject.VersioningMechanism;
 import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.serializer.ISerializer;
 
@@ -34,7 +35,8 @@ public class CorfuCompileWrapperBuilder {
     private static <T extends ICorfuSMR<T>> T getWrapper(Class<T> type, CorfuRuntime rt,
                                                          UUID streamID, Object[] args,
                                                          ISerializer serializer,
-                                                         Set<UUID> streamTags) throws Exception {
+                                                         Set<UUID> streamTags,
+                                                         VersioningMechanism versioningMechanism) throws Exception {
         // Do we have a compiled wrapper for this type?
         Class<ICorfuSMR<T>> wrapperClass = (Class<ICorfuSMR<T>>)
                 Class.forName(type.getName() + ICorfuSMR.CORFUSMR_SUFFIX);
@@ -45,8 +47,14 @@ public class CorfuCompileWrapperBuilder {
 
         // Now we create the proxy, which actually manages
         // instances of this object. The wrapper delegates calls to the proxy.
-        wrapperObject.setCorfuSMRProxy(new CorfuCompileProxy<>(rt, streamID,
-                type, args, serializer, streamTags, wrapperObject));
+        if (versioningMechanism == SMRObject.VersioningMechanism.VERSION_LOCKED) {
+            wrapperObject.setCorfuSMRProxy(new CorfuCompileProxy<>(rt, streamID,
+                    type, args, serializer, streamTags, wrapperObject));
+        } else {
+            // TODO: Refactor.
+            wrapperObject.setCorfuSMRProxy(new MVOCorfuCompileProxy<>(rt, streamID,
+                    type, args, serializer, streamTags, wrapperObject));
+        }
 
         if (wrapperObject instanceof ICorfuSMRProxyWrapper) {
             ((ICorfuSMRProxyWrapper) wrapperObject)
@@ -62,6 +70,7 @@ public class CorfuCompileWrapperBuilder {
                 smrObject.getStreamID(),
                 smrObject.getArguments(),
                 smrObject.getSerializer(),
-                smrObject.getStreamTags());
+                smrObject.getStreamTags(),
+                smrObject.getVersioningMechanism());
     }
 }

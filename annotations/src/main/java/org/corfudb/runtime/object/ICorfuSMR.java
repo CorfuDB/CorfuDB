@@ -63,16 +63,18 @@ public interface ICorfuSMR<T>
 
     /**
      * Javadoc comment.
+     * Specify Object type?
      * @param obj Javadoc.
      */
-    default void setImmutableObject(Object obj) {
+    default void setImmutableState(Object obj) {
     }
 
     /**
      * Javadoc comment.
+     * Specify Object type?
      * @return Javadoc.
      */
-    default Object getImmutableObject() {
+    default Object getImmutableState() {
         return null;
     }
 

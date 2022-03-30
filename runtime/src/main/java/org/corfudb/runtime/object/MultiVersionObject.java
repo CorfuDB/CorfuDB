@@ -9,9 +9,11 @@ import org.corfudb.runtime.view.Address;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.ref.Reference;
 import java.lang.ref.SoftReference;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -49,6 +51,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
     public <R> R access(long timestamp, Function<T, R> accessFunction) throws NullPointerException{
         if (containsVersion(timestamp)) {
+            // TODO: Unsafe - Position of smr stream might not be that of timestamp
             long vloAccessedVersion = getVersionUnsafe();
             log.trace("Access [{}] Direct (optimistic-read) access at {}",
                     this, vloAccessedVersion);
@@ -62,7 +65,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         try {
             ts = lock.writeLock();
 
-            T object = buildVersionWithRetry(timestamp);
+            T object = buildVersionWithRetryUnsafe(timestamp);
             long vloAccessedVersion = getVersionUnsafe();
             correctnessLogger.trace("Version, {}", vloAccessedVersion);
             log.trace("Access [{}] Updated (writelock) access at {}", this, vloAccessedVersion);
@@ -73,11 +76,31 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
     }
 
     // TODO: Complete implementation.
-    public SnapshotProxyAdapter<T> getSnapshotProxy(long ts) {
-        return null;
+    public SnapshotProxyAdapter<T> getSnapshotProxy(long timestamp) {
+        // TODO: Eliminate type cast
+        Reference<T> ref  = (SoftReference<T>) mvoCache.get(new VersionedObjectIdentifier(streamID, timestamp));
+
+        if (ref.get() != null) {
+            return new SnapshotProxyAdapter<>(ref, timestamp, upcallTargetMap);
+        }
+
+        long ts = 0;
+        try {
+            ts = lock.writeLock();
+
+            // TODO: this should provide a Reference<>? Should all Reference<> be given out by cache?
+            T object = buildVersionWithRetryUnsafe(timestamp);
+            final long accessedVersion = getVersionUnsafe();
+            correctnessLogger.trace("Version, {}", accessedVersion);
+            log.trace("Access [{}] Updated (writelock) access at {}", this, accessedVersion);
+            ref  = new SoftReference<>(object);
+            return new SnapshotProxyAdapter<>(ref, timestamp, upcallTargetMap);
+        } finally {
+            lock.unlock(ts);
+        }
     }
 
-    private T buildVersionWithRetry(long timestamp) {
+    private T buildVersionWithRetryUnsafe(long timestamp) {
         T object = newObjectFn.get();
         for (int x = 0; x < TRIM_RETRY; x++) {
             try {
@@ -105,12 +128,13 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
     private void prepareObjectBeforeSync(T object, Long timestamp) {
         // find the entry with the greatest version less than or equal to the given version
+        // TODO: Ref becomes invalid after check?
         SoftReference<Map.Entry<Long, ICorfuSMR>> floorEntry = mvoCache.floorEntry(
                 new VersionedObjectIdentifier(streamID, timestamp));
         if (floorEntry.get() == null) {
             resetUnsafe(object);
         } else {
-            object.setImmutableObject(floorEntry.get().getValue().getImmutableObject());
+            object.setImmutableState(floorEntry.get().getValue().getImmutableState());
             smrStream.seek(floorEntry.get().getKey());
         }
     }
@@ -118,16 +142,24 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
     protected void syncStreamUnsafe(T object, ISMRStream stream, long timestamp) {
         log.trace("Sync[{}] {}", this, (timestamp == Address.OPTIMISTIC)
                 ? "Optimistic" : "to " + timestamp);
+        // TODO: Safe to remove?
         long syncTo = (timestamp == Address.OPTIMISTIC) ? Address.MAX : timestamp;
+
+        // TODO: Need better way to do this
+        AtomicReference<T> wrappedObject = new AtomicReference<>(object);
 
         Runnable syncStreamRunnable = () ->
             stream.streamUpTo(syncTo)
                 .forEachOrdered(entry -> {
                     try {
-                        applyUpdateUnsafe(object, entry);
+                        // TODO: how expensive?
+                        T nextVersion = newObjectFn.get();
+                        nextVersion.setImmutableState(wrappedObject.get().getImmutableState());
+                        applyUpdateUnsafe(nextVersion, entry);
                         VersionedObjectIdentifier vloId =
                                 new VersionedObjectIdentifier(streamID, entry.getGlobalAddress());
-                        mvoCache.put(vloId, object);
+                        mvoCache.put(vloId, nextVersion);
+                        wrappedObject.set(nextVersion);
                     } catch (Exception e) {
                         log.error("Sync[{}] Error: Couldn't execute upcall due to {}", this, e);
                         throw new UnrecoverableCorfuError(e);
@@ -135,6 +167,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                 });
         MicroMeterUtils.time(syncStreamRunnable, "vlo.sync.timer",
                 "streamId", getID().toString());
+        object.setImmutableState(wrappedObject.get().getImmutableState());
     }
 
     private void applyUpdateUnsafe(T object, SMREntry entry) {

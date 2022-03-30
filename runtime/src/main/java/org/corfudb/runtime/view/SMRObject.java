@@ -187,7 +187,7 @@ public class SMRObject<T extends ICorfuSMR<T>> {
     }
 
     // TODO: Refactor me.
-    public enum VersioningMechanism {
+    public static enum VersioningMechanism {
         VERSION_LOCKED,
         PERSISTENT
     }

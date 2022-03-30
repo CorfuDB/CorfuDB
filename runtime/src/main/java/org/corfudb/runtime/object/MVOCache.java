@@ -85,16 +85,16 @@ public class MVOCache {
      * @param voId the id of the versioned object
      * @return the versioned object, or null if not exist
      */
-    public SoftReference<ICorfuSMR> get(VersionedObjectIdentifier voId) {
-        return new SoftReference<>(objectCache.getIfPresent(voId));
+    public <T extends ICorfuSMR<T>> SoftReference<T> get(VersionedObjectIdentifier voId) {
+        return new SoftReference<>((T) objectCache.getIfPresent(voId));
     }
 
-    public SoftReference<ICorfuSMR> put(VersionedObjectIdentifier voId, ICorfuSMR versionedObject) {
+    public <T extends ICorfuSMR<T>> SoftReference<T> put(VersionedObjectIdentifier voId, ICorfuSMR versionedObject) {
         objectCache.put(voId, versionedObject);
 
         objectMap.putIfAbsent(voId.getObjectId(), new TreeMap<>());
         objectMap.get(voId.getObjectId()).put(voId.getVersion(), versionedObject);
-        return new SoftReference<>(versionedObject);
+        return new SoftReference<>((T) versionedObject);
     }
 
     public Boolean containsKey(VersionedObjectIdentifier voId) {
@@ -102,7 +102,11 @@ public class MVOCache {
     }
 
     public SoftReference<Map.Entry<Long, ICorfuSMR>> floorEntry(VersionedObjectIdentifier voId) {
-        return new SoftReference<>(objectMap.get(voId.getObjectId()).floorEntry(voId.getVersion()));
+        final TreeMap<Long, ICorfuSMR> versions = objectMap.get(voId.getObjectId());
+        if (versions == null) {
+            return new SoftReference<>(null);
+        } else {
+            return new SoftReference<>(versions.floorEntry(voId.getVersion()));
+        }
     }
-
 }

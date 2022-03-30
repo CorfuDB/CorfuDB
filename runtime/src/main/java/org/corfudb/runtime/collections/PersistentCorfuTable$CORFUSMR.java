@@ -16,7 +16,7 @@ public class PersistentCorfuTable$CORFUSMR<K, V> extends PersistentCorfuTable<K,
             new ImmutableMap.Builder<String, ICorfuSMRUpcallTarget<PersistentCorfuTable<K, V>>>()
             .put("put", (obj, args) -> { return obj.put((K) args[0], (V) args[1]);})
             .put("clear", (obj, args) -> { obj.clear();return null;})
-            .put("remove", (obj, args) -> { return obj.remove((java.lang.Object) args[0]);}).build();
+            .put("remove", (obj, args) -> { return obj.remove((K) args[0]);}).build();
 
     public PersistentCorfuTable$CORFUSMR() {
         super();
@@ -30,22 +30,41 @@ public class PersistentCorfuTable$CORFUSMR<K, V> extends PersistentCorfuTable<K,
         this.proxy_CORFUSMR = proxy;
     }
 
-    public V remove(@ConflictParameter Object key) {
+    @Override
+    public V remove(@ConflictParameter K key) {
         Object[] conflictField_CORFUSMR = new Object[]{key};
         long address_CORFUSMR = proxy_CORFUSMR.logUpdate("remove",true,conflictField_CORFUSMR,key);
         return (V) proxy_CORFUSMR.getUpcallResult(address_CORFUSMR, conflictField_CORFUSMR);
     }
 
+    @Override
+    public void delete(@ConflictParameter K key) {
+        Object[] conflictField_CORFUSMR = new Object[]{key};
+        proxy_CORFUSMR.logUpdate("remove",false, conflictField_CORFUSMR, key);
+    }
 
+    @Override
     public V put(@ConflictParameter K key, V value) {
         Object[] conflictField_CORFUSMR = new Object[]{key};
         long address_CORFUSMR = proxy_CORFUSMR.logUpdate("put",true,conflictField_CORFUSMR,key, value);
         return (V) proxy_CORFUSMR.getUpcallResult(address_CORFUSMR, conflictField_CORFUSMR);
     }
 
-    public V get(@ConflictParameter Object key) {
+    @Override
+    public void insert(@ConflictParameter K key, V value) {
+        Object[] conflictField_CORFUSMR = new Object[]{key};
+        proxy_CORFUSMR.logUpdate("put",false, conflictField_CORFUSMR, key, value);
+    }
+
+    @Override
+    public V get(@ConflictParameter K key) {
         Object[] conflictField_CORFUSMR = new Object[]{key};
         return proxy_CORFUSMR.access(o_CORFUSMR -> o_CORFUSMR.get(key),conflictField_CORFUSMR);
+    }
+
+    @Override
+    public int size() {
+        return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.size();},null);
     }
 
     public Map<String, ICorfuSMRUpcallTarget<PersistentCorfuTable<K, V>>> getCorfuSMRUpcallMap() {

@@ -1,6 +1,6 @@
 package org.corfudb.runtime.collections;
 
-import io.vavr.collection.HashMap;
+import lombok.NonNull;
 import org.corfudb.runtime.object.ICorfuSMR;
 
 import java.util.Collection;
@@ -10,109 +10,69 @@ import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
-public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<PersistentCorfuTable<K, V>> {
+public class PersistentCorfuTable<K, V> implements ICorfuSMR<PersistentCorfuTable<K, V>> {
 
-    private PersistentHashMapWrapper<K, V> mainMap;
+    private PersistentHashMapWrapper<K, V> tableState;
 
     public PersistentCorfuTable() {
-        mainMap = new PersistentHashMapWrapper<>();
+        tableState = new PersistentHashMapWrapper<>();
     }
 
     @Override
-    public void setImmutableObject(Object obj) {
-        mainMap.setMap((HashMap)obj);
+    public void setImmutableState(Object obj) {
+        tableState = (PersistentHashMapWrapper<K, V>) obj;
     }
 
     @Override
-    public Object getImmutableObject() {
-        return mainMap;
+    public Object getImmutableState() {
+        return tableState;
     }
 
-    @Override
-    public void insert(K key, V value) {
+    public void insert(@NonNull K key, @NonNull V value) {
         // see PersistentCorfuTable$CORFUSMR
     }
 
-    @Override
-    public void delete(K key) {
+    public void delete(@NonNull K key) {
         // see PersistentCorfuTable$CORFUSMR
     }
 
-    @Override
-    public List<V> scanAndFilter(Predicate<? super V> valuePredicate) {
-        return null;
-    }
+    // TODO: Stream<Entry<K, V>> entryStream()
 
-    @Override
-    public Collection<Entry<K, V>> scanAndFilterByEntry(Predicate<? super Entry<K, V>> entryPredicate) {
-        return null;
-    }
-
-    @Override
-    public Stream<Entry<K, V>> entryStream() {
-        return null;
-    }
-
-    @Override
     public int size() {
-        return 0;
+        return tableState.size();
     }
 
-    @Override
     public boolean isEmpty() {
-        return false;
+        return tableState.size() == 0;
     }
 
-    @Override
     public boolean containsKey(Object key) {
         return false;
     }
 
-    @Override
-    public boolean containsValue(Object value) {
-        return false;
+    public V get(@NonNull K key) {
+        return tableState.get(key);
     }
 
-    @Override
-    public V get(Object key) {
-        return mainMap.get((K)key);
+    public V put(@NonNull K key, @NonNull V value) {
+        final V prev = tableState.get(key);
+        tableState = tableState.put(key, value);
+        return prev;
     }
 
-    @Override
-    public V put(K key, V value) {
-        return mainMap.put(key, value);
+    public V remove(@NonNull K key) {
+        final V value = tableState.get(key);
+        tableState = tableState.remove(key);
+        return value;
     }
 
-    @Override
-    public V remove(Object key) {
-        return mainMap.remove((K)key);
-    }
-
-    @Override
-    public void putAll(Map<? extends K, ? extends V> m) {
-
-    }
-
-    @Override
     public void clear() {
 
     }
 
-    @Override
     public Set<K> keySet() {
         return null;
     }
-
-    @Override
-    public Collection<V> values() {
-        return null;
-    }
-
-    @Override
-    public Set<Entry<K, V>> entrySet() {
-        return null;
-    }
-
 
     @Override
     public PersistentCorfuTable<K, V> getContext(Context context) {
@@ -121,6 +81,6 @@ public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<
 
     @Override
     public void reset() {
-        mainMap = new PersistentHashMapWrapper<>();
+        tableState = new PersistentHashMapWrapper<>();
     }
 }
