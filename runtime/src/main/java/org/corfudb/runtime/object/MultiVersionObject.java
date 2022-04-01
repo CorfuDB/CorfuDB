@@ -3,6 +3,7 @@ package org.corfudb.runtime.object;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.runtime.exceptions.StaleObjectVersionException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.Address;
@@ -49,15 +50,24 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         lock = new StampedLock();
     }
 
+    /**
+     * Access the MVO object at a certain timestamp (version) using the given
+     * access function.
+     *
+     * @param timestamp the version of the object to access
+     * @param accessFunction the access function
+     * @param <R>
+     * @return
+     * @throws NullPointerException
+     */
     public <R> R access(long timestamp, Function<T, R> accessFunction) throws NullPointerException{
         if (containsVersion(timestamp)) {
             // TODO: Unsafe - Position of smr stream might not be that of timestamp
-            long vloAccessedVersion = getVersionUnsafe();
             log.trace("Access [{}] Direct (optimistic-read) access at {}",
-                    this, vloAccessedVersion);
+                    this, timestamp);
             T object = (T)mvoCache.get(new VersionedObjectIdentifier(streamID, timestamp)).get();
             R ret = accessFunction.apply(object);
-            correctnessLogger.trace("Version, {}", vloAccessedVersion);
+            correctnessLogger.trace("Version, {}", timestamp);
             return ret;
         }
 
@@ -101,6 +111,12 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
     }
 
     private T buildVersionWithRetryUnsafe(long timestamp) {
+        // Avoid rebuilding the same version
+        Reference<T> ref  = mvoCache.get(new VersionedObjectIdentifier(streamID, timestamp));
+        if (ref.get() != null) {
+            return ref.get();
+        }
+
         T object = newObjectFn.get();
         for (int x = 0; x < TRIM_RETRY; x++) {
             try {
@@ -127,12 +143,19 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
     }
 
     private void prepareObjectBeforeSync(T object, Long timestamp) {
-        // find the entry with the greatest version less than or equal to the given version
-        // TODO: Ref becomes invalid after check?
+        // The first access to this object should always proceed
+        if (!mvoCache.containsObject(streamID)) {
+            resetUnsafe(object);
+            return;
+        }
+
+        // Find the entry with the greatest version less than or equal to the given version
         SoftReference<Map.Entry<Long, ICorfuSMR>> floorEntry = mvoCache.floorEntry(
                 new VersionedObjectIdentifier(streamID, timestamp));
         if (floorEntry.get() == null) {
             resetUnsafe(object);
+            // Do not allow going back to previous versions
+            throw new StaleObjectVersionException(streamID, timestamp);
         } else {
             object.setImmutableState(floorEntry.get().getValue().getImmutableState());
             smrStream.seek(floorEntry.get().getKey());
@@ -140,16 +163,11 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
     }
 
     protected void syncStreamUnsafe(T object, ISMRStream stream, long timestamp) {
-        log.trace("Sync[{}] {}", this, (timestamp == Address.OPTIMISTIC)
-                ? "Optimistic" : "to " + timestamp);
-        // TODO: Safe to remove?
-        long syncTo = (timestamp == Address.OPTIMISTIC) ? Address.MAX : timestamp;
-
         // TODO: Need better way to do this
         AtomicReference<T> wrappedObject = new AtomicReference<>(object);
 
         Runnable syncStreamRunnable = () ->
-            stream.streamUpTo(syncTo)
+            stream.streamUpTo(timestamp)
                 .forEachOrdered(entry -> {
                     try {
                         // TODO: how expensive?

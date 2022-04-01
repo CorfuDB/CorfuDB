@@ -57,7 +57,7 @@ public class ObjectsView extends AbstractView {
     Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();
 
     @Getter
-    MVOCache mvoCache = new MVOCache();
+    MVOCache mvoCache = new MVOCache(runtime);
 
     public ObjectsView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);

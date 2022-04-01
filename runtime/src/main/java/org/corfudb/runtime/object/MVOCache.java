@@ -3,7 +3,9 @@ package org.corfudb.runtime.object;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalNotification;
+import com.sun.org.apache.xpath.internal.operations.Bool;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuRuntime;
 
 import java.lang.ref.SoftReference;
 import java.util.Map;
@@ -37,14 +39,13 @@ public class MVOCache {
     //    floorEntry() on top of it.
     private final ConcurrentHashMap<UUID, TreeMap<Long, ICorfuSMR>> objectMap = new ConcurrentHashMap<>();
 
-    private final long DEFAULT_MAX_CACHE_ENTRIES = 50000;
     private final long DEAFULT_CACHE_EXPIRY_TIME_IN_SECONDS = 300;
 
-    public MVOCache() {
+    public MVOCache(CorfuRuntime corfuRuntime) {
 
         CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
-        cacheBuilder.maximumSize(DEFAULT_MAX_CACHE_ENTRIES);
-        objectCache = cacheBuilder.expireAfterAccess(DEAFULT_CACHE_EXPIRY_TIME_IN_SECONDS, TimeUnit.SECONDS)
+        objectCache = cacheBuilder.maximumSize(corfuRuntime.getParameters().getMaxCacheEntries())
+                .expireAfterAccess(DEAFULT_CACHE_EXPIRY_TIME_IN_SECONDS, TimeUnit.SECONDS)
                 .expireAfterWrite(DEAFULT_CACHE_EXPIRY_TIME_IN_SECONDS, TimeUnit.SECONDS)
                 .removalListener(this::handleEviction)
                 .recordStats()
@@ -65,8 +66,13 @@ public class MVOCache {
      * @return number of versions that has been evicted
      */
     private int prefixEvict(VersionedObjectIdentifier voId) {
-        Map<Long, ICorfuSMR> headMap = objectMap.get(voId.getObjectId())
-                .headMap(voId.getVersion(), true);
+        TreeMap<Long, ICorfuSMR> allVersionsOfThisObject = objectMap.get(voId.getObjectId());
+
+        // Get the head map up to the given version. Exclude the given version
+        // if it is the highest version in the map. This is to guarantee that
+        // at least one version exist in the objectMap for any object
+        Map<Long, ICorfuSMR> headMap = allVersionsOfThisObject.headMap(voId.getVersion(),
+                voId.getVersion() != allVersionsOfThisObject.lastKey());
         headMap.forEach((v, obj) -> {
             voId.setVersion(v);
             // this could cause excessive handleEviction calls
@@ -108,5 +114,11 @@ public class MVOCache {
         } else {
             return new SoftReference<>(versions.floorEntry(voId.getVersion()));
         }
+    }
+
+    public Boolean containsObject(UUID objectId) {
+        // TODO: what if an object existing in objectCache but not in objectMap?
+        // This can happen when MVOCache::put is interrupted
+        return objectMap.containsKey(objectId);
     }
 }
