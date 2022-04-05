@@ -10,6 +10,7 @@ import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.DistributedCompactor;
 import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.proto.RpcCommon.TokenMsg;
 
@@ -159,6 +160,8 @@ public class CorfuStoreCompactor {
             }
             txn.putRecord(previousTrimTokenTable, previousTokenKey, ckToken, null);
             txn.commit();
+        } catch (TransactionAbortedException tae) {
+            log.warn("Another node updated the trim token");
         }
 
         log.info("New trim token {} is updated for node {}.", ckToken, thisNodeUuid);
