@@ -33,3 +33,7 @@ message ClientLiveness {
   TableName tableName = 1;
   int64 livenessCounter = 2;
 }
+message ActiveCPStreamMsg {
+  int64 sequence = 1;
+  bool isClient = 2;
+}
