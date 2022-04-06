@@ -4,11 +4,13 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalNotification;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.lang.ref.SoftReference;
 import java.util.Map;
-import java.util.TreeMap;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -23,21 +25,20 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class MVOCache {
 
-    // Both objectMap and objectCache hold strong references to objects.
+    // The objectCache holds the strong references to all objects.
     // key is basically a pair of (objectId, version)
     // value is the actually MVO object
     private final Cache<VersionedObjectIdentifier, ICorfuSMR> objectCache;
 
-    // This objectMap is updated at two places
-    // 1) put() which puts a new version of an object to the objectMap
+    // This objectVersions is updated at two places
+    // 1) put() which adds a new version to the objectVersions
     // 2) as a side effect of put(), some old versions are evicted from the cache
     // TODO: access/mutation to objectMap should be synchronized
     // Q: Can we use objectCache.asMap() instead of maintaining an external view?
     // A: No. Although asMap() returns a thread-safe weakly-consistent map, it is
     //    not a tree structure so it's very inefficient to implement headMap() and
     //    floorEntry() on top of it.
-    private final ConcurrentHashMap<UUID, TreeMap<Long, ICorfuSMR>> objectMap =
-            new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, TreeSet<Long>> objectVersions = new ConcurrentHashMap<>();
 
     private final long DEAFULT_CACHE_EXPIRY_TIME_IN_SECONDS = 300;
 
@@ -52,6 +53,11 @@ public class MVOCache {
                 .build();
     }
 
+    /**
+     * Callback function which is triggered by every guava cache eviction.
+     *
+     * @param notification guava cache eviction notification
+     */
     private void handleEviction(RemovalNotification<VersionedObjectIdentifier, Object> notification) {
         VersionedObjectIdentifier voId = notification.getKey();
         int evictCount = prefixEvict(voId);
@@ -60,26 +66,29 @@ public class MVOCache {
     }
 
     /**
-     * Evict all versions of the given object up to the target version
+     * Evict all versions of the given object up to the target version.
      *
      * @param voId  the object and version to perform prefixEvict
      * @return number of versions that has been evicted
      */
     private int prefixEvict(VersionedObjectIdentifier voId) {
-        TreeMap<Long, ICorfuSMR> allVersionsOfThisObject = objectMap.get(voId.getObjectId());
+        TreeSet<Long> allVersionsOfThisObject = objectVersions.get(voId.getObjectId());
+        int count;
 
-        // Get the head map up to the given version. Exclude the given version
-        // if it is the highest version in the map. This is to guarantee that
-        // at least one version exist in the objectMap for any object
-        Map<Long, ICorfuSMR> headMap = allVersionsOfThisObject.headMap(voId.getVersion(),
-                voId.getVersion() != allVersionsOfThisObject.lastKey());
-        headMap.forEach((v, obj) -> {
-            voId.setVersion(v);
-            // this could cause excessive handleEviction calls
-            objectCache.invalidate(voId);
-        });
-        int count = headMap.size();
-        headMap.clear();
+        synchronized (allVersionsOfThisObject) {
+            // Get the headset up to the given version. Exclude the given version
+            // if it is the highest version in the set. This is to guarantee that
+            // at least one version exist in the objectMap for any object
+            Set<Long> headSet = allVersionsOfThisObject.headSet(voId.getVersion(),
+                    voId.getVersion() != allVersionsOfThisObject.last());
+            headSet.forEach(version -> {
+                voId.setVersion(version);
+                // this could cause excessive handleEviction calls
+                objectCache.invalidate(voId);
+            });
+            count = headSet.size();
+            headSet.clear();
+        }
 
         return count;
     }
@@ -95,30 +104,67 @@ public class MVOCache {
         return new SoftReference<>((T) objectCache.getIfPresent(voId));
     }
 
-    public <T extends ICorfuSMR<T>> SoftReference<T> put(VersionedObjectIdentifier voId, ICorfuSMR versionedObject) {
-        objectCache.put(voId, versionedObject);
-
-        objectMap.putIfAbsent(voId.getObjectId(), new TreeMap<>());
-        objectMap.get(voId.getObjectId()).put(voId.getVersion(), versionedObject);
-        return new SoftReference<>((T) versionedObject);
+    /**
+     * Put the voId and versionedObject to objectCache, update objectVersions.
+     *
+     * @param voId the object and version to add to cache
+     * @param versionedObject the versioned object to add
+     */
+    public void put(VersionedObjectIdentifier voId, ICorfuSMR versionedObject) {
+        TreeSet<Long> allVersionsOfThisObject = objectVersions.computeIfAbsent(
+                voId.getObjectId(), k -> new TreeSet<>());
+        synchronized (allVersionsOfThisObject) {
+            objectCache.put(voId, versionedObject);
+            allVersionsOfThisObject.add(voId.getVersion());
+        }
     }
 
+    /**
+     * Returns true if the objectCache has the target voId.
+     *
+     * @param voId the object and version to check
+     * @return true if target exists
+     */
     public Boolean containsKey(VersionedObjectIdentifier voId) {
         return objectCache.asMap().containsKey(voId);
     }
 
-    public SoftReference<Map.Entry<Long, ICorfuSMR>> floorEntry(VersionedObjectIdentifier voId) {
-        final TreeMap<Long, ICorfuSMR> versions = objectMap.get(voId.getObjectId());
-        if (versions == null) {
+    /**
+     * For a given voId, find in all versions of this object that has the greatest
+     * version && version <= voId.getVersion.
+     *
+     * @param voId the object and version to check
+     * @return a pair of (voId, versionedObject) in which the voId contains the
+     *         floor version.
+     */
+    public SoftReference<Map.Entry<VersionedObjectIdentifier, ICorfuSMR>> floorEntry(VersionedObjectIdentifier voId) {
+        final TreeSet<Long> allVersionsOfThisObject = objectVersions.get(voId.getObjectId());
+
+        if (allVersionsOfThisObject == null) {
+            // The object has not been created
             return new SoftReference<>(null);
         } else {
-            return new SoftReference<>(versions.floorEntry(voId.getVersion()));
+            synchronized (allVersionsOfThisObject) {
+                Long floorVersion = allVersionsOfThisObject.floor(voId.getVersion());
+                if (floorVersion == null)
+                    return new SoftReference<>(null);
+
+                VersionedObjectIdentifier id = new VersionedObjectIdentifier(voId.getObjectId(), floorVersion);
+                return new SoftReference<>(Pair.of(id, objectCache.getIfPresent(id)));
+            }
         }
     }
 
+    /**
+     * Returns true if objectCache has any versionedObject of a certain object.
+     * Checks the objectVersions.
+     *
+     * @param objectId the object id to check
+     * @return true if target object exists
+     */
     public Boolean containsObject(UUID objectId) {
         // TODO: what if an object existing in objectCache but not in objectMap?
         // This can happen when MVOCache::put is interrupted
-        return objectMap.containsKey(objectId);
+        return objectVersions.containsKey(objectId);
     }
 }

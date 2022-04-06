@@ -18,6 +18,7 @@ public class VersionedObjectIdentifier {
 
     @Getter
     @Setter
+    @NonNull
     private long version;
 
     @Override

@@ -27,6 +27,9 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
     UUID streamId = CorfuRuntime.getStreamID("test");
     CorfuRuntime rt;
 
+    private static final long SMALL_CACHE_SIZE = 3;
+    private static final long LARGE_CACHE_SIZE = 50_000;
+
     private void setupSerializer() {
         ISerializer protoSerializer = new ProtobufSerializer(new ConcurrentHashMap<>());
         rt.getSerializers().registerSerializer(protoSerializer);
@@ -55,7 +58,12 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
     @Test
     public void testTxn() {
-        rt = getDefaultRuntime();
+        addSingleServer(SERVERS.PORT_0);
+        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(LARGE_CACHE_SIZE)
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
         setupSerializer();
         openTable();
 
@@ -137,7 +145,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
     public void testAccessStaleVersion() {
         addSingleServer(SERVERS.PORT_0);
         rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
-                .maxCacheEntries(3)
+                .maxCacheEntries(SMALL_CACHE_SIZE)
                 .build())
                 .parseConfigurationString(getDefaultConfigurationString())
                 .connect();
@@ -183,7 +191,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
     public void simpleParallelAccess() throws InterruptedException {
         addSingleServer(SERVERS.PORT_0);
         rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
-                .maxCacheEntries(3)
+                .maxCacheEntries(SMALL_CACHE_SIZE)
                 .build())
                 .parseConfigurationString(getDefaultConfigurationString())
                 .connect();

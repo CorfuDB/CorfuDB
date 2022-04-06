@@ -150,15 +150,15 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         }
 
         // Find the entry with the greatest version less than or equal to the given version
-        SoftReference<Map.Entry<Long, ICorfuSMR>> floorEntry = mvoCache.floorEntry(
-                new VersionedObjectIdentifier(streamID, timestamp));
+        SoftReference<Map.Entry<VersionedObjectIdentifier, ICorfuSMR>> floorEntry =
+                mvoCache.floorEntry(new VersionedObjectIdentifier(streamID, timestamp));
         if (floorEntry.get() == null) {
             resetUnsafe(object);
             // Do not allow going back to previous versions
             throw new StaleObjectVersionException(streamID, timestamp);
         } else {
             object.setImmutableState(floorEntry.get().getValue().getImmutableState());
-            smrStream.seek(floorEntry.get().getKey());
+            smrStream.seek(floorEntry.get().getKey().getVersion());
         }
     }
 
