@@ -144,7 +144,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
     private void prepareObjectBeforeSync(T object, Long timestamp) {
         // The first access to this object should always proceed
-        if (!mvoCache.containsObject(streamID)) {
+        if (Boolean.FALSE.equals(mvoCache.containsObject(streamID))) {
             resetUnsafe(object);
             return;
         }
@@ -167,15 +167,19 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         AtomicReference<T> wrappedObject = new AtomicReference<>(object);
 
         Runnable syncStreamRunnable = () ->
-            stream.streamUpTo(timestamp)
-                .forEachOrdered(entry -> {
+            stream.streamUpToInList(timestamp)
+                .forEachOrdered(entryList -> {
                     try {
                         // TODO: how expensive?
                         T nextVersion = newObjectFn.get();
                         nextVersion.setImmutableState(wrappedObject.get().getImmutableState());
-                        applyUpdateUnsafe(nextVersion, entry);
-                        VersionedObjectIdentifier vloId =
-                                new VersionedObjectIdentifier(streamID, entry.getGlobalAddress());
+                        // Apply all updates in a MultiSMREntry
+                        for (SMREntry entry : entryList) {
+                            applyUpdateUnsafe(nextVersion, entry);
+                        }
+                        // TODO: is it possible that a MultiSMREntry has 0 SMREntry?
+                        VersionedObjectIdentifier vloId = new VersionedObjectIdentifier(
+                                streamID, entryList.get(0).getGlobalAddress());
                         mvoCache.put(vloId, nextVersion);
                         wrappedObject.set(nextVersion);
                     } catch (Exception e) {

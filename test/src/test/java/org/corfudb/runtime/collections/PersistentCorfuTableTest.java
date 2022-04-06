@@ -12,7 +12,7 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.test.TestSchema;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
- import org.junit.Test;
+import org.junit.Test;
 
 import java.util.HashSet;
 import java.util.UUID;
@@ -183,14 +183,14 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
     public void simpleParallelAccess() throws InterruptedException {
         addSingleServer(SERVERS.PORT_0);
         rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
-                .maxCacheEntries(10)
+                .maxCacheEntries(3)
                 .build())
                 .parseConfigurationString(getDefaultConfigurationString())
                 .connect();
         setupSerializer();
         openTable();
 
-        int readSize = 10;
+        int readSize = 100;
 
         // 1st txn at v0 puts keys {0, .., readSize-1} into the table
         rt.getObjectsView().TXBegin();

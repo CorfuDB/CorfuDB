@@ -3,7 +3,6 @@ package org.corfudb.runtime.object;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalNotification;
-import com.sun.org.apache.xpath.internal.operations.Bool;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 
@@ -24,20 +23,21 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class MVOCache {
 
-    // Both objectMap and objectCache hold strong references to objects
+    // Both objectMap and objectCache hold strong references to objects.
     // key is basically a pair of (objectId, version)
     // value is the actually MVO object
     private final Cache<VersionedObjectIdentifier, ICorfuSMR> objectCache;
 
     // This objectMap is updated at two places
-    // 1) put() which puts a new version of some object to the objectMap
+    // 1) put() which puts a new version of an object to the objectMap
     // 2) as a side effect of put(), some old versions are evicted from the cache
     // TODO: access/mutation to objectMap should be synchronized
     // Q: Can we use objectCache.asMap() instead of maintaining an external view?
     // A: No. Although asMap() returns a thread-safe weakly-consistent map, it is
     //    not a tree structure so it's very inefficient to implement headMap() and
     //    floorEntry() on top of it.
-    private final ConcurrentHashMap<UUID, TreeMap<Long, ICorfuSMR>> objectMap = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, TreeMap<Long, ICorfuSMR>> objectMap =
+            new ConcurrentHashMap<>();
 
     private final long DEAFULT_CACHE_EXPIRY_TIME_IN_SECONDS = 300;
 

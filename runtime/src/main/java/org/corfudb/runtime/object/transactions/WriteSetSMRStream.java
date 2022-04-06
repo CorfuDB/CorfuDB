@@ -242,6 +242,11 @@ public class WriteSetSMRStream implements ISMRStream {
     }
 
     @Override
+    public Stream<List<SMREntry>> streamUpToInList(long maxGlobal) {
+        return Stream.of(remainingUpTo(maxGlobal));
+    }
+
+    @Override
     public long append(SMREntry entry,
                        Function<TokenResponse, Boolean> acquisitionCallback,
                        Function<TokenResponse, Boolean> deacquisitionCallback) {

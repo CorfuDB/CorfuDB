@@ -42,6 +42,8 @@ public interface ISMRStream {
 
     Stream<SMREntry> streamUpTo(long maxGlobal);
 
+    Stream<List<SMREntry>> streamUpToInList(long maxGlobal);
+
     /**
      * Append a SMREntry to the stream, returning the global address
      * it was written at.

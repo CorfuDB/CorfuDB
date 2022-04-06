@@ -155,6 +155,15 @@ public class StreamViewSMRAdapter implements ISMRStream {
                 .flatMap(List::stream);
     }
 
+    @Override
+    public Stream<List<SMREntry>> streamUpToInList(long maxGlobal) {
+        return streamView.streamUpTo(maxGlobal)
+                .filter(m -> m.getType() == DataType.DATA)
+                .filter(m -> m.getPayload(runtime) instanceof ISMRConsumable
+                        || m.hasCheckpointMetadata())
+                .map(this::dataAndCheckpointMapper);
+    }
+
     /**
      * Append a SMREntry to the stream, returning the global address
      * it was written at.
