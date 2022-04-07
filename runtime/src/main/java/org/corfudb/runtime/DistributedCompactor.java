@@ -50,8 +50,12 @@ public class DistributedCompactor {
 
     private TableName currentCPTable = null;
 
-    private static final String COMPACTION_MANAGER_TABLE_NAME = "CompactionManager";
-    private static final String CHECKPOINT_STATUS_TABLE_NAME = "CheckpointStatusTable";
+    public static final long CONN_RETRY_DELAY_MILLISEC = 500;
+    public static final String COMPACTION_MANAGER_TABLE_NAME = "CompactionManager";
+    public static final String CHECKPOINT_STATUS_TABLE_NAME = "CheckpointStatusTable";
+    public static final String ACTIVE_CHECKPOINTS_TABLE_NAME = "ActiveCheckpoints";
+    public static final String PREVIOUS_TOKEN = "previousTokenTable";
+
     private static final String CLIENT_LIVENESS_TABLE_NAME = "ClientLivenessTable";
     public static final String NODE_TOKEN = "node-token";
     public static final String CHECKPOINT = "checkpoint";
@@ -436,7 +440,7 @@ public class DistributedCompactor {
         return epochCmp < 0 ? a : b;
     }
 
-    private<K, V> Token appendCheckpoint(CorfuTable<K, V> corfuTable, TableName tableName, CorfuRuntime rt) {
+    public static <K, V> Token appendCheckpoint(CorfuTable<K, V> corfuTable, TableName tableName, CorfuRuntime rt) {
         MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
         mcw.addMap(corfuTable);
 
@@ -546,7 +550,7 @@ public class DistributedCompactor {
         return corfuTableBuilder.open();
     }
 
-    private CheckpointingStatus getCheckpointingStatus(CheckpointingStatus.StatusType statusType,
+     CheckpointingStatus getCheckpointingStatus(CheckpointingStatus.StatusType statusType,
                                                        boolean endTimestamp,
                                                        @Nullable TokenMsg startToken,
                                                        @Nullable TokenMsg endToken) {
@@ -574,5 +578,41 @@ public class DistributedCompactor {
                 ProtobufFileDescriptor.class);
         return new ProtobufSerializer(classMap);
     }
+
+    /**
+     * In the global checkpoint map we examine if there is a special "freeze token"
+     * The sequence part of this token is overloaded with the timestamp
+     * when the freeze was requested.
+     * Now checkpointer being a busybody has limited patience (2 hours)
+     * If the freeze request is within 2 hours it will honor it and step aside.
+     * Otherwise it will angrily remove the freezeToken and continue about
+     * its business.
+     * @return - true if checkpointing should be skipped, false if not.
+     */
+    public static boolean isCheckpointFrozen(CorfuStore corfuStore, final Table<StringKey, TokenMsg, Message> chkptMap) {
+        final StringKey freezeCheckpointNS = StringKey.newBuilder().setKey("freezeCheckpointNS").build();
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            TokenMsg freezeToken = txn.getRecord(chkptMap, freezeCheckpointNS).getPayload();
+
+            final long patience = 2 * 60 * 60 * 1000;
+            if (freezeToken != null) {
+                long now = System.currentTimeMillis();
+                long frozeAt = freezeToken.getSequence();
+                Date frozeAtDate = new Date(frozeAt);
+                if (now - frozeAt > patience) {
+                    txn.delete(chkptMap, freezeCheckpointNS);
+                    log.warn("Checkpointer asked to freeze at {} but run out of patience",
+                            frozeAtDate);
+                } else {
+                    log.warn("Checkpointer asked to freeze at {}", frozeAtDate);
+                    txn.commit();
+                    return true;
+                }
+            }
+            txn.commit();
+        }
+        return false;
+    }
+
 }
 
