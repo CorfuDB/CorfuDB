@@ -2,11 +2,10 @@ package org.corfudb.runtime.checkpoint;
 
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.ServerContextBuilder;
-import org.corfudb.infrastructure.TestLayoutBuilder;
-import org.corfudb.infrastructure.TestServerRouter;
+import org.corfudb.infrastructure.*;
+import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
+import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
@@ -22,14 +21,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
@@ -39,6 +32,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
     private static final String COMPACTION_MANAGER_TABLE_NAME = "CompactionManager";
     private static final String CHECKPOINT_STATUS_TABLE_NAME = "CheckpointStatusTable";
+    private static final String ACTIVE_CHECKPOINT_TABLE = "ActiveCheckpointTable";
     public static final String CHECKPOINT = "checkpoint";
 
     private static final StringKey COMPACTION_MANAGER_KEY =
@@ -46,6 +40,9 @@ public class DistributedCompactorTests extends AbstractViewTest {
     private static final StringKey CHECKPOINT_KEY = StringKey.newBuilder().setKey("minCheckpointToken").build();
 
     private static final int N_THREADS = 3;
+    private static final int WAIT_FOR_FINISH_CYCLE = 10;
+    private static final int LIVENESS_TIMEOUT = 1000;
+    private static final int VALIDATE_LIVENESS_INTERVAL = 50;
 
     private CorfuRuntime runtime1 = null;
     private CorfuRuntime runtime2 = null;
@@ -176,6 +173,20 @@ public class DistributedCompactorTests extends AbstractViewTest {
         }
     }
 
+    private Table<TableName, ActiveCPStreamMsg, Message> openActiveCheckpointTable() {
+        try {
+            return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                    ACTIVE_CHECKPOINT_TABLE,
+                    TableName.class,
+                    ActiveCPStreamMsg.class,
+                    null,
+                    TableOptions.fromProtoSchema(ActiveCPStreamMsg.class));
+        } catch (Exception e) {
+            log.error("Exception while opening tables ", e);
+            return null;
+        }
+    }
+
     private Table<StringKey, StringKey, Message> openStream(CorfuStore corfuStore, String streamName) {
         try {
             Table<StringKey, StringKey, Message> table = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
@@ -207,19 +218,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
         }
     }
 
-    private boolean executeRunCompactor(CorfuRuntime corfuRuntime, CorfuRuntime cpRuntime, boolean isLeader) {
-        try {
-            System.out.println("runtime clientId: "+corfuRuntime.getParameters().getClientId());
-            DistributedCompactor distributedCompactor = new DistributedCompactor(
-                    corfuRuntime, cpRuntime, null, isLeader);
-            distributedCompactor.runCompactor();
-        } catch (Exception e) {
-            return false;
-        }
-        return true;
-    }
-
-    private boolean verifyManagerStatus(CheckpointingStatus.StatusType targetStatus) {
+    private boolean verifyManagerStatus(StatusType targetStatus) {
         openCompactionManagerTable();
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(COMPACTION_MANAGER_TABLE_NAME,
@@ -230,10 +229,10 @@ public class DistributedCompactorTests extends AbstractViewTest {
                 return true;
             }
         }
-        return true;
+        return false;
     }
 
-    private boolean verifyCheckpointStatusTable(CheckpointingStatus.StatusType targetStatus, int maxFailedTables) {
+    private boolean verifyCheckpointStatusTable(StatusType targetStatus, int maxFailedTables) {
 
         Table<TableName, CheckpointingStatus, Message> cpStatusTable = openCheckpointStatusTable();
 
@@ -275,165 +274,215 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
     @Test
     public void initTest() {
-        DistributedCompactor distributedCompactor1 =
-                new DistributedCompactor(runtime1, cpRuntime1, null, true);
-        DistributedCompactor distributedCompactor2 =
-                new DistributedCompactor(runtime2, cpRuntime2, null, false);
-        DistributedCompactor distributedCompactor3 =
-                new DistributedCompactor(runtime3, cpRuntime3, null, true);
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, UUID.randomUUID());
+        compactorLeaderServices1.setLeader(true);
+        CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime2, UUID.randomUUID());
+        compactorLeaderServices2.setLeader(false);
 
-        assert(distributedCompactor1.init());
-        assert(distributedCompactor2.init());
-        assert(!distributedCompactor3.init());
+        assert(compactorLeaderServices1.init());
+        assert(!compactorLeaderServices2.init());
+        assert(verifyManagerStatus(StatusType.STARTED));
+        assert(verifyCheckpointStatusTable(StatusType.IDLE, 0));
+    }
 
-        assert(verifyManagerStatus(CheckpointingStatus.StatusType.STARTED));
-        assert(verifyCheckpointStatusTable(CheckpointingStatus.StatusType.IDLE, 0));
+    @Test
+    public void initMultipleLeadersTest1() {
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, UUID.randomUUID());
+        compactorLeaderServices1.setLeader(true);
+        CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime2, UUID.randomUUID());
+        compactorLeaderServices2.setLeader(true);
+        CompactorLeaderServices compactorLeaderServices3 = new CompactorLeaderServices(runtime3, UUID.randomUUID());
+        compactorLeaderServices3.setLeader(true);
+
+        boolean init1 = compactorLeaderServices1.init();
+        boolean init2 = compactorLeaderServices2.init();
+        boolean init3 = compactorLeaderServices3.init();
+        assert(init1 ^ init2 ^ init3);
+        assert(verifyManagerStatus(StatusType.STARTED));
+        assert(verifyCheckpointStatusTable(StatusType.IDLE, 0));
+    }
+
+    @Test
+    public void initMultipleLeadersTest2() {
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, UUID.randomUUID());
+        compactorLeaderServices1.setLeader(true);
+        CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime2, UUID.randomUUID());
+        compactorLeaderServices2.setLeader(true);
+
+        ExecutorService scheduler = Executors.newFixedThreadPool(2);
+        Future<Boolean> future1 = scheduler.submit(() -> compactorLeaderServices1.init());
+        Future<Boolean> future2 = scheduler.submit(() -> compactorLeaderServices2.init());
+        compactorLeaderServices1.setLeader(false);
+
+        try {
+            assert(!(future1.get() && future2.get()));
+            if (future1.get() ^ future1.get()) {
+                assert (verifyManagerStatus(StatusType.STARTED));
+                assert (verifyCheckpointStatusTable(StatusType.IDLE, 0));
+            }
+        } catch (Exception e) {
+            log.warn("Unable to get results");
+        }
     }
 
     @Test
     public void startCheckpointingTest() {
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, UUID.randomUUID());
+        compactorLeaderServices1.setLeader(true);
+        compactorLeaderServices1.init();
         DistributedCompactor distributedCompactor1 =
-                new DistributedCompactor(runtime1, cpRuntime1, null, true);
+                new DistributedCompactor(runtime1, cpRuntime1, null, false);
         DistributedCompactor distributedCompactor2 =
-                new DistributedCompactor(runtime2, cpRuntime2, null, false);
+                new DistributedCompactor(runtime2, cpRuntime2, null, true);
         DistributedCompactor distributedCompactor3 =
-                new DistributedCompactor(runtime3, cpRuntime3, null, false);
+                new DistributedCompactor(runtime3, cpRuntime3, null, true);
 
-        distributedCompactor1.init();
         int count1 = distributedCompactor1.startCheckpointing();
         int count2 = distributedCompactor2.startCheckpointing();
         int count3 = distributedCompactor3.startCheckpointing();
         int total = count1 + count2 + count3;
 
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            //This assert ensures all tables are checkpointed by only one of the clients
+            //This assert ensures each table is checkpointed by only one of the clients
             Assert.assertEquals(txn.count(CHECKPOINT_STATUS_TABLE_NAME), total);
             txn.commit();
         }
-        assert(verifyManagerStatus(CheckpointingStatus.StatusType.STARTED));
-        assert(verifyCheckpointStatusTable(CheckpointingStatus.StatusType.COMPLETED, 0));
+        assert(verifyManagerStatus(StatusType.STARTED));
+        assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
     }
 
     @Test
-    public void finishCompactionCycleTest() {
-        DistributedCompactor distributedCompactor1 =
-                new DistributedCompactor(runtime1, cpRuntime1, null, true);
+    public void finishCompactionCycleSuccessTest() {
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, UUID.randomUUID());
+        compactorLeaderServices1.setLeader(true);
+        compactorLeaderServices1.init();
 
-        distributedCompactor1.init();
-        distributedCompactor1.finishCompactionCycle();
+        DistributedCompactor distributedCompactor = new DistributedCompactor(runtime1, cpRuntime1, null, false);
+        distributedCompactor.startCheckpointing();
 
-        assert(verifyManagerStatus(CheckpointingStatus.StatusType.FAILED));
-        assert(verifyCheckpointStatusTable(CheckpointingStatus.StatusType.IDLE, 0));
-    }
+        compactorLeaderServices1.finishCompactionCycle();
 
-    /**
-     * Happy path. 3 Compaction clients checkpoint in parallel with one of them acting as the leader
-     */
-    @Test
-    public void testDistributorCompactor() {
-        for (int i = 0; i < N_THREADS*2; i++) {
-            openStream(corfuStore, STREAM_NAME_PREFIX + i);
-            populateStream(STREAM_NAME_PREFIX + i, NUM_RECORDS);
-        }
-
-        ExecutorService executorService = Executors.newFixedThreadPool(N_THREADS);
-        executorService.submit(() -> executeRunCompactor(runtime1, cpRuntime1, false));
-        executorService.submit(() -> executeRunCompactor(runtime2, cpRuntime2,false));
-        executorService.submit(() -> executeRunCompactor(runtime3, cpRuntime3, true));
-
-        try {
-            final int TIMEOUT = 45;
-            executorService.awaitTermination(TIMEOUT, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            log.info("Interrupted");
-        }
-
-        assert(verifyManagerStatus(CheckpointingStatus.StatusType.COMPLETED));
-        assert(verifyCheckpointStatusTable(CheckpointingStatus.StatusType.COMPLETED, 0));
+        assert(verifyManagerStatus(StatusType.COMPLETED));
+        assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
         assert(verifyCheckpointTable());
     }
 
-    /**
-     * One of the non-leader Compaction clients fails abruptly.
-     */
     @Test
-    public void testNonLeaderFails() {
-        for (int i = 0; i < N_THREADS*2; i++) {
-            openStream(corfuStore, STREAM_NAME_PREFIX + i);
-            populateStream(STREAM_NAME_PREFIX + i, NUM_RECORDS);
-        }
+    public void finishCompactionCycleFailureTest() {
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, UUID.randomUUID());
+        compactorLeaderServices1.setLeader(true);
+        compactorLeaderServices1.init();
 
-        ExecutorService executorService = Executors.newFixedThreadPool(N_THREADS);
-        Future<Boolean> future1 = executorService.submit(() -> executeRunCompactor(runtime1, cpRuntime1, false));
-        executorService.submit(() -> executeRunCompactor(runtime2, cpRuntime2,false));
-        executorService.submit(() -> executeRunCompactor(runtime3, cpRuntime3, true));
+        //Checkpointing not done
+        compactorLeaderServices1.finishCompactionCycle();
 
-        try {
-            final int WAIT = 236;
-            TimeUnit.MILLISECONDS.sleep(WAIT);
-            future1.cancel(true);
-            executorService.awaitTermination(TIMEOUT, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            log.info("Interrupted");
-        }
-
-        assert(verifyManagerStatus(CheckpointingStatus.StatusType.FAILED));
-        assert(verifyCheckpointStatusTable(CheckpointingStatus.StatusType.COMPLETED, 1));
-        assert(verifyCheckpointTable());
-    }
-
-    /**
-     * The leader Compaction clients fails abruptly.
-     */
-    @Test
-    public void testLeaderFails() {
-        for (int i = 0; i < N_THREADS*2; i++) {
-            openStream(corfuStore, STREAM_NAME_PREFIX + i);
-            populateStream(STREAM_NAME_PREFIX + i, NUM_RECORDS);
-        }
-
-        ExecutorService executorService = Executors.newFixedThreadPool(N_THREADS);
-        executorService.submit(() -> executeRunCompactor(runtime1, cpRuntime1, false));
-        executorService.submit(() -> executeRunCompactor(runtime2, cpRuntime2,false));
-        Future<Boolean> future3 = executorService.submit(() -> executeRunCompactor(runtime3, cpRuntime3, true));
-
-        try {
-            final int WAIT = 236;
-            TimeUnit.MILLISECONDS.sleep(WAIT);
-            future3.cancel(true);
-            executorService.awaitTermination(TIMEOUT, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            log.info("Interrupted");
-        }
-
-        assert(verifyManagerStatus(CheckpointingStatus.StatusType.STARTED));
-        assert(verifyCheckpointStatusTable(CheckpointingStatus.StatusType.COMPLETED, 1));
+        assert(verifyManagerStatus(StatusType.FAILED));
+        assert(verifyCheckpointStatusTable(StatusType.IDLE, 0));
         assert(!verifyCheckpointTable());
     }
 
-    /**
-     * Split brain scenario
-     */
+    private boolean pollForFinishCheckpointing() {
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(COMPACTION_MANAGER_TABLE_NAME,
+                    COMPACTION_MANAGER_KEY).getPayload();
+            txn.commit();
+            if (managerStatus != null && (managerStatus.getStatus() == StatusType.COMPLETED
+                    || managerStatus.getStatus() == StatusType.FAILED)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Test
-    public void testSplitBrain1() {
-        for (int i = 0; i < N_THREADS*2; i++) {
-            openStream(corfuStore, STREAM_NAME_PREFIX + i);
-            populateStream(STREAM_NAME_PREFIX + i, NUM_RECORDS);
+    public void validateLivenessLeaderTest() {
+        //make some client to start cp
+        //verifyCheckpointStatusTable
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, UUID.randomUUID());
+        compactorLeaderServices1.setLeader(true);
+        compactorLeaderServices1.init();
+
+        DistributedCompactor distributedCompactor = new DistributedCompactor(runtime1, cpRuntime1, null, false);
+        distributedCompactor.startCheckpointing();
+
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        scheduler.scheduleWithFixedDelay(() -> compactorLeaderServices1.validateLiveness(LIVENESS_TIMEOUT), 0, VALIDATE_LIVENESS_INTERVAL, TimeUnit.MILLISECONDS);
+        try {
+            while (!pollForFinishCheckpointing()) {
+                TimeUnit.MILLISECONDS.sleep(WAIT_FOR_FINISH_CYCLE);
+            }
+        } catch (InterruptedException e) {
+            log.warn("Sleep interrupted, ", e);
         }
 
-        ExecutorService executorService = Executors.newFixedThreadPool(N_THREADS);
-        executorService.submit(() -> executeRunCompactor(runtime1, cpRuntime1, false));
-        executorService.submit(() -> executeRunCompactor(runtime2, cpRuntime2,true));
-        executorService.submit(() -> executeRunCompactor(runtime3, cpRuntime3, true));
+        assert(verifyManagerStatus(StatusType.COMPLETED));
+        assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
+        assert(verifyCheckpointTable());
+    }
+
+    @Test
+    public void validateLivenessNonLeaderTest() {
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, UUID.randomUUID());
+        compactorLeaderServices1.setLeader(true);
+        compactorLeaderServices1.init();
+        compactorLeaderServices1.setLeader(false);
+
+        DistributedCompactor distributedCompactor = new DistributedCompactor(runtime1, cpRuntime1, null, false);
+        distributedCompactor.startCheckpointing();
+
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        scheduler.scheduleWithFixedDelay(() -> compactorLeaderServices1.validateLiveness(LIVENESS_TIMEOUT), 0,
+                VALIDATE_LIVENESS_INTERVAL, TimeUnit.MILLISECONDS);
 
         try {
-            executorService.awaitTermination(TIMEOUT, TimeUnit.SECONDS);
+            TimeUnit.MILLISECONDS.sleep(LIVENESS_TIMEOUT);
         } catch (InterruptedException e) {
-            log.info("Interrupted");
+            log.warn("Sleep interrupted, ", e);
         }
 
-        assert(verifyManagerStatus(CheckpointingStatus.StatusType.COMPLETED));
-        assert(verifyCheckpointStatusTable(CheckpointingStatus.StatusType.COMPLETED, 0));
+        assert(verifyManagerStatus(StatusType.STARTED));
+        assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
+        assert(!verifyCheckpointTable());
+    }
+
+    private static String STREAM_NAME = "streamNameA";
+    @Test
+    public void validateLivenessFailureTest() {
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime2, UUID.randomUUID());
+        compactorLeaderServices1.setLeader(true);
+        compactorLeaderServices1.init();
+
+        Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointTable = openActiveCheckpointTable();
+        Table<TableName, CheckpointingStatus, Message> checkpointStatusTable = openCheckpointStatusTable();
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            TableName table = TableName.newBuilder().setNamespace(CORFU_SYSTEM_NAMESPACE).setTableName(STREAM_NAME).build();
+            txn.putRecord(checkpointStatusTable, table,
+                    CheckpointingStatus.newBuilder().setStatusValue(StatusType.STARTED_VALUE).build(), null);
+            txn.putRecord(activeCheckpointTable,
+                    table,
+                    ActiveCPStreamMsg.getDefaultInstance(),
+                    null);
+            txn.commit();
+        }
+
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        scheduler.scheduleWithFixedDelay(() -> compactorLeaderServices1.validateLiveness(LIVENESS_TIMEOUT), 0, VALIDATE_LIVENESS_INTERVAL, TimeUnit.MILLISECONDS);
+
+
+        DistributedCompactor distributedCompactor = new DistributedCompactor(runtime1, cpRuntime1,
+                null, false);
+        distributedCompactor.startCheckpointing();
+
+        try {
+            while (!pollForFinishCheckpointing()) {
+                TimeUnit.MILLISECONDS.sleep(WAIT_FOR_FINISH_CYCLE);
+            }
+        } catch (InterruptedException e) {
+            log.warn("Sleep interrupted, ", e);
+        }
+
+        assert(verifyManagerStatus(StatusType.FAILED));
+        assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 1));
         assert(verifyCheckpointTable());
     }
 }

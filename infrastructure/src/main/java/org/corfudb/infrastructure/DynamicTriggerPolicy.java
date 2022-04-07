@@ -14,14 +14,12 @@ import java.util.*;
 public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
 
     private final List<UUID> sensitiveStreams = new ArrayList<>();
-    private final CorfuRuntime corfuRuntime;
     private Map<UUID, Long> previousSensitiveStreamsSize = new HashMap<>();
     private Long previousAddressSpaceSize = Long.MAX_VALUE;
     private Long previousTriggerMillis = Long.valueOf(0);
+    private CorfuRuntime corfuRuntime;
 
-    DynamicTriggerPolicy(CorfuRuntime corfuRuntime, List<TableName> sensitiveTables) {
-        this.corfuRuntime = corfuRuntime;
-
+    public void setSensitiveStreams(List<TableName> sensitiveTables) {
         for (TableName table : sensitiveTables) {
             sensitiveStreams.add(CorfuRuntime.getStreamID(
                     TableRegistry.getFullyQualifiedTableName(table.getNamespace(), table.getTableName())));
@@ -32,7 +30,8 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
     public boolean shouldTrigger(long interval) {
         //1. Checks if one of the sensitive streams requires compaction
         //2. Checks if the address space size is bigger than previous cycle
-        //3. If it has been > 30 mins since the last compaction
+        //3. If it has been > interval mins since the last compaction
+
 
         log.info("running shouldTrigger");
         Long currentAddressSpaceSize = corfuRuntime.getAddressSpaceView().getLogTail()
@@ -62,6 +61,11 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
 
         log.info("shouldTrigger: {}", shouldTrigger);
         return shouldTrigger;
+    }
+
+    @Override
+    public void setCorfuRuntime(CorfuRuntime corfuRuntime) {
+        this.corfuRuntime = corfuRuntime;
     }
 
     private void setPreviousSensitiveStreamsSize() {

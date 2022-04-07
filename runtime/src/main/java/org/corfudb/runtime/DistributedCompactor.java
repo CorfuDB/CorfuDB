@@ -3,6 +3,8 @@ package org.corfudb.runtime;
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuStoreMetadata.*;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
@@ -11,12 +13,13 @@ import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
-import org.corfudb.runtime.CorfuCompactorManagement.ClientLiveness;
+import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.proto.RpcCommon.TokenMsg;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.*;
@@ -24,6 +27,7 @@ import org.corfudb.util.serializer.*;
 import javax.annotation.Nullable;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.Supplier;
@@ -36,19 +40,12 @@ public class DistributedCompactor {
     private final CorfuRuntime corfuRuntime;
     private final CorfuRuntime cpRuntime;
     private final String persistedCacheRoot;
+    private final boolean isClient;
 
     private KeyDynamicProtobufSerializer keyDynamicProtobufSerializer;
     private ISerializer protobufSerializer;
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor((r) -> {
-        Thread t = Executors.defaultThreadFactory().newThread(r);
-        t.setName("DistributedCompactorLivenessThread");
-        t.setDaemon(true);
-        return t;
-    });
 
     private final UuidMsg clientId;
-
-    private TableName currentCPTable = null;
 
     public static final long CONN_RETRY_DELAY_MILLISEC = 500;
     public static final String COMPACTION_MANAGER_TABLE_NAME = "CompactionManager";
@@ -57,13 +54,14 @@ public class DistributedCompactor {
     public static final String PREVIOUS_TOKEN = "previousTokenTable";
 
     private static final String CLIENT_LIVENESS_TABLE_NAME = "ClientLivenessTable";
+//    private static final String ACTIVE_CHECKPOINTS_TABLE_NAME = "ActiveCheckpointTable";
     public static final String NODE_TOKEN = "node-token";
     public static final String CHECKPOINT = "checkpoint";
 
     private final Set<String> metadataTables = new HashSet<>(
             Arrays.asList(COMPACTION_MANAGER_TABLE_NAME,
                     CHECKPOINT_STATUS_TABLE_NAME,
-                    CLIENT_LIVENESS_TABLE_NAME,
+                    ACTIVE_CHECKPOINTS_TABLE_NAME,
                     CHECKPOINT,
                     NODE_TOKEN,
                     REGISTRY_TABLE_NAME,
@@ -74,24 +72,18 @@ public class DistributedCompactor {
     public static final StringKey COMPACTION_MANAGER_KEY = StringKey.newBuilder().setKey("CompactionManagerKey").build();
     public static final StringKey CHECKPOINT_KEY = StringKey.newBuilder().setKey("minCheckpointToken").build();
 
-    private static final int CP_TIMEOUT = 300000;
-    private static final int LIVENESS_TIMEOUT = 3000;
-
     private Table<StringKey, CheckpointingStatus, Message> compactionManagerTable;
     private Table<TableName, CheckpointingStatus, Message> checkpointingStatusTable;
-    private Table<UuidMsg, ClientLiveness, Message> clientLivenessTable;
-    private Table<StringKey, TokenMsg, Message> checkpointTable;
-
-    private final Boolean isLeader;
+    private Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointTable;
 
     private final CorfuStore corfuStore;
 
-    public DistributedCompactor(CorfuRuntime corfuRuntime, CorfuRuntime cpRuntime, String persistedCacheRoot, Boolean isLeader) {
+    public DistributedCompactor(CorfuRuntime corfuRuntime, CorfuRuntime cpRuntime, String persistedCacheRoot, boolean isClient) {
         this.corfuRuntime = corfuRuntime;
         this.cpRuntime = cpRuntime;
         this.persistedCacheRoot = persistedCacheRoot;
-        this.isLeader = isLeader;
         this.corfuStore = new CorfuStore(corfuRuntime);
+        this.isClient = isClient;
 
         try {
             protobufSerializer = corfuRuntime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
@@ -121,142 +113,19 @@ public class DistributedCompactor {
                     null,
                     TableOptions.fromProtoSchema(CheckpointingStatus.class));
 
-            this.clientLivenessTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    CLIENT_LIVENESS_TABLE_NAME,
-                    UuidMsg.class,
-                    ClientLiveness.class,
+            this.activeCheckpointTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                    ACTIVE_CHECKPOINTS_TABLE_NAME,
+                    TableName.class,
+                    ActiveCPStreamMsg.class,
                     null,
-                    TableOptions.fromProtoSchema(ClientLiveness.class));
-
-            this.checkpointTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    CHECKPOINT,
-                    StringKey.class,
-                    TokenMsg.class,
-                    null,
-                    TableOptions.fromProtoSchema(TokenMsg.class));
+                    TableOptions.fromProtoSchema(ActiveCPStreamMsg.class));
         } catch (Exception e) {
             log.error("Caught an exception while opening Compaction management tables ", e);
-        }
-
-        scheduler.scheduleAtFixedRate(this::updateLiveness, 0, 1000, TimeUnit.MILLISECONDS);
-    }
-
-    public void runCompactor() {
-        //TODO: add condition when the status is invalid
-        // what to do when split brain happens
-
-        if (!init()) {
-            log.error("Exiting compaction cycle. Potential split brain scenario");
-            return;
-        }
-
-        try {
-            if (pollForCheckpointStarted(60000)) {
-                startCheckpointing();
-            }
-        }  catch (InterruptedException e) {
-            log.error("Checkpointing hasn't started. Exiting compaction cycle. Exception: {}", e);
-            return;
-        }
-
-        if (isLeader) {
-            finishCompactionCycle();
-        }
-        scheduler.shutdown();
-    }
-
-    public boolean init() {
-        if (isLeader) {
-            log.info("in init()");
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                CorfuStoreEntry compactionManagerRecord = txn.getRecord(COMPACTION_MANAGER_TABLE_NAME, COMPACTION_MANAGER_KEY);
-                CheckpointingStatus currentStatus = (CheckpointingStatus) compactionManagerRecord.getPayload();
-                txn.commit();
-
-                if (currentStatus != null) {
-                    log.info("currentStatus: {}", currentStatus.toString());
-                }
-                if (currentStatus != null && currentStatus.getClientId() != this.clientId &&
-                        validateLiveness(currentStatus.getClientId(), LIVENESS_TIMEOUT)) {
-                    return false;
-                }
-            }
-
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                txn.getRecord(COMPACTION_MANAGER_TABLE_NAME, COMPACTION_MANAGER_KEY);
-
-                CheckpointingStatus newStatus = getCheckpointingStatus(StatusType.INITIALIZING,
-                        false, null, null);
-                txn.putRecord(compactionManagerTable, COMPACTION_MANAGER_KEY, newStatus, null);
-                txn.commit();
-            } catch (TransactionAbortedException e) {
-                if (e.getAbortCause() == AbortCause.CONFLICT) {
-                    log.warn("Looks like another compactor started first. Message: {}", e.getCause());
-                } else {
-                    log.warn("Exception caught: {}", e.getStackTrace());
-                }
-                return false;
-            }
-
-            startPopulating();
-        }
-        return true;
-    }
-
-    private Boolean pollForCheckpointStarted (long timeout) throws InterruptedException{
-        long timeoutUntil = System.currentTimeMillis() + timeout;
-        while (System.currentTimeMillis() < timeoutUntil) {
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                CorfuStoreEntry compactionManagerRecord = txn.getRecord(COMPACTION_MANAGER_TABLE_NAME, COMPACTION_MANAGER_KEY);
-                CheckpointingStatus currentStatus = (CheckpointingStatus) compactionManagerRecord.getPayload();
-                txn.commit();
-                if (currentStatus == null) {
-                    continue;
-                }
-                if (currentStatus.getStatus() == StatusType.STARTED) {
-                    log.info("pollForCheckpointStarted: returning true");
-                    return true;
-                } else {
-                    TimeUnit.MILLISECONDS.sleep(timeout / 1000);
-                }
-            }
-        }
-        return false;
-    }
-
-    public void startPopulating() {
-        log.info("startPopulating");
-        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            CorfuStoreEntry compactionManagerRecord = txn.getRecord(COMPACTION_MANAGER_TABLE_NAME, COMPACTION_MANAGER_KEY);
-            CheckpointingStatus currentStatus = (CheckpointingStatus) compactionManagerRecord.getPayload();
-            txn.commit();
-            //TODO: add more conditions
-            if (!isLeader || currentStatus.getStatus() != StatusType.INITIALIZING) {
-                return;
-            }
-        }
-        List<TableName> tableNames = new ArrayList<>(corfuStore.listTables(null));
-        CheckpointingStatus idleStatus = getCheckpointingStatus(StatusType.IDLE,
-                false, null, null);
-
-        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            txn.clear(checkpointingStatusTable);
-            for (TableName table : tableNames) {
-                txn.putRecord(checkpointingStatusTable, table, idleStatus, null);
-            }
-            txn.commit();
-        }
-
-        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            //TODO: add startToken
-            CheckpointingStatus managerStatus = getCheckpointingStatus(StatusType.STARTED,
-                    false, null, null);
-            txn.putRecord(compactionManagerTable, COMPACTION_MANAGER_KEY, managerStatus, null);
-            txn.commit();
         }
     }
 
     public int startCheckpointing() {
+        long startCp = System.currentTimeMillis();
         int count = 0;
         keyDynamicProtobufSerializer = new KeyDynamicProtobufSerializer(cpRuntime);
         cpRuntime.getSerializers().registerSerializer(keyDynamicProtobufSerializer);
@@ -265,10 +134,12 @@ public class DistributedCompactor {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CorfuStoreEntry compactionManagerRecord = txn.getRecord(COMPACTION_MANAGER_TABLE_NAME, COMPACTION_MANAGER_KEY);
             CheckpointingStatus managerStatus = (CheckpointingStatus) compactionManagerRecord.getPayload();
-            txn.close();
-            if (managerStatus.getStatus() != StatusType.STARTED) {
+            txn.commit();
+            if (managerStatus == null || managerStatus.getStatus() != StatusType.STARTED) {
                 return count;
             }
+        } catch (Exception e) {
+            log.warn("Exception here? : ", e);
         }
 
         List<TableName> tableNames;
@@ -289,17 +160,24 @@ public class DistributedCompactor {
                     continue;
                 }
                 //TODO: add tokens?
-                CheckpointingStatus startStatus = getCheckpointingStatus(StatusType.STARTED,
-                        false, null, null);
+                CheckpointingStatus startStatus = getCheckpointingStatus(StatusType.STARTED, null, null);
                 txn.putRecord(checkpointingStatusTable, table, startStatus, null);
+
+                UUID streamId = CorfuRuntime.getCheckpointStreamIdFromName(table.getTableName());
+                long streamTail = corfuRuntime.getSequencerView()
+                        .getStreamAddressSpace(new StreamAddressRange(streamId, Address.MAX, Address.NON_ADDRESS)).getTail();
+                txn.putRecord(activeCheckpointTable, table,
+                        ActiveCPStreamMsg.newBuilder().setTailSequence(streamTail).setIsClientTriggered(isClient).build(),
+                        null);
+
                 txn.commit();
             } catch (TransactionAbortedException e) {
-                //TODO: do this in finishCompactionCycle
                 if (e.getAbortCause() == AbortCause.CONFLICT) {
                     log.warn("Another compactor tried to checkpoint this table");
                     continue;
                 } else {
                     //finishCompactionCycle will mark it as failed
+                    MicroMeterUtils.measure(count, "compaction.num_tables." + clientId.toString());
                     return count;
                 }
             }
@@ -307,13 +185,18 @@ public class DistributedCompactor {
             checkpointTable(table);
         }
 
+        long cpDuration = System.currentTimeMillis() - startCp;
+        MicroMeterUtils.time(Duration.ofMillis(cpDuration), "checkpoint.total.timer",
+                "clientId", clientId.toString());
+        log.info("Took {} ms to checkpoint the tables by client {}", cpDuration, clientId.toString());
+
+        MicroMeterUtils.measure(count, "compaction.num_tables." + clientId.toString());
         log.info("ClientId: {}, Checkpointed {} tables out of {}", this.clientId, count, tableNames.size());
+
         return count;
     }
 
     private void checkpointTable(TableName table) {
-        currentCPTable = table;
-
         CheckpointingStatus endStatus;
         try {
             Token newToken;
@@ -322,128 +205,23 @@ public class DistributedCompactor {
             } else {
                 newToken = appendCheckpoint(openTable(table, keyDynamicProtobufSerializer, cpRuntime), table, cpRuntime);
             }
-            endStatus = getCheckpointingStatus(StatusType.COMPLETED,
-                    true, null,
+            endStatus = getCheckpointingStatus(StatusType.COMPLETED, null,
                     TokenMsg.newBuilder().setEpoch(newToken.getEpoch()).setSequence(newToken.getSequence()).build());
         } catch (Exception e) {
             log.warn("Failed to checkpoint table: {} due to Exception: {}", table, e);
-            endStatus = getCheckpointingStatus(StatusType.FAILED,
-                    true, null, null);
+            endStatus = getCheckpointingStatus(StatusType.FAILED, null, null);
         }
 
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             txn.putRecord(checkpointingStatusTable, table, endStatus, null);
+            txn.delete(ACTIVE_CHECKPOINTS_TABLE_NAME, table);
             txn.commit();
         }
-        currentCPTable = null;
-    }
-
-    public void finishCompactionCycle() {
-        log.info("inside finishCompactionCycle");
-        if (isLeader) {
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                CorfuStoreEntry compactionManagerRecord = txn.getRecord(COMPACTION_MANAGER_TABLE_NAME, COMPACTION_MANAGER_KEY);
-                CheckpointingStatus managerStatus = (CheckpointingStatus) compactionManagerRecord.getPayload();
-                txn.commit();
-
-                if (managerStatus.getStatus() != StatusType.STARTED) {
-                    if (!validateLiveness(managerStatus.getClientId(), LIVENESS_TIMEOUT)) {
-                        txn.putRecord(compactionManagerTable, COMPACTION_MANAGER_KEY, getCheckpointingStatus(
-                                StatusType.FAILED, true, null, null), null);
-                    }
-
-                    return;
-                }
-            }
-
-                //TODO: else can verify if the compaction cycle was started by the same client as this
-//                if (managerStatus != null && managerStatus.getClientId() != this.clientId) {
-//                    txn.commit();
-//                    return;
-//                }
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                txn.getRecord(COMPACTION_MANAGER_TABLE_NAME, COMPACTION_MANAGER_KEY);
-                txn.putRecord(compactionManagerTable, COMPACTION_MANAGER_KEY, getCheckpointingStatus(
-                        StatusType.FINALIZING, true, null, null), null);
-                txn.commit();
-            } catch (TransactionAbortedException e) {
-                if (e.getAbortCause() == AbortCause.CONFLICT) {
-                    log.warn("Another compactor tried to checkpoint this table", e);
-                } else {
-                    log.error("TransactionAbortedException: {}", e.getStackTrace());
-                }
-                return;
-            }
-
-            List<TableName> tableNames;
-            TokenMsg minToken;
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                tableNames = new ArrayList<TableName>(txn.keySet(checkpointingStatusTable)
-                        .stream().collect(Collectors.toList()));
-                minToken = (TokenMsg) txn.getRecord(CHECKPOINT, CHECKPOINT_KEY).getPayload();
-            }
-            boolean failed = false;
-            TokenMsg newToken = null;
-            for (TableName table : tableNames) {
-                try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                    CheckpointingStatus tableStatus = (CheckpointingStatus) txn.getRecord(
-                            CHECKPOINT_STATUS_TABLE_NAME, table).getPayload();
-                    if (tableStatus.getStatus() == StatusType.FAILED || tableStatus.getStatus() == StatusType.IDLE) {
-                        failed = true;
-                    } else if (tableStatus.getStatus() == StatusType.STARTED) {
-                        long timeout = System.currentTimeMillis() + CP_TIMEOUT;
-                        tableStatus = (CheckpointingStatus) txn.getRecord(
-                                CHECKPOINT_STATUS_TABLE_NAME, table).getPayload();
-                        txn.commit();
-                        while (tableStatus.getStatus() == StatusType.STARTED) {
-                            if (System.currentTimeMillis() > timeout ||
-                                    !validateLiveness(tableStatus.getClientId(), LIVENESS_TIMEOUT)) {
-                                failed = true;
-                                break;
-                            } else {
-                                try {
-                                    TimeUnit.MILLISECONDS.sleep(CP_TIMEOUT / 10);
-                                } catch (Exception e) {
-                                    log.warn("Thread interrupted: {}", e);
-                                }
-                            }
-                        }
-                    }
-                    if (tableStatus.getStatus() == StatusType.COMPLETED) {
-                        newToken = (newToken == null) ? tableStatus.getEndToken() :
-                                minTokenMsg(newToken, tableStatus.getEndToken());
-                        log.info("Token: {}, newToken: {}", tableStatus.getEndToken(), newToken);
-                    }
-                }
-            }
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                if (newToken != null && (minToken == null || minToken.getEpoch() <= newToken.getEpoch() &&
-                        minToken.getSequence() <= newToken.getSequence())) {
-                    txn.putRecord(checkpointTable, CHECKPOINT_KEY, newToken, null);
-                }
-                txn.putRecord(compactionManagerTable, COMPACTION_MANAGER_KEY, getCheckpointingStatus(
-                        failed ? StatusType.FAILED : StatusType.COMPLETED, true, null, null), null);
-                txn.clear(clientLivenessTable);
-                txn.commit();
-            } catch (Exception e) {
-                log.warn("Exception caught: {}", e.getStackTrace());
-            }
-        }
-        log.info("Done with finishCompactionCycle");
-    }
-
-    private TokenMsg minTokenMsg(TokenMsg a, TokenMsg b) {
-        int epochCmp = Long.compare(a.getEpoch(), b.getEpoch());
-        if (epochCmp == 0) {
-            return a.getSequence() <= b.getSequence() ? a : b;
-        }
-        return epochCmp < 0 ? a : b;
     }
 
     public static <K, V> Token appendCheckpoint(CorfuTable<K, V> corfuTable, TableName tableName, CorfuRuntime rt) {
         MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
         mcw.addMap(corfuTable);
-
         long tableCkptStartTime = System.currentTimeMillis();
         log.info("Starting checkpoint namespace: {}, tableName: {}",
                 tableName.getNamespace(), tableName.getTableName());
@@ -458,69 +236,6 @@ public class DistributedCompactor {
                 (tableCkptEndTime - tableCkptStartTime));
 
         return trimPoint;
-    }
-
-    private void updateLiveness() {
-        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            ClientLiveness currentClientLiveness = (ClientLiveness) txn.getRecord(CLIENT_LIVENESS_TABLE_NAME,
-                    this.clientId).getPayload();
-            log.info("UpdatingLiveness of client: {}, current cpTable: {}", this.clientId, currentCPTable);
-            ClientLiveness updatedClientLiveness;
-            if (currentCPTable != null) {
-                updatedClientLiveness = ClientLiveness.newBuilder()
-                        .setTableName(currentCPTable)
-                        .setLivenessCounter(currentClientLiveness == null ? 1 :
-                                ((int) currentClientLiveness.getLivenessCounter() + 1))
-                        .build();
-            } else {
-                updatedClientLiveness = ClientLiveness.newBuilder()
-                        .setLivenessCounter(currentClientLiveness == null ? 1 :
-                                ((int) currentClientLiveness.getLivenessCounter() + 1))
-                        .build();
-            }
-            txn.putRecord(clientLivenessTable, this.clientId, updatedClientLiveness, null);
-            txn.commit();
-        } catch (Exception e) {
-            log.warn("Exception while updatingLiveness, {}", e.getStackTrace());
-        }
-    }
-
-    private boolean validateLiveness(UuidMsg targetClient, long timeout) {
-        ClientLiveness prevClientLiveness;
-        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            log.info("validateLiveness 2");
-            prevClientLiveness = (ClientLiveness) txn.getRecord(CLIENT_LIVENESS_TABLE_NAME,
-                    targetClient).getPayload();
-            txn.commit();
-        }
-
-        long timeoutMillis = System.currentTimeMillis() + timeout;
-        while (System.currentTimeMillis() < timeoutMillis) {
-            try {
-                TimeUnit.MILLISECONDS.sleep(timeout / 10);
-                log.info("validateLiveness 0");
-                ClientLiveness currentClientLiveness;
-                try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                    currentClientLiveness = (ClientLiveness) txn.getRecord(CLIENT_LIVENESS_TABLE_NAME,
-                            targetClient).getPayload();
-                    txn.commit();
-                }
-                if (currentClientLiveness == null) {
-                    continue;
-                }
-                if (prevClientLiveness == null ||
-                        currentClientLiveness.getLivenessCounter() > prevClientLiveness.getLivenessCounter()) {
-                    log.info("validateLiveness 3");
-                    return true;
-                }
-
-            } catch (Exception e) {
-                log.warn("Thread interrupted: {}", e);
-            }
-        }
-
-        log.info("validateLiveness 4");
-        return false;
     }
 
     private CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> openTable(TableName tableName,
@@ -550,8 +265,7 @@ public class DistributedCompactor {
         return corfuTableBuilder.open();
     }
 
-     CheckpointingStatus getCheckpointingStatus(CheckpointingStatus.StatusType statusType,
-                                                       boolean endTimestamp,
+    private CheckpointingStatus getCheckpointingStatus(CheckpointingStatus.StatusType statusType,
                                                        @Nullable TokenMsg startToken,
                                                        @Nullable TokenMsg endToken) {
         return CheckpointingStatus.newBuilder()

@@ -59,7 +59,7 @@ public class ManagementAgent {
     /**
      * Interval of executing the CompactionService.
      */
-    private static final Duration COMPACTION_INTERVAL = Duration.ofMinutes(15);
+    private static final Duration TRIGGER_INTERVAL = Duration.ofSeconds(5);
 
     /**
      * To dispatch initialization tasks for recovery and sequencer bootstrap.
@@ -139,7 +139,8 @@ public class ManagementAgent {
 
         this.autoCommitService = new AutoCommitService(serverContext, runtimeSingletonResource);
 
-        this.compactorService = new CompactorService(serverContext, runtimeSingletonResource);
+        this.compactorService = new CompactorService(serverContext, runtimeSingletonResource,
+                new InvokeCheckpointingJvm(serverContext), new DynamicTriggerPolicy());
 
         // Creating the initialization task thread.
         // This thread pool is utilized to dispatch one time recovery and sequencer bootstrap tasks.
@@ -221,8 +222,8 @@ public class ManagementAgent {
             } else {
                 log.info("Auto commit service disabled.");
             }
-            if (serverContext.getServerConfig(String.class, "--compactor-command") != null) {
-                compactorService.start(COMPACTION_INTERVAL);
+            if (serverContext.getServerConfig(String.class, "--compactor-script") != null) {
+                compactorService.start(TRIGGER_INTERVAL);
             } else {
                 log.info("Compaction Service disabled");
             }
