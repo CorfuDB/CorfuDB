@@ -53,8 +53,6 @@ public class DistributedCompactor {
     public static final String ACTIVE_CHECKPOINTS_TABLE_NAME = "ActiveCheckpoints";
     public static final String PREVIOUS_TOKEN = "previousTokenTable";
 
-    private static final String CLIENT_LIVENESS_TABLE_NAME = "ClientLivenessTable";
-//    private static final String ACTIVE_CHECKPOINTS_TABLE_NAME = "ActiveCheckpointTable";
     public static final String NODE_TOKEN = "node-token";
     public static final String CHECKPOINT = "checkpoint";
 
