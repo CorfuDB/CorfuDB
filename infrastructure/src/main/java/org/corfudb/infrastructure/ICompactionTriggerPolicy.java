@@ -8,5 +8,7 @@ public interface ICompactionTriggerPolicy {
      *
      * @return
      */
-    public boolean shouldTrigger(long interval);
+    boolean shouldTrigger(long interval);
+
+    void setCorfuRuntime(CorfuRuntime corfuRuntime);
 }

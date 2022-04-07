@@ -49,11 +49,6 @@ public class CorfuStoreCompactorMain {
 
     private static final String CORFU_SYSTEM_NAMESPACE = "CorfuSystem";
 
-
-    private static UUID thisNodeUuid;
-
-    private static ISerializer protobufSerializer;
-
     private static Table<StringKey, TokenMsg, Message> checkpoint;
     private static Table<StringKey, TokenMsg, Message> previousToken;
 
@@ -76,7 +71,6 @@ public class CorfuStoreCompactorMain {
     private static String trimTokenFile;
     private static boolean upgradeDescriptorTable;
     private static boolean tlsEnabled;
-    private static boolean isLeader;
 
     private static final String USAGE = "Usage: corfu-compactor --hostname=<host> " +
             "--port=<port>" +
@@ -88,8 +82,7 @@ public class CorfuStoreCompactorMain {
             "[--trim=<trim>] "+
             "[--isUpgrade=<isUpgrade>] "+
             "[--upgradeDescriptorTable=<upgradeDescriptorTable>] "+
-            "[--tlsEnabled=<tls_enabled>] "+
-            "[--isLeader=<isLeader>]\n"
+            "[--tlsEnabled=<tls_enabled>]\n"
             + "Options:\n"
             + "--hostname=<hostname>   Hostname\n"
             + "--port=<port>   Port\n"
@@ -104,8 +97,7 @@ public class CorfuStoreCompactorMain {
             + "--isUpgrade=<isUpgrade> Is this called during upgrade\n"
             + "--trimTokenFile=<trimTokenFilePath> file to store the trim tokens during upgrade"
             + "--upgradeDescriptorTable=<upgradeDescriptorTable> Repopulate descriptor table?\n"
-            + "--tlsEnabled=<tls_enabled>\n"
-            + "--isLeader=<isLeader> Is this node the compactor coordinator";
+            + "--tlsEnabled=<tls_enabled>";
 
     public static void main(String[] args) throws Exception {
         CorfuStoreCompactorMain corfuCompactorMain = new CorfuStoreCompactorMain();
@@ -137,8 +129,7 @@ public class CorfuStoreCompactorMain {
 
         corfuRuntime = corfuRuntimeHelper.getRuntime();
         corfuStore = new CorfuStore(corfuRuntime);
-        corfuCompactor = new CorfuStoreCompactor(corfuRuntime, cpRuntimeHelper.getRuntime(), trim, persistedCacheRoot, isLeader);
-        thisNodeUuid = UUID.fromString(CorfuRuntimeHelper.getThisNodeUuid());
+        corfuCompactor = new CorfuStoreCompactor(corfuRuntime, cpRuntimeHelper.getRuntime(), trim, persistedCacheRoot);
 
         openCompactionTables();
 
@@ -408,9 +399,6 @@ public class CorfuStoreCompactorMain {
         }
         if (opts.get("--tlsEnabled") != null) {
             tlsEnabled = Boolean.parseBoolean(opts.get("--tlsEnabled").toString());
-        }
-        if (opts.get("--isLeader") != null) {
-            isLeader = Boolean.parseBoolean(opts.get("--isLeader").toString());
         }
     }
 }
