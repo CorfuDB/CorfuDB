@@ -55,7 +55,6 @@ public class CorfuServer {
                     + "[--base-server-threads=<base_server_threads>] "
                     + "[--log-size-quota-percentage=<max_log_size_percentage>]"
                     + "[--logunit-threads=<logunit_threads>] [--management-server-threads=<management_server_threads>]"
-                    + "[--compactor-command=<compactor_command_path>]"
                     + "[-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] "
                     + "[-b] [-g -o <username_file> -j <password_file>] "
                     + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] "
@@ -63,7 +62,8 @@ public class CorfuServer {
                     + "[--metrics]"
                     + "[--snapshot-batch=<batch-size>] [--lock-lease=<lease-duration>]"
                     + "[-P <prefix>] [-R <retention>] <port>"
-                    + "[--compactor-command=<compactor_command_path>]\n"
+                    + "[--compactor-script=<compactor_script_path>]"
+                    + "[--compactor-config=<compactor_config_path>]\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <path>, --log-path=<path>                                             "
@@ -165,8 +165,11 @@ public class CorfuServer {
                     + "              If this limit is exceeded "
                     + "              write requests will be rejected [default: 100.0].\n         "
                     + "                                                                          "
-                    + " --compactor-command=<compactor_command_path>                             "
-                    + "               Path to spawn the external corfu store compactor JVM\n     "
+                    + " --compactor-script=<compactor_script_path>                               "
+                    + "               Path to spawn the external corfu store compactor script\n  "
+                    + "                                                                          "
+                    + " --compactor-config=<compactor_config_path>                               "
+                    + "               Path containing the external corfu store compactor config\n"
                     + "                                                                          "
                     + " --management-server-threads=<management_server_threads>                  "
                     + "              Number of threads dedicated for the management server [default: 4].\n"
@@ -235,7 +238,7 @@ public class CorfuServer {
     public static void configureMetrics(Map<String, Object> opts, String localEndpoint) {
         if ((boolean) opts.get("--metrics")) {
             try {
-                LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
+                LoggerContext context = (LoggerContext) LoggerFactory. getILoggerFactory();
                 Optional.ofNullable(context.exists(DEFAULT_METRICS_LOGGER_NAME))
                         .ifPresent(logger -> MeterRegistryProvider.MeterRegistryInitializer
                                 .initServerMetrics(logger, DEFAULT_METRICS_LOGGING_INTERVAL, localEndpoint));

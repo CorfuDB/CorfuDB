@@ -32,16 +32,14 @@ public class CorfuStoreCompactor {
     private final int CORFU_LOG_TRIM_ERROR = 2;
 
     private final boolean enableTrim;
-    private final boolean isLeader;
     private final String persistedCacheRoot;
 
     public CorfuStoreCompactor(CorfuRuntime runtime, CorfuRuntime cpRuntime,
-                               boolean enableTrim, String persistedCacheRoot, boolean isLeader) {
+                               boolean enableTrim, String persistedCacheRoot) {
         this.corfuRuntime = runtime;
         this.cpRuntime = cpRuntime;
         this.enableTrim = enableTrim;
         this.persistedCacheRoot = persistedCacheRoot;
-        this.isLeader = isLeader;
 
         corfuStore = new CorfuStore(corfuRuntime);
 
@@ -67,8 +65,8 @@ public class CorfuStoreCompactor {
         DistributedCompactor distributedCompactor = new DistributedCompactor(corfuRuntime,
                 cpRuntime,
                 persistedCacheRoot,
-                isLeader);
-        distributedCompactor.runCompactor();
+                false);
+        distributedCompactor.startCheckpointing();
     }
 
     public void trim() {
