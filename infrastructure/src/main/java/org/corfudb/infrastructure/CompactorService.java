@@ -6,18 +6,13 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.DistributedCompactor;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.util.LambdaUtils;
-import org.corfudb.util.Sleep;
 import org.corfudb.util.concurrent.SingletonResource;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -34,8 +29,6 @@ import java.util.concurrent.TimeoutException;
  */
 @Slf4j
 public class CompactorService implements ManagementService {
-
-    private static final long CONN_RETRY_DELAY_MILLISEC = 500;
 
     private static final Duration TRIGGER_POLICY_RATE = Duration.ofMinutes(1);
 
@@ -132,7 +125,7 @@ public class CompactorService implements ManagementService {
 
                 if (re instanceof NetworkException || re.getCause() instanceof TimeoutException) {
                     try {
-                        TimeUnit.MILLISECONDS.sleep(CONN_RETRY_DELAY_MILLISEC);
+                        TimeUnit.MILLISECONDS.sleep(DistributedCompactor.CONN_RETRY_DELAY_MILLISEC);
                     } catch (InterruptedException e) {
                         log.error("Interrupted in network retry delay sleep");
                         break;
