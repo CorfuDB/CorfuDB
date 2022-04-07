@@ -193,9 +193,16 @@ public class ServerContext implements AutoCloseable {
         return threadCount.map(Integer::parseInt).orElse(4);
     }
 
-    public Object getCompactorCommand() {
-        Optional<Object> compactorCommandPath = getServerConfig("--compactor-command");
-        return compactorCommandPath.get();
+    public Object getCompactorConfig() {
+        Optional<Object> compactorConfigPath = getServerConfig("--compactor-config");
+        log.info("compactorConfigPath: {}", compactorConfigPath);
+        return compactorConfigPath.get();
+    }
+
+    public Object getCompactorScriptPath() {
+        Optional<Object> compactorScriptPath = getServerConfig("--compactor-script");
+        log.info("compactorScriptPath: {}", compactorScriptPath);
+        return compactorScriptPath.get();
     }
 
     public String getPluginConfigFilePath() {

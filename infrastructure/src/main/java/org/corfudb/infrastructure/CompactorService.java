@@ -1,26 +1,25 @@
 package org.corfudb.infrastructure;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.NonNull;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
+import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata;
-import org.corfudb.runtime.DistributedCompactor;
-import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.concurrent.SingletonResource;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 /**
  * Orchestrates distributed compaction
@@ -30,26 +29,43 @@ import java.util.concurrent.TimeoutException;
 @Slf4j
 public class CompactorService implements ManagementService {
 
-    private static final Duration TRIGGER_POLICY_RATE = Duration.ofMinutes(1);
+    //TODO: make this tunable
+    private static final Duration TRIGGER_INTERVAL = Duration.ofMinutes(15);
+    @Setter
+    private static int LIVENESS_TIMEOUT = 60000;
 
     private final ServerContext serverContext;
     private final SingletonResource<CorfuRuntime> runtimeSingletonResource;
-    private final ScheduledExecutorService compactionScheduler;
+
+    private final ScheduledExecutorService orchestratorThread;
+    private final ScheduledExecutorService spawnJvm;
+    private final IInvokeCheckpointing invokeCheckpointing;
+
     private ICompactionTriggerPolicy compactionTriggerPolicy;
-    volatile Process checkpointerProcess = null;
+    private CompactorLeaderServices compactorLeaderServices;
+    private CorfuStore corfuStore;
+
+    private boolean isOrchestratorRunning = false;
 
     //TODO: make it a prop file and maybe pass it from the server
-    List<CorfuStoreMetadata.TableName> sensitiveTables = new ArrayList<>();
+    List<TableName> sensitiveTables = new ArrayList<>();
 
     CompactorService(@NonNull ServerContext serverContext,
-                     @NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource) {
+                     @NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
+                     @NonNull IInvokeCheckpointing invokeCheckpointing,
+                     @NonNull ICompactionTriggerPolicy compactionTriggerPolicy) {
         this.serverContext = serverContext;
         this.runtimeSingletonResource = runtimeSingletonResource;
-        this.compactionScheduler = Executors.newSingleThreadScheduledExecutor(
+        this.orchestratorThread = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
-                        .setDaemon(true)
                         .setNameFormat(serverContext.getThreadPrefix() + "CompactorService")
                         .build());
+        this.spawnJvm = Executors.newSingleThreadScheduledExecutor(
+                new ThreadFactoryBuilder()
+                        .setNameFormat(serverContext.getThreadPrefix() + "CompactorService")
+                        .build());
+        this.invokeCheckpointing = invokeCheckpointing;
+        this.compactionTriggerPolicy = compactionTriggerPolicy;
     }
 
     CorfuRuntime getCorfuRuntime() {
@@ -63,79 +79,66 @@ public class CompactorService implements ManagementService {
      */
     @Override
     public void start(Duration interval) {
-        this.compactionTriggerPolicy = new DynamicTriggerPolicy(getCorfuRuntime(), sensitiveTables);
-        // Have the trigger logic which is computed every min
-        compactionScheduler.scheduleAtFixedRate(
-                () -> {
-                    if(compactionTriggerPolicy.shouldTrigger(interval.toMillis())) {
-                        runCompactionOrchestrator();
-                    }
-                },
-                TRIGGER_POLICY_RATE.toMinutes(),
-                TRIGGER_POLICY_RATE.toMinutes(),
-                TimeUnit.MINUTES
+        this.compactorLeaderServices = new CompactorLeaderServices(getCorfuRuntime(), serverContext.getNodeId());
+        this.corfuStore = new CorfuStore(getCorfuRuntime());
+        this.compactionTriggerPolicy.setCorfuRuntime(getCorfuRuntime());
+
+        orchestratorThread.scheduleAtFixedRate(
+            () -> {
+                boolean isLeader = isNodePrimarySequencer(updateLayoutAndGet());
+                log.info("isLeader: {}", isLeader);
+                if (!isLeader) {
+                    compactorLeaderServices.setLeader(false);
+                    return;
+                }
+                if (!isOrchestratorRunning) {
+                    compactorLeaderServices.setLeader(true);
+                    runOrchestrator();
+                }
+            },
+            interval.toMillis(),
+            interval.toMillis(),
+            TimeUnit.MILLISECONDS
+        );
+
+        spawnJvm.scheduleWithFixedDelay(
+            this::runCheckpointer,
+            interval.toMillis(),
+            interval.toMillis(),
+            TimeUnit.MILLISECONDS
         );
     }
 
-    @VisibleForTesting
-    public synchronized void runCompactionOrchestrator() {
-        Layout currentLayout = null;
 
-        int MAX_COMPACTION_RETRIES = 8;
-        for (int i = 1; i <= MAX_COMPACTION_RETRIES; i++) {
-            try {
-                // Do not perform compaction orchestration if current node is not primary sequencer.
-                currentLayout = updateLayoutAndGet();
-                boolean isLeader = isNodePrimarySequencer(currentLayout);
-                if (!isLeader) {
-                    log.trace("runCompactionOrchestrator: Node not primary sequencer, stop");
-                }
-
-                String compactionCmd =
-                        Files.readAllLines(Paths.get((String) ((ArrayList)serverContext.getCompactorCommand()).get(0)), StandardCharsets.UTF_8).get(0);
-
-                String hostName = serverContext.getLocalEndpoint().split(":")[0];
-                compactionCmd += " --host=" + hostName;
-
-                if (isLeader) {
-                    compactionCmd += " --isLeader=true";
-                } else {
-                    compactionCmd += " --isLeader=false";
-                }
-
-                if (this.checkpointerProcess != null && this.checkpointerProcess.isAlive()) {
-                    this.checkpointerProcess.destroy();
-                }
-                this.checkpointerProcess = new ProcessBuilder("sh", "-c", compactionCmd).start();
-                log.info("runCompactionOrchestrator: started the process");
-                this.checkpointerProcess.waitFor();
-                this.checkpointerProcess = null;
-
-                log.debug("runCompactionOrchestrator: successfully finished a cycle");
-                break;
-
-            } catch (RuntimeException re) {
-                log.trace("runCompactionOrchestrator: encountered an exception on attempt {}/{}.",
-                        i, MAX_COMPACTION_RETRIES, re);
-
-                if (i >= MAX_COMPACTION_RETRIES) {
-                    log.error("runCompactionOrchestrator: retry exhausted.", re);
-                    break;
-                }
-
-                if (re instanceof NetworkException || re.getCause() instanceof TimeoutException) {
-                    try {
-                        TimeUnit.MILLISECONDS.sleep(DistributedCompactor.CONN_RETRY_DELAY_MILLISEC);
-                    } catch (InterruptedException e) {
-                        log.error("Interrupted in network retry delay sleep");
-                        break;
-                    }
-                }
-            } catch (Throwable t) {
-                log.error("runCompactionOrchestrator: encountered unexpected exception", t);
-                log.error("StackTrace: {}", t.getStackTrace());
+    private void runCheckpointer() {
+        try(TxnContext txn = corfuStore.txn(TableRegistry.CORFU_SYSTEM_NAMESPACE)) {
+            CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
+                    CompactorLeaderServices.getCOMPACTION_MANAGER_TABLE_NAME(),
+                    CompactorLeaderServices.getCOMPACTION_MANAGER_KEY()).getPayload();
+            txn.commit();
+            if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED) {
+                invokeCheckpointing.invokeCheckpointing();
             }
         }
+    }
+
+    private void runOrchestrator() {
+        isOrchestratorRunning = true;
+        try(TxnContext txn = corfuStore.txn(TableRegistry.CORFU_SYSTEM_NAMESPACE)) {
+            CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
+                    CompactorLeaderServices.getCOMPACTION_MANAGER_TABLE_NAME(),
+                    CompactorLeaderServices.getCOMPACTION_MANAGER_KEY()).getPayload();
+            txn.commit();
+            if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED){
+                compactorLeaderServices.validateLiveness(LIVENESS_TIMEOUT);
+            } else if (compactionTriggerPolicy.shouldTrigger(TRIGGER_INTERVAL.getSeconds())) {
+                compactorLeaderServices.init();
+            }
+        } catch (Exception e) {
+            log.warn("Exception in runOrchestrator: ", e);
+        }
+        isOrchestratorRunning = false;
+
     }
 
     private Layout updateLayoutAndGet() {
@@ -153,11 +156,9 @@ public class CompactorService implements ManagementService {
      */
     @Override
     public void shutdown() {
-        if (this.checkpointerProcess != null && this.checkpointerProcess.isAlive()) {
-            this.checkpointerProcess.destroy();
-            this.checkpointerProcess = null;
-        }
-        compactionScheduler.shutdownNow();
+        invokeCheckpointing.shutdown();
+        orchestratorThread.shutdownNow();
+        spawnJvm.shutdown();
         log.info("Compactor Orchestrator service shutting down.");
     }
 }
