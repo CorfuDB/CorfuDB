@@ -37,7 +37,6 @@ public class CompactorServiceTest extends AbstractViewTest {
 
     private static final String COMPACTION_MANAGER_TABLE_NAME = "CompactionManager";
     private static final String CHECKPOINT_STATUS_TABLE_NAME = "CheckpointStatusTable";
-    private static final String ACTIVE_CHECKPOINT_TABLE = "ActiveCheckpointTable";
     public static final String CHECKPOINT = "checkpoint";
 
     private static final int LIVENESS_TIMEOUT = 5000;
