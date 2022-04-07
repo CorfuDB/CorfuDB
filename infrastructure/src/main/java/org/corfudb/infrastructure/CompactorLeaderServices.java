@@ -25,7 +25,6 @@ import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.view.Address;
-import org.immutables.value.Value;
 
 import javax.annotation.Nullable;
 
@@ -42,7 +41,7 @@ public class CompactorLeaderServices {
     @Getter
     private static final String COMPACTION_MANAGER_TABLE_NAME = "CompactionManager";
     private static final String CHECKPOINT_STATUS_TABLE_NAME = "CheckpointStatusTable";
-    private static final String ACTIVE_CHECKPOINT_TABLE = "ActiveCheckpointTable";
+    private static final String ACTIVE_CHECKPOINTS_TABLE_NAME = "ActiveCheckpoints";
     public static final String CHECKPOINT = "checkpoint";
 
     private Table<StringKey, CheckpointingStatus, Message> compactionManagerTable;
@@ -91,7 +90,7 @@ public class CompactorLeaderServices {
                     TableOptions.fromProtoSchema(CheckpointingStatus.class));
 
             this.activeCheckpointTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    ACTIVE_CHECKPOINT_TABLE,
+                    ACTIVE_CHECKPOINTS_TABLE_NAME,
                     TableName.class,
                     ActiveCPStreamMsg.class,
                     null,
