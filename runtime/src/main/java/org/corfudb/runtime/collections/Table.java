@@ -431,4 +431,12 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                         entry.getValue().getMetadata()))
                 .collect(Collectors.toList());
     }
+
+    /**
+     * WARNING: Never call this method for anything other than checkpointing!
+     * @return the underlying CorfuTable only for checkpointing purposes
+     */
+    public CorfuTable getCorfuTableForCheckpointingOnly() {
+        return this.corfuTable;
+    }
 }
