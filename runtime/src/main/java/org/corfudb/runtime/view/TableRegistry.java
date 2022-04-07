@@ -15,6 +15,7 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileName;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileDescriptor;
+import org.corfudb.runtime.DistributedClientCheckpointer;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
@@ -37,6 +38,7 @@ import org.corfudb.util.serializer.ProtobufSerializer;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Deque;
 import java.util.HashMap;
@@ -114,6 +116,12 @@ public class TableRegistry {
     @Getter
     private final CorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> protobufDescriptorTable;
 
+    /**
+     * Spawn the local table checkpointer
+     */
+    @Getter
+    private final DistributedClientCheckpointer clientCheckpointer;
+
     public TableRegistry(CorfuRuntime runtime) {
         this.runtime = runtime;
         this.tableMap = new ConcurrentHashMap<>();
@@ -171,6 +179,9 @@ public class TableRegistry {
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
+
+        // Lastly instantiate the DistributedClientCheckpointer
+        this.clientCheckpointer = new DistributedClientCheckpointer(runtime);
     }
 
     /**
@@ -667,6 +678,16 @@ public class TableRegistry {
     }
 
     /**
+     * Returns all the tables that have been opened by this instance
+     * This is used to run local checkpointing without reading state
+     *
+     * @return ArrayList of all Tables opened here.
+     */
+    public ArrayList<Table<Message, Message, Message>> getAllOpenTablesForCheckpointing() {
+        return new ArrayList<>(this.tableMap.values());
+    }
+
+    /**
      * Register a streaming subscription manager as a singleton.
      */
     public synchronized StreamingManager getStreamingManager() {
@@ -682,6 +703,9 @@ public class TableRegistry {
     public void shutdown() {
         if (streamingManager != null) {
             streamingManager.shutdown();
+        }
+        if (clientCheckpointer != null) {
+            clientCheckpointer.shutdown();
         }
     }
 }
