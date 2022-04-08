@@ -77,6 +77,22 @@ public class LogReplicationStreamNameTableManager {
         initStreamNameFetcherPlugin();
     }
 
+    public Set<String> getStreamsToReplicate(int index) {
+
+        Set<String> streams = new HashSet<>();
+        // add registryTable to the streams
+        String registryTable = getFullyQualifiedTableName(
+            CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME);
+        streams.add(registryTable);
+
+        // add protobufDescriptorTable to the streams
+        String protoTable = getFullyQualifiedTableName(
+            CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME);
+        streams.add(protoTable);
+        streams.addAll(logReplicationConfigAdapter.fetchStreamsToReplicate(index));
+        return streams;
+    }
+
     public Set<String> getStreamsToReplicate() {
         // Initialize the streamsToReplicate
         if (verifyTableExists(LOG_REPLICATION_PLUGIN_VERSION_TABLE) &&
@@ -276,6 +292,16 @@ public class LogReplicationStreamNameTableManager {
         for (UUID id : MERGE_ONLY_STREAM_ID_LIST) {
             streamingConfig.put(id,
                     Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId()));
+        }
+        return streamingConfig;
+    }
+
+    public Map<UUID, List<UUID>> getStreamingConfigOnSink(int index) {
+        Map<UUID, List<UUID>> streamingConfig =
+            logReplicationConfigAdapter.getStreamingConfigOnSink(index);
+        for (UUID id : MERGE_ONLY_STREAM_ID_LIST) {
+            streamingConfig.put(id,
+                Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId()));
         }
         return streamingConfig;
     }

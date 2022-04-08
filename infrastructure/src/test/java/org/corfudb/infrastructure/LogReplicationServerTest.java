@@ -16,6 +16,9 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.util.Arrays;
+import java.util.Map;
+
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.ArgumentMatchers.any;
@@ -34,9 +37,12 @@ import static org.mockito.Mockito.atMost;
 public class LogReplicationServerTest {
 
     private final static String SAMPLE_HOSTNAME = "localhost";
+    private final static String SAMPLE_CLUSTERID = "sample_clusterid";
 
     ServerContext context;
     LogReplicationMetadataManager metadataManager;
+    Map<String, LogReplicationMetadataManager> metadataManagerMap;
+    Map<String, LogReplicationSinkManager> sinkManagerMap;
     LogReplicationSinkManager sinkManager;
     LogReplicationServer lrServer;
     ChannelHandlerContext mockHandlerContext;
@@ -50,11 +56,13 @@ public class LogReplicationServerTest {
     public void setup() {
         context = mock(ServerContext.class);
         metadataManager = mock(LogReplicationMetadataManager.class);
+        metadataManagerMap.put(SAMPLE_CLUSTERID, metadataManager);
         sinkManager = mock(LogReplicationSinkManager.class);
+        sinkManagerMap.put(SAMPLE_CLUSTERID, sinkManager);
         lrServer = spy(new LogReplicationServer(
                 context,
-                metadataManager,
-                sinkManager, "nodeId"));
+                metadataManagerMap, "nodeId"));
+        lrServer.setClientToSinkManagerMap(sinkManagerMap);
         mockHandlerContext = mock(ChannelHandlerContext.class);
         mockServerRouter = mock(IServerRouter.class);
     }
@@ -129,7 +137,7 @@ public class LogReplicationServerTest {
         final LogReplicationEntryMsg ack = LogReplicationEntryMsg.newBuilder().build();
 
         doReturn(true).when(lrServer).isLeader(same(request), any(), any(), anyBoolean());
-        doReturn(ack).when(sinkManager).receive(same(request.getPayload().getLrEntry()));
+        doReturn(ack).when(sinkManager).receive(same(request.getPayload().getLrEntry()), "");
 
         // When cluster role not STANDBY, drop the request.
         lrServer.createHandlerMethods().handle(request, mockHandlerContext, mockServerRouter);

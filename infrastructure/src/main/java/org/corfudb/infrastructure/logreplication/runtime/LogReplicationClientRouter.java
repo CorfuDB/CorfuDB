@@ -35,6 +35,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -193,6 +195,7 @@ public class LogReplicationClientRouter implements IClientRouter {
 
             try {
                 header.setClientId(getUuidMsg(parameters.getClientId()));
+                header.setClusterId(getUuidMsg(UUID.fromString(parameters.getLocalClusterId())));
                 header.setRequestId(requestId);
 
                 // If no endpoint is specified, the message is to be sent to the remote leader node.

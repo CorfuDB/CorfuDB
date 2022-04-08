@@ -98,7 +98,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
             if (dataMessage == null) {
                 return;
             }
-            sinkManager.processMessage(dataMessage);
+            sinkManager.processMessage(dataMessage, "");
             ackCnt++;
             buffer.remove(lastProcessedSeq);
             lastProcessedSeq = getCurrentSeq(dataMessage);

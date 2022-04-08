@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
+import java.util.List;
 
 /**
  * This class represents the Log Replication Context.
@@ -29,7 +30,8 @@ public class LogReplicationContext {
     /**
      * Constructor
      **/
-    public LogReplicationContext(LogReplicationConfig config,  TopologyDescriptor topology, String localCorfuEndpoint,
+    public LogReplicationContext(LogReplicationConfig config,
+                                 TopologyDescriptor topology, String localCorfuEndpoint,
                                  IChannelContext channelContext) {
         this.config = config;
         this.topology = topology;

@@ -60,6 +60,7 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
      */
     public void addTo(UUID streamID, SMREntry updateEntry) {
         checkState(streamBuffers.isEmpty(), "Shouldn't be called on a deserialized object");
+        checkState(streamID != null, "Stream id is null");
         MultiSMREntry multiSMREntry = streamUpdates.computeIfAbsent(streamID, k -> new MultiSMREntry());
         multiSMREntry.addTo(updateEntry);
     }

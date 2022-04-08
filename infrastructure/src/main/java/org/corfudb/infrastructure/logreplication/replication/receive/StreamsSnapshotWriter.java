@@ -74,10 +74,14 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     // regularToShadowStreamId map
     private Set<UUID> replicatedStreamIds = new HashSet<>();
 
+    private String index;
+
     @Getter
     private Phase phase;
 
-    public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager) {
+    public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationConfig config,
+                                 LogReplicationMetadataManager logReplicationMetadataManager,
+                                String index) {
         this.rt = rt;
         this.logReplicationMetadataManager = logReplicationMetadataManager;
         this.streamViewMap = new HashMap<>();
@@ -86,6 +90,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         this.snapshotSyncStartMarker = Optional.empty();
         this.dataStreamToTagsMap = config.getDataStreamToTagsMap();
         this.mergeOnlyStreams = config.getMergeOnlyStreams();
+        this.index = index;
 
         initializeShadowStreams(config);
     }
@@ -107,6 +112,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         // For every stream create a shadow stream which name is unique based
         // on the original stream and a suffix.
         for (String streamName : config.getStreamsToReplicate()) {
+            log.info("Index {}, Streams to replicate: {}", index, streamName);
             String shadowStreamName = streamName + SHADOW_STREAM_SUFFIX;
             UUID streamId = CorfuRuntime.getStreamID(streamName);
             UUID shadowStreamId = CorfuRuntime.getStreamID(shadowStreamName);
@@ -117,8 +123,12 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             log.trace("Shadow stream=[{}] for regular stream=[{}] name=({})", shadowStreamId, streamId, streamName);
         }
 
-        log.info("Stream tag map for streaming on Standby/Sink total={}, streams={}", dataStreamToTagsMap.size(),
+        log.info("Index {}, Stream tag map for streaming on Standby/Sink " +
+                "total={}, streams={}", index, dataStreamToTagsMap.size(),
                 dataStreamToTagsMap);
+        regularToShadowStreamId.entrySet().forEach(entry -> log.info(
+            "Index {}, Entry- " +
+            "{}:{}", index, entry.getKey(), entry.getValue()));
     }
 
     /**
@@ -215,7 +225,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * @param message snapshot log entry
      */
     @Override
-    public void apply(LogReplicationEntryMsg message) {
+    public void apply(LogReplicationEntryMsg message, String clusterid) {
 
         verifyMetadata(message.getMetadata());
 
@@ -242,6 +252,9 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         }
         UUID regularStreamId = opaqueEntry.getEntries().keySet().stream().findFirst().get();
 
+        replicatedStreamIds.forEach(stream -> log.info("Index {}, Stream To " +
+            "Replicate: {}", clusterid, stream));
+        log.info("Index {}, Stream received {} ", clusterid, regularStreamId);
         // Clear regular stream on-demand (i.e., as streams come) and only on the first occurrence
         if (!replicatedStreamIds.contains(regularStreamId)) {
             // Note: we should not clear the shadow stream as this could overwrite our mergeOnlyStreams when
@@ -250,6 +263,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             clearRegularStream(regularStreamId);
             replicatedStreamIds.add(regularStreamId);
         }
+        log.info("Index {}, Shadow stream id for stream {} is {}", clusterid,
+            regularStreamId, regularToShadowStreamId.get(regularStreamId));
         processUpdatesShadowStream(opaqueEntry.getEntries().get(regularStreamId), message.getMetadata().getSnapshotSyncSeqNum(),
                 regularToShadowStreamId.get(regularStreamId), getUUID(message.getMetadata().getSyncRequestId()));
         recvSeq++;
@@ -294,7 +309,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     @Override
     public void apply(List<LogReplicationEntryMsg> messages) {
         for (LogReplicationEntryMsg msg : messages) {
-            apply(msg);
+            apply(msg, "");
         }
     }
 

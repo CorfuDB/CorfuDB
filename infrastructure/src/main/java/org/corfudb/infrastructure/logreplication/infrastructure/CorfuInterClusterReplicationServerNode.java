@@ -14,6 +14,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -33,7 +34,7 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
     private final LogReplicationServerRouter router;
 
     @Getter
-    private LogReplicationConfig logReplicationConfig;
+    private List<LogReplicationConfig> logReplicationConfigs;
 
     // This flag makes the closing of the CorfuServer idempotent.
     private final AtomicBoolean close;
@@ -47,14 +48,14 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
      */
     public CorfuInterClusterReplicationServerNode(@Nonnull ServerContext serverContext,
                                                   @Nonnull LogReplicationServer server,
-                                                  @Nonnull LogReplicationConfig config) {
+                                                  @Nonnull List<LogReplicationConfig> configs) {
         this(serverContext,
                 ImmutableMap.<Class, AbstractServer>builder()
                         .put(BaseServer.class, new BaseServer(serverContext))
                         .put(LogReplicationServer.class, server)
                         .build()
         );
-        this.logReplicationConfig = config;
+        this.logReplicationConfigs = configs;
     }
 
     /**
@@ -100,7 +101,8 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
         serverContext.close();
 
         this.router.getServerAdapter().stop();
-        this.getLogReplicationServer().getSinkManager().shutdown();
+        this.getLogReplicationServer().getClientToSinkManagerMap().values()
+            .forEach(sinkManager -> sinkManager.shutdown());
 
         // A executor service to create the shutdown threads
         // plus name the threads correctly.

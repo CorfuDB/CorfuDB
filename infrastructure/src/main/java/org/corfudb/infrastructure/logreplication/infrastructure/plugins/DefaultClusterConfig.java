@@ -12,7 +12,16 @@ public final class DefaultClusterConfig {
     private static final String defaultHost = "localhost";
 
     @Getter
-    private static final List<String> activeNodesUuid = Collections.singletonList("123e4567-e89b-12d3-a456-556642440000");
+    private static final List<String> activeNodesUuid1 =
+        Collections.singletonList("123e4567-e89b-12d3-a456-556642440000");
+
+    @Getter
+    private static final List<String> activeNodesUuid2 =
+        Collections.singletonList("123e4567-e89b-12d3-a456-556642440001");
+
+    @Getter
+    private static final List<String> activeNodesUuid3 =
+        Collections.singletonList("123e4567-e89b-12d3-a456-556642440002");
 
     @Getter
     private static final List<String> standbyNodesUuid = Collections.singletonList("123e4567-e89b-12d3-a456-556642440123");
@@ -30,13 +39,28 @@ public final class DefaultClusterConfig {
     private static final List<String> standbyIpAddresses = Collections.singletonList(defaultHost);
 
     @Getter
-    private static final String activeClusterId = "456e4567-e89b-12d3-a456-556642440001";
+    private static final String activeClusterId1 = "456e4567-e89b-12d3-a456-556642440001";
 
     @Getter
-    private static final String activeCorfuPort = "9000";
+    private static final String activeClusterId2 = "456e4567-e89b-12d3-a456-556642440003";
 
     @Getter
-    private static final String activeLogReplicationPort = "9010";
+    private static final String activeClusterId3 = "456e4567-e89b-12d3-a456-556642440005";
+
+    @Getter
+    private static final String activeCorfuPort1 = "9000";
+    @Getter
+    private static final String activeCorfuPort2 = "9002";
+    @Getter
+    private static final String activeCorfuPort3 = "9004";
+
+
+    @Getter
+    private static final String activeLogReplicationPort1 = "9010";
+    @Getter
+    private static final String activeLogReplicationPort2 = "9011";
+    @Getter
+    private static final String activeLogReplicationPort3 = "9012";
 
     @Getter
     private static final String standbyClusterId = "456e4567-e89b-12d3-a456-556642440002";
@@ -77,8 +101,12 @@ public final class DefaultClusterConfig {
     public static String getDefaultNodeId(String endpoint) {
         String port = endpoint.split(":")[1];
         switch (port) {
-            case activeLogReplicationPort:
-                return activeNodesUuid.get(0);
+            case activeLogReplicationPort1:
+                return activeNodesUuid1.get(0);
+            case activeLogReplicationPort2:
+                return activeNodesUuid2.get(0);
+            case activeLogReplicationPort3:
+                return activeNodesUuid3.get(0);
             case standbyLogReplicationPort:
                 return standbyNodesUuid.get(0);
             case backupLogReplicationPort:

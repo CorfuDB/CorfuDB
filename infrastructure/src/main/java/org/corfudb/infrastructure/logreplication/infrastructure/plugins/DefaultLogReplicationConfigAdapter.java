@@ -21,7 +21,7 @@ public class DefaultLogReplicationConfigAdapter implements ILogReplicationConfig
     private Set<String> streamsToReplicate;
 
     public static final int MAP_COUNT = 10;
-    public static final String TABLE_PREFIX = "Table00";
+    public static final String TABLE_PREFIX = "Table_Demo_LM-";
     public static final String NAMESPACE = "LR-Test";
     public static final String TAG_ONE = "tag_one";
     private final int indexOne = 1;
@@ -46,6 +46,13 @@ public class DefaultLogReplicationConfigAdapter implements ILogReplicationConfig
     }
 
     @Override
+    public Set<String> fetchStreamsToReplicate(int index) {
+        streamsToReplicate = new HashSet<>();
+        streamsToReplicate.add(NAMESPACE + "$" + TABLE_PREFIX + index);
+        return streamsToReplicate;
+    }
+
+    @Override
     public String getVersion() {
         return "version_latest";
     }
@@ -58,6 +65,15 @@ public class DefaultLogReplicationConfigAdapter implements ILogReplicationConfig
                 Collections.singletonList(streamTagOneDefaultId));
         streamsToTagsMaps.put(CorfuRuntime.getStreamID(NAMESPACE + "$" + TABLE_PREFIX + indexTwo),
                 Collections.singletonList(streamTagOneDefaultId));
+        return streamsToTagsMaps;
+    }
+
+    @Override
+    public Map<UUID, List<UUID>> getStreamingConfigOnSink(int index) {
+        Map<UUID, List<UUID>> streamsToTagsMaps = new HashMap<>();
+        UUID streamTagOneDefaultId = TableRegistry.getStreamIdForStreamTag(NAMESPACE, TAG_ONE);
+        streamsToTagsMaps.put(CorfuRuntime.getStreamID(NAMESPACE + "$" + TABLE_PREFIX + index),
+            Collections.singletonList(streamTagOneDefaultId));
         return streamsToTagsMaps;
     }
 }

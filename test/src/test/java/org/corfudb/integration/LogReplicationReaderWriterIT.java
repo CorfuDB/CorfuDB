@@ -33,6 +33,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
@@ -293,7 +294,8 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     public static void writeSnapLogMsgs(List<LogReplicationEntryMsg> msgQ, Set<String> streams, CorfuRuntime rt) {
         LogReplicationConfig config = new LogReplicationConfig(streams, BATCH_SIZE, MAX_MSG_SIZE);
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
-        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataManager);
+        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config,
+            logReplicationMetadataManager, "");
 
         if (msgQ.isEmpty()) {
             log.debug("msgQ is empty");
@@ -305,7 +307,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         writer.reset(topologyConfigId, snapshot);
 
         for (LogReplicationEntryMsg msg : msgQ) {
-            writer.apply(msg);
+            writer.apply(msg, "");
         }
 
         writer.applyShadowStreams();

@@ -29,6 +29,7 @@ import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Properties;
+import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -109,11 +110,9 @@ public class LogReplicationSinkManager implements DataReceiver {
      *
      * @param localCorfuEndpoint endpoint for local corfu server
      * @param config log replication configuration
-     * @param metadataManager
      * @param context
      */
     public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config,
-                                     LogReplicationMetadataManager metadataManager,
                                      ServerContext context, long topologyConfigId) {
 
         this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
@@ -127,7 +126,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.pluginConfigFilePath = context.getPluginConfigFilePath();
         this.topologyConfigId = topologyConfigId;
-        init(metadataManager, config);
+        this.config = config;
     }
 
     /**
@@ -144,18 +143,23 @@ public class LogReplicationSinkManager implements DataReceiver {
                 .build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.pluginConfigFilePath = pluginConfigFilePath;
-        init(metadataManager, config);
+
+        init(metadataManager, config, "");
     }
 
+    public void setMetadataManagerAndInit(
+        LogReplicationMetadataManager metadataManager, String uuid) {
+        init(metadataManager, config, uuid);
+    }
     /**
      * Initialize common parameters
      *
      * @param metadataManager metadata manager instance
      * @param config log replication configuration
      */
-    private void init(LogReplicationMetadataManager metadataManager, LogReplicationConfig config) {
+    private void init(LogReplicationMetadataManager metadataManager,
+                      LogReplicationConfig config, String uuid) {
         this.logReplicationMetadataManager = metadataManager;
-        this.config = config;
 
         // When the server is up, it will be at LOG_ENTRY_SYNC state by default.
         // The sender will query receiver's status and decide what type of replication to start with.
@@ -168,21 +172,23 @@ public class LogReplicationSinkManager implements DataReceiver {
                         .setNameFormat("snapshotSyncApplyExecutor")
                         .build());
 
-        initWriterAndBufferMgr();
+        initWriterAndBufferMgr(uuid);
     }
 
     private void setDataConsistentWithRetry(boolean isDataConsistent) {
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
-                    logReplicationMetadataManager.setDataConsistentOnStandby(isDataConsistent);
+                    logReplicationMetadataManager.setDataConsistentOnStandby(
+                        isDataConsistent);
                     dataConsistent.set(isDataConsistent);
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to setDataConsistent in SinkManager's init", tae);
                     throw new RetryNeededException();
                 }
 
-                log.debug("setDataConsistentWithRetry succeeds, current value is {}", dataConsistent.get());
+                log.debug("setDataConsistentWithRetry succeeds, current value is {}",
+                    dataConsistent.get());
 
                 return null;
             }).run();
@@ -195,7 +201,7 @@ public class LogReplicationSinkManager implements DataReceiver {
     /**
      * Init the writers, Buffer Manager and Snapshot Plugin.
      */
-    private void initWriterAndBufferMgr() {
+    private void initWriterAndBufferMgr(String uuid) {
         // Read config first before init other components.
         readConfig();
 
@@ -203,7 +209,8 @@ public class LogReplicationSinkManager implements DataReceiver {
         // of a snapshot sync.
         snapshotSyncPlugin = getOnSnapshotSyncPlugin();
 
-        snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadataManager);
+        snapshotWriter = new StreamsSnapshotWriter(runtime, config,
+            logReplicationMetadataManager, uuid);
         logEntryWriter = new LogEntryWriter(config, logReplicationMetadataManager);
         logEntryWriter.reset(logReplicationMetadataManager.getLastAppliedSnapshotTimestamp(),
                 logReplicationMetadataManager.getLastProcessedLogEntryTimestamp());
@@ -255,7 +262,8 @@ public class LogReplicationSinkManager implements DataReceiver {
      * @return
      */
     @Override
-    public LogReplication.LogReplicationEntryMsg receive(LogReplication.LogReplicationEntryMsg message) {
+    public LogReplication.LogReplicationEntryMsg receive(
+        LogReplication.LogReplicationEntryMsg message, String uuid) {
         rxMessageCounter++;
         rxMessageCount.setValue(rxMessageCounter);
 
@@ -306,7 +314,7 @@ public class LogReplicationSinkManager implements DataReceiver {
             return null;
         }
 
-        return processReceivedMessage(message);
+        return processReceivedMessage(message, uuid);
     }
 
     /**
@@ -315,11 +323,12 @@ public class LogReplicationSinkManager implements DataReceiver {
      * @param message received message
      * @return ack
      */
-    private LogReplication.LogReplicationEntryMsg processReceivedMessage(LogReplication.LogReplicationEntryMsg message) {
+    private LogReplication.LogReplicationEntryMsg processReceivedMessage(LogReplication.LogReplicationEntryMsg message,
+                                                                         String uuid) {
         if (rxState.equals(RxState.LOG_ENTRY_SYNC)) {
-            return logEntrySinkBufferManager.processMsgAndBuffer(message);
+            return logEntrySinkBufferManager.processMsgAndBuffer(message, uuid);
         } else {
-            return snapshotSinkBufferManager.processMsgAndBuffer(message);
+            return snapshotSinkBufferManager.processMsgAndBuffer(message, uuid);
         }
     }
 
@@ -451,10 +460,10 @@ public class LogReplicationSinkManager implements DataReceiver {
      *
      * @param entry received entry
      */
-    private void processSnapshotMessage(LogReplication.LogReplicationEntryMsg entry) {
+    private void processSnapshotMessage(LogReplication.LogReplicationEntryMsg entry, String uuid) {
         switch (entry.getMetadata().getEntryType()) {
             case SNAPSHOT_MESSAGE:
-                snapshotWriter.apply(entry);
+                snapshotWriter.apply(entry, uuid);
                 break;
             case SNAPSHOT_END:
                 if (snapshotWriter.getPhase() != StreamsSnapshotWriter.Phase.APPLY_PHASE) {
@@ -498,7 +507,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      * @param message
      * @return true if msg was processed else false.
      */
-    public boolean processMessage(LogReplication.LogReplicationEntryMsg message) {
+    public boolean processMessage(LogReplication.LogReplicationEntryMsg message, String uuid) {
         log.trace("Received dataMessage by Sink Manager. Total [{}]", rxMessageCounter);
 
         switch (rxState) {
@@ -506,7 +515,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                 return logEntryWriter.apply(message);
 
             case SNAPSHOT_SYNC:
-                processSnapshotMessage(message);
+                processSnapshotMessage(message, uuid);
                 return true;
 
             default:
@@ -545,6 +554,9 @@ public class LogReplicationSinkManager implements DataReceiver {
      *
      * */
     public void reset() {
+        if (logReplicationMetadataManager == null) {
+            return;
+        }
         long lastAppliedSnapshotTimestamp = logReplicationMetadataManager.getLastAppliedSnapshotTimestamp();
         long lastProcessedLogEntryTimestamp = logReplicationMetadataManager.getLastProcessedLogEntryTimestamp();
         log.debug("Reset Sink Manager, lastAppliedSnapshotTs={}, lastProcessedLogEntryTs={}", lastAppliedSnapshotTimestamp,

@@ -1,16 +1,20 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.TextFormat;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
@@ -19,9 +23,14 @@ import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeadershipLoss;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeadershipResponse;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
@@ -48,10 +57,12 @@ public class LogReplicationServer extends AbstractServer {
     private final ExecutorService executor;
 
     @Getter
-    private final LogReplicationMetadataManager metadataManager;
+    private final Map<String, LogReplicationMetadataManager> metadataManagerMap;
 
     @Getter
-    private final LogReplicationSinkManager sinkManager;
+    @Setter
+    private Map<String, LogReplicationSinkManager> clientToSinkManagerMap =
+        new HashMap<>();
 
     private final AtomicBoolean isLeader = new AtomicBoolean(false);
     private final AtomicBoolean isActive = new AtomicBoolean(false);
@@ -67,19 +78,26 @@ public class LogReplicationServer extends AbstractServer {
         return RequestHandlerMethods.generateHandler(MethodHandles.lookup(), this);
     }
 
-    public LogReplicationServer(@Nonnull ServerContext context, @Nonnull  LogReplicationConfig logReplicationConfig,
-                                @Nonnull LogReplicationMetadataManager metadataManager, String corfuEndpoint,
+    public LogReplicationServer(@Nonnull ServerContext context,
+                                @Nonnull Map<String, LogReplicationConfig> logReplicationConfigs,
+                                @Nonnull Map<String, LogReplicationMetadataManager>
+                                    metadataManagerMap, String corfuEndpoint,
                                 long topologyConfigId, String localNodeId) {
-        this(context, metadataManager, new LogReplicationSinkManager(corfuEndpoint, logReplicationConfig,
-                metadataManager, context, topologyConfigId), localNodeId);
+        this(context, metadataManagerMap, localNodeId);
+        for (Map.Entry<String, LogReplicationConfig> entry :
+            logReplicationConfigs.entrySet()) {
+            LogReplicationSinkManager sinkManager =
+                new LogReplicationSinkManager(corfuEndpoint, entry.getValue(),
+                    context, topologyConfigId);
+            clientToSinkManagerMap.put(entry.getKey(), sinkManager);
+        }
     }
 
     public LogReplicationServer(@Nonnull ServerContext context,
-                                @Nonnull LogReplicationMetadataManager metadataManager,
-                                @Nonnull LogReplicationSinkManager sinkManager, String localNodeId) {
+                                @Nonnull Map<String, LogReplicationMetadataManager> metadataManager,
+                                String localNodeId) {
         this.localNodeId = localNodeId;
-        this.metadataManager = metadataManager;
-        this.sinkManager = sinkManager;
+        this.metadataManagerMap = metadataManager;
         this.executor = context.getExecutorService(1, "LogReplicationServer-");
     }
 
@@ -116,7 +134,10 @@ public class LogReplicationServer extends AbstractServer {
         if (isStandby.get() && isLeader(request, ctx, router, true)) {
             // Forward the received message to the Sink Manager for apply
             LogReplicationEntryMsg ack =
-                    sinkManager.receive(request.getPayload().getLrEntry());
+                    clientToSinkManagerMap.get(
+                        getUUID(request.getHeader().getClusterId()).toString())
+                        .receive(request.getPayload().getLrEntry(),
+                            getUUID(request.getHeader().getClusterId()).toString());
 
             if (ack != null) {
                 long ts = ack.getMetadata().getEntryType().equals(LogReplicationEntryType.LOG_ENTRY_REPLICATED) ?
@@ -153,7 +174,10 @@ public class LogReplicationServer extends AbstractServer {
         log.info("Log Replication Metadata Request received by Server.");
 
         if (isLeader(request, ctx, router, false)) {
-            LogReplicationMetadataManager metadataMgr = sinkManager.getLogReplicationMetadataManager();
+            LogReplicationSinkManager sinkManager =
+                clientToSinkManagerMap.get(getUUID(request.getHeader().getClusterId()).toString());
+            LogReplicationMetadataManager metadataMgr =
+                sinkManager.getLogReplicationMetadataManager();
             ResponseMsg response = metadataMgr.getMetadataResponse(getHeaderMsg(request.getHeader()));
             log.info("Send Metadata response :: {}", TextFormat.shortDebugString(response.getPayload()));
             router.sendResponse(response, ctx);
@@ -180,6 +204,14 @@ public class LogReplicationServer extends AbstractServer {
     private void handleLogReplicationQueryLeadership(@Nonnull RequestMsg request,
                                                      @Nonnull ChannelHandlerContext ctx,
                                                      @Nonnull IServerRouter router) {
+
+        LogReplicationSinkManager sinkManager = clientToSinkManagerMap.get(
+            getUUID(request.getHeader().getClusterId()).toString());
+
+            sinkManager.setMetadataManagerAndInit(metadataManagerMap.get(
+                getUUID(request.getHeader().getClusterId()).toString()),
+                getUUID(request.getHeader().getClusterId()).toString());
+
         log.debug("Log Replication Query Leadership Request received by Server.");
         if (!isStandby.get() && isLeader.get()) {
             log.warn("This node is the leader but the current role of the cluster is not STANDBY");
@@ -237,7 +269,8 @@ public class LogReplicationServer extends AbstractServer {
     }
 
     public void stopSink() {
-        sinkManager.stopOnLeadershipLoss();
+        clientToSinkManagerMap.values().forEach(
+            sinkManager -> sinkManager.stopOnLeadershipLoss());
     }
 
     public synchronized void setActive(boolean active) {

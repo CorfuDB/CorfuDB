@@ -121,7 +121,7 @@ public abstract class SinkBufferManager {
      * If the message is not the expected message, put the entry into the buffer if there is space.
      * @param dataMessage
      */
-    public LogReplicationEntryMsg processMsgAndBuffer(LogReplicationEntryMsg dataMessage) {
+    public LogReplicationEntryMsg processMsgAndBuffer(LogReplicationEntryMsg dataMessage, String uuid) {
 
         if (!verifyMessageType(dataMessage)) {
             log.warn("Received invalid message type {}", dataMessage.getMetadata());
@@ -134,7 +134,7 @@ public abstract class SinkBufferManager {
         // This message contains entries that haven't been applied yet
         if (preTs <= lastProcessedSeq && currentTs > lastProcessedSeq) {
             log.debug("Received in order message={}, lastProcessed={}", currentTs, lastProcessedSeq);
-            if (sinkManager.processMessage(dataMessage)) {
+            if (sinkManager.processMessage(dataMessage, uuid)) {
                 ackCnt++;
                 lastProcessedSeq = getCurrentSeq(dataMessage);
             }

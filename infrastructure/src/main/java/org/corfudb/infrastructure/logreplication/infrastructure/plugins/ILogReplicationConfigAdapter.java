@@ -20,6 +20,8 @@ public interface ILogReplicationConfigAdapter {
      */
     Set<String> fetchStreamsToReplicate();
 
+    Set<String> fetchStreamsToReplicate(int index);
+
     String getVersion();
 
     /**
@@ -30,4 +32,6 @@ public interface ILogReplicationConfigAdapter {
      * to the replicated data, therefore, this data must be provided by the plugin externally.
      */
     Map<UUID, List<UUID>> getStreamingConfigOnSink();
+
+    Map<UUID, List<UUID>> getStreamingConfigOnSink(int index);
 }

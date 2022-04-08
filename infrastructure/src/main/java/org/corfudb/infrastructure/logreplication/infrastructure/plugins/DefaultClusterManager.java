@@ -139,15 +139,25 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
 
     public static TopologyDescriptor readConfig() {
         ClusterDescriptor activeCluster;
+        ClusterDescriptor activeCluster2 = null;
+        ClusterDescriptor activeCluster3 = null;
         List<String> activeNodeNames = new ArrayList<>();
         List<String> standbyNodeNames = new ArrayList<>();
         List<String> activeNodeHosts = new ArrayList<>();
         List<String> standbyNodeHosts = new ArrayList<>();
         List<String> activeNodeIds = new ArrayList<>();
+        List<String> activeNodeIds2 = new ArrayList<>();
+        List<String> activeNodeIds3 = new ArrayList<>();
         List<String> standbyNodeIds = new ArrayList<>();
         String activeClusterId;
         String activeCorfuPort;
         String activeLogReplicationPort;
+        String activeClusterId2;
+        String activeCorfuPort2;
+        String activeLogReplicationPort2 = "0";
+        String activeClusterId3;
+        String activeCorfuPort3;
+        String activeLogReplicationPort3 = "0";
 
         String standbySiteName;
         String standbyCorfuPort;
@@ -188,12 +198,36 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
 
         } catch (IOException e) {
             log.warn("Plugin Config File {} does not exist. Using default configs", CONFIG_FILE_PATH);
-            activeClusterId = DefaultClusterConfig.getActiveClusterId();
-            activeCorfuPort = DefaultClusterConfig.getActiveCorfuPort();
-            activeLogReplicationPort = DefaultClusterConfig.getActiveLogReplicationPort();
+
+            activeClusterId2 = DefaultClusterConfig.getActiveClusterId2();
+            activeCorfuPort2 = DefaultClusterConfig.getActiveCorfuPort2();
+            activeLogReplicationPort2 =
+                DefaultClusterConfig.getActiveLogReplicationPort2();
             activeNodeNames.addAll(DefaultClusterConfig.getActiveNodeNames());
             activeNodeHosts.addAll(DefaultClusterConfig.getActiveIpAddresses());
-            activeNodeIds.addAll(DefaultClusterConfig.getActiveNodesUuid());
+            activeNodeIds2.addAll(DefaultClusterConfig.getActiveNodesUuid2());
+
+            activeCluster2 = new ClusterDescriptor(activeClusterId2,
+                ClusterRole.ACTIVE, Integer.parseInt(activeCorfuPort2));
+
+            activeClusterId3 = DefaultClusterConfig.getActiveClusterId3();
+            activeCorfuPort3 = DefaultClusterConfig.getActiveCorfuPort3();
+            activeLogReplicationPort3 =
+                DefaultClusterConfig.getActiveLogReplicationPort3();
+            //activeNodeNames.addAll(DefaultClusterConfig.getActiveNodeNames());
+            activeNodeHosts.addAll(DefaultClusterConfig.getActiveIpAddresses());
+            activeNodeIds3.addAll(DefaultClusterConfig.getActiveNodesUuid3());
+
+            activeCluster3 = new ClusterDescriptor(activeClusterId3,
+                ClusterRole.ACTIVE, Integer.parseInt(activeCorfuPort3));
+
+            activeClusterId = DefaultClusterConfig.getActiveClusterId1();
+            activeCorfuPort = DefaultClusterConfig.getActiveCorfuPort1();
+            activeLogReplicationPort =
+                DefaultClusterConfig.getActiveLogReplicationPort1();
+            //activeNodeNames.addAll(DefaultClusterConfig.getActiveNodeNames());
+            activeNodeHosts.addAll(DefaultClusterConfig.getActiveIpAddresses());
+            activeNodeIds.addAll(DefaultClusterConfig.getActiveNodesUuid1());
 
             standbySiteName = DefaultClusterConfig.getStandbyClusterId();
             standbyCorfuPort = DefaultClusterConfig.getStandbyCorfuPort();
@@ -212,6 +246,25 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
             activeCluster.getNodesDescriptors().add(nodeInfo);
         }
 
+        if (activeCluster2 != null) {
+            for (int i = 0; i < activeNodeNames.size(); i++) {
+                log.info("Active Cluster Name {}, IpAddress {}", activeNodeNames.get(i), activeNodeHosts.get(i));
+                NodeDescriptor nodeInfo = new NodeDescriptor(activeNodeHosts.get(i),
+                    activeLogReplicationPort2, ACTIVE_CLUSTER_NAME,
+                    activeNodeIds2.get(i), activeNodeIds2.get(i));
+                activeCluster2.getNodesDescriptors().add(nodeInfo);
+            }
+        }
+
+        if (activeCluster3 != null) {
+            for (int i = 0; i < activeNodeNames.size(); i++) {
+                log.info("Active Cluster Name {}, IpAddress {}", activeNodeNames.get(i), activeNodeHosts.get(i));
+                NodeDescriptor nodeInfo = new NodeDescriptor(activeNodeHosts.get(i),
+                    activeLogReplicationPort3, ACTIVE_CLUSTER_NAME,
+                    activeNodeIds3.get(i), activeNodeIds3.get(i));
+                activeCluster3.getNodesDescriptors().add(nodeInfo);
+            }
+        }
         // Setup backup cluster information
         Map<String, ClusterDescriptor> standbySites = new HashMap<>();
         standbySites.put(STANDBY_CLUSTER_NAME, new ClusterDescriptor(standbySiteName, ClusterRole.STANDBY, Integer.parseInt(standbyCorfuPort)));
@@ -223,8 +276,16 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
             standbySites.get(STANDBY_CLUSTER_NAME).getNodesDescriptors().add(nodeInfo);
         }
 
+        List<ClusterDescriptor> activeClusters =
+            new ArrayList<>();
+        activeClusters.add(activeCluster);
+        if (activeCluster2 != null && activeCluster3 != null) {
+            activeClusters.add(activeCluster2);
+            activeClusters.add(activeCluster3);
+        }
         log.info("Active Cluster Info {}; Standby Cluster Info {}", activeCluster, standbySites);
-        return new TopologyDescriptor(0L, Arrays.asList(activeCluster), new ArrayList<>(standbySites.values()));
+        return new TopologyDescriptor(0L, activeClusters,
+            new ArrayList<>(standbySites.values()));
     }
 
     public static TopologyConfigurationMsg constructTopologyConfigMsg() {

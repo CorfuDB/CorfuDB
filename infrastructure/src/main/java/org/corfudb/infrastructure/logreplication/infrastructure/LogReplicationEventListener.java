@@ -17,11 +17,13 @@ public final class LogReplicationEventListener implements StreamListener {
     }
 
     public void start() {
-        discoveryService.getLogReplicationMetadataManager().subscribeReplicationEventTable(this);
+        discoveryService.getLogReplicationMetadataManagerMap().values()
+            .iterator().next().subscribeReplicationEventTable(this);
     }
 
     public void stop() {
-        discoveryService.getLogReplicationMetadataManager().unsubscribeReplicationEventTable(this);
+        discoveryService.getLogReplicationMetadataManagerMap().values()
+            .iterator().next().unsubscribeReplicationEventTable(this);
     }
 
     @Override

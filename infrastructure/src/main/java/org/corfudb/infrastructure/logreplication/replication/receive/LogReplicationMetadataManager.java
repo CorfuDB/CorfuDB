@@ -61,17 +61,19 @@ public class LogReplicationMetadataManager {
     private final String metadataTableName;
 
     private final CorfuRuntime runtime;
-    private final String localClusterId;
+    private final String remoteClusterId;
 
     private final Table<ReplicationStatusKey, ReplicationStatusVal, Message> replicationStatusTable;
     private final Table<LogReplicationMetadataKey, LogReplicationMetadataVal, Message> metadataTable;
     private final Table<ReplicationEventKey, ReplicationEvent, Message> replicationEventTable;
 
-    public LogReplicationMetadataManager(CorfuRuntime rt, long topologyConfigId, String localClusterId) {
+    public LogReplicationMetadataManager(CorfuRuntime rt, long topologyConfigId,
+        String remoteClusterId) {
         this.runtime = rt;
         this.corfuStore = new CorfuStore(runtime);
 
-        metadataTableName = getPersistedWriterMetadataTableName(localClusterId);
+        metadataTableName =
+            getPersistedWriterMetadataTableName(remoteClusterId);
         try {
             this.metadataTable = this.corfuStore.openTable(NAMESPACE,
                             metadataTableName,
@@ -94,7 +96,7 @@ public class LogReplicationMetadataManager {
                     null,
                     TableOptions.fromProtoSchema(ReplicationEvent.class));
 
-            this.localClusterId = localClusterId;
+            this.remoteClusterId = remoteClusterId;
         } catch (Exception e) {
             log.error("Caught an exception while opening MetadataManagerTables ", e);
             throw new ReplicationWriterException(e);
@@ -402,13 +404,7 @@ public class LogReplicationMetadataManager {
             // Set 'isDataConsistent' flag on replication status table atomically with snapshot sync completed
             // information, to prevent any inconsistency between flag and state of snapshot sync completion in
             // the event of crashes
-            ReplicationStatusVal statusValue = ReplicationStatusVal.newBuilder()
-                    .setDataConsistent(true)
-                    .setStatus(SyncStatus.UNAVAILABLE)
-                    .build();
-            txn.putRecord(replicationStatusTable, ReplicationStatusKey.newBuilder().setClusterId(localClusterId).build(),
-                    statusValue, null);
-
+            setDataConsistentOnStandby(true, txn);
             txn.commit();
             log.debug("Commit snapshot apply complete timestamp={}, for topologyConfigId={}", ts, topologyConfigId);
         }
@@ -648,7 +644,8 @@ public class LogReplicationMetadataManager {
      * @param isConsistent data is consistent or not
      */
     public void setDataConsistentOnStandby(boolean isConsistent) {
-        ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(localClusterId).build();
+        ReplicationStatusKey key =
+            ReplicationStatusKey.newBuilder().setClusterId(remoteClusterId).build();
         ReplicationStatusVal val = ReplicationStatusVal.newBuilder()
                 .setDataConsistent(isConsistent)
                 .setStatus(SyncStatus.UNAVAILABLE)
@@ -658,30 +655,45 @@ public class LogReplicationMetadataManager {
             txn.commit();
         }
 
-        log.debug("setDataConsistentOnStandby: localClusterId: {}, isConsistent: {}", localClusterId, isConsistent);
+        log.debug("setDataConsistentOnStandby: remoteClusterId: {}, " +
+            "isConsistent: {}", remoteClusterId, isConsistent);
+    }
+
+    public void setDataConsistentOnStandby(boolean isConsistent, TxnContext txn) {
+        ReplicationStatusKey key =
+            ReplicationStatusKey.newBuilder().setClusterId(remoteClusterId).build();
+        ReplicationStatusVal val = ReplicationStatusVal.newBuilder()
+            .setDataConsistent(isConsistent)
+            .setStatus(SyncStatus.UNAVAILABLE)
+            .build();
+        txn.putRecord(replicationStatusTable, key, val, null);
     }
 
     public Map<String, ReplicationStatusVal> getDataConsistentOnStandby() {
-        CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, Message> record;
-        ReplicationStatusVal statusVal;
+        List<CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, Message>>
+            entries;
+
+        Map<String, ReplicationStatusVal> dataConsistentMap = new HashMap<>();
 
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-            record = txn.getRecord(replicationStatusTable, ReplicationStatusKey.newBuilder().setClusterId(localClusterId).build());
+            entries = txn.executeQuery(replicationStatusTable, record -> true);
             txn.commit();
         }
 
-        // Initially, snapshot sync is pending so the data is not consistent.
-        if (record.getPayload() == null) {
-            log.warn("DataConsistent status is not set for local cluster {}", localClusterId);
-            statusVal = ReplicationStatusVal.newBuilder().setDataConsistent(false).build();
-        } else {
-            statusVal = record.getPayload();
+        for (CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, Message> entry : entries) {
+            String clusterId = entry.getKey().getClusterId();
+            ReplicationStatusVal value = entry.getPayload();
+            if (value == null) {
+                // Initially, snapshot sync is pending so the data is not consistent.
+                log.warn("DataConsistent status is not set for remote cluster {}",
+                    clusterId);
+                value =
+                    ReplicationStatusVal.newBuilder().setDataConsistent(false).build();
+            }
+            dataConsistentMap.put(clusterId, value);
+            log.debug("getDataConsistentOnStandby: remoteClusterId: {}, " +
+                "statusVal:{}", clusterId, value);
         }
-        Map<String, ReplicationStatusVal> dataConsistentMap = new HashMap<>();
-        dataConsistentMap.put(localClusterId, statusVal);
-
-        log.debug("getDataConsistentOnStandby: localClusterId: {}, statusVal: {}", localClusterId, statusVal);
-
         return dataConsistentMap;
     }
 

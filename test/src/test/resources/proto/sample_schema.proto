@@ -115,3 +115,13 @@ message ValueFieldTagOneAndTwo {
 
     optional string payload = 1;
 }
+
+message KeyToMerge {
+    optional string key = 1;
+}
+
+message PayloadToMerge {
+    option (org.corfudb.runtime.table_schema).stream_tag = "tag_one";
+    option (org.corfudb.runtime.table_schema).is_federated = true;
+    optional string payload = 1;
+}

@@ -141,14 +141,15 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
         if (lastAckDropped < message.getMetadata().getTimestamp()) {
             // resend msg multiple times and assert ack is received for every resend
             for (int resentTme = 0; resentTme < 2; resentTme++) {
-                ack = destinationLogReplicationManager.receive(message);
+                ack = destinationLogReplicationManager.receive(message, "");
                 assertThat(ack.getMetadata().getTimestamp()).isEqualTo(message.getMetadata().getTimestamp());
             }
             // test negative scenario: when a msg is ignored by Sink, the ACK received should not be for the ignored msg
-            ack = destinationLogReplicationManager.receive(changeMsgMetadata(message));
+            ack =
+                destinationLogReplicationManager.receive(changeMsgMetadata(message), "");
             assertThat(ack.getMetadata().getTimestamp()).isEqualTo(message.getMetadata().getTimestamp());
         } else {
-            ack = destinationLogReplicationManager.receive(message);
+            ack = destinationLogReplicationManager.receive(message, "");
         }
 
         //check is_data_consistent flag is set to false on snapshot_start
