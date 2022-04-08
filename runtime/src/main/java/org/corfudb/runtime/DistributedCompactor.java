@@ -6,25 +6,25 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.CorfuStoreMetadata.*;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.*;
 import org.corfudb.runtime.exceptions.AbortCause;
-import org.corfudb.runtime.exceptions.SerializerException;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
-import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
+import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.proto.RpcCommon.TokenMsg;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.SMRObject;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.*;
 
-import javax.annotation.Nullable;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -37,13 +37,12 @@ import static org.corfudb.runtime.view.TableRegistry.*;
 
 @Slf4j
 public class DistributedCompactor {
-    private final CorfuRuntime corfuRuntime;
+    private final CorfuRuntime runtime;
     private final CorfuRuntime cpRuntime;
     private final String persistedCacheRoot;
     private final boolean isClient;
 
     private KeyDynamicProtobufSerializer keyDynamicProtobufSerializer;
-    private ISerializer protobufSerializer;
 
     private final UuidMsg clientId;
 
@@ -70,123 +69,147 @@ public class DistributedCompactor {
     public static final StringKey COMPACTION_MANAGER_KEY = StringKey.newBuilder().setKey("CompactionManagerKey").build();
     public static final StringKey CHECKPOINT_KEY = StringKey.newBuilder().setKey("minCheckpointToken").build();
 
-    private Table<StringKey, CheckpointingStatus, Message> compactionManagerTable;
-    private Table<TableName, CheckpointingStatus, Message> checkpointingStatusTable;
-    private Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointTable;
+    public static class CorfuTableNamePair {
+        public TableName tableName;
+        public CorfuTable corfuTable;
+        public CorfuTableNamePair(TableName tableName, CorfuTable corfuTable) {
+            this.tableName = tableName;
+            this.corfuTable = corfuTable;
+        }
+    }
 
-    private final CorfuStore corfuStore;
+    private CorfuStore corfuStore = null;
+    private Table<StringKey, CheckpointingStatus, Message> compactionManagerTable = null;
+    private Table<TableName, CheckpointingStatus, Message> checkpointingStatusTable = null;
+    private Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointsTable = null;
+    private Table<StringKey, RpcCommon.TokenMsg, Message> checkpointFreezeTable = null;
+    private Table<StringKey, RpcCommon.TokenMsg, Message> previousTokenTable = null;
 
-    public DistributedCompactor(CorfuRuntime corfuRuntime, CorfuRuntime cpRuntime, String persistedCacheRoot, boolean isClient) {
-        this.corfuRuntime = corfuRuntime;
+    public DistributedCompactor(CorfuRuntime corfuRuntime, CorfuRuntime cpRuntime, String persistedCacheRoot) {
+        this.runtime = corfuRuntime;
         this.cpRuntime = cpRuntime;
         this.persistedCacheRoot = persistedCacheRoot;
-        this.corfuStore = new CorfuStore(corfuRuntime);
-        this.isClient = isClient;
-
-        try {
-            protobufSerializer = corfuRuntime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
-        } catch (SerializerException se) {
-            // This means the protobuf serializer had not been registered yet.
-            protobufSerializer = createProtobufSerializer();
-            corfuRuntime.getSerializers().registerSerializer(protobufSerializer);
-        }
+        this.isClient = false;
 
         clientId = UuidMsg.newBuilder()
                 .setLsb(corfuRuntime.getParameters().getClientId().getLeastSignificantBits())
                 .setMsb(corfuRuntime.getParameters().getClientId().getMostSignificantBits())
                 .build();
+    }
 
+    public DistributedCompactor(CorfuRuntime corfuRuntime) {
+        this.runtime = corfuRuntime;
+        this.cpRuntime = null;
+        this.persistedCacheRoot = null;
+        this.isClient = true;
+
+        clientId = UuidMsg.newBuilder()
+                .setLsb(corfuRuntime.getParameters().getClientId().getLeastSignificantBits())
+                .setMsb(corfuRuntime.getParameters().getClientId().getMostSignificantBits())
+                .build();
+    }
+
+    private void openCheckpointingMetadataTables() {
         try {
+            if (this.corfuStore != null) { // only run this method once
+                return;
+            }
+            this.corfuStore = new CorfuStore(this.runtime);
+            log.debug("Opening all the checkpoint metadata tables");
             this.compactionManagerTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    COMPACTION_MANAGER_TABLE_NAME,
+                    DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
                     StringKey.class,
                     CheckpointingStatus.class,
                     null,
                     TableOptions.fromProtoSchema(CheckpointingStatus.class));
 
             this.checkpointingStatusTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    CHECKPOINT_STATUS_TABLE_NAME,
+                    DistributedCompactor.CHECKPOINT_STATUS_TABLE_NAME,
                     TableName.class,
                     CheckpointingStatus.class,
                     null,
                     TableOptions.fromProtoSchema(CheckpointingStatus.class));
 
-            this.activeCheckpointTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    ACTIVE_CHECKPOINTS_TABLE_NAME,
+            this.activeCheckpointsTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                    DistributedCompactor.ACTIVE_CHECKPOINTS_TABLE_NAME,
                     TableName.class,
                     ActiveCPStreamMsg.class,
                     null,
                     TableOptions.fromProtoSchema(ActiveCPStreamMsg.class));
+
+            this.checkpointFreezeTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                    DistributedCompactor.CHECKPOINT,
+                    StringKey.class,
+                    RpcCommon.TokenMsg.class,
+                    null,
+                    TableOptions.fromProtoSchema(RpcCommon.TokenMsg.class));
+
+            this.previousTokenTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                    DistributedCompactor.PREVIOUS_TOKEN,
+                    StringKey.class,
+                    RpcCommon.TokenMsg.class,
+                    null,
+                    TableOptions.fromProtoSchema(RpcCommon.TokenMsg.class));
         } catch (Exception e) {
-            log.error("Caught an exception while opening Compaction management tables ", e);
+            log.error("Caught an exception while opening checkpoint management tables ", e);
         }
+    }
+
+    private boolean checkGlobalCheckpointStartTrigger() {
+        // This is necessary here to stop checkpointing after it has started?
+        // if (isCheckpointFrozen(corfuStore, this.checkpointFreezeTable)) {return;}
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            final CorfuStoreEntry<StringKey, CheckpointingStatus, Message> compactionStatus =
+                    txn.getRecord(compactionManagerTable, DistributedCompactor.COMPACTION_MANAGER_KEY);
+            if (compactionStatus.getPayload() == null ||
+                    compactionStatus.getPayload().getStatus() != CheckpointingStatus.StatusType.STARTED) {
+                txn.commit();
+                return false;
+            }
+            txn.commit();
+        } catch (Exception e) {
+            log.error("Checkpointer unable to check the main status table", e);
+            return false;
+        }
+        return true;
     }
 
     public int startCheckpointing() {
         long startCp = System.currentTimeMillis();
         int count = 0;
+        log.info("Starting Checkpointing in-memory tables..");
+        count = checkpointOpenedTables();
+        if (count <= 0) {
+            log.warn("Stopping checkpointing since checkpoint of open tables has failed");
+            return count;
+        }
+
+        log.info("{} in-memory tables checkpointed using protobuf serializer. Checkpointing remaining.",
+                count);
         keyDynamicProtobufSerializer = new KeyDynamicProtobufSerializer(cpRuntime);
         cpRuntime.getSerializers().registerSerializer(keyDynamicProtobufSerializer);
 
-        log.info("inside startCheckpointing");
-        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            CorfuStoreEntry compactionManagerRecord = txn.getRecord(COMPACTION_MANAGER_TABLE_NAME, COMPACTION_MANAGER_KEY);
-            CheckpointingStatus managerStatus = (CheckpointingStatus) compactionManagerRecord.getPayload();
-            txn.commit();
-            if (managerStatus == null || managerStatus.getStatus() != StatusType.STARTED) {
+        List<TableName> tableNames = getAllTablesToCheckpoint();
+        if (tableNames == null) { // either an error or no tables to checkpoint
+            return count;
+        }
+        for (TableName tableName : tableNames) {
+            CheckpointingStatus tableStatus;
+            final CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> corfuTable =
+                    openTable(tableName, keyDynamicProtobufSerializer, cpRuntime);
+            final int successfulCheckpoints = tryCheckpointTable(tableName, corfuTable);
+            if (successfulCheckpoints < 0) {
+                // finishCompactionCycle will mark it as failed
+                MicroMeterUtils.measure(count, "compaction.num_tables." + clientId.toString());
                 return count;
             }
-        } catch (Exception e) {
-            log.warn("Exception here? : ", e);
-        }
-
-        List<TableName> tableNames;
-        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-             tableNames = new ArrayList<>(txn.keySet(checkpointingStatusTable)
-                    .stream().collect(Collectors.toList()));
-             txn.commit();
-        }
-
-        for (TableName table : tableNames) {
-            CheckpointingStatus tableStatus;
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                tableStatus = (CheckpointingStatus) txn.getRecord(
-                        CHECKPOINT_STATUS_TABLE_NAME, table).getPayload();
-
-                if (tableStatus == null || tableStatus.getStatus() != StatusType.IDLE) {
-                    txn.commit();
-                    continue;
-                }
-                //TODO: add tokens?
-                CheckpointingStatus startStatus = getCheckpointingStatus(StatusType.STARTED, null, null);
-                txn.putRecord(checkpointingStatusTable, table, startStatus, null);
-
-                UUID streamId = CorfuRuntime.getCheckpointStreamIdFromName(table.getTableName());
-                long streamTail = corfuRuntime.getSequencerView()
-                        .getStreamAddressSpace(new StreamAddressRange(streamId, Address.MAX, Address.NON_ADDRESS)).getTail();
-                txn.putRecord(activeCheckpointTable, table,
-                        ActiveCPStreamMsg.newBuilder().setTailSequence(streamTail).setIsClientTriggered(isClient).build(),
-                        null);
-
-                txn.commit();
-            } catch (TransactionAbortedException e) {
-                if (e.getAbortCause() == AbortCause.CONFLICT) {
-                    log.warn("Another compactor tried to checkpoint this table");
-                    continue;
-                } else {
-                    //finishCompactionCycle will mark it as failed
-                    MicroMeterUtils.measure(count, "compaction.num_tables." + clientId.toString());
-                    return count;
-                }
-            }
-            count++;
-            checkpointTable(table);
+            count += successfulCheckpoints; // 0 means lock failed so don't tick up count
         }
 
         long cpDuration = System.currentTimeMillis() - startCp;
         MicroMeterUtils.time(Duration.ofMillis(cpDuration), "checkpoint.total.timer",
                 "clientId", clientId.toString());
-        log.info("Took {} ms to checkpoint the tables by client {}", cpDuration, clientId.toString());
+        log.info("Took {} ms to checkpoint the tables by client {}", cpDuration, clientId);
 
         MicroMeterUtils.measure(count, "compaction.num_tables." + clientId.toString());
         log.info("ClientId: {}, Checkpointed {} tables out of {}", this.clientId, count, tableNames.size());
@@ -194,27 +217,23 @@ public class DistributedCompactor {
         return count;
     }
 
-    private void checkpointTable(TableName table) {
-        CheckpointingStatus endStatus;
-        try {
-            Token newToken;
-            if (metadataTables.contains(table.getTableName())) {
-                newToken = appendCheckpoint(openTable(table, protobufSerializer, corfuRuntime), table, corfuRuntime);
-            } else {
-                newToken = appendCheckpoint(openTable(table, keyDynamicProtobufSerializer, cpRuntime), table, cpRuntime);
+    private List<TableName> getAllTablesToCheckpoint() {
+        List<TableName> tablesToCheckpoint = null;
+        final int maxRetry = 5;
+        for (int retry = 0; retry < maxRetry; retry++) {
+            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                tablesToCheckpoint = new ArrayList<>(txn.keySet(checkpointingStatusTable)
+                        .stream().collect(Collectors.toList()));
+                txn.commit();
+            } catch (RuntimeException re) {
+                if (!isCriticalRuntimeException(re, retry, maxRetry)) {
+                    return null;
+                }
+            } catch (Throwable t) {
+                log.error("getAllTablesToCheckpoint: encountered unexpected exception", t);
             }
-            endStatus = getCheckpointingStatus(StatusType.COMPLETED, null,
-                    TokenMsg.newBuilder().setEpoch(newToken.getEpoch()).setSequence(newToken.getSequence()).build());
-        } catch (Exception e) {
-            log.warn("Failed to checkpoint table: {} due to Exception: {}", table, e);
-            endStatus = getCheckpointingStatus(StatusType.FAILED, null, null);
         }
-
-        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            txn.putRecord(checkpointingStatusTable, table, endStatus, null);
-            txn.delete(ACTIVE_CHECKPOINTS_TABLE_NAME, table);
-            txn.commit();
-        }
+        return tablesToCheckpoint;
     }
 
     public static <K, V> Token appendCheckpoint(CorfuTable<K, V> corfuTable, TableName tableName, CorfuRuntime rt) {
@@ -263,32 +282,227 @@ public class DistributedCompactor {
         return corfuTableBuilder.open();
     }
 
-    private CheckpointingStatus getCheckpointingStatus(CheckpointingStatus.StatusType statusType,
-                                                       @Nullable TokenMsg startToken,
-                                                       @Nullable TokenMsg endToken) {
-        return CheckpointingStatus.newBuilder()
-                .setStatus(statusType)
-                .setClientId(clientId)
-                .setStartToken(startToken == null ? TokenMsg.getDefaultInstance() : startToken)
-                .setEndToken(endToken==null?TokenMsg.getDefaultInstance():endToken)
-                .build();
+    /**
+     * Checkpoint all tables already opened by the current JVM to save on reads & memory.
+     * @return positive count on success and negative value on failure
+     */
+    public synchronized int checkpointOpenedTables() {
+        openCheckpointingMetadataTables();
+
+        if (!checkGlobalCheckpointStartTrigger()) {
+            return 0; // Orchestrator says checkpointing is either not needed or done.
+        }
+
+        int count = 0;
+        for (CorfuTableNamePair openedTable :
+                this.runtime.getTableRegistry().getAllOpenTablesForCheckpointing()) {
+            final int isSuccess = tryCheckpointTable(openedTable.tableName, openedTable.corfuTable);
+            if (isSuccess < 0) {
+                log.warn("Stopping checkpointing after failure in {}${}",
+                        openedTable.tableName.getNamespace(), openedTable.tableName.getTableName());
+                return -count; // Stop checkpointing other tables on first failure
+            }
+            count += isSuccess; // 0 means lock failed so don't uptick count of checkpointed tables
+        }
+        return count; // All open tables have been successfully checkpointed
     }
 
-    private static ISerializer createProtobufSerializer() {
-        ConcurrentMap<String, Class<? extends Message>> classMap = new ConcurrentHashMap<>();
+    /**
+     * Distributed Checkpointing involves 3 steps:
+     * 1. Acquire distributed lock on the table to be checkpointed using transactions.
+     * 2. Attempt to checkpoint the table, retry on retryable errors like WrongEpochException.
+     * 3. If successful, unlock the table. if unsuccessful mark the checkpoint as failed.
+     * @param corfuTable - the locally opened Table instance to be checkpointed
+     * @return 1 on success, 0 if lock failed and negative value on error
+     */
+    private int tryCheckpointTable(TableName tableName, CorfuTable corfuTable) {
+        if (!tryLockMyTableToCheckpoint(tableName)) {
+            return 0; // Failure to get a lock is treated as success
+        }
 
-        // Register the schemas of TableName, TableDescriptors, TableMetadata, ProtobufFilename/Descriptor
-        // to be able to understand registry table.
-        classMap.put(getTypeUrl(TableName.getDescriptor()), TableName.class);
-        classMap.put(getTypeUrl(TableDescriptors.getDescriptor()),
-                TableDescriptors.class);
-        classMap.put(getTypeUrl(TableMetadata.getDescriptor()),
-                TableMetadata.class);
-        classMap.put(getTypeUrl(ProtobufFileName.getDescriptor()),
-                ProtobufFileName.class);
-        classMap.put(getTypeUrl(ProtobufFileDescriptor.getDescriptor()),
-                ProtobufFileDescriptor.class);
-        return new ProtobufSerializer(classMap);
+        Token endToken = tryAppendCheckpoint(tableName, corfuTable);
+
+        return unlockMyCheckpointTable(tableName, endToken);
+    }
+
+    /**
+     * @param tableName - protobuf name of the table used as key for the granular lock
+     * @return true if the table can be checkpointed by me
+     *          false if lock acquisition fails due to race or a different error
+     */
+    private boolean tryLockMyTableToCheckpoint(TableName tableName) {
+        final int maxRetries = 5;
+        for (int retry = 0; retry < maxRetries; retry++) {
+            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                final CorfuStoreEntry<TableName, CheckpointingStatus, Message> tableToChkpt =
+                        txn.getRecord(checkpointingStatusTable, tableName);
+                if (tableToChkpt.getPayload().getStatus() == CheckpointingStatus.StatusType.IDLE) {
+                    UUID streamId = CorfuRuntime.getCheckpointStreamIdFromName(
+                            TableRegistry.getFullyQualifiedTableName(
+                                    tableName.getNamespace(), tableName.getTableName()));
+                    long streamTail = runtime.getSequencerView()
+                            .getStreamAddressSpace(new StreamAddressRange(streamId,
+                                    Address.MAX, Address.NON_ADDRESS)).getTail();
+                    txn.putRecord(checkpointingStatusTable,
+                            tableName,
+                            CheckpointingStatus.newBuilder()
+                                    .setStatus(CheckpointingStatus.StatusType.STARTED)
+                                    .setClientId(RpcCommon.UuidMsg.newBuilder()
+                                            .setLsb(runtime.getParameters().getClientId().getLeastSignificantBits())
+                                            .setMsb(runtime.getParameters().getClientId().getMostSignificantBits())
+                                            .build())
+                                    .build(),
+                            null);
+                    txn.putRecord(activeCheckpointsTable, tableName,
+                            ActiveCPStreamMsg.newBuilder()
+                                    .setTailSequence(streamTail)
+                                    .setIsClientTriggered(isClient) // This will stall server side compaction!
+                                    .build(),
+                            null);
+                } else { // This table is already being checkpointed by someone else
+                    txn.commit();
+                    return false;
+                }
+                txn.commit();
+                return true; // Lock successfully acquired!
+            } catch (TransactionAbortedException e) {
+                if (e.getAbortCause() == AbortCause.CONFLICT) {
+                    log.info("My opened table {}${} is being checkpointed by someone else",
+                            tableName.getNamespace(), tableName.getTableName());
+                    return false;
+                }
+            } catch (RuntimeException re) { // TODO: return a different error code maybe?
+                if (isCriticalRuntimeException(re, retry, maxRetries)) {
+                    return false; // stop on non-retryable exceptions
+                }
+            } catch (Throwable t) {
+                log.error("clientChpt-tryLock: encountered unexpected exception", t);
+                log.error("StackTrace: {}", t.getStackTrace());
+            }
+        }
+        return false;
+    }
+
+    /**
+     * This is the routine where the actual checkpointing is invoked
+     * @param tableName - protobuf name of the table to be checkpointed
+     * @param corfuTable - the table to be checkpointed
+     * @return the token returned from the checkpointing, null if failure happens
+     */
+    private Token tryAppendCheckpoint(TableName tableName, CorfuTable corfuTable) {
+        final int maxRetries = 5;
+        for (int retry = 0; retry < maxRetries; retry++) {
+            try {
+                log.info("Client checkpointing locally opened table {}${}",
+                        tableName.getNamespace(), tableName.getTableName());
+                return DistributedCompactor.appendCheckpoint(corfuTable, tableName, runtime);
+            } catch (RuntimeException re) {
+                if (isCriticalRuntimeException(re, retry, maxRetries)) {
+                    return null; // stop on non-retryable exceptions
+                }
+            } catch (Throwable t) {
+                log.error("clientCheckpointer: encountered unexpected exception", t);
+                log.error("StackTrace: {}", t.getStackTrace());
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Mark the checkpointed table as either done or failed based on endToken
+     * @param tableName - protobuf name of the table just checkpointed
+     * @param endToken - final token at which the checkpoint snapshot was written
+     * @return - 1 on success, 0 or negative value on failure
+     */
+    private int unlockMyCheckpointTable(TableName tableName, Token endToken) {
+        final int checkpointFailedError = -1;
+        final int checkpointSuccess = 1;
+        int isSuccess = checkpointFailedError;
+        final int maxRetries = 5;
+        for (int retry = 0; retry < maxRetries; retry++) {
+            try (TxnContext endTxn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                if (endToken == null) {
+                    log.error("clientCheckpointer: Marking checkpointing as failed on table {}", tableName);
+                    endTxn.putRecord(checkpointingStatusTable,
+                            tableName,
+                            CheckpointingStatus.newBuilder()
+                                    .setStatus(CheckpointingStatus.StatusType.FAILED)
+                                    .setClientId(RpcCommon.UuidMsg.newBuilder()
+                                            .setLsb(runtime.getParameters().getClientId().getLeastSignificantBits())
+                                            .setMsb(runtime.getParameters().getClientId().getMostSignificantBits())
+                                            .build())
+                                    .build(),
+                            null);
+                    isSuccess = checkpointFailedError; // this will stop checkpointing on first failure
+                } else {
+                    endTxn.putRecord(checkpointingStatusTable,
+                            tableName,
+                            CheckpointingStatus.newBuilder()
+                                    .setStatus(CheckpointingStatus.StatusType.COMPLETED)
+                                    .setClientId(RpcCommon.UuidMsg.newBuilder()
+                                            .setLsb(runtime.getParameters().getClientId().getLeastSignificantBits())
+                                            .setMsb(runtime.getParameters().getClientId().getMostSignificantBits())
+                                            .build())
+                                    .setEndToken(RpcCommon.TokenMsg.newBuilder()
+                                            .setEpoch(endToken.getEpoch())
+                                            .setSequence(endToken.getSequence())
+                                            .build())
+                                    .build(),
+                            null);
+                    isSuccess = checkpointSuccess;
+                }
+                endTxn.delete(activeCheckpointsTable, tableName);
+                endTxn.commit();
+            } catch (RuntimeException re) {
+                if (isCriticalRuntimeException(re, retry, maxRetries)) {
+                    return checkpointFailedError; // stop on non-retryable exceptions
+                }
+            } catch (Throwable t) {
+                log.error("clientCheckpointer: encountered unexpected exception", t);
+                log.error("StackTrace: {}", t.getStackTrace());
+                isSuccess = checkpointFailedError;
+            }
+        }
+        return isSuccess;
+    }
+
+    /**
+     *
+     * @param re - the exception this method is called on
+     * @param retry - the number of times retries have been done
+     * @param maxRetries - max number of times retries need to happen
+     * @return - True if we should stop & return. False if we can retry!
+     */
+    private boolean isCriticalRuntimeException(RuntimeException re, int retry, int maxRetries) {
+        log.trace("checkpointer: encountered an exception on attempt {}/{}.",
+                retry, maxRetries, re);
+
+        if (retry == maxRetries - 1) {
+            log.error("checkpointer: retry exhausted.", re);
+            return true;
+        }
+
+        if (re instanceof NetworkException || re.getCause() instanceof TimeoutException) {
+            try {
+                TimeUnit.MILLISECONDS.sleep(DistributedCompactor.CONN_RETRY_DELAY_MILLISEC);
+            } catch (InterruptedException e) {
+                log.error("Interrupted in network retry sleep");
+                return true;
+            }
+        }
+        if (re instanceof WrongClusterException) {
+            log.error("Wrong cluster exception hit! stopping right away!");
+            return true;
+        }
+        return false; // it is ok to retry a few times on network timeouts
+    }
+
+    public static TableName getTableName(Table<Message, Message, Message> table) {
+        String fullName = table.getFullyQualifiedTableName();
+        return TableName.newBuilder()
+                .setNamespace(table.getNamespace())
+                .setTableName(fullName.substring(fullName.indexOf("$")+1))
+                .build();
     }
 
     /**
