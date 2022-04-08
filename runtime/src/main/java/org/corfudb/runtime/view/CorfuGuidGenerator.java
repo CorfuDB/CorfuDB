@@ -44,7 +44,7 @@ class CorfuGuid {
         this.uniqueInstanceId = uniqueInstanceId;
     }
 
-    private static final long TIMESTAMP_MSB_MASK = 0x000000FFffFF0000L;
+    private static final long TIMESTAMP_MSB_MASK = 0x0000007FffFF0000L;
     private static final long TIMESTAMP_LSB_MASK = 0x000000000000FFffL;
     private static final long INSTANCE_ID_MASK   = 0x000000000000FFffL;
     private static final int CORRECTION_MASK     = MAX_CORRECTION;
