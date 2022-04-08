@@ -16,6 +16,7 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileName;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileDescriptor;
 import org.corfudb.runtime.DistributedClientCheckpointer;
+import org.corfudb.runtime.DistributedCompactor;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
@@ -679,12 +680,32 @@ public class TableRegistry {
 
     /**
      * Returns all the tables that have been opened by this instance
+     * This includes special tables like RegistryTable and ProtobufDescriptTable
+     * that are opened outside the Table.java type
      * This is used to run local checkpointing without reading state
      *
      * @return ArrayList of all Tables opened here.
      */
-    public ArrayList<Table<Message, Message, Message>> getAllOpenTablesForCheckpointing() {
-        return new ArrayList<>(this.tableMap.values());
+    public List<DistributedCompactor.CorfuTableNamePair> getAllOpenTablesForCheckpointing() {
+        List<DistributedCompactor.CorfuTableNamePair> allTables = new ArrayList<>();
+        allTables.add(new DistributedCompactor.CorfuTableNamePair(
+                TableName.newBuilder()
+                        .setNamespace(CORFU_SYSTEM_NAMESPACE)
+                        .setTableName(REGISTRY_TABLE_NAME)
+                        .build(),
+                registryTable));
+        allTables.add(new DistributedCompactor.CorfuTableNamePair(
+                TableName.newBuilder()
+                        .setNamespace(CORFU_SYSTEM_NAMESPACE)
+                        .setTableName(PROTOBUF_DESCRIPTOR_TABLE_NAME)
+                        .build(),
+                protobufDescriptorTable));
+        this.tableMap.values().forEach(t ->
+            allTables.add(new DistributedCompactor.CorfuTableNamePair(
+                    DistributedCompactor.getTableName(t),
+                    t.getCorfuTableForCheckpointingOnly()))
+        );
+        return allTables;
     }
 
     /**
