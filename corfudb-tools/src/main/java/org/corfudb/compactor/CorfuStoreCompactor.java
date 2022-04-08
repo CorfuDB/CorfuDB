@@ -64,8 +64,8 @@ public class CorfuStoreCompactor {
     void checkpoint() {
         DistributedCompactor distributedCompactor = new DistributedCompactor(corfuRuntime,
                 cpRuntime,
-                persistedCacheRoot,
-                false);
+                persistedCacheRoot
+        );
         distributedCompactor.startCheckpointing();
     }
 

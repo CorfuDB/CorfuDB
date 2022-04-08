@@ -8,6 +8,7 @@ import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.DistributedCompactor;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.Layout;
@@ -113,7 +114,7 @@ public class CompactorService implements ManagementService {
     private void runCheckpointer() {
         try(TxnContext txn = corfuStore.txn(TableRegistry.CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                    CompactorLeaderServices.getCOMPACTION_MANAGER_TABLE_NAME(),
+                    DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
                     CompactorLeaderServices.getCOMPACTION_MANAGER_KEY()).getPayload();
             txn.commit();
             if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED) {
@@ -126,7 +127,7 @@ public class CompactorService implements ManagementService {
         isOrchestratorRunning = true;
         try(TxnContext txn = corfuStore.txn(TableRegistry.CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                    CompactorLeaderServices.getCOMPACTION_MANAGER_TABLE_NAME(),
+                    DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
                     CompactorLeaderServices.getCOMPACTION_MANAGER_KEY()).getPayload();
             txn.commit();
             if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED){

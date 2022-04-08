@@ -9,7 +9,7 @@ public class InvokeCheckpointingMock implements IInvokeCheckpointing {
 
     public InvokeCheckpointingMock(CorfuRuntime runtime, CorfuRuntime cpRuntime) {
         this.distributedCompactor =
-                new DistributedCompactor(runtime, cpRuntime, null, true);
+                new DistributedCompactor(runtime, cpRuntime, null);
     }
 
     @Override
