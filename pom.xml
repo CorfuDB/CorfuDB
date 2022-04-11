@@ -41,6 +41,8 @@
         <logback.classic.version>1.2.3</logback.classic.version>
 
         <!-- Dependency versions -->
+        <netty.version>4.1.75.Final</netty.version>
+        <netty.tcnative.version>2.0.51.Final</netty.tcnative.version>
         <junit.jupiter.version>5.7.1</junit.jupiter.version>
     </properties>
 
@@ -165,13 +167,13 @@
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-all</artifactId> <!-- Use 'netty-all' for 4.0 or above -->
-            <version>4.1.73.Final</version>
+            <version>${netty.version}</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-tcnative</artifactId>
-            <version>2.0.46.Final</version>
+            <version>${netty.tcnative.version}</version>
             <classifier>${os.detected.classifier}</classifier>
         </dependency>
         <dependency>
