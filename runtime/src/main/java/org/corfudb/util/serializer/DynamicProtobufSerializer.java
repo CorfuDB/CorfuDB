@@ -1,16 +1,11 @@
 package org.corfudb.util.serializer;
 
 import com.google.common.reflect.TypeToken;
-import com.google.protobuf.Any;
-import com.google.protobuf.DescriptorProtos;
+import com.google.protobuf.*;
 import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
-import com.google.protobuf.Descriptors;
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.DescriptorValidationException;
 import com.google.protobuf.Descriptors.FileDescriptor;
-import com.google.protobuf.DynamicMessage;
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.Message;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
@@ -298,6 +293,95 @@ public class DynamicProtobufSerializer implements ISerializer {
         return builder.build();
     }
 
+    public DynamicMessage createDynamicMessageForBenchmark(Any anyMsg, String currentItr) {
+        FileDescriptor fileDescriptor;
+        try {
+            String fullMessageName = getFullMessageName(anyMsg);
+            fileDescriptor = getDescriptor(
+                    messagesFdProtoNameMap.get(fullMessageName));
+        } catch (Descriptors.DescriptorValidationException e) {
+            log.warn("DescriptorValidationException thrown", e);
+            return null;
+        }
+        Descriptors.Descriptor descriptor =
+                fileDescriptor.findMessageTypeByName(getMessageName(anyMsg));
+        DynamicMessage.Builder builder;
+        boolean modifiedAnyMsg = false;
+
+        try {
+            builder = DynamicMessage.parseFrom(descriptor,
+                    anyMsg.getValue()).toBuilder();
+
+            for(Descriptors.FieldDescriptor fieldDesc : descriptor.getFields()) {
+                switch (fieldDesc.getType()) {
+                    case DOUBLE:
+                        builder.setField(fieldDesc, Double.parseDouble(currentItr));
+                        modifiedAnyMsg = true;
+                        break;
+                    case FLOAT:
+                        builder.setField(fieldDesc, Float.parseFloat(currentItr));
+                        modifiedAnyMsg = true;
+                        break;
+                    case INT64:
+                        builder.setField(fieldDesc, Long.parseLong(currentItr));
+                        modifiedAnyMsg = true;
+                        break;
+                    case UINT64:
+                        builder.setField(fieldDesc, Long.parseLong(currentItr));
+                        modifiedAnyMsg = true;
+                        break;
+                    case INT32:
+                        builder.setField(fieldDesc, Integer.parseInt(currentItr));
+                        modifiedAnyMsg = true;
+                        break;
+                    case FIXED64:
+                        builder.setField(fieldDesc, Long.parseLong(currentItr));
+                        modifiedAnyMsg = true;
+                        break;
+                    case FIXED32:
+                        builder.setField(fieldDesc, Integer.parseInt(currentItr));
+                        modifiedAnyMsg = true;
+                        break;
+                    case BOOL:
+                        builder.setField(fieldDesc, false);
+                        modifiedAnyMsg = true;
+                        break;
+                    case STRING:
+                        builder.setField(fieldDesc, currentItr);
+                        modifiedAnyMsg = true;
+                        break;
+                    case UINT32:
+                        builder.setField(fieldDesc, Integer.parseInt(currentItr));
+                        modifiedAnyMsg = true;
+                        break;
+                    case SFIXED32:
+                        builder.setField(fieldDesc, Integer.parseInt(currentItr));
+                        modifiedAnyMsg = true;
+                        break;
+                    case SFIXED64:
+                        builder.setField(fieldDesc, Long.parseLong(currentItr));
+                        modifiedAnyMsg = true;
+                        break;
+                    case SINT32:
+                        builder.setField(fieldDesc, Integer.parseInt(currentItr));
+                        modifiedAnyMsg = true;
+                        break;
+                    case SINT64:
+                        builder.setField(fieldDesc, Long.parseLong(currentItr));
+                        modifiedAnyMsg = true;
+                        break;
+                }
+                if (modifiedAnyMsg) {
+                    break;
+                }
+            }
+        } catch (InvalidProtocolBufferException e) {
+            log.warn("Unable to Parse Key {}", anyMsg.getValue());
+            return null;
+        }
+
+        return builder.build();
+    }
     /**
      * Deserialize an object from a given byte buffer.
      *

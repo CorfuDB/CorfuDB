@@ -33,7 +33,8 @@ public class CorfuStoreBrowserEditorMain {
         listTablesForTag,
         listTagsForTable,
         listTagsMap,
-        printMetadataMap
+        printMetadataMap,
+        radioTest
     }
 
     private static final String USAGE = "Usage: corfu-browser --host=<host> " +
@@ -251,6 +252,22 @@ public class CorfuStoreBrowserEditorMain {
                     } else {
                         log.error("Print metadata map for a specific address. Specify using tag --address");
                     }
+                    break;
+                case radioTest:
+                    numItems = 10;
+                    itemSize = 1;
+                    int startIdx = 0;
+                    if (opts.get("--numItems") != null) {
+                        numItems = Integer.parseInt(opts.get("--numItems").toString());
+                    }
+                    if (opts.get("--itemSize") != null) {
+                        itemSize = Integer.parseInt(opts.get("--itemSize").toString());
+                    }
+                    if (opts.get("--address") != null) {
+                        startIdx = Integer.parseInt(opts.get("--address").toString());
+                    }
+                    browser.radioTest(namespace, tableName, numItems, startIdx);
+                    break;
                 default:
                     break;
             }

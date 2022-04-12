@@ -612,36 +612,47 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         Assert.assertEquals(browser.listTables(namespace), 1);
 
         // Edit the record changing value from 3L -> 5L
-        String keyString = "{\"msb\": \"1\", \"lsb\": \"1\"}";
-        String newValString = "{\"msb\": \"5\", \"lsb\": \"5\"}";
-        final long newVal = 5L;
-        SampleSchema.Uuid newValUuid = SampleSchema.Uuid.newBuilder()
-            .setMsb(newVal)
-            .setLsb(newVal)
-            .build();
+//        String keyString = "{\"msb\": \"1\", \"lsb\": \"1\"}";
+//        String newValString = "{\"msb\": \"5\", \"lsb\": \"5\"}";
+//        final long newVal = 5L;
+//        SampleSchema.Uuid newValUuid = SampleSchema.Uuid.newBuilder()
+//            .setMsb(newVal)
+//            .setLsb(newVal)
+//            .build();
 
-        CorfuDynamicRecord editedRecord = browser.editRecord(namespace,
-            tableName, keyString, newValString);
-        Assert.assertNotNull(editedRecord);
+        int numEntriesBefore = browser.printTable(namespace, tableName);
 
-        DynamicMessage dynamicValMessage = DynamicMessage.newBuilder(newValUuid)
-            .build();
-        String valTypeUrl = Any.pack(newValUuid).getTypeUrl();
-        DynamicMessage dynamicMetadataMessage = DynamicMessage.newBuilder(metadata)
-            .build();
-        String metadataTypeUrl = Any.pack(metadata).getTypeUrl();
-        CorfuDynamicRecord expectedRecord = new CorfuDynamicRecord(valTypeUrl,
-            dynamicValMessage, metadataTypeUrl, dynamicMetadataMessage);
+        browser.radioTest(namespace, tableName, 10, 0);
 
-        Assert.assertEquals(expectedRecord, editedRecord);
 
-        // Now test deleteRecord capability
-        assertThat(browser.deleteRecord(namespace, tableName, keyString)).isEqualTo(1);
-        // Try to edit the deleted key and verify it is a no-op
-        Assert.assertNull(browser.editRecord(namespace, tableName, keyString,
-            newValString));
-        // Try to delete a deleted key and verify it is a no-op
-        assertThat(browser.deleteRecord(namespace, tableName, keyString)).isZero();
+        assertThat(browser.printTable(namespace, tableName)).isEqualTo(numEntriesBefore + 10);
+
+        browser.radioTest(namespace, tableName, 10, 11);
+
+        assertThat(browser.printTable(namespace, tableName)).isEqualTo(numEntriesBefore + 10 + 10);
+
+//        CorfuDynamicRecord editedRecord = browser.editRecord(namespace,
+//            tableName, keyString, newValString);
+////        Assert.assertNotNull(editedRecord);
+//
+//        DynamicMessage dynamicValMessage = DynamicMessage.newBuilder(newValUuid)
+//            .build();
+//        String valTypeUrl = Any.pack(newValUuid).getTypeUrl();
+//        DynamicMessage dynamicMetadataMessage = DynamicMessage.newBuilder(metadata)
+//            .build();
+//        String metadataTypeUrl = Any.pack(metadata).getTypeUrl();
+//        CorfuDynamicRecord expectedRecord = new CorfuDynamicRecord(valTypeUrl,
+//            dynamicValMessage, metadataTypeUrl, dynamicMetadataMessage);
+//
+//        Assert.assertEquals(expectedRecord, editedRecord);
+//
+//        // Now test deleteRecord capability
+//        assertThat(browser.deleteRecord(namespace, tableName, keyString)).isEqualTo(1);
+//        // Try to edit the deleted key and verify it is a no-op
+//        Assert.assertNull(browser.editRecord(namespace, tableName, keyString,
+//            newValString));
+//        // Try to delete a deleted key and verify it is a no-op
+//        assertThat(browser.deleteRecord(namespace, tableName, keyString)).isZero();
         runtime.shutdown();
     }
 }
