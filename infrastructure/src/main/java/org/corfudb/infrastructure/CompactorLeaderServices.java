@@ -1,8 +1,6 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalNotification;
 import com.google.protobuf.Message;
 import lombok.Getter;
@@ -26,13 +24,11 @@ import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.TableRegistry;
 
 import javax.annotation.Nullable;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
@@ -48,7 +44,7 @@ public class CompactorLeaderServices {
     private Table<StringKey, RpcCommon.TokenMsg, Message> previousTokenTable;
     private Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable;
 
-    private Cache<TableName, Tuple<Long, Long>> readCache;
+    private Map<TableName, Tuple<Long, Long>> readCache = new HashMap<>();
 
     @Getter
     private static final StringKey COMPACTION_MANAGER_KEY = StringKey.newBuilder().setKey("CompactionManagerKey").build();
@@ -66,12 +62,6 @@ public class CompactorLeaderServices {
         this.corfuRuntime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);
         this.nodeId = nodeID;
-
-        readCache = CacheBuilder.newBuilder()
-                .expireAfterAccess(this.corfuRuntime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
-                .removalListener(this::handleEviction)
-                .recordStats()
-                .build();
 
         try {
             this.compactionManagerTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
@@ -125,6 +115,7 @@ public class CompactorLeaderServices {
         if (!isLeader) {
             return false;
         }
+        //add split brain scenario -
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CorfuStoreEntry compactionManagerRecord = txn.getRecord(DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME, COMPACTION_MANAGER_KEY);
             CheckpointingStatus currentStatus = (CheckpointingStatus) compactionManagerRecord.getPayload();
@@ -191,26 +182,30 @@ public class CompactorLeaderServices {
             txn.commit();
         }
         if (tableNames.size() == 0) {
-            if (readCache.asMap().containsKey(emptyTable)) {
-                if (System.currentTimeMillis() - readCache.asMap().get(emptyTable).second > timeout) {
+            if (readCache.containsKey(emptyTable)) {
+                //TODO: have a separate timeout?
+                if (System.currentTimeMillis() - readCache.get(emptyTable).second > timeout) {
+                    readCache.clear();
                     finishCompactionCycle();
                     return;
                 }
-                readCache.asMap().put(emptyTable, readCache.asMap().get(emptyTable));
+                readCache.put(emptyTable, readCache.get(emptyTable));
             } else {
-                readCache.asMap().put(emptyTable, Tuple.of(null, System.currentTimeMillis()));
+                readCache.put(emptyTable, Tuple.of(null, System.currentTimeMillis()));
             }
         }
         for (TableName table : tableNames) {
             if (!isLeader) {
+                readCache.clear();
                 return;
             }
-            UUID streamId = CorfuRuntime.getCheckpointStreamIdFromName(table.getTableName());
+            String streamName = TableRegistry.getFullyQualifiedTableName(table.getNamespace(), table.getTableName());
+            UUID streamId = CorfuRuntime.getCheckpointStreamIdFromName(streamName);
             long currentStreamTail = corfuRuntime.getSequencerView()
                     .getStreamAddressSpace(new StreamAddressRange(streamId, Address.MAX, Address.NON_ADDRESS)).getTail();
-            if (readCache.asMap().containsKey(table)) {
-                if (readCache.asMap().get(table).first >= currentStreamTail &&
-                        (System.currentTimeMillis() - readCache.asMap().get(table).second) > timeout) {
+            if (readCache.containsKey(table)) {
+                if (readCache.get(table).first >= currentStreamTail &&
+                        (System.currentTimeMillis() - readCache.get(table).second) > timeout) {
                     try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                         CheckpointingStatus tableStatus = txn.getRecord(
                                 checkpointingStatusTable, table).getPayload();
@@ -222,17 +217,18 @@ public class CompactorLeaderServices {
                             txn.delete(activeCheckpointsTable, table);
                             log.info("Came here as well");
                         }
-                        log.info("need to fail for table: {}", table);
                         txn.commit();
                     } catch (TransactionAbortedException ex) {
                         if (ex.getAbortCause() == AbortCause.CONFLICT) {
                             log.warn("Another node tried to commit");
+                            readCache.clear();
+                            return;
                         }
                     }
                 }
-                readCache.asMap().put(table, Tuple.of(currentStreamTail, readCache.asMap().get(table).second));
+                readCache.put(table, Tuple.of(currentStreamTail, readCache.get(table).second));
             } else {
-                readCache.asMap().put(table, Tuple.of(currentStreamTail, System.currentTimeMillis()));
+                readCache.put(table, Tuple.of(currentStreamTail, System.currentTimeMillis()));
             }
         }
     }
@@ -242,6 +238,8 @@ public class CompactorLeaderServices {
         if (!isLeader) {
             return;
         }
+
+        List<TableName> tableNames;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
                     DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME, COMPACTION_MANAGER_KEY).getPayload();
@@ -252,21 +250,6 @@ public class CompactorLeaderServices {
                 return;
             }
 
-            txn.putRecord(compactionManagerTable, COMPACTION_MANAGER_KEY,
-                    getCheckpointingStatus(StatusType.FINALIZING, null, null),
-                    null);
-            txn.commit();
-        } catch (TransactionAbortedException e) {
-            if (e.getAbortCause() == AbortCause.CONFLICT) {
-                log.warn("Another compactor tried to modify this table", e);
-            } else {
-                log.error("TransactionAbortedException: {}", e.getStackTrace());
-            }
-            return;
-        }
-
-        List<TableName> tableNames;
-        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             tableNames = new ArrayList<TableName>(txn.keySet(checkpointingStatusTable)
                     .stream().collect(Collectors.toList()));
 

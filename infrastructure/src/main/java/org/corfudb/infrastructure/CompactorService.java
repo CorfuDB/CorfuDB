@@ -45,8 +45,7 @@ public class CompactorService implements ManagementService {
     private ICompactionTriggerPolicy compactionTriggerPolicy;
     private CompactorLeaderServices compactorLeaderServices;
     private CorfuStore corfuStore;
-
-    private boolean isOrchestratorRunning = false;
+    private boolean isLeader;
 
     //TODO: make it a prop file and maybe pass it from the server
     List<TableName> sensitiveTables = new ArrayList<>();
@@ -85,24 +84,13 @@ public class CompactorService implements ManagementService {
         this.compactionTriggerPolicy.setCorfuRuntime(getCorfuRuntime());
 
         orchestratorThread.scheduleAtFixedRate(
-            () -> {
-                boolean isLeader = isNodePrimarySequencer(updateLayoutAndGet());
-                log.info("isLeader: {}", isLeader);
-                if (!isLeader) {
-                    compactorLeaderServices.setLeader(false);
-                    return;
-                }
-                if (!isOrchestratorRunning) {
-                    compactorLeaderServices.setLeader(true);
-                    runOrchestrator();
-                }
-            },
+            this::runOrchestrator,
             interval.toMillis(),
             interval.toMillis(),
             TimeUnit.MILLISECONDS
         );
 
-        spawnJvm.scheduleWithFixedDelay(
+        spawnJvm.scheduleAtFixedRate(
             this::runCheckpointer,
             interval.toMillis(),
             interval.toMillis(),
@@ -110,13 +98,13 @@ public class CompactorService implements ManagementService {
         );
     }
 
-
     private void runCheckpointer() {
         try(TxnContext txn = corfuStore.txn(TableRegistry.CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
                     DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
                     CompactorLeaderServices.getCOMPACTION_MANAGER_KEY()).getPayload();
             txn.commit();
+            log.info("runcp managerStatus: {}", managerStatus != null ? managerStatus : "null");
             if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED) {
                 invokeCheckpointing.invokeCheckpointing();
             }
@@ -124,12 +112,17 @@ public class CompactorService implements ManagementService {
     }
 
     private void runOrchestrator() {
-        isOrchestratorRunning = true;
+        this.isLeader = isNodePrimarySequencer(updateLayoutAndGet());
+        compactorLeaderServices.setLeader(this.isLeader);
+        if (!isLeader) {
+            return;
+        }
         try(TxnContext txn = corfuStore.txn(TableRegistry.CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
                     DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
                     CompactorLeaderServices.getCOMPACTION_MANAGER_KEY()).getPayload();
             txn.commit();
+            log.info("managerStatus: {}", managerStatus != null ? managerStatus : "null");
             if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED){
                 compactorLeaderServices.validateLiveness(LIVENESS_TIMEOUT);
             } else if (compactionTriggerPolicy.shouldTrigger(TRIGGER_INTERVAL.getSeconds())) {
@@ -138,8 +131,6 @@ public class CompactorService implements ManagementService {
         } catch (Exception e) {
             log.warn("Exception in runOrchestrator: ", e);
         }
-        isOrchestratorRunning = false;
-
     }
 
     private Layout updateLayoutAndGet() {
@@ -159,7 +150,7 @@ public class CompactorService implements ManagementService {
     public void shutdown() {
         invokeCheckpointing.shutdown();
         orchestratorThread.shutdownNow();
-        spawnJvm.shutdown();
+        spawnJvm.shutdownNow();
         log.info("Compactor Orchestrator service shutting down.");
     }
 }
