@@ -227,3 +227,10 @@ test/.jqwik-database
 .flattened-pom.xml
 /*/.flattened-pom.xml
 tags
+
+#temp files
+copy-to-cluster.sh
+compactor_runner.py
+corfu-compactor-config.yml
+corfudb-tools-logback.prod.xml
+corfudb-tools-nonconfig-logback.prod.xml
