@@ -77,6 +77,10 @@ public final class FileSystemAgent {
         instance = Optional.of(new FileSystemAgent(config));
     }
 
+    public static void shutdown() {
+        PartitionAgent.shutdown();
+    }
+
     public static ResourceQuota getResourceQuota() {
         Supplier<IllegalStateException> err = () -> new IllegalStateException(NOT_CONFIGURED_ERR_MSG);
         return instance.orElseThrow(err).logSizeQuota;
@@ -245,6 +249,13 @@ public final class FileSystemAgent {
             private final boolean readOnly;
             private final long availableSpace;
             private final long totalSpace;
+        }
+
+        /**
+         * Clean up
+         */
+        public static void shutdown() {
+            scheduler.shutdown();
         }
     }
 }
