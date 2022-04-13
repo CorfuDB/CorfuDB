@@ -79,21 +79,6 @@
                             </execution>
 
                             <execution>
-                                <id>Corfu cmdlets</id>
-                                <phase>package</phase>
-                                <goals>
-                                    <goal>exec</goal>
-                                </goals>
-                                <configuration>
-                                    <executable>cp</executable>
-                                    <arguments>
-                                        <argument>${session.executionRootDirectory}/cmdlets/target/cmdlets-${project.version}-shaded.jar</argument>
-                                        <argument>target</argument>
-                                    </arguments>
-                                </configuration>
-                            </execution>
-
-                            <execution>
                                 <id>Corfu browser tools</id>
                                 <phase>package</phase>
                                 <goals>
@@ -122,10 +107,6 @@
                                         <argument>--build-arg</argument>
                                         <argument>
                                             CORFU_JAR=infrastructure-${project.version}-shaded.jar
-                                        </argument>
-                                        <argument>--build-arg</argument>
-                                        <argument>
-                                            CMDLETS_JAR=cmdlets-${project.version}-shaded.jar
                                         </argument>
                                         <argument>--build-arg</argument>
                                         <argument>
@@ -207,21 +188,6 @@
                             </execution>
 
                             <execution>
-                                <id>Corfu cmdlets</id>
-                                <phase>package</phase>
-                                <goals>
-                                    <goal>exec</goal>
-                                </goals>
-                                <configuration>
-                                    <executable>cp</executable>
-                                    <arguments>
-                                        <argument>${session.executionRootDirectory}/cmdlets/target/cmdlets-${project.version}-shaded.jar</argument>
-                                        <argument>target</argument>
-                                    </arguments>
-                                </configuration>
-                            </execution>
-
-                            <execution>
                                 <id>Corfu browser tools</id>
                                 <phase>package</phase>
                                 <goals>
@@ -250,10 +216,6 @@
                                         <argument>--build-arg</argument>
                                         <argument>
                                             CORFU_JAR=infrastructure-${project.version}-shaded.jar
-                                        </argument>
-                                        <argument>--build-arg</argument>
-                                        <argument>
-                                            CMDLETS_JAR=cmdlets-${project.version}-shaded.jar
                                         </argument>
                                         <argument>--build-arg</argument>
                                         <argument>
