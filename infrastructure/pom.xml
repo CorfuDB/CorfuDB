@@ -29,6 +29,85 @@
                         <artifactId>exec-maven-plugin</artifactId>
                         <version>1.6.0</version>
                         <executions>
+                            <!-- Copy corfu binaries into the target directory-->
+                            <execution>
+                                <id>Corfu bin tools</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>cp</executable>
+                                    <arguments>
+                                        <argument>-r</argument>
+                                        <argument>../bin</argument>
+                                        <argument>target</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+
+                            <execution>
+                                <id>Corfu scripts</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>cp</executable>
+                                    <arguments>
+                                        <argument>-r</argument>
+                                        <argument>../corfu_scripts</argument>
+                                        <argument>target</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+
+                            <execution>
+                                <id>Corfu utilities</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>cp</executable>
+                                    <arguments>
+                                        <argument>-r</argument>
+                                        <argument>../scripts</argument>
+                                        <argument>target</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+
+                            <execution>
+                                <id>Corfu cmdlets</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>cp</executable>
+                                    <arguments>
+                                        <argument>../cmdlets/target/cmdlets-${project.version}-shaded.jar</argument>
+                                        <argument>target</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+
+                            <execution>
+                                <id>Corfu browser tools</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>cp</executable>
+                                    <arguments>
+                                        <argument>../corfudb-tools/target/corfudb-tools-${project.version}-shaded.jar</argument>
+                                        <argument>target</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+
                             <execution>
                                 <id>Docker build</id>
                                 <phase>package</phase>
@@ -43,6 +122,14 @@
                                         <argument>--build-arg</argument>
                                         <argument>
                                             CORFU_JAR=infrastructure-${project.version}-shaded.jar
+                                        </argument>
+                                        <argument>--build-arg</argument>
+                                        <argument>
+                                            CMDLETS_JAR=cmdlets-${project.version}-shaded.jar
+                                        </argument>
+                                        <argument>--build-arg</argument>
+                                        <argument>
+                                            CORFU_TOOLS_JAR=corfudb-tools-${project.version}-shaded.jar
                                         </argument>
                                         <argument>-t</argument>
                                         <argument>
@@ -70,6 +157,85 @@
                         <artifactId>exec-maven-plugin</artifactId>
                         <version>1.6.0</version>
                         <executions>
+                            <!-- Copy corfu binaries into the target directory-->
+                            <execution>
+                                <id>Corfu tools</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>cp</executable>
+                                    <arguments>
+                                        <argument>-r</argument>
+                                        <argument>../bin</argument>
+                                        <argument>target</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+
+                            <execution>
+                                <id>Corfu scripts</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>cp</executable>
+                                    <arguments>
+                                        <argument>-r</argument>
+                                        <argument>../corfu_scripts</argument>
+                                        <argument>target</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+
+                            <execution>
+                                <id>Corfu utilities</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>cp</executable>
+                                    <arguments>
+                                        <argument>-r</argument>
+                                        <argument>../scripts</argument>
+                                        <argument>target</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+
+                            <execution>
+                                <id>Corfu cmdlets</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>cp</executable>
+                                    <arguments>
+                                        <argument>../cmdlets/target/cmdlets-${project.version}-shaded.jar</argument>
+                                        <argument>target</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+
+                            <execution>
+                                <id>Corfu browser tools</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>cp</executable>
+                                    <arguments>
+                                        <argument>../corfudb-tools/target/corfudb-tools-${project.version}-shaded.jar</argument>
+                                        <argument>target</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+
                             <execution>
                                 <id>Docker build</id>
                                 <phase>package</phase>
@@ -84,6 +250,14 @@
                                         <argument>--build-arg</argument>
                                         <argument>
                                             CORFU_JAR=infrastructure-${project.version}-shaded.jar
+                                        </argument>
+                                        <argument>--build-arg</argument>
+                                        <argument>
+                                            CMDLETS_JAR=cmdlets-${project.version}-shaded.jar
+                                        </argument>
+                                        <argument>--build-arg</argument>
+                                        <argument>
+                                            CORFU_TOOLS_JAR=corfudb-tools-${project.version}-shaded.jar
                                         </argument>
                                         <argument>-t</argument>
                                         <argument>
