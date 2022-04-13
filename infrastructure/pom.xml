@@ -56,7 +56,7 @@
                                     <executable>cp</executable>
                                     <arguments>
                                         <argument>-r</argument>
-                                        <argument>../corfu_scripts</argument>
+                                        <argument>corfu_scripts</argument>
                                         <argument>target</argument>
                                     </arguments>
                                 </configuration>
@@ -72,7 +72,7 @@
                                     <executable>cp</executable>
                                     <arguments>
                                         <argument>-r</argument>
-                                        <argument>../scripts</argument>
+                                        <argument>scripts</argument>
                                         <argument>target</argument>
                                     </arguments>
                                 </configuration>
@@ -87,7 +87,7 @@
                                 <configuration>
                                     <executable>cp</executable>
                                     <arguments>
-                                        <argument>../cmdlets/target/cmdlets-${project.version}-shaded.jar</argument>
+                                        <argument>cmdlets/target/cmdlets-${project.version}-shaded.jar</argument>
                                         <argument>target</argument>
                                     </arguments>
                                 </configuration>
@@ -102,7 +102,7 @@
                                 <configuration>
                                     <executable>cp</executable>
                                     <arguments>
-                                        <argument>../corfudb-tools/target/corfudb-tools-${project.version}-shaded.jar</argument>
+                                        <argument>corfudb-tools/target/corfudb-tools-${project.version}-shaded.jar</argument>
                                         <argument>target</argument>
                                     </arguments>
                                 </configuration>
@@ -168,7 +168,7 @@
                                     <executable>cp</executable>
                                     <arguments>
                                         <argument>-r</argument>
-                                        <argument>../bin</argument>
+                                        <argument>bin</argument>
                                         <argument>target</argument>
                                     </arguments>
                                 </configuration>
@@ -184,7 +184,7 @@
                                     <executable>cp</executable>
                                     <arguments>
                                         <argument>-r</argument>
-                                        <argument>../corfu_scripts</argument>
+                                        <argument>corfu_scripts</argument>
                                         <argument>target</argument>
                                     </arguments>
                                 </configuration>
@@ -200,7 +200,7 @@
                                     <executable>cp</executable>
                                     <arguments>
                                         <argument>-r</argument>
-                                        <argument>../scripts</argument>
+                                        <argument>scripts</argument>
                                         <argument>target</argument>
                                     </arguments>
                                 </configuration>
@@ -215,7 +215,7 @@
                                 <configuration>
                                     <executable>cp</executable>
                                     <arguments>
-                                        <argument>../cmdlets/target/cmdlets-${project.version}-shaded.jar</argument>
+                                        <argument>cmdlets/target/cmdlets-${project.version}-shaded.jar</argument>
                                         <argument>target</argument>
                                     </arguments>
                                 </configuration>
@@ -230,7 +230,7 @@
                                 <configuration>
                                     <executable>cp</executable>
                                     <arguments>
-                                        <argument>../corfudb-tools/target/corfudb-tools-${project.version}-shaded.jar</argument>
+                                        <argument>corfudb-tools/target/corfudb-tools-${project.version}-shaded.jar</argument>
                                         <argument>target</argument>
                                     </arguments>
                                 </configuration>
