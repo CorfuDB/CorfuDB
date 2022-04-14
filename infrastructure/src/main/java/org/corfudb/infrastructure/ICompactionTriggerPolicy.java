@@ -10,5 +10,10 @@ public interface ICompactionTriggerPolicy {
      */
     boolean shouldTrigger(long interval);
 
+    long getLastCheckpointStartTime();
+    void markCompactionCycleStart();
+
+    void markTrimComplete();
+
     void setCorfuRuntime(CorfuRuntime corfuRuntime);
 }

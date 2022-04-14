@@ -9,6 +9,21 @@ public class MockCompactionTriggerPolicy implements ICompactionTriggerPolicy{
     private boolean shouldTrigger;
 
     @Override
+    public void markCompactionCycleStart() {
+
+    }
+
+    @Override
+    public long getLastCheckpointStartTime() {
+        return 0;
+    }
+
+    @Override
+    public void markTrimComplete() {
+
+    }
+
+    @Override
     public boolean shouldTrigger(long interval) {
         if (shouldTrigger) {
             shouldTrigger = false;
@@ -16,6 +31,7 @@ public class MockCompactionTriggerPolicy implements ICompactionTriggerPolicy{
         }
         return false;
     }
+
 
     @Override
     public void setCorfuRuntime(CorfuRuntime corfuRuntime) {

@@ -271,8 +271,8 @@ public class DistributedCompactorTests extends AbstractViewTest {
         CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime2, UUID.randomUUID());
         compactorLeaderServices2.setLeader(false);
 
-        assert(compactorLeaderServices1.triggerCheckpointing());
-        assert(!compactorLeaderServices2.triggerCheckpointing());
+        assert(compactorLeaderServices1.trimAndTriggerDistributedCheckpointing());
+        assert(!compactorLeaderServices2.trimAndTriggerDistributedCheckpointing());
         assert(verifyManagerStatus(StatusType.STARTED));
         assert(verifyCheckpointStatusTable(StatusType.IDLE, 0));
     }
@@ -286,9 +286,9 @@ public class DistributedCompactorTests extends AbstractViewTest {
         CompactorLeaderServices compactorLeaderServices3 = new CompactorLeaderServices(runtime3, UUID.randomUUID());
         compactorLeaderServices3.setLeader(true);
 
-        boolean init1 = compactorLeaderServices1.triggerCheckpointing();
-        boolean init2 = compactorLeaderServices2.triggerCheckpointing();
-        boolean init3 = compactorLeaderServices3.triggerCheckpointing();
+        boolean init1 = compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
+        boolean init2 = compactorLeaderServices2.trimAndTriggerDistributedCheckpointing();
+        boolean init3 = compactorLeaderServices3.trimAndTriggerDistributedCheckpointing();
         assert(init1 ^ init2 ^ init3);
         assert(verifyManagerStatus(StatusType.STARTED));
         assert(verifyCheckpointStatusTable(StatusType.IDLE, 0));
@@ -302,8 +302,8 @@ public class DistributedCompactorTests extends AbstractViewTest {
         compactorLeaderServices2.setLeader(true);
 
         ExecutorService scheduler = Executors.newFixedThreadPool(2);
-        Future<Boolean> future1 = scheduler.submit(() -> compactorLeaderServices1.triggerCheckpointing());
-        Future<Boolean> future2 = scheduler.submit(() -> compactorLeaderServices2.triggerCheckpointing());
+        Future<Boolean> future1 = scheduler.submit(() -> compactorLeaderServices1.trimAndTriggerDistributedCheckpointing());
+        Future<Boolean> future2 = scheduler.submit(() -> compactorLeaderServices2.trimAndTriggerDistributedCheckpointing());
         compactorLeaderServices1.setLeader(false);
 
         try {
@@ -321,7 +321,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
     public void startCheckpointingTest() {
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, UUID.randomUUID());
         compactorLeaderServices1.setLeader(true);
-        compactorLeaderServices1.triggerCheckpointing();
+        compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
         DistributedCompactor distributedCompactor1 =
                 new DistributedCompactor(runtime1, cpRuntime1, null);
         DistributedCompactor distributedCompactor2 =
@@ -347,7 +347,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
     public void finishCompactionCycleSuccessTest() {
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, UUID.randomUUID());
         compactorLeaderServices1.setLeader(true);
-        compactorLeaderServices1.triggerCheckpointing();
+        compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
 
         DistributedCompactor distributedCompactor = new DistributedCompactor(runtime1, cpRuntime1, null);
         distributedCompactor.startCheckpointing();
@@ -363,14 +363,13 @@ public class DistributedCompactorTests extends AbstractViewTest {
     public void finishCompactionCycleFailureTest() {
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, UUID.randomUUID());
         compactorLeaderServices1.setLeader(true);
-        compactorLeaderServices1.triggerCheckpointing();
+        compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
 
         //Checkpointing not done
         compactorLeaderServices1.finishCompactionCycle();
 
         assert(verifyManagerStatus(StatusType.FAILED));
         assert(verifyCheckpointStatusTable(StatusType.IDLE, 0));
-        assert(!verifyCheckpointTable());
     }
 
     private boolean pollForFinishCheckpointing() {
@@ -394,7 +393,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
         //verifyCheckpointStatusTable
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, UUID.randomUUID());
         compactorLeaderServices1.setLeader(true);
-        compactorLeaderServices1.triggerCheckpointing();
+        compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
 
         DistributedCompactor distributedCompactor = new DistributedCompactor(runtime1, cpRuntime1, null);
         distributedCompactor.startCheckpointing();
@@ -419,7 +418,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
     public void validateLivenessNonLeaderTest() {
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, UUID.randomUUID());
         compactorLeaderServices1.setLeader(true);
-        compactorLeaderServices1.triggerCheckpointing();
+        compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
         compactorLeaderServices1.setLeader(false);
 
         DistributedCompactor distributedCompactor = new DistributedCompactor(runtime1, cpRuntime1, null);
@@ -437,7 +436,6 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
         assert(verifyManagerStatus(StatusType.STARTED));
         assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
-        assert(!verifyCheckpointTable());
     }
 
     private static String STREAM_NAME = "streamNameA";
@@ -446,7 +444,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
     public void validateLivenessFailureTest() {
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime2, UUID.randomUUID());
         compactorLeaderServices1.setLeader(true);
-        compactorLeaderServices1.triggerCheckpointing();
+        compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
 
         Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointTable = openActiveCheckpointsTable();
         Table<TableName, CheckpointingStatus, Message> checkpointStatusTable = openCheckpointStatusTable();
@@ -481,6 +479,5 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
         assert(verifyManagerStatus(StatusType.FAILED));
         assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 1));
-        assert(!verifyCheckpointTable());
     }
 }

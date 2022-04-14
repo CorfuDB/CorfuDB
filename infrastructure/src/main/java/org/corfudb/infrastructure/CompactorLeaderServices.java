@@ -39,7 +39,6 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 public class CompactorLeaderServices {
     @Getter
     public static final String CHECKPOINT = "checkpoint";
-    private final StringKey previousTokenKey;
 
     private Table<StringKey, CheckpointingStatus, Message> compactionManagerTable;
     private Table<TableName, CheckpointingStatus, Message> checkpointingStatusTable;
@@ -62,7 +61,6 @@ public class CompactorLeaderServices {
         this.corfuRuntime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);
         this.nodeId = nodeID;
-        this.previousTokenKey = StringKey.newBuilder().setKey("previousTokenKey").build();
 
         try {
             this.compactionManagerTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
@@ -98,18 +96,18 @@ public class CompactorLeaderServices {
         }
     }
 
-    private void handleEviction(RemovalNotification<TableName, Tuple<Long, Long>> notification) {
-        if (log.isTraceEnabled()) {
-            log.trace("handleEviction: evicting {} cause {}", notification.getKey(), notification.getCause());
-        }
-    }
-
     @VisibleForTesting
-    public boolean triggerCheckpointing() {
+    public boolean trimAndTriggerDistributedCheckpointing() {
         log.info("=============Initiating Distributed Checkpointing============");
         if (!isLeader) {
             return false;
         }
+        trimLog();
+        if (DistributedCompactor.isCheckpointFrozen(corfuStore, checkpointTable)) {
+            log.warn("Will not trigger checkpointing since checkpointing has been frozen");
+            return false;
+        }
+
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CorfuStoreEntry compactionManagerRecord = txn.getRecord(
                     DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME, DistributedCompactor.COMPACTION_MANAGER_KEY);
@@ -123,9 +121,6 @@ public class CompactorLeaderServices {
                 txn.putRecord(checkpointingStatusTable, table, idleStatus, null);
             }
 
-            final CorfuStoreEntry<StringKey, RpcCommon.TokenMsg, Message> prevMinToken =
-                    txn.getRecord(checkpointTable, DistributedCompactor.CHECKPOINT_KEY);
-
             // Also record the minToken as the earliest token BEFORE checkpointing is initiated
             // This is the safest point to trim at since all data up to this point will surely
             // be included in the upcoming checkpoint cycle
@@ -136,10 +131,6 @@ public class CompactorLeaderServices {
                             .setSequence(minTokenBeforeCycleStarts)
                             .build(),
                     null);
-
-            if (prevMinToken.getPayload() != null) {
-                txn.putRecord(checkpointTable, previousTokenKey, prevMinToken.getPayload(), null);
-            }
 
             CheckpointingStatus managerStatus = getCheckpointingStatus(StatusType.STARTED,null, null);
             txn.putRecord(compactionManagerTable, DistributedCompactor.COMPACTION_MANAGER_KEY, managerStatus, null);
@@ -326,30 +317,31 @@ public class CompactorLeaderServices {
     /**
      * Perform log-trimming on CorfuDB by selecting the smallest value from checkpoint map.
      */
-    public void trimLog(long timeOfLastCheckpointStart) {
+    @VisibleForTesting
+    public void trimLog() {
         log.info("Starting CorfuStore trimming task");
 
-        final RpcCommon.TokenMsg thisTrimToken;
-        if (timeOfLastCheckpointStart == 0) {
-            log.warn("No prior timestamp of a checkpoint cycle, so trimming token 2 cycles ago");
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                thisTrimToken = txn.getRecord(checkpointTable, previousTokenKey).getPayload();
-                txn.commit();
-            }
-        } else {
-            log.warn("Since safe trim time has elapsed, trimming token from start of last cycle");
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+        RpcCommon.TokenMsg thisTrimToken = null;
+        log.warn("Since safe trim time has elapsed, trimming token from start of last cycle");
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
+                    DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
+                    DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
+            if (managerStatus.getStatus() == StatusType.COMPLETED) {
                 thisTrimToken = txn.getRecord(checkpointTable, DistributedCompactor.CHECKPOINT_KEY).getPayload();
-                txn.commit();
+            } else {
+                log.warn("Skip trimming since last checkpointing cycle did not complete successfully");
             }
+            txn.commit();
+        } catch (Exception e) {
+            log.warn("Unable to acquire the trim token");
+            return;
         }
 
         if (thisTrimToken == null) {
             log.warn("Trim token is not present... skipping.");
             return;
         }
-
-        log.info("Previously computed trim token: {}", thisTrimToken);
 
         // Measure time spent on trimming.
         final long startTime = System.nanoTime();
