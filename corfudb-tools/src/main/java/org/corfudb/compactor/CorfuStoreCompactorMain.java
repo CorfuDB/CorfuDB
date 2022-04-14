@@ -50,7 +50,7 @@ public class CorfuStoreCompactorMain {
     private static final String CORFU_SYSTEM_NAMESPACE = "CorfuSystem";
 
     private static Table<StringKey, TokenMsg, Message> checkpoint;
-    private static Table<StringKey, TokenMsg, Message> previousToken;
+    private static Table<StringKey, TokenMsg, Message> PREVIOUS_TOKEN_KEY;
 
     // Reduce checkpoint batch size due to disk-based nature and smaller compactor JVM size
     private static final int NON_CONFIG_DEFAULT_CP_MAX_WRITE_SIZE = 1 << 20;
@@ -138,7 +138,8 @@ public class CorfuStoreCompactorMain {
         }
 
         if (trim) {
-            trimAndUpdateToken();
+            // Disable this to test server side trim feature
+            // trimAndUpdateToken();
         }
 
         //TODO: Write a plugin for upgrade?
@@ -180,12 +181,6 @@ public class CorfuStoreCompactorMain {
                     null,
                     TableOptions.fromProtoSchema(TokenMsg.class));
 
-            previousToken = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    CorfuRuntimeHelper.PREVIOUS_TOKEN,
-                    StringKey.class,
-                    TokenMsg.class,
-                    null,
-                    TableOptions.fromProtoSchema(TokenMsg.class));
         } catch (Exception e) {
             log.error("Caught an exception while opening Compaction management tables ", e);
         }
@@ -193,10 +188,6 @@ public class CorfuStoreCompactorMain {
 
     public static Table<StringKey, TokenMsg, Message> getCheckpointMap() {
         return checkpoint;
-    }
-
-    public static Table<StringKey, TokenMsg, Message> getPreviousTrimTokenTable() {
-        return previousToken;
     }
 
     /**
