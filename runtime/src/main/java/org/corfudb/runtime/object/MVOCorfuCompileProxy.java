@@ -53,7 +53,7 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
         this.streamTags = streamTags;
 
         this.underlyingMVO = new MultiVersionObject<>(
-                rt.getObjectsView().getMvoCache(),
+                rt,
                 this::getNewInstance,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
                 wrapperObject, streamID);

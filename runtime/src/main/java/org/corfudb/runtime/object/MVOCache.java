@@ -3,8 +3,10 @@ package org.corfudb.runtime.object;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalNotification;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.lang.ref.SoftReference;
@@ -13,6 +15,8 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 
@@ -23,12 +27,17 @@ import java.util.concurrent.TimeUnit;
  *
  */
 @Slf4j
-public class MVOCache {
+public class MVOCache<T extends ICorfuSMR<T>> {
 
-    // The objectCache holds the strong references to all objects.
+    private final CorfuRuntime runtime;
+
+    // A registry to keep track of all opened MVOs
+    private final ConcurrentHashMap<UUID, MultiVersionObject<T>> allMVOs = new ConcurrentHashMap<>();
+
+    // The objectCache holds the strong references to all versioned objects
     // key is basically a pair of (objectId, version)
-    // value is the actually MVO object
-    private final Cache<VersionedObjectIdentifier, ICorfuSMR> objectCache;
+    // value is the versioned object such as PersistentCorfuTable
+    private final Cache<VersionedObjectIdentifier, T> objectCache;
 
     // This objectVersions is updated at two places
     // 1) put() which adds a new version to the objectVersions
@@ -42,15 +51,30 @@ public class MVOCache {
 
     private final long DEAFULT_CACHE_EXPIRY_TIME_IN_SECONDS = 300;
 
+    final ScheduledExecutorService mvoCacheSyncThread = Executors.newSingleThreadScheduledExecutor(
+            new ThreadFactoryBuilder().setDaemon(true)
+                    .setNameFormat("MVOCacheSyncThread")
+                    .build());
+
     public MVOCache(CorfuRuntime corfuRuntime) {
+        runtime = corfuRuntime;
 
         CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
-        objectCache = cacheBuilder.maximumSize(corfuRuntime.getParameters().getMaxCacheEntries())
+        objectCache = cacheBuilder.maximumSize(runtime.getParameters().getMaxCacheEntries())
                 .expireAfterAccess(DEAFULT_CACHE_EXPIRY_TIME_IN_SECONDS, TimeUnit.SECONDS)
                 .expireAfterWrite(DEAFULT_CACHE_EXPIRY_TIME_IN_SECONDS, TimeUnit.SECONDS)
                 .removalListener(this::handleEviction)
                 .recordStats()
                 .build();
+
+        mvoCacheSyncThread.scheduleAtFixedRate(this::syncMVOCache,
+                runtime.getParameters().getMvoAutoSyncPeriod().toMinutes(),
+                runtime.getParameters().getMvoAutoSyncPeriod().toMinutes(),
+                TimeUnit.MINUTES);
+    }
+
+    public void stopMVOCacheSync() {
+        mvoCacheSyncThread.shutdownNow();
     }
 
     /**
@@ -100,8 +124,8 @@ public class MVOCache {
      * @param voId the id of the versioned object
      * @return the versioned object, or null if not exist
      */
-    public <T extends ICorfuSMR<T>> SoftReference<T> get(VersionedObjectIdentifier voId) {
-        return new SoftReference<>((T) objectCache.getIfPresent(voId));
+    public SoftReference<T> get(VersionedObjectIdentifier voId) {
+        return new SoftReference<>(objectCache.getIfPresent(voId));
     }
 
     /**
@@ -110,7 +134,7 @@ public class MVOCache {
      * @param voId the object and version to add to cache
      * @param versionedObject the versioned object to add
      */
-    public void put(VersionedObjectIdentifier voId, ICorfuSMR versionedObject) {
+    public void put(VersionedObjectIdentifier voId, T versionedObject) {
         TreeSet<Long> allVersionsOfThisObject = objectVersions.computeIfAbsent(
                 voId.getObjectId(), k -> new TreeSet<>());
         synchronized (allVersionsOfThisObject) {
@@ -137,7 +161,7 @@ public class MVOCache {
      * @return a pair of (voId, versionedObject) in which the voId contains the
      *         floor version.
      */
-    public SoftReference<Map.Entry<VersionedObjectIdentifier, ICorfuSMR>> floorEntry(VersionedObjectIdentifier voId) {
+    public SoftReference<Map.Entry<VersionedObjectIdentifier, T>> floorEntry(VersionedObjectIdentifier voId) {
         final TreeSet<Long> allVersionsOfThisObject = objectVersions.get(voId.getObjectId());
 
         if (allVersionsOfThisObject == null) {
@@ -163,8 +187,23 @@ public class MVOCache {
      * @return true if target object exists
      */
     public Boolean containsObject(UUID objectId) {
-        // TODO: what if an object existing in objectCache but not in objectMap?
+        // TODO: what if an object existing in objectCache but its version is not in objectVersions?
         // This can happen when MVOCache::put is interrupted
         return objectVersions.containsKey(objectId);
+    }
+
+    public void registerMVO(UUID objectId, MultiVersionObject<T> mvo) {
+        allMVOs.computeIfAbsent(objectId, key -> mvo);
+    }
+
+    private void syncMVOCache() {
+        TokenResponse streamTails = runtime.getSequencerView()
+                .query(allMVOs.keySet().toArray(new UUID[0]));
+        allMVOs.forEach((uuid, mvo) -> {
+            if (objectVersions.get(uuid).last() < streamTails.getStreamTail(uuid)) {
+                // Sync to the latest state
+                mvo.getVersionedObjectUnderLock(streamTails.getStreamTail(uuid));
+            }
+        });
     }
 }

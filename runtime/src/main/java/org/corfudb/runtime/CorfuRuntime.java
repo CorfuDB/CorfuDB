@@ -25,6 +25,7 @@ import org.corfudb.runtime.clients.SequencerHandler;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.object.MVOCache;
 import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.Layout;
@@ -313,6 +314,11 @@ public class CorfuRuntime {
         Duration runtimeGCPeriod = Duration.ofMinutes(20);
 
         /*
+         * The period at which the runtime will auto sync all mvo objects present in mvoCache
+         */
+        Duration mvoAutoSyncPeriod = Duration.ofMillis(5);
+
+        /*
          * The {@link UUID} for the cluster this client is connecting to, or
          * {@code null} if the client should adopt the {@link UUID} of the first
          * server it connects to.
@@ -409,6 +415,7 @@ public class CorfuRuntime {
             private int streamBatchSize = 10;
             private int checkpointReadBatchSize = 5;
             private Duration runtimeGCPeriod = Duration.ofMinutes(20);
+            private Duration mvoAutoSyncPeriod = Duration.ofMinutes(5);
             private UUID clusterId = null;
             private int systemDownHandlerTriggerLimit = 20;
             private List<NodeLocator> layoutServers = new ArrayList<>();
@@ -662,6 +669,11 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder mvoAutoSyncPeriod(Duration mvoAutoSyncPeriod) {
+                this.mvoAutoSyncPeriod = mvoAutoSyncPeriod;
+                return this;
+            }
+
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder clusterId(UUID clusterId) {
                 this.clusterId = clusterId;
                 return this;
@@ -742,6 +754,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setStreamBatchSize(streamBatchSize);
                 corfuRuntimeParameters.setCheckpointReadBatchSize(checkpointReadBatchSize);
                 corfuRuntimeParameters.setRuntimeGCPeriod(runtimeGCPeriod);
+                corfuRuntimeParameters.setMvoAutoSyncPeriod(mvoAutoSyncPeriod);
                 corfuRuntimeParameters.setClusterId(clusterId);
                 corfuRuntimeParameters.setSystemDownHandlerTriggerLimit(systemDownHandlerTriggerLimit);
                 corfuRuntimeParameters.setLayoutServers(layoutServers);
@@ -935,6 +948,10 @@ public class CorfuRuntime {
     public void shutdown() {
         // Stopping async task from fetching layout.
         isShutdown = true;
+
+        // Shutdown the mvoCache sync thread
+        getObjectsView().getMvoCache().stopMVOCacheSync();
+
         TableRegistry tableRegistryObj = tableRegistry.get();
         if (tableRegistryObj != null) {
             tableRegistryObj.shutdown();

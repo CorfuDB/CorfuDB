@@ -3,6 +3,7 @@ package org.corfudb.runtime.object;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.StaleObjectVersionException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -22,6 +23,7 @@ import java.util.function.Supplier;
 @Slf4j
 public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
+    private CorfuRuntime runtime;
     private MVOCache mvoCache;
 
     private final StampedLock lock;
@@ -35,12 +37,13 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
     private static final int TRIM_RETRY = 9;
 
-    public MultiVersionObject(MVOCache mvoCache,
+    public MultiVersionObject(CorfuRuntime corfuRuntime,
                               Supplier<T> newObjectFn,
                               StreamViewSMRAdapter smrStream,
                               ICorfuSMR<T> wrapperObject,
                               UUID streamID) {
-        this.mvoCache = mvoCache;
+        this.runtime = corfuRuntime;
+        this.mvoCache = runtime.getObjectsView().getMvoCache();
         this.newObjectFn = newObjectFn;
         this.smrStream = smrStream;
         this.upcallTargetMap = wrapperObject.getCorfuSMRUpcallMap();
@@ -48,6 +51,8 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
         wrapperObject.closeWrapper();
         lock = new StampedLock();
+
+        mvoCache.registerMVO(this.streamID,this);
     }
 
     /**
@@ -71,18 +76,11 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
             return ret;
         }
 
-        long ts = 0;
-        try {
-            ts = lock.writeLock();
-
-            T object = buildVersionWithRetryUnsafe(timestamp);
-            long vloAccessedVersion = getVersionUnsafe();
-            correctnessLogger.trace("Version, {}", vloAccessedVersion);
-            log.trace("Access [{}] Updated (writelock) access at {}", this, vloAccessedVersion);
-            return accessFunction.apply(object);
-        } finally {
-            lock.unlock(ts);
-        }
+        T object = getVersionedObjectUnderLock(timestamp);
+        long vloAccessedVersion = getVersionUnsafe();
+        correctnessLogger.trace("Version, {}", vloAccessedVersion);
+        log.trace("Access [{}] Updated (writelock) access at {}", this, vloAccessedVersion);
+        return accessFunction.apply(object);
     }
 
     // TODO: Complete implementation.
@@ -93,48 +91,47 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         if (ref.get() != null) {
             return new SnapshotProxyAdapter<>(ref, timestamp, upcallTargetMap);
         }
+        // TODO: this should provide a Reference<>? Should all Reference<> be given out by cache?
+        T object = getVersionedObjectUnderLock(timestamp);
+        final long accessedVersion = getVersionUnsafe();
+        correctnessLogger.trace("Version, {}", accessedVersion);
+        log.trace("Access [{}] Updated (writelock) access at {}", this, accessedVersion);
+        ref  = new SoftReference<>(object);
+        return new SnapshotProxyAdapter<>(ref, timestamp, upcallTargetMap);
+    }
+
+    protected T getVersionedObjectUnderLock(long timestamp) {
 
         long ts = 0;
         try {
             ts = lock.writeLock();
 
-            // TODO: this should provide a Reference<>? Should all Reference<> be given out by cache?
-            T object = buildVersionWithRetryUnsafe(timestamp);
-            final long accessedVersion = getVersionUnsafe();
-            correctnessLogger.trace("Version, {}", accessedVersion);
-            log.trace("Access [{}] Updated (writelock) access at {}", this, accessedVersion);
-            ref  = new SoftReference<>(object);
-            return new SnapshotProxyAdapter<>(ref, timestamp, upcallTargetMap);
+            Reference<T> ref = mvoCache.get(new VersionedObjectIdentifier(streamID, timestamp));
+            if (ref.get() != null) {
+                return ref.get();
+            }
+
+            T object = newObjectFn.get();
+            for (int x = 0; x < TRIM_RETRY; x++) {
+                try {
+                    syncObjectUnsafe(object, timestamp);
+                    break;
+                } catch (TrimmedException te) {
+                    log.info("accessInner: Encountered trimmed address space " +
+                                    "while accessing version {} of stream {} on attempt {}",
+                            timestamp, streamID, x);
+
+                    resetUnsafe(object);
+
+                    if (x == (TRIM_RETRY - 1)) {
+                        throw te;
+                    }
+                }
+            }
+            return object;
         } finally {
             lock.unlock(ts);
         }
-    }
-
-    private T buildVersionWithRetryUnsafe(long timestamp) {
-        // Avoid rebuilding the same version
-        Reference<T> ref  = mvoCache.get(new VersionedObjectIdentifier(streamID, timestamp));
-        if (ref.get() != null) {
-            return ref.get();
-        }
-
-        T object = newObjectFn.get();
-        for (int x = 0; x < TRIM_RETRY; x++) {
-            try {
-                syncObjectUnsafe(object, timestamp);
-                break;
-            } catch (TrimmedException te) {
-                log.info("accessInner: Encountered trimmed address space " +
-                                "while accessing version {} of stream {} on attempt {}",
-                        timestamp, streamID, x);
-
-                resetUnsafe(object);
-
-                if (x == (TRIM_RETRY - 1)) {
-                    throw te;
-                }
-            }
-        }
-        return object;
     }
 
     public void syncObjectUnsafe(T object, long timestamp) {

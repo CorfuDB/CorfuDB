@@ -3,12 +3,7 @@ package org.corfudb.runtime.collections;
 import lombok.NonNull;
 import org.corfudb.runtime.object.ICorfuSMR;
 
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.function.Predicate;
-import java.util.stream.Stream;
 
 public class PersistentCorfuTable<K, V> implements ICorfuSMR<PersistentCorfuTable<K, V>> {
 
