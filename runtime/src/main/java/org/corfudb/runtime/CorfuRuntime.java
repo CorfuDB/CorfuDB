@@ -315,7 +315,7 @@ public class CorfuRuntime {
         /**
          * How often should the local client checkpointer run? 0 disables it completely.
          */
-        long checkpointTriggerFreqSecs = 0;
+        long checkpointTriggerFreqMillis = 0;
 
         /*
          * The period at which the runtime will run garbage collection
@@ -432,7 +432,7 @@ public class CorfuRuntime {
             private int streamingSchedulerPollThreshold = 5;
             private boolean cacheWrites = true;
             private String clientName = "CorfuClient";
-            private long checkpointTriggerFreqSecs = 0;
+            private long checkpointTriggerFreqMillis = 0;
 
             public CorfuRuntimeParametersBuilder streamingWorkersThreadPoolSize(int streamingWorkersThreadPoolSize) {
                 this.streamingWorkersThreadPoolSize = streamingWorkersThreadPoolSize;
@@ -674,9 +674,9 @@ public class CorfuRuntime {
                 return this;
             }
 
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder checkpointTriggerFreqSecs(
-                    long checkpointTriggerFreqSecs) {
-                this.checkpointTriggerFreqSecs = checkpointTriggerFreqSecs;
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder checkpointTriggerFreqMillis(
+                    long checkpointTriggerFreqMillis) {
+                this.checkpointTriggerFreqMillis = checkpointTriggerFreqMillis;
                 return this;
             }
 
@@ -778,7 +778,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setStreamingSchedulerPollThreshold(streamingSchedulerPollThreshold);
                 corfuRuntimeParameters.setCacheWrites(cacheWrites);
                 corfuRuntimeParameters.setClientName(clientName);
-                corfuRuntimeParameters.setCheckpointTriggerFreqSecs(checkpointTriggerFreqSecs);
+                corfuRuntimeParameters.setCheckpointTriggerFreqMillis(checkpointTriggerFreqMillis);
                 return corfuRuntimeParameters;
             }
         }
