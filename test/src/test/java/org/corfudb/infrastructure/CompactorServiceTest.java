@@ -511,7 +511,6 @@ public class CompactorServiceTest extends AbstractViewTest {
         assert(verifyManagerStatus(StatusType.COMPLETED));
         assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
         assert(verifyCheckpointTable());
-        assert(!serverCp);
     }
 
     @Test
