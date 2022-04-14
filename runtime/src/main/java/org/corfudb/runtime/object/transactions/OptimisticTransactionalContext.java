@@ -68,7 +68,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     public <R, T extends ICorfuSMR<T>> R access(ICorfuSMRProxyInternal<T> proxy,
                                                 ICorfuSMRAccess<R, T> accessFunction,
                                                 Object[] conflictObject) {
-        log.debug("Access[{},{}] conflictObj={}", this, proxy, conflictObject);
+        log.trace("Access[{},{}] conflictObj={}", this, proxy, conflictObject);
         // First, we add this access to the read set
         addToReadSet(proxy, conflictObject);
 
@@ -215,7 +215,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     @Override
     @SuppressWarnings("unchecked")
     public long commitTransaction() throws TransactionAbortedException {
-        log.debug("TX[{}] request optimistic commit", this);
+        log.trace("TX[{}] request optimistic commit", this);
 
         return getConflictSetAndCommit(getReadSetInfo());
     }
