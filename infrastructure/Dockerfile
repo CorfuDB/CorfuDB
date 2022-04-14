@@ -10,7 +10,7 @@ RUN apk add --update iptables sudo
 COPY target/${CORFU_JAR} /usr/share/corfu/lib/${CORFU_JAR}
 COPY target/${CORFU_TOOLS_JAR} /usr/share/corfu/lib/${CORFU_TOOLS_JAR}
 
-COPY target/bin /usr/local
+COPY target/bin /usr/share/corfu
 COPY target/corfu_scripts /usr/share/corfu
 COPY target/scripts /usr/share/corfu
 
