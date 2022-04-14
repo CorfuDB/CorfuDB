@@ -99,7 +99,7 @@ public class CorfuStoreCompactor {
     private void trimLog() {
         log.info("Starting CorfuStore trimming task");
 
-        final Table<StringKey, TokenMsg, Message> previousTrimTokenTable = CorfuStoreCompactorMain.getPreviousTrimTokenTable();
+        final Table<StringKey, TokenMsg, Message> previousTrimTokenTable = CorfuStoreCompactorMain.getCheckpointMap();
 
         final TokenMsg thisTrimToken;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -146,7 +146,7 @@ public class CorfuStoreCompactor {
             return;
         }
 
-        final Table<StringKey, TokenMsg, Message> previousTrimTokenTable = CorfuStoreCompactorMain.getPreviousTrimTokenTable();
+        final Table<StringKey, TokenMsg, Message> previousTrimTokenTable = CorfuStoreCompactorMain.getCheckpointMap();
 
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             TokenMsg nodeTokenVal = txn.getRecord(checkpointMap, DistributedCompactor.CHECKPOINT_KEY).getPayload();

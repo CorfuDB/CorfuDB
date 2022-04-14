@@ -44,7 +44,7 @@ public class DistributedCompactor {
 
     private KeyDynamicProtobufSerializer keyDynamicProtobufSerializer;
 
-    private final UuidMsg clientId;
+    private final String clientName;
 
     public static final long CONN_RETRY_DELAY_MILLISEC = 500;
     public static final String COMPACTION_MANAGER_TABLE_NAME = "CompactionManager";
@@ -90,11 +90,7 @@ public class DistributedCompactor {
         this.cpRuntime = cpRuntime;
         this.persistedCacheRoot = persistedCacheRoot;
         this.isClient = false;
-
-        clientId = UuidMsg.newBuilder()
-                .setLsb(corfuRuntime.getParameters().getClientId().getLeastSignificantBits())
-                .setMsb(corfuRuntime.getParameters().getClientId().getMostSignificantBits())
-                .build();
+        this.clientName = corfuRuntime.getParameters().getClientName();
     }
 
     public DistributedCompactor(CorfuRuntime corfuRuntime) {
@@ -102,11 +98,7 @@ public class DistributedCompactor {
         this.cpRuntime = null;
         this.persistedCacheRoot = null;
         this.isClient = true;
-
-        clientId = UuidMsg.newBuilder()
-                .setLsb(corfuRuntime.getParameters().getClientId().getLeastSignificantBits())
-                .setMsb(corfuRuntime.getParameters().getClientId().getMostSignificantBits())
-                .build();
+        this.clientName = corfuRuntime.getParameters().getClientName();
     }
 
     private void openCheckpointingMetadataTables() {
@@ -159,14 +151,14 @@ public class DistributedCompactor {
         // This is necessary here to stop checkpointing after it has started?
         // if (isCheckpointFrozen(corfuStore, this.checkpointFreezeTable)) {return;}
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            final CorfuStoreEntry<StringKey, CheckpointingStatus, Message> compactionStatus =
-                    txn.getRecord(compactionManagerTable, DistributedCompactor.COMPACTION_MANAGER_KEY);
-            if (compactionStatus.getPayload() == null ||
-                    compactionStatus.getPayload().getStatus() != CheckpointingStatus.StatusType.STARTED) {
-                txn.commit();
+            final CheckpointingStatus managerStatus = txn.getRecord(
+                    compactionManagerTable, DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
+            txn.commit();
+            if (managerStatus == null ||
+                    (managerStatus.getStatus() != CheckpointingStatus.StatusType.STARTED &&
+                    managerStatus.getStatus() != CheckpointingStatus.StatusType.STARTED_ALL)) {
                 return false;
             }
-            txn.commit();
         } catch (Exception e) {
             log.error("Checkpointer unable to check the main status table", e);
             return false;
@@ -179,8 +171,11 @@ public class DistributedCompactor {
         int count = 0;
         log.info("Starting Checkpointing in-memory tables..");
         count = checkpointOpenedTables();
-        if (count <= 0) {
+        if (count < 0) {
             log.warn("Stopping checkpointing since checkpoint of open tables has failed");
+            return count;
+        } else if  (count == 0) {
+            log.info("Checkpoint hasn't started");
             return count;
         }
 
@@ -194,13 +189,12 @@ public class DistributedCompactor {
             return count;
         }
         for (TableName tableName : tableNames) {
-            CheckpointingStatus tableStatus;
             final CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> corfuTable =
                     openTable(tableName, keyDynamicProtobufSerializer, cpRuntime);
             final int successfulCheckpoints = tryCheckpointTable(tableName, corfuTable);
             if (successfulCheckpoints < 0) {
                 // finishCompactionCycle will mark it as failed
-                MicroMeterUtils.measure(count, "compaction.num_tables." + clientId.toString());
+                MicroMeterUtils.measure(count, "compaction.num_tables." + clientName);
                 return count;
             }
             count += successfulCheckpoints; // 0 means lock failed so don't tick up count
@@ -208,11 +202,11 @@ public class DistributedCompactor {
 
         long cpDuration = System.currentTimeMillis() - startCp;
         MicroMeterUtils.time(Duration.ofMillis(cpDuration), "checkpoint.total.timer",
-                "clientId", clientId.toString());
-        log.info("Took {} ms to checkpoint the tables by client {}", cpDuration, clientId);
+                "clientId", clientName);
+        log.info("Took {} ms to checkpoint the tables by client {}", cpDuration, clientName);
 
-        MicroMeterUtils.measure(count, "compaction.num_tables." + clientId.toString());
-        log.info("ClientId: {}, Checkpointed {} tables out of {}", this.clientId, count, tableNames.size());
+        MicroMeterUtils.measure(count, "compaction.num_tables." + clientName);
+        log.info("ClientId: {}, Checkpointed {} tables out of {}", this.clientName, count, tableNames.size());
 
         return count;
     }
@@ -347,10 +341,7 @@ public class DistributedCompactor {
                             tableName,
                             CheckpointingStatus.newBuilder()
                                     .setStatus(CheckpointingStatus.StatusType.STARTED)
-                                    .setClientId(RpcCommon.UuidMsg.newBuilder()
-                                            .setLsb(runtime.getParameters().getClientId().getLeastSignificantBits())
-                                            .setMsb(runtime.getParameters().getClientId().getMostSignificantBits())
-                                            .build())
+                                    .setClientName(clientName)
                                     .build(),
                             null);
                     txn.putRecord(activeCheckpointsTable, tableName,
@@ -427,10 +418,7 @@ public class DistributedCompactor {
                             tableName,
                             CheckpointingStatus.newBuilder()
                                     .setStatus(CheckpointingStatus.StatusType.FAILED)
-                                    .setClientId(RpcCommon.UuidMsg.newBuilder()
-                                            .setLsb(runtime.getParameters().getClientId().getLeastSignificantBits())
-                                            .setMsb(runtime.getParameters().getClientId().getMostSignificantBits())
-                                            .build())
+                                    .setClientName(clientName)
                                     .build(),
                             null);
                     isSuccess = checkpointFailedError; // this will stop checkpointing on first failure
@@ -439,10 +427,7 @@ public class DistributedCompactor {
                             tableName,
                             CheckpointingStatus.newBuilder()
                                     .setStatus(CheckpointingStatus.StatusType.COMPLETED)
-                                    .setClientId(RpcCommon.UuidMsg.newBuilder()
-                                            .setLsb(runtime.getParameters().getClientId().getLeastSignificantBits())
-                                            .setMsb(runtime.getParameters().getClientId().getMostSignificantBits())
-                                            .build())
+                                    .setClientName(clientName)
                                     .setEndToken(RpcCommon.TokenMsg.newBuilder()
                                             .setEpoch(endToken.getEpoch())
                                             .setSequence(endToken.getSequence())
