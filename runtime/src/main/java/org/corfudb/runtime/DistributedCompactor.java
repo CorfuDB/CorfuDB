@@ -50,7 +50,6 @@ public class DistributedCompactor {
     public static final String COMPACTION_MANAGER_TABLE_NAME = "CompactionManager";
     public static final String CHECKPOINT_STATUS_TABLE_NAME = "CheckpointStatusTable";
     public static final String ACTIVE_CHECKPOINTS_TABLE_NAME = "ActiveCheckpoints";
-    public static final String PREVIOUS_TOKEN = "previousTokenTable";
 
     public static final String NODE_TOKEN = "node-token";
     public static final String CHECKPOINT = "checkpoint";
@@ -83,7 +82,6 @@ public class DistributedCompactor {
     private Table<TableName, CheckpointingStatus, Message> checkpointingStatusTable = null;
     private Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointsTable = null;
     private Table<StringKey, RpcCommon.TokenMsg, Message> checkpointFreezeTable = null;
-    private Table<StringKey, RpcCommon.TokenMsg, Message> previousTokenTable = null;
 
     public DistributedCompactor(CorfuRuntime corfuRuntime, CorfuRuntime cpRuntime, String persistedCacheRoot) {
         this.runtime = corfuRuntime;
@@ -131,13 +129,6 @@ public class DistributedCompactor {
 
             this.checkpointFreezeTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
                     DistributedCompactor.CHECKPOINT,
-                    StringKey.class,
-                    RpcCommon.TokenMsg.class,
-                    null,
-                    TableOptions.fromProtoSchema(RpcCommon.TokenMsg.class));
-
-            this.previousTokenTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.PREVIOUS_TOKEN,
                     StringKey.class,
                     RpcCommon.TokenMsg.class,
                     null,
