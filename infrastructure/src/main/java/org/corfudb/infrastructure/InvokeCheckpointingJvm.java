@@ -41,12 +41,7 @@ public class InvokeCheckpointingJvm implements IInvokeCheckpointing {
                 pb.inheritIO();
                 this.checkpointerProcess = pb.start();
                 log.info("runCompactionOrchestrator: started the process");
-                this.checkpointerProcess.waitFor();
-                this.checkpointerProcess = null;
-
-                log.debug("runCompactionOrchestrator: successfully finished a cycle");
                 break;
-
             } catch (RuntimeException re) {
                 log.trace("runCompactionOrchestrator: encountered an exception on attempt {}/{}.",
                         i, MAX_COMPACTION_RETRIES, re);
@@ -69,6 +64,11 @@ public class InvokeCheckpointingJvm implements IInvokeCheckpointing {
                 log.error("StackTrace: {}", t.getStackTrace());
             }
         }
+    }
+
+    @Override
+    public boolean isRunning() {
+        return (this.checkpointerProcess != null && this.checkpointerProcess.isAlive());
     }
 
     @Override

@@ -18,6 +18,11 @@ public class InvokeCheckpointingMock implements IInvokeCheckpointing {
     }
 
     @Override
+    public boolean isRunning() {
+        return false;
+    }
+
+    @Override
     public void shutdown() {
     }
 }
