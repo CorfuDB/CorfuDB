@@ -266,7 +266,7 @@ public class CorfuStoreBrowserEditorMain {
                     if (opts.get("--address") != null) {
                         startIdx = Integer.parseInt(opts.get("--address").toString());
                     }
-                    browser.radioTest(namespace, tableName, numItems, startIdx);
+                    browser.radioTest(namespace, tableName, numItems, itemSize, startIdx);
                     break;
                 default:
                     break;

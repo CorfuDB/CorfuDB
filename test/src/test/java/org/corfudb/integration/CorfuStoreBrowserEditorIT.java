@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.corfudb.browser.CorfuStoreBrowserEditor;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -22,6 +23,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.util.serializer.ProtobufSerializer;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -574,10 +576,12 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
         // Start a Corfu runtime
         runtime = createRuntime(singleNodeEndpoint);
+        ProtobufSerializer protoSerializer = new ProtobufSerializer(new ConcurrentHashMap<>());
+        runtime.getSerializers().registerSerializer(protoSerializer);
 
         CorfuStore store = new CorfuStore(runtime);
 
-        final Table<SampleSchema.Uuid, SampleSchema.Uuid, SampleSchema.Uuid> table1 = store.openTable(
+        Table<SampleSchema.Uuid, SampleSchema.Uuid, SampleSchema.Uuid> table1 = store.openTable(
             namespace,
             tableName,
             SampleSchema.Uuid.class,
@@ -604,55 +608,25 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         TxnContext tx = store.txn(namespace);
         tx.putRecord(table1, uuidKey, uuidVal, metadata);
         tx.commit();
-        runtime.shutdown();
+//        runtime.shutdown();
+//
+//        runtime = createRuntime(singleNodeEndpoint);
+//        protoSerializer = new ProtobufSerializer(new ConcurrentHashMap<>());
+//        runtime.getSerializers().registerSerializer(protoSerializer);
 
-        runtime = createRuntime(singleNodeEndpoint);
         CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
         // Invoke listTables and verify table count
-        Assert.assertEquals(browser.listTables(namespace), 1);
-
-        // Edit the record changing value from 3L -> 5L
-//        String keyString = "{\"msb\": \"1\", \"lsb\": \"1\"}";
-//        String newValString = "{\"msb\": \"5\", \"lsb\": \"5\"}";
-//        final long newVal = 5L;
-//        SampleSchema.Uuid newValUuid = SampleSchema.Uuid.newBuilder()
-//            .setMsb(newVal)
-//            .setLsb(newVal)
-//            .build();
-
-        int numEntriesBefore = browser.printTable(namespace, tableName);
-
-        browser.radioTest(namespace, tableName, 10, 0);
+//        Assert.assertEquals(browser.listTables(namespace), 1);
 
 
-        assertThat(browser.printTable(namespace, tableName)).isEqualTo(numEntriesBefore + 10);
+//        int numEntriesBefore = browser.printTable(namespace, tableName);
 
-        browser.radioTest(namespace, tableName, 10, 11);
+//        assertThat(table1.count()).isEqualTo(1);
+        browser.radioTest(namespace, tableName, 10, 1, 10);
 
-        assertThat(browser.printTable(namespace, tableName)).isEqualTo(numEntriesBefore + 10 + 10);
+        assertThat(table1.count()).isEqualTo(11);
 
-//        CorfuDynamicRecord editedRecord = browser.editRecord(namespace,
-//            tableName, keyString, newValString);
-////        Assert.assertNotNull(editedRecord);
-//
-//        DynamicMessage dynamicValMessage = DynamicMessage.newBuilder(newValUuid)
-//            .build();
-//        String valTypeUrl = Any.pack(newValUuid).getTypeUrl();
-//        DynamicMessage dynamicMetadataMessage = DynamicMessage.newBuilder(metadata)
-//            .build();
-//        String metadataTypeUrl = Any.pack(metadata).getTypeUrl();
-//        CorfuDynamicRecord expectedRecord = new CorfuDynamicRecord(valTypeUrl,
-//            dynamicValMessage, metadataTypeUrl, dynamicMetadataMessage);
-//
-//        Assert.assertEquals(expectedRecord, editedRecord);
-//
-//        // Now test deleteRecord capability
-//        assertThat(browser.deleteRecord(namespace, tableName, keyString)).isEqualTo(1);
-//        // Try to edit the deleted key and verify it is a no-op
-//        Assert.assertNull(browser.editRecord(namespace, tableName, keyString,
-//            newValString));
-//        // Try to delete a deleted key and verify it is a no-op
-//        assertThat(browser.deleteRecord(namespace, tableName, keyString)).isZero();
+
         runtime.shutdown();
     }
 }

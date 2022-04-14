@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
 
@@ -47,6 +48,7 @@ import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.ProtobufSerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.rocksdb.Options;
 
@@ -65,7 +67,8 @@ import javax.annotation.Nonnull;
 public class CorfuStoreBrowserEditor {
     private final CorfuRuntime runtime;
     private final String diskPath;
-    private final DynamicProtobufSerializer dynamicProtobufSerializer;
+    private final DynamicProtobufSerializer dynamicProtobufSerializer = null;
+    private ProtobufSerializer protoSerializer = null;
     private final String QUOTE = "\"";
 
     /**
@@ -85,9 +88,11 @@ public class CorfuStoreBrowserEditor {
     public CorfuStoreBrowserEditor(CorfuRuntime runtime, String diskPath) {
         this.runtime = runtime;
         this.diskPath = diskPath;
-        dynamicProtobufSerializer =
-            new DynamicProtobufSerializer(runtime);
-        runtime.getSerializers().registerSerializer(dynamicProtobufSerializer);
+        protoSerializer = new ProtobufSerializer(new ConcurrentHashMap<>());
+        runtime.getSerializers().registerSerializer(protoSerializer);
+//        dynamicProtobufSerializer =
+//            new DynamicProtobufSerializer(runtime);
+//        runtime.getSerializers().registerSerializer(dynamicProtobufSerializer);
     }
 
     /**
@@ -125,7 +130,7 @@ public class CorfuStoreBrowserEditor {
         runtime.getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
                 .setStreamName(fullTableName)
-                .setSerializer(dynamicProtobufSerializer);
+                .setSerializer(protoSerializer);
 
         if (diskPath != null) {
             final Options options = new Options().setCreateIfMissing(true);
@@ -157,16 +162,16 @@ public class CorfuStoreBrowserEditor {
             getTable(namespace, tablename);
         int size = table.size();
         final int batchSize = 50;
-        Stream<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> entryStream = table.entryStream();
-        final Iterable<List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>>> partitions =
-                Iterables.partition(entryStream::iterator, batchSize);
-        for (List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> partition : partitions) {
-            for (Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry : partition) {
-                printKey(entry);
-                printPayload(entry);
-                printMetadata(entry);
-            }
-        }
+//        Stream<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> entryStream = table.entryStream();
+//        final Iterable<List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>>> partitions =
+//                Iterables.partition(entryStream::iterator, batchSize);
+//        for (List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> partition : partitions) {
+//            for (Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry : partition) {
+//                printKey(entry);
+//                printPayload(entry);
+//                printMetadata(entry);
+//            }
+//        }
         return size;
     }
 
@@ -742,61 +747,109 @@ public class CorfuStoreBrowserEditor {
             + " TableNames: " + formatMapping);
     }
 
-    public void radioTest(String namespace, String tablename, int numItems, int startIdx) {
-        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
-                getTable(namespace, tablename);
+//    public void radioTest(String namespace, String tablename, int numItems, int startIdx) {
+//        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
+//                getTable(namespace, tablename);
+//
+//        TableName tableNameProto = TableName.newBuilder().setTableName(tablename)
+//                .setNamespace(namespace).build();
+//
+//        Any defaultKeyAny =
+//                dynamicProtobufSerializer.getCachedRegistryTable().get(tableNameProto)
+//                        .getPayload().getKey();
+//        Any defaultValueAny =
+//                dynamicProtobufSerializer.getCachedRegistryTable().get(tableNameProto)
+//                        .getPayload().getValue();
+//        Any defaultMetadataAny =
+//                dynamicProtobufSerializer.getCachedRegistryTable().get(tableNameProto)
+//                        .getPayload().getMetadata();
+//        DynamicMessage newValueMsg;
+//
+//
+//        for (int i = startIdx; i < startIdx + numItems; i++) {
+//            try {
+//                DynamicMessage keyMsg =
+//                        dynamicProtobufSerializer.createDynamicMessageForBenchmark(defaultKeyAny, String.valueOf(i));
+//                DynamicMessage metadataMsg = dynamicProtobufSerializer.createDynamicMessageForBenchmark(defaultKeyAny, String.valueOf(i));
+//                newValueMsg =
+//                        dynamicProtobufSerializer.createDynamicMessageForBenchmark(defaultValueAny, String.valueOf(i));
+//                CorfuDynamicKey dynamicKey =
+//                        new CorfuDynamicKey(defaultKeyAny.getTypeUrl(), keyMsg);
+//
+//                runtime.getObjectsView().TXBegin();
+//
+//                CorfuDynamicRecord record =new CorfuDynamicRecord(defaultValueAny.getTypeUrl(),
+//                        newValueMsg, defaultMetadataAny.getTypeUrl(), metadataMsg);
+//                table.put(dynamicKey, record);
+//                runtime.getObjectsView().TXEnd();
+//            } catch (TransactionAbortedException e) {
+//                log.error("Transaction to edit record aborted.", e);
+//            } finally {
+//                if (TransactionalContext.isInTransaction()) {
+//                    runtime.getObjectsView().TXAbort();
+//                }
+//            }
+//        }
+//
+//
+////        log.info("Size of key: {}, size of value: {}, size of metadata: {}", key.getSerializedSize(), value.getSerializedSize(), metadata.getSerializedSize());
+////        log.info("Total size for 1 CorfuStoreEntry (key + payload + metadata) is: {}", key.getSerializedSize() + value.getSerializedSize() + metadata.getSerializedSize());
+//        log.info("{} records are put into table {}${}", numItems, namespace, tablename);
+//    }
 
-        TableName tableNameProto = TableName.newBuilder().setTableName(tablename)
-                .setNamespace(namespace).build();
+    public void radioTest(String namespace, String tablename, int numItems, int itemSize, int startIdx) {
+        ProtobufSerializer protoSerializer = new ProtobufSerializer(new ConcurrentHashMap<>());
+        runtime.getSerializers().registerSerializer(protoSerializer);
 
-        Any defaultKeyAny =
-                dynamicProtobufSerializer.getCachedRegistryTable().get(tableNameProto)
-                        .getPayload().getKey();
-        Any defaultValueAny =
-                dynamicProtobufSerializer.getCachedRegistryTable().get(tableNameProto)
-                        .getPayload().getValue();
-        Any defaultMetadataAny =
-                dynamicProtobufSerializer.getCachedRegistryTable().get(tableNameProto)
-                        .getPayload().getMetadata();
-        DynamicMessage newValueMsg;
+        CorfuStore store = new CorfuStore(runtime);
 
+        TableOptions.TableOptionsBuilder optionsBuilder = TableOptions.builder();
+        Table<TableName, TableName, TableName> table = null;
+        try {
+            table = store.openTable(
+                    namespace, tablename,
+                    TableName.class,
+                    TableName.class,
+                    TableName.class,
+                    TableOptions.fromProtoSchema(TableName.class));
+        } catch (Exception e) {
+            log.error("Unable to open table {}:{}", namespace, tablename);
+        }
+
+        String payload = getRandomStringOfSize(itemSize);
+
+        Function<Object,Object> keyMutator = (x) -> x;
+        Function<Object,Object> valueMutator = (x) -> x;
+        ISerializer serializer = Serializers.getDefaultSerializer();
+        SMREntry each = new SMREntry("put", new Object[]{keyMutator.apply("key_0"), valueMutator.apply(payload)}, serializer);
+        ByteBuf b = Unpooled.buffer();
+        each.serialize(b);
+//        System.out.println("Single SMR Entry size is: " + b.writerIndex());
+//        int size = 0;
 
         for (int i = startIdx; i < startIdx + numItems; i++) {
-            try {
-                DynamicMessage keyMsg =
-                        dynamicProtobufSerializer.createDynamicMessageForBenchmark(defaultKeyAny, String.valueOf(i));
-                DynamicMessage metadataMsg = dynamicProtobufSerializer.createDynamicMessageForBenchmark(defaultKeyAny, String.valueOf(i));
-                newValueMsg =
-                        dynamicProtobufSerializer.createDynamicMessageForBenchmark(defaultValueAny, String.valueOf(i));
-                CorfuDynamicKey dynamicKey =
-                        new CorfuDynamicKey(defaultKeyAny.getTypeUrl(), keyMsg);
-
-                runtime.getObjectsView().TXBegin();
-
-                CorfuDynamicRecord record =new CorfuDynamicRecord(defaultValueAny.getTypeUrl(),
-                        newValueMsg, defaultMetadataAny.getTypeUrl(), metadataMsg);
-                table.put(dynamicKey, record);
-                runtime.getObjectsView().TXEnd();
-            } catch (TransactionAbortedException e) {
-                log.error("Transaction to edit record aborted.", e);
-            } finally {
-                if (TransactionalContext.isInTransaction()) {
-                    runtime.getObjectsView().TXAbort();
-                }
+            try(TxnContext txn = store.txn(namespace)) {
+                TableName key = TableName.newBuilder().setNamespace(namespace).setTableName("key_" + i).build();
+                TableName value = TableName.newBuilder().setNamespace(namespace).setTableName(payload).build();
+                TableName metadata = TableName.newBuilder().setNamespace(namespace).setTableName("metadata").build();
+                txn.putRecord(table, key, value, metadata);
+                txn.commit();
             }
         }
 
-
-//        log.info("Size of key: {}, size of value: {}, size of metadata: {}", key.getSerializedSize(), value.getSerializedSize(), metadata.getSerializedSize());
-//        log.info("Total size for 1 CorfuStoreEntry (key + payload + metadata) is: {}", key.getSerializedSize() + value.getSerializedSize() + metadata.getSerializedSize());
+        TableName key = TableName.newBuilder().setNamespace(namespace).setTableName("key_0").build();
+        TableName value = TableName.newBuilder().setNamespace(namespace).setTableName(payload).build();
+        TableName metadata = TableName.newBuilder().setNamespace(namespace).setTableName("metadata").build();
+        log.info("Size of key: {}, size of value: {}, size of metadata: {}", key.getSerializedSize(), value.getSerializedSize(), metadata.getSerializedSize());
+        log.info("Total size for 1 CorfuStoreEntry (key + payload + metadata) is: {}", key.getSerializedSize() + value.getSerializedSize() + metadata.getSerializedSize());
         log.info("{} records are put into table {}${}", numItems, namespace, tablename);
     }
 
 
-    private ByteString getRandomStringOfSize(int size) {
+    private String getRandomStringOfSize(int size) {
         byte[] buf = new byte[size];
         ThreadLocalRandom.current().nextBytes(buf);
-        return ByteString.copyFrom(buf);
+        return new String(buf);
     }
 
 }
