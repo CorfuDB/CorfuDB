@@ -1,8 +1,11 @@
 package org.corfudb.runtime.collections;
 
-import lombok.NonNull;
+import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.object.ICorfuSMR;
 
+import javax.annotation.Nonnull;
+import java.util.Collection;
+import java.util.Map;
 import java.util.Set;
 
 public class PersistentCorfuTable<K, V> implements ICorfuSMR<PersistentCorfuTable<K, V>> {
@@ -11,6 +14,10 @@ public class PersistentCorfuTable<K, V> implements ICorfuSMR<PersistentCorfuTabl
 
     public PersistentCorfuTable() {
         tableState = new PersistentHashMapWrapper<>();
+    }
+
+    public PersistentCorfuTable(@Nonnull final Index.Registry<K, V> indices) {
+        tableState = new PersistentHashMapWrapper<>(indices);
     }
 
     @Override
@@ -23,12 +30,14 @@ public class PersistentCorfuTable<K, V> implements ICorfuSMR<PersistentCorfuTabl
         return tableState;
     }
 
-    public void insert(@NonNull K key, @NonNull V value) {
-        // see PersistentCorfuTable$CORFUSMR
+    public void insert(@Nonnull K key, @Nonnull V value) {
+        // See PersistentCorfuTable$CORFUSMR
+        // tableState = tableState.put(key, value);
     }
 
-    public void delete(@NonNull K key) {
-        // see PersistentCorfuTable$CORFUSMR
+    public void delete(@Nonnull K key) {
+        // See PersistentCorfuTable$CORFUSMR
+        // tableState = tableState.remove(key);
     }
 
     // TODO: Stream<Entry<K, V>> entryStream()
@@ -41,32 +50,38 @@ public class PersistentCorfuTable<K, V> implements ICorfuSMR<PersistentCorfuTabl
         return tableState.size() == 0;
     }
 
-    public boolean containsKey(Object key) {
-        return false;
+    public boolean containsKey(@Nonnull K key) {
+        return tableState.containsKey(key);
     }
 
-    public V get(@NonNull K key) {
+    public V get(@Nonnull K key) {
         return tableState.get(key);
     }
 
-    public V put(@NonNull K key, @NonNull V value) {
+    @Deprecated
+    public V put(@Nonnull K key, @Nonnull V value) {
         final V prev = tableState.get(key);
         tableState = tableState.put(key, value);
         return prev;
     }
 
-    public V remove(@NonNull K key) {
+    @Deprecated
+    public V remove(@Nonnull K key) {
         final V value = tableState.get(key);
         tableState = tableState.remove(key);
         return value;
     }
 
     public void clear() {
-
+        tableState = tableState.clear();
     }
 
     public Set<K> keySet() {
-        return null;
+        return tableState.keySet();
+    }
+
+    public <I> Collection<Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey) {
+        return tableState.getByIndex(indexName, indexKey);
     }
 
     @Override
@@ -76,6 +91,10 @@ public class PersistentCorfuTable<K, V> implements ICorfuSMR<PersistentCorfuTabl
 
     @Override
     public void reset() {
-        tableState = new PersistentHashMapWrapper<>();
+        tableState = tableState.clear();
+    }
+
+    public static <K, V> TypeToken<PersistentCorfuTable<K, V>> getTableType() {
+        return new TypeToken<PersistentCorfuTable<K, V>>() {};
     }
 }

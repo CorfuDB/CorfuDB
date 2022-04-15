@@ -6,7 +6,10 @@ import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
 
+import javax.annotation.Nonnull;
+import java.util.Collection;
 import java.util.Map;
+import java.util.Set;
 
 public class PersistentCorfuTable$CORFUSMR<K, V> extends PersistentCorfuTable<K, V> implements ICorfuSMR<PersistentCorfuTable<K, V>> {
 
@@ -63,12 +66,37 @@ public class PersistentCorfuTable$CORFUSMR<K, V> extends PersistentCorfuTable<K,
     }
 
     @Override
+    public Set<K> keySet() {
+        return proxy_CORFUSMR.access(PersistentCorfuTable::keySet, null);
+    }
+
+    @Override
+    public boolean containsKey(@ConflictParameter K key) {
+        Object[] conflictField_CORFUSMR = new Object[]{key};
+        return proxy_CORFUSMR.access(o_CORFUSMR -> o_CORFUSMR.containsKey(key), conflictField_CORFUSMR);
+    }
+
+    @Override
     public int size() {
-        return proxy_CORFUSMR.access(o_CORFUSMR -> {return o_CORFUSMR.size();},null);
+        return proxy_CORFUSMR.access(PersistentCorfuTable::size,null);
+    }
+
+    @Override
+    public boolean isEmpty() {
+        return proxy_CORFUSMR.access(PersistentCorfuTable::isEmpty, null);
+    }
+
+    @Override
+    public void clear() {
+        proxy_CORFUSMR.logUpdate("clear", false, null);
+    }
+
+    @Override
+    public <I>Collection<Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey) {
+        return proxy_CORFUSMR.access(o_CORFUSMR -> o_CORFUSMR.getByIndex(indexName, indexKey), null);
     }
 
     public Map<String, ICorfuSMRUpcallTarget<PersistentCorfuTable<K, V>>> getCorfuSMRUpcallMap() {
         return upcallMap_CORFUSMR;
     }
-
 }

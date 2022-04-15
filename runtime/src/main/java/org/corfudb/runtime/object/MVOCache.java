@@ -49,6 +49,12 @@ public class MVOCache<T extends ICorfuSMR<T>> {
     //    floorEntry() on top of it.
     private final ConcurrentHashMap<UUID, TreeSet<Long>> objectVersions = new ConcurrentHashMap<>();
 
+    /**
+     * TODO: access pattern
+     * Mutations: 1) objectCache, 2) objectVersions
+     * Accesses/Gets: 1) objectVersions, 2) query objectCache for real object if previous query is true
+     */
+
     private final long DEAFULT_CACHE_EXPIRY_TIME_IN_SECONDS = 300;
 
     final ScheduledExecutorService mvoCacheSyncThread = Executors.newSingleThreadScheduledExecutor(
@@ -135,6 +141,7 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      * @param versionedObject the versioned object to add
      */
     public void put(VersionedObjectIdentifier voId, T versionedObject) {
+        // System.out.println("MVOCache[put]: " + voId.toString());
         TreeSet<Long> allVersionsOfThisObject = objectVersions.computeIfAbsent(
                 voId.getObjectId(), k -> new TreeSet<>());
         synchronized (allVersionsOfThisObject) {
@@ -202,7 +209,7 @@ public class MVOCache<T extends ICorfuSMR<T>> {
         allMVOs.forEach((uuid, mvo) -> {
             if (objectVersions.get(uuid).last() < streamTails.getStreamTail(uuid)) {
                 // Sync to the latest state
-                mvo.getVersionedObjectUnderLock(streamTails.getStreamTail(uuid));
+                mvo.getVersionedObjectUnderLock(streamTails.getStreamTail(uuid), v -> {});
             }
         });
     }

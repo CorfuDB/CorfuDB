@@ -15,8 +15,10 @@ import java.lang.ref.Reference;
 import java.lang.ref.SoftReference;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.StampedLock;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -67,7 +69,6 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      */
     public <R> R access(long timestamp, Function<T, R> accessFunction) throws NullPointerException{
         if (containsVersion(timestamp)) {
-            // TODO: Unsafe - Position of smr stream might not be that of timestamp
             log.trace("Access [{}] Direct (optimistic-read) access at {}",
                     this, timestamp);
             T object = (T)mvoCache.get(new VersionedObjectIdentifier(streamID, timestamp)).get();
@@ -76,10 +77,10 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
             return ret;
         }
 
-        T object = getVersionedObjectUnderLock(timestamp);
-        long vloAccessedVersion = getVersionUnsafe();
-        correctnessLogger.trace("Version, {}", vloAccessedVersion);
-        log.trace("Access [{}] Updated (writelock) access at {}", this, vloAccessedVersion);
+        AtomicLong vloAccessedVersion = new AtomicLong();
+        T object = getVersionedObjectUnderLock(timestamp, vloAccessedVersion::set);
+        correctnessLogger.trace("Version, {}", vloAccessedVersion.get());
+        log.trace("Access [{}] Updated (writelock) access at {}", this, vloAccessedVersion.get());
         return accessFunction.apply(object);
     }
 
@@ -92,15 +93,15 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
             return new SnapshotProxyAdapter<>(ref, timestamp, upcallTargetMap);
         }
         // TODO: this should provide a Reference<>? Should all Reference<> be given out by cache?
-        T object = getVersionedObjectUnderLock(timestamp);
-        final long accessedVersion = getVersionUnsafe();
-        correctnessLogger.trace("Version, {}", accessedVersion);
-        log.trace("Access [{}] Updated (writelock) access at {}", this, accessedVersion);
+        AtomicLong vloAccessedVersion = new AtomicLong();
+        T object = getVersionedObjectUnderLock(timestamp, vloAccessedVersion::set);
+        correctnessLogger.trace("Version, {}", vloAccessedVersion.get());
+        log.trace("Access [{}] Updated (writelock) access at {}", this, vloAccessedVersion.get());
         ref  = new SoftReference<>(object);
         return new SnapshotProxyAdapter<>(ref, timestamp, upcallTargetMap);
     }
 
-    protected T getVersionedObjectUnderLock(long timestamp) {
+    protected T getVersionedObjectUnderLock(long timestamp, Consumer<Long> versionAccessed) {
 
         long ts = 0;
         try {
@@ -115,6 +116,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
             for (int x = 0; x < TRIM_RETRY; x++) {
                 try {
                     syncObjectUnsafe(object, timestamp);
+                    versionAccessed.accept(getVersionUnsafe());
                     break;
                 } catch (TrimmedException te) {
                     log.info("accessInner: Encountered trimmed address space " +
