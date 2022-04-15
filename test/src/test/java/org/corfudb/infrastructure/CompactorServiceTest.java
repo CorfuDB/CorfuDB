@@ -22,10 +22,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -52,8 +49,6 @@ public class CompactorServiceTest extends AbstractViewTest {
 
     private Layout layout = null;
     private CorfuStore corfuStore = null;
-
-    private boolean serverCp;
 
     /**
      * Generates and bootstraps a 3 node cluster in disk mode.
@@ -130,8 +125,6 @@ public class CompactorServiceTest extends AbstractViewTest {
 
         corfuStore = new CorfuStore(runtime0);
 
-        serverCp = true;
-
         System.out.println("testSetup completed");
     }
 
@@ -206,10 +199,10 @@ public class CompactorServiceTest extends AbstractViewTest {
         return false;
     }
 
+    Set<String> clientIds = new HashSet<>();
+
     private boolean verifyCheckpointStatusTable(StatusType targetStatus, int maxFailedTables) {
-
         Table<TableName, CheckpointingStatus, Message> cpStatusTable = openCheckpointStatusTable();
-
         int failed = 0;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             List<TableName> tableNames = new ArrayList<>(txn.keySet(cpStatusTable)
@@ -219,12 +212,21 @@ public class CompactorServiceTest extends AbstractViewTest {
                         DistributedCompactor.CHECKPOINT_STATUS_TABLE_NAME, table).getPayload();
                 System.out.println(table.getTableName() +
                         " : " + cpStatus.getStatus() + " clientId: " + cpStatus.getClientName());
+                clientIds.add(cpStatus.getClientName());
                 if (cpStatus.getStatus() != targetStatus) {
                     failed++;
                 }
             }
             return failed <= maxFailedTables;
         }
+    }
+
+    private boolean verifyClientCheckpointing(int minClients, int maxClients) {
+        System.out.println("total client: " + clientIds.size());
+        if (clientIds.size() <= maxClients && clientIds.size() >= minClients ) {
+            return true;
+        }
+        return false;
     }
 
     private boolean verifyCheckpointTable() {
@@ -255,8 +257,6 @@ public class CompactorServiceTest extends AbstractViewTest {
                     || managerStatus.getStatus() == StatusType.FAILED)) {
                 log.info("done pollForFinishCp: {}", managerStatus.getStatus());
                 return true;
-            } else if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED_ALL) {
-                serverCp = true;
             }
         }
         return false;
@@ -485,13 +485,11 @@ public class CompactorServiceTest extends AbstractViewTest {
 
     @Test
     public void clientsCheckpointing() {
-        runtime2.getParameters().setCheckpointTriggerFreqMillis(COMPACTOR_SERVICE_INTERVAL/2);
+        runtime2.getParameters().setCheckpointTriggerFreqMillis(COMPACTOR_SERVICE_INTERVAL);
         DistributedClientCheckpointer distributedClientCheckpointer = new DistributedClientCheckpointer(runtime2);
 
         SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);
         MockCompactionTriggerPolicy mockCompactionTriggerPolicy1 = new MockCompactionTriggerPolicy();
-        SingletonResource<CorfuRuntime> runtimeSingletonResource2 = SingletonResource.withInitial(() -> runtime1);
-        MockCompactionTriggerPolicy mockCompactionTriggerPolicy2 = new MockCompactionTriggerPolicy();
 
         CompactorService compactorService1 = new CompactorService(sc0, runtimeSingletonResource1,
                 new InvokeCheckpointingMock(runtime0, cpRuntime0), mockCompactionTriggerPolicy1);
@@ -511,6 +509,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         assert(verifyManagerStatus(StatusType.COMPLETED));
         assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
         assert(verifyCheckpointTable());
+        assert(verifyClientCheckpointing(1, 1));
     }
 
     @Test
@@ -544,6 +543,6 @@ public class CompactorServiceTest extends AbstractViewTest {
         assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
         assert(verifyCheckpointTable());
         //asserts that the server invoked checkpointing
-        assert(serverCp);
+        assert(verifyClientCheckpointing(2, 2));
     }
 }
