@@ -94,7 +94,6 @@ public class CompactorService implements ManagementService {
                     DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
                     DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
             txn.commit();
-            log.info("managerStatus: {}", managerStatus != null ? managerStatus : "null");
 
             if (managerStatus != null) {
                 if (managerStatus.getStatus() == StatusType.FAILED || managerStatus.getStatus() == StatusType.COMPLETED) {
