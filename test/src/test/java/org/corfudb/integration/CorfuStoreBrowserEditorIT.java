@@ -646,4 +646,217 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         assertThat(browser.deleteRecord(namespace, tableName, keyString)).isZero();
         runtime.shutdown();
     }
+
+    @Test
+    public void addRecordTest() throws IOException, InvocationTargetException,
+        NoSuchMethodException, IllegalAccessException {
+        final String namespace = "namespace";
+        final String tableName = "table";
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        // Start a Corfu runtime
+        runtime = createRuntime(singleNodeEndpoint);
+
+        CorfuStore store = new CorfuStore(runtime);
+
+        final Table<SampleSchema.Uuid, SampleSchema.Uuid, SampleSchema.Uuid> table1 = store.openTable(
+            namespace,
+            tableName,
+            SampleSchema.Uuid.class,
+            SampleSchema.Uuid.class,
+            SampleSchema.Uuid.class,
+            TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
+
+        final long keyUuid = 1L;
+        final long valueUuid = 3L;
+        final long metadataUuid = 5L;
+
+        SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder()
+            .setMsb(keyUuid)
+            .setLsb(keyUuid)
+            .build();
+        SampleSchema.Uuid uuidVal = SampleSchema.Uuid.newBuilder()
+            .setMsb(valueUuid)
+            .setLsb(valueUuid)
+            .build();
+        SampleSchema.Uuid metadata = SampleSchema.Uuid.newBuilder()
+            .setMsb(metadataUuid)
+            .setLsb(metadataUuid)
+            .build();
+        TxnContext tx = store.txn(namespace);
+        tx.putRecord(table1, uuidKey, uuidVal, metadata);
+        tx.commit();
+        runtime.shutdown();
+
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        // Invoke listTables and verify table count
+        Assert.assertEquals(1, browser.printTable(namespace, tableName));
+
+        // Add a new record
+        final String newKeyString = "{\"msb\": \"2\", \"lsb\": \"2\"}";
+        final String newValString = "{\"msb\": \"4\", \"lsb\": \"4\"}";
+        final String newMetadataString = "{\"msb\": \"6\", \"lsb\": \"6\"}";
+        final long newVal = 4L;
+        SampleSchema.Uuid newValUuid = SampleSchema.Uuid.newBuilder()
+            .setMsb(newVal)
+            .setLsb(newVal)
+            .build();
+
+        final long metadataVal = 6L;
+        SampleSchema.Uuid newMetadataUuid = SampleSchema.Uuid.newBuilder()
+            .setMsb(metadataVal)
+            .setLsb(metadataVal)
+            .build();
+
+        CorfuDynamicRecord addedRecord = browser.addRecord(namespace,
+            tableName, newKeyString, newValString, newMetadataString);
+        Assert.assertNotNull(addedRecord);
+
+        DynamicMessage dynamicValMessage = DynamicMessage.newBuilder(newValUuid)
+            .build();
+        String valTypeUrl = Any.pack(newValUuid).getTypeUrl();
+        DynamicMessage dynamicMetadataMessage =
+            DynamicMessage.newBuilder(newMetadataUuid).build();
+        String metadataTypeUrl = Any.pack(newMetadataUuid).getTypeUrl();
+        CorfuDynamicRecord expectedRecord = new CorfuDynamicRecord(valTypeUrl,
+            dynamicValMessage, metadataTypeUrl, dynamicMetadataMessage);
+
+        Assert.assertEquals(expectedRecord, addedRecord);
+        Assert.assertEquals(2, browser.printTable(namespace, tableName));
+    }
+
+    /**
+     * Verify that a record with null or empty key and/or value cannot be
+     * inserted and a record with null or empty metadata can be inserted.
+     */
+    @Test
+    public void addRecordTestWithNullAndEmpty() throws IOException,
+        InvocationTargetException, NoSuchMethodException,
+        IllegalAccessException {
+        final String namespace = "namespace";
+        final String tableName = "table";
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        // Start a Corfu runtime
+        runtime = createRuntime(singleNodeEndpoint);
+
+        CorfuStore store = new CorfuStore(runtime);
+
+        final Table<SampleSchema.Uuid, SampleSchema.Uuid, SampleSchema.Uuid> table1 = store.openTable(
+            namespace,
+            tableName,
+            SampleSchema.Uuid.class,
+            SampleSchema.Uuid.class,
+            SampleSchema.Uuid.class,
+            TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
+
+        final long keyUuid = 1L;
+        final long valueUuid = 3L;
+        final long metadataUuid = 5L;
+
+        SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder()
+            .setMsb(keyUuid)
+            .setLsb(keyUuid)
+            .build();
+        SampleSchema.Uuid uuidVal = SampleSchema.Uuid.newBuilder()
+            .setMsb(valueUuid)
+            .setLsb(valueUuid)
+            .build();
+        SampleSchema.Uuid metadata = SampleSchema.Uuid.newBuilder()
+            .setMsb(metadataUuid)
+            .setLsb(metadataUuid)
+            .build();
+        TxnContext tx = store.txn(namespace);
+        tx.putRecord(table1, uuidKey, uuidVal, metadata);
+        tx.commit();
+        runtime.shutdown();
+
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+
+        // Invoke printTable and verify table count
+        Assert.assertEquals(1, browser.printTable(namespace, tableName));
+
+        // Add a new record with null key
+        final String newKeyString1 = null;
+        final String newValString1 = "{\"msb\": \"4\", \"lsb\": \"4\"}";
+        final String newMetadataString1 = "{\"msb\": \"6\", \"lsb\": \"6\"}";
+
+        CorfuDynamicRecord addedRecord = browser.addRecord(namespace,
+            tableName, newKeyString1, newValString1, newMetadataString1);
+
+        // Verify that the record cannot be added
+        Assert.assertNull(addedRecord);
+        Assert.assertEquals(1, browser.printTable(namespace, tableName));
+
+        // Add a new record with empty value string
+        final String newKeyString2 = "{\"msb\": \"2\", \"lsb\": \"2\"}";
+        final String newValString2 = "";
+        final String newMetadataString2 = newMetadataString1;
+
+        addedRecord = browser.addRecord(namespace, tableName, newKeyString2,
+            newValString2, newMetadataString2);
+        // Verify that the record cannot be added
+        Assert.assertNull(addedRecord);
+        Assert.assertEquals(1, browser.printTable(namespace, tableName));
+
+
+        // Add a new record with empty metadata and verify it can be added
+        final String newKeyString3 = newKeyString2;
+        final String newValString3 = newValString1;
+        final String newMetadataString3 = "";
+
+        final long newVal = 4L;
+        SampleSchema.Uuid newValUuid = SampleSchema.Uuid.newBuilder()
+            .setMsb(newVal)
+            .setLsb(newVal)
+            .build();
+
+        SampleSchema.Uuid newMetadataUuid = SampleSchema.Uuid.newBuilder()
+            .build();
+
+        addedRecord = browser.addRecord(namespace,
+            tableName, newKeyString3, newValString3, newMetadataString3);
+        Assert.assertNotNull(addedRecord);
+
+        DynamicMessage dynamicValMessage = DynamicMessage.newBuilder(newValUuid)
+            .build();
+        String valTypeUrl = Any.pack(newValUuid).getTypeUrl();
+        DynamicMessage dynamicMetadataMessage = null;
+        String metadataTypeUrl = Any.pack(newMetadataUuid).getTypeUrl();
+        CorfuDynamicRecord expectedRecord = new CorfuDynamicRecord(valTypeUrl,
+            dynamicValMessage, metadataTypeUrl, dynamicMetadataMessage);
+
+        Assert.assertEquals(expectedRecord, addedRecord);
+        Assert.assertEquals(2, browser.printTable(namespace, tableName));
+    }
+
+    /**
+     * Verify that addRecord fails on a non-existent table.
+     */
+    @Test
+    public void addRecordTestWithNonExistentTable() throws IOException {
+        final String namespace = "namespace";
+        final String tableName = "table";
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        // Start a Corfu runtime
+        runtime = createRuntime(singleNodeEndpoint);
+
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+
+        // Invoke printTable and verify table count
+        Assert.assertEquals(0, browser.listTables(namespace));
+
+        // New key, value, metadata to add
+        final String newKeyString = "{\"msb\": \"2\", \"lsb\": \"2\"}";
+        final String newValString = "{\"msb\": \"4\", \"lsb\": \"4\"}";
+        final String newMetadataString = "{\"msb\": \"6\", \"lsb\": \"6\"}";
+
+        // Adding the record must fail as the table does not exist.
+        CorfuDynamicRecord addedRecord = browser.addRecord(namespace,
+            tableName, newKeyString, newValString, newMetadataString);
+        Assert.assertNull(addedRecord);
+    }
 }

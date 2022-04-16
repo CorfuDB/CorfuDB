@@ -33,7 +33,8 @@ public class CorfuStoreBrowserEditorMain {
         listTablesForTag,
         listTagsForTable,
         listTagsMap,
-        printMetadataMap
+        printMetadataMap,
+        addRecord
     }
 
     private static final String USAGE = "Usage: corfu-browser --host=<host> " +
@@ -48,6 +49,7 @@ public class CorfuStoreBrowserEditorMain {
         "[--itemSize=<sizeOfEachRecordValue>] "
         + "[--keyToEdit=<keyToEdit>] [--newRecord=<newRecord>] [--tag=<tag>]"
         + "[--keyToDelete=<keyToDelete>]"
+        + "[--keyToAdd=<keyToAdd>] [--valueToAdd=<valueToAdd>] [--metadataToAdd=<metadataToAdd>]"
         + "[--tlsEnabled=<tls_enabled>]\n"
         + "Options:\n"
         + "--host=<host>   Hostname\n"
@@ -70,6 +72,9 @@ public class CorfuStoreBrowserEditorMain {
         + "--keyToEdit=<keyToEdit> Key of the record to edit\n"
         + "--keyToDelete=<keyToDelete> Key of the record to be deleted\n"
         + "--newRecord=<newRecord> New Edited record to insert\n"
+        + "--keyToAdd=<keyToAdd>"
+        + "--valueToAdd=<valueToAdd>"
+        + "--metadataToAdd=<metadataToAdd>"
         + "--tlsEnabled=<tls_enabled>";
 
     public static void main(String[] args) {
@@ -188,6 +193,37 @@ public class CorfuStoreBrowserEditorMain {
                     Preconditions.checkNotNull(keyToDelete,
                             "Key To Delete is Null.");
                     browser.deleteRecord(namespace, tableName, keyToDelete);
+                    break;
+                case addRecord:
+                    String keyToAdd = null;
+                    String valueToAdd = null;
+                    String metadataToAdd = null;
+
+                    String keyArg = "--keyToAdd";
+                    String valueArg = "--valueToAdd";
+                    String metadataArg = "--metadataToAdd";
+
+                    if (opts.get(keyArg) != null) {
+                        keyToAdd = String.valueOf(opts.get(keyArg));
+                    }
+                    if (opts.get(valueArg) != null) {
+                        valueToAdd = String.valueOf(opts.get(valueArg));
+                    }
+                    if (opts.get(metadataArg) != null) {
+                        metadataToAdd = String.valueOf(opts.get(metadataArg));
+                    }
+                    Preconditions.checkArgument(isValid(namespace),
+                        "Namespace is null or empty.");
+                    Preconditions.checkArgument(isValid(tableName),
+                        "Table name is null or empty.");
+                    Preconditions.checkNotNull(keyToAdd,
+                        "Key To Add is Null.");
+                    Preconditions.checkNotNull(valueToAdd,
+                        "New Value is null");
+                    Preconditions.checkNotNull(metadataToAdd,
+                        "New Metadata is null");
+                    browser.addRecord(namespace, tableName, keyToAdd,
+                        valueToAdd, metadataToAdd);
                     break;
                 case loadTable:
                     int numItems = 1000;
