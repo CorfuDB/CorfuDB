@@ -18,7 +18,6 @@ import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.proto.RpcCommon.TokenMsg;
-import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.SMRObject;
@@ -221,23 +220,29 @@ public class DistributedCompactor {
         return tablesToCheckpoint;
     }
 
-    public static <K, V> Token appendCheckpoint(CorfuTable<K, V> corfuTable, TableName tableName, CorfuRuntime rt) {
+    public <K, V> CheckpointingStatus appendCheckpoint(CorfuTable<K, V> corfuTable, TableName tableName, CorfuRuntime rt) {
         MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
         mcw.addMap(corfuTable);
         long tableCkptStartTime = System.currentTimeMillis();
-        log.info("Starting checkpoint namespace: {}, tableName: {}",
+        log.info("{} Starting checkpoint: {}${}", clientName,
                 tableName.getNamespace(), tableName.getTableName());
 
         Token trimPoint = mcw.appendCheckpoints(rt, "checkpointer");
 
-        long tableCkptEndTime = System.currentTimeMillis();
+        long elapsedTime = System.currentTimeMillis() - tableCkptStartTime;
+        long tableSize = corfuTable.size();
         log.info("Completed checkpoint namespace: {}, tableName: {}, with {} entries in {} ms",
                 tableName.getNamespace(),
                 tableName.getTableName(),
                 corfuTable.size(),
-                (tableCkptEndTime - tableCkptStartTime));
+                elapsedTime);
 
-        return trimPoint;
+        return CheckpointingStatus.newBuilder()
+                .setStatus(CheckpointingStatus.StatusType.COMPLETED)
+                .setClientName(this.clientName)
+                .setTableSize(tableSize)
+                .setTimeTaken(elapsedTime)
+                .build();
     }
 
     private CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> openTable(TableName tableName,
@@ -305,9 +310,9 @@ public class DistributedCompactor {
             return 0; // Failure to get a lock is treated as success
         }
 
-        Token endToken = tryAppendCheckpoint(tableName, corfuTable);
+        CheckpointingStatus checkpointStatus = tryAppendCheckpoint(tableName, corfuTable);
 
-        return unlockMyCheckpointTable(tableName, endToken);
+        return unlockMyCheckpointTable(tableName, checkpointStatus);
     }
 
     /**
@@ -371,60 +376,46 @@ public class DistributedCompactor {
      * @param corfuTable - the table to be checkpointed
      * @return the token returned from the checkpointing, null if failure happens
      */
-    private Token tryAppendCheckpoint(TableName tableName, CorfuTable corfuTable) {
+    private CheckpointingStatus tryAppendCheckpoint(TableName tableName, CorfuTable corfuTable) {
         final int maxRetries = 5;
+        CheckpointingStatus failedStatus = CheckpointingStatus.newBuilder()
+                .setStatus(CheckpointingStatus.StatusType.FAILED)
+                .setClientName(clientName)
+                .setTableSize(corfuTable.size())
+                .build();
         for (int retry = 0; retry < maxRetries; retry++) {
             try {
-                log.info("Client checkpointing locally opened table {}${}",
-                        tableName.getNamespace(), tableName.getTableName());
-                return DistributedCompactor.appendCheckpoint(corfuTable, tableName, runtime);
+                return appendCheckpoint(corfuTable, tableName, runtime);
             } catch (RuntimeException re) {
                 if (isCriticalRuntimeException(re, retry, maxRetries)) {
-                    return null; // stop on non-retryable exceptions
+                    return failedStatus; // stop on non-retryable exceptions
                 }
             } catch (Throwable t) {
                 log.error("clientCheckpointer: encountered unexpected exception", t);
                 log.error("StackTrace: {}", t.getStackTrace());
             }
         }
-        return null;
+        return failedStatus;
     }
 
     /**
      * Mark the checkpointed table as either done or failed based on endToken
      * @param tableName - protobuf name of the table just checkpointed
-     * @param endToken - final token at which the checkpoint snapshot was written
+     * @param checkpointStatus - status of checkpoint with all the info
      * @return - 1 on success, 0 or negative value on failure
      */
-    private int unlockMyCheckpointTable(TableName tableName, Token endToken) {
+    private int unlockMyCheckpointTable(TableName tableName, CheckpointingStatus checkpointStatus) {
         final int checkpointFailedError = -1;
         final int checkpointSuccess = 1;
         int isSuccess = checkpointFailedError;
         final int maxRetries = 5;
         for (int retry = 0; retry < maxRetries; retry++) {
             try (TxnContext endTxn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                if (endToken == null) {
+                endTxn.putRecord(checkpointingStatusTable, tableName, checkpointStatus, null);
+                if (checkpointStatus.getStatus() != CheckpointingStatus.StatusType.COMPLETED) {
                     log.error("clientCheckpointer: Marking checkpointing as failed on table {}", tableName);
-                    endTxn.putRecord(checkpointingStatusTable,
-                            tableName,
-                            CheckpointingStatus.newBuilder()
-                                    .setStatus(CheckpointingStatus.StatusType.FAILED)
-                                    .setClientName(clientName)
-                                    .build(),
-                            null);
                     isSuccess = checkpointFailedError; // this will stop checkpointing on first failure
                 } else {
-                    endTxn.putRecord(checkpointingStatusTable,
-                            tableName,
-                            CheckpointingStatus.newBuilder()
-                                    .setStatus(CheckpointingStatus.StatusType.COMPLETED)
-                                    .setClientName(clientName)
-                                    .setEndToken(RpcCommon.TokenMsg.newBuilder()
-                                            .setEpoch(endToken.getEpoch())
-                                            .setSequence(endToken.getSequence())
-                                            .build())
-                                    .build(),
-                            null);
                     isSuccess = checkpointSuccess;
                 }
                 endTxn.delete(activeCheckpointsTable, tableName);
