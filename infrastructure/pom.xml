@@ -25,6 +25,37 @@
             <build>
                 <plugins>
                     <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-dependency-plugin</artifactId>
+                        <version>3.3.0</version>
+                        <executions>
+                            <execution>
+                                <id>copy</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>copy</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>org.corfudb</groupId>
+                                    <artifactId>cmdlets</artifactId>
+                                    <version>${project.version}</version>
+                                    <type>jar</type>
+                                    <classifier>shaded</classifier>
+                                    <overWrite>false</overWrite>
+                                    <outputDirectory>${project.build.directory}</outputDirectory>
+                                    <destFileName>cmdlets-${project.version}-shaded.jar</destFileName>
+                                </artifactItem>
+                            </artifactItems>
+                            <overWriteReleases>false</overWriteReleases>
+                            <overWriteSnapshots>true</overWriteSnapshots>
+                        </configuration>
+                    </plugin>
+
+                    <plugin>
                         <groupId>org.codehaus.mojo</groupId>
                         <artifactId>exec-maven-plugin</artifactId>
                         <version>3.0.0</version>
@@ -87,7 +118,9 @@
                                 <configuration>
                                     <executable>cp</executable>
                                     <arguments>
-                                        <argument>${session.executionRootDirectory}/corfudb-tools/target/corfudb-tools-${project.version}-shaded.jar</argument>
+                                        <argument>
+                                            ${session.executionRootDirectory}/corfudb-tools/target/corfudb-tools-${project.version}-shaded.jar
+                                        </argument>
                                         <argument>target</argument>
                                     </arguments>
                                 </configuration>
@@ -107,6 +140,10 @@
                                         <argument>--build-arg</argument>
                                         <argument>
                                             CORFU_JAR=infrastructure-${project.version}-shaded.jar
+                                        </argument>
+                                        <argument>--build-arg</argument>
+                                        <argument>
+                                            CMDLETS_JAR=cmdlets-${project.version}-shaded.jar
                                         </argument>
                                         <argument>--build-arg</argument>
                                         <argument>
@@ -133,6 +170,37 @@
             <id>compatibility</id>
             <build>
                 <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-dependency-plugin</artifactId>
+                        <version>3.3.0</version>
+                        <executions>
+                            <execution>
+                                <id>copy</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>copy</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>org.corfudb</groupId>
+                                    <artifactId>cmdlets</artifactId>
+                                    <version>${project.version}</version>
+                                    <type>jar</type>
+                                    <classifier>shaded</classifier>
+                                    <overWrite>false</overWrite>
+                                    <outputDirectory>${project.build.directory}</outputDirectory>
+                                    <destFileName>cmdlets-${project.version}-shaded.jar</destFileName>
+                                </artifactItem>
+                            </artifactItems>
+                            <overWriteReleases>false</overWriteReleases>
+                            <overWriteSnapshots>true</overWriteSnapshots>
+                        </configuration>
+                    </plugin>
+
                     <plugin>
                         <groupId>org.codehaus.mojo</groupId>
                         <artifactId>exec-maven-plugin</artifactId>
@@ -196,7 +264,9 @@
                                 <configuration>
                                     <executable>cp</executable>
                                     <arguments>
-                                        <argument>${session.executionRootDirectory}/corfudb-tools/target/corfudb-tools-${project.version}-shaded.jar</argument>
+                                        <argument>
+                                            ${session.executionRootDirectory}/corfudb-tools/target/corfudb-tools-${project.version}-shaded.jar
+                                        </argument>
                                         <argument>target</argument>
                                     </arguments>
                                 </configuration>
@@ -220,6 +290,10 @@
                                         <argument>--build-arg</argument>
                                         <argument>
                                             CORFU_TOOLS_JAR=corfudb-tools-${project.version}-shaded.jar
+                                        </argument>
+                                        <argument>--build-arg</argument>
+                                        <argument>
+                                            CMDLETS_JAR=cmdlets-${project.version}-shaded.jar
                                         </argument>
                                         <argument>-t</argument>
                                         <argument>
@@ -265,7 +339,8 @@
                                 </outputTarget>
                                 <outputTarget>
                                     <type>grpc-java</type>
-                                    <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.15.0:exe:${os.detected.classifier}</pluginArtifact>
+                                    <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.15.0:exe:${os.detected.classifier}
+                                    </pluginArtifact>
                                 </outputTarget>
                             </outputTargets>
                             <outputDirectory>
