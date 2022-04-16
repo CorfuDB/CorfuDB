@@ -20,8 +20,8 @@ message CheckpointingStatus {
   }
   StatusType status = 1;
   string client_name = 2;
-  TokenMsg start_token = 3;
-  TokenMsg end_token = 4;
+  int64 table_size = 5;
+  int64 time_taken = 6;
 }
 
 message StringKey{
