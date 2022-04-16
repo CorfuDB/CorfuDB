@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.cache.RemovalNotification;
 import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.Setter;
@@ -26,8 +25,6 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
-
-import javax.annotation.Nullable;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -114,7 +111,7 @@ public class CompactorLeaderServices {
             CheckpointingStatus currentStatus = (CheckpointingStatus) compactionManagerRecord.getPayload();
 
             List<TableName> tableNames = new ArrayList<>(corfuStore.listTables(null));
-            CheckpointingStatus idleStatus = getCheckpointingStatus(StatusType.IDLE, null, null);
+            CheckpointingStatus idleStatus = buildCheckpointStatus(StatusType.IDLE);
 
             txn.clear(checkpointingStatusTable);
             for (TableName table : tableNames) {
@@ -132,7 +129,8 @@ public class CompactorLeaderServices {
                             .build(),
                     null);
 
-            CheckpointingStatus managerStatus = getCheckpointingStatus(StatusType.STARTED,null, null);
+            CheckpointingStatus managerStatus = buildCheckpointStatus(StatusType.STARTED, tableNames.size(),
+                    System.currentTimeMillis()); // put the current time when cycle starts
             txn.putRecord(compactionManagerTable, DistributedCompactor.COMPACTION_MANAGER_KEY, managerStatus, null);
 
             txn.commit();
@@ -210,7 +208,7 @@ public class CompactorLeaderServices {
                 if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED) {
                     txn.putRecord(compactionManagerTable,
                             DistributedCompactor.COMPACTION_MANAGER_KEY,
-                            getCheckpointingStatus(StatusType.STARTED_ALL, null, null),
+                            buildCheckpointStatus(StatusType.STARTED_ALL),
                             null);
                     readCache.remove(emptyTable);
                     txn.commit();
@@ -245,13 +243,13 @@ public class CompactorLeaderServices {
             if (tableStatus.getStatus() == StatusType.STARTED || tableStatus.getStatus() == StatusType.STARTED_ALL) {
                 txn.putRecord(checkpointingStatusTable,
                         table,
-                        getCheckpointingStatus(StatusType.FAILED, null, null),
+                        buildCheckpointStatus(StatusType.FAILED),
                         null);
                 txn.delete(activeCheckpointsTable, table);
                 //Mark cycle failed and return on first failure
                 txn.putRecord(compactionManagerTable,
                         DistributedCompactor.COMPACTION_MANAGER_KEY,
-                        getCheckpointingStatus(StatusType.FAILED, null, null),
+                        buildCheckpointStatus(StatusType.FAILED),
                         null);
                 txn.commit();
                 return false;
@@ -291,22 +289,27 @@ public class CompactorLeaderServices {
             RpcCommon.TokenMsg minToken = (RpcCommon.TokenMsg) txn.getRecord(CHECKPOINT,
                     DistributedCompactor.CHECKPOINT_KEY).getPayload();
             boolean cpFailed = false;
+            StringBuilder str = new StringBuilder("finishCycle:");
 
             for (TableName table : tableNames) {
                 CheckpointingStatus tableStatus = (CheckpointingStatus) txn.getRecord(
                         DistributedCompactor.CHECKPOINT_STATUS_TABLE_NAME, table).getPayload();
+                str.append(printCheckpointStatus(table, tableStatus));
                 if (tableStatus.getStatus() != StatusType.COMPLETED) {
-                    log.warn("Checkpointing failed on {}${}. clientName={}", table.getNamespace(),
-                            table.getTableName(),
-                            table.getTableName());
                     cpFailed = true;
-                } else {
-                    log.info("Checkpoint of {}${} done by clientName={}", table.getNamespace(),
-                            table.getTableName(), tableStatus.getClientName());
                 }
             }
-            txn.putRecord(compactionManagerTable, DistributedCompactor.COMPACTION_MANAGER_KEY, getCheckpointingStatus(
-                    cpFailed ? StatusType.FAILED : StatusType.COMPLETED, null, null), null);
+            long totalTimeElapsed = System.currentTimeMillis() - managerStatus.getTimeTaken();
+            str.append("\n").append(" totalTimeTaken=").append(totalTimeElapsed).append("ms");
+            if (cpFailed) {
+                log.warn("{}", str);
+            } else {
+                log.info("{}", str);
+            }
+            txn.putRecord(compactionManagerTable, DistributedCompactor.COMPACTION_MANAGER_KEY,
+                    buildCheckpointStatus(cpFailed ? StatusType.FAILED : StatusType.COMPLETED,
+                            tableNames.size(), totalTimeElapsed),
+                    null);
             txn.commit();
         } catch (Exception e) {
             log.warn("Exception caught: {}", e.getStackTrace());
@@ -319,10 +322,7 @@ public class CompactorLeaderServices {
      */
     @VisibleForTesting
     public void trimLog() {
-        log.info("Starting CorfuStore trimming task");
-
         RpcCommon.TokenMsg thisTrimToken = null;
-        log.warn("Since safe trim time has elapsed, trimming token from start of last cycle");
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
                     DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
@@ -350,18 +350,42 @@ public class CompactorLeaderServices {
         corfuRuntime.getAddressSpaceView().gc();
         final long endTime = System.nanoTime();
 
-        log.info("Trim completed, elapsed({}s), log address up to {} (exclusive).",
+        log.info("Trim completed, elapsed({}s), log address up to {}.",
                 TimeUnit.NANOSECONDS.toSeconds(endTime - startTime), thisTrimToken.getSequence());
     }
 
-    private CheckpointingStatus getCheckpointingStatus(CheckpointingStatus.StatusType statusType,
-                                                                                @Nullable RpcCommon.TokenMsg startToken,
-                                                                                @Nullable RpcCommon.TokenMsg endToken) {
+    private CheckpointingStatus buildCheckpointStatus(CheckpointingStatus.StatusType statusType) {
         return CheckpointingStatus.newBuilder()
                 .setStatus(statusType)
                 .setClientName(nodeId.toString())
-                .setStartToken(startToken == null ? RpcCommon.TokenMsg.getDefaultInstance() : startToken)
-                .setEndToken(endToken==null? RpcCommon.TokenMsg.getDefaultInstance():endToken)
                 .build();
+    }
+
+    private CheckpointingStatus buildCheckpointStatus(CheckpointingStatus.StatusType statusType,
+                                                      long count,
+                                                      long time) {
+        return CheckpointingStatus.newBuilder()
+                .setStatus(statusType)
+                .setTableSize(count)
+                .setTimeTaken(time)
+                .setClientName(nodeId.toString())
+                .build();
+    }
+
+    public static String printCheckpointStatus(TableName tableName, CheckpointingStatus status) {
+        StringBuilder str = new StringBuilder("\n");
+        str.append(status.getClientName()).append(":");
+        if (status.getStatus() != StatusType.COMPLETED) {
+            str.append("FAILED ");
+        } else {
+            str.append("SUCCESS ");
+        }
+        str.append(tableName.getNamespace()).append("$").append(tableName.getTableName());
+        str.append(" size(")
+                .append(status.getTableSize())
+                .append(") in ")
+                .append(status.getTimeTaken())
+                .append("ms");
+        return str.toString();
     }
 }
