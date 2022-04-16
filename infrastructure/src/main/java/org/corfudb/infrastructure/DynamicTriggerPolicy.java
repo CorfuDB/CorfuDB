@@ -91,8 +91,6 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
      *            return true // no record of previous trim & safe trim period elapsed
      *            ... once trim happens, we record the lastAddressSpaceSizeOnTrim
      *            ... once checkpoint starts we record the lastCompactionCycleStartTS
-     *        if (currentAddressSpaceSize > lastAddressSpaceSizeOnTrim * 2)
-     *            return true
      * 2. if ((currentTime - lastCompactionCycleStart) > maxTimeBetweenCompactionStarts)
      *
      * @param interval - ignored for now
