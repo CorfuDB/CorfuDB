@@ -10,7 +10,7 @@ public interface ICompactionTriggerPolicy {
      */
     boolean shouldTrigger(long interval);
 
-    long getLastCheckpointStartTime();
+    long getLastCompactionCycleStartTime();
     void markCompactionCycleStart();
 
     void markTrimComplete();
