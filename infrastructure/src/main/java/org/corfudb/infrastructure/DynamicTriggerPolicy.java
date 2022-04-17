@@ -62,7 +62,7 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
     }
 
     @Override
-    public long getLastCheckpointStartTime() {
+    public long getLastCompactionCycleStartTime() {
         return this.lastCompactionCycleStartTS;
     }
 
