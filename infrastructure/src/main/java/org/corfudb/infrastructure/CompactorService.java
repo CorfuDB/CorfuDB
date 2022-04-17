@@ -44,7 +44,9 @@ public class CompactorService implements ManagementService {
     private final ICompactionTriggerPolicy compactionTriggerPolicy;
     private CompactorLeaderServices compactorLeaderServices;
     private CorfuStore corfuStore;
+
     private long epoch = 0;
+    private boolean invokedJvm = false;
 
     //TODO: make it a prop file and maybe pass it from the server
     List<TableName> sensitiveTables = new ArrayList<>();
@@ -74,7 +76,7 @@ public class CompactorService implements ManagementService {
      */
     @Override
     public void start(Duration interval) {
-        this.compactorLeaderServices = new CompactorLeaderServices(getCorfuRuntime(), serverContext.getNodeId());
+        this.compactorLeaderServices = new CompactorLeaderServices(getCorfuRuntime());
         this.corfuStore = new CorfuStore(getCorfuRuntime());
         this.compactionTriggerPolicy.setCorfuRuntime(getCorfuRuntime());
 
@@ -98,9 +100,11 @@ public class CompactorService implements ManagementService {
             if (managerStatus != null) {
                 if (managerStatus.getStatus() == StatusType.FAILED || managerStatus.getStatus() == StatusType.COMPLETED) {
                     checkpointerJvmManager.shutdown();
+                    invokedJvm = false;
                 } else if (managerStatus.getStatus() == StatusType.STARTED_ALL) {
-                    if (!checkpointerJvmManager.isRunning()) {
+                    if (!checkpointerJvmManager.isRunning() && !invokedJvm) {
                         checkpointerJvmManager.invokeCheckpointing();
+                        invokedJvm = true;
                     }
                 }
             }

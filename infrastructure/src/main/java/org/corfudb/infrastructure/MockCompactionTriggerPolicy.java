@@ -14,7 +14,7 @@ public class MockCompactionTriggerPolicy implements ICompactionTriggerPolicy{
     }
 
     @Override
-    public long getLastCheckpointStartTime() {
+    public long getLastCompactionCycleStartTime() {
         return 0;
     }
 
