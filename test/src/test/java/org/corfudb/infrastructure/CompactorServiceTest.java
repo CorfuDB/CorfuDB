@@ -252,6 +252,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         return false;
     }
 
+    boolean started_all = false;
     private boolean pollForFinishCheckpointing() {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
@@ -262,6 +263,8 @@ public class CompactorServiceTest extends AbstractViewTest {
                     || managerStatus.getStatus() == StatusType.FAILED)) {
                 log.info("done pollForFinishCp: {}", managerStatus.getStatus());
                 return true;
+            } else if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED_ALL) {
+                started_all = true;
             }
         }
         return false;
@@ -498,6 +501,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
         assert(verifyCheckpointTable());
         assert(verifyClientCheckpointing(1, 2));
+        assert(!started_all);
     }
 
     @Test
@@ -516,7 +520,6 @@ public class CompactorServiceTest extends AbstractViewTest {
         compactorService1.setLIVENESS_TIMEOUT(LIVENESS_TIMEOUT);
         mockCompactionTriggerPolicy1.setShouldTrigger(true);
 
-
         try {
             while (!pollForFinishCheckpointing()) {
                 TimeUnit.MILLISECONDS.sleep(COMPACTOR_SERVICE_INTERVAL);
@@ -531,5 +534,6 @@ public class CompactorServiceTest extends AbstractViewTest {
         assert(verifyCheckpointTable());
         //asserts that the server invoked checkpointing
         assert(verifyClientCheckpointing(2, 2));
+        assert(started_all);
     }
 }
