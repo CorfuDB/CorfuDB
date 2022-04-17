@@ -15,6 +15,7 @@ import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
+import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.proto.RpcCommon.TokenMsg;
@@ -24,6 +25,7 @@ import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.*;
 
+import javax.annotation.Nullable;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -33,6 +35,17 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.view.TableRegistry.*;
+
+/**
+ * DistributedCompactor class performs checkpointing of tables in multiple clients in parallel.
+ * If the DistributedCompactor is triggered by the server, all opened and unopened tables are checkpointed. Otherwise,
+ * only opened tables are checkpointed.
+ * To checkpoint a table -
+ * 1. Check if the table is locked for checkpointing by any other client ie. check if the Status of the table is IDLE
+ * 2. Acquire lock to checkpoint the table, ie. mark table's status as STARTED if no other client already did
+ * 3. Perform checkpointing for the table's stream
+ * 4. Release lock to checkpoint the table ie. mark table's status as FAILED/COMPLETED
+ */
 
 @Slf4j
 public class DistributedCompactor {
@@ -80,7 +93,7 @@ public class DistributedCompactor {
     private Table<StringKey, CheckpointingStatus, Message> compactionManagerTable = null;
     private Table<TableName, CheckpointingStatus, Message> checkpointingStatusTable = null;
     private Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointsTable = null;
-    private Table<StringKey, RpcCommon.TokenMsg, Message> checkpointFreezeTable = null;
+    private Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable = null;
 
     public DistributedCompactor(CorfuRuntime corfuRuntime, CorfuRuntime cpRuntime, String persistedCacheRoot) {
         this.runtime = corfuRuntime;
@@ -126,7 +139,7 @@ public class DistributedCompactor {
                     null,
                     TableOptions.fromProtoSchema(ActiveCPStreamMsg.class));
 
-            this.checkpointFreezeTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+            this.checkpointTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
                     DistributedCompactor.CHECKPOINT,
                     StringKey.class,
                     RpcCommon.TokenMsg.class,
@@ -137,20 +150,21 @@ public class DistributedCompactor {
         }
     }
 
-    private boolean checkGlobalCheckpointStartTrigger() {
-        // This is necessary here to stop checkpointing after it has started?
+    private boolean checkCompactionManagerStartTrigger() {
+        // TODO: This is necessary here to stop checkpointing after it has started?
         // if (isCheckpointFrozen(corfuStore, this.checkpointFreezeTable)) {return;}
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             final CheckpointingStatus managerStatus = txn.getRecord(
                     compactionManagerTable, DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
             txn.commit();
+            log.warn("ManagerStatus: {}", (managerStatus == null ? "null" : managerStatus.getStatus()));
             if (managerStatus == null ||
-                    (managerStatus.getStatus() != CheckpointingStatus.StatusType.STARTED &&
-                    managerStatus.getStatus() != CheckpointingStatus.StatusType.STARTED_ALL)) {
+                    (managerStatus.getStatus() != StatusType.STARTED &&
+                    managerStatus.getStatus() != StatusType.STARTED_ALL)) {
                 return false;
             }
         } catch (Exception e) {
-            log.error("Checkpointer unable to check the main status table", e);
+            log.error("Unable to acquire CompactionManager status, {}, {}", e, e.getStackTrace());
             return false;
         }
         return true;
@@ -161,23 +175,36 @@ public class DistributedCompactor {
         int count = 0;
         log.info("Starting Checkpointing in-memory tables..");
         count = checkpointOpenedTables();
-        if (count < 0) {
-            log.warn("Stopping checkpointing since checkpoint of open tables has failed");
-            return count;
-        } else if  (count == 0) {
-            log.info("Checkpoint hasn't started");
-            return count;
+
+        if (count <= 0) {
+            log.info("Opened tables Checkpoint not done by client: {}", clientName);
+            if (count < 0) {
+                return count;
+            }
         }
 
-        log.info("{} in-memory tables checkpointed using protobuf serializer. Checkpointing remaining.",
-                count);
+        if (!isClient) {
+            log.info("{} in-memory tables checkpointed using protobuf serializer. Checkpointing remaining.", count);
+            count += checkpointUnopenedTables();
+        }
+
+        long cpDuration = System.currentTimeMillis() - startCp;
+        log.info("Client {} took {} ms to checkpoint {} tables", clientName, cpDuration, count);
+
+        MicroMeterUtils.time(Duration.ofMillis(cpDuration), "checkpoint.total.timer",
+                "clientName", clientName);
+        MicroMeterUtils.measure(count, "compaction.num_tables." + clientName);
+
+        return count;
+    }
+
+    private int checkpointUnopenedTables() {
+        int count = 0;
+
         keyDynamicProtobufSerializer = new KeyDynamicProtobufSerializer(cpRuntime);
         cpRuntime.getSerializers().registerSerializer(keyDynamicProtobufSerializer);
 
         List<TableName> tableNames = getAllTablesToCheckpoint();
-        if (tableNames == null) { // either an error or no tables to checkpoint
-            return count;
-        }
         for (TableName tableName : tableNames) {
             final CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> corfuTable =
                     openTable(tableName, keyDynamicProtobufSerializer, cpRuntime);
@@ -189,14 +216,6 @@ public class DistributedCompactor {
             }
             count += successfulCheckpoints; // 0 means lock failed so don't tick up count
         }
-
-        long cpDuration = System.currentTimeMillis() - startCp;
-        MicroMeterUtils.time(Duration.ofMillis(cpDuration), "checkpoint.total.timer",
-                "clientId", clientName);
-        log.info("Took {} ms to checkpoint the tables by client {}", cpDuration, clientName);
-
-        MicroMeterUtils.measure(count, "compaction.num_tables." + clientName);
-        log.info("ClientId: {}, Checkpointed {} tables out of {}", this.clientName, count, tableNames.size());
 
         return count;
     }
@@ -278,11 +297,10 @@ public class DistributedCompactor {
      */
     public synchronized int checkpointOpenedTables() {
         openCheckpointingMetadataTables();
-
-        if (!checkGlobalCheckpointStartTrigger()) {
+        if (!checkCompactionManagerStartTrigger()) {
+            log.info("Checkpoint hasn't started");
             return 0; // Orchestrator says checkpointing is either not needed or done.
         }
-
         int count = 0;
         for (CorfuTableNamePair openedTable :
                 this.runtime.getTableRegistry().getAllOpenTablesForCheckpointing()) {
@@ -326,7 +344,7 @@ public class DistributedCompactor {
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                 final CorfuStoreEntry<TableName, CheckpointingStatus, Message> tableToChkpt =
                         txn.getRecord(checkpointingStatusTable, tableName);
-                if (tableToChkpt.getPayload().getStatus() == CheckpointingStatus.StatusType.IDLE) {
+                if (tableToChkpt.getPayload().getStatus() == StatusType.IDLE) {
                     UUID streamId = CorfuRuntime.getCheckpointStreamIdFromName(
                             TableRegistry.getFullyQualifiedTableName(
                                     tableName.getNamespace(), tableName.getTableName()));
@@ -506,6 +524,5 @@ public class DistributedCompactor {
         }
         return false;
     }
-
 }
 

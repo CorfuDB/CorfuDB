@@ -41,7 +41,7 @@ public class DistributedClientCheckpointer {
      * Attempt to checkpoint all the tables already materialized in my JVM heap
      */
     private synchronized void checkpointAllMyOpenedTables() {
-        this.distributedCompactor.checkpointOpenedTables();
+        this.distributedCompactor.startCheckpointing();
     }
 
     /**

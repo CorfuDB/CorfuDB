@@ -29,17 +29,16 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
 public class DistributedCompactorTests extends AbstractViewTest {
-    private static final int N_THREADS = 3;
     private static final int WAIT_FOR_FINISH_CYCLE = 10;
     private static final int LIVENESS_TIMEOUT = 1000;
-    private static final int VALIDATE_LIVENESS_INTERVAL = 1000;
+    private static final String CLIENT_NAME_PREFIX = "Client";
 
+    private CorfuRuntime runtime0 = null;
     private CorfuRuntime runtime1 = null;
     private CorfuRuntime runtime2 = null;
-    private CorfuRuntime runtime3 = null;
+    private CorfuRuntime cpRuntime0 = null;
     private CorfuRuntime cpRuntime1 = null;
     private CorfuRuntime cpRuntime2 = null;
-    private CorfuRuntime cpRuntime3 = null;
 
     private CorfuStore corfuStore = null;
 
@@ -111,14 +110,22 @@ public class DistributedCompactorTests extends AbstractViewTest {
     public void testSetup() {
         Layout l = setup3NodeCluster();
 
+        runtime0 = getRuntime(l).connect();
         runtime1 = getRuntime(l).connect();
         runtime2 = getRuntime(l).connect();
-        runtime3 = getRuntime(l).connect();
+        runtime0.getParameters().setClientName(CLIENT_NAME_PREFIX + "0");
+        runtime1.getParameters().setClientName(CLIENT_NAME_PREFIX + "1");
+        runtime2.getParameters().setClientName(CLIENT_NAME_PREFIX + "2");
+
+        cpRuntime0 = getRuntime(l).connect();
         cpRuntime1 = getRuntime(l).connect();
         cpRuntime2 = getRuntime(l).connect();
-        cpRuntime3 = getRuntime(l).connect();
+        cpRuntime0.getParameters().setClientName(CLIENT_NAME_PREFIX + "_cp0");
+        cpRuntime1.getParameters().setClientName(CLIENT_NAME_PREFIX + "_cp1");
+        cpRuntime2.getParameters().setClientName(CLIENT_NAME_PREFIX + "_cp2");
 
-        corfuStore = new CorfuStore(runtime1);
+
+        corfuStore = new CorfuStore(runtime0);
     }
 
     private Table<StringKey, CheckpointingStatus, Message> openCompactionManagerTable() {
@@ -214,7 +221,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
                     DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
                     DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
-            System.out.println("ManagerStatus: " + managerStatus.getStatus());
+            System.out.println("ManagerStatus: " + (managerStatus == null ? "null" : managerStatus.getStatus()));
             if (managerStatus.getStatus() == targetStatus) {
                 System.out.println("verifyManagerStatus: returning true");
                 return true;
@@ -266,9 +273,9 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
     @Test
     public void initTest() {
-        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, UUID.randomUUID());
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0);
         compactorLeaderServices1.setLeader(true);
-        CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime2, UUID.randomUUID());
+        CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime1);
         compactorLeaderServices2.setLeader(false);
 
         assert(compactorLeaderServices1.trimAndTriggerDistributedCheckpointing());
@@ -279,26 +286,25 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
     @Test
     public void initMultipleLeadersTest1() {
-        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, UUID.randomUUID());
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0);
         compactorLeaderServices1.setLeader(true);
-        CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime2, UUID.randomUUID());
+        CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime1);
         compactorLeaderServices2.setLeader(true);
-        CompactorLeaderServices compactorLeaderServices3 = new CompactorLeaderServices(runtime3, UUID.randomUUID());
-        compactorLeaderServices3.setLeader(true);
 
+        ExecutorService scheduler = Executors.newFixedThreadPool(2);
         boolean init1 = compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
         boolean init2 = compactorLeaderServices2.trimAndTriggerDistributedCheckpointing();
-        boolean init3 = compactorLeaderServices3.trimAndTriggerDistributedCheckpointing();
-        assert(init1 ^ init2 ^ init3);
+
+        assert (init1 ^ init2);
         assert(verifyManagerStatus(StatusType.STARTED));
         assert(verifyCheckpointStatusTable(StatusType.IDLE, 0));
     }
 
     @Test
     public void initMultipleLeadersTest2() {
-        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, UUID.randomUUID());
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0);
         compactorLeaderServices1.setLeader(true);
-        CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime2, UUID.randomUUID());
+        CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime1);
         compactorLeaderServices2.setLeader(true);
 
         ExecutorService scheduler = Executors.newFixedThreadPool(2);
@@ -319,15 +325,15 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
     @Test
     public void startCheckpointingTest() {
-        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, UUID.randomUUID());
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0);
         compactorLeaderServices1.setLeader(true);
         compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
         DistributedCompactor distributedCompactor1 =
-                new DistributedCompactor(runtime1, cpRuntime1, null);
+                new DistributedCompactor(runtime0, cpRuntime0, null);
         DistributedCompactor distributedCompactor2 =
-                new DistributedCompactor(runtime2, cpRuntime2, null);
+                new DistributedCompactor(runtime1, cpRuntime1, null);
         DistributedCompactor distributedCompactor3 =
-                new DistributedCompactor(runtime3, cpRuntime3, null);
+                new DistributedCompactor(runtime2, cpRuntime2, null);
 
         int count1 = distributedCompactor1.startCheckpointing();
         int count2 = distributedCompactor2.startCheckpointing();
@@ -345,11 +351,11 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
     @Test
     public void finishCompactionCycleSuccessTest() {
-        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, UUID.randomUUID());
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0);
         compactorLeaderServices1.setLeader(true);
         compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
 
-        DistributedCompactor distributedCompactor = new DistributedCompactor(runtime1, cpRuntime1, null);
+        DistributedCompactor distributedCompactor = new DistributedCompactor(runtime0, cpRuntime0, null);
         distributedCompactor.startCheckpointing();
 
         compactorLeaderServices1.finishCompactionCycle();
@@ -361,7 +367,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
     @Test
     public void finishCompactionCycleFailureTest() {
-        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, UUID.randomUUID());
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0);
         compactorLeaderServices1.setLeader(true);
         compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
 
@@ -378,7 +384,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
                     DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
                     DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
             txn.commit();
-            log.info("managerStatus in test: {}", managerStatus.getStatus());
+            log.info("managerStatus in test: {}", (managerStatus == null ? "null" : managerStatus.getStatus()));
             if (managerStatus != null && (managerStatus.getStatus() == StatusType.COMPLETED
                     || managerStatus.getStatus() == StatusType.FAILED)) {
                 return true;
@@ -391,16 +397,16 @@ public class DistributedCompactorTests extends AbstractViewTest {
     public void validateLivenessLeaderTest() {
         //make some client to start cp
         //verifyCheckpointStatusTable
-        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, UUID.randomUUID());
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0);
         compactorLeaderServices1.setLeader(true);
         compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
 
-        DistributedCompactor distributedCompactor = new DistributedCompactor(runtime1, cpRuntime1, null);
+        DistributedCompactor distributedCompactor = new DistributedCompactor(runtime0, cpRuntime0, null);
         distributedCompactor.startCheckpointing();
 
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         scheduler.scheduleWithFixedDelay(() -> compactorLeaderServices1.validateLiveness(LIVENESS_TIMEOUT), 0,
-                VALIDATE_LIVENESS_INTERVAL, TimeUnit.MILLISECONDS);
+                LIVENESS_TIMEOUT, TimeUnit.MILLISECONDS);
         try {
             while (!pollForFinishCheckpointing()) {
                 TimeUnit.MILLISECONDS.sleep(WAIT_FOR_FINISH_CYCLE);
@@ -416,17 +422,17 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
     @Test
     public void validateLivenessNonLeaderTest() {
-        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, UUID.randomUUID());
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0);
         compactorLeaderServices1.setLeader(true);
         compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
         compactorLeaderServices1.setLeader(false);
 
-        DistributedCompactor distributedCompactor = new DistributedCompactor(runtime1, cpRuntime1, null);
+        DistributedCompactor distributedCompactor = new DistributedCompactor(runtime0, cpRuntime0, null);
         distributedCompactor.startCheckpointing();
 
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         scheduler.scheduleWithFixedDelay(() -> compactorLeaderServices1.validateLiveness(LIVENESS_TIMEOUT), 0,
-                VALIDATE_LIVENESS_INTERVAL, TimeUnit.MILLISECONDS);
+                LIVENESS_TIMEOUT, TimeUnit.MILLISECONDS);
 
         try {
             TimeUnit.MILLISECONDS.sleep(LIVENESS_TIMEOUT);
@@ -442,7 +448,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
     @Test
     public void validateLivenessFailureTest() {
-        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime2, UUID.randomUUID());
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1);
         compactorLeaderServices1.setLeader(true);
         compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
 
@@ -462,10 +468,10 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         scheduler.scheduleWithFixedDelay(() -> compactorLeaderServices1.validateLiveness(LIVENESS_TIMEOUT), 0,
-                VALIDATE_LIVENESS_INTERVAL, TimeUnit.MILLISECONDS);
+                LIVENESS_TIMEOUT, TimeUnit.MILLISECONDS);
 
 
-        DistributedCompactor distributedCompactor = new DistributedCompactor(runtime1, cpRuntime1,
+        DistributedCompactor distributedCompactor = new DistributedCompactor(runtime0, cpRuntime0,
                 null);
         distributedCompactor.startCheckpointing();
 
