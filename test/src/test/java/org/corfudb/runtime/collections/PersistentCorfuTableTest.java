@@ -9,10 +9,9 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.ExampleSchemas.Company;
 import org.corfudb.runtime.ExampleSchemas.ExampleValue;
-import org.corfudb.runtime.ExampleSchemas.ActivitySchedule;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
-import org.corfudb.runtime.ExampleSchemas.Adult;
 import org.corfudb.runtime.ExampleSchemas.Uuid;
 import org.corfudb.runtime.exceptions.StaleObjectVersionException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -27,6 +26,7 @@ import org.junit.Test;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -335,11 +335,11 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         rt.getObjectsView().TXEnd();
     }
 
-    // PersistentCorfuTable SecondaryIndexes Tests
+    // PersistentCorfuTable SecondaryIndexes Tests - Adapted From CorfuTableTest & CorfuStoreSecondaryIndexTest
 
     /**
      * Verify that a  lookup by index throws an exception,
-     * when the index has never been specified for this CorfuTable.
+     * when the index has never been specified for this PersistentCorfuTable.
      */
     @Test (expected = IllegalArgumentException.class)
     public void cannotLookupByIndexWhenIndexNotSpecified() throws Exception {
@@ -413,70 +413,6 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
     }
 
     /**
-     * Verify that secondary indexes are updated on removes.
-     */
-    @Test
-    public void doUpdateIndicesOnRemove() throws Exception {
-        addSingleServer(SERVERS.PORT_0);
-        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
-                .maxCacheEntries(MEDIUM_CACHE_SIZE)
-                .build())
-                .parseConfigurationString(getDefaultConfigurationString())
-                .connect();
-
-        setupSerializer();
-
-        PersistentCorfuTable<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>> table = openTable(
-                rt,
-                someNamespace,
-                someTable,
-                Uuid.class,
-                ExampleValue.class,
-                ManagedMetadata.class,
-                TableOptions.fromProtoSchema(ExampleValue.class).getSchemaOptions()
-        );
-
-        ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
-        final long numEntries = 10;
-
-        ArrayList<Map.Entry<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>>> expectedEntries =
-                LongStream.rangeClosed(1, numEntries)
-                        .boxed()
-                        .map(i -> Pair.of(
-                                Uuid.newBuilder().setLsb(i).setMsb(i).build(),
-                                new CorfuRecord<>(ExampleValue.newBuilder()
-                                        .setPayload("abc")
-                                        .setAnotherKey(i)
-                                        .setUuid(Uuid.getDefaultInstance())
-                                        .build(), user_1)))
-                        .collect(Collectors.toCollection(ArrayList::new));
-
-        // Insert entries into table
-        for (Map.Entry<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>> entry : expectedEntries) {
-            rt.getObjectsView().TXBegin();
-            table.insert(entry.getKey(), entry.getValue());
-            rt.getObjectsView().TXEnd();
-        }
-
-        // Verify secondary indexes
-        rt.getObjectsView().TXBegin();
-        List<Map.Entry<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>>>
-                entries = new ArrayList<>(table.getByIndex(() -> "anotherKey", numEntries));
-        assertThat(entries).hasSize(1);
-        assertThat(entries.get(0).getKey().getLsb()).isEqualTo(numEntries);
-        assertThat(entries.get(0).getKey().getMsb()).isEqualTo(numEntries);
-        assertThat(entries.get(0).getValue().getPayload().getAnotherKey()).isEqualTo(numEntries);
-
-        entries = new ArrayList<>(table.getByIndex(() -> "uuid", Uuid.getDefaultInstance()));
-        assertThat(entries.size()).isEqualTo(numEntries);
-        assertThat(entries.containsAll(expectedEntries)).isTrue();
-        assertThat(expectedEntries.containsAll(entries)).isTrue();
-        rt.getObjectsView().TXEnd();
-
-        // TODO: finish this test
-    }
-
-    /**
      * Very basic functionality of secondary indexes.
      */
     @Test
@@ -532,6 +468,651 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         entries = new ArrayList<>(table.getByIndex(() -> "uuid", secondaryKey1));
         assertThat(entries).hasSize(1);
         assertThat(entries.get(0).getValue().getPayload().getPayload()).isEqualTo("abc");
+        rt.getObjectsView().TXEnd();
+    }
+
+    /**
+     * Verify that secondary indexes are updated on removes.
+     */
+    @Test
+    public void doUpdateIndicesOnRemove() throws Exception {
+        addSingleServer(SERVERS.PORT_0);
+        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(SMALL_CACHE_SIZE)
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+
+        setupSerializer();
+
+        PersistentCorfuTable<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>> table = openTable(
+                rt,
+                someNamespace,
+                someTable,
+                Uuid.class,
+                ExampleValue.class,
+                ManagedMetadata.class,
+                TableOptions.fromProtoSchema(ExampleValue.class).getSchemaOptions()
+        );
+
+        ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
+        final long numEntries = 10;
+
+        ArrayList<Map.Entry<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>>> initialEntries =
+                LongStream.rangeClosed(1, numEntries)
+                        .boxed()
+                        .map(i -> Pair.of(
+                                Uuid.newBuilder().setLsb(i).setMsb(i).build(),
+                                new CorfuRecord<>(ExampleValue.newBuilder()
+                                        .setPayload("abc")
+                                        .setAnotherKey(i)
+                                        .setUuid(Uuid.getDefaultInstance())
+                                        .build(), user_1)))
+                        .collect(Collectors.toCollection(ArrayList::new));
+
+        // Insert entries into table
+        for (Map.Entry<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>> entry : initialEntries) {
+            rt.getObjectsView().TXBegin();
+            table.insert(entry.getKey(), entry.getValue());
+            rt.getObjectsView().TXEnd();
+        }
+
+        // Verify secondary indexes
+        rt.getObjectsView().TXBegin();
+        List<Map.Entry<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>>>
+                entries = new ArrayList<>(table.getByIndex(() -> "anotherKey", numEntries));
+        assertThat(entries).hasSize(1);
+        assertThat(entries.get(0).getKey().getLsb()).isEqualTo(numEntries);
+        assertThat(entries.get(0).getKey().getMsb()).isEqualTo(numEntries);
+        assertThat(entries.get(0).getValue().getPayload().getAnotherKey()).isEqualTo(numEntries);
+
+        entries = new ArrayList<>(table.getByIndex(() -> "uuid", Uuid.getDefaultInstance()));
+        assertThat(entries.size()).isEqualTo(numEntries);
+        assertThat(entries.containsAll(initialEntries)).isTrue();
+        assertThat(initialEntries.containsAll(entries)).isTrue();
+        rt.getObjectsView().TXEnd();
+
+        // Remove entries whose key LSB (UUID) is odd
+        ArrayList<Map.Entry<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>>> expectedEntries =
+                initialEntries.stream().filter(entry -> entry.getKey().getLsb() % 2 == 0).collect(Collectors.toCollection(ArrayList::new));
+
+        for (long i = 0; i < numEntries; i++) {
+            if (i % 2 != 0) {
+                rt.getObjectsView().TXBegin();
+                table.delete(Uuid.newBuilder().setLsb(i).setMsb(i).build());
+                rt.getObjectsView().TXEnd();
+            }
+        }
+
+        // Verify secondary indexes
+        rt.getObjectsView().TXBegin();
+        entries = new ArrayList<>(table.getByIndex(() -> "anotherKey", numEntries));
+        assertThat(entries).hasSize(1);
+        assertThat(entries.get(0).getKey().getLsb()).isEqualTo(numEntries);
+        assertThat(entries.get(0).getKey().getMsb()).isEqualTo(numEntries);
+        assertThat(entries.get(0).getValue().getPayload().getAnotherKey()).isEqualTo(numEntries);
+
+        entries = new ArrayList<>(table.getByIndex(() -> "anotherKey", 1L));
+        assertThat(entries).isEmpty();
+
+        entries = new ArrayList<>(table.getByIndex(() -> "uuid", Uuid.getDefaultInstance()));
+        assertThat(entries.size()).isEqualTo(expectedEntries.size());
+        assertThat(entries.containsAll(expectedEntries)).isTrue();
+        assertThat(expectedEntries.containsAll(entries)).isTrue();
+        rt.getObjectsView().TXEnd();
+    }
+
+    /**
+     * Very functionality of nested secondary indexes.
+     */
+    @Test
+    public void testNestedSecondaryIndexes() throws Exception {
+        addSingleServer(SERVERS.PORT_0);
+        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(SMALL_CACHE_SIZE)
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+
+        setupSerializer();
+
+        PersistentCorfuTable<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>> table = openTable(
+                rt,
+                someNamespace,
+                someTable,
+                Uuid.class,
+                ExampleValue.class,
+                ManagedMetadata.class,
+                TableOptions.fromProtoSchema(ExampleValue.class).getSchemaOptions()
+        );
+
+        // Create 100 records.
+        final int totalRecords = 100;
+        final long even = 0L;
+        final long odd = 1L;
+        List<Long> evenRecordIndexes = new ArrayList<>();
+        ManagedMetadata user = ManagedMetadata.newBuilder().setCreateUser("user_UT").build();
+
+        for(long i = 0; i < totalRecords; i++) {
+            if(i % 2 == 0) {
+                evenRecordIndexes.add(i);
+            }
+
+            UUID uuid = UUID.randomUUID();
+            Uuid key = Uuid.newBuilder()
+                    .setMsb(uuid.getMostSignificantBits()).setLsb(uuid.getLeastSignificantBits())
+                    .build();
+
+            rt.getObjectsView().TXBegin();
+            table.insert(key, new CorfuRecord<>(
+                    ExampleValue.newBuilder()
+                            .setPayload("payload_" + i)
+                            .setAnotherKey(System.currentTimeMillis())
+                            .setEntryIndex(i)
+                            .setNonPrimitiveFieldLevel0(ExampleSchemas.NonPrimitiveValue.newBuilder()
+                                    .setKey1Level1(i % 2 == 0 ? even : odd)
+                                    .setKey2Level1(ExampleSchemas.NonPrimitiveNestedValue.newBuilder()
+                                            .setKey1Level2(i < (totalRecords / 2) ? "lower half" : "upper half")
+                                            .setLevelNumber(2)
+                                            .build()))
+                            .build(),
+                    user));
+            rt.getObjectsView().TXEnd();
+        }
+
+        // Get by secondary index, retrieve from database all even entries.
+        rt.getObjectsView().TXBegin();
+        List<Map.Entry<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>>>
+                entries = new ArrayList<>(table.getByIndex(() -> "non_primitive_field_level_0.key_1_level_1", even));
+
+        assertThat(entries.size()).isEqualTo(totalRecords / 2);
+
+        for (Map.Entry<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>> entry : entries) {
+            assertThat(evenRecordIndexes).contains(entry.getValue().getPayload().getEntryIndex());
+            evenRecordIndexes.remove(entry.getValue().getPayload().getEntryIndex());
+        }
+
+        assertThat(evenRecordIndexes).isEmpty();
+        rt.getObjectsView().TXEnd();
+
+        // Get by secondary index from second level (nested), retrieve from database 'upper half'.
+        rt.getObjectsView().TXBegin();
+        entries = new ArrayList<>(table.getByIndex(() -> "non_primitive_field_level_0.key_2_level_1.key_1_level_2", "upper half"));
+        assertThat(entries.size()).isEqualTo(totalRecords / 2);
+        long sum = 0;
+
+        for (Map.Entry<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>> entry : entries) {
+            sum += entry.getValue().getPayload().getEntryIndex();
+        }
+
+        // Assert sum of consecutive numbers of "upper half" match the expected value.
+        assertThat(sum).isEqualTo(((totalRecords / 2) / 2) * ((totalRecords / 2) + (totalRecords - 1)));
+        rt.getObjectsView().TXEnd();
+    }
+
+    /**
+     * Verify the case of a nested secondary index on REPEATED fields followed by a REPEATED non-primitive
+     * field which is directly the indexed value.
+     */
+    @Test
+    public void testNestedSecondaryIndexesWhenIndexedIsNonPrimitiveAndRepeated() throws Exception {
+        addSingleServer(SERVERS.PORT_0);
+        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(SMALL_CACHE_SIZE)
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+
+        setupSerializer();
+
+        PersistentCorfuTable<Uuid, CorfuRecord<Company, ManagedMetadata>> table = openTable(
+                rt,
+                someNamespace,
+                someTable,
+                Uuid.class,
+                Company.class,
+                ManagedMetadata.class,
+                TableOptions.fromProtoSchema(Company.class).getSchemaOptions()
+        );
+
+        final int totalCompanies = 100;
+        List<ExampleSchemas.Department> departments = createApartments();
+        createOffices(departments, totalCompanies, table);
+
+        // Get by secondary index, retrieve from database all Companies that have Department of type 1.
+        rt.getObjectsView().TXBegin();
+        List<Map.Entry<Uuid, CorfuRecord<Company, ManagedMetadata>>>
+                entries = new ArrayList<>(table.getByIndex(() -> "office.departments", departments.get(0)));
+        assertThat(entries.size()).isEqualTo(totalCompanies / 2);
+        rt.getObjectsView().TXEnd();
+
+        // Get by secondary index, retrieve from database all Companies that have Department of Type 4 (all).
+        rt.getObjectsView().TXBegin();
+        entries = new ArrayList<>(table.getByIndex(() -> "office.departments", departments.get(3)));
+        assertThat(entries.size()).isEqualTo(totalCompanies);
+        rt.getObjectsView().TXEnd();
+    }
+
+    private List<ExampleSchemas.Department> createApartments() {
+        // Department 1 for office_A and office_C
+        ExampleSchemas.Department dpt_1 = ExampleSchemas.Department.newBuilder()
+                .addMembers(ExampleSchemas.Member.newBuilder()
+                        .addPhoneNumbers("111-111-1111")
+                        .setName("Member_DPT1")
+                        .build())
+                .build();
+
+        // Department 2 for office_B
+        ExampleSchemas.Department dpt_2 = ExampleSchemas.Department.newBuilder()
+                .addMembers(ExampleSchemas.Member.newBuilder()
+                        .addPhoneNumbers("222-222-2222")
+                        .setName("Member_DPT2")
+                        .build())
+                .build();
+
+        // Department 3 for office_B
+        ExampleSchemas.Department dpt_3 = ExampleSchemas.Department.newBuilder()
+                .addMembers(ExampleSchemas.Member.newBuilder()
+                        .addPhoneNumbers("333-333-3333")
+                        .setName("Member_DPT3")
+                        .build())
+                .build();
+
+        // Department 4 for all offices
+        ExampleSchemas.Department dpt_4 = ExampleSchemas.Department.newBuilder()
+                .addMembers(ExampleSchemas.Member.newBuilder()
+                        .addPhoneNumbers("444-444-4444")
+                        .setName("Member_DPT4")
+                        .build())
+                .build();
+
+        return Arrays.asList(dpt_1, dpt_2, dpt_3, dpt_4);
+    }
+
+    private void createOffices(List<ExampleSchemas.Department> departments, int totalCompanies,
+                               PersistentCorfuTable<Uuid, CorfuRecord<Company, ManagedMetadata>> table) {
+        // Even indexed companies will have Office_A and Office_C
+        ExampleSchemas.Office office_A = ExampleSchemas.Office.newBuilder()
+                .addDepartments(departments.get(0))
+                .addDepartments(departments.get(3))
+                .build();
+
+        // Odd indexed companies will have Office_B
+        ExampleSchemas.Office office_B = ExampleSchemas.Office.newBuilder()
+                .addDepartments(departments.get(1))
+                .addDepartments(departments.get(2))
+                .addDepartments(departments.get(3))
+                .build();
+
+        ExampleSchemas.Office office_C = ExampleSchemas.Office.newBuilder()
+                .addDepartments(departments.get(0))
+                .addDepartments(departments.get(3))
+                .build();
+
+        ManagedMetadata user = ManagedMetadata.newBuilder().setCreateUser("user_UT").build();
+
+        for (int i = 0; i < totalCompanies; i++) {
+            UUID id = UUID.randomUUID();
+            Uuid networkId = Uuid.newBuilder()
+                    .setMsb(id.getMostSignificantBits()).setLsb(id.getLeastSignificantBits())
+                    .build();
+
+            rt.getObjectsView().TXBegin();
+            if (i % 2 == 0) {
+                table.insert(networkId, new CorfuRecord<>(
+                        Company.newBuilder().addOffice(office_A).addOffice(office_C).build(),
+                        user
+                ));
+            } else {
+                table.insert(networkId, new CorfuRecord<>(
+                        Company.newBuilder().addOffice(office_B).build(),
+                        user
+                ));
+            }
+            rt.getObjectsView().TXEnd();
+        }
+    }
+
+    /**
+     * Verify that nested secondary indexes work on repeated fields when the repeated field is
+     * not the root level but a nested level.
+     */
+    @Test
+    public void testNestedSecondaryIndexesNestedRepeatedField() throws Exception {
+        addSingleServer(SERVERS.PORT_0);
+        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(SMALL_CACHE_SIZE)
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+
+        setupSerializer();
+
+        PersistentCorfuTable<Uuid, CorfuRecord<ExampleSchemas.Person, ManagedMetadata>> table = openTable(
+                rt,
+                someNamespace,
+                someTable,
+                Uuid.class,
+                ExampleSchemas.Person.class,
+                ManagedMetadata.class,
+                TableOptions.fromProtoSchema(ExampleSchemas.Person.class).getSchemaOptions()
+        );
+
+        // Create 10 records.
+        final int people = 10;
+        final String mobileForEvens = "650-123-4567";
+        final String mobileForOdds = "408-987-6543";
+        final String mobileCommonBoth = "491-999-1111";
+
+        ManagedMetadata user = ManagedMetadata.newBuilder().setCreateUser("user_UT").build();
+
+        for (int i = 0; i < people; i++) {
+            UUID uuid = UUID.randomUUID();
+            Uuid key = Uuid.newBuilder()
+                    .setMsb(uuid.getMostSignificantBits()).setLsb(uuid.getLeastSignificantBits())
+                    .build();
+
+            rt.getObjectsView().TXBegin();
+            table.insert(key, new CorfuRecord<>(
+                    ExampleSchemas.Person.newBuilder()
+                            .setName("Name_" + i)
+                            .setAge(i)
+                            .setPhoneNumber(ExampleSchemas.PhoneNumber.newBuilder()
+                                    .setHome(UUID.randomUUID().toString())
+                                    .addMobile(i % 2 == 0 ? mobileForEvens : mobileForOdds)
+                                    .addMobile(mobileCommonBoth)
+                                    .build())
+                            .build(),
+                    user
+            ));
+            rt.getObjectsView().TXEnd();
+        }
+
+        // Get by secondary index, retrieve from database all even entries.
+        rt.getObjectsView().TXBegin();
+        List<Map.Entry<Uuid, CorfuRecord<ExampleSchemas.Person, ManagedMetadata>>>
+                entries = new ArrayList<>(table.getByIndex(() -> "phoneNumber.mobile", mobileForEvens));
+        assertThat(entries.size()).isEqualTo(people / 2);
+        rt.getObjectsView().TXEnd();
+
+        // Get by secondary index, retrieve from database all entries with common mobile number.
+        rt.getObjectsView().TXBegin();
+        entries = new ArrayList<>(table.getByIndex(() -> "phoneNumber.mobile", mobileCommonBoth));
+        assertThat(entries.size()).isEqualTo(people);
+        rt.getObjectsView().TXEnd();
+    }
+
+    /**
+     * Verify that nested secondary indexes work on recursive 'repeated' fields.
+     */
+    @Test
+    public void testNestedSecondaryIndexesRecursiveRepeatedFields() throws Exception {
+        addSingleServer(SERVERS.PORT_0);
+        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(SMALL_CACHE_SIZE)
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+
+        setupSerializer();
+
+        PersistentCorfuTable<Uuid, CorfuRecord<ExampleSchemas.Office, ManagedMetadata>> table = openTable(
+                rt,
+                someNamespace,
+                someTable,
+                Uuid.class,
+                ExampleSchemas.Office.class,
+                ManagedMetadata.class,
+                TableOptions.fromProtoSchema(ExampleSchemas.Office.class).getSchemaOptions()
+        );
+
+        // Create 6 records.
+        final int numOffices = 6;
+        // Phone number for even index offices
+        final String evenPhoneNumber = "222-222-2222";
+        // Phone number for odd index offices
+        final String oddPhoneNumber = "333-333-3333";
+        // Common phone number for all offices
+        final String commonPhoneNumber = "000-000-0000";
+        // Common home phone number for all offices
+        final String homePhoneNumber = "N/A";
+
+        ManagedMetadata user = ManagedMetadata.newBuilder().setCreateUser("user_UT").build();
+
+        for (int i = 0; i < numOffices; i++) {
+            UUID id = UUID.randomUUID();
+            Uuid officeId = Uuid.newBuilder()
+                    .setMsb(id.getMostSignificantBits()).setLsb(id.getLeastSignificantBits())
+                    .build();
+
+            rt.getObjectsView().TXBegin();
+            table.insert(officeId, new CorfuRecord<>(
+                    ExampleSchemas.Office.newBuilder()
+                            // Department 1 per Office
+                            .addDepartments(ExampleSchemas.Department.newBuilder()
+                                    // Department 1 - Member 1
+                                    .addMembers(ExampleSchemas.Member.newBuilder()
+                                            .setName("Office_" + i + "_Dpt.1_Member_1")
+                                            .addPhoneNumbers(i % 2 == 0 ? evenPhoneNumber : oddPhoneNumber)
+                                            .addPhoneNumbers(homePhoneNumber)
+                                            .addPhoneNumbers(commonPhoneNumber)
+                                            .build())
+                                    // Department 1 - Member 2
+                                    .addMembers(ExampleSchemas.Member.newBuilder()
+                                            .setName("Office_" + i + "_Dpt.1_Member_2")
+                                            .addPhoneNumbers(commonPhoneNumber)
+                                            .build())
+                                    .build())
+                            // Department 2 per Office
+                            .addDepartments(ExampleSchemas.Department.newBuilder()
+                                    // Department 2 - Member 1
+                                    .addMembers(ExampleSchemas.Member.newBuilder()
+                                            .setName("Office_" + i + "_Dpt.2_Member_1")
+                                            .addPhoneNumbers(commonPhoneNumber)
+                                            .build())
+                                    .build())
+                            .build(),
+                    user
+            ));
+            rt.getObjectsView().TXEnd();
+        }
+
+        // Get by secondary index, retrieve from database all offices which have an evenPhoneNumber.
+        rt.getObjectsView().TXBegin();
+        List<Map.Entry<Uuid, CorfuRecord<ExampleSchemas.Office, ManagedMetadata>>>
+                entries = new ArrayList<>(table.getByIndex(() -> "departments.members.phoneNumbers", evenPhoneNumber));
+        assertThat(entries.size()).isEqualTo(numOffices / 2);
+        rt.getObjectsView().TXEnd();
+
+        // Get by secondary index, retrieve from database all entries with common mobile number.
+        rt.getObjectsView().TXBegin();
+        entries = new ArrayList<>(table.getByIndex(() -> "departments.members.phoneNumbers", commonPhoneNumber));
+        assertThat(entries.size()).isEqualTo(numOffices);
+        rt.getObjectsView().TXEnd();
+    }
+
+    /**
+     * Verify that we can access a secondary index based on a custom alias or the default alias.
+     */
+    @Test
+    public void testSecondaryIndexAlias() throws Exception {
+        addSingleServer(SERVERS.PORT_0);
+        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(SMALL_CACHE_SIZE)
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+
+        setupSerializer();
+
+        PersistentCorfuTable<Uuid, CorfuRecord<ExampleSchemas.Adult, ManagedMetadata>> table = openTable(
+                rt,
+                someNamespace,
+                someTable,
+                Uuid.class,
+                ExampleSchemas.Adult.class,
+                ManagedMetadata.class,
+                TableOptions.fromProtoSchema(ExampleSchemas.Adult.class).getSchemaOptions()
+        );
+
+        ManagedMetadata user = ManagedMetadata.newBuilder().setCreateUser("user_UT").build();
+        final int adultCount = 50;
+        final long adultBaseAge = 30L;
+        final long kidsBaseAge = 4L;
+
+        for (int i = 0; i < adultCount; i++) {
+            UUID adultId = UUID.randomUUID();
+            Uuid adultKey = Uuid.newBuilder()
+                    .setMsb(adultId.getMostSignificantBits()).setLsb(adultId.getLeastSignificantBits())
+                    .build();
+
+            rt.getObjectsView().TXBegin();
+            final long adultAge = i % 2 == 0 ? adultBaseAge : adultBaseAge * 2;
+            final long kidsAge = i % 2 == 0 ? kidsBaseAge : kidsBaseAge * 2;
+
+            table.insert(adultKey, new CorfuRecord<>(
+                    ExampleSchemas.Adult.newBuilder()
+                            .setPerson(ExampleSchemas.Person.newBuilder()
+                                    .setName("Name_" + i)
+                                    .setAge(adultAge)
+                                    .setPhoneNumber(ExampleSchemas.PhoneNumber.newBuilder()
+                                            .setHome(UUID.randomUUID().toString())
+                                            .build())
+                                    .setChildren(ExampleSchemas.Children.newBuilder()
+                                            .addChild(ExampleSchemas.Child.newBuilder().setName("Child_" + i).setAge(kidsAge)).build())
+                                    .build()).build(),
+                    user
+            ));
+            rt.getObjectsView().TXEnd();
+        }
+
+        // Get by secondary index (default alias), retrieve from database all adults with adultsBaseAge.
+        rt.getObjectsView().TXBegin();
+        List<Map.Entry<Uuid, CorfuRecord<ExampleSchemas.Adult, ManagedMetadata>>>
+                entries = new ArrayList<>(table.getByIndex(() -> "age", adultBaseAge));
+        assertThat(entries.size()).isEqualTo(adultCount / 2);
+        rt.getObjectsView().TXEnd();
+
+        // Get by secondary index (using fully qualified name), retrieve from database all adults with adultsBaseAge.
+        rt.getObjectsView().TXBegin();
+        entries = new ArrayList<>(table.getByIndex(() -> "person.age", adultBaseAge));
+        assertThat(entries.size()).isEqualTo(adultCount / 2);
+        rt.getObjectsView().TXEnd();
+
+        // Get by secondary index (custom alias), retrieve from database all adults with kids on age 'kidsBaseAge'.
+        rt.getObjectsView().TXBegin();
+        entries = new ArrayList<>(table.getByIndex(() -> "kidsAge", kidsBaseAge));
+        assertThat(entries.size()).isEqualTo(adultCount / 2);
+        rt.getObjectsView().TXEnd();
+
+        // Get by secondary index (fully qualified name), retrieve from database all adults with kids on age 'kidsBaseAge'.
+        rt.getObjectsView().TXBegin();
+        entries = new ArrayList<>(table.getByIndex(() -> "person.children.child.age", kidsBaseAge));
+        assertThat(entries.size()).isEqualTo(adultCount / 2);
+        rt.getObjectsView().TXEnd();
+
+        // Get by secondary index (custom alias), retrieve from database all adults with kids on age '2' (non-existent).
+        rt.getObjectsView().TXBegin();
+        entries = new ArrayList<>(table.getByIndex(() -> "kidsAge", 2));
+        assertThat(entries.size()).isZero();
+        rt.getObjectsView().TXEnd();
+    }
+
+    /**
+     * Test indexing of 'NULL' (i.e., unset non-primitive sub-fields) for the following sub-field patterns
+     * (from the root):
+     *
+     * Refer to SportsProfessional proto, in 'example_schemas.proto' for definitions.
+     *
+     * (1) Repeated field followed by oneOf field (e.g., hobby.sport)
+     * (2) Non-repeated field followed by oneOf field (e.g., profession.sport)
+     * (3) Repeated field followed by repeated field (e.g., training.exercises)
+     */
+    @Test
+    public void testNestedIndexesWithNullValues() throws Exception {
+        addSingleServer(SERVERS.PORT_0);
+        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(SMALL_CACHE_SIZE)
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+
+        setupSerializer();
+
+        PersistentCorfuTable<Uuid, CorfuRecord<ExampleSchemas.SportsProfessional, ManagedMetadata>> table = openTable(
+                rt,
+                someNamespace,
+                someTable,
+                Uuid.class,
+                ExampleSchemas.SportsProfessional.class,
+                ManagedMetadata.class,
+                TableOptions.fromProtoSchema(ExampleSchemas.SportsProfessional.class).getSchemaOptions()
+        );
+
+        // Define a player and set only (1) oneOf type, then query for the unset field to confirm this
+        // is indexed as NULL (i.e., not set)
+        ExampleSchemas.SportsProfessional player1 = ExampleSchemas.SportsProfessional.newBuilder()
+                .setPerson(ExampleSchemas.Person.newBuilder().setName("Michael Jordan").build())
+                // Set Basket as profession (oneOf field) so query for Baseball as profession
+                .setProfession(ExampleSchemas.Hobby.newBuilder().setBasket(ExampleSchemas.Basketball.newBuilder().setTeam("Chicago Bulls").build()).build())
+                // Set Baseball as hobby (oneOf field) so query for Basket as hobby
+                .addHobby(ExampleSchemas.Hobby.newBuilder().setBaseball(ExampleSchemas.Baseball.newBuilder().build()).build())
+                // Do not define any sub-field of repeated type (Exercises) and confirmed its indexed as NULL
+                .addTraining(ExampleSchemas.TrainingPlan.newBuilder().build())
+                .build();
+
+        // Define a player which does not have any indexed sub-field set (therefore, it should be indexed as NULL)
+        ExampleSchemas.SportsProfessional playerUndefined = ExampleSchemas.SportsProfessional.newBuilder()
+                .setPerson(ExampleSchemas.Person.newBuilder().setName("Undefined").build())
+                // Don't set any 'oneOf' sport for profession (sub-field)
+                .setProfession(ExampleSchemas.Hobby.newBuilder().build())
+                // Don't set any 'oneOf' sport for Hobby (sub-field)
+                .addHobby(ExampleSchemas.Hobby.newBuilder().setBaseball(ExampleSchemas.Baseball.newBuilder().build()).build())
+                // Do not define any sub-field of repeated type (Exercises) and confirmed its indexed as NULL
+                .addTraining(ExampleSchemas.TrainingPlan.newBuilder().build())
+                .build();
+
+        // Add players to Table
+        UUID id1 = UUID.randomUUID();
+        Uuid idPlayer1 = Uuid.newBuilder()
+                .setMsb(id1.getMostSignificantBits()).setLsb(id1.getLeastSignificantBits())
+                .build();
+
+        UUID id2 = UUID.randomUUID();
+        Uuid idPlayerUndefined = Uuid.newBuilder()
+                .setMsb(id2.getMostSignificantBits()).setLsb(id2.getLeastSignificantBits())
+                .build();
+
+        rt.getObjectsView().TXBegin();
+        table.insert(idPlayer1, new CorfuRecord<>(
+                player1,
+                ManagedMetadata.newBuilder().setCreateUser("user_UT").build()
+        ));
+
+        table.insert(idPlayerUndefined, new CorfuRecord<>(
+                playerUndefined,
+                ManagedMetadata.newBuilder().setCreateUser("user_UT").build()
+        ));
+        rt.getObjectsView().TXEnd();
+
+        // Query secondary indexes
+        // (1) Repeated field followed by oneOf field (e.g., hobby.sport)
+        rt.getObjectsView().TXBegin();
+        List<Map.Entry<Uuid, CorfuRecord<ExampleSchemas.SportsProfessional, ManagedMetadata>>>
+                entries = new ArrayList<>(table.getByIndex(() -> "basketAsHobby", null));
+        assertThat(entries.size()).isEqualTo(2);
+        rt.getObjectsView().TXEnd();
+
+        // (2) Non-repeated field followed by oneOf field (e.g., profession.sport)
+        rt.getObjectsView().TXBegin();
+        entries = new ArrayList<>(table.getByIndex(() -> "baseballPlayers", null));
+        assertThat(entries.size()).isEqualTo(2);
+        rt.getObjectsView().TXEnd();
+
+        // (3) Repeated field followed by repeated field (e.g., training.exercises)
+        rt.getObjectsView().TXBegin();
+        entries = new ArrayList<>(table.getByIndex(() -> "exercises", null));
+        assertThat(entries.size()).isEqualTo(2);
         rt.getObjectsView().TXEnd();
     }
 }

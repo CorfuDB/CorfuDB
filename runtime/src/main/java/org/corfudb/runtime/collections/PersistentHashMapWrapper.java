@@ -167,7 +167,7 @@ public class PersistentHashMapWrapper<K, V> {
         }
 
         private <I> Option<Map<K, V>> contains(@Nonnull final String index, I indexKey) {
-            if (secondaryIndexes.containsKey(index) && secondaryIndexes.get(index).getOrNull() != null) {
+            if (secondaryIndexes.containsKey(index)) {
                 return secondaryIndexes.get(index).get().get(indexKey);
             }
 
