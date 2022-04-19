@@ -291,13 +291,13 @@ public class LogReplicationAbstractIT extends AbstractIT {
         }).run();
     }
 
-    private void validateSnapshotSyncPlugin(SnapshotSyncPluginListener listener) {
+    void validateSnapshotSyncPlugin(SnapshotSyncPluginListener listener) {
         assertThat(listener.getUpdates().size()).isEqualTo(2);
         assertThat(listener.getUpdates()).contains(DefaultSnapshotSyncPlugin.ON_START_VALUE);
         assertThat(listener.getUpdates()).contains(DefaultSnapshotSyncPlugin.ON_END_VALUE);
     }
 
-    private void subscribeToSnapshotSyncPluginTable(SnapshotSyncPluginListener listener) {
+    void subscribeToSnapshotSyncPluginTable(SnapshotSyncPluginListener listener) {
         try {
             corfuStoreStandby.openTable(DefaultSnapshotSyncPlugin.NAMESPACE,
                     DefaultSnapshotSyncPlugin.TABLE_NAME, ExampleSchemas.Uuid.class, SnapshotSyncPluginValue.class,
@@ -308,7 +308,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         }
     }
 
-    private class SnapshotSyncPluginListener implements StreamListener {
+    class SnapshotSyncPluginListener implements StreamListener {
 
         @Getter
         List<String> updates = new ArrayList<>();
@@ -332,7 +332,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         }
     }
 
-    private class ReplicationStatusListener implements StreamListener {
+    class ReplicationStatusListener implements StreamListener {
 
         @Getter
         List<Boolean> accumulatedStatus = new ArrayList<>();

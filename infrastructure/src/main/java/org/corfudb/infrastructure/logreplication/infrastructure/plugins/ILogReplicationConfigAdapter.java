@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
+import org.corfudb.runtime.collections.CorfuStore;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -30,4 +31,6 @@ public interface ILogReplicationConfigAdapter {
      * to the replicated data, therefore, this data must be provided by the plugin externally.
      */
     Map<UUID, List<UUID>> getStreamingConfigOnSink();
+
+    void setCorfuStore(CorfuStore corfuStore);
 }

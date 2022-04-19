@@ -118,6 +118,7 @@ public class LogReplicationStreamNameTableManager {
             Class plugin = Class.forName(config.getStreamFetcherClassCanonicalName(), true, child);
             logReplicationConfigAdapter = (ILogReplicationConfigAdapter) plugin.getDeclaredConstructor()
                     .newInstance();
+            logReplicationConfigAdapter.setCorfuStore(corfuStore);
         } catch (Exception e) {
             log.error("Fatal error: Failed to get Stream Fetcher Plugin", e);
             throw new UnrecoverableCorfuError(e);
