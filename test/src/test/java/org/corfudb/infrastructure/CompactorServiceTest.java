@@ -37,7 +37,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     ServerContext sc1;
     ServerContext sc2;
 
-    private static final int LIVENESS_TIMEOUT = 10000;
+    private static final int LIVENESS_TIMEOUT = 5000;
     private static final int WAIT_TO_KILL = 3000;
     private static final int COMPACTOR_SERVICE_INTERVAL = 10;
 
