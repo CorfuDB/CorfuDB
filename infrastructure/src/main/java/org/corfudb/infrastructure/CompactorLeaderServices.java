@@ -2,7 +2,6 @@ package org.corfudb.infrastructure;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Message;
-import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.Tuple;
@@ -201,7 +200,7 @@ public class CompactorLeaderServices {
                     idleCount--;
                 }
             }
-            log.info("Number of idle tables: {} out of {}, non-idle: {}", idleCount, tableNames.size(), (tableNames.size() - idleCount));
+            log.trace("Number of idle tables: {} out of {}, non-idle: {}", idleCount, tableNames.size(), (tableNames.size() - idleCount));
             txn.commit();
         }
         return idleCount;
@@ -226,7 +225,7 @@ public class CompactorLeaderServices {
         if ((System.currentTimeMillis() - readCache.get(emptyTable).second) > timeout) {
             long idleCount = findCheckpointProgress();
             if (!readCache.containsKey(active) || idleCount < readCache.get(active).first) {
-                log.info("Checkpointing in progress...");
+                log.trace("Checkpointing in progress...");
                 readCache.put(active, Tuple.of(idleCount, System.currentTimeMillis()));
             } else if (System.currentTimeMillis() - readCache.get(active).second > timeout) {
                 if (idleCount == 0 || (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED_ALL)) {

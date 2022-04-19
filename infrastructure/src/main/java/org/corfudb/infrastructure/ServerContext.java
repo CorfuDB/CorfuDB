@@ -335,6 +335,10 @@ public class ServerContext implements AutoCloseable {
      * @return an instance of {@link CorfuRuntimeParameters}
      */
     public CorfuRuntimeParameters getManagementRuntimeParameters() {
+        int checkpointTriggerFreqMs = 0;
+        if (serverConfig.get(("--compaction-trigger-freq-ms")) != null) {
+            checkpointTriggerFreqMs = Integer.parseInt((String)serverConfig.get("--compaction-trigger-freq-ms"));
+        }
         return CorfuRuntime.CorfuRuntimeParameters.builder()
                 .priorityLevel(PriorityLevel.HIGH)
                 .nettyEventLoop(clientGroup)
@@ -348,6 +352,8 @@ public class ServerContext implements AutoCloseable {
                 .usernameFile((String) serverConfig.get("--sasl-plain-text-username-file"))
                 .passwordFile((String) serverConfig.get("--sasl-plain-text-password-file"))
                 .bulkReadSize(Integer.parseInt((String) serverConfig.get("--batch-size")))
+                .clientName("CorfuServer")
+                .checkpointTriggerFreqMillis(checkpointTriggerFreqMs)
                 .build();
     }
 

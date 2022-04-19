@@ -15,22 +15,6 @@ import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
-
-    /**
-     * This is the first trigger policy parameter. No new checkpointing will start
-     * if less than this time has elapsed to prevent slow consumers from hitting TrimmedException.
-     */
-    private final Duration defaultMinTimeBetweenCompactionStarts = Duration.ofMinutes(5);
-    private final Duration minTimeBetweenCompactionStarts = defaultMinTimeBetweenCompactionStarts;
-
-    /**
-     * This is the max amount of time between compaction cycles
-     * If this time is hit, compaction will be triggered even if other policies
-     * do not necessitate a compaction cycle.
-     */
-    private final Duration defaultMaxTimeBetweenCompactionStarts = Duration.ofMinutes(30);
-    private final Duration maxTimeBetweenCompactionStarts = defaultMaxTimeBetweenCompactionStarts;
-
     /**
      * What time did the previous cycle start
      */
@@ -102,19 +86,19 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
                 lastCompactionCycleStartTS, lastAddressSpaceSizeAfterTrim);
         final long currentTime = System.currentTimeMillis();
         final long timeSinceLastCycleMillis = currentTime - lastCompactionCycleStartTS;
-        if (timeSinceLastCycleMillis > minTimeBetweenCompactionStarts.toMillis()) {
+        if (timeSinceLastCycleMillis > interval) {
             if (lastAddressSpaceSizeAfterTrim == 0) { // no record of previous trim & safe trim period elapsed
                 log.info("DynamicTriggerPolicy: Trigger as elapsedTime {} > safeTrimPeriod{}",
                         TimeUnit.MILLISECONDS.toMinutes(timeSinceLastCycleMillis),
-                        minTimeBetweenCompactionStarts.toMinutes());
+                        interval);
                 return true;
             }
         }
 
-        if (timeSinceLastCycleMillis > maxTimeBetweenCompactionStarts.toMillis()) {
+        if (timeSinceLastCycleMillis > interval*2) {
             log.info("DynamicTriggerPolicy: Trigger as elapsedTime {} > maxTimeToChkpt{}",
                     TimeUnit.MILLISECONDS.toMinutes(timeSinceLastCycleMillis),
-                    maxTimeBetweenCompactionStarts.toMinutes());
+                    interval*2);
             return true;
         }
         return false;
