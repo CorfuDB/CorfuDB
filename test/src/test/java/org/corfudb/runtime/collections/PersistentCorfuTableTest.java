@@ -16,6 +16,7 @@ import org.corfudb.runtime.ExampleSchemas.Uuid;
 import org.corfudb.runtime.exceptions.StaleObjectVersionException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
+import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.test.TestSchema;
@@ -25,13 +26,16 @@ import org.junit.Test;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 
@@ -46,6 +50,8 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
     private static final long SMALL_CACHE_SIZE = 3;
     private static final long MEDIUM_CACHE_SIZE = 100;
     private static final long LARGE_CACHE_SIZE = 50_000;
+
+    private static final long MVO_AUTO_SYNC_PERIOD_SECONDS = 1;
 
     private static final String someNamespace = "some-namespace";
     private static final String someTable = "some-table";
@@ -224,6 +230,12 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         assertThat(corfuTable.get(nonExistingKey)).isNull();
         assertThat(corfuTable.size()).isEqualTo(2);
         rt.getObjectsView().TXEnd();
+
+        // Verify the MVOCache has exactly 2 versions
+        Set<VersionedObjectIdentifier> voIds = rt.getObjectsView().getMvoCache().keySet();
+        assertThat(voIds).containsExactlyInAnyOrder(
+                new VersionedObjectIdentifier(corfuTable.getCorfuStreamID(), 0),
+                new VersionedObjectIdentifier(corfuTable.getCorfuStreamID(), 1));
     }
 
     /**
@@ -335,10 +347,52 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         rt.getObjectsView().TXEnd();
     }
 
+    @Test
+    public void testMVOCacheAutoSync() throws Exception {
+        addSingleServer(SERVERS.PORT_0);
+        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(MEDIUM_CACHE_SIZE)
+                .mvoAutoSyncPeriod(Duration.ofSeconds(MVO_AUTO_SYNC_PERIOD_SECONDS))
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+        setupSerializer();
+        openTable();
+
+        int writeSize = 20;
+
+        for (int i = 0; i < writeSize; i++) {
+            rt.getObjectsView().TXBegin();
+            TestSchema.Uuid key = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            TestSchema.Uuid payload = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            TestSchema.Uuid metadata = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            CorfuRecord value = new CorfuRecord(payload, metadata);
+            corfuTable.insert(key, value);
+            rt.getObjectsView().TXEnd();
+        }
+        // Transactions obtain the object state at the beginning.
+        // A pure write txn will not add its version to the cache.
+        assertThat(rt.getObjectsView().getMvoCache().keySet().size()).isEqualTo(writeSize - 1);
+        TimeUnit.SECONDS.sleep(MVO_AUTO_SYNC_PERIOD_SECONDS * 2);
+        assertThat(rt.getObjectsView().getMvoCache().keySet().size()).isEqualTo(writeSize);
+
+        for (int i = 0; i < writeSize; i++) {
+            TestSchema.Uuid key = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            TestSchema.Uuid payload = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            TestSchema.Uuid metadata = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            CorfuRecord value = new CorfuRecord(payload, metadata);
+            corfuTable.insert(key, value);
+        }
+        // Non-transactional writes does not obtain object state at all.
+        assertThat(rt.getObjectsView().getMvoCache().keySet().size()).isEqualTo(writeSize);
+        TimeUnit.SECONDS.sleep(MVO_AUTO_SYNC_PERIOD_SECONDS * 2);
+        assertThat(rt.getObjectsView().getMvoCache().keySet().size()).isEqualTo(writeSize * 2);
+    }
+
     // PersistentCorfuTable SecondaryIndexes Tests - Adapted From CorfuTableTest & CorfuStoreSecondaryIndexTest
 
     /**
-     * Verify that a  lookup by index throws an exception,
+     * Verify that a lookup by index throws an exception,
      * when the index has never been specified for this PersistentCorfuTable.
      */
     @Test (expected = IllegalArgumentException.class)

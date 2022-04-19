@@ -3,6 +3,7 @@ package org.corfudb.runtime.object;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalNotification;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
@@ -18,6 +19,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 
 /**
@@ -55,7 +57,7 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      * Accesses/Gets: 1) objectVersions, 2) query objectCache for real object if previous query is true
      */
 
-    private final long DEAFULT_CACHE_EXPIRY_TIME_IN_SECONDS = 300;
+    private static final long DEFAULT_CACHE_EXPIRY_TIME_IN_SECONDS = 300;
 
     final ScheduledExecutorService mvoCacheSyncThread = Executors.newSingleThreadScheduledExecutor(
             new ThreadFactoryBuilder().setDaemon(true)
@@ -67,16 +69,16 @@ public class MVOCache<T extends ICorfuSMR<T>> {
 
         CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
         objectCache = cacheBuilder.maximumSize(runtime.getParameters().getMaxCacheEntries())
-                .expireAfterAccess(DEAFULT_CACHE_EXPIRY_TIME_IN_SECONDS, TimeUnit.SECONDS)
-                .expireAfterWrite(DEAFULT_CACHE_EXPIRY_TIME_IN_SECONDS, TimeUnit.SECONDS)
+                .expireAfterAccess(DEFAULT_CACHE_EXPIRY_TIME_IN_SECONDS, TimeUnit.SECONDS)
+                .expireAfterWrite(DEFAULT_CACHE_EXPIRY_TIME_IN_SECONDS, TimeUnit.SECONDS)
                 .removalListener(this::handleEviction)
                 .recordStats()
                 .build();
 
         mvoCacheSyncThread.scheduleAtFixedRate(this::syncMVOCache,
-                runtime.getParameters().getMvoAutoSyncPeriod().toMinutes(),
-                runtime.getParameters().getMvoAutoSyncPeriod().toMinutes(),
-                TimeUnit.MINUTES);
+                runtime.getParameters().getMvoAutoSyncPeriod().toMillis(),
+                runtime.getParameters().getMvoAutoSyncPeriod().toMillis(),
+                TimeUnit.MILLISECONDS);
     }
 
     public void stopMVOCacheSync() {
@@ -206,11 +208,20 @@ public class MVOCache<T extends ICorfuSMR<T>> {
     private void syncMVOCache() {
         TokenResponse streamTails = runtime.getSequencerView()
                 .query(allMVOs.keySet().toArray(new UUID[0]));
+        final AtomicInteger count = new AtomicInteger(0);
         allMVOs.forEach((uuid, mvo) -> {
-            if (objectVersions.get(uuid).last() < streamTails.getStreamTail(uuid)) {
+            if (objectVersions.get(uuid) != null &&
+                    objectVersions.get(uuid).last() < streamTails.getStreamTail(uuid)) {
                 // Sync to the latest state
                 mvo.getVersionedObjectUnderLock(streamTails.getStreamTail(uuid), v -> {});
+                count.getAndIncrement();
             }
         });
+        log.info("Synced {} objects.", count);
+    }
+
+    // For testing purpose
+    public Set<VersionedObjectIdentifier> keySet() {
+        return ImmutableSet.copyOf(objectCache.asMap().keySet());
     }
 }

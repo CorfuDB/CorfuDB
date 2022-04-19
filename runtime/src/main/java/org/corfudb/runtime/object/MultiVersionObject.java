@@ -157,7 +157,9 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
             throw new StaleObjectVersionException(streamID, timestamp);
         } else {
             object.setImmutableState(floorEntry.get().getValue().getImmutableState());
-            smrStream.seek(floorEntry.get().getKey().getVersion());
+            // Next stream read begins from a given address (inclusive),
+            // so +1 to avoid applying the same update twice
+            smrStream.seek(floorEntry.get().getKey().getVersion() + 1);
         }
     }
 
