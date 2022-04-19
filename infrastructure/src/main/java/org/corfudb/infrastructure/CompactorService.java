@@ -30,8 +30,8 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class CompactorService implements ManagementService {
 
-    //TODO: make this tunable
-    private static final Duration TRIGGER_INTERVAL = Duration.ofMinutes(15);
+    private long compactionTriggerFreqMs = TimeUnit.MINUTES.toMillis(8);
+
     @Setter
     private static int LIVENESS_TIMEOUT = 60000;
 
@@ -79,6 +79,9 @@ public class CompactorService implements ManagementService {
         this.compactorLeaderServices = new CompactorLeaderServices(getCorfuRuntime());
         this.corfuStore = new CorfuStore(getCorfuRuntime());
         this.compactionTriggerPolicy.setCorfuRuntime(getCorfuRuntime());
+        if (getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis() > 0) {
+            this.compactionTriggerFreqMs = getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis();
+        }
 
         orchestratorThread.scheduleAtFixedRate(
             this::runOrchestrator,
@@ -113,7 +116,7 @@ public class CompactorService implements ManagementService {
                 if (managerStatus != null && (managerStatus.getStatus() == StatusType.STARTED ||
                         managerStatus.getStatus() == StatusType.STARTED_ALL)){
                     compactorLeaderServices.validateLiveness(LIVENESS_TIMEOUT);
-                } else if (compactionTriggerPolicy.shouldTrigger(TRIGGER_INTERVAL.getSeconds())) {
+                } else if (compactionTriggerPolicy.shouldTrigger(this.compactionTriggerFreqMs)) {
                     compactorLeaderServices.trimAndTriggerDistributedCheckpointing();
                     compactionTriggerPolicy.markCompactionCycleStart();
                 }

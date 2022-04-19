@@ -25,7 +25,6 @@ import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.*;
 
-import javax.annotation.Nullable;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -173,7 +172,7 @@ public class DistributedCompactor {
     public int startCheckpointing() {
         long startCp = System.currentTimeMillis();
         int count = 0;
-        log.info("Starting Checkpointing in-memory tables..");
+        log.trace("Starting Checkpointing in-memory tables..");
         count = checkpointOpenedTables();
 
         if (count <= 0) {
@@ -188,12 +187,14 @@ public class DistributedCompactor {
             count += checkpointUnopenedTables();
         }
 
-        long cpDuration = System.currentTimeMillis() - startCp;
-        log.info("Client {} took {} ms to checkpoint {} tables", clientName, cpDuration, count);
+        if (count > 0) {
+            long cpDuration = System.currentTimeMillis() - startCp;
+            log.info("Client {} took {} ms to checkpoint {} tables", clientName, cpDuration, count);
 
-        MicroMeterUtils.time(Duration.ofMillis(cpDuration), "checkpoint.total.timer",
-                "clientName", clientName);
-        MicroMeterUtils.measure(count, "compaction.num_tables." + clientName);
+            MicroMeterUtils.time(Duration.ofMillis(cpDuration), "checkpoint.total.timer",
+                    "clientName", clientName);
+            MicroMeterUtils.measure(count, "compaction.num_tables." + clientName);
+        }
 
         return count;
     }
@@ -298,9 +299,10 @@ public class DistributedCompactor {
     public synchronized int checkpointOpenedTables() {
         openCheckpointingMetadataTables();
         if (!checkCompactionManagerStartTrigger()) {
-            log.info("Checkpoint hasn't started");
+            log.trace("Checkpoint hasn't started");
             return 0; // Orchestrator says checkpointing is either not needed or done.
         }
+        log.info("Checkpointing opened tables");
         int count = 0;
         for (CorfuTableNamePair openedTable :
                 this.runtime.getTableRegistry().getAllOpenTablesForCheckpointing()) {
