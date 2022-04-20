@@ -35,6 +35,11 @@
             </pattern>
         </encoder>
     </appender>
+    <appender name="SYSLOG" class="ch.qos.logback.classic.net.SyslogAppender">
+        <syslogHost>localhost</syslogHost>
+        <facility>SYSLOG</facility>
+        <suffixPattern>[%thread] %-5level %msg%n%xException</suffixPattern>
+    </appender>
 
     <!-- https://logback.qos.ch/manual/appenders.html#AsyncAppender -->
     <appender name="async_file" class="ch.qos.logback.classic.AsyncAppender">
@@ -50,6 +55,9 @@
 
     <logger additivity="false" level="debug" name="org.corfudb.metricsdata">
         <appender-ref ref="async_metrics_file"/>
+    </logger>
+    <logger additivity="false" level="info" name="SYSLOG">
+        <appender-ref ref="SYSLOG"/>
     </logger>
     <logger name="org.corfudb.client.metricsdata" level="off" />
 

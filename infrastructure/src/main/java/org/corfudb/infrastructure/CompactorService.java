@@ -14,6 +14,8 @@ import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.concurrent.SingletonResource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -27,7 +29,6 @@ import java.util.concurrent.TimeUnit;
  * <p>
  * Created by Sundar Sridharan on 3/2/22.
  */
-@Slf4j
 public class CompactorService implements ManagementService {
 
     private long compactionTriggerFreqMs = TimeUnit.MINUTES.toMillis(8);
@@ -47,6 +48,7 @@ public class CompactorService implements ManagementService {
 
     private long epoch = 0;
     private boolean invokedJvm = false;
+    private Logger syslog;
 
     //TODO: make it a prop file and maybe pass it from the server
     List<TableName> sensitiveTables = new ArrayList<>();
@@ -63,6 +65,7 @@ public class CompactorService implements ManagementService {
                         .build());
         this.checkpointerJvmManager = checkpointerJvmManager;
         this.compactionTriggerPolicy = compactionTriggerPolicy;
+        syslog = LoggerFactory.getLogger("SYSLOG");
     }
 
     CorfuRuntime getCorfuRuntime() {
@@ -99,7 +102,7 @@ public class CompactorService implements ManagementService {
                     DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
                     DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
             txn.commit();
-
+            syslog.trace("ManagerStatus: {}", managerStatus == null ? "null" : managerStatus.getStatus());
             if (managerStatus != null) {
                 if (managerStatus.getStatus() == StatusType.FAILED || managerStatus.getStatus() == StatusType.COMPLETED) {
                     checkpointerJvmManager.shutdown();
@@ -122,7 +125,7 @@ public class CompactorService implements ManagementService {
                 }
             }
         } catch (Exception e) {
-            log.warn("Exception in runOrchestrator: {}", e.getStackTrace());
+            syslog.warn("Exception in runOrchestrator: {}", e.getStackTrace());
         }
     }
 
@@ -145,6 +148,6 @@ public class CompactorService implements ManagementService {
     public void shutdown() {
         checkpointerJvmManager.shutdown();
         orchestratorThread.shutdownNow();
-        log.info("Compactor Orchestrator service shutting down.");
+        syslog.info("Compactor Orchestrator service shutting down.");
     }
 }
