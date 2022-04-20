@@ -8,11 +8,12 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
-@Slf4j
 public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
     /**
      * What time did the previous cycle start
@@ -26,10 +27,12 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
     private Long previousAddressSpaceSize = Long.MAX_VALUE;
     private Long previousTriggerMillis = Long.valueOf(0);
     private CorfuRuntime corfuRuntime;
+    private Logger syslog;
 
     public DynamicTriggerPolicy() {
         lastCompactionCycleStartTS = System.currentTimeMillis();
         lastAddressSpaceSizeAfterTrim = 0;
+        syslog = LoggerFactory.getLogger("SYSLOG");
     }
 
     public void setSensitiveStreams(List<TableName> sensitiveTables) {
@@ -62,7 +65,7 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
                 currentAddressSpaceSize = corfuRuntime.getAddressSpaceView().getLogTail()
                         - corfuRuntime.getAddressSpaceView().getTrimMark().getSequence();
             } catch (Exception e) {
-                log.warn("getCurrentAddressSpaceSize hit exception {}. StackTrace {}", e, e.getStackTrace());
+                syslog.warn("getCurrentAddressSpaceSize hit exception {}. StackTrace {}", e, e.getStackTrace());
             }
         }
         return currentAddressSpaceSize;
@@ -85,7 +88,7 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
         final long timeSinceLastCycleMillis = currentTime - lastCompactionCycleStartTS;
         if (timeSinceLastCycleMillis > interval) {
             if (lastAddressSpaceSizeAfterTrim == 0) { // no record of previous trim & safe trim period elapsed
-                log.info("DynamicTriggerPolicy: Trigger as elapsedTime {} > safeTrimPeriod{}",
+                syslog.info("DynamicTriggerPolicy: Trigger as elapsedTime {} > safeTrimPeriod {}",
                         TimeUnit.MILLISECONDS.toSeconds(timeSinceLastCycleMillis),
                         TimeUnit.MILLISECONDS.toSeconds(interval));
                 return true;
@@ -93,9 +96,9 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
         }
 
         if (timeSinceLastCycleMillis > interval*2) {
-            log.info("DynamicTriggerPolicy: Trigger as elapsedTime {} > maxTimeToChkpt{}",
-                    TimeUnit.MILLISECONDS.toSeconds(timeSinceLastCycleMillis),
-                    TimeUnit.MILLISECONDS.toSeconds(interval*2));
+            syslog.info("DynamicTriggerPolicy: Trigger as elapsedTime {} > maxTimeToChkpt {}",
+                    TimeUnit.MILLISECONDS.toMinutes(timeSinceLastCycleMillis),
+                    TimeUnit.MILLISECONDS.toMinutes(interval*2));
             return true;
         }
         return false;
