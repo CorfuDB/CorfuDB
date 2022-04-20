@@ -93,16 +93,13 @@ public abstract class AbstractTransactionContextTest extends AbstractTransaction
     @Test
     public void ensureEmptyWriteSetIsNotWritten() {
         TXBegin();
-        long result = getRuntime().getObjectsView().TXEnd();
+        getRuntime().getObjectsView().TXEnd();
         ILogData ld =
                 getRuntime()
                         .getAddressSpaceView()
                         .peek(0);
         assertThat(ld)
                 .isNull();
-
-        assertThat(result)
-                .isEqualTo(Address.NON_ADDRESS);
     }
 
     /**
