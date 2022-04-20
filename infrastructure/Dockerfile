@@ -6,7 +6,7 @@ ARG CORFU_TOOLS_JAR
 
 WORKDIR /app
 
-RUN apk add --update iptables bash jq sudo
+RUN apk add --update iptables bash jq python3 sudo
 
 COPY target/${CORFU_JAR} /usr/share/corfu/lib/${CORFU_JAR}
 COPY target/${CMDLETS_JAR} /usr/share/corfu/lib/${CMDLETS_JAR}
