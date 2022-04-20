@@ -240,7 +240,9 @@ public class CompactorLeaderServices {
 
                         txn.putRecord(compactionManagerTable,
                                 DistributedCompactor.COMPACTION_MANAGER_KEY,
-                                buildCheckpointStatus(StatusType.STARTED_ALL),
+                                buildCheckpointStatus(StatusType.STARTED_ALL,
+                                        managerStatus.getTableSize(),
+                                        managerStatus.getTimeTaken()),
                                 null);
                         readCache.remove(emptyTable);
                         readCache.remove(active);
@@ -311,7 +313,8 @@ public class CompactorLeaderServices {
             RpcCommon.TokenMsg minToken = (RpcCommon.TokenMsg) txn.getRecord(DistributedCompactor.CHECKPOINT,
                     DistributedCompactor.CHECKPOINT_KEY).getPayload();
             boolean cpFailed = false;
-            StringBuilder str = new StringBuilder("finishCycle:");
+            StringBuilder str = new StringBuilder("finishCycle: ChkptStatusTableSize=");
+            str.append(tableNames.size());
 
             for (TableName table : tableNames) {
                 CheckpointingStatus tableStatus = (CheckpointingStatus) txn.getRecord(

@@ -9,7 +9,6 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 
-import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
@@ -82,57 +81,24 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
      */
     @Override
     public boolean shouldTrigger(long interval) {
-        log.info("DynamicTriggerPolicy: lastCompactionCycleStartTS={}. lastAddressSpaceSizeOnTrim={}",
-                lastCompactionCycleStartTS, lastAddressSpaceSizeAfterTrim);
         final long currentTime = System.currentTimeMillis();
         final long timeSinceLastCycleMillis = currentTime - lastCompactionCycleStartTS;
         if (timeSinceLastCycleMillis > interval) {
             if (lastAddressSpaceSizeAfterTrim == 0) { // no record of previous trim & safe trim period elapsed
                 log.info("DynamicTriggerPolicy: Trigger as elapsedTime {} > safeTrimPeriod{}",
-                        TimeUnit.MILLISECONDS.toMinutes(timeSinceLastCycleMillis),
-                        interval);
+                        TimeUnit.MILLISECONDS.toSeconds(timeSinceLastCycleMillis),
+                        TimeUnit.MILLISECONDS.toSeconds(interval));
                 return true;
             }
         }
 
         if (timeSinceLastCycleMillis > interval*2) {
             log.info("DynamicTriggerPolicy: Trigger as elapsedTime {} > maxTimeToChkpt{}",
-                    TimeUnit.MILLISECONDS.toMinutes(timeSinceLastCycleMillis),
-                    interval*2);
+                    TimeUnit.MILLISECONDS.toSeconds(timeSinceLastCycleMillis),
+                    TimeUnit.MILLISECONDS.toSeconds(interval*2));
             return true;
         }
         return false;
-
-        /**
-        Long currentAddressSpaceSize = corfuRuntime.getAddressSpaceView().getLogTail()
-                - corfuRuntime.getAddressSpaceView().getTrimMark().getSequence();
-        boolean shouldTrigger = false;
-        for (UUID streamId : sensitiveStreams) {
-            StreamAddressSpace streamAddressSpace = corfuRuntime.getSequencerView()
-                    .getStreamAddressSpace(new StreamAddressRange(streamId, Address.MAX, Address.NON_ADDRESS));
-
-            Long previousSize = (!previousSensitiveStreamsSize.containsKey(streamId)) ? Long.MAX_VALUE :
-                    previousSensitiveStreamsSize.get(streamId);
-            if (streamAddressSpace.size() > previousSize) {
-                shouldTrigger = true;
-            }
-        }
-
-        if (currentAddressSpaceSize > previousAddressSpaceSize ||
-                System.currentTimeMillis() - previousTriggerMillis >= interval) {
-            shouldTrigger = true;
-        }
-
-        if (shouldTrigger) {
-             setPreviousSensitiveStreamsSize();
-             previousAddressSpaceSize = currentAddressSpaceSize;
-             previousTriggerMillis = System.currentTimeMillis();
-         }
-
-        log.info("shouldTrigger: {}", shouldTrigger);
-        return shouldTrigger;
-
-         */
     }
 
     @Override

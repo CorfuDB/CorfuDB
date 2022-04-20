@@ -156,12 +156,12 @@ public class DistributedCompactor {
             final CheckpointingStatus managerStatus = txn.getRecord(
                     compactionManagerTable, DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
             txn.commit();
-            log.warn("ManagerStatus: {}", (managerStatus == null ? "null" : managerStatus.getStatus()));
             if (managerStatus == null ||
                     (managerStatus.getStatus() != StatusType.STARTED &&
                     managerStatus.getStatus() != StatusType.STARTED_ALL)) {
                 return false;
             }
+            log.warn("ManagerStatus: {}", (managerStatus == null ? "null" : managerStatus.getStatus()));
         } catch (Exception e) {
             log.error("Unable to acquire CompactionManager status, {}, {}", e, e.getStackTrace());
             return false;
@@ -302,7 +302,7 @@ public class DistributedCompactor {
             log.trace("Checkpoint hasn't started");
             return 0; // Orchestrator says checkpointing is either not needed or done.
         }
-        log.info("Checkpointing opened tables");
+        log.trace("Checkpointing opened tables");
         int count = 0;
         for (CorfuTableNamePair openedTable :
                 this.runtime.getTableRegistry().getAllOpenTablesForCheckpointing()) {
