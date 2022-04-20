@@ -193,6 +193,7 @@ public class InMemoryStreamLog implements StreamLog {
     @Override
     public void close() {
         logCache = new HashMap<>();
+        FileSystemAgent.shutdown();
     }
 
     @Override

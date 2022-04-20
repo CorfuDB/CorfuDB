@@ -1228,6 +1228,7 @@ public class StreamLogFiles implements StreamLog {
 
     @Override
     public void close() {
+        FileSystemAgent.shutdown();
         for (SegmentHandle fh : writeChannels.values()) {
             fh.close();
         }
