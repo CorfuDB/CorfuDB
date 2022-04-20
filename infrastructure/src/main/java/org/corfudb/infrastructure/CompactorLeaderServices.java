@@ -287,7 +287,11 @@ public class CompactorLeaderServices {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus tableStatus = txn.getRecord(
                     checkpointingStatusTable, table).getPayload();
-            if (tableStatus.getStatus() != StatusType.COMPLETED && tableStatus.getStatus() != StatusType.FAILED) {
+            if (tableStatus == null) {
+                txn.delete(activeCheckpointsTable, table);
+                txn.commit();
+                return true;
+            } else if (tableStatus.getStatus() != StatusType.COMPLETED && tableStatus.getStatus() != StatusType.FAILED) {
                 txn.putRecord(checkpointingStatusTable,
                         table,
                         buildCheckpointStatus(StatusType.FAILED),
@@ -300,8 +304,9 @@ public class CompactorLeaderServices {
                         null);
                 txn.commit();
                 return false;
+            } else {
+                txn.commit();
             }
-            txn.commit();
         } catch (TransactionAbortedException ex) {
             if (ex.getAbortCause() == AbortCause.CONFLICT) {
                 syslog.warn("Another node tried to commit");

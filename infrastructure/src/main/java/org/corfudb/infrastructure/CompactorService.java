@@ -3,7 +3,6 @@ package org.corfudb.infrastructure;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.NonNull;
 import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuRuntime;
@@ -34,7 +33,7 @@ public class CompactorService implements ManagementService {
     private long compactionTriggerFreqMs = TimeUnit.MINUTES.toMillis(8);
 
     @Setter
-    private static int LIVENESS_TIMEOUT = 60000;
+    private static int livenessTimeout = 60000;
 
     private final ServerContext serverContext;
     private final SingletonResource<CorfuRuntime> runtimeSingletonResource;
@@ -118,7 +117,7 @@ public class CompactorService implements ManagementService {
             if (isLeader) {
                 if (managerStatus != null && (managerStatus.getStatus() == StatusType.STARTED ||
                         managerStatus.getStatus() == StatusType.STARTED_ALL)){
-                    compactorLeaderServices.validateLiveness(LIVENESS_TIMEOUT);
+                    compactorLeaderServices.validateLiveness(livenessTimeout);
                 } else if (compactionTriggerPolicy.shouldTrigger(this.compactionTriggerFreqMs)) {
                     compactorLeaderServices.trimAndTriggerDistributedCheckpointing();
                     compactionTriggerPolicy.markCompactionCycleStart();
