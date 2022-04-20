@@ -24,6 +24,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
@@ -75,6 +76,10 @@ public final class FileSystemAgent {
 
     public static void init(FileSystemConfig config) {
         instance = Optional.of(new FileSystemAgent(config));
+    }
+
+    public static void shutdown() {
+        PartitionAgent.shutdown();
     }
 
     public static ResourceQuota getResourceQuota() {
@@ -189,6 +194,7 @@ public final class FileSystemAgent {
         // A single thread scheduler that has a single instance of execution at any given time.
         private static final ScheduledExecutorService scheduler =
                 Executors.newSingleThreadScheduledExecutor();
+        private static ScheduledFuture<?> scheduledFuture = null;
 
         public PartitionAgent(FileSystemConfig config) {
             this.config = config;
@@ -205,7 +211,7 @@ public final class FileSystemAgent {
          * seconds after the previous set task is completed.
          */
         private void initializeScheduler(){
-            scheduler.scheduleWithFixedDelay(
+            scheduledFuture = scheduler.scheduleWithFixedDelay(
                     this::setPartitionAttribute, NO_DELAY, UPDATE_INTERVAL, SECONDS
             );
         }
@@ -245,6 +251,15 @@ public final class FileSystemAgent {
             private final boolean readOnly;
             private final long availableSpace;
             private final long totalSpace;
+        }
+
+        /**
+         * Clean up
+         */
+        public static void shutdown() {
+            if (scheduledFuture != null) {
+                scheduledFuture.cancel(true);
+            }
         }
     }
 }
