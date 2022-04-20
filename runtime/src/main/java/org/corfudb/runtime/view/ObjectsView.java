@@ -164,6 +164,17 @@ public class ObjectsView extends AbstractView {
             long commitAddress = TransactionalContext.getCurrentContext().commitTransaction();
             MicroMeterUtils.time(Duration.ofMillis(System.currentTimeMillis() - context.getStartTime()),
                     "transaction.duration");
+            if (commitAddress == Address.NON_ADDRESS) {
+                // If no streams were touched or only empty streams were touched, the returned address would be -1
+                // But -1 can be detrimental to stream subscription which is just looking for a safe spot
+                // to resume subscription from, so instead return the address from the snapshot token taken.
+                long snapshotAddress = context.getSnapshotTimestamp().getSequence();
+                if (snapshotAddress >= 0) {
+                    // Perform a read at this address to force materialization.
+                    runtime.getAddressSpaceView().read(snapshotAddress);
+                }
+                return snapshotAddress;
+            }
             return commitAddress;
         } catch (TransactionAbortedException e) {
             log.warn("TXEnd[{}] Aborted Exception ", context, e);
