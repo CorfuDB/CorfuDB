@@ -557,7 +557,7 @@ public class CorfuStoreIT extends AbstractIT {
         try (TxnContext tx = corfuStore.txn(namespace)) {
             assertThat(tx.getTable(tableNameNoWrites).count()).isEqualTo(0);
             Timestamp readTx = tx.commit();
-            assertThat(readTx.getSequence()).isEqualTo(Address.NON_ADDRESS);
+            assertThat(readTx.getSequence()).isPositive();
         }
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
