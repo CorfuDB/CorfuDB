@@ -65,15 +65,6 @@ public class DistributedCompactor {
     public static final String NODE_TOKEN = "node-token";
     public static final String CHECKPOINT = "checkpoint";
 
-    private final Set<String> metadataTables = new HashSet<>(
-            Arrays.asList(COMPACTION_MANAGER_TABLE_NAME,
-                    CHECKPOINT_STATUS_TABLE_NAME,
-                    ACTIVE_CHECKPOINTS_TABLE_NAME,
-                    CHECKPOINT,
-                    NODE_TOKEN,
-                    REGISTRY_TABLE_NAME,
-                    PROTOBUF_DESCRIPTOR_TABLE_NAME));
-
     //TODO: have a special table list if required - like ALL_OPENED_CLUSTERING_STREAMS
 
     public static final StringKey COMPACTION_MANAGER_KEY = StringKey.newBuilder().setKey("CompactionManagerKey").build();
@@ -169,6 +160,11 @@ public class DistributedCompactor {
         return true;
     }
 
+    /**
+     * An entry for all the clients participating in checkpointing
+     * Tries to checkpoint tables that are marked as IDLE
+     * @return count - the number of tables checkpointed by the client
+     */
     public int startCheckpointing() {
         long startCp = System.currentTimeMillis();
         int count = 0;
