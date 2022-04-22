@@ -121,6 +121,13 @@ public class CompactorLeaderServices {
         }
     }
 
+    /**
+     * The leader initiates the Distributed checkpointer
+     * First, trim the log until the trimtoken saved in checkpoint table
+     * Mark the start of the compaction cycle and also populate CheckpointStatusTable with all the
+     * tables in the registry.
+     * @return
+     */
     @VisibleForTesting
     public boolean trimAndTriggerDistributedCheckpointing() {
         syslog.info("=============Initiating Distributed Checkpointing============");
@@ -176,8 +183,20 @@ public class CompactorLeaderServices {
     }
 
     /**
-     *
-     * @param timeout
+     * Validates the liveness of any on-going checkpoint of a table
+     * ActiveCheckpointTable contains the list of tables for which checkpointing has started. This method is scheduled
+     * to execute continuously by the leader, which monitors the checkpoint activity of the tables present in
+     * ActiveCheckpointTable.
+     * if there are no tables present,
+     *      ... wait for timeout ms to see if it remains empty
+     *      ... if it does, check the CheckpointStatusTable if there's any progress (this step is done to include the
+     *              tables which are checkpointed extremely fast)
+     *      ... finally if there's no progress, call finishCompactionCycle() to mark the end of the cycle
+     * if there are any slow checkpointers,
+     *      ... monitor checkpointing of the table by observing if the checkpointStream's tail moves forward
+     *      ... if it does not move forward for timeout ms, then mark it as failed
+     * Also, when checkpoint of a table is found to be failed, the cycle is immediately marks as failed.
+     * @param timeout in ms
      */
     public void validateLiveness(long timeout) {
         List<TableName> tableNames;
@@ -248,7 +267,6 @@ public class CompactorLeaderServices {
             LivenessValidator.setPrevIdleTime(currentTime);
             return;
         }
-        //TODO: have a separate timeout?
         if ((currentTime - LivenessValidator.getPrevIdleTime()) > timeout) {
             long idleCount = findCheckpointProgress();
             if (LivenessValidator.getPrevActiveTime() < 0 || idleCount < LivenessValidator.getPrevIdleCount()) {
@@ -354,12 +372,12 @@ public class CompactorLeaderServices {
                 }
             }
             long totalTimeElapsed = System.currentTimeMillis() - managerStatus.getTimeTaken();
-            str.append("\n").append(" totalTimeTaken=").append(totalTimeElapsed).append("ms");
             if (cpFailed) {
                 syslog.warn("{}", str);
             } else {
                 syslog.info("{}", str);
             }
+            syslog.info("Total time taken for the compaction cycle: {}ms", totalTimeElapsed);
             txn.putRecord(compactionManagerTable, DistributedCompactor.COMPACTION_MANAGER_KEY,
                     buildCheckpointStatus(cpFailed ? StatusType.FAILED : StatusType.COMPLETED,
                             tableNames.size(), totalTimeElapsed),
