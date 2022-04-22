@@ -30,7 +30,7 @@ public class InvokeCheckpointingJvm implements IInvokeCheckpointing {
                 String compactorScriptPath = (String) serverContext.getCompactorScriptPath();
                 String compactorConfigPath = (String) serverContext.getCompactorConfig();
 
-                syslog.info("Script path: {}, configPath: {}", compactorScriptPath, compactorConfigPath);
+                syslog.trace("Script path: {}, configPath: {}", compactorScriptPath, compactorConfigPath);
                 List<String> endpoint = Arrays.asList(serverContext.getLocalEndpoint().split(":"));
                 String hostName = endpoint.get(0);
                 String port = endpoint.get(1);
@@ -43,14 +43,14 @@ public class InvokeCheckpointingJvm implements IInvokeCheckpointing {
                         port, "--compactorConfig", compactorConfigPath);
                 pb.inheritIO();
                 this.checkpointerProcess = pb.start();
-                syslog.info("runCompactionOrchestrator: started the process");
+                syslog.info("Triggered the compaction jvm");
                 break;
             } catch (RuntimeException re) {
-                syslog.trace("runCompactionOrchestrator: encountered an exception on attempt {}/{}.",
+                syslog.trace("Encountered an exception on attempt {}/{}.",
                         i, MAX_COMPACTION_RETRIES, re);
 
                 if (i >= MAX_COMPACTION_RETRIES) {
-                    syslog.error("runCompactionOrchestrator: retry exhausted.", re);
+                    syslog.error("Retry exhausted.", re);
                     break;
                 }
 
@@ -63,7 +63,7 @@ public class InvokeCheckpointingJvm implements IInvokeCheckpointing {
                     }
                 }
             } catch (Throwable t) {
-                syslog.error("runCompactionOrchestrator: encountered unexpected exception", t);
+                syslog.error("Encountered unexpected exception", t);
                 syslog.error("StackTrace: {}", t.getStackTrace());
             }
         }

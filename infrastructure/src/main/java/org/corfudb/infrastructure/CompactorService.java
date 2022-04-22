@@ -60,7 +60,7 @@ public class CompactorService implements ManagementService {
         this.runtimeSingletonResource = runtimeSingletonResource;
         this.orchestratorThread = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
-                        .setNameFormat("CmptService")
+                        .setNameFormat("CmptService-chkpter")
                         .build());
         this.checkpointerJvmManager = checkpointerJvmManager;
         this.compactionTriggerPolicy = compactionTriggerPolicy;
