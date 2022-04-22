@@ -187,9 +187,9 @@ public class DistributedCompactor {
             long cpDuration = System.currentTimeMillis() - startCp;
             log.info("Client {} took {} ms to checkpoint {} tables", clientName, cpDuration, count);
 
-            MicroMeterUtils.time(Duration.ofMillis(cpDuration), "checkpoint.total.timer",
+            MicroMeterUtils.time(Duration.ofMillis(cpDuration), "checkpoint.total.client_timer",
                     "clientName", clientName);
-            MicroMeterUtils.measure(count, "compaction.num_tables." + clientName);
+            MicroMeterUtils.measure(count, "checkpoint.num_tables." + clientName);
         }
 
         return count;

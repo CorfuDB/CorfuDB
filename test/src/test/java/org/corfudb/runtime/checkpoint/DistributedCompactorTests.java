@@ -273,9 +273,9 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
     @Test
     public void initTest() {
-        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0);
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0);
         compactorLeaderServices1.setLeader(true);
-        CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime1);
+        CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime1, SERVERS.ENDPOINT_1);
         compactorLeaderServices2.setLeader(false);
 
         assert(compactorLeaderServices1.trimAndTriggerDistributedCheckpointing());
@@ -286,9 +286,9 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
     @Test
     public void initMultipleLeadersTest1() {
-        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0);
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0);
         compactorLeaderServices1.setLeader(true);
-        CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime1);
+        CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime1, SERVERS.ENDPOINT_1);
         compactorLeaderServices2.setLeader(true);
 
         ExecutorService scheduler = Executors.newFixedThreadPool(2);
@@ -302,9 +302,9 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
     @Test
     public void initMultipleLeadersTest2() {
-        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0);
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0);
         compactorLeaderServices1.setLeader(true);
-        CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime1);
+        CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime1, SERVERS.ENDPOINT_1);
         compactorLeaderServices2.setLeader(true);
 
         ExecutorService scheduler = Executors.newFixedThreadPool(2);
@@ -325,7 +325,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
     @Test
     public void startCheckpointingTest() {
-        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0);
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0);
         compactorLeaderServices1.setLeader(true);
         compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
         DistributedCompactor distributedCompactor1 =
@@ -351,7 +351,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
     @Test
     public void finishCompactionCycleSuccessTest() {
-        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0);
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0);
         compactorLeaderServices1.setLeader(true);
         compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
 
@@ -367,7 +367,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
     @Test
     public void finishCompactionCycleFailureTest() {
-        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0);
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0);
         compactorLeaderServices1.setLeader(true);
         compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
 
@@ -397,7 +397,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
     public void validateLivenessLeaderTest() {
         //make some client to start cp
         //verifyCheckpointStatusTable
-        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0);
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0);
         compactorLeaderServices1.setLeader(true);
         compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
 
@@ -422,7 +422,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
     @Test
     public void validateLivenessNonLeaderTest() {
-        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0);
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0);
         compactorLeaderServices1.setLeader(true);
         compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
         compactorLeaderServices1.setLeader(false);
@@ -448,7 +448,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
     @Test
     public void validateLivenessFailureTest() {
-        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1);
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, SERVERS.ENDPOINT_0);
         compactorLeaderServices1.setLeader(true);
         compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
 
