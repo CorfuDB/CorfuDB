@@ -57,6 +57,7 @@ public class CompactorService implements ManagementService {
                      @NonNull IInvokeCheckpointing checkpointerJvmManager,
                      @NonNull ICompactionTriggerPolicy compactionTriggerPolicy) {
         this.serverContext = serverContext;
+        //serverContext.getLocalEndpoint()
         this.runtimeSingletonResource = runtimeSingletonResource;
         this.orchestratorThread = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
@@ -78,7 +79,7 @@ public class CompactorService implements ManagementService {
      */
     @Override
     public void start(Duration interval) {
-        this.compactorLeaderServices = new CompactorLeaderServices(getCorfuRuntime());
+        this.compactorLeaderServices = new CompactorLeaderServices(getCorfuRuntime(), serverContext.getLocalEndpoint());
         this.corfuStore = new CorfuStore(getCorfuRuntime());
         this.compactionTriggerPolicy.setCorfuRuntime(getCorfuRuntime());
         if (getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis() > 0) {
