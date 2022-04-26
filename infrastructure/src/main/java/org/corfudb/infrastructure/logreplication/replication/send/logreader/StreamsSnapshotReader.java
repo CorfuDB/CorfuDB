@@ -22,15 +22,7 @@ import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 
 import javax.annotation.concurrent.NotThreadSafe;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.PriorityQueue;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Stream;
 
 import static com.google.protobuf.UnsafeByteOperations.unsafeWrap;
@@ -70,15 +62,21 @@ public class StreamsSnapshotReader implements SnapshotReader {
     @Setter
     private long topologyConfigId;
 
+    private String name;
+
+    private LogReplicationConfig config;
+
     /**
      * Init runtime and streams to read
      */
-    public StreamsSnapshotReader(CorfuRuntime runtime, LogReplicationConfig config) {
+    public StreamsSnapshotReader(CorfuRuntime runtime, LogReplicationConfig config, String name) {
         this.rt = runtime;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
-        this.streams = config.getStreamsToReplicate();
+        this.streams = name == null? config.getStreamsToReplicate() : new HashSet<>(config.getLmToStreamsToSend().get(name));
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
+        this.name = name;
+        this.config = config;
     }
 
     /**
@@ -212,6 +210,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
      */
     @Override
     public SnapshotReadMessage read(UUID syncRequestId) {
+        log.info("Streams to replicate: {}", streams);
         List<LogReplicationEntryMsg> messages = new ArrayList<>();
 
         boolean endSnapshotSync = false;
@@ -224,7 +223,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
                 // Setup a new stream
                 String streamToReplicate = streamsToSend.poll();
                 currentStreamInfo = new OpaqueStreamIterator(streamToReplicate, rt, snapshotTimestamp);
-                log.info("Start Snapshot Sync replication for stream name={}, id={}", streamToReplicate,
+                log.info("Start Snapshot Sync replication from node {} for stream name={}, id={}", this.name,streamToReplicate,
                         CorfuRuntime.getStreamID(streamToReplicate));
 
                 // If the new stream has entries to be processed, go to the next step
@@ -264,13 +263,15 @@ public class StreamsSnapshotReader implements SnapshotReader {
 
     @Override
     public void reset(long ts) {
-        streamsToSend = new PriorityQueue<>(streams);
         preMsgTs = Address.NON_ADDRESS;
         currentMsgTs = Address.NON_ADDRESS;
         snapshotTimestamp = ts;
         currentStreamInfo = null;
         sequence = 0;
         lastEntry = null;
+        streams.clear();
+        this.streams = name == null? config.getStreamsToReplicate() : new HashSet<>(config.getLmToStreamsToSend().get(name));
+        streamsToSend = new PriorityQueue<>(streams);
     }
 
     /**

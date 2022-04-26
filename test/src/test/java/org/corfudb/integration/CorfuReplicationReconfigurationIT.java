@@ -221,7 +221,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         LogReplicationMetadata.ReplicationStatusKey key =
                 LogReplicationMetadata.ReplicationStatusKey
                         .newBuilder()
-                        .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                        .setClusterId(DefaultClusterConfig.getStandbyClusterIds().get(0))
                         .build();
 
         ReplicationStatusVal replicationStatusVal;
@@ -570,7 +570,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         LogReplicationMetadata.ReplicationStatusKey key =
                 LogReplicationMetadata.ReplicationStatusKey
                         .newBuilder()
-                        .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                        .setClusterId(DefaultClusterConfig.getStandbyClusterIds().get(0))
                         .build();
 
         ReplicationStatusVal replicationStatusVal;

@@ -61,12 +61,15 @@ public class LogReplicationAckReader {
 
     private final Lock lock = new ReentrantLock();
 
+    private int remotePort;
+
     public LogReplicationAckReader(LogReplicationMetadataManager metadataManager, LogReplicationConfig config,
-                                    CorfuRuntime runtime, String remoteClusterId) {
+                                    CorfuRuntime runtime, String remoteClusterId, int remotePort) {
         this.metadataManager = metadataManager;
         this.config = config;
         this.runtime = runtime;
         this.remoteClusterId = remoteClusterId;
+        this.remotePort = remotePort;
     }
 
     public void setAckedTsAndSyncType(long ackedTs, SyncType syncType) {
@@ -445,7 +448,7 @@ public class LogReplicationAckReader {
     public void startSyncStatusUpdatePeriodicTask() {
         log.info("Start sync status update periodic task");
         lastAckedTsPoller = Executors.newSingleThreadScheduledExecutor(
-                new ThreadFactoryBuilder().setNameFormat("ack-timestamp-reader").build());
+                new ThreadFactoryBuilder().setNameFormat("ack-timestamp-reader-"+remotePort).build());
         lastAckedTsPoller.scheduleWithFixedDelay(new TsPollingTask(), 0, ACKED_TS_READ_INTERVAL_SECONDS,
                 TimeUnit.SECONDS);
     }

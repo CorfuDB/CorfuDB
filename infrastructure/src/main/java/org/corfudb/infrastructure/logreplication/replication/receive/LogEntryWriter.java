@@ -33,6 +33,7 @@ public class LogEntryWriter {
     private long srcGlobalSnapshot; //the source snapshot that the transaction logs are based
     private long lastMsgTs; //the timestamp of the last message processed.
     private Map<UUID, List<UUID>> dataStreamToTagsMap;
+    private Map<UUID, UUID> partitionedToGlobalMap;
 
     public LogEntryWriter(LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager) {
         this.logReplicationMetadataManager = logReplicationMetadataManager;
@@ -40,8 +41,23 @@ public class LogEntryWriter {
         this.lastMsgTs = Address.NON_ADDRESS;
         this.streamMap = new HashMap<>();
         this.dataStreamToTagsMap = config.getDataStreamToTagsMap();
+        this.partitionedToGlobalMap = new HashMap<>();
 
-        config.getStreamsToReplicate().stream().forEach(stream -> streamMap.put(CorfuRuntime.getStreamID(stream), stream));
+        final String globalStreamName = "LR-Test$Table_Directory_Global";
+
+//        config.getStreamsToReplicate().stream().forEach(stream -> streamMap.put(CorfuRuntime.getStreamID(stream), stream));
+
+        if(config.getLmToStreamsToSend().get(logReplicationMetadataManager.getLocalClusterId()) != null) {
+            config.getLmToStreamsToSend().get(logReplicationMetadataManager.getLocalClusterId())
+                    .stream().forEach(stream -> {
+                        streamMap.put(CorfuRuntime.getStreamID(stream), stream);
+                        if (stream.equals("LR-Test$Table_Directory_Group-1") ||
+                                stream.equals("LR-Test$Table_Directory_Group-2") ||
+                                stream.equals("LR-Test$Table_Directory_Group-3")) {
+                            partitionedToGlobalMap.put(CorfuRuntime.getStreamID(stream), CorfuRuntime.getStreamID(globalStreamName));
+                        }
+            });
+        }
     }
 
     /**
@@ -107,6 +123,12 @@ public class LogEntryWriter {
             for (OpaqueEntry opaqueEntry : newOpaqueEntryList) {
                 for (UUID streamId : opaqueEntry.getEntries().keySet()) {
                     for (SMREntry smrEntry : opaqueEntry.getEntries().get(streamId)) {
+                        if(partitionedToGlobalMap.containsKey(streamId)) {
+                            log.debug("incoming streamId: {} and outgoing {} ", streamId, partitionedToGlobalMap.get(streamId));
+                            txnContext.logUpdate(partitionedToGlobalMap.get(streamId), smrEntry, dataStreamToTagsMap.get(partitionedToGlobalMap.get(streamId)));
+                        } else {
+                            txnContext.logUpdate(streamId, smrEntry, dataStreamToTagsMap.get(streamId));
+                        }
                         // If stream tags exist for the current stream, it means its intended for streaming on the Sink (receiver)
                         txnContext.logUpdate(streamId, smrEntry, dataStreamToTagsMap.get(streamId));
                     }

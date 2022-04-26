@@ -134,6 +134,7 @@ public class InLogEntrySyncState implements LogReplicationState {
 
     @Override
     public void onEntry(LogReplicationState from) {
+        log.info("entering");
         // Execute snapshot transaction for every table to be replicated
         try {
             // Reset before start sending log entry data, only when we're coming

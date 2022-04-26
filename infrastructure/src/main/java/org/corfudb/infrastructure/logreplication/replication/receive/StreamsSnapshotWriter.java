@@ -74,8 +74,12 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     // regularToShadowStreamId map
     private Set<UUID> replicatedStreamIds = new HashSet<>();
 
+    private Map<UUID, UUID> partitionedToGlobalMap;
+
     @Getter
     private Phase phase;
+
+    private LogReplicationConfig config;
 
     public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager) {
         this.rt = rt;
@@ -86,8 +90,10 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         this.snapshotSyncStartMarker = Optional.empty();
         this.dataStreamToTagsMap = config.getDataStreamToTagsMap();
         this.mergeOnlyStreams = config.getMergeOnlyStreams();
+        this.partitionedToGlobalMap = new HashMap<>();
 
-        initializeShadowStreams(config);
+        this.config = config;
+        initializeShadowStreams();
     }
 
     /**
@@ -103,17 +109,41 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * In the future, we will support Table Aliasing which will enable atomic flip from shadow to regular streams, avoiding
      * complete inconsistency.
      */
-    private void initializeShadowStreams(LogReplicationConfig config) {
+    private void initializeShadowStreams() {
         // For every stream create a shadow stream which name is unique based
         // on the original stream and a suffix.
-        for (String streamName : config.getStreamsToReplicate()) {
-            String shadowStreamName = streamName + SHADOW_STREAM_SUFFIX;
-            UUID streamId = CorfuRuntime.getStreamID(streamName);
+        log.info("config.getLMToStreamsToSend() {} localclusterId: {} ", config.getLmToStreamsToSend(),logReplicationMetadataManager.getLocalClusterId());
+        if (!config.getLmToStreamsToSend().containsKey(logReplicationMetadataManager.getLocalClusterId())) {
+            log.info("Nothing to replicate to this site");
+            return;
+        }
+        log.info("Clearing in-memory maps partitionedToGlobalMap, regularToShadowStreamId and streamViewMap");
+        partitionedToGlobalMap.clear();
+        regularToShadowStreamId.clear();
+        streamViewMap.clear();
+        for (String streamName : config.getLmToStreamsToSend().get(logReplicationMetadataManager.getLocalClusterId())) {
+            String shadowStreamName;
+            UUID streamId;
+            if (streamName.equals("LR-Test$Table_Directory_Group-1") ||
+                    streamName.equals("LR-Test$Table_Directory_Group-2") ||
+                    streamName.equals("LR-Test$Table_Directory_Group-3")) {
+                String globalStreamName = "LR-Test$Table_Directory_Global";
+                partitionedToGlobalMap.put(CorfuRuntime.getStreamID(streamName), CorfuRuntime.getStreamID(globalStreamName));
+                shadowStreamName = globalStreamName + SHADOW_STREAM_SUFFIX;
+                regularToShadowStreamId.put(CorfuRuntime.getStreamID(globalStreamName), CorfuRuntime.getStreamID(shadowStreamName));
+            } else {
+                shadowStreamName = streamName + SHADOW_STREAM_SUFFIX;
+            }
+
+            streamId = CorfuRuntime.getStreamID(streamName);
             UUID shadowStreamId = CorfuRuntime.getStreamID(shadowStreamName);
             regularToShadowStreamId.put(streamId, shadowStreamId);
             regularToShadowStreamId.put(shadowStreamId, streamId);
             streamViewMap.put(streamId, streamName);
 
+
+            log.info("Orignal streams to replicate: {} ........... TO {} partitionedToGlobalMap {}",
+                    config.getLmToStreamsToSend().get(logReplicationMetadataManager.getLocalClusterId()), streamViewMap, partitionedToGlobalMap);
             log.trace("Shadow stream=[{}] for regular stream=[{}] name=({})", shadowStreamId, streamId, streamName);
         }
 
@@ -149,6 +179,10 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         phase = Phase.TRANSFER_PHASE;
         snapshotSyncStartMarker = Optional.empty();
         replicatedStreamIds.clear();
+        //hard coded the change in domain for PoC. While actual dev, need to replicate the domain
+        // table along with registry table, and create the maps in initializeShadowStreams
+        config.getLmToStreamsToSend().get(logReplicationMetadataManager.getLocalClusterId()).add("LR-Test$Table_Directory_Group-1");
+        initializeShadowStreams();
     }
 
     /**
@@ -203,6 +237,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
         logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, srcGlobalSnapshot);
 
+        log.info("Writing to streamId {}",  streamId);
         for (SMREntry smrEntry : smrEntries) {
             txnContext.logUpdate(streamId, smrEntry, dataStreamToTagsMap.get(streamId));
         }
@@ -250,6 +285,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             clearRegularStream(regularStreamId);
             replicatedStreamIds.add(regularStreamId);
         }
+        log.info("the current msg has entries from {} the shadow is: {}", regularStreamId, regularToShadowStreamId.get(regularStreamId));
         processUpdatesShadowStream(opaqueEntry.getEntries().get(regularStreamId), message.getMetadata().getSnapshotSyncSeqNum(),
                 regularToShadowStreamId.get(regularStreamId), getUUID(message.getMetadata().getSyncRequestId()));
         recvSeq++;
@@ -351,7 +387,11 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         long snapshot = rt.getAddressSpaceView().getLogTail();
         log.debug("Apply Shadow Streams, total={}", streamViewMap.size());
         for (UUID regularStreamId : streamViewMap.keySet()) {
-            applyShadowStream(regularStreamId, snapshot);
+            if (partitionedToGlobalMap.containsKey(regularStreamId)) {
+                applyShadowStream(partitionedToGlobalMap.get(regularStreamId), snapshot);
+            } else {
+                applyShadowStream(regularStreamId, snapshot);
+            }
         }
         // Invalidate client cache after snapshot sync is completed, as shadow streams are no longer useful in the cache
         rt.getAddressSpaceView().invalidateClientCache();
@@ -391,6 +431,14 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         Set<UUID> streamsToQuery = streamViewMap.keySet().stream()
                 .filter(id -> !replicatedStreamIds.contains(id))
                 .collect(Collectors.toCollection(HashSet::new));
+        log.info("Streams to clear before: {} ", streamsToQuery);
+        for(UUID originalStreamID : streamsToQuery) {
+            if (partitionedToGlobalMap.containsKey(originalStreamID)) {
+                streamsToQuery.remove(originalStreamID);
+                streamsToQuery.add(partitionedToGlobalMap.get(originalStreamID));
+            }
+        }
+        log.info("Streams to clear after: {} ", streamsToQuery);
 
         log.debug("Total of {} streams were replicated from active out of {}, sequencer query for {}, streamsToQuery={}",
                 replicatedStreamIds.size(), streamViewMap.size(), streamsToQuery.size(), streamsToQuery);

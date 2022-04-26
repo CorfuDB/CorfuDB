@@ -80,7 +80,12 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     private StreamIteratorMetadata currentProcessedEntryMetadata;
 
-    public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
+    private final String name;
+
+    @Getter
+    private LogReplicationConfig config;
+
+    public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config, String name) {
         runtime.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
@@ -88,17 +93,22 @@ public class StreamsLogEntryReader implements LogEntryReader {
         this.deltaCounter = configureDeltaCounter();
         this.validDeltaCounter = configureValidDeltaCounter();
         this.opaqueEntryCounter = configureOpaqueEntryCounter();
-        Set<String> streams = config.getStreamsToReplicate();
-
-        streamUUIDs = new HashSet<>();
-        for (String s : streams) {
-            streamUUIDs.add(CorfuRuntime.getStreamID(s));
-        }
-
-        log.debug("Streams to replicate total={}, stream_names={}, stream_ids={}", streamUUIDs.size(), streams, streamUUIDs);
+        this.config = config;
+        this.streamUUIDs = new HashSet<>();
 
         //create an opaque stream for transaction stream
         txOpaqueStream = new TxOpaqueStream(runtime);
+        this.name = name;
+        getStreamsToSend();
+    }
+
+    private void getStreamsToSend() {
+        Set<String> streams = new HashSet<>(config.getLmToStreamsToSend().get(name));
+        streamUUIDs.clear();
+        for (String s : streams) {
+            streamUUIDs.add(CorfuRuntime.getStreamID(s));
+        }
+        log.debug("Streams to replicate total={}, stream_names={}, stream_ids={} this.config.getLmToStreamsToSend(){}", streamUUIDs.size(), streams, streamUUIDs, this.config.getLmToStreamsToSend());
     }
 
     private LogReplicationEntryMsg generateMessageWithOpaqueEntryList(
@@ -148,7 +158,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
         // If none of the streams in the transaction entry are specified to be replicated, this is an invalid entry, skip
         if (Collections.disjoint(streamUUIDs, txEntryStreamIds)) {
-            log.trace("TX Stream entry[{}] :: contains none of the streams of interest, streams={} [ignored]", entry.getVersion(), txEntryStreamIds);
+            log.debug("TX Stream entry[{}] :: contains none of the streams of interest, streams={} [ignored]", entry.getVersion(), txEntryStreamIds);
             return false;
         } else {
             Set<UUID> ignoredTxStreams = txEntryStreamIds.stream().filter(id -> !streamUUIDs.contains(id))
@@ -288,6 +298,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
     @Override
     public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
         messageExceededSize = false;
+        getStreamsToSend();
         setGlobalBaseSnapshot(lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
     }
 

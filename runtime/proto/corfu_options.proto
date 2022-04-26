@@ -19,6 +19,10 @@ message SchemaOptions {
     repeated string stream_tag = 5;
     // Nested Secondary Key (repeated field)
     repeated SecondaryIndex secondary_key = 6;
+    // LM-GM replication model -> n:1, where n is the number of source
+    optional bool is_multiClientMerge = 7;
+    // GM-LM replication model -> streams have dynamic destination
+    optional bool is_dynamicStreamDestination = 8;
 }
 
 message SecondaryIndex {

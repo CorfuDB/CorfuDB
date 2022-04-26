@@ -252,7 +252,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         LogReplicationMetadata.ReplicationStatusKey key =
                 LogReplicationMetadata.ReplicationStatusKey
                         .newBuilder()
-                        .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                        .setClusterId(DefaultClusterConfig.getStandbyClusterIds().get(0))
                         .build();
 
         ReplicationStatusVal replicationStatusVal;
@@ -433,7 +433,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         LogReplicationMetadata.ReplicationStatusKey key =
             LogReplicationMetadata.ReplicationStatusKey
                 .newBuilder()
-                .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                .setClusterId(DefaultClusterConfig.getStandbyClusterIds().get(0))
                 .build();
         ReplicationStatusVal replicationStatusVal;
         try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
@@ -496,7 +496,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         LogReplicationMetadata.ReplicationStatusKey key =
             LogReplicationMetadata.ReplicationStatusKey
                 .newBuilder()
-                .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                .setClusterId(DefaultClusterConfig.getStandbyClusterIds().get(0))
                 .build();
         ReplicationStatusVal replicationStatusVal;
         try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
@@ -696,7 +696,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         // Verify Sync Status
         ReplicationStatusKey standbyClusterId = ReplicationStatusKey.newBuilder()
-                        .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                        .setClusterId(DefaultClusterConfig.getStandbyClusterIds().get(0))
                         .build();
         ReplicationStatusVal standbyStatus;
 
@@ -1261,7 +1261,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         LogReplicationMetadata.ReplicationStatusKey key =
                 LogReplicationMetadata.ReplicationStatusKey
                         .newBuilder()
-                        .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                        .setClusterId(DefaultClusterConfig.getStandbyClusterIds().get(0))
                         .build();
 
         LogReplicationMetadata.ReplicationStatusVal replicationStatusVal;

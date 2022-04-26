@@ -20,3 +20,13 @@ message IntValueTag {
 message Metadata {
     string metadata = 3;
 }
+
+
+message SampleDomainTableKey {
+    option (org.corfudb.runtime.table_schema).stream_tag = "domain";
+    string logicalGroupName = 1;
+}
+
+message SampleDomainTableValue {
+    repeated string sites = 1;
+}

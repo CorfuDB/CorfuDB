@@ -458,7 +458,7 @@ public class LogReplicationClientRouter implements IClientRouter {
      * @param nodeId id of the remote node to which connection was established.
      */
     public synchronized void onConnectionUp(String nodeId) {
-        log.info("Connection established to remote node {}", nodeId);
+        log.info("Connection established from {} to remote node {}", parameters.getRemoteClusterDescriptor().getClusterId(), nodeId);
         runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.ON_CONNECTION_UP, nodeId));
     }
 

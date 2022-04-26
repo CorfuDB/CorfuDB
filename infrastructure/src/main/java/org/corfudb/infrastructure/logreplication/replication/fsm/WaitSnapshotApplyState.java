@@ -68,7 +68,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
         this.dataSender = dataSender;
         this.snapshotSyncApplyMonitorExecutor = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
                 .setDaemon(true)
-                .setNameFormat("snapshotSyncApplyVerificationScheduler")
+                .setNameFormat("snapshotSyncApplyVerificationScheduler_" +logReplicationFSM.getPort())
                 .build());
     }
 

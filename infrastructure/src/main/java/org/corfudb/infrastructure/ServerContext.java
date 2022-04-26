@@ -176,6 +176,7 @@ public class ServerContext implements AutoCloseable {
         nodeLocator = NodeLocator
                 .parseString(serverConfig.get("--address") + ":" + serverConfig.get("<port>"));
         localEndpoint = nodeLocator.toEndpointUrl();
+        log.info("serverContext localEndpoint {}", localEndpoint);
     }
 
     int getBaseServerThreadCount() {

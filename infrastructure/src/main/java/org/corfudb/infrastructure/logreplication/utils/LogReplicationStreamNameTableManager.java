@@ -77,7 +77,11 @@ public class LogReplicationStreamNameTableManager {
         initStreamNameFetcherPlugin();
     }
 
-    public Set<String> getStreamsToReplicate() {
+    public Set<String> getStreamsToReplicate(boolean isPoC) {
+        Set<String> staticStreamsToReplicate= new HashSet<>();
+        staticStreamsToReplicate.add("Table:LR-Test$Table_Directory_Group-1 Tags:nsx$tag_one");
+        staticStreamsToReplicate.add("Table:LR-Test$Table_Directory_Group-2 Tags:nsx$tag_one");
+        staticStreamsToReplicate.add("Table:LR-Test$Table_Directory_Group-3 Tags:nsx$tag_one");
         // Initialize the streamsToReplicate
         if (verifyTableExists(LOG_REPLICATION_PLUGIN_VERSION_TABLE) &&
             verifyTableExists(LOG_REPLICATION_STREAMS_NAME_TABLE)) {
@@ -88,13 +92,13 @@ public class LogReplicationStreamNameTableManager {
             if (!tableVersionMatchesPlugin()) {
                 // delete the tables and recreate them
                 deleteExistingStreamNameAndVersionTables();
-                createStreamNameAndVersionTables(
+                createStreamNameAndVersionTables(isPoC ? staticStreamsToReplicate :
                     logReplicationConfigAdapter.fetchStreamsToReplicate());
             }
         } else {
             // If any 1 of the 2 tables does not exist, delete and recreate them both as they may have been corrupted.
             deleteExistingStreamNameAndVersionTables();
-            createStreamNameAndVersionTables(
+            createStreamNameAndVersionTables(isPoC ? staticStreamsToReplicate :
                 logReplicationConfigAdapter.fetchStreamsToReplicate());
         }
         return readStreamsToReplicateFromTable();

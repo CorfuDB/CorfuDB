@@ -149,9 +149,9 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         String activeCorfuPort;
         String activeLogReplicationPort;
 
-        String standbySiteName;
-        String standbyCorfuPort;
-        String standbyLogReplicationPort;
+        List<String> standbySiteName = null;
+        List<String> standbyCorfuPort = null;
+        List<String> standbyLogReplicationPorts = null;
 
         File configFile = new File(CONFIG_FILE_PATH);
         try (FileReader reader = new FileReader(configFile)) {
@@ -173,9 +173,9 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
             }
             // TODO: add reading of node id (which is the APH node uuid)
 
-            standbySiteName = props.getProperty(STANDBY_CLUSTER_NAME, DEFAULT_STANDBY_CLUSTER_NAME);
-            standbyCorfuPort = props.getProperty(STANDBY_CLUSTER_CORFU_PORT);
-            standbyLogReplicationPort = props.getProperty(LOG_REPLICATION_SERVICE_STANDBY_PORT_NUM);
+//            standbySiteName = props.getProperty(STANDBY_CLUSTER_NAME, DEFAULT_STANDBY_CLUSTER_NAME);
+//            standbyCorfuPort = props.getProperty(STANDBY_CLUSTER_CORFU_PORT);
+//            standbyLogReplicationPort = props.getProperty(LOG_REPLICATION_SERVICE_STANDBY_PORT_NUM);
             for (int i = 0; i < NUM_NODES_PER_CLUSTER; i++) {
                 String nodeName = STANDBY_CLUSTER_NODE + i;
                 if (!names.contains(nodeName)) {
@@ -195,12 +195,14 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
             activeNodeHosts.addAll(DefaultClusterConfig.getActiveIpAddresses());
             activeNodeIds.addAll(DefaultClusterConfig.getActiveNodesUuid());
 
-            standbySiteName = DefaultClusterConfig.getStandbyClusterId();
-            standbyCorfuPort = DefaultClusterConfig.getStandbyCorfuPort();
-            standbyLogReplicationPort = DefaultClusterConfig.getStandbyLogReplicationPort();
-            standbyNodeNames.addAll(DefaultClusterConfig.getActiveNodeNames());
+            standbySiteName = DefaultClusterConfig.getStandbyClusterIds();
+            standbyCorfuPort = DefaultClusterConfig.getStandbyCorfuPorts();
+            standbyNodeNames.addAll(DefaultClusterConfig.getStandbyNodeNames());
             standbyNodeHosts.addAll(DefaultClusterConfig.getStandbyIpAddresses());
             standbyNodeIds.addAll(DefaultClusterConfig.getStandbyNodesUuid());
+
+            standbyLogReplicationPorts = Arrays.asList(DefaultClusterConfig.getStandbyLogReplicationPort1(),
+                    DefaultClusterConfig.getStandbyLogReplicationPort2(), DefaultClusterConfig.getStandbyLogReplicationPort3());
         }
 
         activeCluster = new ClusterDescriptor(activeClusterId, ClusterRole.ACTIVE, Integer.parseInt(activeCorfuPort));
@@ -214,13 +216,13 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
 
         // Setup backup cluster information
         Map<String, ClusterDescriptor> standbySites = new HashMap<>();
-        standbySites.put(STANDBY_CLUSTER_NAME, new ClusterDescriptor(standbySiteName, ClusterRole.STANDBY, Integer.parseInt(standbyCorfuPort)));
 
         for (int i = 0; i < standbyNodeNames.size(); i++) {
-            log.info("Standby Cluster Name {}, IpAddress {}", standbyNodeNames.get(i), standbyNodeHosts.get(i));
-            NodeDescriptor nodeInfo = new NodeDescriptor(standbyNodeHosts.get(i),
-                    standbyLogReplicationPort, STANDBY_CLUSTER_NAME, standbyNodeIds.get(i), standbyNodeIds.get(i));
-            standbySites.get(STANDBY_CLUSTER_NAME).getNodesDescriptors().add(nodeInfo);
+            log.info("Standby Cluster Name {}, IpAddress {}", standbyNodeNames.get(i), standbyNodeHosts);
+            standbySites.put(STANDBY_CLUSTER_NAME + i, new ClusterDescriptor(standbySiteName.get(i), ClusterRole.STANDBY, Integer.parseInt(standbyCorfuPort.get(i))));
+            NodeDescriptor nodeInfo = new NodeDescriptor(standbyNodeHosts.get(0),
+                    standbyLogReplicationPorts.get(i), STANDBY_CLUSTER_NAME, standbyNodeIds.get(i), standbyNodeIds.get(i));
+            standbySites.get(STANDBY_CLUSTER_NAME + i).getNodesDescriptors().add(nodeInfo);
         }
 
         log.info("Active Cluster Info {}; Standby Cluster Info {}", activeCluster, standbySites);

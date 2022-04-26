@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.runtime;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
@@ -118,6 +119,7 @@ public class CorfuLogReplicationRuntime {
     /**
      * Current state of the FSM.
      */
+    @Getter
     private volatile LogReplicationRuntimeState state;
 
     /**
@@ -152,22 +154,26 @@ public class CorfuLogReplicationRuntime {
     @Getter
     public final String remoteClusterId;
 
+    @Getter
+    private final String name;
+
     /**
      * Default Constructor
      */
-    public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters, LogReplicationMetadataManager metadataManager) {
+    public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters, LogReplicationMetadataManager metadataManager, String name) {
         this.remoteClusterId = parameters.getRemoteClusterDescriptor().getClusterId();
         this.metadataManager = metadataManager;
         this.router = new LogReplicationClientRouter(parameters, this);
         this.router.addClient(new LogReplicationHandler());
+        this.name = name;
         this.sourceManager = new LogReplicationSourceManager(parameters, new LogReplicationClient(router, remoteClusterId),
                 metadataManager);
         this.connectedNodes = new HashSet<>();
-        ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker").build();
+        ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker-"+parameters.getRemoteClusterDescriptor().getCorfuPort()).build();
         this.communicationFSMWorkers = new ThreadPoolExecutor(1, 1, 0L,
                 TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), threadFactory);
         this.communicationFSMConsumer = Executors.newSingleThreadExecutor(new
-                ThreadFactoryBuilder().setNameFormat("runtime-fsm-consumer").build());
+                ThreadFactoryBuilder().setNameFormat("runtime-fsm-consumer-" + parameters.getRemoteClusterDescriptor().getCorfuPort()).build());
 
         initializeStates();
         this.state = states.get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY);

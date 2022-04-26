@@ -220,8 +220,9 @@ public class CorfuNettyClientChannel extends SimpleChannelInboundHandler<Respons
         if (shutdown) {
             return;
         }
-        log.info("Connect Async {}", node.getNodeId());
+        log.info("Connect Async {}, ThreadName= {}, bootstrap {}", node.getNodeId(), Thread.currentThread().getName(), bootstrap);
         // Use the bootstrap to create a new channel.
+        log.info("bootstraping, node: {}, host: {}, port:{}", node, node.getHost(), Integer.valueOf(node.getPort()));
         ChannelFuture f = bootstrap.connect(node.getHost(), Integer.valueOf(node.getPort()));
         f.addListener((ChannelFuture cf) -> channelConnectionFutureHandler(cf, bootstrap));
     }
@@ -286,9 +287,10 @@ public class CorfuNettyClientChannel extends SimpleChannelInboundHandler<Respons
                 parameters.getNettyEventLoopThreads();
         ThreadFactory factory = new ThreadFactoryBuilder()
                 .setDaemon(true)
-                .setNameFormat(parameters.getNettyEventLoopThreadFormat())
+                .setNameFormat("netty-"+ node.getPort())
                 .setUncaughtExceptionHandler(this::handleUncaughtThread)
                 .build();
+        log.info("paramters {} ", parameters);
         return parameters.getSocketType().getGenerator().generate(numThreads, factory);
     }
 

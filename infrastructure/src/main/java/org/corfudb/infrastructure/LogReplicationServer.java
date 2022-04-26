@@ -181,6 +181,7 @@ public class LogReplicationServer extends AbstractServer {
                                                      @Nonnull ChannelHandlerContext ctx,
                                                      @Nonnull IServerRouter router) {
         log.debug("Log Replication Query Leadership Request received by Server.");
+        log.info("isStandby {} isLeader {} isActive {} ", isStandby.get(), isLeader.get(), isActive);
         if (!isStandby.get() && isLeader.get()) {
             log.warn("This node is the leader but the current role of the cluster is not STANDBY");
         }

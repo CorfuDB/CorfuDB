@@ -3,6 +3,7 @@ package org.corfudb.integration;
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.StreamsSnapshotWriter;
@@ -263,7 +264,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     public static void readSnapLogMsgs(List<LogReplicationEntryMsg> msgQ, Set<String> streams, CorfuRuntime rt, boolean blockOnSem)  {
         int cnt = 0;
         LogReplicationConfig config = new LogReplicationConfig(streams, BATCH_SIZE, MAX_MSG_SIZE);
-        StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config);
+        StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config, null);
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
         while (true) {
@@ -292,7 +293,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
     public static void writeSnapLogMsgs(List<LogReplicationEntryMsg> msgQ, Set<String> streams, CorfuRuntime rt) {
         LogReplicationConfig config = new LogReplicationConfig(streams, BATCH_SIZE, MAX_MSG_SIZE);
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, null, PRIMARY_SITE_ID);
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataManager);
 
         if (msgQ.isEmpty()) {
@@ -318,7 +319,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     public static void readLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, Set<String> streams, CorfuRuntime rt, boolean blockOnce) throws
             TrimmedException {
         LogReplicationConfig config = new LogReplicationConfig(streams, BATCH_SIZE, MAX_MSG_SIZE);
-        StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, config);
+        StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, config, null);
         reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
 
         LogReplicationEntryMsg entry;
@@ -348,7 +349,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
     public static void writeLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, Set<String> streams, CorfuRuntime rt) {
         LogReplicationConfig config = new LogReplicationConfig(streams);
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, null, PRIMARY_SITE_ID);
         LogEntryWriter writer = new LogEntryWriter(config, logReplicationMetadataManager);
 
         if (msgQ.isEmpty()) {

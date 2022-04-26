@@ -16,8 +16,8 @@ public final class LogReplicationEventListener implements StreamListener {
         this.discoveryService = discoveryService;
     }
 
-    public void start() {
-        discoveryService.getLogReplicationMetadataManager().subscribeReplicationEventTable(this);
+    public void start(String clusterId) {
+        discoveryService.getLogReplicationMetadataManager().subscribeReplicationEventTable(this, clusterId);
     }
 
     public void stop() {

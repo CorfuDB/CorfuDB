@@ -2,6 +2,7 @@ package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
 import lombok.Builder;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuOptions;
 
 import javax.annotation.Nonnull;
@@ -12,6 +13,7 @@ import java.util.Optional;
 /**
  * Created by zlokhandwala on 2019-08-09.
  */
+@Slf4j
 @Builder
 public class TableOptions {
 
@@ -43,6 +45,7 @@ public class TableOptions {
     public static <V extends Message> TableOptions fromProtoSchema(@Nonnull Class<V> vClass,
                                                                    TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+//        log.info("have come into the fromProtoSchema {}", tableOptions);
         TableOptions.TableOptionsBuilder tableOptionsBuilder =
                 new TableOptions.TableOptionsBuilder();
         if (vClass != null) { // some test cases pass vClass as null to verify behavior
@@ -55,6 +58,13 @@ public class TableOptions {
         if (tableOptions != null && tableOptions.getPersistentDataPath().isPresent()) {
             tableOptionsBuilder.persistentDataPath((Path) tableOptions.getPersistentDataPath().get());
         }
+//        if (tableOptions != null && tableOptions.getSchemaOptions() != null && tableOptions.getSchemaOptions().getStreamTagList() != null) {
+//            for (String tag : tableOptions.getSchemaOptions().getStreamTagList()) {
+//                log.info("Adding tag {}", tag);
+//                tableOptionsBuilder.schemaOptions.getStreamTagList().add(tag);
+//                log.info("Now the schemaOptions are: {}", tableOptionsBuilder.schemaOptions);
+//            }
+//        }
         return tableOptionsBuilder.build();
     }
 

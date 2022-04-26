@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.replication;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Data;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.DataSender;
@@ -52,6 +53,9 @@ public class LogReplicationSourceManager {
 
     private final LogReplicationAckReader ackReader;
 
+    @Getter
+    private String name;
+
     @VisibleForTesting
     private int countACKs = 0;
 
@@ -69,6 +73,7 @@ public class LogReplicationSourceManager {
     public LogReplicationSourceManager(LogReplicationRuntimeParameters params, LogReplicationClient client,
                                        LogReplicationMetadataManager metadataManager) {
         this(params, metadataManager, new CorfuDataSender(client));
+        this.name = params.getRemoteClusterDescriptor().getClusterId();
     }
 
     @VisibleForTesting
@@ -99,12 +104,12 @@ public class LogReplicationSourceManager {
         }
 
         ExecutorService logReplicationFSMWorkers = Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
-                ThreadFactoryBuilder().setNameFormat("state-machine-worker").build());
+                ThreadFactoryBuilder().setNameFormat("state-machine-worker-" + params.getRemoteClusterDescriptor().getCorfuPort()).build());
         ReadProcessor readProcessor = new DefaultReadProcessor(runtime);
         this.metadataManager = metadataManager;
         // Ack Reader for Snapshot and LogEntry Sync
         this.ackReader = new LogReplicationAckReader(this.metadataManager, config, runtime,
-                params.getRemoteClusterDescriptor().getClusterId());
+                params.getRemoteClusterDescriptor().getClusterId(), params.getRemoteClusterDescriptor().getCorfuPort());
 
         this.logReplicationFSM = new LogReplicationFSM(this.runtime, config, params.getRemoteClusterDescriptor(),
                 dataSender, readProcessor, logReplicationFSMWorkers, ackReader);

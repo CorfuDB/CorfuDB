@@ -491,17 +491,17 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 // Default implementation used for Log Replication (stream-based)
                 LogReplicationConfig logReplicationConfig = new LogReplicationConfig(Collections.singleton(TEST_STREAM_NAME));
                 snapshotReader = new StreamsSnapshotReader(getNewRuntime(getDefaultNode()).connect(),
-                        logReplicationConfig);
+                        logReplicationConfig, null);
                 dataSender = new TestDataSender();
                 break;
             default:
                 break;
         }
 
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, TEST_TOPOLOGY_CONFIG_ID,
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, null,
                 TEST_LOCAL_CLUSTER_ID);
         LogReplicationConfig config = new LogReplicationConfig(new HashSet<>(Arrays.asList(TEST_STREAM_NAME)));
-        ackReader = new LogReplicationAckReader(metadataManager, config, runtime, TEST_LOCAL_CLUSTER_ID);
+        ackReader = new LogReplicationAckReader(metadataManager, config, runtime, TEST_LOCAL_CLUSTER_ID, 0);
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
                 new DefaultReadProcessor(runtime), config, new ClusterDescriptor("Cluster-Local",
                 LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT),

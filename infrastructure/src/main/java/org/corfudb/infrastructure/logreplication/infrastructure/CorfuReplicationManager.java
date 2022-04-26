@@ -4,19 +4,22 @@ import com.google.common.collect.Sets;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
+import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeStateType;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.*;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.*;
 
 /**
  * This class manages Log Replication for multiple remote (standby) clusters.
@@ -42,10 +45,16 @@ public class CorfuReplicationManager {
 
     private final String pluginFilePath;
 
+    private Map<String, Set<String>> domainToSitesMap;
+
+    private ExecutorService executor;
+
+    private LogReplicationConfig config;
+
     /**
      * Constructor
      */
-    public CorfuReplicationManager(LogReplicationContext context, NodeDescriptor localNodeDescriptor,
+    public CorfuReplicationManager(LogReplicationConfig config, LogReplicationContext context, NodeDescriptor localNodeDescriptor,
                                    LogReplicationMetadataManager metadataManager, String pluginFilePath,
                                    CorfuRuntime corfuRuntime) {
         this.context = context;
@@ -53,20 +62,162 @@ public class CorfuReplicationManager {
         this.pluginFilePath = pluginFilePath;
         this.corfuRuntime = corfuRuntime;
         this.localNodeDescriptor = localNodeDescriptor;
+        this.config = config;
+        domainToSitesMap = new HashMap<>();
+
     }
+
+    private class StreamListenerImpl implements StreamListener {
+
+//        StreamListenerImpl() {
+//           log.info("inside construcotr");
+//        }
+
+        // update the domain,
+        @Override
+        public void onNext(CorfuStreamEntries results) {
+            for(List<CorfuStreamEntry> entryList : results.getEntries().values()) {
+                for(CorfuStreamEntry entry : entryList) {
+                    log.info("OnNext entry: {}", entry);
+                    Sample.SampleDomainTableKey key = (Sample.SampleDomainTableKey) entry.getKey();
+                    Sample.SampleDomainTableValue incomingDestination = (Sample.SampleDomainTableValue) entry.getPayload();
+                    log.info("Change was: {}",incomingDestination.getSitesList());
+                    Set<String> incomingSiteChanges = new HashSet<>();
+                    for(String site : incomingDestination.getSitesList()) {
+                        incomingSiteChanges.add(site);
+                    }
+
+                    Set<String> currDestinationSites = domainToSitesMap.get(key.getLogicalGroupName());
+                    // change is captured only if it differs from existing set. Ensures idempotency.
+                    if(Sets.difference(currDestinationSites, incomingSiteChanges).size() > 0 ||
+                            Sets.difference(incomingSiteChanges, currDestinationSites).size() > 0) {
+                        captureDomainChange(key.getLogicalGroupName(), incomingSiteChanges);
+                    }
+
+                }
+            }
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            log.error("Error in domain listner {} ", throwable);
+        }
+//
+//        @Override
+//        public boolean equals(Object o) {
+//            return this.hashCode() == o.hashCode();
+//        }
+//
+//        @Override
+//        public int hashCode() {
+//            return name.hashCode();
+//        }
+//
+//        @Override
+//        public String toString() {
+//            return name;
+//        }
+    }
+
+    private void captureDomainChange(String domainName, Set<String> incomingSiteChanges) {
+        Set<String> currDestinationSites = domainToSitesMap.get(domainName);
+        Set sitesAddedToDomain = Sets.difference(incomingSiteChanges, currDestinationSites);
+        if (sitesAddedToDomain.size() > 0) {
+            // 1. change the map in config
+
+            // 2. call the FSM. if FSM is already present, force-sync else start a new fsm.
+            // for PoC assuming that there is a runtime against all LMs already.
+            // In actual coding, need to handle addition of new LM -> This would also be a topology change I guess.
+            log.info("currDestinationSites {}, domainToSitesMap {}", currDestinationSites, incomingSiteChanges);
+            Set<String> newSiteAdditions = Sets.difference(incomingSiteChanges, currDestinationSites);
+            config.updateLMToStreamsMap(domainName, newSiteAdditions);
+            log.info("currDestinationSites {}, newSiteAdditions {}", currDestinationSites, newSiteAdditions);
+            for (String site : newSiteAdditions) {
+                log.info("Starting force snapshot sync because site {} was added to domain {}", site, domainName);
+                CorfuLogReplicationRuntime remoteRuntime = runtimeToRemoteCluster.get(site);
+                if (!remoteRuntime.getState().getType().equals(LogReplicationRuntimeStateType.REPLICATING)) {
+                    log.debug("The remote {} has not started replication. Adding the remote to domain {} " +
+                            "did not inturrupt the state machine", site, domainName);
+                    continue;
+                }
+                //update domainToSitesMap
+                domainToSitesMap.put(domainName, incomingSiteChanges);
+                remoteRuntime.getSourceManager().stopLogReplication();
+                remoteRuntime.getSourceManager().startForcedSnapshotSync(UUID.randomUUID());
+            }
+        }
+        //if added, call that FSM and force sync
+        //if removed, see the 3 cases in the confluence
+    }
+
+
+    private void initiateMaps() {
+        domainToSitesMap.put("Domain1", new HashSet<>());
+        domainToSitesMap.put("Domain2", new HashSet<>());
+        domainToSitesMap.put("Domain3", new HashSet<>());
+
+        final Map<String, String> LMtoIdMap = new HashMap<>();
+        topology.getStandbyClusters().values().stream().forEach((x) -> {
+            if (x.getClusterId().equals("111e4567-e89b-12d3-a456-556642440111")) {
+                LMtoIdMap.put("LM1", x.getClusterId());
+            } else if (x.getClusterId().equals("222e4567-e89b-12d3-a456-556642440222")) {
+                LMtoIdMap.put("LM2", x.getClusterId());
+            } else {
+                LMtoIdMap.put("LM3", x.getClusterId());
+            }
+        });
+        domainToSitesMap.get("Domain1").add("116e4567-e89b-12d3-a456-111664440011");
+        domainToSitesMap.get("Domain1").add("226e4567-e89b-12d3-a456-111664440022");
+        domainToSitesMap.get("Domain2").add("226e4567-e89b-12d3-a456-111664440022");
+        domainToSitesMap.get("Domain3").add("336e4567-e89b-12d3-a456-111664440033");
+        domainToSitesMap.get("Domain3").add("116e4567-e89b-12d3-a456-111664440011");
+
+        log.info("setting up a subscriber ");
+        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
+
+        try {
+            corfuStore.openTable("LR-Test", "Table_Domains_Mapping",
+                    Sample.SampleDomainTableKey.class,
+                    Sample.SampleDomainTableValue.class, null,
+                    TableOptions.fromProtoSchema(Sample.SampleDomainTableKey.class));
+        } catch (Exception e) {
+            log.error("caught trying to open Domain table in manager {}", e);
+        }
+
+
+        StreamListenerImpl listener1 = new StreamListenerImpl();
+        corfuStore.subscribeListener(listener1, "LR-Test", "domain",
+                Collections.singletonList("Table_Domains_Mapping"));
+        log.info("have a subscriber ");
+    }
+
+    //Shama : StreamsToReplicate -> form a map: which LM replicates which table.
+
 
     /**
      * Start Log Replication Manager, this will initiate a runtime against
      * each standby cluster, to further start log replication.
      */
     public void start() {
+        initiateMaps();
+        BasicThreadFactory factory = new BasicThreadFactory.Builder()
+                .namingPattern("LSM-thread-%d")
+                .build();
+        executor = Executors.newFixedThreadPool(topology.getStandbyClusters().values().size(), factory);
+
         for (ClusterDescriptor remoteCluster : topology.getStandbyClusters().values()) {
             try {
-                startLogReplicationRuntime(remoteCluster);
+                log.info("Shama: {}", remoteCluster);
+                executor.submit(() -> {
+
+                    log.info("Shama, starting FSM: {}", remoteCluster.getClusterId());
+                    startLogReplicationRuntime(remoteCluster);
+                });
             } catch (Exception e) {
                 log.error("Failed to start log replication runtime for remote cluster {}", remoteCluster.getClusterId());
             }
         }
+        log.info("Shama, all runtimes against LMs: keys: {}, values:{}", runtimeToRemoteCluster.keySet(), runtimeToRemoteCluster.values());
     }
 
     /**
@@ -133,11 +284,11 @@ public class CorfuReplicationManager {
                             .trustStore(corfuRuntime.getParameters().getTrustStore())
                             .tsPasswordFile(corfuRuntime.getParameters().getTsPasswordFile())
                             .build();
-                    CorfuLogReplicationRuntime replicationRuntime = new CorfuLogReplicationRuntime(parameters, metadataManager);
+                    CorfuLogReplicationRuntime replicationRuntime = new CorfuLogReplicationRuntime(parameters, metadataManager,remoteCluster.getClusterId());
                     replicationRuntime.start();
                     runtimeToRemoteCluster.put(remoteCluster.getClusterId(), replicationRuntime);
                 } catch (Exception e) {
-                    log.error("Exception {}. Failed to connect to remote cluster {}. Retry after 1 second.",
+                    log.error("Exception {}. / {}. Retry after 1 second.",
                             e, remoteCluster.getClusterId());
                     throw new RetryNeededException();
                 }

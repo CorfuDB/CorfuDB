@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Data;
+import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
@@ -11,6 +12,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+
+import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 
 /**
  * This class represents any Log Replication Configuration,
@@ -41,6 +44,12 @@ public class LogReplicationConfig {
 
     // Unique identifiers for all streams to be replicated across sites
     private Set<String> streamsToReplicate;
+
+    @Getter
+    // This would be done by joining the registry table and the domainMap. For POC, hard-coding it: lM-ID -> streams to replicate to the LM.
+    private Map<String, Set<String>> lmToStreamsToSend; // this to be formed by replicationManager=> join DomainToStreamsToSend and the domainMap.
+
+    private Map<String, Set<String>> domainToStreamsToSend; // This to be formed from registry table.
 
     // Streaming tags on Sink/Standby (map data stream id to list of tags associated to it)
     private Map<UUID, List<UUID>> dataStreamToTagsMap = new HashMap<>();
@@ -86,6 +95,38 @@ public class LogReplicationConfig {
         this.maxMsgSize = maxMsgSize;
         this.maxCacheSize = cacheSize;
         this.maxDataSizePerMsg = maxMsgSize * DATA_FRACTION_PER_MSG / 100;
+        this.lmToStreamsToSend = new HashMap<>();
+        this.lmToStreamsToSend.put("116e4567-e89b-12d3-a456-111664440011", new HashSet<String>(){{
+            add("LR-Test$Table_Directory_Group-1"); add("LR-Test$Table_Directory_Group-3");
+            add("CorfuSystem$ProtobufDescriptorTable"); add("CorfuSystem$RegistryTable");}});
+        this.lmToStreamsToSend.put("226e4567-e89b-12d3-a456-111664440022", new HashSet<String>(){{
+            add("LR-Test$Table_Directory_Group-1"); add("LR-Test$Table_Directory_Group-2");
+            add("CorfuSystem$ProtobufDescriptorTable"); add("CorfuSystem$RegistryTable");}});
+        this.lmToStreamsToSend.put("336e4567-e89b-12d3-a456-111664440033", new HashSet<String>(){{
+            add("LR-Test$Table_Directory_Group-3"); add("CorfuSystem$ProtobufDescriptorTable");
+            add("CorfuSystem$RegistryTable");}});
+
+        // will be built from registry table
+        domainToStreamsToSend = new HashMap<String, Set<String>>();
+        domainToStreamsToSend.put("Domain1", new HashSet<String>(){{ add("LR-Test$Table_Directory_Group-1"); }});
+        domainToStreamsToSend.put("Domain2", new HashSet<String>(){{ add("LR-Test$Table_Directory_Group-2"); }});
+        domainToStreamsToSend.put("Domain3", new HashSet<String>(){{ add("LR-Test$Table_Directory_Group-3"); }});
+    }
+
+    public void updateLMToStreamsMap(String domainName, Set<String> LMsAddedToDomain) {
+        // an LM gets added in domain. Then the streams sent ot LM will change ->
+        // will have to include the tables that are being sent in the new domain to the LM
+
+//        Set<String> streamsToAddToNewDestination = domainToStreamsToSend.get(domainName);
+
+        for(String lm : LMsAddedToDomain) {
+            if (!lmToStreamsToSend.containsKey(lm)) {
+                lmToStreamsToSend.put(lm, new HashSet<String>());
+            }
+            log.info("before domainChange, lm {} had streams {}", lm, lmToStreamsToSend.get(lm));
+            lmToStreamsToSend.get(lm).addAll(domainToStreamsToSend.get(domainName));
+            log.info("after domainChange, lm {} has streams {}...expect to see table3 and table1", lm, lmToStreamsToSend.get(lm));
+        }
     }
 
     /**

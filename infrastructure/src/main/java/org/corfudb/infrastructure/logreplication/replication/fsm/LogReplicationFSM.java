@@ -201,6 +201,12 @@ public class LogReplicationFSM {
     @Getter
     private final LogReplicationAckReader ackReader;
 
+    @Getter
+    private String name;
+
+    @Getter
+    private int port;
+
     /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
      *
@@ -215,8 +221,10 @@ public class LogReplicationFSM {
     public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfig config, ClusterDescriptor remoteCluster, DataSender dataSender,
                              ReadProcessor readProcessor, ExecutorService workers, LogReplicationAckReader ackReader) {
         // Use stream-based readers for snapshot and log entry sync reads
-        this(runtime, new StreamsSnapshotReader(runtime, config), dataSender,
-                new StreamsLogEntryReader(runtime, config), readProcessor, config, remoteCluster, workers, ackReader);
+        this(runtime, new StreamsSnapshotReader(runtime, config, remoteCluster.getClusterId()), dataSender,
+                new StreamsLogEntryReader(runtime, config, remoteCluster.getClusterId()), readProcessor, config, remoteCluster, workers, ackReader);
+        this.name = remoteCluster.getClusterId();
+        this.port = remoteCluster.getCorfuPort();
     }
 
     /**
@@ -251,7 +259,7 @@ public class LogReplicationFSM {
         this.state = states.get(LogReplicationStateType.INITIALIZED);
         this.logReplicationFSMWorkers = workers;
         this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
-                ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer").build());
+                ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer-" + remoteCluster.getCorfuPort()).build());
 
         logReplicationFSMConsumer.submit(this::consume);
 
@@ -316,7 +324,7 @@ public class LogReplicationFSM {
 
             try {
                 LogReplicationState newState = state.processEvent(event);
-                log.trace("Transition from {} to {}", state, newState);
+                log.info("Transition from {} to {}", state, newState);
                 transition(state, newState);
                 state = newState;
                 numTransitions.setValue(numTransitions.getValue() + 1);

@@ -115,3 +115,17 @@ message ValueFieldTagOneAndTwo {
 
     optional string payload = 1;
 }
+
+message SampleDomainGroup {
+    option (org.corfudb.runtime.table_schema).stream_tag = "sample_streamer_1";
+    option (org.corfudb.runtime.table_schema).requires_backup_support = false;
+    option (org.corfudb.runtime.table_schema).is_dynamicStreamDestination = true;
+    option (org.corfudb.runtime.table_schema).is_federated = true;
+
+    optional string payload = 1;
+}
+
+message SampleMetadataDynamicStreamRouting {
+    optional string logicalGroup = 1;
+    optional string destinationName = 2;
+}
