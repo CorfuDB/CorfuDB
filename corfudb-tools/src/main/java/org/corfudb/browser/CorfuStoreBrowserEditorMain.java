@@ -93,7 +93,7 @@ public class CorfuStoreBrowserEditorMain {
             String operation = opts.get("--operation").toString();
 
             final int SYSTEM_EXIT_ERROR_CODE = 1;
-            final int SYSTEM_DOWN_RETRIES = 5;
+            final int SYSTEM_DOWN_RETRIES = 60;
             CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder
                 builder = CorfuRuntime.CorfuRuntimeParameters.builder()
                 .cacheDisabled(true)
