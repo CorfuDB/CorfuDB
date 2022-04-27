@@ -1,7 +1,9 @@
 package org.corfudb.runtime;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Message;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
@@ -25,6 +27,7 @@ import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.*;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -169,10 +172,11 @@ public class DistributedCompactor {
         long startCp = System.currentTimeMillis();
         int count = 0;
         log.trace("Starting Checkpointing in-memory tables..");
+        openCheckpointingMetadataTables();
         count = checkpointOpenedTables();
 
         if (count <= 0) {
-            log.info("Opened tables Checkpoint not done by client: {}", clientName);
+            log.trace("Opened tables Checkpoint not done by client: {}", clientName);
             if (count < 0) {
                 return count;
             }
@@ -236,6 +240,77 @@ public class DistributedCompactor {
         return tablesToCheckpoint;
     }
 
+    private ILivenessUpdater livenessUpdater = new ILivenessUpdater() {
+        private boolean isSyncing = false;
+        private ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
+        private ScheduledFuture<?> scheduledFuture = null;
+
+        private final static int updateInterval = 15000;
+        private TableName tableName = null;
+
+        @Override
+        public void notifyOnSyncStart() {
+            isSyncing = true;
+        }
+
+        @Override
+        public void updateLiveness(TableName tableName) {
+            this.tableName = tableName;
+            // update validity counter every 15 s
+            scheduledFuture = executorService.scheduleWithFixedDelay(() -> {
+                if (isSyncing) {
+                    try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                        CheckpointingStatus tableStatus =
+                                txn.getRecord(checkpointingStatusTable, tableName).getPayload();
+                        if (tableStatus == null || tableStatus.getStatus() != StatusType.SYNCING) {
+                            txn.commit();
+                            return;
+                        }
+                        CheckpointingStatus newStatus = CheckpointingStatus.newBuilder()
+                                .setStatus(tableStatus.getStatus())
+                                .setClientName(tableStatus.getClientName())
+                                .setTimeTaken(tableStatus.getTimeTaken())
+                                .setValidityCounter(tableStatus.getValidityCounter() + 1)
+                                .build();
+                        txn.putRecord(checkpointingStatusTable, tableName, newStatus, null);
+                        txn.commit();
+                        log.info("Updated liveness for table {} to {}", tableName, tableStatus.getValidityCounter() + 1);
+                    } catch (Exception e) {
+                        log.error("Unable to update liveness for table: {}", tableName);
+                    }
+                }
+            }, updateInterval/2, updateInterval, TimeUnit.MILLISECONDS);
+        }
+
+        private void changeStatus(TableName tableName) {
+            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                CheckpointingStatus tableStatus =
+                        txn.getRecord(checkpointingStatusTable, tableName).getPayload();
+                if (tableStatus == null || tableStatus.getStatus() != StatusType.SYNCING) {
+                    txn.commit();
+                    return;
+                }
+                CheckpointingStatus newStatus = CheckpointingStatus.newBuilder()
+                        .setStatus(StatusType.STARTED)
+                        .setClientName(tableStatus.getClientName())
+                        .setTimeTaken(tableStatus.getTimeTaken())
+                        .build();
+                txn.putRecord(checkpointingStatusTable, tableName, newStatus, null);
+                txn.commit();
+            } catch (Exception e) {
+                log.error("Unable to mark status as STARTED for table: {}, {} StackTrace: {}", tableName, e, e.getStackTrace());
+            }
+        }
+
+        @Override
+        public void notifyOnSyncComplete() {
+            isSyncing = false;
+            scheduledFuture.cancel(true);
+            Executors.newSingleThreadExecutor().execute(() -> changeStatus(tableName));
+            tableName = null;
+        }
+    };
+
     public <K, V> CheckpointingStatus appendCheckpoint(CorfuTable<K, V> corfuTable, TableName tableName, CorfuRuntime rt) {
         MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
         mcw.addMap(corfuTable);
@@ -243,22 +318,26 @@ public class DistributedCompactor {
         log.info("{} Starting checkpoint: {}${}", clientName,
                 tableName.getNamespace(), tableName.getTableName());
 
-        Token trimPoint = mcw.appendCheckpoints(rt, "checkpointer");
-
-        long elapsedTime = System.currentTimeMillis() - tableCkptStartTime;
-        long tableSize = corfuTable.size();
-        log.info("Completed checkpoint namespace: {}, tableName: {}, with {} entries in {} ms",
-                tableName.getNamespace(),
-                tableName.getTableName(),
-                corfuTable.size(),
-                elapsedTime);
-
-        return CheckpointingStatus.newBuilder()
-                .setStatus(CheckpointingStatus.StatusType.COMPLETED)
-                .setClientName(this.clientName)
-                .setTableSize(tableSize)
-                .setTimeTaken(elapsedTime)
-                .build();
+        livenessUpdater.updateLiveness(tableName);
+        CheckpointingStatus returnStatus = null;
+        try {
+            Token trimPoint = mcw.appendCheckpoints(rt, "checkpointer", livenessUpdater);
+            returnStatus = CheckpointingStatus.newBuilder()
+                    .setStatus(CheckpointingStatus.StatusType.COMPLETED)
+                    .setClientName(this.clientName)
+                    .setTableSize(corfuTable.size())
+                    .setTimeTaken(System.currentTimeMillis() - tableCkptStartTime)
+                    .build();
+        } catch (Exception e) {
+            log.error("Unable to checkpoint table: {}", tableName);
+            returnStatus = CheckpointingStatus.newBuilder()
+                    .setStatus(CheckpointingStatus.StatusType.FAILED)
+                    .setClientName(this.clientName)
+                    .setTableSize(corfuTable.size())
+                    .setTimeTaken(System.currentTimeMillis() - tableCkptStartTime)
+                    .build();
+        }
+        return returnStatus;
     }
 
     private CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> openTable(TableName tableName,
@@ -293,7 +372,6 @@ public class DistributedCompactor {
      * @return positive count on success and negative value on failure
      */
     public synchronized int checkpointOpenedTables() {
-        openCheckpointingMetadataTables();
         if (!checkCompactionManagerStartTrigger()) {
             log.trace("Checkpoint hasn't started");
             return 0; // Orchestrator says checkpointing is either not needed or done.
@@ -352,7 +430,7 @@ public class DistributedCompactor {
                     txn.putRecord(checkpointingStatusTable,
                             tableName,
                             CheckpointingStatus.newBuilder()
-                                    .setStatus(CheckpointingStatus.StatusType.STARTED)
+                                    .setStatus(CheckpointingStatus.StatusType.SYNCING)
                                     .setClientName(clientName)
                                     .build(),
                             null);
@@ -379,8 +457,8 @@ public class DistributedCompactor {
                     return false; // stop on non-retryable exceptions
                 }
             } catch (Throwable t) {
-                log.error("clientChpt-tryLock: encountered unexpected exception", t);
-                log.error("StackTrace: {}", t.getStackTrace());
+                log.error("clientChpt-tryLock: encountered unexpected exception, {}", t.getMessage());
+                log.error("StackTrace: {}, Cause: {}", t.getStackTrace(), t.getCause());
             }
         }
         return false;
