@@ -13,15 +13,17 @@ import "corfu_store_metadata.proto";
 message CheckpointingStatus {
   enum StatusType {
     IDLE = 0;
-    STARTED = 1;
-    STARTED_ALL = 2;
-    COMPLETED = 3;
-    FAILED = 4;
+    SYNCING = 1;
+    STARTED = 2;
+    STARTED_ALL = 3;
+    COMPLETED = 4;
+    FAILED = 5;
   }
   StatusType status = 1;
   string client_name = 2;
   int64 table_size = 3;
   int64 time_taken = 4;
+  int64 validity_counter = 5;
 }
 
 message StringKey{

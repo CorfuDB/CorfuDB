@@ -9,10 +9,12 @@ import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.util.serializer.ISerializer;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Function;
 
 /**
  * Checkpoint multiple CorfuTables serially as a prerequisite for a later log trim.
@@ -43,31 +45,29 @@ public class MultiCheckpointWriter<T extends StreamingMap> {
      * @param author Author's name, stored in checkpoint metadata
      * @return Global log address of the first record of
      */
-    public Token appendCheckpoints(CorfuRuntime rt, String author) {
+    public Token appendCheckpoints(CorfuRuntime rt, String author, @Nullable ILivenessUpdater livenessUpdater) {
         int numRetries = rt.getParameters().getCheckpointRetries();
         int retry = 0;
-        log.info("appendCheckpoints: appending checkpoints for {} maps", maps.size());
 
         Token minSnapshot = Token.UNINITIALIZED;
 
-        final long cpStart = System.currentTimeMillis();
         try {
             for (ICorfuSMR<T> map : maps) {
                 UUID streamId = map.getCorfuStreamID();
 
                 CheckpointWriter<T> cpw = new CheckpointWriter(rt, streamId, author, (T) map);
                 ISerializer serializer = ((CorfuCompileProxy) map.getCorfuSMRProxy())
-                                .getSerializer();
+                        .getSerializer();
                 cpw.setSerializer(serializer);
 
                 Token minCPSnapshot = Token.UNINITIALIZED;
                 while (retry < numRetries) {
                     try {
-                        minCPSnapshot = cpw.appendCheckpoint();
+                        minCPSnapshot = cpw.appendCheckpoint(livenessUpdater);
                         break;
                     } catch (WrongEpochException wee) {
                         log.info("Epoch changed to {} during append checkpoint snapshot resolution. Sequencer" +
-                                " failover can lead to potential epoch regression, retry {}/{}", wee.getCorrectEpoch(),
+                                        " failover can lead to potential epoch regression, retry {}/{}", wee.getCorrectEpoch(),
                                 retry, numRetries);
                         retry++;
                         if (retry == numRetries) {
@@ -94,11 +94,12 @@ public class MultiCheckpointWriter<T extends StreamingMap> {
                     author, minSnapshot);
             rt.getObjectsView().TXEnd();
         }
-        final long cpStop = System.currentTimeMillis();
 
-        log.info("appendCheckpoints: took {} ms to append {} checkpoints", cpStop - cpStart,
-                maps.size());
         return minSnapshot;
+    }
+
+    public Token appendCheckpoints(CorfuRuntime rt, String author) {
+        return appendCheckpoints(rt, author, null);
     }
 
 }
