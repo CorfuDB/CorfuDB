@@ -7,6 +7,7 @@ import javax.annotation.Nonnull;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 
 public class PersistentCorfuTable<K, V> implements ICorfuSMR<PersistentCorfuTable<K, V>> {
 
@@ -40,7 +41,9 @@ public class PersistentCorfuTable<K, V> implements ICorfuSMR<PersistentCorfuTabl
         // tableState = tableState.remove(key);
     }
 
-    // TODO: Stream<Entry<K, V>> entryStream()
+    public Stream<Map.Entry<K, V>> entryStream() {
+        return tableState.entryStream();
+    }
 
     public int size() {
         return tableState.size();

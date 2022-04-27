@@ -8,9 +8,9 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -159,7 +159,7 @@ public class SMRObject<T extends ICorfuSMR<T>> {
 
                                     // Get object serializer to check if we didn't attempt to set another serializer
                                     // to an already existing map
-                                    ISerializer objectSerializer = ((CorfuCompileProxy) ((ICorfuSMR) result).
+                                    ISerializer objectSerializer = ((ICorfuSMRProxyInternal<T>) ((ICorfuSMR) result).
                                             getCorfuSMRProxy())
                                             .getSerializer();
 

@@ -107,6 +107,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         CorfuRuntime.overrideGetRouterFunction = this::getRouterFunction;
         runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
                 .nettyEventLoop(NETTY_EVENT_LOOP)
+                .maxCacheEntries(100) // MVO cache size of 100
                 .build());
         // Default number of times to read before hole filling to 0
         // (most aggressive, to surface concurrency issues).

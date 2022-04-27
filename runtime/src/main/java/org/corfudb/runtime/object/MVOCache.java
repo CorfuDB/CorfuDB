@@ -1,5 +1,6 @@
 package org.corfudb.runtime.object;
 
+import com.google.common.base.Preconditions;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalNotification;
@@ -11,6 +12,7 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.lang.ref.SoftReference;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -108,11 +110,15 @@ public class MVOCache<T extends ICorfuSMR<T>> {
         int count;
 
         synchronized (allVersionsOfThisObject) {
+            Preconditions.checkState(!allVersionsOfThisObject.isEmpty());
+
             // Get the headset up to the given version. Exclude the given version
             // if it is the highest version in the set. This is to guarantee that
             // at least one version exist in the objectMap for any object
-            Set<Long> headSet = allVersionsOfThisObject.headSet(voId.getVersion(),
-                    voId.getVersion() != allVersionsOfThisObject.last());
+
+            // TODO(Zach):
+            Set<Long> headSet = new HashSet<>(allVersionsOfThisObject.headSet(voId.getVersion(),
+                    voId.getVersion() != allVersionsOfThisObject.last()));
             headSet.forEach(version -> {
                 voId.setVersion(version);
                 // this could cause excessive handleEviction calls

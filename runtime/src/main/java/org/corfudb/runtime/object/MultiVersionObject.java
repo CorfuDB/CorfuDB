@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.StaleObjectVersionException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -89,6 +90,13 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         // TODO: Eliminate type cast
         Reference<T> ref  = (SoftReference<T>) mvoCache.get(new VersionedObjectIdentifier(streamID, timestamp));
 
+        // PersistentCorfuTable shell shared with cache, but allocating
+        // a new shell no longer tied the SoftReference to cache.
+        // T instCopy = newObjectFn.get();
+        // instCopy.setImmutableState(ref.get().getImmutableState());
+
+        // SoftRef(PersistentCorfuTable : PersistentHashMapWrapper/ImmutableState)
+
         if (ref.get() != null) {
             return new SnapshotProxyAdapter<>(ref, timestamp, upcallTargetMap);
         }
@@ -151,15 +159,18 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         // Find the entry with the greatest version less than or equal to the given version
         SoftReference<Map.Entry<VersionedObjectIdentifier, ICorfuSMR>> floorEntry =
                 mvoCache.floorEntry(new VersionedObjectIdentifier(streamID, timestamp));
-        if (floorEntry.get() == null) {
+
+        Map.Entry<VersionedObjectIdentifier, ICorfuSMR> rawFloorEntry = floorEntry.get();
+
+        if (rawFloorEntry == null) {
             resetUnsafe(object);
             // Do not allow going back to previous versions
             throw new StaleObjectVersionException(streamID, timestamp);
         } else {
-            object.setImmutableState(floorEntry.get().getValue().getImmutableState());
+             object.setImmutableState(rawFloorEntry.getValue().getImmutableState());
             // Next stream read begins from a given address (inclusive),
             // so +1 to avoid applying the same update twice
-            smrStream.seek(floorEntry.get().getKey().getVersion() + 1);
+            smrStream.seek(rawFloorEntry.getKey().getVersion() + 1);
         }
     }
 

@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import javax.annotation.Nonnull;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.stream.Stream;
 
 @Slf4j
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
@@ -119,6 +120,15 @@ public class PersistentHashMapWrapper<K, V> {
 
     /**
      *
+     * @return
+     */
+    public Stream<java.util.Map.Entry<K, V>> entryStream() {
+        // TODO: Consider alternative to avoid conversion to Java Map.
+        return mainMap.toJavaMap().entrySet().stream();
+    }
+
+    /**
+     *
      * @param indexName
      * @param indexKey
      * @param <I>
@@ -179,7 +189,7 @@ public class PersistentHashMapWrapper<K, V> {
             }
 
             // If index is not specified, the lookup by index API must fail.
-            log.error("CorfuTable: secondary index " + index +
+            log.error("PersistentCorfuTable: secondary index " + index +
                     " does not exist for this table, cannot complete the get by index.");
             throw new IllegalArgumentException("Secondary Index " + index + " is not defined.");
         }
