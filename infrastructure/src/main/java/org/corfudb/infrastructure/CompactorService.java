@@ -117,7 +117,7 @@ public class CompactorService implements ManagementService {
 
             if (isLeader) {
                 if (managerStatus != null && (managerStatus.getStatus() == StatusType.STARTED ||
-                        managerStatus.getStatus() == StatusType.STARTED_ALL)){
+                        managerStatus.getStatus() == StatusType.STARTED_ALL)) {
                     compactorLeaderServices.validateLiveness(livenessTimeout);
                 } else if (compactionTriggerPolicy.shouldTrigger(this.compactionTriggerFreqMs)) {
                     compactorLeaderServices.trimAndTriggerDistributedCheckpointing();

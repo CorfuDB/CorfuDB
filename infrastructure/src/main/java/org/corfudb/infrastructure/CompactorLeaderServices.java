@@ -4,7 +4,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.common.util.Tuple;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
@@ -45,7 +44,6 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  *    marks the end of the compactoin cycle.
  */
 
-@Slf4j
 public class CompactorLeaderServices {
     private Table<StringKey, CheckpointingStatus, Message> compactionManagerTable;
     private Table<TableName, CheckpointingStatus, Message> checkpointingStatusTable;
@@ -152,6 +150,7 @@ public class CompactorLeaderServices {
             CheckpointingStatus idleStatus = buildCheckpointStatus(StatusType.IDLE);
 
             txn.clear(checkpointingStatusTable);
+            txn.clear(activeCheckpointsTable);
             //Populate CheckpointingStatusTable
             for (TableName table : tableNames) {
                 txn.putRecord(checkpointingStatusTable, table, idleStatus, null);
@@ -212,21 +211,30 @@ public class CompactorLeaderServices {
         }
         for (TableName table : tableNames) {
             LivenessValidator.clear();
-            String streamName = TableRegistry.getFullyQualifiedTableName(table.getNamespace(), table.getTableName());
-            UUID streamId = CorfuRuntime.getCheckpointStreamIdFromName(streamName);
-            long currentStreamTail = corfuRuntime.getSequencerView()
-                    .getStreamAddressSpace(new StreamAddressRange(streamId, Address.MAX, Address.NON_ADDRESS)).getTail();
-            if (readCache.containsKey(table)) {
-                if (readCache.get(table).first >= currentStreamTail &&
-                        (currentTime - readCache.get(table).second) > timeout) {
+            long readCacheFirst = 0;
+            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                CheckpointingStatus tableStatus = txn.getRecord(checkpointingStatusTable, table).getPayload();
+                if (tableStatus != null && tableStatus.getStatus() == StatusType.SYNCING) {
+                    readCacheFirst = tableStatus.getValidityCounter();
+                } else if (tableStatus != null && tableStatus.getStatus() == StatusType.STARTED) {
+                    String streamName = TableRegistry.getFullyQualifiedTableName(table.getNamespace(), table.getTableName());
+                    UUID streamId = CorfuRuntime.getCheckpointStreamIdFromName(streamName);
+                    readCacheFirst = corfuRuntime.getSequencerView()
+                            .getStreamAddressSpace(new StreamAddressRange(streamId, Address.MAX, Address.NON_ADDRESS)).getTail();
+                }
+                txn.commit();
+            } catch (Exception e) {
+                syslog.warn("Unable to acquire table status");
+            }
+            if (readCache.containsKey(table) && readCacheFirst <= readCache.get(table).first) {
+                if ((currentTime - readCache.get(table).second) > timeout){
                     if (!handleSlowCheckpointers(table)) {
                         readCache.clear();
                         return;
                     }
                 }
-                readCache.put(table, Tuple.of(currentStreamTail, readCache.get(table).second));
             } else {
-                readCache.put(table, Tuple.of(currentStreamTail, currentTime));
+                readCache.put(table, Tuple.of(readCacheFirst, currentTime));
             }
         }
     }
@@ -296,11 +304,7 @@ public class CompactorLeaderServices {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus tableStatus = txn.getRecord(
                     checkpointingStatusTable, table).getPayload();
-            if (tableStatus == null) {
-                txn.delete(activeCheckpointsTable, table);
-                txn.commit();
-                return true;
-            } else if (tableStatus.getStatus() != StatusType.COMPLETED && tableStatus.getStatus() != StatusType.FAILED) {
+            if (tableStatus.getStatus() != StatusType.COMPLETED && tableStatus.getStatus() != StatusType.FAILED) {
                 txn.putRecord(checkpointingStatusTable,
                         table,
                         buildCheckpointStatus(StatusType.FAILED),
