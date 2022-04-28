@@ -10,6 +10,7 @@ import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.DistributedCompactor;
+import org.corfudb.runtime.ILivenessUpdater;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -30,6 +31,7 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @Slf4j
 public class DistributedCompactorTests extends AbstractViewTest {
     private static final int WAIT_FOR_FINISH_CYCLE = 10;
+    private static final int WAIT_IN_SYNC_STATE = 5000;
     private static final int LIVENESS_TIMEOUT = 1000;
     private static final String CLIENT_NAME_PREFIX = "Client";
 
@@ -470,7 +472,6 @@ public class DistributedCompactorTests extends AbstractViewTest {
         scheduler.scheduleWithFixedDelay(() -> compactorLeaderServices1.validateLiveness(LIVENESS_TIMEOUT), 0,
                 LIVENESS_TIMEOUT, TimeUnit.MILLISECONDS);
 
-
         DistributedCompactor distributedCompactor = new DistributedCompactor(runtime0, cpRuntime0,
                 null);
         distributedCompactor.startCheckpointing();
@@ -482,8 +483,106 @@ public class DistributedCompactorTests extends AbstractViewTest {
         } catch (InterruptedException e) {
             log.warn("Sleep interrupted, ", e);
         }
-
         assert(verifyManagerStatus(StatusType.FAILED));
         assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 1));
+    }
+
+    private ILivenessUpdater mockLivenessUpdater = new ILivenessUpdater() {
+        private ScheduledExecutorService executorService;
+        private final static int updateInterval = 250;
+        TableName tableName = null;
+
+        @Override
+        public void updateLiveness(TableName tableName) {
+            this.tableName = tableName;
+            // update validity counter every 250ms
+            executorService = Executors.newSingleThreadScheduledExecutor();
+            executorService.scheduleWithFixedDelay(() -> {
+                Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointsTable = openActiveCheckpointsTable();
+                try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                    ActiveCPStreamMsg currentStatus =
+                            txn.getRecord(activeCheckpointsTable, tableName).getPayload();
+                    ActiveCPStreamMsg newStatus = ActiveCPStreamMsg.newBuilder()
+                            .setSyncHeartbeat(currentStatus.getSyncHeartbeat() + 1)
+                            .build();
+                    txn.putRecord(activeCheckpointsTable, tableName, newStatus, null);
+                    txn.commit();
+                    log.info("Updated liveness for table {} to {}", tableName, currentStatus.getSyncHeartbeat() + 1);
+                } catch (Exception e) {
+                    log.error("Unable to update liveness for table: {}, e ", tableName, e);
+                }
+            }, 0, updateInterval, TimeUnit.MILLISECONDS);
+        }
+
+        private void changeStatus() {
+            Table<TableName, CheckpointingStatus, Message> checkpointingStatusTable = openCheckpointStatusTable();
+            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                CheckpointingStatus tableStatus =
+                        txn.getRecord(checkpointingStatusTable, tableName).getPayload();
+                if (tableStatus == null || tableStatus.getStatus() != StatusType.STARTED) {
+                    txn.commit();
+                    return;
+                }
+                CheckpointingStatus newStatus = CheckpointingStatus.newBuilder()
+                        .setStatus(StatusType.COMPLETED)
+                        .setClientName(tableStatus.getClientName())
+                        .setTimeTaken(tableStatus.getTimeTaken())
+                        .build();
+                txn.putRecord(checkpointingStatusTable, tableName, newStatus, null);
+                txn.delete(DistributedCompactor.ACTIVE_CHECKPOINTS_TABLE_NAME, tableName);
+                txn.commit();
+            } catch (Exception e) {
+                log.error("Unable to mark status as COMPLETED for table: {}, {} StackTrace: {}", tableName, e, e.getStackTrace());
+            }
+        }
+
+        @Override
+        public void notifyOnSyncComplete() {
+            executorService.shutdownNow();
+            changeStatus();
+        }
+    };
+
+    @Test
+    public void validateLivenessSyncStateTest() {
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, SERVERS.ENDPOINT_0);
+        compactorLeaderServices1.setLeader(true);
+        compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
+
+        Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointTable = openActiveCheckpointsTable();
+        Table<TableName, CheckpointingStatus, Message> checkpointStatusTable = openCheckpointStatusTable();
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            TableName table = TableName.newBuilder().setNamespace(CORFU_SYSTEM_NAMESPACE).setTableName(STREAM_NAME).build();
+            txn.putRecord(checkpointStatusTable, table,
+                    CheckpointingStatus.newBuilder().setStatusValue(StatusType.STARTED_VALUE).build(), null);
+            txn.putRecord(activeCheckpointTable,
+                    table,
+                    ActiveCPStreamMsg.getDefaultInstance(),
+                    null);
+            txn.commit();
+            mockLivenessUpdater.updateLiveness(table);
+        }
+
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        scheduler.scheduleWithFixedDelay(() -> compactorLeaderServices1.validateLiveness(LIVENESS_TIMEOUT), 0,
+                LIVENESS_TIMEOUT, TimeUnit.MILLISECONDS);
+
+        DistributedCompactor distributedCompactor = new DistributedCompactor(runtime0, cpRuntime0,
+                null);
+
+        try {
+            TimeUnit.MILLISECONDS.sleep(WAIT_IN_SYNC_STATE);
+            mockLivenessUpdater.notifyOnSyncComplete();
+
+            distributedCompactor.startCheckpointing();
+            while (!pollForFinishCheckpointing()) {
+                TimeUnit.MILLISECONDS.sleep(WAIT_FOR_FINISH_CYCLE);
+            }
+        } catch (InterruptedException e) {
+            log.warn("Sleep interrupted, ", e);
+        }
+
+        assert(verifyManagerStatus(StatusType.COMPLETED));
+        assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
     }
 }

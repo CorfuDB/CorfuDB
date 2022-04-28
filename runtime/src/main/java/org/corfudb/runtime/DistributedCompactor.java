@@ -241,73 +241,33 @@ public class DistributedCompactor {
     }
 
     private ILivenessUpdater livenessUpdater = new ILivenessUpdater() {
-        private boolean isSyncing = false;
-        private ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
-        private ScheduledFuture<?> scheduledFuture = null;
+        private ScheduledExecutorService executorService;
 
         private final static int updateInterval = 15000;
-        private TableName tableName = null;
-
-        @Override
-        public void notifyOnSyncStart() {
-            isSyncing = true;
-        }
 
         @Override
         public void updateLiveness(TableName tableName) {
-            this.tableName = tableName;
-            // update validity counter every 15 s
-            scheduledFuture = executorService.scheduleWithFixedDelay(() -> {
-                if (isSyncing) {
-                    try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                        CheckpointingStatus tableStatus =
-                                txn.getRecord(checkpointingStatusTable, tableName).getPayload();
-                        if (tableStatus == null || tableStatus.getStatus() != StatusType.SYNCING) {
-                            txn.commit();
-                            return;
-                        }
-                        CheckpointingStatus newStatus = CheckpointingStatus.newBuilder()
-                                .setStatus(tableStatus.getStatus())
-                                .setClientName(tableStatus.getClientName())
-                                .setTimeTaken(tableStatus.getTimeTaken())
-                                .setValidityCounter(tableStatus.getValidityCounter() + 1)
-                                .build();
-                        txn.putRecord(checkpointingStatusTable, tableName, newStatus, null);
-                        txn.commit();
-                        log.info("Updated liveness for table {} to {}", tableName, tableStatus.getValidityCounter() + 1);
-                    } catch (Exception e) {
-                        log.error("Unable to update liveness for table: {}", tableName);
-                    }
+            // update validity counter every 15s
+            executorService = Executors.newSingleThreadScheduledExecutor();
+            executorService.scheduleWithFixedDelay(() -> {
+                try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                    ActiveCPStreamMsg currentStatus =
+                            txn.getRecord(activeCheckpointsTable, tableName).getPayload();
+                    ActiveCPStreamMsg newStatus = ActiveCPStreamMsg.newBuilder()
+                                    .setSyncHeartbeat(currentStatus.getSyncHeartbeat() + 1)
+                                    .setIsClientTriggered(currentStatus.getIsClientTriggered())
+                                    .build();
+                    txn.putRecord(activeCheckpointsTable, tableName, newStatus, null);
+                    txn.commit();
+                } catch (Exception e) {
+                    log.error("Unable to update liveness for table: {}", tableName);
                 }
             }, updateInterval/2, updateInterval, TimeUnit.MILLISECONDS);
         }
 
-        private void changeStatus(TableName tableName) {
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                CheckpointingStatus tableStatus =
-                        txn.getRecord(checkpointingStatusTable, tableName).getPayload();
-                if (tableStatus == null || tableStatus.getStatus() != StatusType.SYNCING) {
-                    txn.commit();
-                    return;
-                }
-                CheckpointingStatus newStatus = CheckpointingStatus.newBuilder()
-                        .setStatus(StatusType.STARTED)
-                        .setClientName(tableStatus.getClientName())
-                        .setTimeTaken(tableStatus.getTimeTaken())
-                        .build();
-                txn.putRecord(checkpointingStatusTable, tableName, newStatus, null);
-                txn.commit();
-            } catch (Exception e) {
-                log.error("Unable to mark status as STARTED for table: {}, {} StackTrace: {}", tableName, e, e.getStackTrace());
-            }
-        }
-
         @Override
         public void notifyOnSyncComplete() {
-            isSyncing = false;
-            scheduledFuture.cancel(true);
-            Executors.newSingleThreadExecutor().execute(() -> changeStatus(tableName));
-            tableName = null;
+            executorService.shutdownNow();
         }
     };
 
@@ -329,7 +289,7 @@ public class DistributedCompactor {
                     .setTimeTaken(System.currentTimeMillis() - tableCkptStartTime)
                     .build();
         } catch (Exception e) {
-            log.error("Unable to checkpoint table: {}", tableName);
+            log.error("Unable to checkpoint table: {}, e: {}", tableName, e);
             returnStatus = CheckpointingStatus.newBuilder()
                     .setStatus(CheckpointingStatus.StatusType.FAILED)
                     .setClientName(this.clientName)
@@ -337,6 +297,7 @@ public class DistributedCompactor {
                     .setTimeTaken(System.currentTimeMillis() - tableCkptStartTime)
                     .build();
         }
+        livenessUpdater.notifyOnSyncComplete();
         return returnStatus;
     }
 
@@ -421,22 +382,15 @@ public class DistributedCompactor {
                 final CorfuStoreEntry<TableName, CheckpointingStatus, Message> tableToChkpt =
                         txn.getRecord(checkpointingStatusTable, tableName);
                 if (tableToChkpt.getPayload().getStatus() == StatusType.IDLE) {
-                    UUID streamId = CorfuRuntime.getCheckpointStreamIdFromName(
-                            TableRegistry.getFullyQualifiedTableName(
-                                    tableName.getNamespace(), tableName.getTableName()));
-                    long streamTail = runtime.getSequencerView()
-                            .getStreamAddressSpace(new StreamAddressRange(streamId,
-                                    Address.MAX, Address.NON_ADDRESS)).getTail();
                     txn.putRecord(checkpointingStatusTable,
                             tableName,
                             CheckpointingStatus.newBuilder()
-                                    .setStatus(CheckpointingStatus.StatusType.SYNCING)
+                                    .setStatus(CheckpointingStatus.StatusType.STARTED)
                                     .setClientName(clientName)
                                     .build(),
                             null);
                     txn.putRecord(activeCheckpointsTable, tableName,
                             ActiveCPStreamMsg.newBuilder()
-                                    .setTailSequence(streamTail)
                                     .setIsClientTriggered(isClient) // This will stall server side compaction!
                                     .build(),
                             null);
