@@ -168,10 +168,6 @@ public class CheckpointWriter<T extends StreamingMap> {
 
         log.info("appendCheckpoint: Started checkpoint for {} at snapshot {}", streamId, snapshotTimestamp);
 
-        if (livenessUpdater != null) {
-            livenessUpdater.notifyOnSyncStart();
-        }
-
         try (Stream<Map.Entry> entries = this.map.entryStream()) {
             // A checkpoint writer will do two accesses one to obtain the object
             // vlo version and to get a shallow copy of the entry set

@@ -50,7 +50,7 @@ public class CompactorLeaderServices {
     private Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointsTable;
     private Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable;
 
-    private Map<TableName, Tuple<Long, Long>> readCache = new HashMap<>();
+    private Map<TableName, Tuple<Tuple<Long, Long>, Long>> readCache = new HashMap<>();
 
     private final CorfuRuntime corfuRuntime;
     private final CorfuStore corfuStore;
@@ -211,30 +211,36 @@ public class CompactorLeaderServices {
         }
         for (TableName table : tableNames) {
             LivenessValidator.clear();
-            long readCacheFirst = 0;
+            String streamName = TableRegistry.getFullyQualifiedTableName(table.getNamespace(), table.getTableName());
+            UUID streamId = CorfuRuntime.getCheckpointStreamIdFromName(streamName);
+            long currentStreamTail = corfuRuntime.getSequencerView()
+                    .getStreamAddressSpace(new StreamAddressRange(streamId, Address.MAX, Address.NON_ADDRESS)).getTail();
+
+            long syncHeartBeat = -1;
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                CheckpointingStatus tableStatus = txn.getRecord(checkpointingStatusTable, table).getPayload();
-                if (tableStatus != null && tableStatus.getStatus() == StatusType.SYNCING) {
-                    readCacheFirst = tableStatus.getValidityCounter();
-                } else if (tableStatus != null && tableStatus.getStatus() == StatusType.STARTED) {
-                    String streamName = TableRegistry.getFullyQualifiedTableName(table.getNamespace(), table.getTableName());
-                    UUID streamId = CorfuRuntime.getCheckpointStreamIdFromName(streamName);
-                    readCacheFirst = corfuRuntime.getSequencerView()
-                            .getStreamAddressSpace(new StreamAddressRange(streamId, Address.MAX, Address.NON_ADDRESS)).getTail();
-                }
+                syncHeartBeat = txn.getRecord(activeCheckpointsTable, table).getPayload().getSyncHeartbeat();
                 txn.commit();
             } catch (Exception e) {
                 syslog.warn("Unable to acquire table status");
             }
-            if (readCache.containsKey(table) && readCacheFirst <= readCache.get(table).first) {
-                if ((currentTime - readCache.get(table).second) > timeout){
-                    if (!handleSlowCheckpointers(table)) {
-                        readCache.clear();
-                        return;
+            if (readCache.containsKey(table)) {
+                //previousStatus.first is ValidityCounter
+                //previousStatus.second is StreamTail
+                Tuple<Long, Long> previousStatus = readCache.get(table).first;
+                if (previousStatus.second < currentStreamTail) {
+                    readCache.put(table, Tuple.of(Tuple.of(previousStatus.first, currentStreamTail), currentTime));
+                } else if (previousStatus.first < syncHeartBeat) {
+                    readCache.put(table, Tuple.of(Tuple.of(syncHeartBeat, previousStatus.second), currentTime));
+                } else if (previousStatus.second == currentStreamTail || previousStatus.first == syncHeartBeat) {
+                    if (currentTime - readCache.get(table).second > timeout) {
+                        if (!handleSlowCheckpointers(table)) {
+                            readCache.clear();
+                            return;
+                        }
                     }
                 }
             } else {
-                readCache.put(table, Tuple.of(readCacheFirst, currentTime));
+                readCache.put(table, Tuple.of(Tuple.of(syncHeartBeat, currentStreamTail), currentTime));
             }
         }
     }
