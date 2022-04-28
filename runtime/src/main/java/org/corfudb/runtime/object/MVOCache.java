@@ -3,6 +3,7 @@ package org.corfudb.runtime.object;
 import com.google.common.base.Preconditions;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.RemovalCause;
 import com.google.common.cache.RemovalNotification;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -93,6 +94,9 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      * @param notification guava cache eviction notification
      */
     private void handleEviction(RemovalNotification<VersionedObjectIdentifier, Object> notification) {
+        if (notification.getCause() == RemovalCause.EXPLICIT ||
+                notification.getCause() == RemovalCause.REPLACED)
+            return;
         VersionedObjectIdentifier voId = notification.getKey();
         int evictCount = prefixEvict(voId);
         log.info("evicted {} versions for object {} which is older than version {}",
@@ -116,9 +120,8 @@ public class MVOCache<T extends ICorfuSMR<T>> {
             // if it is the highest version in the set. This is to guarantee that
             // at least one version exist in the objectMap for any object
 
-            // TODO(Zach):
-            Set<Long> headSet = new HashSet<>(allVersionsOfThisObject.headSet(voId.getVersion(),
-                    voId.getVersion() != allVersionsOfThisObject.last()));
+            Set<Long> headSet = allVersionsOfThisObject.headSet(voId.getVersion(),
+                    voId.getVersion() != allVersionsOfThisObject.last());
             headSet.forEach(version -> {
                 voId.setVersion(version);
                 // this could cause excessive handleEviction calls
@@ -149,7 +152,6 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      * @param versionedObject the versioned object to add
      */
     public void put(VersionedObjectIdentifier voId, T versionedObject) {
-        // System.out.println("MVOCache[put]: " + voId.toString());
         TreeSet<Long> allVersionsOfThisObject = objectVersions.computeIfAbsent(
                 voId.getObjectId(), k -> new TreeSet<>());
         synchronized (allVersionsOfThisObject) {
