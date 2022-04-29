@@ -6,6 +6,7 @@ import com.google.protobuf.Message;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
@@ -554,5 +555,93 @@ public class DistributedCompactor {
         }
         return false;
     }
+
+    private final int loaderId = new Random().nextInt();
+    private int tableNumber;
+    public void justLoadData() {
+        String namespace = "nsx";
+        String tableName = clientName+"_BigTable"+tableNumber;
+        final int numTables = 6;
+        tableNumber = (tableNumber + 1)% numTables;
+        int numItems =  5000;
+        int batchSize = 50;
+        int itemSize = 10240;
+        /*** if things go wrong please uncomment this and patch...
+        runtime.getTableRegistry().getRegistryTable()
+               .delete(TableName.newBuilder().setTableName(tableName).setNamespace(namespace).build());
+        if (batchSize == 50) {
+            log.warn("Deleted table {}${}", namespace, tableName);
+            return;
+        }
+         //*/
+
+        try {
+            TableOptions.TableOptionsBuilder optionsBuilder = TableOptions.builder();
+            final Table<ExampleSchemas.ExampleTableName,
+                    ExampleSchemas.ExampleTableName,
+                    ExampleSchemas.ManagedMetadata> table =
+                    corfuStore.openTable(
+                    namespace, tableName,
+                    ExampleSchemas.ExampleTableName.class,
+                    ExampleSchemas.ExampleTableName.class,
+                    ExampleSchemas.ManagedMetadata.class,
+                    TableOptions.fromProtoSchema(ExampleSchemas.ExampleTableName.class, optionsBuilder.build())
+            );
+
+            String streamName = TableRegistry.getFullyQualifiedTableName(namespace, tableName);
+            UUID streamId = CorfuRuntime.getStreamID(streamName);
+            long numAddressesLoaded = runtime.getSequencerView()
+                    .getStreamAddressSpace(new StreamAddressRange(streamId, Address.MAX, Address.NON_ADDRESS)).size();
+            long tableSize = 0;
+            try (TxnContext txn = corfuStore.txn(namespace)) {
+                tableSize = txn.count(table);
+                txn.commit();
+            }
+            if (numAddressesLoaded > tableSize*3) {
+                log.warn("Giving up as I already loaded into table "+streamName+" addresses="+numAddressesLoaded);
+                return;
+            }
+
+            /*
+             * Random bytes are needed to bypass the compression.
+             * If we don't use random bytes, compression will reduce the size of the payload siginficantly
+             * increasing the time it takes to load data if we are trying to fill up disk.
+             */
+            log.warn("WARNING: Loading " + numItems + " items of " + itemSize +
+                    " size in " + batchSize + " batchSized transactions into " +
+                    namespace + "$" + tableName+" stream addressSpaceSize="+numAddressesLoaded);
+            int itemsRemaining = numItems;
+            try (TxnContext tx = corfuStore.txn(namespace)) {
+                tx.clear(table);
+            }
+            while (itemsRemaining > 0) {
+                long startTime = System.nanoTime();
+                try (TxnContext tx = corfuStore.txn(namespace)) {
+                    for (int j = batchSize; j > 0 && itemsRemaining > 0; j--, itemsRemaining--) {
+                        byte[] array = new byte[itemSize];
+                        new Random().nextBytes(array);
+                        ExampleSchemas.ExampleTableName dummyVal = ExampleSchemas
+                                .ExampleTableName.newBuilder().setNamespace(namespace+tableName)
+                                .setTableName(new String(array, StandardCharsets.UTF_16)).build();
+                        ExampleSchemas.ExampleTableName dummyKey = ExampleSchemas.ExampleTableName.newBuilder()
+                                .setNamespace(Integer.toString(loaderId))
+                                .setTableName(Integer.toString(j)).build();
+                        tx.putRecord(table, dummyKey, dummyVal, ExampleSchemas.ManagedMetadata.getDefaultInstance());
+                    }
+                    CorfuStoreMetadata.Timestamp address = tx.commit();
+                    long elapsedNs = System.nanoTime() - startTime;
+                    log.info("loadTable: "+streamName+" Txn at address "
+                            + address.getSequence() + " Items  now left " + itemsRemaining+
+                            " took "+TimeUnit.NANOSECONDS.toMillis(elapsedNs)+"ms");
+                    ILogData ld = runtime.getAddressSpaceView().peek(address.getSequence());
+                    log.info("Item size = {}", ld.getSizeEstimate());
+                }
+            }
+        } catch (Exception e) {
+            log.error("loadTable: {} {} {} {} failed. {} stack {}", namespace, tableName, numItems, batchSize,
+                    e, e.getStackTrace());
+        }
+    }
+
 }
 
