@@ -14,7 +14,9 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.proto.RpcCommon;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.concurrent.SingletonResource;
@@ -40,6 +42,8 @@ public class CompactorServiceTest extends AbstractViewTest {
     private static final int LIVENESS_TIMEOUT = 5000;
     private static final int WAIT_TO_KILL = 3000;
     private static final int COMPACTOR_SERVICE_INTERVAL = 10;
+    private static final int NUM_STREAMS = 10;
+    private static final int NUM_RECORDS = 50;
 
     private static final String CLIENT_NAME_PREFIX = "Client";
 
@@ -59,7 +63,7 @@ public class CompactorServiceTest extends AbstractViewTest {
      *
      * @return The generated layout.
      */
-    private Layout setup3NodeCluster() {
+    private Layout setup3NodeCluster(Double logSizeLimitPercentage) {
         sc0 = new ServerContextBuilder()
                 .setSingle(false)
                 .setServerRouter(new TestServerRouter(SERVERS.PORT_0))
@@ -67,6 +71,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                 .setMemory(false)
                 .setCacheSizeHeapRatio("0.0")
                 .setLogPath(com.google.common.io.Files.createTempDir().getAbsolutePath())
+                .setLogSizeLimitPercentage(Double.toString(logSizeLimitPercentage))
                 .build();
         sc1 = new ServerContextBuilder()
                 .setSingle(false)
@@ -75,6 +80,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                 .setMemory(false)
                 .setCacheSizeHeapRatio("0.0")
                 .setLogPath(com.google.common.io.Files.createTempDir().getAbsolutePath())
+                .setLogSizeLimitPercentage(Double.toString(logSizeLimitPercentage))
                 .build();
         sc2 = new ServerContextBuilder()
                 .setSingle(false)
@@ -83,6 +89,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                 .setMemory(false)
                 .setCacheSizeHeapRatio("0.0")
                 .setLogPath(com.google.common.io.Files.createTempDir().getAbsolutePath())
+                .setLogSizeLimitPercentage(Double.toString(logSizeLimitPercentage))
                 .build();
 
         addServer(SERVERS.PORT_0, sc0);
@@ -111,9 +118,8 @@ public class CompactorServiceTest extends AbstractViewTest {
         return l;
     }
 
-    @Before
-    public void testSetup() {
-        layout = setup3NodeCluster();
+    public void testSetup(Double logSizeLimitPercentage) {
+        layout = setup3NodeCluster(logSizeLimitPercentage);
         runtime0 = getRuntime(layout).connect();
         runtime1 = getRuntime(layout).connect();
         runtime2 = getRuntime(layout).connect();
@@ -270,6 +276,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     }
 
     private Map<String, Table<StringKey, StringKey, Message>> openedStreams = new HashMap<>();
+    private static String STREAM_NAME_PREFIX = "StreamName";
     private static String STREAM_KEY_PREFIX = "StreamKey";
     private static String STREAM_VALUE_PREFIX = "StreamValue";
 
@@ -291,6 +298,7 @@ public class CompactorServiceTest extends AbstractViewTest {
 
     private void populateStream(String streamName, int numRecords) {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+//            TransactionalContext.getRootContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
             for (int i = 0; i < numRecords; i++) {
                 txn.putRecord(openedStreams.get(streamName),
                         StringKey.newBuilder().setKey(STREAM_KEY_PREFIX + i).build(),
@@ -301,8 +309,11 @@ public class CompactorServiceTest extends AbstractViewTest {
         }
     }
 
+    private final static Double logSizeLimitPercentageFull = 100.0;
+
     @Test
     public void singleServerTest() {
+        testSetup(logSizeLimitPercentageFull);
         SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);
         MockCompactionTriggerPolicy mockCompactionTriggerPolicy1 = new MockCompactionTriggerPolicy();
 
@@ -327,6 +338,7 @@ public class CompactorServiceTest extends AbstractViewTest {
 
     @Test
     public void multipleServerTest() {
+        testSetup(logSizeLimitPercentageFull);
         SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);
         MockCompactionTriggerPolicy mockCompactionTriggerPolicy1 = new MockCompactionTriggerPolicy();
         SingletonResource<CorfuRuntime> runtimeSingletonResource2 = SingletonResource.withInitial(() -> runtime1);
@@ -359,6 +371,7 @@ public class CompactorServiceTest extends AbstractViewTest {
 
     @Test
     public void leaderFailureTest() {
+        testSetup(logSizeLimitPercentageFull);
         SingletonResource<CorfuRuntime> runtimeSingletonResource0 = SingletonResource.withInitial(() -> runtime0);
         MockCompactionTriggerPolicy mockCompactionTriggerPolicy0 = new MockCompactionTriggerPolicy();
         CompactorService compactorService0 = new CompactorService(sc0, runtimeSingletonResource0,
@@ -402,6 +415,7 @@ public class CompactorServiceTest extends AbstractViewTest {
 
     @Test
     public void nonLeaderFailureTest() {
+        testSetup(logSizeLimitPercentageFull);
         SingletonResource<CorfuRuntime> runtimeSingletonResource0 = SingletonResource.withInitial(() -> runtime0);
         MockCompactionTriggerPolicy mockCompactionTriggerPolicy0 = new MockCompactionTriggerPolicy();
         CompactorService compactorService0 = new CompactorService(sc0, runtimeSingletonResource0,
@@ -445,6 +459,7 @@ public class CompactorServiceTest extends AbstractViewTest {
 
     @Test
     public void clientsCheckpointing() {
+        testSetup(logSizeLimitPercentageFull);
         runtime2.getParameters().setCheckpointTriggerFreqMillis(COMPACTOR_SERVICE_INTERVAL);
         DistributedClientCheckpointer distributedClientCheckpointer0 = new DistributedClientCheckpointer(runtime2);
 
@@ -478,6 +493,7 @@ public class CompactorServiceTest extends AbstractViewTest {
 
     @Test
     public void serverCheckpointsUnopenedTables() {
+        testSetup(logSizeLimitPercentageFull);
         openStream(STREAM_KEY_PREFIX);
 
         runtime2.getParameters().setCheckpointTriggerFreqMillis(COMPACTOR_SERVICE_INTERVAL);
@@ -510,6 +526,7 @@ public class CompactorServiceTest extends AbstractViewTest {
 
     @Test
     public void checkpointFailureTest() {
+        testSetup(logSizeLimitPercentageFull);
         SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);
         MockCompactionTriggerPolicy mockCompactionTriggerPolicy1 = new MockCompactionTriggerPolicy();
 
@@ -546,5 +563,32 @@ public class CompactorServiceTest extends AbstractViewTest {
         assert(verifyCheckpointStatusTable(StatusType.IDLE, 1));
         //asserts that the server invoked checkpointing
         assert(!started_all);
+    }
+
+    private final static Double logSizeLimitPercentageLow = 0.000002;
+
+    @Test
+    public void quotaExceededTest() {
+        testSetup(logSizeLimitPercentageLow);
+        SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);
+        MockCompactionTriggerPolicy mockCompactionTriggerPolicy1 = new MockCompactionTriggerPolicy();
+
+        CompactorService compactorService1 = new CompactorService(sc0, runtimeSingletonResource1,
+                new InvokeCheckpointingMock(runtime0, cpRuntime0), mockCompactionTriggerPolicy1);
+        compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
+        compactorService1.setLivenessTimeout(LIVENESS_TIMEOUT);
+        mockCompactionTriggerPolicy1.setShouldTrigger(true);
+
+        try {
+            while (!pollForFinishCheckpointing()) {
+                TimeUnit.MILLISECONDS.sleep(COMPACTOR_SERVICE_INTERVAL);
+            }
+        } catch (InterruptedException e) {
+            log.warn("Sleep interrupted, ", e);
+        }
+
+        assert(verifyManagerStatus(StatusType.COMPLETED));
+        assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
+        assert(verifyCheckpointTable());
     }
 }

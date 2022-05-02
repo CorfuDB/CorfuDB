@@ -27,6 +27,7 @@ import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.object.transactions.TransactionalContext.PreCommitListener;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
 
@@ -123,6 +124,10 @@ public abstract class AbstractTransactionalContext implements
     @Getter
     @Setter
     private TxnContext txnContext;
+
+    @Getter
+    @Setter
+    private CorfuMessage.PriorityLevel priorityLevel;
 
     @Getter
     private final WriteSetInfo writeSetInfo = new WriteSetInfo();

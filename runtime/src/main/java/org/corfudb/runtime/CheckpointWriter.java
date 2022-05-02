@@ -17,6 +17,8 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.view.CacheOption;
 import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.runtime.view.TableRegistry;
@@ -165,6 +167,7 @@ public class CheckpointWriter<T extends StreamingMap> {
                 .snapshot(snapshotTimestamp)
                 .build()
                 .begin();
+        TransactionalContext.getRootContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
 
         log.info("appendCheckpoint: Started checkpoint for {} at snapshot {}", streamId, snapshotTimestamp);
 
