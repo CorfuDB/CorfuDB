@@ -22,7 +22,9 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.proto.RpcCommon;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
 import org.slf4j.Logger;
@@ -149,6 +151,7 @@ public class CompactorLeaderServices {
             List<TableName> tableNames = new ArrayList<>(corfuStore.listTables(null));
             CheckpointingStatus idleStatus = buildCheckpointStatus(StatusType.IDLE);
 
+            TransactionalContext.getRootContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
             txn.clear(checkpointingStatusTable);
             txn.clear(activeCheckpointsTable);
             //Populate CheckpointingStatusTable
@@ -173,7 +176,7 @@ public class CompactorLeaderServices {
 
             txn.commit();
         } catch (Exception e) {
-            syslog.error("triggerCheckpoint hit an exception {}. Stack Trace {}", e, e.getStackTrace());
+            syslog.error("triggerDistributedCheckpoint hit an exception {}. Stack Trace {}", e, e.getStackTrace());
             return false;
         }
         return true;
@@ -292,6 +295,7 @@ public class CompactorLeaderServices {
                         DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
                         DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
 
+                TransactionalContext.getRootContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
                 txn.putRecord(compactionManagerTable,
                         DistributedCompactor.COMPACTION_MANAGER_KEY,
                         buildCheckpointStatus(StatusType.STARTED_ALL,
@@ -311,6 +315,7 @@ public class CompactorLeaderServices {
             CheckpointingStatus tableStatus = txn.getRecord(
                     checkpointingStatusTable, table).getPayload();
             if (tableStatus.getStatus() != StatusType.COMPLETED && tableStatus.getStatus() != StatusType.FAILED) {
+                TransactionalContext.getRootContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
                 txn.putRecord(checkpointingStatusTable,
                         table,
                         buildCheckpointStatus(StatusType.FAILED),
@@ -322,6 +327,8 @@ public class CompactorLeaderServices {
                         buildCheckpointStatus(StatusType.FAILED),
                         null);
                 txn.commit();
+                syslog.warn("Finished compaction cycle. FAILED due to table: {}${}", table.getNamespace(),
+                        table.getTableName());
                 return false;
             } else {
                 txn.commit();
@@ -377,6 +384,7 @@ public class CompactorLeaderServices {
                     tableNames.size());
             MicroMeterUtils.time(Duration.ofMillis(totalTimeElapsed), "compaction.total.timer",
                     "nodeEndpoint", nodeEndpoint);
+            TransactionalContext.getRootContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
             txn.putRecord(compactionManagerTable, DistributedCompactor.COMPACTION_MANAGER_KEY,
                     buildCheckpointStatus(cpFailed ? StatusType.FAILED : StatusType.COMPLETED,
                             tableNames.size(), totalTimeElapsed),
