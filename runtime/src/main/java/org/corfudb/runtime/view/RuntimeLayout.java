@@ -14,6 +14,7 @@ import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 
 import javax.annotation.Nonnull;
@@ -101,12 +102,11 @@ public class RuntimeLayout {
      */
     private IClient getClient(final Class<? extends IClient> clientClass,
                               final String endpoint) {
-        return senderClientMap.compute(clientClass, (senderClass, stringEntryMap) -> {
+        IClient returnClient = senderClientMap.compute(clientClass, (senderClass, stringEntryMap) -> {
             Map<String, IClient> endpointClientMap = stringEntryMap;
             if (endpointClientMap == null) {
                 endpointClientMap = new HashMap<>();
             }
-
             endpointClientMap.computeIfAbsent(endpoint, s -> {
                 try {
                     Constructor<? extends IClient> ctor =
@@ -122,6 +122,15 @@ public class RuntimeLayout {
             });
             return endpointClientMap;
         }).get(endpoint);
+
+        //Thread priority overrides ClientPriority in a TransactionalContext
+        if (TransactionalContext.isInTransaction() &&
+                TransactionalContext.getRootContext().getPriorityLevel() != null) {
+            log.info("PriorityLevel: {}", TransactionalContext.getRootContext().getPriorityLevel());
+            returnClient.setPriorityLevel(TransactionalContext.getRootContext().getPriorityLevel());
+        }
+
+        return returnClient;
     }
 
     public BaseClient getBaseClient(String endpoint) {
