@@ -223,9 +223,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
                     DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
                     DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
-            System.out.println("ManagerStatus: " + (managerStatus == null ? "null" : managerStatus.getStatus()));
             if (managerStatus.getStatus() == targetStatus) {
-                System.out.println("verifyManagerStatus: returning true");
                 return true;
             }
         }
@@ -243,8 +241,6 @@ public class DistributedCompactorTests extends AbstractViewTest {
             for (TableName table : tableNames) {
                 CheckpointingStatus cpStatus = (CheckpointingStatus) txn.getRecord(
                         DistributedCompactor.CHECKPOINT_STATUS_TABLE_NAME, table).getPayload();
-                System.out.println(table.getTableName() +
-                        " : " + cpStatus.getStatus() + " clientId: " + cpStatus.getClientName());
                 if (cpStatus.getStatus() != targetStatus) {
                     failed++;
                 }

@@ -20,8 +20,10 @@ import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.proto.RpcCommon.TokenMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.SMRObject;
@@ -258,6 +260,7 @@ public class DistributedCompactor {
                                     .setSyncHeartbeat(currentStatus.getSyncHeartbeat() + 1)
                                     .setIsClientTriggered(currentStatus.getIsClientTriggered())
                                     .build();
+                    TransactionalContext.getRootContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
                     txn.putRecord(activeCheckpointsTable, tableName, newStatus, null);
                     txn.commit();
                 } catch (Exception e) {
@@ -383,6 +386,7 @@ public class DistributedCompactor {
                 final CorfuStoreEntry<TableName, CheckpointingStatus, Message> tableToChkpt =
                         txn.getRecord(checkpointingStatusTable, tableName);
                 if (tableToChkpt.getPayload().getStatus() == StatusType.IDLE) {
+                    TransactionalContext.getRootContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
                     txn.putRecord(checkpointingStatusTable,
                             tableName,
                             CheckpointingStatus.newBuilder()
@@ -460,6 +464,7 @@ public class DistributedCompactor {
         final int maxRetries = 5;
         for (int retry = 0; retry < maxRetries; retry++) {
             try (TxnContext endTxn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                TransactionalContext.getRootContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
                 endTxn.putRecord(checkpointingStatusTable, tableName, checkpointStatus, null);
                 if (checkpointStatus.getStatus() != CheckpointingStatus.StatusType.COMPLETED) {
                     log.error("clientCheckpointer: Marking checkpointing as failed on table {}", tableName);
