@@ -9,6 +9,7 @@
 (import org.corfudb.runtime.clients.LogUnitClient)
 (import org.corfudb.runtime.clients.ManagementClient)
 (import org.corfudb.util.NodeLocator)
+(import java.time.Duration)
 (import org.corfudb.runtime.CorfuRuntime$CorfuRuntimeParameters)
 (use 'clojure.reflect)
 
@@ -125,6 +126,7 @@ The variable *r holds the last runtime obtrained, and *o holds the last router o
                          (.port (get-port endpoint))
                          (.build))
           (-> (CorfuRuntime$CorfuRuntimeParameters/builder)
+              (.connectionTimeout (Duration/ofMillis (Integer/parseInt (or (.. opts (get "--connection-timeout")) "500"))))
               (.tlsEnabled (.. opts (get "--enable-tls")))
               (.keyStore (.. opts (get "--keystore")))
               (.ksPasswordFile (.. opts (get "--keystore-password-file")))

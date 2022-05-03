@@ -8,9 +8,10 @@
 (import java.util.UUID)
 (def usage "corfu_bootstrap_cluster, setup the Corfu cluster from nodes that have NOT been previously bootstrapped.
 Usage:
-  corfu_bootstrap_cluster -l <layout> [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] [-g -o <username_file> -j <password_file>]]
+  corfu_bootstrap_cluster -l <layout> --connection-timeout <timeout> [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] [-g -o <username_file> -j <password_file>]]
 Options:
-  -l <layout>, --layout <layout>              JSON layout file to be bootstrapped.
+  -l <layout>, --layout <layout>                                                         JSON layout file to be bootstrapped.
+  --connection-timeout <timeout>                                                         Connection timeout in milliseconds.
   -e, --enable-tls                                                                       Enable TLS.
   -u <keystore>, --keystore=<keystore>                                                   Path to the key store.
   -f <keystore_password_file>, --keystore-password-file=<keystore_password_file>         Path to the file containing the key store password.
@@ -42,12 +43,12 @@ Options:
                       (do
                         (doseq [server (.getLayoutServers new-layout)]
                            (do
+                             (println  (format "Installing layout for %s" server))
                              (let [router (get-router server localcmd)]
-                               (.get (.bootstrapLayout (get-layout-client router (.getEpoch new-layout) (.getClusterId new-layout)) new-layout))
-                               (.get (.bootstrapManagement (get-management-client router (.getEpoch new-layout) (.getClusterId new-layout)) new-layout))
+                               (.join (.bootstrapLayout (get-layout-client router (.getEpoch new-layout) (.getClusterId new-layout)) new-layout))
+                               (.join (.bootstrapManagement (get-management-client router (.getEpoch new-layout) (.getClusterId new-layout)) new-layout))
                             )))
-                        (println "New layout installed!")
-                        )))))
+                        (println "New layout installed!"))))))
 
 ; determine whether to read or write
 (cond (.. localcmd (get "--layout")) (bootstrap-cluster (.. localcmd (get "--layout")))
