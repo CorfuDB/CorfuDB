@@ -26,8 +26,7 @@ public class CorfuStoreCompactor {
     private final CorfuRuntime corfuRuntime;
     private final CorfuRuntime cpRuntime;
     private final CorfuStore corfuStore;
-    private final String thisNodeUuid;
-    private final StringKey previousTokenKey;
+    private final StringKey previousTokenKey = StringKey.newBuilder().setKey("previousTokenKey").build();
 
     private final int CORFU_LOG_TRIM_ERROR = 2;
 
@@ -42,23 +41,6 @@ public class CorfuStoreCompactor {
         this.persistedCacheRoot = persistedCacheRoot;
 
         corfuStore = new CorfuStore(corfuRuntime);
-
-        try {
-            this.thisNodeUuid = CorfuRuntimeHelper.getThisNodeUuid();
-            this.previousTokenKey = StringKey.newBuilder().setKey("previousTokenKey").build();
-        } catch(Exception e) {
-            throw new RuntimeException("Failed to get node UUID", e);
-        }
-    }
-
-    private String getCheckpointMapValue(CorfuTable<StringKey, TokenMsg> checkpointMap) {
-        return checkpointMap.entrySet().stream()
-                .map(entry -> new StringBuilder("{component: ")
-                        .append(entry.getKey().getKey().toString())
-                        .append(", token: ")
-                        .append(entry.getValue())
-                        .append("}"))
-                .collect(Collectors.joining(", "));
     }
 
     void checkpoint() {
@@ -78,13 +60,11 @@ public class CorfuStoreCompactor {
         try {
             trimLog();
         } catch (WrongEpochException wee) {
-            // TODO: Find a way to log this to syslog
             log.error(
                     "Compactor: Trim failed, ignore the WrongEpochException" +
                             CORFU_LOG_TRIM_ERROR, wee);
         } catch (Throwable t) {
             String msg = "Compactor: Trim failed!";
-            // TODO: Find a way to log this to syslog with error code
             log.error(msg, CORFU_LOG_TRIM_ERROR, t);
             throw new RuntimeException(msg, t);
         }
@@ -108,7 +88,7 @@ public class CorfuStoreCompactor {
         }
 
         if (thisTrimToken == null) {
-            log.warn("Trim token is not present... skipping.");
+            log.warn("Trim token is not present... skipping");
             return;
         }
 
@@ -121,10 +101,9 @@ public class CorfuStoreCompactor {
         corfuRuntime.getAddressSpaceView().gc();
         final long endTime = System.nanoTime();
 
-        log.info("Trim completed, elapsed({}s), log address up to {} (exclusive).",
+        log.info("Trim completed, elapsed({}s), log address up to {} (exclusive)",
                     TimeUnit.NANOSECONDS.toSeconds(endTime - startTime), thisTrimToken.getSequence());
 
-        Table<StringKey, TokenMsg, Message> checkpointMap = CorfuStoreCompactorMain.getCheckpointMap();
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             log.info("Current checkpoint map: {}", txn.getRecord(previousTrimTokenTable, previousTokenKey));
             txn.commit();
@@ -132,7 +111,7 @@ public class CorfuStoreCompactor {
     }
 
     public void updateThisNodeTrimToken() {
-        log.info("Start to update trim token for node {}.", thisNodeUuid);
+        log.info("Start to update trim token");
 
         // Get the smallest checkpoint address for trimming that has valid data to trim.
         final Table<StringKey, TokenMsg, Message> checkpointMap = CorfuStoreCompactorMain.getCheckpointMap();
@@ -142,7 +121,7 @@ public class CorfuStoreCompactor {
             txn.commit();
         }
         if (ckToken == null) {
-            log.warn("No values in the checkpoint map.");
+            log.warn("No values in the checkpoint map");
             return;
         }
 
@@ -151,10 +130,9 @@ public class CorfuStoreCompactor {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             TokenMsg nodeTokenVal = txn.getRecord(checkpointMap, DistributedCompactor.CHECKPOINT_KEY).getPayload();
             if (Objects.equals(nodeTokenVal, ckToken)) {
-                // TODO: How to log this to syslog
                 log.error(
-                        "ERROR: the trim token of node {} hasn't moved forward " +
-                                "over the last compaction cycle.", thisNodeUuid);
+                        "ERROR: the trim token hasn't moved forward " +
+                                "over the last compaction cycle");
             }
             txn.putRecord(previousTrimTokenTable, previousTokenKey, ckToken, null);
             txn.commit();
@@ -162,6 +140,6 @@ public class CorfuStoreCompactor {
             log.warn("Another node updated the trim token");
         }
 
-        log.info("New trim token {} is updated for node {}.", ckToken, thisNodeUuid);
+        log.info("New trim token {} is updated", ckToken);
     }
 }

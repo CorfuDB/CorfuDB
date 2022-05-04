@@ -30,10 +30,6 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
 public class DistributedCompactorTests extends AbstractViewTest {
-    private static final int WAIT_FOR_FINISH_CYCLE = 10;
-    private static final int WAIT_IN_SYNC_STATE = 5000;
-    private static final int LIVENESS_TIMEOUT = 1000;
-    private static final String CLIENT_NAME_PREFIX = "Client";
 
     private CorfuRuntime runtime0 = null;
     private CorfuRuntime runtime1 = null;
@@ -44,7 +40,11 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
     private CorfuStore corfuStore = null;
 
-    private Map<String, Table<StringKey, StringKey, Message>> openedStreams = new HashMap<>();
+    private static final int WAIT_FOR_FINISH_CYCLE = 10;
+    private static final int WAIT_IN_SYNC_STATE = 5000;
+    private static final int LIVENESS_TIMEOUT = 1000;
+    private static final String CLIENT_NAME_PREFIX = "Client";
+    private static String STREAM_NAME = "streamNameA";
 
     /**
      * Generates and bootstraps a 3 node cluster in disk mode.
@@ -186,37 +186,6 @@ public class DistributedCompactorTests extends AbstractViewTest {
         }
     }
 
-    private Table<StringKey, StringKey, Message> openStream(CorfuStore corfuStore, String streamName) {
-        try {
-            Table<StringKey, StringKey, Message> table = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    streamName,
-                    StringKey.class,
-                    StringKey.class,
-                    null,
-                    TableOptions.fromProtoSchema(StringKey.class));
-            openedStreams.put(streamName, table);
-            return table;
-        } catch (Exception e) {
-            log.error("Exception while opening tables ", e);
-        }
-        return null;
-    }
-
-    private static String STREAM_KEY_PREFIX = "StreamKey";
-    private static String STREAM_VALUE_PREFIX = "StreamValue";
-
-    private void populateStream(String streamName, int numRecords) {
-        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            for (int i = 0; i < numRecords; i++) {
-                txn.putRecord(openedStreams.get(streamName),
-                        StringKey.newBuilder().setKey(STREAM_KEY_PREFIX + i).build(),
-                        StringKey.newBuilder().setKey(STREAM_VALUE_PREFIX + i).build(),
-                        null);
-            }
-            txn.commit();
-        }
-    }
-
     private boolean verifyManagerStatus(StatusType targetStatus) {
         openCompactionManagerTable();
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -259,15 +228,8 @@ public class DistributedCompactorTests extends AbstractViewTest {
             txn.commit();
         }
 
-        if (token != null) {
-            return true;
-        }
-        return false;
+        return (token != null);
     }
-
-    private static String STREAM_NAME_PREFIX = "streamName";
-    private static final int NUM_RECORDS = 50;
-    private static final int TIMEOUT = 45;
 
     @Test
     public void initTest() {
@@ -289,7 +251,6 @@ public class DistributedCompactorTests extends AbstractViewTest {
         CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime1, SERVERS.ENDPOINT_1);
         compactorLeaderServices2.setLeader(true);
 
-        ExecutorService scheduler = Executors.newFixedThreadPool(2);
         boolean init1 = compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
         boolean init2 = compactorLeaderServices2.trimAndTriggerDistributedCheckpointing();
 
@@ -442,8 +403,6 @@ public class DistributedCompactorTests extends AbstractViewTest {
         assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
     }
 
-    private static String STREAM_NAME = "streamNameA";
-
     @Test
     public void validateLivenessFailureTest() {
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, SERVERS.ENDPOINT_0);
@@ -528,7 +487,8 @@ public class DistributedCompactorTests extends AbstractViewTest {
                 txn.delete(DistributedCompactor.ACTIVE_CHECKPOINTS_TABLE_NAME, tableName);
                 txn.commit();
             } catch (Exception e) {
-                log.error("Unable to mark status as COMPLETED for table: {}, {} StackTrace: {}", tableName, e, e.getStackTrace());
+                log.error("Unable to mark status as COMPLETED for table: {}, {} StackTrace: {}",
+                        tableName, e, e.getStackTrace());
             }
         }
 
