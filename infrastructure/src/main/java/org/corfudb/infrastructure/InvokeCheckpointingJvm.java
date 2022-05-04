@@ -13,6 +13,7 @@ import java.util.concurrent.TimeoutException;
 public class InvokeCheckpointingJvm implements IInvokeCheckpointing {
 
     private static final long CONN_RETRY_DELAY_MILLISEC = 500;
+    private static final int MAX_COMPACTION_RETRIES = 8;
     private final ServerContext serverContext;
     private volatile Process checkpointerProcess;
     private Logger syslog;
@@ -24,7 +25,6 @@ public class InvokeCheckpointingJvm implements IInvokeCheckpointing {
 
     @Override
     public void invokeCheckpointing() {
-        int MAX_COMPACTION_RETRIES = 8;
         for (int i = 1; i <= MAX_COMPACTION_RETRIES; i++) {
             try {
                 String compactorScriptPath = (String) serverContext.getCompactorScriptPath();
@@ -71,7 +71,7 @@ public class InvokeCheckpointingJvm implements IInvokeCheckpointing {
 
     @Override
     public boolean isRunning() {
-        return (this.checkpointerProcess != null && this.checkpointerProcess.isAlive());
+        return this.checkpointerProcess != null && this.checkpointerProcess.isAlive();
     }
 
     @Override

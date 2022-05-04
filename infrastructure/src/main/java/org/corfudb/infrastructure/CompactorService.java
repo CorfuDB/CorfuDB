@@ -45,7 +45,6 @@ public class CompactorService implements ManagementService {
     private CompactorLeaderServices compactorLeaderServices;
     private CorfuStore corfuStore;
 
-    private long epoch = 0;
     private boolean invokedJvm = false;
     private Logger syslog;
 
@@ -57,7 +56,6 @@ public class CompactorService implements ManagementService {
                      @NonNull IInvokeCheckpointing checkpointerJvmManager,
                      @NonNull ICompactionTriggerPolicy compactionTriggerPolicy) {
         this.serverContext = serverContext;
-        //serverContext.getLocalEndpoint()
         this.runtimeSingletonResource = runtimeSingletonResource;
         this.orchestratorThread = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
@@ -94,6 +92,12 @@ public class CompactorService implements ManagementService {
         );
     }
 
+    /**
+     * Invokes and cleans up the CorfuStoreCompactor jvm based on the status of CompactionManager
+     * Additionally, If the current node is the leader,
+     *      a. Invokes ValidateLiveness() to keep track of checkpointing progress by each client
+     *      b. Triggers the distributed compaction cycle based on the TriggerPolicy
+     */
     private void runOrchestrator() {
         boolean isLeader = isNodePrimarySequencer(updateLayoutAndGet());
         compactorLeaderServices.setLeader(isLeader);
@@ -107,11 +111,10 @@ public class CompactorService implements ManagementService {
                 if (managerStatus.getStatus() == StatusType.FAILED || managerStatus.getStatus() == StatusType.COMPLETED) {
                     checkpointerJvmManager.shutdown();
                     invokedJvm = false;
-                } else if (managerStatus.getStatus() == StatusType.STARTED_ALL) {
-                    if (!checkpointerJvmManager.isRunning() && !invokedJvm) {
-                        checkpointerJvmManager.invokeCheckpointing();
-                        invokedJvm = true;
-                    }
+                } else if (managerStatus.getStatus() == StatusType.STARTED_ALL &&  !checkpointerJvmManager.isRunning()
+                        && !invokedJvm) {
+                    checkpointerJvmManager.invokeCheckpointing();
+                    invokedJvm = true;
                 }
             }
 
@@ -133,7 +136,6 @@ public class CompactorService implements ManagementService {
         Layout layout = getCorfuRuntime()
                 .invalidateLayout()
                 .join();
-        this.epoch = layout.getEpoch();
         return layout;
     }
 
