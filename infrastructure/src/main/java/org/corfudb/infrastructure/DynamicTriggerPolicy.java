@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure;
 
 import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
@@ -11,7 +10,11 @@ import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
@@ -24,8 +27,6 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
 
     private final List<UUID> sensitiveStreams = new ArrayList<>();
     private Map<UUID, Long> previousSensitiveStreamsSize = new HashMap<>();
-    private Long previousAddressSpaceSize = Long.MAX_VALUE;
-    private Long previousTriggerMillis = Long.valueOf(0);
     private CorfuRuntime corfuRuntime;
     private Logger syslog;
 
@@ -86,13 +87,12 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
     public boolean shouldTrigger(long interval) {
         final long currentTime = System.currentTimeMillis();
         final long timeSinceLastCycleMillis = currentTime - lastCompactionCycleStartTS;
-        if (timeSinceLastCycleMillis > interval) {
-            if (lastAddressSpaceSizeAfterTrim == 0) { // no record of previous trim & safe trim period elapsed
-                syslog.info("DynamicTriggerPolicy: Trigger as elapsedTime {} > safeTrimPeriod {}",
-                        TimeUnit.MILLISECONDS.toSeconds(timeSinceLastCycleMillis),
-                        TimeUnit.MILLISECONDS.toSeconds(interval));
-                return true;
-            }
+        if (timeSinceLastCycleMillis > interval && lastAddressSpaceSizeAfterTrim == 0) {
+            // no record of previous trim & safe trim period elapsed when lastAddressSpaceSizeAfterTrim is 0
+            syslog.info("DynamicTriggerPolicy: Trigger as elapsedTime {} > safeTrimPeriod {}",
+                    TimeUnit.MILLISECONDS.toSeconds(timeSinceLastCycleMillis),
+                    TimeUnit.MILLISECONDS.toSeconds(interval));
+            return true;
         }
 
         if (timeSinceLastCycleMillis > interval*2) {
