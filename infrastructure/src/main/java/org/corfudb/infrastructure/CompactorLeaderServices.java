@@ -65,7 +65,7 @@ public class CompactorLeaderServices {
     private long epoch;
     private Logger syslog;
 
-    private static class LivenessValidator {
+    private static class LivenessValidatorHelper {
         @Getter
         @Setter
         private static long prevIdleCount = -1;
@@ -121,8 +121,8 @@ public class CompactorLeaderServices {
 
     /**
      * The leader initiates the Distributed checkpointer
-     * First, trim the log until the trimtoken saved in checkpoint table
-     * Mark the start of the compaction cycle and also populate CheckpointStatusTable with all the
+     * Trims the log till 'trimtoken' saved in the checkpoint table
+     * Mark the start of the compaction cycle and populate CheckpointStatusTable with all the
      * tables in the registry.
      * @return
      */
@@ -134,7 +134,7 @@ public class CompactorLeaderServices {
         }
         trimLog();
         if (DistributedCompactor.isCheckpointFrozen(corfuStore, checkpointTable)) {
-            syslog.warn("Will not trigger checkpointing since checkpointing has been frozen");
+            syslog.warn("Will not start checkpointing since checkpointing has been frozen");
             return false;
         }
 
@@ -213,7 +213,7 @@ public class CompactorLeaderServices {
             handleNoActiveCheckpointers(timeout, currentTime);
         }
         for (TableName table : tableNames) {
-            LivenessValidator.clear();
+            LivenessValidatorHelper.clear();
             String streamName = TableRegistry.getFullyQualifiedTableName(table.getNamespace(), table.getTableName());
             UUID streamId = CorfuRuntime.getCheckpointStreamIdFromName(streamName);
             long currentStreamTail = corfuRuntime.getSequencerView()
@@ -227,7 +227,7 @@ public class CompactorLeaderServices {
                 syslog.warn("Unable to acquire table status");
             }
             if (readCache.containsKey(table)) {
-                //previousStatus.first is ValidityCounter
+                //previousStatus.first is syncHeartbeat
                 //previousStatus.second is StreamTail
                 Tuple<Long, Long> previousStatus = readCache.get(table).first;
                 if (previousStatus.second < currentStreamTail) {
@@ -235,11 +235,9 @@ public class CompactorLeaderServices {
                 } else if (previousStatus.first < syncHeartBeat) {
                     readCache.put(table, Tuple.of(Tuple.of(syncHeartBeat, previousStatus.second), currentTime));
                 } else if (previousStatus.second == currentStreamTail || previousStatus.first == syncHeartBeat) {
-                    if (currentTime - readCache.get(table).second > timeout) {
-                        if (!handleSlowCheckpointers(table)) {
-                            readCache.clear();
-                            return;
-                        }
+                    if ((currentTime - readCache.get(table).second > timeout) && !handleSlowCheckpointers(table)) {
+                        readCache.clear();
+                        return;
                     }
                 }
             } else {
@@ -277,17 +275,18 @@ public class CompactorLeaderServices {
             syslog.warn("Unable to acquire Manager Status");
         }
 
+        //Find the number of tables with IDLE status
         long idleCount = findCheckpointProgress();
-        if (LivenessValidator.getPrevActiveTime() < 0 || idleCount < LivenessValidator.getPrevIdleCount()) {
+        if (LivenessValidatorHelper.getPrevActiveTime() < 0 || idleCount < LivenessValidatorHelper.getPrevIdleCount()) {
             syslog.trace("Checkpointing in progress...");
-            LivenessValidator.setPrevIdleCount(idleCount);
-            LivenessValidator.setPrevActiveTime(currentTime);
-        } else if (idleCount == 0 || (currentTime - LivenessValidator.getPrevActiveTime() > timeout &&
+            LivenessValidatorHelper.setPrevIdleCount(idleCount);
+            LivenessValidatorHelper.setPrevActiveTime(currentTime);
+        } else if (idleCount == 0 || (currentTime - LivenessValidatorHelper.getPrevActiveTime() > timeout &&
                 managerStatus != null && managerStatus.getStatus() == StatusType.STARTED_ALL)) {
             readCache.clear();
-            LivenessValidator.clear();
+            LivenessValidatorHelper.clear();
             finishCompactionCycle();
-        } else if (currentTime - LivenessValidator.getPrevActiveTime() > timeout &&
+        } else if (currentTime - LivenessValidatorHelper.getPrevActiveTime() > timeout &&
                 managerStatus != null && managerStatus.getStatus() == StatusType.STARTED) {
             syslog.info("No active client checkpointers available...");
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -303,7 +302,7 @@ public class CompactorLeaderServices {
                                 managerStatus.getTimeTaken()),
                         null);
                 txn.commit();
-                LivenessValidator.clear();
+                LivenessValidatorHelper.clear();
             } catch (Exception e) {
                 syslog.warn("Exception in handleNoActiveCheckpointers, e: {}. StackTrace: {}", e, e.getStackTrace());
             }
@@ -365,8 +364,6 @@ public class CompactorLeaderServices {
             List<TableName> tableNames = new ArrayList<TableName>(txn.keySet(checkpointingStatusTable)
                     .stream().collect(Collectors.toList()));
 
-            RpcCommon.TokenMsg minToken = (RpcCommon.TokenMsg) txn.getRecord(DistributedCompactor.CHECKPOINT,
-                    DistributedCompactor.CHECKPOINT_KEY).getPayload();
             boolean cpFailed = false;
 
             for (TableName table : tableNames) {
@@ -377,7 +374,7 @@ public class CompactorLeaderServices {
                 if (tableStatus.getStatus() != StatusType.COMPLETED) {
                     cpFailed = true;
                 }
-                syslog.info("{}", str);
+//                syslog.info("{}", str);
             }
             long totalTimeElapsed = System.currentTimeMillis() - managerStatus.getTimeTaken();
             syslog.info("Total time taken for the compaction cycle: {}ms for {} tables", totalTimeElapsed,

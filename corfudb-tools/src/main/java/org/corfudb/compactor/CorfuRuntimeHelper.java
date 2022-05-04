@@ -19,21 +19,16 @@ public class CorfuRuntimeHelper {
 
     private CorfuRuntime corfuRuntime;
 
-    private static final String NODE_UUID_PATH = "/common/configs/serial_number";
-    private static final String UUID_KEY = "serial";
-    private static final String NODE_UUID_PREFIX = UUID_KEY + "=";
-
     private static int maxWriteSize = Integer.MAX_VALUE;
 
-    private static int bulkReadSize = 10;
+    private int bulkReadSize;
 
-    private static volatile String runtimeKeyStore;
-    private static volatile String runtimeKeystorePasswordFile;
-    private static volatile String runtimeTrustStore;
-    private static volatile String runtimeTrustStorePasswordFile;
-    private static volatile boolean enableTls = false;
+    private volatile String runtimeKeyStore;
+    private volatile String runtimeKeystorePasswordFile;
+    private volatile String runtimeTrustStore;
+    private volatile String runtimeTrustStorePasswordFile;
+    private volatile boolean enableTls;
 
-    public static final String PREVIOUS_TOKEN = "previousTokenTable";
     public static final String CHECKPOINT = "checkpoint";
 
     private static final int systemDownHandlerTriggerLimit = 100;  // Corfu default is 20
@@ -45,8 +40,9 @@ public class CorfuRuntimeHelper {
     };
 
     CorfuRuntimeHelper(List<String> hostnames, int port, int maxWriteSize, int bulkReadSize) {
-        CorfuRuntimeHelper.enableTls = false;
-        CorfuRuntimeHelper.bulkReadSize = bulkReadSize;
+        this.enableTls = false;
+        this.bulkReadSize = bulkReadSize;
+        this.maxWriteSize = maxWriteSize;
         log.info("Set maxWriteSize to {}, bulkReadSize to {}, no tls", maxWriteSize, bulkReadSize);
         connectCorfuRuntime(hostnames, port);
     }
@@ -56,13 +52,13 @@ public class CorfuRuntimeHelper {
                        String runtimeKeystorePasswordFile,
                        String runtimeTrustStore,
                        String runtimeTrustStorePasswordFile) {
-        CorfuRuntimeHelper.maxWriteSize = maxWriteSize;
-        CorfuRuntimeHelper.bulkReadSize = bulkReadSize;
-        CorfuRuntimeHelper.runtimeKeyStore = runtimeKeyStore;
-        CorfuRuntimeHelper.runtimeKeystorePasswordFile = runtimeKeystorePasswordFile;
-        CorfuRuntimeHelper.runtimeTrustStore = runtimeTrustStore;
-        CorfuRuntimeHelper.runtimeTrustStorePasswordFile = runtimeTrustStorePasswordFile;
-        CorfuRuntimeHelper.enableTls = true;
+        this.maxWriteSize = maxWriteSize;
+        this.bulkReadSize = bulkReadSize;
+        this.runtimeKeyStore = runtimeKeyStore;
+        this.runtimeKeystorePasswordFile = runtimeKeystorePasswordFile;
+        this.runtimeTrustStore = runtimeTrustStore;
+        this.runtimeTrustStorePasswordFile = runtimeTrustStorePasswordFile;
+        this.enableTls = true;
         log.info("Set maxWriteSize to {}, bulkReadSize to {} with TLS", maxWriteSize, bulkReadSize);
         connectCorfuRuntime(hostnames, port);
     }
@@ -72,7 +68,7 @@ public class CorfuRuntimeHelper {
         String connectionString = constructConnectionString(hostnames, port);
         corfuRuntime = CorfuRuntime.fromParameters(params);
         corfuRuntime.parseConfigurationString(connectionString).connect();
-        log.info("Successfully connected to {}", hostnames.toString());
+        log.info("Successfully connected to {}", hostnames);
     }
 
     private CorfuRuntimeParameters buildCorfuRuntimeParameters() {
@@ -104,30 +100,6 @@ public class CorfuRuntimeHelper {
 
     CorfuRuntime getRuntime() {
         return corfuRuntime;
-    }
-
-    /**
-     * Read the UUID of this node from UUID file.
-     *
-     * @return UUID of this node.
-     */
-    static String getThisNodeUuid() throws Exception {
-        File f = new File(NODE_UUID_PATH);
-        List<String> lines = Files.readAllLines(f.toPath());
-        if (lines.size() != 1) {
-            throw new RuntimeException("No serial number found in " + NODE_UUID_PATH);
-        }
-
-        String nodeIdString = lines.get(0);
-
-        if (!nodeIdString.startsWith(NODE_UUID_PREFIX)) {
-            throw new RuntimeException("Invalid serial number in " + NODE_UUID_PATH);
-        }
-
-        nodeIdString = nodeIdString.substring(NODE_UUID_PREFIX.length()).trim();
-
-        log.info("Get this node UUID = {}", nodeIdString);
-        return nodeIdString;
     }
 
     private String constructConnectionString(List<String> hostnames, int port) {

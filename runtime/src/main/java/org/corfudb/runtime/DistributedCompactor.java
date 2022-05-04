@@ -59,8 +59,6 @@ public class DistributedCompactor {
     private final String persistedCacheRoot;
     private final boolean isClient;
 
-    private KeyDynamicProtobufSerializer keyDynamicProtobufSerializer;
-
     private final String clientName;
 
     public static final long CONN_RETRY_DELAY_MILLISEC = 500;
@@ -68,13 +66,16 @@ public class DistributedCompactor {
     public static final String CHECKPOINT_STATUS_TABLE_NAME = "CheckpointStatusTable";
     public static final String ACTIVE_CHECKPOINTS_TABLE_NAME = "ActiveCheckpoints";
 
-    public static final String NODE_TOKEN = "node-token";
     public static final String CHECKPOINT = "checkpoint";
-
-    //TODO: have a special table list if required - like ALL_OPENED_CLUSTERING_STREAMS
 
     public static final StringKey COMPACTION_MANAGER_KEY = StringKey.newBuilder().setKey("CompactionManagerKey").build();
     public static final StringKey CHECKPOINT_KEY = StringKey.newBuilder().setKey("minCheckpointToken").build();
+
+    private CorfuStore corfuStore = null;
+    private Table<StringKey, CheckpointingStatus, Message> compactionManagerTable = null;
+    private Table<TableName, CheckpointingStatus, Message> checkpointingStatusTable = null;
+    private Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointsTable = null;
+    private Table<StringKey, TokenMsg, Message> checkpointTable = null;
 
     public static class CorfuTableNamePair {
         public TableName tableName;
@@ -84,12 +85,6 @@ public class DistributedCompactor {
             this.corfuTable = corfuTable;
         }
     }
-
-    private CorfuStore corfuStore = null;
-    private Table<StringKey, CheckpointingStatus, Message> compactionManagerTable = null;
-    private Table<TableName, CheckpointingStatus, Message> checkpointingStatusTable = null;
-    private Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointsTable = null;
-    private Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable = null;
 
     public DistributedCompactor(CorfuRuntime corfuRuntime, CorfuRuntime cpRuntime, String persistedCacheRoot) {
         this.runtime = corfuRuntime;
@@ -135,7 +130,7 @@ public class DistributedCompactor {
                     null,
                     TableOptions.fromProtoSchema(ActiveCPStreamMsg.class));
 
-            this.checkpointTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+            checkpointTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
                     DistributedCompactor.CHECKPOINT,
                     StringKey.class,
                     RpcCommon.TokenMsg.class,
@@ -147,8 +142,12 @@ public class DistributedCompactor {
     }
 
     private boolean checkCompactionManagerStartTrigger() {
-        // TODO: This is necessary here to stop checkpointing after it has started?
-        // if (isCheckpointFrozen(corfuStore, this.checkpointFreezeTable)) {return;}
+        //This is necessary here to stop checkpointing after it has started?
+        if (isCheckpointFrozen(corfuStore, this.checkpointTable) ||
+                (isClient && isUpgrade(corfuStore, this.checkpointTable))) {
+            return false;
+        }
+
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             final CheckpointingStatus managerStatus = txn.getRecord(
                     compactionManagerTable, DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
@@ -205,7 +204,7 @@ public class DistributedCompactor {
     private int checkpointUnopenedTables() {
         int count = 0;
 
-        keyDynamicProtobufSerializer = new KeyDynamicProtobufSerializer(cpRuntime);
+        KeyDynamicProtobufSerializer keyDynamicProtobufSerializer = new KeyDynamicProtobufSerializer(cpRuntime);
         cpRuntime.getSerializers().registerSerializer(keyDynamicProtobufSerializer);
 
         List<TableName> tableNames = getAllTablesToCheckpoint();
@@ -285,7 +284,7 @@ public class DistributedCompactor {
         livenessUpdater.updateLiveness(tableName);
         CheckpointingStatus returnStatus = null;
         try {
-            Token trimPoint = mcw.appendCheckpoints(rt, "checkpointer", livenessUpdater);
+            mcw.appendCheckpoints(rt, "checkpointer", livenessUpdater);
             returnStatus = CheckpointingStatus.newBuilder()
                     .setStatus(CheckpointingStatus.StatusType.COMPLETED)
                     .setClientName(this.clientName)
@@ -316,7 +315,7 @@ public class DistributedCompactor {
                         .setStreamName(getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName()))
                         .setSerializer(serializer)
                         .addOpenOption(ObjectOpenOption.NO_CACHE);
-        if (persistedCacheRoot == null || persistedCacheRoot == "") {
+        if (persistedCacheRoot == null || persistedCacheRoot.equals("")) {
             log.warn("Table {}::{} should be opened in disk-mode, but disk cache path is invalid",
                     tableName.getNamespace(), tableName.getTableName());
         } else {
@@ -557,6 +556,19 @@ public class DistributedCompactor {
                 }
             }
             txn.commit();
+        }
+        return false;
+    }
+
+    public static boolean isUpgrade(CorfuStore corfuStore, final Table<StringKey, TokenMsg, Message> chkptMap) {
+        final StringKey upgradeTokenKey = StringKey.newBuilder().setKey("upgrade").build();
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            TokenMsg upgradeToken = txn.getRecord(chkptMap, upgradeTokenKey).getPayload();
+            txn.commit();
+            if (upgradeToken != null) {
+                log.warn("Client Checkpointer asked to freeze due to upgrade");
+                return true;
+            }
         }
         return false;
     }
