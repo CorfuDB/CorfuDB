@@ -42,8 +42,6 @@ public class CompactorServiceTest extends AbstractViewTest {
     private static final int LIVENESS_TIMEOUT = 5000;
     private static final int WAIT_TO_KILL = 3000;
     private static final int COMPACTOR_SERVICE_INTERVAL = 10;
-    private static final int NUM_STREAMS = 10;
-    private static final int NUM_RECORDS = 50;
 
     private static final String CLIENT_NAME_PREFIX = "Client";
 
@@ -54,8 +52,15 @@ public class CompactorServiceTest extends AbstractViewTest {
     private CorfuRuntime cpRuntime1 = null;
     private CorfuRuntime cpRuntime2 = null;
 
-    private Layout layout = null;
     private CorfuStore corfuStore = null;
+
+    private Set<String> clientIds = new HashSet<>();
+    private boolean started_all = false;
+    private Map<String, Table<StringKey, StringKey, Message>> openedStreams = new HashMap<>();
+    private static String STREAM_KEY_PREFIX = "StreamKey";
+
+    private final static Double logSizeLimitPercentageFull = 100.0;
+    private final static Double logSizeLimitPercentageLow = 0.000002;
 
     /**
      * Generates and bootstraps a 3 node cluster in disk mode.
@@ -119,7 +124,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     }
 
     public void testSetup(Double logSizeLimitPercentage) {
-        layout = setup3NodeCluster(logSizeLimitPercentage);
+        Layout layout = setup3NodeCluster(logSizeLimitPercentage);
         runtime0 = getRuntime(layout).connect();
         runtime1 = getRuntime(layout).connect();
         runtime2 = getRuntime(layout).connect();
@@ -210,8 +215,6 @@ public class CompactorServiceTest extends AbstractViewTest {
         return false;
     }
 
-    Set<String> clientIds = new HashSet<>();
-
     private boolean verifyCheckpointStatusTable(StatusType targetStatus, int maxFailedTables) {
         Table<TableName, CheckpointingStatus, Message> cpStatusTable = openCheckpointStatusTable();
         int failed = 0;
@@ -231,14 +234,6 @@ public class CompactorServiceTest extends AbstractViewTest {
         }
     }
 
-    private boolean verifyClientCheckpointing(int minClients, int maxClients) {
-        log.info("total client: " + clientIds.size());
-        if (clientIds.size() <= maxClients && clientIds.size() >= minClients ) {
-            return true;
-        }
-        return false;
-    }
-
     private boolean verifyCheckpointTable() {
 
         openCheckpointTable();
@@ -251,13 +246,9 @@ public class CompactorServiceTest extends AbstractViewTest {
         }
         log.info("verify Token: {}", token == null ? "null" : token.toString());
 
-        if (token != null) {
-            return true;
-        }
-        return false;
+        return (token != null);
     }
 
-    boolean started_all = false;
     private boolean pollForFinishCheckpointing() {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
@@ -275,11 +266,6 @@ public class CompactorServiceTest extends AbstractViewTest {
         return false;
     }
 
-    private Map<String, Table<StringKey, StringKey, Message>> openedStreams = new HashMap<>();
-    private static String STREAM_NAME_PREFIX = "StreamName";
-    private static String STREAM_KEY_PREFIX = "StreamKey";
-    private static String STREAM_VALUE_PREFIX = "StreamValue";
-
     private Table<StringKey, StringKey, Message> openStream(String streamName) {
         try {
             Table<StringKey, StringKey, Message> table = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
@@ -295,21 +281,6 @@ public class CompactorServiceTest extends AbstractViewTest {
         }
         return null;
     }
-
-    private void populateStream(String streamName, int numRecords) {
-        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-//            TransactionalContext.getRootContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
-            for (int i = 0; i < numRecords; i++) {
-                txn.putRecord(openedStreams.get(streamName),
-                        StringKey.newBuilder().setKey(STREAM_KEY_PREFIX + i).build(),
-                        StringKey.newBuilder().setKey(STREAM_VALUE_PREFIX + i).build(),
-                        null);
-            }
-            txn.commit();
-        }
-    }
-
-    private final static Double logSizeLimitPercentageFull = 100.0;
 
     @Test
     public void singleServerTest() {
@@ -564,8 +535,6 @@ public class CompactorServiceTest extends AbstractViewTest {
         //asserts that the server invoked checkpointing
         assert(!started_all);
     }
-
-    private final static Double logSizeLimitPercentageLow = 0.000002;
 
     @Test
     public void quotaExceededTest() {

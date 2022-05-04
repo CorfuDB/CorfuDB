@@ -12,7 +12,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.DistributedCompactor;
-import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.RpcCommon.TokenMsg;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
@@ -33,7 +38,6 @@ import java.util.Date;
 import java.io.FileWriter;
 import java.io.PrintWriter;
 import java.util.Set;
-import java.util.UUID;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -52,6 +56,7 @@ public class CorfuStoreCompactorMain {
     private static CorfuStoreCompactor corfuCompactor;
 
     private static final String CORFU_SYSTEM_NAMESPACE = "CorfuSystem";
+    private static final int CORFU_LOG_CHECKPOINT_ERROR = 3;
 
     private static Table<StringKey, TokenMsg, Message> checkpoint;
 
@@ -137,23 +142,12 @@ public class CorfuStoreCompactorMain {
 
         openCompactionTables();
 
-        if (isCheckpointFrozen()) {
-            return;
-        }
-
-        if (trim) {
-            // Disable this to test server side trim feature
-            // trimAndUpdateToken();
-        }
-
         //TODO: Write a plugin for upgrade?
         if (isUpgrade) {
-            log.info("Upgrade: Saving Trim Token");
-
             if (upgradeDescriptorTable) {
                 syncProtobufDescriptorTable();
             }
-            final Optional<TokenMsg> minToken = getGlobalToken();
+            final Optional<TokenMsg> minToken = getCheckpointToken();
             if (minToken.isPresent()) {
                 log.info("Upgrade: Saving Trim Token {}", minToken.get());
                 FileWriter fileWriter = new FileWriter(trimTokenFile, true);
@@ -168,10 +162,7 @@ public class CorfuStoreCompactorMain {
         try {
             corfuCompactor.checkpoint();
         } catch (Throwable throwable) {
-            log.warn("CorfuStoreCompactorMain crashed with error:", throwable);
-            //TODO: Find a way to log this error into syslog..
-//            log.error(Logger.SYSLOG_MARKER, ErrorCode.CORFU_LOG_CHECKPOINT_ERROR.getCode(),
-//            throwable,"Checkpoint failed for UFO data.");
+            log.error("CorfuStoreCompactorMain crashed with error:", CORFU_LOG_CHECKPOINT_ERROR, throwable);
             throw throwable;
         }
     }
@@ -231,7 +222,7 @@ public class CorfuStoreCompactorMain {
         return false;
     }
 
-    private static Optional<TokenMsg> getGlobalToken() {
+    private static Optional<TokenMsg> getCheckpointToken() {
         Table<StringKey, TokenMsg, Message> ckTable = getCheckpointMap();
         TokenMsg ckToken;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
