@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.ICorfuImmutable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.StaleObjectVersionException;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -24,7 +25,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 @Slf4j
-public class MultiVersionObject<T extends ICorfuSMR<T>> {
+public class MultiVersionObject<T extends ICorfuSMR<T>, O extends ICorfuImmutable<T>> {
 
     private CorfuRuntime runtime;
     private MVOCache mvoCache;
@@ -86,9 +87,9 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
     }
 
     // TODO: Complete implementation.
-    public SnapshotProxyAdapter<T> getSnapshotProxy(long timestamp) {
+    public SnapshotProxyAdapter<T, O> getSnapshotProxy(long timestamp) {
         // TODO: Eliminate type cast
-        Reference<T> ref  = (SoftReference<T>) mvoCache.get(new VersionedObjectIdentifier(streamID, timestamp));
+        Reference<O> ref  = mvoCache.get(new VersionedObjectIdentifier(streamID, timestamp));
 
         // PersistentCorfuTable shell shared with cache, but allocating
         // a new shell no longer tied the SoftReference to cache.
@@ -105,7 +106,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         T object = getVersionedObjectUnderLock(timestamp, vloAccessedVersion::set);
         correctnessLogger.trace("Version, {}", vloAccessedVersion.get());
         log.trace("Access [{}] Updated (writelock) access at {}", this, vloAccessedVersion.get());
-        ref  = new SoftReference<>(object);
+        ref  = new SoftReference<>((O)object.getImmutableState());
         return new SnapshotProxyAdapter<>(ref, timestamp, upcallTargetMap);
     }
 
@@ -157,14 +158,14 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         }
 
         // Find the entry with the greatest version less than or equal to the given version
-        SoftReference<Map.Entry<VersionedObjectIdentifier, ICorfuSMR>> floorEntry =
+        SoftReference<Map.Entry<VersionedObjectIdentifier, ICorfuImmutable<T>>> floorEntry =
                 mvoCache.floorEntry(new VersionedObjectIdentifier(streamID, timestamp));
         if (floorEntry.get() == null) {
             resetUnsafe(object);
             // Do not allow going back to previous versions
             throw new StaleObjectVersionException(streamID, timestamp);
         } else {
-            object.setImmutableState(floorEntry.get().getValue().getImmutableState());
+            object.setImmutableState(floorEntry.get().getValue());
             // Next stream read begins from a given address (inclusive),
             // so +1 to avoid applying the same update twice
             smrStream.seek(floorEntry.get().getKey().getVersion() + 1);
@@ -189,7 +190,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                         // TODO: is it possible that a MultiSMREntry has 0 SMREntry?
                         VersionedObjectIdentifier vloId = new VersionedObjectIdentifier(
                                 streamID, entryList.get(0).getGlobalAddress());
-                        mvoCache.put(vloId, nextVersion);
+                        mvoCache.put(vloId, (ICorfuImmutable<T>) nextVersion.getImmutableState());
                         wrappedObject.set(nextVersion);
                     } catch (Exception e) {
                         log.error("Sync[{}] Error: Couldn't execute upcall due to {}", this, e);

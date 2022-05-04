@@ -21,6 +21,10 @@ public class PersistentCorfuTable<K, V> implements ICorfuSMR<PersistentCorfuTabl
         tableState = new PersistentHashMapWrapper<>(indices);
     }
 
+    public PersistentCorfuTable(PersistentHashMapWrapper<K, V> tableState) {
+        this.tableState = tableState;
+    }
+
     @Override
     public void setImmutableState(Object obj) {
         tableState = (PersistentHashMapWrapper<K, V>) obj;

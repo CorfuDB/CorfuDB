@@ -17,6 +17,7 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.collections.ICorfuImmutable;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -133,7 +134,7 @@ public abstract class AbstractTransactionalContext implements
     private final ConflictSetInfo readSetInfo = new ConflictSetInfo();
 
     // TODO: Make into a class?
-    protected final Map<UUID, SnapshotProxyAdapter<?>> snapshotProxyMap = new HashMap<>();
+    protected final Map<UUID, SnapshotProxyAdapter<?,?>> snapshotProxyMap = new HashMap<>();
 
     /**
      * Cache of last known position of streams accessed in this transaction.
@@ -148,10 +149,11 @@ public abstract class AbstractTransactionalContext implements
         AbstractTransactionalContext.log.debug("TXBegin[{}]", this);
     }
 
-    protected <T extends ICorfuSMR<T>> SnapshotProxyAdapter<T> getAndCacheSnapshotProxy(ICorfuSMRProxyInternal<T> proxy, long ts) {
+    protected <T extends ICorfuSMR<T>, O extends ICorfuImmutable<T>> SnapshotProxyAdapter<T, O>
+    getAndCacheSnapshotProxy(ICorfuSMRProxyInternal<T> proxy, long ts) {
         // TODO: Refactor me to avoid casting on ICorfuSMRProxyInternal type.
-        SnapshotProxyAdapter<T> adapter = (SnapshotProxyAdapter<T>) snapshotProxyMap.get(proxy.getStreamID());
-        final MVOCorfuCompileProxy<T> persistentProxy = (MVOCorfuCompileProxy<T>) proxy;
+        SnapshotProxyAdapter<T, O> adapter = (SnapshotProxyAdapter<T, O>) snapshotProxyMap.get(proxy.getStreamID());
+        final MVOCorfuCompileProxy<T, O> persistentProxy = (MVOCorfuCompileProxy<T, O>) proxy;
         if (adapter == null) {
             adapter = persistentProxy.getUnderlyingMVO().getSnapshotProxy(ts);
             snapshotProxyMap.put(proxy.getStreamID(), adapter);

@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.ICorfuImmutable;
 
 import java.lang.ref.SoftReference;
 import java.util.HashSet;
@@ -32,17 +33,17 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  */
 @Slf4j
-public class MVOCache<T extends ICorfuSMR<T>> {
+public class MVOCache<T extends ICorfuSMR<T>, O extends ICorfuImmutable<T>> {
 
     private final CorfuRuntime runtime;
 
     // A registry to keep track of all opened MVOs
-    private final ConcurrentHashMap<UUID, MultiVersionObject<T>> allMVOs = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, MultiVersionObject<T, O>> allMVOs = new ConcurrentHashMap<>();
 
     // The objectCache holds the strong references to all versioned objects
     // key is basically a pair of (objectId, version)
     // value is the versioned object such as PersistentCorfuTable
-    private final Cache<VersionedObjectIdentifier, T> objectCache;
+    private final Cache<VersionedObjectIdentifier, O> objectCache;
 
     // This objectVersions is updated at two places
     // 1) put() which adds a new version to the objectVersions
@@ -141,7 +142,7 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      * @param voId the id of the versioned object
      * @return the versioned object, or null if not exist
      */
-    public SoftReference<T> get(VersionedObjectIdentifier voId) {
+    public SoftReference<O> get(VersionedObjectIdentifier voId) {
         return new SoftReference<>(objectCache.getIfPresent(voId));
     }
 
@@ -149,13 +150,13 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      * Put the voId and versionedObject to objectCache, update objectVersions.
      *
      * @param voId the object and version to add to cache
-     * @param versionedObject the versioned object to add
+     * @param versionedObjectImmutableState the immutable state inside the versioned object
      */
-    public void put(VersionedObjectIdentifier voId, T versionedObject) {
+    public void put(VersionedObjectIdentifier voId, O versionedObjectImmutableState) {
         TreeSet<Long> allVersionsOfThisObject = objectVersions.computeIfAbsent(
                 voId.getObjectId(), k -> new TreeSet<>());
         synchronized (allVersionsOfThisObject) {
-            objectCache.put(voId, versionedObject);
+            objectCache.put(voId, versionedObjectImmutableState);
             allVersionsOfThisObject.add(voId.getVersion());
         }
     }
@@ -178,7 +179,7 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      * @return a pair of (voId, versionedObject) in which the voId contains the
      *         floor version.
      */
-    public SoftReference<Map.Entry<VersionedObjectIdentifier, T>> floorEntry(VersionedObjectIdentifier voId) {
+    public SoftReference<Map.Entry<VersionedObjectIdentifier, O>> floorEntry(VersionedObjectIdentifier voId) {
         final TreeSet<Long> allVersionsOfThisObject = objectVersions.get(voId.getObjectId());
 
         if (allVersionsOfThisObject == null) {
@@ -209,7 +210,7 @@ public class MVOCache<T extends ICorfuSMR<T>> {
         return objectVersions.containsKey(objectId);
     }
 
-    public void registerMVO(UUID objectId, MultiVersionObject<T> mvo) {
+    public void registerMVO(UUID objectId, MultiVersionObject<T, O> mvo) {
         allMVOs.computeIfAbsent(objectId, key -> mvo);
     }
 

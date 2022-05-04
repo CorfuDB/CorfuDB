@@ -8,6 +8,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.ICorfuImmutable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -24,10 +25,10 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 @Slf4j
-public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxyInternal<T> {
+public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>, O extends ICorfuImmutable<T>> implements ICorfuSMRProxyInternal<T> {
 
     @Getter
-    MultiVersionObject<T> underlyingMVO;
+    MultiVersionObject<T, O> underlyingMVO;
 
     final CorfuRuntime rt;
 

@@ -16,7 +16,7 @@ import java.util.stream.Stream;
 
 @Slf4j
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
-public class PersistentHashMapWrapper<K, V> {
+public class PersistentHashMapWrapper<K, V> implements ICorfuImmutable<PersistentCorfuTable<K, V>> {
 
     // The "main" map which contains the primary key-value mappings.
     private Map<K, V> mainMap;
@@ -144,6 +144,11 @@ public class PersistentHashMapWrapper<K, V> {
         }
 
         return Collections.emptySet();
+    }
+
+    @Override
+    public PersistentCorfuTable getWrapper() {
+        return new PersistentCorfuTable(this);
     }
 
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
