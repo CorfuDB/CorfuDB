@@ -111,7 +111,7 @@ public class CompactorService implements ManagementService {
                 if (managerStatus.getStatus() == StatusType.FAILED || managerStatus.getStatus() == StatusType.COMPLETED) {
                     checkpointerJvmManager.shutdown();
                     invokedJvm = false;
-                } else if (managerStatus.getStatus() == StatusType.STARTED_ALL &&  !checkpointerJvmManager.isRunning()
+                } else if (managerStatus.getStatus() == StatusType.STARTED_ALL && !checkpointerJvmManager.isRunning()
                         && !invokedJvm) {
                     checkpointerJvmManager.invokeCheckpointing();
                     invokedJvm = true;

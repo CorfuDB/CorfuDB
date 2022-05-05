@@ -9,14 +9,15 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.DistributedCompactor;
-import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.proto.RpcCommon.TokenMsg;
 
-import java.util.*;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -28,7 +29,7 @@ public class CorfuStoreCompactor {
     private final CorfuStore corfuStore;
     private final StringKey previousTokenKey = StringKey.newBuilder().setKey("previousTokenKey").build();
 
-    private final int CORFU_LOG_TRIM_ERROR = 2;
+    private static final int CORFU_LOG_TRIM_ERROR = 2;
 
     private final boolean enableTrim;
     private final String persistedCacheRoot;
