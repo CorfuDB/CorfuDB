@@ -14,23 +14,28 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.proto.RpcCommon;
-import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.concurrent.SingletonResource;
-import org.junit.Before;
 import org.junit.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.function.Predicate;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @Slf4j
 public class CompactorServiceTest extends AbstractViewTest {
@@ -57,10 +62,14 @@ public class CompactorServiceTest extends AbstractViewTest {
     private Set<String> clientIds = new HashSet<>();
     private boolean started_all = false;
     private Map<String, Table<StringKey, StringKey, Message>> openedStreams = new HashMap<>();
-    private static String STREAM_KEY_PREFIX = "StreamKey";
 
-    private final static Double logSizeLimitPercentageFull = 100.0;
-    private final static Double logSizeLimitPercentageLow = 0.000002;
+    private static final String STREAM_NAME_PREFIX = "StreamName";
+    private static final String STREAM_KEY_PREFIX = "StreamKey";
+    private static final int ITEM_SIZE = 10000;
+    private static final int NUM_RECORDS = 100;
+
+    private static final Double logSizeLimitPercentageFull = 100.0;
+    private static final Double logSizeLimitPercentageLow = 0.0002;
 
     /**
      * Generates and bootstraps a 3 node cluster in disk mode.
@@ -144,7 +153,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         System.out.println("testSetup completed");
     }
 
-    private Table<StringKey, CheckpointingStatus, Message> openCompactionManagerTable() {
+    private Table<StringKey, CheckpointingStatus, Message> openCompactionManagerTable(CorfuStore corfuStore) {
         try {
             return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
                     DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
@@ -201,7 +210,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     }
 
     private boolean verifyManagerStatus(StatusType targetStatus) {
-        openCompactionManagerTable();
+        openCompactionManagerTable(corfuStore);
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
                     DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
@@ -235,9 +244,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     }
 
     private boolean verifyCheckpointTable() {
-
         openCheckpointTable();
-
         RpcCommon.TokenMsg token;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             token = (RpcCommon.TokenMsg) txn.getRecord(DistributedCompactor.CHECKPOINT,
@@ -246,7 +253,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         }
         log.info("verify Token: {}", token == null ? "null" : token.toString());
 
-        return (token != null);
+        return token != null;
     }
 
     private boolean pollForFinishCheckpointing() {
@@ -282,6 +289,22 @@ public class CompactorServiceTest extends AbstractViewTest {
         return null;
     }
 
+    private void populateStream(String streamName, int numRecords) throws RuntimeException {
+        CorfuStore localCorfuStore = new CorfuStore(runtime2);
+        openCompactionManagerTable(localCorfuStore);
+        for (int i = 0; i < numRecords; i++) {
+            try (TxnContext txn = localCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                byte[] array = new byte[ITEM_SIZE];
+                new Random().nextBytes(array);
+                txn.putRecord(openedStreams.get(streamName),
+                        StringKey.newBuilder().setKey(STREAM_KEY_PREFIX + i).build(),
+                        StringKey.newBuilder().setKey(new String(array, StandardCharsets.UTF_16)).build(),
+                        null);
+                txn.commit();
+            }
+        }
+    }
+
     @Test
     public void singleServerTest() {
         testSetup(logSizeLimitPercentageFull);
@@ -302,9 +325,9 @@ public class CompactorServiceTest extends AbstractViewTest {
             log.warn("Sleep interrupted, ", e);
         }
 
-        assert(verifyManagerStatus(StatusType.COMPLETED));
-        assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
-        assert(verifyCheckpointTable());
+        assert verifyManagerStatus(StatusType.COMPLETED);
+        assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
+        assert verifyCheckpointTable();
     }
 
     @Test
@@ -335,9 +358,9 @@ public class CompactorServiceTest extends AbstractViewTest {
             log.warn("Sleep interrupted, ", e);
         }
 
-        assert(verifyManagerStatus(StatusType.COMPLETED));
-        assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
-        assert(verifyCheckpointTable());
+        assert verifyManagerStatus(StatusType.COMPLETED);
+        assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
+        assert verifyCheckpointTable();
     }
 
     @Test
@@ -379,9 +402,9 @@ public class CompactorServiceTest extends AbstractViewTest {
             log.warn("Exception: ", e);
         }
 
-        assert(verifyManagerStatus(StatusType.COMPLETED));
-        assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
-        assert(verifyCheckpointTable());
+        assert verifyManagerStatus(StatusType.COMPLETED);
+        assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
+        assert verifyCheckpointTable();
     }
 
     @Test
@@ -423,9 +446,9 @@ public class CompactorServiceTest extends AbstractViewTest {
             log.warn("Exception: ", e);
         }
 
-        assert(verifyManagerStatus(StatusType.COMPLETED));
-        assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
-        assert(verifyCheckpointTable());
+        assert verifyManagerStatus(StatusType.COMPLETED);
+        assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
+        assert verifyCheckpointTable();
     }
 
     @Test
@@ -456,16 +479,16 @@ public class CompactorServiceTest extends AbstractViewTest {
             log.warn("Sleep interrupted, ", e);
         }
 
-        assert(verifyManagerStatus(StatusType.COMPLETED));
-        assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
-        assert(verifyCheckpointTable());
-        assert(!started_all);
+        assert verifyManagerStatus(StatusType.COMPLETED);
+        assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
+        assert verifyCheckpointTable();
+        assert !started_all;
     }
 
     @Test
     public void serverCheckpointsUnopenedTables() {
         testSetup(logSizeLimitPercentageFull);
-        openStream(STREAM_KEY_PREFIX);
+        openStream(STREAM_NAME_PREFIX);
 
         runtime2.getParameters().setCheckpointTriggerFreqMillis(COMPACTOR_SERVICE_INTERVAL);
         DistributedClientCheckpointer distributedClientCheckpointer = new DistributedClientCheckpointer(runtime2);
@@ -488,11 +511,11 @@ public class CompactorServiceTest extends AbstractViewTest {
             log.warn("Sleep interrupted, ", e);
         }
 
-        assert(verifyManagerStatus(StatusType.COMPLETED));
-        assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
-        assert(verifyCheckpointTable());
+        assert verifyManagerStatus(StatusType.COMPLETED);
+        assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
+        assert verifyCheckpointTable();
         //asserts that the server invoked default checkpointing
-        assert(started_all);
+        assert started_all;
     }
 
     @Test
@@ -512,7 +535,7 @@ public class CompactorServiceTest extends AbstractViewTest {
             Table<TableName, CorfuCompactorManagement.ActiveCPStreamMsg, Message> activeCheckpointTable = openActiveCheckpointsTable();
             Table<TableName, CheckpointingStatus, Message> checkpointStatusTable = openCheckpointStatusTable();
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                TableName table = TableName.newBuilder().setNamespace(CORFU_SYSTEM_NAMESPACE).setTableName(STREAM_KEY_PREFIX).build();
+                TableName table = TableName.newBuilder().setNamespace(CORFU_SYSTEM_NAMESPACE).setTableName(STREAM_NAME_PREFIX).build();
                 //Adding a table with STARTED value - making it look like someone started and died while checkpointing
                 txn.putRecord(checkpointStatusTable, table,
                         CheckpointingStatus.newBuilder().setStatusValue(StatusType.STARTED_VALUE).build(), null);
@@ -530,10 +553,10 @@ public class CompactorServiceTest extends AbstractViewTest {
             log.warn("Sleep interrupted, ", e);
         }
 
-        assert(verifyManagerStatus(StatusType.FAILED));
-        assert(verifyCheckpointStatusTable(StatusType.IDLE, 1));
+        assert verifyManagerStatus(StatusType.FAILED);
+        assert verifyCheckpointStatusTable(StatusType.IDLE, 1);
         //asserts that the server invoked checkpointing
-        assert(!started_all);
+        assert !started_all;
     }
 
     @Test
@@ -544,9 +567,15 @@ public class CompactorServiceTest extends AbstractViewTest {
 
         CompactorService compactorService1 = new CompactorService(sc0, runtimeSingletonResource1,
                 new InvokeCheckpointingMock(runtime0, cpRuntime0), mockCompactionTriggerPolicy1);
-        compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
+
         compactorService1.setLivenessTimeout(LIVENESS_TIMEOUT);
         mockCompactionTriggerPolicy1.setShouldTrigger(true);
+        compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
+
+        openStream(STREAM_NAME_PREFIX);
+        Exception ex = assertThrows(RuntimeException.class,
+                () -> populateStream(STREAM_NAME_PREFIX, NUM_RECORDS));
+        assertThat(ex.getCause().getClass()).isEqualTo(QuotaExceededException.class);
 
         try {
             while (!pollForFinishCheckpointing()) {
@@ -556,8 +585,8 @@ public class CompactorServiceTest extends AbstractViewTest {
             log.warn("Sleep interrupted, ", e);
         }
 
-        assert(verifyManagerStatus(StatusType.COMPLETED));
-        assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
-        assert(verifyCheckpointTable());
+        assert verifyManagerStatus(StatusType.COMPLETED);
+        assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
+        assert verifyCheckpointTable();
     }
 }
