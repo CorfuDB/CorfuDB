@@ -14,7 +14,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
-import java.util.function.Function;
 
 /**
  * Checkpoint multiple CorfuTables serially as a prerequisite for a later log trim.

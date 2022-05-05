@@ -241,7 +241,7 @@ public class CorfuServer {
     public static void configureMetrics(Map<String, Object> opts, String localEndpoint) {
         if ((boolean) opts.get("--metrics")) {
             try {
-                LoggerContext context = (LoggerContext) LoggerFactory. getILoggerFactory();
+                LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
                 Optional.ofNullable(context.exists(DEFAULT_METRICS_LOGGER_NAME))
                         .ifPresent(logger -> MeterRegistryProvider.MeterRegistryInitializer
                                 .initServerMetrics(logger, DEFAULT_METRICS_LOGGING_INTERVAL, localEndpoint));

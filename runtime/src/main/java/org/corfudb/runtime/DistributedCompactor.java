@@ -1,16 +1,22 @@
 package org.corfudb.runtime;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Message;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
-import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.collections.CorfuDynamicKey;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistedStreamingMap;
+import org.corfudb.runtime.collections.OpaqueCorfuDynamicRecord;
+import org.corfudb.runtime.collections.StreamingMap;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -28,18 +34,27 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
-import org.corfudb.util.serializer.*;
+import org.corfudb.util.serializer.KeyDynamicProtobufSerializer;
+import org.corfudb.util.serializer.ISerializer;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Date;
+import java.util.Random;
+import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import static org.corfudb.runtime.view.TableRegistry.*;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 
 /**
  * DistributedCompactor class performs checkpointing of tables in multiple clients in parallel.
@@ -144,7 +159,7 @@ public class DistributedCompactor {
     private boolean checkCompactionManagerStartTrigger() {
         //This is necessary here to stop checkpointing after it has started?
         if (isCheckpointFrozen(corfuStore, this.checkpointTable) ||
-                (isClient && isUpgrade(corfuStore, this.checkpointTable))) {
+                isClient && isUpgrade(corfuStore, this.checkpointTable)) {
             return false;
         }
 
@@ -153,11 +168,10 @@ public class DistributedCompactor {
                     compactionManagerTable, DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
             txn.commit();
             if (managerStatus == null ||
-                    (managerStatus.getStatus() != StatusType.STARTED &&
-                    managerStatus.getStatus() != StatusType.STARTED_ALL)) {
+                    managerStatus.getStatus() != StatusType.STARTED &&
+                    managerStatus.getStatus() != StatusType.STARTED_ALL) {
                 return false;
             }
-            log.warn("ManagerStatus: {}", (managerStatus == null ? "null" : managerStatus.getStatus()));
         } catch (Exception e) {
             log.error("Unable to acquire CompactionManager status, {}, {}", e, e.getStackTrace());
             return false;
@@ -245,7 +259,7 @@ public class DistributedCompactor {
     private ILivenessUpdater livenessUpdater = new ILivenessUpdater() {
         private ScheduledExecutorService executorService;
 
-        private final static int updateInterval = 15000;
+        private static final int updateInterval = 15000;
 
         @Override
         public void updateLiveness(TableName tableName) {
@@ -259,7 +273,7 @@ public class DistributedCompactor {
                                     .setSyncHeartbeat(currentStatus.getSyncHeartbeat() + 1)
                                     .setIsClientTriggered(currentStatus.getIsClientTriggered())
                                     .build();
-                    TransactionalContext.getRootContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
+                    TransactionalContext.getCurrentContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
                     txn.putRecord(activeCheckpointsTable, tableName, newStatus, null);
                     txn.commit();
                 } catch (Exception e) {
@@ -385,7 +399,7 @@ public class DistributedCompactor {
                 final CorfuStoreEntry<TableName, CheckpointingStatus, Message> tableToChkpt =
                         txn.getRecord(checkpointingStatusTable, tableName);
                 if (tableToChkpt.getPayload().getStatus() == StatusType.IDLE) {
-                    TransactionalContext.getRootContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
+                    TransactionalContext.getCurrentContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
                     txn.putRecord(checkpointingStatusTable,
                             tableName,
                             CheckpointingStatus.newBuilder()
@@ -463,7 +477,7 @@ public class DistributedCompactor {
         final int maxRetries = 5;
         for (int retry = 0; retry < maxRetries; retry++) {
             try (TxnContext endTxn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                TransactionalContext.getRootContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
+                TransactionalContext.getCurrentContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
                 endTxn.putRecord(checkpointingStatusTable, tableName, checkpointStatus, null);
                 if (checkpointStatus.getStatus() != CheckpointingStatus.StatusType.COMPLETED) {
                     log.error("clientCheckpointer: Marking checkpointing as failed on table {}", tableName);

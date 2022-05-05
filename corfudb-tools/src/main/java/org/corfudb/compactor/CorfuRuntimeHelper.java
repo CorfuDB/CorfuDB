@@ -10,8 +10,6 @@ import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
 
-import java.io.File;
-import java.nio.file.Files;
 import java.util.List;
 
 @Slf4j
