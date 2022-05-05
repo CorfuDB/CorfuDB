@@ -335,7 +335,7 @@ public class ServerContext implements AutoCloseable {
      */
     public CorfuRuntimeParameters getManagementRuntimeParameters() {
         int checkpointTriggerFreqMs = 0;
-        if (serverConfig.get(("--compaction-trigger-freq-ms")) != null) {
+        if (serverConfig.get("--compaction-trigger-freq-ms") != null) {
             checkpointTriggerFreqMs = Integer.parseInt((String)serverConfig.get("--compaction-trigger-freq-ms"));
         }
         return CorfuRuntime.CorfuRuntimeParameters.builder()

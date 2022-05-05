@@ -125,7 +125,7 @@ public class RuntimeLayout {
 
         //Thread priority overrides Client Priority in a TransactionalContext
         if (TransactionalContext.isInTransaction() &&
-                TransactionalContext.getRootContext().getPriorityLevel() != null) {
+                TransactionalContext.getCurrentContext().getPriorityLevel() != null) {
             returnClient.setPriorityLevel(TransactionalContext.getRootContext().getPriorityLevel());
         }
 

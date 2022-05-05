@@ -2,7 +2,11 @@ package org.corfudb.runtime.checkpoint;
 
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.*;
+import org.corfudb.infrastructure.CompactorLeaderServices;
+import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.ServerContextBuilder;
+import org.corfudb.infrastructure.TestLayoutBuilder;
+import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
@@ -22,8 +26,13 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
@@ -238,10 +247,10 @@ public class DistributedCompactorTests extends AbstractViewTest {
         CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime1, SERVERS.ENDPOINT_1);
         compactorLeaderServices2.setLeader(false);
 
-        assert(compactorLeaderServices1.trimAndTriggerDistributedCheckpointing());
-        assert(!compactorLeaderServices2.trimAndTriggerDistributedCheckpointing());
-        assert(verifyManagerStatus(StatusType.STARTED));
-        assert(verifyCheckpointStatusTable(StatusType.IDLE, 0));
+        assert compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
+        assert !compactorLeaderServices2.trimAndTriggerDistributedCheckpointing();
+        assert verifyManagerStatus(StatusType.STARTED);
+        assert verifyCheckpointStatusTable(StatusType.IDLE, 0);
     }
 
     @Test
@@ -254,9 +263,9 @@ public class DistributedCompactorTests extends AbstractViewTest {
         boolean init1 = compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
         boolean init2 = compactorLeaderServices2.trimAndTriggerDistributedCheckpointing();
 
-        assert (init1 ^ init2);
-        assert(verifyManagerStatus(StatusType.STARTED));
-        assert(verifyCheckpointStatusTable(StatusType.IDLE, 0));
+        assert init1 ^ init2;
+        assert verifyManagerStatus(StatusType.STARTED);
+        assert verifyCheckpointStatusTable(StatusType.IDLE, 0);
     }
 
     @Test
@@ -274,8 +283,8 @@ public class DistributedCompactorTests extends AbstractViewTest {
         try {
             assert(!(future1.get() && future2.get()));
             if (future1.get() ^ future1.get()) {
-                assert (verifyManagerStatus(StatusType.STARTED));
-                assert (verifyCheckpointStatusTable(StatusType.IDLE, 0));
+                assert verifyManagerStatus(StatusType.STARTED);
+                assert verifyCheckpointStatusTable(StatusType.IDLE, 0);
             }
         } catch (Exception e) {
             log.warn("Unable to get results");
@@ -304,8 +313,8 @@ public class DistributedCompactorTests extends AbstractViewTest {
             Assert.assertEquals(txn.count(DistributedCompactor.CHECKPOINT_STATUS_TABLE_NAME), total);
             txn.commit();
         }
-        assert(verifyManagerStatus(StatusType.STARTED));
-        assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
+        assert verifyManagerStatus(StatusType.STARTED);
+        assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
     }
 
     @Test
@@ -319,9 +328,9 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
         compactorLeaderServices1.finishCompactionCycle();
 
-        assert(verifyManagerStatus(StatusType.COMPLETED));
-        assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
-        assert(verifyCheckpointTable());
+        assert verifyManagerStatus(StatusType.COMPLETED);
+        assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
+        assert verifyCheckpointTable();
     }
 
     @Test
@@ -333,8 +342,8 @@ public class DistributedCompactorTests extends AbstractViewTest {
         //Checkpointing not done
         compactorLeaderServices1.finishCompactionCycle();
 
-        assert(verifyManagerStatus(StatusType.FAILED));
-        assert(verifyCheckpointStatusTable(StatusType.IDLE, 0));
+        assert verifyManagerStatus(StatusType.FAILED);
+        assert verifyCheckpointStatusTable(StatusType.IDLE, 0);
     }
 
     private boolean pollForFinishCheckpointing() {
@@ -374,9 +383,9 @@ public class DistributedCompactorTests extends AbstractViewTest {
             log.warn("Sleep interrupted, ", e);
         }
 
-        assert(verifyManagerStatus(StatusType.COMPLETED));
-        assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
-        assert(verifyCheckpointTable());
+        assert verifyManagerStatus(StatusType.COMPLETED);
+        assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
+        assert verifyCheckpointTable();
     }
 
     @Test
@@ -399,8 +408,8 @@ public class DistributedCompactorTests extends AbstractViewTest {
             log.warn("Sleep interrupted, ", e);
         }
 
-        assert(verifyManagerStatus(StatusType.STARTED));
-        assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
+        assert verifyManagerStatus(StatusType.STARTED);
+        assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
     }
 
     @Test
@@ -438,13 +447,13 @@ public class DistributedCompactorTests extends AbstractViewTest {
         } catch (InterruptedException e) {
             log.warn("Sleep interrupted, ", e);
         }
-        assert(verifyManagerStatus(StatusType.FAILED));
-        assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 1));
+        assert verifyManagerStatus(StatusType.FAILED);
+        assert verifyCheckpointStatusTable(StatusType.COMPLETED, 1);
     }
 
     private ILivenessUpdater mockLivenessUpdater = new ILivenessUpdater() {
         private ScheduledExecutorService executorService;
-        private final static int updateInterval = 250;
+        private static final int updateInterval = 250;
         TableName tableName = null;
 
         @Override
@@ -538,7 +547,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
             log.warn("Sleep interrupted, ", e);
         }
 
-        assert(verifyManagerStatus(StatusType.COMPLETED));
-        assert(verifyCheckpointStatusTable(StatusType.COMPLETED, 0));
+        assert verifyManagerStatus(StatusType.COMPLETED);
+        assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
     }
 }
