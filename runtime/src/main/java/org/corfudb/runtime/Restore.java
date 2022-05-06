@@ -123,18 +123,21 @@ public class Restore {
      * @throws IOException
      */
     private void restoreTable(Path filePath, UUID streamId) throws IOException {
+        log.info("start restoring table UUID: {}", streamId);
         long startTime = System.currentTimeMillis();
 
         try (FileInputStream fileInput = new FileInputStream(filePath.toString())) {
-            TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE);
 
             // Clear table before restore
             if (restoreMode == RestoreMode.PARTIAL) {
-                SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
-                txn.logUpdate(streamId, entry);
+                try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                    SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
+                    txn.logUpdate(streamId, entry);
+                    txn.commit();
+                }
             }
 
-            long numEntries = 0;
+            long numSMREntries = 0;
             while (fileInput.available() > 0) {
                 OpaqueEntry opaqueEntry = OpaqueEntry.read(fileInput);
                 List<SMREntry> smrEntries = opaqueEntry.getEntries().get(streamId);
@@ -142,15 +145,17 @@ public class Restore {
                     continue;
                 }
 
-                txn.logUpdate(streamId, smrEntries);
-                numEntries += smrEntries.size();
+                // Do not batch SMR entries to avoid max txn size violation
+                try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                    txn.logUpdate(streamId, smrEntries);
+                    txn.commit();
+                }
+                numSMREntries += smrEntries.size();
             }
-            txn.commit();
-
             long elapsedTime = System.currentTimeMillis() - startTime;
 
-            log.info("completed restore of table {} with {} numEntries, elapsed time {}ms",
-                    streamId, numEntries, elapsedTime);
+            log.info("completed restore of table {} by applying {} SMREntries, elapsed time {}ms",
+                    streamId, numSMREntries, elapsedTime);
         } catch (FileNotFoundException e) {
             log.error("restoreTable can not find file {}", filePath);
             throw e;

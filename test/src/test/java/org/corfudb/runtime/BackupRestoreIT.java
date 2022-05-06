@@ -18,6 +18,7 @@ import org.corfudb.runtime.exceptions.BackupRestoreException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.Uuid;
 import org.junit.Test;
@@ -203,8 +204,8 @@ public class BackupRestoreIT extends AbstractIT {
         Table table = hasBackupTag ? openTableWithBackupTag(dataStore, tableName) :
                 openTableWithoutBackupTag(dataStore, tableName);
 
-        TxnContext txn = dataStore.txn(NAMESPACE);
         for (int i = 0; i < numEntries; i++) {
+            TxnContext txn = dataStore.txn(NAMESPACE);
             uuidKey = SampleSchema.Uuid.newBuilder()
                     .setMsb(i)
                     .setLsb(i)
@@ -218,8 +219,8 @@ public class BackupRestoreIT extends AbstractIT {
                 SampleSchema.EventInfo eventInfo = SampleSchema.EventInfo.newBuilder().setName(name).build();
                 txn.putRecord(table, uuidKey, eventInfo, uuidKey);
             }
+            txn.commit();
         }
-        txn.commit();
     }
 
     /**
@@ -330,6 +331,14 @@ public class BackupRestoreIT extends AbstractIT {
         for (String tableName : tableNames) {
             openTableWithoutBackupTag(destDataCorfuStore, tableName);
             compareCorfuStoreTables(srcDataCorfuStore, tableName, destDataCorfuStore, tableName);
+        }
+
+        for (UUID streamID : streamIDs) {
+            IStreamView sv = destDataRuntime.getStreamsView().get(streamID);
+            // Since src data was generated one entry per txn,
+            // the dest data should have exact same number of updates.
+            // numEntries * 2 = pre-existing data + restored data, 1 = clear table operation
+            assertThat(sv.stream().count()).isEqualTo(numEntries * 2 + 1);
         }
 
         // Close servers and runtime before exiting
@@ -734,7 +743,7 @@ public class BackupRestoreIT extends AbstractIT {
     }
 
     @Test
-    public void cleanupTempDirsBeforeBackupRestoreTest() throws Exception{
+    public void cleanupTempDirsBeforeBackupRestoreTest() throws Exception {
         // Set up the test environment
         setupEnv();
 

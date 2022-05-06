@@ -179,6 +179,7 @@ public class Backup {
      * @throws IOException
      */
     private void backupTable(Path filePath, UUID uuid) throws IOException {
+        log.info("start backing up table UUID: {}", uuid);
         long startTime = System.currentTimeMillis();
         BackupTableStats backupTableStats;
 
@@ -200,7 +201,7 @@ public class Backup {
 
         long elapsedTime = System.currentTimeMillis() - startTime;
 
-        log.info("{} entries (size: {} bytes, elapsed time: {} ms) saved to temp file {}",
+        log.info("{} SMREntries (size: {} bytes, elapsed time: {} ms) saved to temp file {}",
                 backupTableStats.getNumOfEntries(), backupTableStats.getTableSize(), elapsedTime, filePath);
     }
 
@@ -209,10 +210,10 @@ public class Backup {
         int numOfEntries = 0;
         int tableSize = 0;
         while (iterator.hasNext()) {
-            numOfEntries++;
             OpaqueEntry lastEntry = iterator.next();
             List<SMREntry> smrEntries = lastEntry.getEntries().get(uuid);
             if (smrEntries != null) {
+                numOfEntries += smrEntries.size();
                 Map<UUID, List<SMREntry>> map = new HashMap<>();
                 map.put(uuid, smrEntries);
                 OpaqueEntry newOpaqueEntry = new OpaqueEntry(lastEntry.getVersion(), map);
