@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.NonNull;
 import lombok.Setter;
+import org.corfudb.runtime.CorfuCompactorManagement;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuRuntime;
@@ -10,6 +11,7 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.DistributedCompactor;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.concurrent.SingletonResource;
@@ -22,6 +24,8 @@ import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * Orchestrates distributed compaction
@@ -57,6 +61,13 @@ public class CompactorService implements ManagementService {
                      @NonNull ICompactionTriggerPolicy compactionTriggerPolicy) {
         this.serverContext = serverContext;
         this.runtimeSingletonResource = runtimeSingletonResource;
+
+        String threadName;
+        if (serverContext.getServerConfig().get("<port>").toString().equals("9040")) {
+            threadName = "Cmpt-NonConfig-chkpter";
+        } else {
+            threadName = "Cmpt-Config-chkpter";
+        }
         this.orchestratorThread = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
                         .setNameFormat("CmptService-chkpter")
@@ -101,7 +112,7 @@ public class CompactorService implements ManagementService {
     private void runOrchestrator() {
         boolean isLeader = isNodePrimarySequencer(updateLayoutAndGet());
         compactorLeaderServices.setLeader(isLeader);
-        try (TxnContext txn = corfuStore.txn(TableRegistry.CORFU_SYSTEM_NAMESPACE)) {
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
                     DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
                     DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
