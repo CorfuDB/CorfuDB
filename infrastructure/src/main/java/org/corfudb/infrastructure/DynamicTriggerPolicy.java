@@ -4,6 +4,10 @@ import lombok.Getter;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.DistributedCompactor;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
@@ -16,6 +20,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
     /**
@@ -72,6 +78,19 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
         return currentAddressSpaceSize;
     }
 
+    private boolean shouldForceTrigger() {
+        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            RpcCommon.TokenMsg upgradeToken = (RpcCommon.TokenMsg) txn.getRecord(DistributedCompactor.CHECKPOINT,
+                    DistributedCompactor.UPGRADE_KEY).getPayload();
+            txn.commit();
+            if (upgradeToken != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * 1. if ((currentTime - lastCompactionCycleStart) > minTimeBetweenCompactionStarts)
      *        if (lastAddressSpaceSizeOnTrim == 0)
@@ -85,6 +104,12 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
      */
     @Override
     public boolean shouldTrigger(long interval) {
+
+        if (shouldForceTrigger()) {
+            syslog.info("Force triggering compaction");
+            return true;
+        }
+
         final long currentTime = System.currentTimeMillis();
         final long timeSinceLastCycleMillis = currentTime - lastCompactionCycleStartTS;
         if (timeSinceLastCycleMillis > interval && lastAddressSpaceSizeAfterTrim == 0) {
@@ -101,6 +126,7 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
                     TimeUnit.MILLISECONDS.toMinutes(interval*2));
             return true;
         }
+
         return false;
     }
 
