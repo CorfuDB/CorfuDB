@@ -12,6 +12,8 @@ import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static org.corfudb.protocols.CorfuProtocolCommon.getRemoteHostAddressFromCtx;
+
 @Slf4j
 @ChannelHandler.Sharable
 public class CorfuNettyServerChannel extends ChannelInboundHandlerAdapter {
@@ -100,7 +102,7 @@ public class CorfuNettyServerChannel extends ChannelInboundHandlerAdapter {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        log.error("Error in handling inbound message.", cause);
+        log.error("Error in handling inbound message from {} ", getRemoteHostAddressFromCtx(ctx), cause);
         ctx.close();
     }
 }

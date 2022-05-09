@@ -9,6 +9,7 @@ import com.google.common.reflect.TypeToken;
 import com.google.protobuf.ByteString;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelHandlerContext;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +45,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.EnumMap;
@@ -170,6 +172,21 @@ public final class CorfuProtocolCommon {
      */
     public static TokenMsg getTokenMsg(Token token) {
         return getTokenMsg(token.getEpoch(), token.getSequence());
+    }
+
+
+    /**
+     * Returns the remote host address from the netty Context
+     *
+     * @param ctx The context from which address needs to be accessed.
+     * @return a String representation of the remote host address
+     */
+    public static String getRemoteHostAddressFromCtx(ChannelHandlerContext ctx){
+        try {
+            return ((InetSocketAddress)ctx.channel().remoteAddress()).getAddress().getHostAddress();
+        } catch (NullPointerException ex) {
+            return "unavailable";
+        }
     }
 
     /**

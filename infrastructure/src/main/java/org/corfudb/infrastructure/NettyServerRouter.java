@@ -19,6 +19,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.corfudb.protocols.CorfuProtocolCommon.getRemoteHostAddressFromCtx;
+
 /**
  * The netty server router routes incoming messages to registered roles using the
  * handlerMap (in the case of a legacy CorfuMsg) and requestTypeHandlerMap (in
@@ -145,7 +147,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        log.error("Error in handling inbound message", cause);
+        log.error("Error in handling inbound message from {} ", getRemoteHostAddressFromCtx(ctx), cause);
         ctx.close();
     }
 }

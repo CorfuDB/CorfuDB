@@ -4,6 +4,7 @@ import com.google.protobuf.TextFormat;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
+import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.ReadTimeoutException;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import java.util.concurrent.ConcurrentHashMap;
@@ -20,6 +21,8 @@ import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.util.GitRepositoryState;
+
+import javax.net.ssl.SSLSession;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
@@ -136,7 +139,20 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
             return;
         }
 
-        log.info("channelRead: Handshake succeeded. Corfu Server Version: [{}]", Long.toHexString(corfuServerVersion));
+        SslHandler sslHandler = (SslHandler) ctx.pipeline().get("ssl");
+        if (sslHandler!=null) { // sslHandler could be null in unit tests
+            SSLSession sslSession =
+                    sslHandler.engine().getSession();
+            log.info("channelRead: {} HANDSHAKEN: protocol:{} cipher suite:{}, " +
+                            "Corfu Server Version: [{}], " +
+                            "Corfu Runtime Version: [{}]",
+                    ctx.channel(),
+                    sslSession.getProtocol(),
+                    sslSession.getCipherSuite(),
+                    Long.toHexString(corfuServerVersion),
+                    Long.toHexString(corfuClientVersion));
+        }
+
 
         requestMessages.forEach(ctx::writeAndFlush);
         requestMessages.clear();
