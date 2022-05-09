@@ -53,7 +53,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
     private static final int WAIT_IN_SYNC_STATE = 5000;
     private static final int LIVENESS_TIMEOUT = 1000;
     private static final String CLIENT_NAME_PREFIX = "Client";
-    private static String STREAM_NAME = "streamNameA";
+    private static final String STREAM_NAME = "streamNameA";
 
     /**
      * Generates and bootstraps a 3 node cluster in disk mode.
@@ -237,7 +237,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
             txn.commit();
         }
 
-        return (token != null);
+        return token != null;
     }
 
     @Test
@@ -281,7 +281,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
         compactorLeaderServices1.setLeader(false);
 
         try {
-            assert(!(future1.get() && future2.get()));
+            assert !(future1.get() && future2.get());
             if (future1.get() ^ future1.get()) {
                 assert verifyManagerStatus(StatusType.STARTED);
                 assert verifyCheckpointStatusTable(StatusType.IDLE, 0);
@@ -352,7 +352,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
                     DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
                     DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
             txn.commit();
-            log.info("managerStatus in test: {}", (managerStatus == null ? "null" : managerStatus.getStatus()));
+            log.info("managerStatus in test: {}", managerStatus == null ? "null" : managerStatus.getStatus());
             if (managerStatus != null && (managerStatus.getStatus() == StatusType.COMPLETED
                     || managerStatus.getStatus() == StatusType.FAILED)) {
                 return true;

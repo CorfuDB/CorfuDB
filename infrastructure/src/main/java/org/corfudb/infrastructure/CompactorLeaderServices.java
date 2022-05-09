@@ -239,7 +239,7 @@ public class CompactorLeaderServices {
                 } else if (previousStatus.first < syncHeartBeat) {
                     readCache.put(table, Tuple.of(Tuple.of(syncHeartBeat, previousStatus.second), currentTime));
                 } else if (previousStatus.second == currentStreamTail || previousStatus.first == syncHeartBeat) {
-                    if ((currentTime - readCache.get(table).second > timeout) && !handleSlowCheckpointers(table)) {
+                    if (currentTime - readCache.get(table).second > timeout && !handleSlowCheckpointers(table)) {
                         readCache.clear();
                         return;
                     }
@@ -334,6 +334,7 @@ public class CompactorLeaderServices {
                         table.getTableName());
                 return false;
             } else {
+                txn.delete(activeCheckpointsTable, table);
                 txn.commit();
             }
         } catch (TransactionAbortedException ex) {
@@ -359,8 +360,8 @@ public class CompactorLeaderServices {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
                     DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME, DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
 
-            if (managerStatus == null || (managerStatus.getStatus() != StatusType.STARTED &&
-                    managerStatus.getStatus() != StatusType.STARTED_ALL)) {
+            if (managerStatus == null || managerStatus.getStatus() != StatusType.STARTED &&
+                    managerStatus.getStatus() != StatusType.STARTED_ALL) {
                 syslog.warn("Cannot perform finishCompactionCycle");
                 return;
             }
@@ -394,6 +395,18 @@ public class CompactorLeaderServices {
         } catch (Exception e) {
             syslog.warn("Exception in finishCompactionCycle: {}. StackTrace={}", e, e.getStackTrace());
         }
+
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            RpcCommon.TokenMsg upgradeToken = (RpcCommon.TokenMsg) txn.getRecord(DistributedCompactor.CHECKPOINT,
+                    DistributedCompactor.UPGRADE_KEY).getPayload();
+            syslog.info("Upgrade Key found: Hence trimlog invoked");
+            txn.delete(DistributedCompactor.CHECKPOINT, DistributedCompactor.UPGRADE_KEY);
+            txn.commit();
+            if (upgradeToken != null) {
+                trimLog();
+            }
+        }
+
         syslog.info("Finished the compaction cycle");
     }
 
@@ -402,7 +415,7 @@ public class CompactorLeaderServices {
      */
     @VisibleForTesting
     public void trimLog() {
-        RpcCommon.TokenMsg thisTrimToken = null;
+        RpcCommon.TokenMsg thisTrimToken;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
                     DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,

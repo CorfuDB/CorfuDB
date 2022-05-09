@@ -5,7 +5,6 @@ package org.corfudb.compactor;
 
 import java.util.ArrayList;
 import java.util.Map;
-import java.util.Optional;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -34,14 +33,13 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
 
-import java.util.Date;
-import java.io.FileWriter;
-import java.io.PrintWriter;
 import java.util.Set;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
 
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.corfudb.runtime.view.TableRegistry.getTypeUrl;
 
 /**
@@ -52,17 +50,17 @@ import static org.corfudb.runtime.view.TableRegistry.getTypeUrl;
 public class CorfuStoreCompactorMain {
 
     private static CorfuRuntime corfuRuntime;
+    private static CorfuRuntime cpRuntime;
     private static CorfuStore corfuStore;
-    private static CorfuStoreCompactor corfuCompactor;
+    private static DistributedCompactor distributedCompactor;
 
-    private static final String CORFU_SYSTEM_NAMESPACE = "CorfuSystem";
     private static final int CORFU_LOG_CHECKPOINT_ERROR = 3;
 
-    private static Table<StringKey, TokenMsg, Message> checkpoint;
+    private static Table<StringKey, TokenMsg, Message> checkpointTable;
+    private static int retryCheckpointing = 0;
 
     // Reduce checkpoint batch size due to disk-based nature and smaller compactor JVM size
     private static final int NON_CONFIG_DEFAULT_CP_MAX_WRITE_SIZE = 1 << 20;
-
     private static final int DEFAULT_CP_MAX_WRITE_SIZE = 25 << 20;
 
     private static List<String> hostname = new ArrayList<>();
@@ -74,9 +72,7 @@ public class CorfuStoreCompactorMain {
     private static String persistedCacheRoot = null;
     private static int maxWriteSize = -1;
     private static int bulkReadSize = 10;
-    private static boolean trim;
     private static boolean isUpgrade;
-    private static String trimTokenFile;
     private static boolean upgradeDescriptorTable;
     private static boolean tlsEnabled;
 
@@ -108,12 +104,14 @@ public class CorfuStoreCompactorMain {
             + "--tlsEnabled=<tls_enabled>";
 
     public static void main(String[] args) throws Exception {
-        Thread.currentThread().setName("CorfuStore-chkpter");
+        if (port == 9040) {
+            Thread.currentThread().setName("CS-NonConfig-chkpter");
+        } else {
+            Thread.currentThread().setName("CS-Config-chkpter");
+        }
         CorfuStoreCompactorMain corfuCompactorMain = new CorfuStoreCompactorMain();
         corfuCompactorMain.getCompactorArgs(args);
 
-        CorfuRuntimeHelper corfuRuntimeHelper;
-        CorfuRuntimeHelper cpRuntimeHelper;
         if (maxWriteSize == -1) {
             if (persistedCacheRoot == null) {
                 // in-memory compaction
@@ -123,6 +121,9 @@ public class CorfuStoreCompactorMain {
                 maxWriteSize = NON_CONFIG_DEFAULT_CP_MAX_WRITE_SIZE;
             }
         }
+
+        CorfuRuntimeHelper corfuRuntimeHelper;
+        CorfuRuntimeHelper cpRuntimeHelper;
         if (tlsEnabled) {
             corfuRuntimeHelper = new CorfuRuntimeHelper(hostname, port, maxWriteSize, bulkReadSize,
                     runtimeKeyStore, runtimeKeystorePasswordFile,
@@ -137,39 +138,42 @@ public class CorfuStoreCompactorMain {
         }
 
         corfuRuntime = corfuRuntimeHelper.getRuntime();
+        cpRuntime = cpRuntimeHelper.getRuntime();
         corfuStore = new CorfuStore(corfuRuntime);
-        corfuCompactor = new CorfuStoreCompactor(corfuRuntime, cpRuntimeHelper.getRuntime(), trim, persistedCacheRoot);
+        distributedCompactor = new DistributedCompactor(corfuRuntime, cpRuntime, persistedCacheRoot);
 
         openCompactionTables();
 
-        //TODO: Write a plugin for upgrade?
         if (isUpgrade) {
+            retryCheckpointing = 10;
             if (upgradeDescriptorTable) {
                 syncProtobufDescriptorTable();
             }
-            final Optional<TokenMsg> minToken = getCheckpointToken();
-            if (minToken.isPresent()) {
-                log.info("Upgrade: Saving Trim Token {}", minToken.get());
-                FileWriter fileWriter = new FileWriter(trimTokenFile, true);
-                PrintWriter printWriter = new PrintWriter(fileWriter);
-                printWriter.println(minToken.get());
-                printWriter.close();
-            } else {
-                log.warn("Upgrade: Trying to save trim token, but got null minToken!");
+            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                txn.putRecord(checkpointTable, DistributedCompactor.UPGRADE_KEY, TokenMsg.getDefaultInstance(),
+                        null);
+                txn.commit();
             }
         }
 
         try {
-            corfuCompactor.checkpoint();
+            for (int i = 0; i< retryCheckpointing; i++) {
+                checkpoint();
+                TimeUnit.MILLISECONDS.sleep(1000);
+            }
         } catch (Throwable throwable) {
             log.error("CorfuStoreCompactorMain crashed with error:", CORFU_LOG_CHECKPOINT_ERROR, throwable);
             throw throwable;
         }
     }
 
+    private static void checkpoint() {
+        distributedCompactor.startCheckpointing();
+    }
+
     private static void openCompactionTables() {
         try {
-            checkpoint = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+            checkpointTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
                     CorfuRuntimeHelper.CHECKPOINT,
                     StringKey.class,
                     TokenMsg.class,
@@ -179,72 +183,6 @@ public class CorfuStoreCompactorMain {
         } catch (Exception e) {
             log.error("Caught an exception while opening Compaction management tables ", e);
         }
-    }
-
-    public static Table<StringKey, TokenMsg, Message> getCheckpointMap() {
-        return checkpoint;
-    }
-
-    /**
-     * In the global checkpoint map we examine if there is a special "freeze token"
-     * The sequence part of this token is overloaded with the timestamp
-     * when the freeze was requested.
-     * Now checkpointer being a busybody has limited patience (2 hours)
-     * If the freeze request is within 2 hours it will honor it and step aside.
-     * Otherwise it will angrily remove the freezeToken and continue about
-     * its business.
-     * @return - true if checkpointing should be skipped, false if not.
-     */
-    public static boolean isCheckpointFrozen() {
-        final StringKey freezeCheckpointNS = StringKey.newBuilder().setKey("freezeCheckpointNS").build();
-        final Table<StringKey, TokenMsg, Message> chkptMap = getCheckpointMap();
-
-        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            TokenMsg freezeToken = txn.getRecord(chkptMap, freezeCheckpointNS).getPayload();
-
-            final long patience = 2 * 60 * 60 * 1000;
-            if (freezeToken != null) {
-                long now = System.currentTimeMillis();
-                long frozeAt = freezeToken.getSequence();
-                Date frozeAtDate = new Date(frozeAt);
-                if (now - frozeAt > patience) {
-                    txn.delete(chkptMap, freezeCheckpointNS);
-                    log.warn("CorfuStoreCompactor asked to freeze at {} but run out of patience",
-                            frozeAtDate);
-                } else {
-                    log.warn("CorfuStoreCompactor asked to freeze at {}", frozeAtDate);
-                    txn.commit();
-                    return true;
-                }
-            }
-            txn.commit();
-        }
-        return false;
-    }
-
-    private static Optional<TokenMsg> getCheckpointToken() {
-        Table<StringKey, TokenMsg, Message> ckTable = getCheckpointMap();
-        TokenMsg ckToken;
-        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            ckToken = txn.getRecord(ckTable, DistributedCompactor.CHECKPOINT_KEY).getPayload();
-            txn.commit();
-        }
-        return Optional.of(ckToken);
-    }
-
-    /**
-     * 1. Trim based on this node's token, which is updated in the last round of this::trimAndUpdateToken().
-     * 2. Query the latest token and update it for this node in a corfu map, this token
-     *      would be used for trimming in the next round (15min after) trim.
-     */
-    private static void trimAndUpdateToken() {
-        log.info("Start to trim and update trim token.");
-
-        // Trim based on the token computed in the previous round of checkpoint.
-        corfuCompactor.trim();
-        corfuCompactor.updateThisNodeTrimToken();
-
-        log.info("Finished to trim and update trim token.");
     }
 
     /**
@@ -335,8 +273,8 @@ public class CorfuStoreCompactorMain {
                 if (numRetries-- <= 0) {
                     throw txAbort;
                 }
-                log.info("syncProtobufDescriptorTable: commit failed. " +
-                    "Will retry {} times. Cause {}", numRetries, txAbort);
+                log.info("syncProtobufDescriptorTable: commit failed. Will retry {} times. Cause {}",
+                        numRetries, txAbort);
             }
         }
     }
@@ -371,14 +309,8 @@ public class CorfuStoreCompactorMain {
         if (opts.get("--bulkReadSize") != null) {
             bulkReadSize = Integer.parseInt(opts.get("--bulkReadSize").toString());
         }
-        if (opts.get("--trim") != null) {
-            trim = Boolean.parseBoolean(opts.get("--trim").toString());
-        }
         if (opts.get("--isUpgrade") != null) {
             isUpgrade = Boolean.parseBoolean(opts.get("--isUpgrade").toString());
-        }
-        if (opts.get("--trimTokenFile") != null) {
-            trimTokenFile = opts.get("--trimTokenFile").toString();
         }
         if (opts.get("--upgradeDescriptorTable") != null) {
             upgradeDescriptorTable = Boolean.parseBoolean(opts.get("--upgradeDescriptorTable").toString());

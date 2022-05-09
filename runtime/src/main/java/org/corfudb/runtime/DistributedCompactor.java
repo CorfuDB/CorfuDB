@@ -85,6 +85,7 @@ public class DistributedCompactor {
 
     public static final StringKey COMPACTION_MANAGER_KEY = StringKey.newBuilder().setKey("CompactionManagerKey").build();
     public static final StringKey CHECKPOINT_KEY = StringKey.newBuilder().setKey("minCheckpointToken").build();
+    public static final StringKey UPGRADE_KEY = StringKey.newBuilder().setKey("UpgradeKey").build();
 
     private CorfuStore corfuStore = null;
     private Table<StringKey, CheckpointingStatus, Message> compactionManagerTable = null;
@@ -157,7 +158,7 @@ public class DistributedCompactor {
     }
 
     private boolean checkCompactionManagerStartTrigger() {
-        //This is necessary here to stop checkpointing after it has started?
+        //This is necessary here to stop checkpointing after it has started
         if (isCheckpointFrozen(corfuStore, this.checkpointTable) ||
                 isClient && isUpgrade(corfuStore, this.checkpointTable)) {
             return false;
@@ -186,13 +187,18 @@ public class DistributedCompactor {
      */
     public int startCheckpointing() {
         long startCp = System.currentTimeMillis();
-        int count = 0;
         log.trace("Starting Checkpointing in-memory tables..");
         openCheckpointingMetadataTables();
-        count = checkpointOpenedTables();
+
+        if (!checkCompactionManagerStartTrigger()) {
+            log.trace("Checkpoint hasn't started");
+            return 0; // Orchestrator says checkpointing is either not needed or done.
+        }
+
+        int count = checkpointOpenedTables();
 
         if (count <= 0) {
-            log.trace("Opened tables Checkpoint not done by client: {}", clientName);
+            log.trace("Opened tables not checkpointed by client: {}", clientName);
             if (count < 0) {
                 return count;
             }
@@ -350,10 +356,6 @@ public class DistributedCompactor {
      * @return positive count on success and negative value on failure
      */
     public synchronized int checkpointOpenedTables() {
-        if (!checkCompactionManagerStartTrigger()) {
-            log.trace("Checkpoint hasn't started");
-            return 0; // Orchestrator says checkpointing is either not needed or done.
-        }
         log.trace("Checkpointing opened tables");
         int count = 0;
         for (CorfuTableNamePair openedTable :
@@ -575,9 +577,8 @@ public class DistributedCompactor {
     }
 
     public static boolean isUpgrade(CorfuStore corfuStore, final Table<StringKey, TokenMsg, Message> chkptMap) {
-        final StringKey upgradeTokenKey = StringKey.newBuilder().setKey("upgrade").build();
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            TokenMsg upgradeToken = txn.getRecord(chkptMap, upgradeTokenKey).getPayload();
+            TokenMsg upgradeToken = txn.getRecord(chkptMap, UPGRADE_KEY).getPayload();
             txn.commit();
             if (upgradeToken != null) {
                 log.warn("Client Checkpointer asked to freeze due to upgrade");
