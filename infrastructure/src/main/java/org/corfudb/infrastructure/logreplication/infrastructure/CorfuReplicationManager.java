@@ -69,10 +69,6 @@ public class CorfuReplicationManager {
 
     private class StreamListenerImpl implements StreamListener {
 
-//        StreamListenerImpl() {
-//           log.info("inside construcotr");
-//        }
-
         // update the domain,
         @Override
         public void onNext(CorfuStreamEntries results) {
@@ -102,52 +98,46 @@ public class CorfuReplicationManager {
         public void onError(Throwable throwable) {
             log.error("Error in domain listner {} ", throwable);
         }
-//
-//        @Override
-//        public boolean equals(Object o) {
-//            return this.hashCode() == o.hashCode();
-//        }
-//
-//        @Override
-//        public int hashCode() {
-//            return name.hashCode();
-//        }
-//
-//        @Override
-//        public String toString() {
-//            return name;
-//        }
     }
 
     private void captureDomainChange(String domainName, Set<String> incomingSiteChanges) {
         Set<String> currDestinationSites = domainToSitesMap.get(domainName);
-        Set sitesAddedToDomain = Sets.difference(incomingSiteChanges, currDestinationSites);
-        if (sitesAddedToDomain.size() > 0) {
+        Set<String> sitesToAdd = Sets.difference(incomingSiteChanges, currDestinationSites);
+        Set<String> sitesToRemove = Sets.difference(currDestinationSites, incomingSiteChanges);
+        if (sitesToAdd.size() > 0) {
             // 1. change the map in config
 
             // 2. call the FSM. if FSM is already present, force-sync else start a new fsm.
             // for PoC assuming that there is a runtime against all LMs already.
             // In actual coding, need to handle addition of new LM -> This would also be a topology change I guess.
             log.info("currDestinationSites {}, domainToSitesMap {}", currDestinationSites, incomingSiteChanges);
-            Set<String> newSiteAdditions = Sets.difference(incomingSiteChanges, currDestinationSites);
-            config.updateLMToStreamsMap(domainName, newSiteAdditions);
-            log.info("currDestinationSites {}, newSiteAdditions {}", currDestinationSites, newSiteAdditions);
-            for (String site : newSiteAdditions) {
-                log.info("Starting force snapshot sync because site {} was added to domain {}", site, domainName);
-                CorfuLogReplicationRuntime remoteRuntime = runtimeToRemoteCluster.get(site);
-                if (!remoteRuntime.getState().getType().equals(LogReplicationRuntimeStateType.REPLICATING)) {
-                    log.debug("The remote {} has not started replication. Adding the remote to domain {} " +
-                            "did not inturrupt the state machine", site, domainName);
-                    continue;
-                }
-                //update domainToSitesMap
-                domainToSitesMap.put(domainName, incomingSiteChanges);
-                remoteRuntime.getSourceManager().stopLogReplication();
-                remoteRuntime.getSourceManager().startForcedSnapshotSync(UUID.randomUUID());
-            }
+            config.updateLMToStreamsMap(domainName, sitesToAdd, true);
+            triggerForceSnapshotOnDomainChange(domainName, sitesToAdd);
+            log.info("currDestinationSites {}, newSiteAdditions {}", currDestinationSites, sitesToAdd);
         }
-        //if added, call that FSM and force sync
-        //if removed, see the 3 cases in the confluence
+        if (sitesToRemove.size() > 0) {
+            //This is 1 out of the 3 cases in the confluence.
+
+            config.updateLMToStreamsMap(domainName, sitesToRemove, false);
+            triggerForceSnapshotOnDomainChange(domainName, sitesToRemove);
+            log.info("currDestinationSites {}, newSiteRemoved {}", currDestinationSites, sitesToRemove);
+        }
+        domainToSitesMap.put(domainName, incomingSiteChanges);
+    }
+
+    private void triggerForceSnapshotOnDomainChange(String domainName, Set<String> sitesAddedOrRemoved) {
+        for (String site : sitesAddedOrRemoved) {
+            log.info("Starting force snapshot sync because site {} was added or removed from domain {}", site, domainName);
+            CorfuLogReplicationRuntime remoteRuntime = runtimeToRemoteCluster.get(site);
+            if (!remoteRuntime.getState().getType().equals(LogReplicationRuntimeStateType.REPLICATING)) {
+                log.debug("The remote {} has not started replication. Adding the remote to domain {} " +
+                        "did not inturrupt the state machine", site, domainName);
+                continue;
+            }
+            //update domainToSitesMap
+            remoteRuntime.getSourceManager().stopLogReplication();
+            remoteRuntime.getSourceManager().startForcedSnapshotSync(UUID.randomUUID());
+        }
     }
 
 

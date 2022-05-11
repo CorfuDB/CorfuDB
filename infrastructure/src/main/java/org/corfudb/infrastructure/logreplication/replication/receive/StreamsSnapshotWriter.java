@@ -142,10 +142,10 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             streamViewMap.put(streamId, streamName);
 
 
-            log.info("Orignal streams to replicate: {} ........... TO {} partitionedToGlobalMap {}",
-                    config.getLmToStreamsToSend().get(logReplicationMetadataManager.getLocalClusterId()), streamViewMap, partitionedToGlobalMap);
-            log.trace("Shadow stream=[{}] for regular stream=[{}] name=({})", shadowStreamId, streamId, streamName);
+            log.info("Shadow stream=[{}] for regular stream=[{}] name=({})", shadowStreamId, streamId, streamName);
         }
+        log.info("Orignal streams to replicate: {} ........... TO {} partitionedToGlobalMap {}",
+                config.getLmToStreamsToSend().get(logReplicationMetadataManager.getLocalClusterId()), streamViewMap, partitionedToGlobalMap);
 
         log.info("Stream tag map for streaming on Standby/Sink total={}, streams={}", dataStreamToTagsMap.size(),
                 dataStreamToTagsMap);
@@ -285,7 +285,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             clearRegularStream(regularStreamId);
             replicatedStreamIds.add(regularStreamId);
         }
-        log.info("the current msg has entries from {} the shadow is: {}", regularStreamId, regularToShadowStreamId.get(regularStreamId));
+        log.info("the current msg has entries from {} the shadow is: {}...{}", regularStreamId, regularToShadowStreamId.get(regularStreamId), replicatedStreamIds);
         processUpdatesShadowStream(opaqueEntry.getEntries().get(regularStreamId), message.getMetadata().getSnapshotSyncSeqNum(),
                 regularToShadowStreamId.get(regularStreamId), getUUID(message.getMetadata().getSyncRequestId()));
         recvSeq++;
@@ -386,7 +386,12 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     public void applyShadowStreams() {
         long snapshot = rt.getAddressSpaceView().getLogTail();
         log.debug("Apply Shadow Streams, total={}", streamViewMap.size());
+        log.debug("Apply Shadow Streams, replicated streams={}", replicatedStreamIds);
         for (UUID regularStreamId : streamViewMap.keySet()) {
+            if (!replicatedStreamIds.contains(regularStreamId)) {
+                log.info("g {} ", regularStreamId);
+                continue;
+            }
             if (partitionedToGlobalMap.containsKey(regularStreamId)) {
                 applyShadowStream(partitionedToGlobalMap.get(regularStreamId), snapshot);
             } else {
@@ -432,12 +437,9 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
                 .filter(id -> !replicatedStreamIds.contains(id))
                 .collect(Collectors.toCollection(HashSet::new));
         log.info("Streams to clear before: {} ", streamsToQuery);
-        for(UUID originalStreamID : streamsToQuery) {
-            if (partitionedToGlobalMap.containsKey(originalStreamID)) {
-                streamsToQuery.remove(originalStreamID);
-                streamsToQuery.add(partitionedToGlobalMap.get(originalStreamID));
-            }
-        }
+        // PoC: we filter out the replicated streams above because those streams are cleared out in transfer phase itself.
+        // But the globalMap would not be since its not one of replicateStreamId. So ad-hoc adding it so its cleared on every snapshot_sync
+        streamsToQuery.addAll(partitionedToGlobalMap.values());
         log.info("Streams to clear after: {} ", streamsToQuery);
 
         log.debug("Total of {} streams were replicated from active out of {}, sequencer query for {}, streamsToQuery={}",
@@ -469,7 +471,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
                         }
                     });
                     CorfuStoreMetadata.Timestamp ts = txnContext.commit();
-                    log.trace("Clear {} streams committed at :: {}", streamsToClear.size(), ts.getSequence());
+                    log.info("Clear {} streams committed at :: {}", streamsToClear.size(), ts.getSequence());
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to clear locally written streams.", tae);
                     throw new RetryNeededException();

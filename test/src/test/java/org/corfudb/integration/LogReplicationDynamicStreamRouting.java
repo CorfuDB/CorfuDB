@@ -69,24 +69,15 @@ public class LogReplicationDynamicStreamRouting extends AbstractIT {
     public static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
     public static final String CORFU_NAMESPACE = CORFU_SYSTEM_NAMESPACE;
     private final String NAMESPACE = DefaultLogReplicationConfigAdapter.NAMESPACE;
-    private final String STREAM_TAG = DefaultLogReplicationConfigAdapter.TAG_ONE;
-    private final String STATUS_STREAM_TAG = "lr_status";
 
-    private final int ONE = 1;
     private final int THREE = 3;
     private final int NINE = 9;
-    private final int FIFTY = 50;
-    private final int TWO_THOUSAND = 2000;
-    private final int THREE_THOUSAND = 3000;
     private final int SIX = 6;
     private final int TEN = 10;
     private final int TWELVE = 12;
     private final int HUNDRED = 100;
     private final int TWO_HUNDRED = 200;
     private final int THREE_HUNDRED = 300;
-    private final int FOUR_HUNDRED = 400;
-    private final int FIVE_HUNDERD= 500;
-    private final int TWENTYONE = 21;
     private final int EIGHTEEN = 18;
 
 
@@ -199,9 +190,9 @@ public class LogReplicationDynamicStreamRouting extends AbstractIT {
         System.out.println("Step 5: Add deltas");
         System.out.println("==============================================");
 
-        writeMoreData(corfuStoreSource, TABLE_1, table1, THREE, FIFTY);
-        writeMoreData(corfuStoreSource, TABLE_2, table2, THREE, TWO_THOUSAND);
-        writeMoreData(corfuStoreSource, TABLE_3, table3, THREE, THREE_THOUSAND);
+        writeMoreData(corfuStoreSource, TABLE_1, table1, THREE, HUNDRED + THREE);
+        writeMoreData(corfuStoreSource, TABLE_2, table2, THREE, TWO_HUNDRED + THREE);
+        writeMoreData(corfuStoreSource, TABLE_3, table3, THREE, THREE_HUNDRED + THREE);
 
         while(table_atLM1.count() != TWELVE || table_atLM2.count() != TWELVE || table_atLM3.count() != SIX) {
         }
@@ -227,12 +218,11 @@ public class LogReplicationDynamicStreamRouting extends AbstractIT {
         System.out.println("==============================================");
 
 
-        writeMoreData(corfuStoreSource, TABLE_1, table1, THREE, HUNDRED);
-        writeMoreData(corfuStoreSource, TABLE_2, table2, THREE, TWO_HUNDRED);
-        writeMoreData(corfuStoreSource, TABLE_3, table3, THREE, THREE_HUNDRED);
+        writeMoreData(corfuStoreSource, TABLE_1, table1, THREE, HUNDRED + SIX);
+        writeMoreData(corfuStoreSource, TABLE_2, table2, THREE, TWO_HUNDRED + SIX);
+        writeMoreData(corfuStoreSource, TABLE_3, table3, THREE, THREE_HUNDRED + SIX);
 
         while(table_atLM1.count() != EIGHTEEN || table_atLM2.count() != EIGHTEEN || table_atLM3.count() != EIGHTEEN) {
-            System.out.println("table_atLM1: "+table_atLM1.count()+" table_atLM2: "+ table_atLM2.count()+" table_atLM3: "+ table_atLM3.count());
         }
 
         Assert.assertEquals(EIGHTEEN, table_atLM1.count());
@@ -240,10 +230,10 @@ public class LogReplicationDynamicStreamRouting extends AbstractIT {
         Assert.assertEquals(EIGHTEEN, table_atLM3.count());
 
         try (TxnContext txn = corfuStoreSource.txn(NAMESPACE)) {
-            LogReplicationMetadata.ReplicationStatusKey key = LogReplicationMetadata.ReplicationStatusKey.newBuilder().setClusterId("336e4567-e89b-12d3-a456-111664440033").build();
-            CorfuStoreEntry<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, Message> record = txn.getRecord(replicationStatusTable_LM3, key);
-            Assert.assertTrue(record.getPayload().getSnapshotSyncInfo().getType().equals(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.FORCED));
-            System.out.println("Forced snapshotSync triggerd on: LM3");
+            LogReplicationMetadata.ReplicationStatusKey key = LogReplicationMetadata.ReplicationStatusKey.newBuilder().setClusterId("116e4567-e89b-12d3-a456-111664440011").build();
+            CorfuStoreEntry<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, Message> record = txn.getRecord(replicationStatusTable_LM1, key);
+            Assert.assertTrue(record.getPayload().getSnapshotSyncInfo().getType().equals(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT));
+            System.out.println("Forced snapshotSync not triggerd on: LM1");
         }
 
         try (TxnContext txn = corfuStoreSource.txn(NAMESPACE)) {
@@ -254,19 +244,51 @@ public class LogReplicationDynamicStreamRouting extends AbstractIT {
         }
 
         try (TxnContext txn = corfuStoreSource.txn(NAMESPACE)) {
-            LogReplicationMetadata.ReplicationStatusKey key = LogReplicationMetadata.ReplicationStatusKey.newBuilder().setClusterId("116e4567-e89b-12d3-a456-111664440011").build();
-            CorfuStoreEntry<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, Message> record = txn.getRecord(replicationStatusTable_LM1, key);
-            Assert.assertTrue(record.getPayload().getSnapshotSyncInfo().getType().equals(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT));
-            System.out.println("Forced snapshotSync not triggerd on: LM1");
+            LogReplicationMetadata.ReplicationStatusKey key = LogReplicationMetadata.ReplicationStatusKey.newBuilder().setClusterId("336e4567-e89b-12d3-a456-111664440033").build();
+            CorfuStoreEntry<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, Message> record = txn.getRecord(replicationStatusTable_LM3, key);
+            Assert.assertTrue(record.getPayload().getSnapshotSyncInfo().getType().equals(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.FORCED));
+            System.out.println("Forced snapshotSync triggerd on: LM3");
         }
 
+        System.out.println("==========================================================");
+        System.out.println("Step 8: Change domain by removing a site from a Domain");
+        System.out.println("==========================================================");
 
-//        shutdownCorfuServers();
-//        shutdownLogReplicationServers();
-//        sourceRuntime1.shutdown();
-//        sourceRuntime2.shutdown();
-//        sourceRuntime3.shutdown();
-//        sinkRuntime.shutdown();
+        System.out.println("Currently Domain1: LM1, LM2, LM3 && Domain3: LM1, LM3");
+        System.out.println("Removing LM1 from Domain1");
+
+        newDdestinations = new HashSet<String>(){{
+            add("226e4567-e89b-12d3-a456-111664440022"); add("336e4567-e89b-12d3-a456-111664440033");}};
+
+        changeDomain("Domain1", newDdestinations);
+
+
+        while(true) {
+            try (TxnContext txn = corfuStoreSource.txn(NAMESPACE)) {
+                LogReplicationMetadata.ReplicationStatusKey key = LogReplicationMetadata.ReplicationStatusKey.newBuilder().setClusterId("116e4567-e89b-12d3-a456-111664440011").build();
+                CorfuStoreEntry<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, Message> record = txn.getRecord(replicationStatusTable_LM1, key);
+                if (record.getPayload().getSnapshotSyncInfo().getType().equals(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.FORCED)) {
+                    Assert.assertTrue(record.getPayload().getSnapshotSyncInfo().getType().equals(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.FORCED));
+                    if (record.getPayload().getSnapshotSyncInfo().getStatus().equals(LogReplicationMetadata.SyncStatus.COMPLETED)) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        Assert.assertEquals(NINE, table_atLM1.count());
+        Assert.assertEquals(EIGHTEEN, table_atLM2.count());
+        Assert.assertEquals(EIGHTEEN, table_atLM3.count());
+
+        System.out.println("Force Snapshot Sync triggered on only LM1");
+
+
+        shutdownCorfuServers();
+        shutdownLogReplicationServers();
+        sourceRuntime.shutdown();
+        sinkRuntime1.shutdown();
+        sinkRuntime2.shutdown();
+        sinkRuntime3.shutdown();
     }
 
     private void setupSourceAndSinkCorfu() throws Exception {
@@ -479,94 +501,10 @@ public class LogReplicationDynamicStreamRouting extends AbstractIT {
         }
     }
 
-//    private void deleteRecord(CorfuStore corfuStore, String tableName,
-//                              int index) {
-//        SampleSchema.KeyToMerge key =
-//                SampleSchema.KeyToMerge.newBuilder().setKey(tableName + " key " + index).build();
-//
-//        try (TxnContext txnContext = corfuStore.txn(NAMESPACE)) {
-//            txnContext.delete(tableName, key);
-//            txnContext.commit();
-//        }
-//    }
-
     private void startReplicationServers() throws Exception {
         sourceReplicationServer = runReplicationServer(sourceReplicationPort, pluginConfigFilePath);
         sinkReplicationServer1 = runReplicationServer(sinkReplicationPort1, pluginConfigFilePath);
         sinkReplicationServer2 = runReplicationServer(sinkReplicationPort2, pluginConfigFilePath);
         sinkReplicationServer3 = runReplicationServer(sinkReplicationPort3, pluginConfigFilePath);
     }
-
-//    private class MergeTableListener implements StreamListener {
-//
-//        @Override
-//        public void onNext(CorfuStreamEntries results) {
-//            List<CorfuStreamEntry> entries = new ArrayList<>();
-//            for (List<CorfuStreamEntry> streamEntries :
-//                    results.getEntries().values()) {
-//                entries.addAll(streamEntries);
-//            }
-//
-//            for (CorfuStreamEntry entry : entries) {
-//                try(TxnContext txn = corfuStoreSink.txn(NAMESPACE)) {
-//                    if (entry.getOperation() == CorfuStreamEntry.OperationType.DELETE) {
-//                        txn.delete(TABLE_MERGED, entry.getKey());
-//                    } else if (entry.getOperation() == CorfuStreamEntry.OperationType.UPDATE) {
-//                        txn.putRecord(mergedTable,
-//                                (SampleSchema.KeyToMerge)entry.getKey(),
-//                                (SampleSchema.PayloadToMerge)entry.getPayload(),
-//                                (Message)entry.getMetadata());
-//                    } else if (entry.getOperation() == CorfuStreamEntry.OperationType.CLEAR){
-//                    } else {
-//                        throw new RuntimeException("Unexpected Op type " +
-//                                entry.getOperation());
-//                    }
-//                    txn.commit();
-//                }
-//            }
-//        }
-//
-//        @Override
-//        public void onError(Throwable t) {
-//            System.out.print("Error:");
-//            t.printStackTrace();
-//        }
-//    }
-
-//    private class ReplicationStatusListener implements StreamListener {
-//
-//        @Getter
-//        List<Boolean> accumulatedStatus = new ArrayList<>();
-//
-//        private final CountDownLatch countDownLatch;
-//        @Getter
-//        private boolean isforceSnapshotSync;
-//
-//        private final String name;
-//
-//        public ReplicationStatusListener(CountDownLatch countdownLatch, String name) {
-//            this.countDownLatch = countdownLatch;
-//            this.isforceSnapshotSync = false;
-//            this.name = name;
-//        }
-//
-//        @Override
-//        public void onNext(CorfuStreamEntries results) {
-////            System.out.println("coming here ");
-//            results.getEntries().forEach((schema, entries) -> entries.forEach(e -> {
-//                        System.out.println("Table name: " + schema.getTableName() +" this.name: " + this.name +" equals: " +schema.getTableName().equals(this.name) + " Payload: " + ((LogReplicationMetadata.ReplicationStatusVal)e.getPayload()).getSnapshotSyncInfo().getType());
-//                        if (schema.getTableName().equals(this.name)) {
-//                            this.isforceSnapshotSync = ((LogReplicationMetadata.ReplicationStatusVal)e.getPayload())
-//                                    .getSnapshotSyncInfo().getType().equals(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.FORCED);
-//                        }
-//                System.out.println("isforceSnapshotSync: " + isforceSnapshotSync +" for name " + this.name);
-//                    }));
-//            countDownLatch.countDown();
-//        }
-//
-//        @Override
-//        public void onError(Throwable throwable) {
-//            fail("onError for ReplicationStatusListener");
-//        }
-//    }
 }

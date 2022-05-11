@@ -113,19 +113,23 @@ public class LogReplicationConfig {
         domainToStreamsToSend.put("Domain3", new HashSet<String>(){{ add("LR-Test$Table_Directory_Group-3"); }});
     }
 
-    public void updateLMToStreamsMap(String domainName, Set<String> LMsAddedToDomain) {
+    public void updateLMToStreamsMap(String domainName, Set<String> LMsAddedToDomain, boolean isAdded) {
         // an LM gets added in domain. Then the streams sent ot LM will change ->
         // will have to include the tables that are being sent in the new domain to the LM
 
-//        Set<String> streamsToAddToNewDestination = domainToStreamsToSend.get(domainName);
-
         for(String lm : LMsAddedToDomain) {
-            if (!lmToStreamsToSend.containsKey(lm)) {
-                lmToStreamsToSend.put(lm, new HashSet<String>());
-            }
             log.info("before domainChange, lm {} had streams {}", lm, lmToStreamsToSend.get(lm));
-            lmToStreamsToSend.get(lm).addAll(domainToStreamsToSend.get(domainName));
-            log.info("after domainChange, lm {} has streams {}...expect to see table3 and table1", lm, lmToStreamsToSend.get(lm));
+            if (isAdded) {
+                if (!lmToStreamsToSend.containsKey(lm)) {
+                    lmToStreamsToSend.put(lm, new HashSet<String>());
+                }
+                lmToStreamsToSend.get(lm).addAll(domainToStreamsToSend.get(domainName));
+            } else {
+                // considering only positive case now. Negative case is that the domina never contained the site that the client has now requested to remove.
+
+                lmToStreamsToSend.get(lm).removeAll(domainToStreamsToSend.get(domainName));
+            }
+            log.info("after domainChange, lm {} has streams {}...expect to see table3", lm, lmToStreamsToSend.get(lm));
         }
     }
 
