@@ -15,8 +15,6 @@ public interface ICorfuSMRSnapshotProxy<T> {
 
     void logUpdate(@NonNull Collection<SMREntry> updateEntries, @NonNull LongSupplier updateVersion);
 
-    // TODO: getUpcall
-
     long getVersion();
 
     T get();

@@ -145,7 +145,7 @@ public abstract class AbstractTransactionalContext implements
         this.transaction = transaction;
         this.startTime = System.currentTimeMillis();
         this.parentContext = TransactionalContext.getCurrentContext();
-        AbstractTransactionalContext.log.trace("TXBegin[{}]", this);
+        AbstractTransactionalContext.log.debug("TXBegin[{}]", this);
     }
 
     protected <T extends ICorfuSMR<T>> ICorfuSMRSnapshotProxy<T> getAndCacheSnapshotProxy(ICorfuSMRProxyInternal<T> proxy, long ts) {
@@ -196,8 +196,8 @@ public abstract class AbstractTransactionalContext implements
      * @return The result of the upcall.
      */
     public abstract <T extends ICorfuSMR<T>> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy,
-                                                                     long timestamp,
-                                                                     Object[] conflictObject);
+                                                                    long timestamp,
+                                                                    Object[] conflictObject);
 
     public void syncWithRetryUnsafe(VersionLockedObject vlo,
                                     Token snapshotTimestamp,
@@ -247,8 +247,8 @@ public abstract class AbstractTransactionalContext implements
      * @return The address the update was written at.
      */
     public abstract <T extends ICorfuSMR<T>> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
-                                                             SMREntry updateEntry,
-                                                             Object[] conflictObject);
+                                                            SMREntry updateEntry,
+                                                            Object[] conflictObject);
 
     public abstract void logUpdate(UUID streamId, SMREntry updateEntry);
 

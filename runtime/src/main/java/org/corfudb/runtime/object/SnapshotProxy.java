@@ -33,7 +33,6 @@ public class SnapshotProxy<T> implements ICorfuSMRSnapshotProxy<T> {
         return ret;
     }
 
-
     public void logUpdate(@NonNull SMREntry updateEntry) {
         final ICorfuSMRUpcallTarget<T> target = upcallTargetMap.get(updateEntry.getSMRMethod());
 

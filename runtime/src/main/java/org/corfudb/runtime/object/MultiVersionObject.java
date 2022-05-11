@@ -93,7 +93,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      * @param wrapperObject The wrapper over the actual object.
      */
     public MultiVersionObject(@Nonnull CorfuRuntime corfuRuntime, @Nonnull Supplier<T> newObjectFn,
-               @Nonnull StreamViewSMRAdapter smrStream, @Nonnull ICorfuSMR<T> wrapperObject) {
+                              @Nonnull StreamViewSMRAdapter smrStream, @Nonnull ICorfuSMR<T> wrapperObject) {
         this.lock = new StampedLock();
         this.smrStream = smrStream;
         this.upcallTargetMap = wrapperObject.getSMRUpcallMap();
@@ -224,32 +224,32 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         }
 
         Runnable syncStreamRunnable = () ->
-            smrStream.streamUpToInList(timestamp)
-                .forEachOrdered(addressUpdates -> {
-                    try {
-                        // Apply all updates in a MultiSMREntry, which is treated as one version.
-                        final long globalAddress = addressUpdates.getGlobalAddress();
-                        addressUpdates.getSmrEntryList().forEach(this::applyUpdateUnsafe);
+                smrStream.streamUpToInList(timestamp)
+                        .forEachOrdered(addressUpdates -> {
+                            try {
+                                // Apply all updates in a MultiSMREntry, which is treated as one version.
+                                final long globalAddress = addressUpdates.getGlobalAddress();
+                                addressUpdates.getSmrEntryList().forEach(this::applyUpdateUnsafe);
 
-                        final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), globalAddress);
+                                final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), globalAddress);
 
-                        // Populate the new version in the MVOCache and update version metadata.
-                        mvoCache.put(voId, object);
-                        addressSpace.addAddress(globalAddress);
+                                // Populate the new version in the MVOCache and update version metadata.
+                                mvoCache.put(voId, object);
+                                addressSpace.addAddress(globalAddress);
 
-                        // The globalAddress can be equal to materializedUpTo when processing checkpoint
-                        // entries that consist of multiple continuation entries. These will all share the
-                        // globalAddress of the no-op operation. There is no correctness issue by putting
-                        // these prematurely in the cache, as optimistic reads will be invalid.
-                        Preconditions.checkState(globalAddress >= materializedUpTo,
-                                "globalAddress %s not >= materialized %s", globalAddress, materializedUpTo);
+                                // The globalAddress can be equal to materializedUpTo when processing checkpoint
+                                // entries that consist of multiple continuation entries. These will all share the
+                                // globalAddress of the no-op operation. There is no correctness issue by putting
+                                // these prematurely in the cache, as optimistic reads will be invalid.
+                                Preconditions.checkState(globalAddress >= materializedUpTo,
+                                        "globalAddress %s not >= materialized %s", globalAddress, materializedUpTo);
 
-                        materializedUpTo = globalAddress;
-                    } catch (Exception e) {
-                        log.error("Sync[{}] couldn't execute upcall due to {}", Utils.toReadableId(getID()), e);
-                        throw new UnrecoverableCorfuError(e);
-                    }
-                });
+                                materializedUpTo = globalAddress;
+                            } catch (Exception e) {
+                                log.error("Sync[{}] couldn't execute upcall due to {}", Utils.toReadableId(getID()), e);
+                                throw new UnrecoverableCorfuError(e);
+                            }
+                        });
 
         MicroMeterUtils.time(syncStreamRunnable, "mvo.sync.timer",
                 "streamId", getID().toString());
