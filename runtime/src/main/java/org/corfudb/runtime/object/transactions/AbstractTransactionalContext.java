@@ -25,8 +25,8 @@ import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.object.ICorfuSMRSnapshotProxy;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
-import org.corfudb.runtime.object.SnapshotProxyAdapter;
 import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.object.transactions.TransactionalContext.PreCommitListener;
 import org.corfudb.runtime.view.Address;
@@ -133,7 +133,7 @@ public abstract class AbstractTransactionalContext implements
     private final ConflictSetInfo readSetInfo = new ConflictSetInfo();
 
     // TODO: Make into a class?
-    protected final Map<UUID, SnapshotProxyAdapter<?>> snapshotProxyMap = new HashMap<>();
+    protected final Map<UUID, ICorfuSMRSnapshotProxy<?>> snapshotProxyMap = new HashMap<>();
 
     /**
      * Cache of last known position of streams accessed in this transaction.
@@ -148,16 +148,16 @@ public abstract class AbstractTransactionalContext implements
         AbstractTransactionalContext.log.debug("TXBegin[{}]", this);
     }
 
-    protected <T extends ICorfuSMR<T>> SnapshotProxyAdapter<T> getAndCacheSnapshotProxy(ICorfuSMRProxyInternal<T> proxy, long ts) {
+    protected <T extends ICorfuSMR<T>> ICorfuSMRSnapshotProxy<T> getAndCacheSnapshotProxy(ICorfuSMRProxyInternal<T> proxy, long ts) {
         // TODO: Refactor me to avoid casting on ICorfuSMRProxyInternal type.
-        SnapshotProxyAdapter<T> adapter = (SnapshotProxyAdapter<T>) snapshotProxyMap.get(proxy.getStreamID());
+        ICorfuSMRSnapshotProxy<T> snapshotProxy = (ICorfuSMRSnapshotProxy<T>) snapshotProxyMap.get(proxy.getStreamID());
         final MVOCorfuCompileProxy<T> persistentProxy = (MVOCorfuCompileProxy<T>) proxy;
-        if (adapter == null) {
-            adapter = persistentProxy.getUnderlyingMVO().getSnapshotProxy(ts);
-            snapshotProxyMap.put(proxy.getStreamID(), adapter);
+        if (snapshotProxy == null) {
+            snapshotProxy = persistentProxy.getUnderlyingMVO().getSnapshotProxy(ts);
+            snapshotProxyMap.put(proxy.getStreamID(), snapshotProxy);
         }
 
-        return adapter;
+        return snapshotProxy;
     }
 
     protected void updateKnownStreamPosition(UUID streamId, long position) {

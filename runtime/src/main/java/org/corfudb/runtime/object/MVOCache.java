@@ -7,18 +7,19 @@ import com.google.common.cache.RemovalCause;
 import com.google.common.cache.RemovalNotification;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 
-import java.lang.ref.SoftReference;
-import java.util.HashSet;
-import java.util.Map;
+import java.util.Collection;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -42,7 +43,7 @@ public class MVOCache<T extends ICorfuSMR<T>> {
     // The objectCache holds the strong references to all versioned objects
     // key is basically a pair of (objectId, version)
     // value is the versioned object such as PersistentCorfuTable
-    private final Cache<VersionedObjectIdentifier, T> objectCache;
+    private final Cache<VersionedObjectIdentifier, MVOCacheEntry> objectCache;
 
     // This objectVersions is updated at two places
     // 1) put() which adds a new version to the objectVersions
@@ -141,8 +142,22 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      * @param voId the id of the versioned object
      * @return the versioned object, or null if not exist
      */
+    /*
     public SoftReference<T> get(VersionedObjectIdentifier voId) {
-        return new SoftReference<>(objectCache.getIfPresent(voId));
+        return new SoftReference<>(objectCache.getIfPresent(voId).getBaseSnapshot());
+    }
+    */
+
+    public Optional<ICorfuSMRSnapshotProxy<T>> get(@NonNull VersionedObjectIdentifier voId,
+                                                   @NonNull ISnapshotProxyGenerator<T> snapshotProxyFn) {
+        MVOCacheEntry cacheEntry = objectCache.getIfPresent(voId);
+        if (cacheEntry == null) {
+            return Optional.empty();
+        }
+
+        final ICorfuSMRSnapshotProxy<T> snapshotProxy = snapshotProxyFn.generate(voId, cacheEntry.getBaseSnapshot());
+        cacheEntry.getSnapshotProxies().add(snapshotProxy);
+        return Optional.of(snapshotProxy);
     }
 
     /**
@@ -151,11 +166,12 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      * @param voId the object and version to add to cache
      * @param versionedObject the versioned object to add
      */
-    public void put(VersionedObjectIdentifier voId, T versionedObject) {
+    public void put(@NonNull VersionedObjectIdentifier voId, @NonNull T versionedObject) {
         TreeSet<Long> allVersionsOfThisObject = objectVersions.computeIfAbsent(
                 voId.getObjectId(), k -> new TreeSet<>());
         synchronized (allVersionsOfThisObject) {
-            objectCache.put(voId, versionedObject);
+            // TODO: What if voId is already there?
+            objectCache.put(voId, new MVOCacheEntry(versionedObject));
             allVersionsOfThisObject.add(voId.getVersion());
         }
     }
@@ -178,6 +194,7 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      * @return a pair of (voId, versionedObject) in which the voId contains the
      *         floor version.
      */
+    /*
     public SoftReference<Map.Entry<VersionedObjectIdentifier, T>> floorEntry(VersionedObjectIdentifier voId) {
         final TreeSet<Long> allVersionsOfThisObject = objectVersions.get(voId.getObjectId());
 
@@ -192,6 +209,33 @@ public class MVOCache<T extends ICorfuSMR<T>> {
 
                 VersionedObjectIdentifier id = new VersionedObjectIdentifier(voId.getObjectId(), floorVersion);
                 return new SoftReference<>(Pair.of(id, objectCache.getIfPresent(id)));
+            }
+        }
+    }
+     */
+
+    public Optional<ICorfuSMRSnapshotProxy<T>> floorEntry(@NonNull VersionedObjectIdentifier voId,
+                                                          @NonNull ISnapshotProxyGenerator<T> snapshotProxyFn) {
+        final TreeSet<Long> allVersionsOfThisObject = objectVersions.get(voId.getObjectId());
+
+        if (allVersionsOfThisObject == null) {
+            // The object has not been created
+            return Optional.empty();
+        } else {
+            synchronized (allVersionsOfThisObject) {
+                final Long floorVersion = allVersionsOfThisObject.floor(voId.getVersion());
+                if (floorVersion == null) {
+                    return Optional.empty();
+                }
+
+                final VersionedObjectIdentifier id = new VersionedObjectIdentifier(voId.getObjectId(), floorVersion);
+                final MVOCacheEntry cacheEntry = objectCache.getIfPresent(id);
+
+                // TODO: will always be present since objectVersions and objectCache should be in sync
+                Preconditions.checkState(cacheEntry != null);
+                final ICorfuSMRSnapshotProxy<T> snapshotProxy = snapshotProxyFn.generate(id, cacheEntry.getBaseSnapshot());
+                cacheEntry.getSnapshotProxies().add(snapshotProxy);
+                return Optional.of(snapshotProxy);
             }
         }
     }
@@ -231,5 +275,22 @@ public class MVOCache<T extends ICorfuSMR<T>> {
     // For testing purpose
     public Set<VersionedObjectIdentifier> keySet() {
         return ImmutableSet.copyOf(objectCache.asMap().keySet());
+    }
+
+    private class MVOCacheEntry {
+        @Getter
+        private final T baseSnapshot;
+
+        // This is used to "tie" the snapshot proxies given out with the immutable state in the cache.
+        // Snapshot proxies should not be invalidated while the cache maintains this entry.
+        @Getter
+        private final Collection<ICorfuSMRSnapshotProxy<T>> snapshotProxies;
+
+        MVOCacheEntry(@NonNull final T baseSnapshot) {
+            this.baseSnapshot = baseSnapshot;
+
+            // ConcurrentLinkedQueue provides fast insertions in some ordering
+            this.snapshotProxies = new ConcurrentLinkedQueue<>();
+        }
     }
 }

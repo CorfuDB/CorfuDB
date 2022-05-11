@@ -5,35 +5,27 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 
 import javax.annotation.concurrent.NotThreadSafe;
-import java.lang.ref.Reference;
 import java.util.Map;
 import java.util.function.LongConsumer;
 
 @NotThreadSafe
 @Slf4j
-public class SnapshotProxyAdapter<T extends ICorfuSMR<T>> {
+public class SnapshotProxy<T> implements ICorfuSMRSnapshotProxy<T> {
 
-    private final Reference<T> snapshotReference;
+    private T snapshot;
 
     private final long baseSnapshotVersion;
 
     private final Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap;
 
-    public SnapshotProxyAdapter(@NonNull final Reference<T> snapshotReference, final long snapshotVersion,
-                                @NonNull final Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap) {
-        this.snapshotReference = snapshotReference;
-        this.baseSnapshotVersion = snapshotVersion;
+    public SnapshotProxy(@NonNull final T snapshot, final long baseSnapshotVersion,
+                         @NonNull final Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap) {
+        this.snapshot = snapshot;
+        this.baseSnapshotVersion = baseSnapshotVersion;
         this.upcallTargetMap = upcallTargetMap;
     }
 
     public <R> R access(@NonNull ICorfuSMRAccess<R, T> accessFunction, @NonNull LongConsumer versionAccessed) {
-        final T snapshot = snapshotReference.get();
-
-        if (snapshotReference == null) {
-            // TODO: Throw custom exception.
-            throw new RuntimeException("Snapshot reference not available");
-        }
-
         final R ret = accessFunction.access(snapshot);
         versionAccessed.accept(baseSnapshotVersion);
         return ret;
@@ -46,15 +38,15 @@ public class SnapshotProxyAdapter<T extends ICorfuSMR<T>> {
             throw new RuntimeException("Unknown upcall " + updateEntry.getSMRMethod());
         }
 
-        final T snapshot = snapshotReference.get();
-
-        if (snapshot == null) {
-            // TODO: Throw custom exception.
-            throw new RuntimeException("Snapshot reference not available");
-        }
-
-        target.upcall(snapshot, updateEntry.getSMRArguments());
+        // TODO: update ICorfuSMRUpcallTarget interface to avoid cast
+        snapshot = (T) target.upcall(snapshot, updateEntry.getSMRArguments());
     }
 
-    // TODO: getUpcall().
+    public long getVersion() {
+        return baseSnapshotVersion;
+    }
+
+    public T get() {
+        return snapshot;
+    }
 }

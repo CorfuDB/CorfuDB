@@ -37,6 +37,23 @@ public class CorfuCompileWrapperBuilder {
                                                          ISerializer serializer,
                                                          Set<UUID> streamTags,
                                                          VersioningMechanism versioningMechanism) throws Exception {
+
+        if (versioningMechanism == VersioningMechanism.PERSISTENT) {
+            // TODO: make general
+            Class<T> immutableClass = (Class<T>)
+                    Class.forName("org.corfudb.runtime.collections.ImmutableCorfuTable");
+
+            Class<ICorfuSMR<T>> wrapperClass = (Class<ICorfuSMR<T>>) Class.forName(type.getName());
+
+            // Instantiate a new instance of this class.
+            ICorfuSMR<T> wrapperObject = (ICorfuSMR<T>) ReflectionUtils.
+                    findMatchingConstructor(wrapperClass.getDeclaredConstructors(), args);
+
+            wrapperObject.setProxy$CORFUSMR(new MVOCorfuCompileProxy<>(rt, streamID,
+                    immutableClass, args, serializer, streamTags, wrapperObject));
+            return (T) wrapperObject;
+        }
+
         // Do we have a compiled wrapper for this type?
         Class<ICorfuSMR<T>> wrapperClass = (Class<ICorfuSMR<T>>)
                 Class.forName(type.getName() + ICorfuSMR.CORFUSMR_SUFFIX);
@@ -47,14 +64,8 @@ public class CorfuCompileWrapperBuilder {
 
         // Now we create the proxy, which actually manages
         // instances of this object. The wrapper delegates calls to the proxy.
-        if (versioningMechanism == SMRObject.VersioningMechanism.VERSION_LOCKED) {
-            wrapperObject.setCorfuSMRProxy(new CorfuCompileProxy<>(rt, streamID,
-                    type, args, serializer, streamTags, wrapperObject));
-        } else {
-            // TODO: Refactor.
-            wrapperObject.setCorfuSMRProxy(new MVOCorfuCompileProxy<>(rt, streamID,
-                    type, args, serializer, streamTags, wrapperObject));
-        }
+        wrapperObject.setCorfuSMRProxy(new CorfuCompileProxy<>(rt, streamID,
+                type, args, serializer, streamTags, wrapperObject));
 
         if (wrapperObject instanceof ICorfuSMRProxyWrapper) {
             ((ICorfuSMRProxyWrapper) wrapperObject)

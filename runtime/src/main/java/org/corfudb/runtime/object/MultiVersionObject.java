@@ -1,10 +1,10 @@
 package org.corfudb.runtime.object;
 
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.StaleObjectVersionException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -12,22 +12,20 @@ import org.corfudb.runtime.view.Address;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.ref.Reference;
 import java.lang.ref.SoftReference;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.Supplier;
 
 @Slf4j
 public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
     private CorfuRuntime runtime;
-    private MVOCache mvoCache;
+    private MVOCache<T> mvoCache;
 
     private final StampedLock lock;
     private final ISMRStream smrStream;
@@ -40,6 +38,11 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
     private static final int TRIM_RETRY = 9;
 
+    private final ISnapshotProxyGenerator<T> snapshotReferenceProxyGenerator;
+
+    private final ISnapshotProxyGenerator<T> snapshotProxyGenerator;
+
+
     public MultiVersionObject(CorfuRuntime corfuRuntime,
                               Supplier<T> newObjectFn,
                               StreamViewSMRAdapter smrStream,
@@ -49,13 +52,19 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         this.mvoCache = runtime.getObjectsView().getMvoCache();
         this.newObjectFn = newObjectFn;
         this.smrStream = smrStream;
-        this.upcallTargetMap = wrapperObject.getCorfuSMRUpcallMap();
+        this.upcallTargetMap = wrapperObject.getSMRUpcallMap();
         this.streamID = streamID;
 
-        wrapperObject.closeWrapper();
-        lock = new StampedLock();
+        this.snapshotReferenceProxyGenerator = (voId, object) ->
+                new SnapshotReferenceProxy<>(voId.getObjectId(), voId.getVersion(), object, upcallTargetMap, SoftReference::new);
 
-        mvoCache.registerMVO(this.streamID,this);
+        this.snapshotProxyGenerator = (voId, object) ->
+                new SnapshotProxy<>(object, voId.getVersion(), upcallTargetMap);
+
+        wrapperObject.closeWrapper();
+        this.lock = new StampedLock();
+
+        this.mvoCache.registerMVO(this.streamID,this);
     }
 
     /**
@@ -68,87 +77,116 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      * @return
      * @throws NullPointerException
      */
-    public <R> R access(long timestamp, Function<T, R> accessFunction) throws NullPointerException{
-        if (containsVersion(timestamp)) {
-            log.trace("Access [{}] Direct (optimistic-read) access at {}",
-                    this, timestamp);
-            T object = (T)mvoCache.get(new VersionedObjectIdentifier(streamID, timestamp)).get();
-            R ret = accessFunction.apply(object);
+    public <R> R access(long timestamp, ICorfuSMRAccess<R, T> accessFunction) throws NullPointerException{
+        Optional<ICorfuSMRSnapshotProxy<T>> snapshotProxyOptional = mvoCache.get(
+                new VersionedObjectIdentifier(streamID, timestamp),
+                snapshotReferenceProxyGenerator
+        );
+
+        if (snapshotProxyOptional.isPresent()) {
+            log.trace("Access [{}] Direct (optimistic-read) access at {}", this, timestamp);
+            final R ret = snapshotProxyOptional.get().access(accessFunction, version -> {});
             correctnessLogger.trace("Version, {}", timestamp);
             return ret;
         }
 
         AtomicLong vloAccessedVersion = new AtomicLong();
-        T object = getVersionedObjectUnderLock(timestamp, vloAccessedVersion::set);
-        correctnessLogger.trace("Version, {}", vloAccessedVersion.get());
-        log.trace("Access [{}] Updated (writelock) access at {}", this, vloAccessedVersion.get());
-        return accessFunction.apply(object);
-    }
+        snapshotProxyOptional = getVersionedObjectUnderLock(timestamp, vloAccessedVersion::set);
 
-    // TODO: Complete implementation.
-    public SnapshotProxyAdapter<T> getSnapshotProxy(long timestamp) {
-        // TODO: Eliminate type cast
-        Reference<T> ref  = (SoftReference<T>) mvoCache.get(new VersionedObjectIdentifier(streamID, timestamp));
-
-        // PersistentCorfuTable shell shared with cache, but allocating
-        // a new shell no longer tied the SoftReference to cache.
-        // T instCopy = newObjectFn.get();
-        // instCopy.setImmutableState(ref.get().getImmutableState());
-
-        // SoftRef(PersistentCorfuTable : PersistentHashMapWrapper/ImmutableState)
-
-        if (ref.get() != null) {
-            return new SnapshotProxyAdapter<>(ref, timestamp, upcallTargetMap);
+        if (snapshotProxyOptional.isPresent()) {
+            correctnessLogger.trace("Version, {}", vloAccessedVersion.get());
+            log.trace("Access [{}] Updated (writelock) access at {}", this, vloAccessedVersion.get());
+            return snapshotProxyOptional.get().access(accessFunction, version -> {});
         }
-        // TODO: this should provide a Reference<>? Should all Reference<> be given out by cache?
-        AtomicLong vloAccessedVersion = new AtomicLong();
-        T object = getVersionedObjectUnderLock(timestamp, vloAccessedVersion::set);
-        correctnessLogger.trace("Version, {}", vloAccessedVersion.get());
-        log.trace("Access [{}] Updated (writelock) access at {}", this, vloAccessedVersion.get());
-        ref  = new SoftReference<>(object);
-        return new SnapshotProxyAdapter<>(ref, timestamp, upcallTargetMap);
+
+        throw new StaleObjectVersionException(streamID, timestamp);
     }
 
-    protected T getVersionedObjectUnderLock(long timestamp, Consumer<Long> versionAccessed) {
+    public ICorfuSMRSnapshotProxy<T> getSnapshotProxy(long timestamp) {
+        Optional<ICorfuSMRSnapshotProxy<T>> snapshotProxyOptional = mvoCache.get(
+                new VersionedObjectIdentifier(streamID, timestamp),
+                this::getSMRSnapshotProxy
+        );
+
+        if (snapshotProxyOptional.isPresent()) {
+            return snapshotProxyOptional.get();
+        }
+
+        AtomicLong vloAccessedVersion = new AtomicLong();
+        snapshotProxyOptional = getVersionedObjectUnderLock(timestamp, vloAccessedVersion::set);
+
+        if (snapshotProxyOptional.isPresent()) {
+            correctnessLogger.trace("Version, {}", vloAccessedVersion.get());
+            log.trace("Access [{}] Updated (writelock) access at {}", this, vloAccessedVersion.get());
+            return snapshotProxyOptional.get();
+        }
+
+        throw new StaleObjectVersionException(streamID, timestamp);
+    }
+
+    protected Optional<ICorfuSMRSnapshotProxy<T>> getVersionedObjectUnderLock(long timestamp, Consumer<Long> versionAccessed) {
 
         long ts = 0;
         try {
             ts = lock.writeLock();
 
-            Reference<T> ref = mvoCache.get(new VersionedObjectIdentifier(streamID, timestamp));
-            if (ref.get() != null) {
-                return ref.get();
+            Optional<ICorfuSMRSnapshotProxy<T>> snapshotProxyOptional = mvoCache.get(
+                    new VersionedObjectIdentifier(streamID, timestamp), snapshotReferenceProxyGenerator);
+
+            if (snapshotProxyOptional.isPresent()) {
+                return snapshotProxyOptional;
             }
 
-            T object = newObjectFn.get();
+            // TODO: why do we need retries here? We are retrying with the same TS
             for (int x = 0; x < TRIM_RETRY; x++) {
                 try {
-                    syncObjectUnsafe(object, timestamp);
+                    ICorfuSMRSnapshotProxy<T> snapshotProxy = syncObjectUnsafe(timestamp);
                     versionAccessed.accept(getVersionUnsafe());
-                    break;
+
+                    if (snapshotProxy.getVersion() == Address.NON_ADDRESS) {
+                        // Since there were no previous versions in the cache
+                        // we keep the same proxy (not backed by SoftReference)
+                        return Optional.of(snapshotProxy);
+                    }
+
+                    // TODO: version should now be in cache and return a snapshot proxy backed by a SoftReference
+                    return mvoCache.get(
+                            new VersionedObjectIdentifier(streamID, getVersionUnsafe()),
+                            snapshotReferenceProxyGenerator
+                    );
                 } catch (TrimmedException te) {
                     log.info("accessInner: Encountered trimmed address space " +
                                     "while accessing version {} of stream {} on attempt {}",
                             timestamp, streamID, x);
 
-                    resetUnsafe(object);
+                    resetUnsafe();
 
                     if (x == (TRIM_RETRY - 1)) {
                         throw te;
                     }
                 }
             }
-            return object;
+
+            return Optional.empty();
         } finally {
             lock.unlock(ts);
         }
     }
 
+    /*
     public void syncObjectUnsafe(T object, long timestamp) {
         prepareObjectBeforeSync(object, timestamp);
         syncStreamUnsafe(object, smrStream, timestamp);
     }
+     */
 
+    public ICorfuSMRSnapshotProxy<T> syncObjectUnsafe(long timestamp) {
+        ICorfuSMRSnapshotProxy<T> snapshotProxy = prepareObjectBeforeSync(timestamp);
+        syncStreamUnsafe(snapshotProxy, smrStream, timestamp);
+        return snapshotProxy;
+    }
+
+    /*
     private void prepareObjectBeforeSync(T object, Long timestamp) {
         // The first access to this object should always proceed
         if (Boolean.FALSE.equals(mvoCache.containsObject(streamID))) {
@@ -170,49 +208,63 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
             smrStream.seek(floorEntry.get().getKey().getVersion() + 1);
         }
     }
+     */
 
-    protected void syncStreamUnsafe(T object, ISMRStream stream, long timestamp) {
-        // TODO: Need better way to do this
-        AtomicReference<T> wrappedObject = new AtomicReference<>(object);
+    private ICorfuSMRSnapshotProxy<T> prepareObjectBeforeSync(Long timestamp) {
+        // The first access to this object should always proceed
+        if (Boolean.FALSE.equals(mvoCache.containsObject(streamID))) {
+            resetUnsafe();
 
+            // Return a snapshot proxy that isn't backed by a SoftReference since
+            // this snapshot is not yet tied to an MVO cache entry
+            return getSMRSnapshotProxy(
+                    new VersionedObjectIdentifier(streamID, Address.NON_ADDRESS),
+                    newObjectFn.get(),
+                    snapshotProxyGenerator
+            );
+        }
+
+        // Find the entry with the greatest version less than or equal to the given version
+        Optional<ICorfuSMRSnapshotProxy<T>> snapshotProxyOptional = mvoCache.floorEntry(
+                new VersionedObjectIdentifier(streamID, timestamp),
+                this::getSMRSnapshotProxy
+        );
+
+        if (!snapshotProxyOptional.isPresent()) {
+            // Do not allow going back to previous versions
+            resetUnsafe();
+            throw new StaleObjectVersionException(streamID, timestamp);
+        } else {
+            // Next stream read begins from a given address (inclusive),
+            // so +1 to avoid applying the same update twice
+            smrStream.seek(snapshotProxyOptional.get().getVersion() + 1);
+            return snapshotProxyOptional.get();
+        }
+    }
+
+    protected void syncStreamUnsafe(@NonNull ICorfuSMRSnapshotProxy<T> snapshotProxy,
+                                    @NonNull ISMRStream stream, long timestamp) {
         Runnable syncStreamRunnable = () ->
             stream.streamUpToInList(timestamp)
                 .forEachOrdered(entryList -> {
                     try {
-                        // TODO: how expensive?
-                        T nextVersion = newObjectFn.get();
-                        nextVersion.setImmutableState(wrappedObject.get().getImmutableState());
                         // Apply all updates in a MultiSMREntry
-                        for (SMREntry entry : entryList) {
-                            applyUpdateUnsafe(nextVersion, entry);
-                        }
+                        entryList.forEach(snapshotProxy::logUpdate);
+
                         // TODO: is it possible that a MultiSMREntry has 0 SMREntry?
                         VersionedObjectIdentifier vloId = new VersionedObjectIdentifier(
                                 streamID, entryList.get(0).getGlobalAddress());
-                        mvoCache.put(vloId, nextVersion);
-                        wrappedObject.set(nextVersion);
+                        mvoCache.put(vloId, snapshotProxy.get());
+
+                        // TODO: handle StaleObjectVersionException
                     } catch (Exception e) {
                         log.error("Sync[{}] Error: Couldn't execute upcall due to {}", this, e);
                         throw new UnrecoverableCorfuError(e);
                     }
                 });
+
         MicroMeterUtils.time(syncStreamRunnable, "vlo.sync.timer",
                 "streamId", getID().toString());
-        object.setImmutableState(wrappedObject.get().getImmutableState());
-    }
-
-    private void applyUpdateUnsafe(T object, SMREntry entry) {
-        log.trace("Apply[{}] of {}@{} ({})", this, entry.getSMRMethod(),
-                Address.isAddress(entry.getGlobalAddress()) ? entry.getGlobalAddress() : "OPT",
-                entry.getSMRArguments());
-
-        ICorfuSMRUpcallTarget<T> target = upcallTargetMap.get(entry.getSMRMethod());
-        if (target == null) {
-            throw new RuntimeException("Unknown upcall " + entry.getSMRMethod());
-        }
-
-        // Now invoke the upcall
-        target.upcall(object, entry.getSMRArguments());
     }
 
     public long logUpdate(SMREntry entry) {
@@ -221,10 +273,9 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
             t -> true);
     }
 
-    public void resetUnsafe(T object) {
+    public void resetUnsafe() {
         log.debug("Reset[{}]", this);
         smrStream.reset();
-        object.reset();
     }
 
     public long getVersionUnsafe() {
@@ -239,4 +290,12 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         return smrStream.getID();
     }
 
+    private ICorfuSMRSnapshotProxy<T> getSMRSnapshotProxy(@NonNull VersionedObjectIdentifier voId, @NonNull T object) {
+        return getSMRSnapshotProxy(voId, object, snapshotReferenceProxyGenerator);
+    }
+
+    private ICorfuSMRSnapshotProxy<T> getSMRSnapshotProxy(@NonNull VersionedObjectIdentifier voId, @NonNull T object,
+                                                          @NonNull ISnapshotProxyGenerator<T> generator) {
+        return generator.generate(voId, object);
+    }
 }

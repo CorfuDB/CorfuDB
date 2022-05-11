@@ -131,7 +131,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         }
 
         final String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
-        PersistentCorfuTable<K, CorfuRecord<V, M>> table = new PersistentCorfuTable$CORFUSMR<>();
+        PersistentCorfuTable<K, CorfuRecord<V, M>> table = new PersistentCorfuTable<>();
 
         Object[] args = {};
 
@@ -140,10 +140,10 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
             args = new Object[]{new ProtobufIndexer(defaultValueMessage, schemaOptions)};
         }
 
-        table.setCorfuSMRProxy(new MVOCorfuCompileProxy(
+        table.setProxy$CORFUSMR(new MVOCorfuCompileProxy(
                 runtime,
                 UUID.nameUUIDFromBytes(fullyQualifiedTableName.getBytes()),
-                PersistentCorfuTable.<K, CorfuRecord<V, M>>getTableType().getRawType(),
+                ImmutableCorfuTable.<K, CorfuRecord<V, M>>getTableType().getRawType(),
                 args,
                 runtime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE),
                 new HashSet<UUID>(),
@@ -176,7 +176,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         assertThat(corfuTable.size()).isZero();
 
         // Put key1
-        corfuTable.put(key1, value1);
+        corfuTable.insert(key1, value1);
 
         // Table should now have size 1 and contain key1
         assertThat(corfuTable.get(key1).getPayload().getLsb()).isEqualTo(payload1.getLsb());
@@ -194,7 +194,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         rt.getObjectsView().TXBegin();
 
         // Put key2
-        corfuTable.put(key2, value2);
+        corfuTable.insert(key2, value2);
 
         // Table should contain both key1 and key2, but not nonExistingKey
         assertThat(corfuTable.get(key2).getPayload().getLsb()).isEqualTo(payload2.getLsb());
@@ -261,7 +261,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
             TestSchema.Uuid payload = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
             TestSchema.Uuid metadata = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
             CorfuRecord value = new CorfuRecord(payload, metadata);
-            corfuTable.put(key, value);
+            corfuTable.insert(key, value);
         }
 
         // Populate the MVOCache with v1, v2 and v3.
@@ -310,7 +310,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
             TestSchema.Uuid payload = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
             TestSchema.Uuid metadata = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
             CorfuRecord value = new CorfuRecord(payload, metadata);
-            corfuTable.put(key, value);
+            corfuTable.insert(key, value);
         }
         rt.getObjectsView().TXEnd();
 
@@ -321,7 +321,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
             TestSchema.Uuid payload = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
             TestSchema.Uuid metadata = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
             CorfuRecord value = new CorfuRecord(payload, metadata);
-            corfuTable.put(key, value);
+            corfuTable.insert(key, value);
         }
         rt.getObjectsView().TXEnd();
 

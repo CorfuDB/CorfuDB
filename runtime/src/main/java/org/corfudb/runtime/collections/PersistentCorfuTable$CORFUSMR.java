@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 
+/**
 public class PersistentCorfuTable$CORFUSMR<K, V> extends PersistentCorfuTable<K, V> implements ICorfuSMR<PersistentCorfuTable<K, V>> {
 
     public ICorfuSMRProxy<PersistentCorfuTable<K, V>> proxy_CORFUSMR;
@@ -106,3 +107,4 @@ public class PersistentCorfuTable$CORFUSMR<K, V> extends PersistentCorfuTable<K,
         return upcallMap_CORFUSMR;
     }
 }
+**/
