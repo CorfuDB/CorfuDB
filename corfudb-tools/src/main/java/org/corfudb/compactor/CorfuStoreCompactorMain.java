@@ -52,13 +52,12 @@ public class CorfuStoreCompactorMain {
     private static CorfuRuntime corfuRuntime;
     private static CorfuRuntime cpRuntime;
     private static CorfuStore corfuStore;
-    private static DistributedCompactor distributedCompactor;
+
+    private DistributedCompactor distributedCompactor;
+    private Table<StringKey, TokenMsg, Message> checkpointTable;
+    private int retryCheckpointing = 1;
 
     private static final int CORFU_LOG_CHECKPOINT_ERROR = 3;
-
-    private static Table<StringKey, TokenMsg, Message> checkpointTable;
-    private static int retryCheckpointing = 0;
-
     // Reduce checkpoint batch size due to disk-based nature and smaller compactor JVM size
     private static final int NON_CONFIG_DEFAULT_CP_MAX_WRITE_SIZE = 1 << 20;
     private static final int DEFAULT_CP_MAX_WRITE_SIZE = 25 << 20;
@@ -72,8 +71,8 @@ public class CorfuStoreCompactorMain {
     private static String persistedCacheRoot = null;
     private static int maxWriteSize = -1;
     private static int bulkReadSize = 10;
-    private static boolean isUpgrade;
-    private static boolean upgradeDescriptorTable;
+    private static boolean isUpgrade = false;
+    private static boolean upgradeDescriptorTable = false;
     private static boolean tlsEnabled;
 
     private static final String USAGE = "Usage: corfu-compactor --hostname=<host> " +
@@ -103,15 +102,7 @@ public class CorfuStoreCompactorMain {
             + "--upgradeDescriptorTable=<upgradeDescriptorTable> Repopulate descriptor table?\n"
             + "--tlsEnabled=<tls_enabled>";
 
-    public static void main(String[] args) throws Exception {
-        if (port == 9040) {
-            Thread.currentThread().setName("CS-NonConfig-chkpter");
-        } else {
-            Thread.currentThread().setName("CS-Config-chkpter");
-        }
-        CorfuStoreCompactorMain corfuCompactorMain = new CorfuStoreCompactorMain();
-        corfuCompactorMain.getCompactorArgs(args);
-
+    public CorfuStoreCompactorMain() {
         if (maxWriteSize == -1) {
             if (persistedCacheRoot == null) {
                 // in-memory compaction
@@ -142,39 +133,56 @@ public class CorfuStoreCompactorMain {
         corfuStore = new CorfuStore(corfuRuntime);
         distributedCompactor = new DistributedCompactor(corfuRuntime, cpRuntime, persistedCacheRoot);
 
-        openCompactionTables();
+        this.openCompactionTables();
+    }
+
+    private void upgrade() {
+        retryCheckpointing = 10;
+        if (upgradeDescriptorTable) {
+            syncProtobufDescriptorTable();
+        }
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            txn.putRecord(checkpointTable, DistributedCompactor.UPGRADE_KEY, TokenMsg.getDefaultInstance(),
+                    null);
+            txn.commit();
+        } catch (Exception e) {
+            log.warn("Unable to write UpgradeKey to checkpoint table, ", e);
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        getCompactorArgs(args);
+
+        if (port == 9040) {
+            Thread.currentThread().setName("CS-NonConfig-chkpter");
+        } else {
+            Thread.currentThread().setName("CS-Config-chkpter");
+        }
+        CorfuStoreCompactorMain corfuCompactorMain = new CorfuStoreCompactorMain();
 
         if (isUpgrade) {
-            retryCheckpointing = 10;
-            if (upgradeDescriptorTable) {
-                syncProtobufDescriptorTable();
-            }
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                txn.putRecord(checkpointTable, DistributedCompactor.UPGRADE_KEY, TokenMsg.getDefaultInstance(),
-                        null);
-                txn.commit();
-            }
+            corfuCompactorMain.upgrade();
         }
+        corfuCompactorMain.checkpoint();
+    }
 
+    private void checkpoint() {
         try {
             for (int i = 0; i< retryCheckpointing; i++) {
-                checkpoint();
+                if (distributedCompactor.startCheckpointing() > 0) {
+                    break;
+                }
                 TimeUnit.MILLISECONDS.sleep(1000);
             }
         } catch (Throwable throwable) {
             log.error("CorfuStoreCompactorMain crashed with error:", CORFU_LOG_CHECKPOINT_ERROR, throwable);
-            throw throwable;
         }
     }
 
-    private static void checkpoint() {
-        distributedCompactor.startCheckpointing();
-    }
-
-    private static void openCompactionTables() {
+    private void openCompactionTables() {
         try {
             checkpointTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    CorfuRuntimeHelper.CHECKPOINT,
+                    DistributedCompactor.CHECKPOINT,
                     StringKey.class,
                     TokenMsg.class,
                     null,
@@ -279,7 +287,7 @@ public class CorfuStoreCompactorMain {
         }
     }
 
-    private void getCompactorArgs(String[] args) {
+    private static void getCompactorArgs(String[] args) {
         // Parse the options given, using docopt.
         Map<String, Object> opts =
                 new Docopt(USAGE)
@@ -310,10 +318,10 @@ public class CorfuStoreCompactorMain {
             bulkReadSize = Integer.parseInt(opts.get("--bulkReadSize").toString());
         }
         if (opts.get("--isUpgrade") != null) {
-            isUpgrade = Boolean.parseBoolean(opts.get("--isUpgrade").toString());
+            isUpgrade = true;
         }
         if (opts.get("--upgradeDescriptorTable") != null) {
-            upgradeDescriptorTable = Boolean.parseBoolean(opts.get("--upgradeDescriptorTable").toString());
+            upgradeDescriptorTable = true;
         }
         if (opts.get("--tlsEnabled") != null) {
             tlsEnabled = Boolean.parseBoolean(opts.get("--tlsEnabled").toString());

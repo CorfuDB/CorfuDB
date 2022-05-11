@@ -399,10 +399,10 @@ public class CompactorLeaderServices {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             RpcCommon.TokenMsg upgradeToken = (RpcCommon.TokenMsg) txn.getRecord(DistributedCompactor.CHECKPOINT,
                     DistributedCompactor.UPGRADE_KEY).getPayload();
-            syslog.info("Upgrade Key found: Hence trimlog invoked");
             txn.delete(DistributedCompactor.CHECKPOINT, DistributedCompactor.UPGRADE_KEY);
             txn.commit();
             if (upgradeToken != null) {
+                syslog.info("Upgrade Key found: Hence invoking trimlog()");
                 trimLog();
             }
         }
