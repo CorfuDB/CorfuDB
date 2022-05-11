@@ -17,8 +17,7 @@ public class CorfuRuntimeHelper {
 
     private CorfuRuntime corfuRuntime;
 
-    private static int maxWriteSize = Integer.MAX_VALUE;
-
+    private int maxWriteSize;
     private int bulkReadSize;
 
     private volatile String runtimeKeyStore;
@@ -26,8 +25,6 @@ public class CorfuRuntimeHelper {
     private volatile String runtimeTrustStore;
     private volatile String runtimeTrustStorePasswordFile;
     private volatile boolean enableTls;
-
-    public static final String CHECKPOINT = "checkpoint";
 
     private static final int systemDownHandlerTriggerLimit = 100;  // Corfu default is 20
     private static final Runnable defaultSystemDownHandler = new Runnable(){
@@ -46,10 +43,8 @@ public class CorfuRuntimeHelper {
     }
 
     CorfuRuntimeHelper(List<String> hostnames, int port, int maxWriteSize, int bulkReadSize,
-                       String runtimeKeyStore,
-                       String runtimeKeystorePasswordFile,
-                       String runtimeTrustStore,
-                       String runtimeTrustStorePasswordFile) {
+                       String runtimeKeyStore, String runtimeKeystorePasswordFile,
+                       String runtimeTrustStore, String runtimeTrustStorePasswordFile) {
         this.maxWriteSize = maxWriteSize;
         this.bulkReadSize = bulkReadSize;
         this.runtimeKeyStore = runtimeKeyStore;
