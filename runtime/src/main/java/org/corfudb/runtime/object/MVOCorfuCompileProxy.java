@@ -89,7 +89,7 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
         // Perform underlying access
         R result = null;
         try {
-            result = underlyingMVO.access(timestamp, accessMethod::access);
+            result = underlyingMVO.access(timestamp, accessMethod);
         } catch (NullPointerException npe) {
             // TODO: wrap and throw ObjectEvictedException
             log.error("Object has been evicted!", npe);
