@@ -17,13 +17,11 @@ public class DistributedClientCheckpointer {
 
     private final ScheduledExecutorService compactionScheduler;
     private final DistributedCompactor distributedCompactor;
-    private final ScheduledExecutorService bigLoadScheduler;
 
     public DistributedClientCheckpointer(@Nonnull CorfuRuntime runtime) {
         if (runtime.getParameters().checkpointTriggerFreqMillis <= 0) {
             this.compactionScheduler = null;
             this.distributedCompactor = null;
-            this.bigLoadScheduler = null;
             return;
         }
         this.distributedCompactor = new DistributedCompactor(runtime);
@@ -37,23 +35,6 @@ public class DistributedClientCheckpointer {
                 runtime.getParameters().getCheckpointTriggerFreqMillis(),
                 TimeUnit.MILLISECONDS
         );
-        final long LOADER_MAGIC_VALUE = 8001;
-        if (runtime.getParameters().getCheckpointTriggerFreqMillis() == LOADER_MAGIC_VALUE) {
-            this.bigLoadScheduler = Executors.newSingleThreadScheduledExecutor(
-                    new ThreadFactoryBuilder()
-                            .setDaemon(true)
-                            .setNameFormat(runtime.getParameters().getClientName() + "-chkpter-loader")
-                            .build());
-            bigLoadScheduler.scheduleWithFixedDelay(this::justLoadData,
-                    runtime.getParameters().getCheckpointTriggerFreqMillis(),
-                    runtime.getParameters().getCheckpointTriggerFreqMillis(),
-                    TimeUnit.MILLISECONDS);
-
-        } else {
-            log.info("NOT going to load data");
-            this.bigLoadScheduler = null;
-        }
-
     }
 
     /**
@@ -61,11 +42,6 @@ public class DistributedClientCheckpointer {
      */
     private synchronized void checkpointAllMyOpenedTables() {
         this.distributedCompactor.startCheckpointing();
-    }
-
-    private synchronized void justLoadData() {
-        this.distributedCompactor.justLoadData();
-
     }
 
     /**

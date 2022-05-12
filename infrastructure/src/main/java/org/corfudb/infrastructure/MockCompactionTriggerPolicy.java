@@ -10,7 +10,7 @@ public class MockCompactionTriggerPolicy implements ICompactionTriggerPolicy{
 
     @Override
     public void markCompactionCycleStart() {
-
+        //Not invoked
     }
 
     @Override
@@ -20,7 +20,7 @@ public class MockCompactionTriggerPolicy implements ICompactionTriggerPolicy{
 
     @Override
     public void markTrimComplete() {
-
+        //Not invoked
     }
 
     @Override
@@ -35,6 +35,6 @@ public class MockCompactionTriggerPolicy implements ICompactionTriggerPolicy{
 
     @Override
     public void setCorfuRuntime(CorfuRuntime corfuRuntime) {
-
+        //Not invoked
     }
 }

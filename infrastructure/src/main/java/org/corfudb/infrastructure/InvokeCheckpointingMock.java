@@ -24,5 +24,6 @@ public class InvokeCheckpointingMock implements IInvokeCheckpointing {
 
     @Override
     public void shutdown() {
+        //Not invoked
     }
 }
