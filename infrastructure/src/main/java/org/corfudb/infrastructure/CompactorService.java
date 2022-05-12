@@ -3,7 +3,6 @@ package org.corfudb.infrastructure;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.NonNull;
 import lombok.Setter;
-import org.corfudb.runtime.CorfuCompactorManagement;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuRuntime;
@@ -11,9 +10,7 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.DistributedCompactor;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.concurrent.SingletonResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,7 +67,7 @@ public class CompactorService implements ManagementService {
         }
         this.orchestratorThread = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
-                        .setNameFormat("CmptService-chkpter")
+                        .setNameFormat(threadName)
                         .build());
         this.checkpointerJvmManager = checkpointerJvmManager;
         this.compactionTriggerPolicy = compactionTriggerPolicy;

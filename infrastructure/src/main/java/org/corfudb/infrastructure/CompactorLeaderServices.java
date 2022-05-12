@@ -285,8 +285,8 @@ public class CompactorLeaderServices {
             syslog.trace("Checkpointing in progress...");
             LivenessValidatorHelper.setPrevIdleCount(idleCount);
             LivenessValidatorHelper.setPrevActiveTime(currentTime);
-        } else if (idleCount == 0 || (currentTime - LivenessValidatorHelper.getPrevActiveTime() > timeout &&
-                managerStatus != null && managerStatus.getStatus() == StatusType.STARTED_ALL)) {
+        } else if (idleCount == 0 || currentTime - LivenessValidatorHelper.getPrevActiveTime() > timeout &&
+                managerStatus != null && managerStatus.getStatus() == StatusType.STARTED_ALL) {
             readCache.clear();
             LivenessValidatorHelper.clear();
             finishCompactionCycle();
