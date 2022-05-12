@@ -1,24 +1,14 @@
 package org.corfudb.infrastructure;
 
 import lombok.Getter;
-import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.DistributedCompactor;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.RpcCommon;
-import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.TableRegistry;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
@@ -31,8 +21,6 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
     private long lastCompactionCycleStartTS = 0;
     private long lastAddressSpaceSizeAfterTrim = 0;
 
-    private final List<UUID> sensitiveStreams = new ArrayList<>();
-    private Map<UUID, Long> previousSensitiveStreamsSize = new HashMap<>();
     private CorfuRuntime corfuRuntime;
     private Logger syslog;
 
@@ -40,13 +28,6 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
         lastCompactionCycleStartTS = System.currentTimeMillis();
         lastAddressSpaceSizeAfterTrim = 0;
         syslog = LoggerFactory.getLogger("SYSLOG");
-    }
-
-    public void setSensitiveStreams(List<TableName> sensitiveTables) {
-        for (TableName table : sensitiveTables) {
-            sensitiveStreams.add(CorfuRuntime.getStreamID(
-                    TableRegistry.getFullyQualifiedTableName(table.getNamespace(), table.getTableName())));
-        }
     }
 
     @Override
@@ -133,13 +114,5 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
     @Override
     public void setCorfuRuntime(CorfuRuntime corfuRuntime) {
         this.corfuRuntime = corfuRuntime;
-    }
-
-    private void setPreviousSensitiveStreamsSize() {
-        for (UUID streamId : sensitiveStreams) {
-            StreamAddressSpace streamAddressSpace = corfuRuntime.getSequencerView()
-                    .getStreamAddressSpace(new StreamAddressRange(streamId, Address.MAX, Address.NON_ADDRESS));
-            previousSensitiveStreamsSize.put(streamId, streamAddressSpace.size());
-        }
     }
 }

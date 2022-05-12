@@ -4,8 +4,6 @@ import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuStore;
@@ -30,24 +28,17 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.proto.RpcCommon.TokenMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage;
-import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.SMRObject;
-import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.KeyDynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Date;
-import java.util.Random;
-import java.util.UUID;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
@@ -93,6 +84,8 @@ public class DistributedCompactor {
     private Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointsTable = null;
     private Table<StringKey, TokenMsg, Message> checkpointTable = null;
 
+    private CheckpointLivenessUpdater livenessUpdater;
+
     public static class CorfuTableNamePair {
         public TableName tableName;
         public CorfuTable corfuTable;
@@ -124,6 +117,7 @@ public class DistributedCompactor {
                 return;
             }
             this.corfuStore = new CorfuStore(this.runtime);
+            livenessUpdater = new CheckpointLivenessUpdater(corfuStore);
             log.debug("Opening all the checkpoint metadata tables");
             this.compactionManagerTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
                     DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
@@ -262,38 +256,6 @@ public class DistributedCompactor {
         return tablesToCheckpoint;
     }
 
-    private ILivenessUpdater livenessUpdater = new ILivenessUpdater() {
-        private ScheduledExecutorService executorService;
-
-        private static final int updateInterval = 15000;
-
-        @Override
-        public void updateLiveness(TableName tableName) {
-            // update validity counter every 15s
-            executorService = Executors.newSingleThreadScheduledExecutor();
-            executorService.scheduleWithFixedDelay(() -> {
-                try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                    ActiveCPStreamMsg currentStatus =
-                            txn.getRecord(activeCheckpointsTable, tableName).getPayload();
-                    ActiveCPStreamMsg newStatus = ActiveCPStreamMsg.newBuilder()
-                                    .setSyncHeartbeat(currentStatus.getSyncHeartbeat() + 1)
-                                    .setIsClientTriggered(currentStatus.getIsClientTriggered())
-                                    .build();
-                    TransactionalContext.getCurrentContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
-                    txn.putRecord(activeCheckpointsTable, tableName, newStatus, null);
-                    txn.commit();
-                } catch (Exception e) {
-                    log.error("Unable to update liveness for table: {}", tableName);
-                }
-            }, updateInterval/2, updateInterval, TimeUnit.MILLISECONDS);
-        }
-
-        @Override
-        public void notifyOnSyncComplete() {
-            executorService.shutdownNow();
-        }
-    };
-
     public <K, V> CheckpointingStatus appendCheckpoint(CorfuTable<K, V> corfuTable, TableName tableName, CorfuRuntime rt) {
         MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
         mcw.addMap(corfuTable);
@@ -335,7 +297,7 @@ public class DistributedCompactor {
                         .setStreamName(getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName()))
                         .setSerializer(serializer)
                         .addOpenOption(ObjectOpenOption.NO_CACHE);
-        if (persistedCacheRoot == null || persistedCacheRoot.equals("")) {
+        if (!"".equals(persistedCacheRoot)) {
             log.warn("Table {}::{} should be opened in disk-mode, but disk cache path is invalid",
                     tableName.getNamespace(), tableName.getTableName());
         } else {
@@ -459,7 +421,7 @@ public class DistributedCompactor {
                     return failedStatus; // stop on non-retryable exceptions
                 }
             } catch (Throwable t) {
-                log.error("clientCheckpointer: encountered unexpected exception", t);
+                log.error("Unexpected exception encountered while trying to checkpoint, ", t);
                 log.error("StackTrace: {}", t.getStackTrace());
             }
         }
@@ -494,8 +456,8 @@ public class DistributedCompactor {
                     return checkpointFailedError; // stop on non-retryable exceptions
                 }
             } catch (Throwable t) {
-                log.error("clientCheckpointer: encountered unexpected exception", t);
-                log.error("StackTrace: {}", t.getStackTrace());
+                log.error("Unexpected exception encountered while unlocking my checkpoint table, ", t);
+                log.error("StackTrace : {}", t.getStackTrace());
                 isSuccess = checkpointFailedError;
             }
         }
@@ -587,93 +549,5 @@ public class DistributedCompactor {
         }
         return false;
     }
-
-    private final int loaderId = new Random().nextInt();
-    private int tableNumber;
-    public void justLoadData() {
-        String namespace = "nsx";
-        String tableName = clientName+"_BigTable"+tableNumber;
-        final int numTables = 6;
-        tableNumber = (tableNumber + 1)% numTables;
-        int numItems =  5000;
-        int batchSize = 50;
-        int itemSize = 10240;
-        /*** if things go wrong please uncomment this and patch...
-        runtime.getTableRegistry().getRegistryTable()
-               .delete(TableName.newBuilder().setTableName(tableName).setNamespace(namespace).build());
-        if (batchSize == 50) {
-            log.warn("Deleted table {}${}", namespace, tableName);
-            return;
-        }
-         //*/
-
-        try {
-            TableOptions.TableOptionsBuilder optionsBuilder = TableOptions.builder();
-            final Table<ExampleSchemas.ExampleTableName,
-                    ExampleSchemas.ExampleTableName,
-                    ExampleSchemas.ManagedMetadata> table =
-                    corfuStore.openTable(
-                    namespace, tableName,
-                    ExampleSchemas.ExampleTableName.class,
-                    ExampleSchemas.ExampleTableName.class,
-                    ExampleSchemas.ManagedMetadata.class,
-                    TableOptions.fromProtoSchema(ExampleSchemas.ExampleTableName.class, optionsBuilder.build())
-            );
-
-            String streamName = TableRegistry.getFullyQualifiedTableName(namespace, tableName);
-            UUID streamId = CorfuRuntime.getStreamID(streamName);
-            long numAddressesLoaded = runtime.getSequencerView()
-                    .getStreamAddressSpace(new StreamAddressRange(streamId, Address.MAX, Address.NON_ADDRESS)).size();
-            long tableSize = 0;
-            try (TxnContext txn = corfuStore.txn(namespace)) {
-                tableSize = txn.count(table);
-                txn.commit();
-            }
-            if (numAddressesLoaded > tableSize*3) {
-                log.warn("Giving up as I already loaded into table "+streamName+" addresses="+numAddressesLoaded);
-                return;
-            }
-
-            /*
-             * Random bytes are needed to bypass the compression.
-             * If we don't use random bytes, compression will reduce the size of the payload siginficantly
-             * increasing the time it takes to load data if we are trying to fill up disk.
-             */
-            log.warn("WARNING: Loading " + numItems + " items of " + itemSize +
-                    " size in " + batchSize + " batchSized transactions into " +
-                    namespace + "$" + tableName+" stream addressSpaceSize="+numAddressesLoaded);
-            int itemsRemaining = numItems;
-            try (TxnContext tx = corfuStore.txn(namespace)) {
-                tx.clear(table);
-            }
-            while (itemsRemaining > 0) {
-                long startTime = System.nanoTime();
-                try (TxnContext tx = corfuStore.txn(namespace)) {
-                    for (int j = batchSize; j > 0 && itemsRemaining > 0; j--, itemsRemaining--) {
-                        byte[] array = new byte[itemSize];
-                        new Random().nextBytes(array);
-                        ExampleSchemas.ExampleTableName dummyVal = ExampleSchemas
-                                .ExampleTableName.newBuilder().setNamespace(namespace+tableName)
-                                .setTableName(new String(array, StandardCharsets.UTF_16)).build();
-                        ExampleSchemas.ExampleTableName dummyKey = ExampleSchemas.ExampleTableName.newBuilder()
-                                .setNamespace(Integer.toString(loaderId))
-                                .setTableName(Integer.toString(j)).build();
-                        tx.putRecord(table, dummyKey, dummyVal, ExampleSchemas.ManagedMetadata.getDefaultInstance());
-                    }
-                    CorfuStoreMetadata.Timestamp address = tx.commit();
-                    long elapsedNs = System.nanoTime() - startTime;
-                    log.info("loadTable: "+streamName+" Txn at address "
-                            + address.getSequence() + " Items  now left " + itemsRemaining+
-                            " took "+TimeUnit.NANOSECONDS.toMillis(elapsedNs)+"ms");
-                    ILogData ld = runtime.getAddressSpaceView().peek(address.getSequence());
-                    log.info("Item size = {}", ld.getSizeEstimate());
-                }
-            }
-        } catch (Exception e) {
-            log.error("loadTable: {} {} {} {} failed. {} stack {}", namespace, tableName, numItems, batchSize,
-                    e, e.getStackTrace());
-        }
-    }
-
 }
 

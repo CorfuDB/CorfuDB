@@ -49,9 +49,9 @@ import static org.corfudb.runtime.view.TableRegistry.getTypeUrl;
 @Slf4j
 public class CorfuStoreCompactorMain {
 
-    private static CorfuRuntime corfuRuntime;
-    private static CorfuRuntime cpRuntime;
-    private static CorfuStore corfuStore;
+    private final CorfuRuntime corfuRuntime;
+    private final CorfuRuntime cpRuntime;
+    private final CorfuStore corfuStore;
 
     private DistributedCompactor distributedCompactor;
     private Table<StringKey, TokenMsg, Message> checkpointTable;
@@ -103,16 +103,6 @@ public class CorfuStoreCompactorMain {
             + "--tlsEnabled=<tls_enabled>";
 
     public CorfuStoreCompactorMain() {
-        if (maxWriteSize == -1) {
-            if (persistedCacheRoot == null) {
-                // in-memory compaction
-                maxWriteSize = DEFAULT_CP_MAX_WRITE_SIZE;
-            } else {
-                // disk-backed non-config compaction
-                maxWriteSize = NON_CONFIG_DEFAULT_CP_MAX_WRITE_SIZE;
-            }
-        }
-
         CorfuRuntimeHelper corfuRuntimeHelper;
         CorfuRuntimeHelper cpRuntimeHelper;
         if (tlsEnabled) {
@@ -150,14 +140,31 @@ public class CorfuStoreCompactorMain {
         }
     }
 
+    /**
+     * Entry point to invoke Client checkpointing by the CorfuServer
+     *
+     * @param args command line argument strings
+     */
+    @SuppressWarnings("UncommentedMain")
     public static void main(String[] args) throws Exception {
         getCompactorArgs(args);
+
+        if (maxWriteSize == -1) {
+            if (persistedCacheRoot == null) {
+                // in-memory compaction
+                maxWriteSize = DEFAULT_CP_MAX_WRITE_SIZE;
+            } else {
+                // disk-backed non-config compaction
+                maxWriteSize = NON_CONFIG_DEFAULT_CP_MAX_WRITE_SIZE;
+            }
+        }
 
         if (port == 9040) {
             Thread.currentThread().setName("CS-NonConfig-chkpter");
         } else {
             Thread.currentThread().setName("CS-Config-chkpter");
         }
+
         CorfuStoreCompactorMain corfuCompactorMain = new CorfuStoreCompactorMain();
 
         if (isUpgrade) {
@@ -198,7 +205,7 @@ public class CorfuStoreCompactorMain {
      *
      * @return Protobuf Serializer.
      */
-    private static ISerializer createProtobufSerializer() {
+    private ISerializer createProtobufSerializer() {
         ConcurrentMap<String, Class<? extends Message>> classMap = new ConcurrentHashMap<>();
 
         // Register the schemas of TableName, TableDescriptors, TableMetadata, ProtobufFilename/Descriptor
@@ -219,7 +226,7 @@ public class CorfuStoreCompactorMain {
      * Populate the ProtobufDescriptorTable using the RegistryTable.
      * Enables backward compatibility in case of data migration.
      */
-    private static void syncProtobufDescriptorTable() {
+    private void syncProtobufDescriptorTable() {
 
         log.info("Running syncProtobufDescriptorTable ...");
         // Create or get a protobuf serializer to read the table registry.
@@ -241,27 +248,26 @@ public class CorfuStoreCompactorMain {
                     descriptorTable = corfuRuntime.getTableRegistry().getProtobufDescriptorTable();
 
                 Set<TableName> allTableNames = registryTable.keySet();
-                allTableNames.forEach(tableName -> {
+                for (TableName tableName : allTableNames) {
                     CorfuRecord<TableDescriptors, TableMetadata> registryRecord = registryTable.get(tableName);
                     TableDescriptors.Builder tableDescriptorsBuilder = TableDescriptors.newBuilder();
 
                     registryRecord.getPayload().getFileDescriptorsMap().forEach(
-                        (protoName, fileDescriptorProto) -> {
-                        // populate ProtobufDescriptorTable
-                        ProtobufFileName fileName = ProtobufFileName
-                            .newBuilder().setFileName(protoName).build();
-                        ProtobufFileDescriptor fileDescriptor = ProtobufFileDescriptor
-                            .newBuilder().setFileDescriptor(fileDescriptorProto).build();
-                        CorfuRecord<ProtobufFileDescriptor, TableMetadata> corfuRecord =
-                            descriptorTable.putIfAbsent(fileName, new CorfuRecord<>(fileDescriptor, null));
-                        if (corfuRecord == null) {
-                            log.info("Add proto file {}, fileDescriptor {} to ProtobufDescriptorTable",
-                                fileName, fileDescriptor.getFileDescriptor());
-                        }
-                        // construct a new tableDescriptorsMap using default FileDescriptorProto instances
-                        tableDescriptorsBuilder.putFileDescriptors(protoName,
-                            fileDescriptorProto.getDefaultInstanceForType());
-                    });
+                            (protoName, fileDescriptorProto) -> {
+                                // populate ProtobufDescriptorTable
+                                ProtobufFileName fileName = ProtobufFileName.newBuilder().setFileName(protoName).build();
+                                ProtobufFileDescriptor fileDescriptor = ProtobufFileDescriptor
+                                        .newBuilder().setFileDescriptor(fileDescriptorProto).build();
+                                CorfuRecord<ProtobufFileDescriptor, TableMetadata> corfuRecord =
+                                        descriptorTable.putIfAbsent(fileName, new CorfuRecord<>(fileDescriptor, null));
+                                if (corfuRecord == null) {
+                                    log.info("Add proto file {}, fileDescriptor {} to ProtobufDescriptorTable",
+                                            fileName, fileDescriptor.getFileDescriptor());
+                                }
+                                // construct a new tableDescriptorsMap using default FileDescriptorProto instances
+                                tableDescriptorsBuilder.putFileDescriptors(protoName,
+                                        fileDescriptorProto.getDefaultInstanceForType());
+                            });
 
                     tableDescriptorsBuilder.setKey(registryRecord.getPayload().getKey());
                     tableDescriptorsBuilder.setValue(registryRecord.getPayload().getValue());
@@ -273,7 +279,7 @@ public class CorfuStoreCompactorMain {
 
                     log.info("Cleaned up an entry in RegistryTable: {}${}",
                             tableName.getNamespace(), tableName.getTableName());
-                });
+                }
                 tx.commit();
                 log.info("syncProtobufDescriptorTable: completed!");
                 break;
