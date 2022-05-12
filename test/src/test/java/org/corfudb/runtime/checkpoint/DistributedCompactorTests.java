@@ -14,7 +14,6 @@ import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.DistributedCompactor;
-import org.corfudb.runtime.ILivenessUpdater;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -55,6 +54,11 @@ public class DistributedCompactorTests extends AbstractViewTest {
     private static final String CLIENT_NAME_PREFIX = "Client";
     private static final String STREAM_NAME = "streamNameA";
 
+    private static final String CACHE_SIZE_HEAP_RATIO = "0.0";
+    private static final String OPEN_TABLES_EXCEPTION_MSG = "Exception while opening tables";
+
+    private MockLivenessUpdater mockLivenessUpdater;
+
     /**
      * Generates and bootstraps a 3 node cluster in disk mode.
      *
@@ -66,7 +70,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
                 .setServerRouter(new TestServerRouter(SERVERS.PORT_0))
                 .setPort(SERVERS.PORT_0)
                 .setMemory(false)
-                .setCacheSizeHeapRatio("0.0")
+                .setCacheSizeHeapRatio(CACHE_SIZE_HEAP_RATIO)
                 .setLogPath(com.google.common.io.Files.createTempDir().getAbsolutePath())
                 .build();
         ServerContext sc1 = new ServerContextBuilder()
@@ -74,7 +78,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
                 .setServerRouter(new TestServerRouter(SERVERS.PORT_1))
                 .setPort(SERVERS.PORT_1)
                 .setMemory(false)
-                .setCacheSizeHeapRatio("0.0")
+                .setCacheSizeHeapRatio(CACHE_SIZE_HEAP_RATIO)
                 .setLogPath(com.google.common.io.Files.createTempDir().getAbsolutePath())
                 .build();
         ServerContext sc2 = new ServerContextBuilder()
@@ -82,7 +86,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
                 .setServerRouter(new TestServerRouter(SERVERS.PORT_2))
                 .setPort(SERVERS.PORT_2)
                 .setMemory(false)
-                .setCacheSizeHeapRatio("0.0")
+                .setCacheSizeHeapRatio(CACHE_SIZE_HEAP_RATIO)
                 .setLogPath(com.google.common.io.Files.createTempDir().getAbsolutePath())
                 .build();
 
@@ -137,6 +141,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
 
         corfuStore = new CorfuStore(runtime0);
+        mockLivenessUpdater = new MockLivenessUpdater(corfuStore);
     }
 
     private Table<StringKey, CheckpointingStatus, Message> openCompactionManagerTable() {
@@ -148,7 +153,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
                     null,
                     TableOptions.fromProtoSchema(CheckpointingStatus.class));
         } catch (Exception e) {
-            log.error("Exception while opening tables ", e);
+            log.error("{}, ", OPEN_TABLES_EXCEPTION_MSG, e);
             return null;
         }
     }
@@ -162,7 +167,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
                     null,
                     TableOptions.fromProtoSchema(CheckpointingStatus.class));
         } catch (Exception e) {
-            log.error("Exception while opening tables ", e);
+            log.error("{}, ", OPEN_TABLES_EXCEPTION_MSG, e);
             return null;
         }
     }
@@ -176,7 +181,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
                     null,
                     TableOptions.fromProtoSchema(TokenMsg.class));
         } catch (Exception e) {
-            log.error("Exception while opening tables ", e);
+            log.error("{}, ", OPEN_TABLES_EXCEPTION_MSG, e);
             return null;
         }
     }
@@ -190,7 +195,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
                     null,
                     TableOptions.fromProtoSchema(ActiveCPStreamMsg.class));
         } catch (Exception e) {
-            log.error("Exception while opening tables ", e);
+            log.error("{}, {} ", OPEN_TABLES_EXCEPTION_MSG, e);
             return null;
         }
     }
@@ -352,7 +357,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
                     DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
                     DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
             txn.commit();
-            log.info("managerStatus in test: {}", managerStatus == null ? "null" : managerStatus.getStatus());
+            log.debug("managerStatus in test: {}", managerStatus == null ? "null" : managerStatus.getStatus());
             if (managerStatus != null && (managerStatus.getStatus() == StatusType.COMPLETED
                     || managerStatus.getStatus() == StatusType.FAILED)) {
                 return true;
@@ -380,7 +385,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
                 TimeUnit.MILLISECONDS.sleep(WAIT_FOR_FINISH_CYCLE);
             }
         } catch (InterruptedException e) {
-            log.warn("Sleep interrupted, ", e);
+            log.warn("Sleep interrupted, Exception: ", e);
         }
 
         assert verifyManagerStatus(StatusType.COMPLETED);
@@ -405,7 +410,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
         try {
             TimeUnit.MILLISECONDS.sleep(LIVENESS_TIMEOUT);
         } catch (InterruptedException e) {
-            log.warn("Sleep interrupted, ", e);
+            log.warn("Sleep interrupted. Exception: ", e);
         }
 
         assert verifyManagerStatus(StatusType.STARTED);
@@ -450,63 +455,6 @@ public class DistributedCompactorTests extends AbstractViewTest {
         assert verifyManagerStatus(StatusType.FAILED);
         assert verifyCheckpointStatusTable(StatusType.COMPLETED, 1);
     }
-
-    private ILivenessUpdater mockLivenessUpdater = new ILivenessUpdater() {
-        private ScheduledExecutorService executorService;
-        private static final int updateInterval = 250;
-        TableName tableName = null;
-
-        @Override
-        public void updateLiveness(TableName tableName) {
-            this.tableName = tableName;
-            // update validity counter every 250ms
-            executorService = Executors.newSingleThreadScheduledExecutor();
-            executorService.scheduleWithFixedDelay(() -> {
-                Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointsTable = openActiveCheckpointsTable();
-                try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                    ActiveCPStreamMsg currentStatus =
-                            txn.getRecord(activeCheckpointsTable, tableName).getPayload();
-                    ActiveCPStreamMsg newStatus = ActiveCPStreamMsg.newBuilder()
-                            .setSyncHeartbeat(currentStatus.getSyncHeartbeat() + 1)
-                            .build();
-                    txn.putRecord(activeCheckpointsTable, tableName, newStatus, null);
-                    txn.commit();
-                    log.info("Updated liveness for table {} to {}", tableName, currentStatus.getSyncHeartbeat() + 1);
-                } catch (Exception e) {
-                    log.error("Unable to update liveness for table: {}, e ", tableName, e);
-                }
-            }, 0, updateInterval, TimeUnit.MILLISECONDS);
-        }
-
-        private void changeStatus() {
-            Table<TableName, CheckpointingStatus, Message> checkpointingStatusTable = openCheckpointStatusTable();
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                CheckpointingStatus tableStatus =
-                        txn.getRecord(checkpointingStatusTable, tableName).getPayload();
-                if (tableStatus == null || tableStatus.getStatus() != StatusType.STARTED) {
-                    txn.commit();
-                    return;
-                }
-                CheckpointingStatus newStatus = CheckpointingStatus.newBuilder()
-                        .setStatus(StatusType.COMPLETED)
-                        .setClientName(tableStatus.getClientName())
-                        .setTimeTaken(tableStatus.getTimeTaken())
-                        .build();
-                txn.putRecord(checkpointingStatusTable, tableName, newStatus, null);
-                txn.delete(DistributedCompactor.ACTIVE_CHECKPOINTS_TABLE_NAME, tableName);
-                txn.commit();
-            } catch (Exception e) {
-                log.error("Unable to mark status as COMPLETED for table: {}, {} StackTrace: {}",
-                        tableName, e, e.getStackTrace());
-            }
-        }
-
-        @Override
-        public void notifyOnSyncComplete() {
-            executorService.shutdownNow();
-            changeStatus();
-        }
-    };
 
     @Test
     public void validateLivenessSyncStateTest() {

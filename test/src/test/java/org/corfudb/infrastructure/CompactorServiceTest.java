@@ -48,7 +48,9 @@ public class CompactorServiceTest extends AbstractViewTest {
     private static final int WAIT_TO_KILL = 3000;
     private static final int COMPACTOR_SERVICE_INTERVAL = 10;
 
+    private static final String CACHE_SIZE_HEAP_RATIO = "0.0";
     private static final String CLIENT_NAME_PREFIX = "Client";
+    private static final String OPEN_TABLES_EXCEPTION_MSG = "Exception while opening tables";
 
     private CorfuRuntime runtime0 = null;
     private CorfuRuntime runtime1 = null;
@@ -83,7 +85,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                 .setServerRouter(new TestServerRouter(SERVERS.PORT_0))
                 .setPort(SERVERS.PORT_0)
                 .setMemory(false)
-                .setCacheSizeHeapRatio("0.0")
+                .setCacheSizeHeapRatio(CACHE_SIZE_HEAP_RATIO)
                 .setLogPath(com.google.common.io.Files.createTempDir().getAbsolutePath())
                 .setLogSizeLimitPercentage(Double.toString(logSizeLimitPercentage))
                 .build();
@@ -92,7 +94,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                 .setServerRouter(new TestServerRouter(SERVERS.PORT_1))
                 .setPort(SERVERS.PORT_1)
                 .setMemory(false)
-                .setCacheSizeHeapRatio("0.0")
+                .setCacheSizeHeapRatio(CACHE_SIZE_HEAP_RATIO)
                 .setLogPath(com.google.common.io.Files.createTempDir().getAbsolutePath())
                 .setLogSizeLimitPercentage(Double.toString(logSizeLimitPercentage))
                 .build();
@@ -101,7 +103,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                 .setServerRouter(new TestServerRouter(SERVERS.PORT_2))
                 .setPort(SERVERS.PORT_2)
                 .setMemory(false)
-                .setCacheSizeHeapRatio("0.0")
+                .setCacheSizeHeapRatio(CACHE_SIZE_HEAP_RATIO)
                 .setLogPath(com.google.common.io.Files.createTempDir().getAbsolutePath())
                 .setLogSizeLimitPercentage(Double.toString(logSizeLimitPercentage))
                 .build();
@@ -149,8 +151,6 @@ public class CompactorServiceTest extends AbstractViewTest {
         cpRuntime2.getParameters().setClientName(CLIENT_NAME_PREFIX + "_cp2");
 
         corfuStore = new CorfuStore(runtime0);
-
-        System.out.println("testSetup completed");
     }
 
     private Table<StringKey, CheckpointingStatus, Message> openCompactionManagerTable(CorfuStore corfuStore) {
@@ -162,7 +162,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                     null,
                     TableOptions.fromProtoSchema(CheckpointingStatus.class));
         } catch (Exception e) {
-            log.error("Exception while opening tables ", e);
+            log.error("{}, ", OPEN_TABLES_EXCEPTION_MSG, e);
             return null;
         }
     }
@@ -176,7 +176,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                     null,
                     TableOptions.fromProtoSchema(CheckpointingStatus.class));
         } catch (Exception e) {
-            log.error("Exception while opening tables ", e);
+            log.error("{}, ", OPEN_TABLES_EXCEPTION_MSG, e);
             return null;
         }
     }
@@ -190,7 +190,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                     null,
                     TableOptions.fromProtoSchema(CorfuCompactorManagement.ActiveCPStreamMsg.class));
         } catch (Exception e) {
-            log.error("Exception while opening tables ", e);
+            log.error("{}, ", OPEN_TABLES_EXCEPTION_MSG, e);
             return null;
         }
     }
@@ -243,16 +243,16 @@ public class CompactorServiceTest extends AbstractViewTest {
         }
     }
 
-    private long verifyCheckpointTable(StringKey record) {
+    private long verifyCheckpointTable(StringKey targetRecord) {
         openCheckpointTable();
         RpcCommon.TokenMsg token;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            token = (RpcCommon.TokenMsg) txn.getRecord(DistributedCompactor.CHECKPOINT, record).getPayload();
+            token = (RpcCommon.TokenMsg) txn.getRecord(DistributedCompactor.CHECKPOINT, targetRecord).getPayload();
             txn.commit();
         }
-        log.info("verify Token: {}", token == null ? "null" : token.toString());
+        log.info("VerifyCheckpointTable Token: {}", token == null ? "null" : token.toString());
 
-        return (token != null ? token.getSequence() : 0);
+        return token != null ? token.getSequence() : 0;
     }
 
     private boolean pollForFinishCheckpointing() {
@@ -321,7 +321,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                 TimeUnit.MILLISECONDS.sleep(COMPACTOR_SERVICE_INTERVAL);
             }
         } catch (InterruptedException e) {
-            log.warn("Sleep interrupted, ", e);
+            log.warn("Sleep interrupted, Exception: ", e);
         }
 
         assert verifyManagerStatus(StatusType.COMPLETED);
@@ -398,7 +398,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                 TimeUnit.MILLISECONDS.sleep(COMPACTOR_SERVICE_INTERVAL);
             }
         } catch (Exception e) {
-            log.warn("Exception: ", e);
+            log.warn("Sleep interrupted. Exception: ", e);
         }
 
         assert verifyManagerStatus(StatusType.COMPLETED);
