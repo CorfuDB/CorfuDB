@@ -50,7 +50,6 @@ import static org.corfudb.runtime.view.TableRegistry.getTypeUrl;
 public class CorfuStoreCompactorMain {
 
     private final CorfuRuntime corfuRuntime;
-    private final CorfuRuntime cpRuntime;
     private final CorfuStore corfuStore;
 
     private DistributedCompactor distributedCompactor;
@@ -119,9 +118,8 @@ public class CorfuStoreCompactorMain {
         }
 
         corfuRuntime = corfuRuntimeHelper.getRuntime();
-        cpRuntime = cpRuntimeHelper.getRuntime();
         corfuStore = new CorfuStore(corfuRuntime);
-        distributedCompactor = new DistributedCompactor(corfuRuntime, cpRuntime, persistedCacheRoot);
+        distributedCompactor = new DistributedCompactor(corfuRuntime, cpRuntimeHelper.getRuntime(), persistedCacheRoot);
 
         this.openCompactionTables();
     }
