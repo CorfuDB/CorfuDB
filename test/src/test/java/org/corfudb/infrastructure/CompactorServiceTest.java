@@ -51,6 +51,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     private static final String CACHE_SIZE_HEAP_RATIO = "0.0";
     private static final String CLIENT_NAME_PREFIX = "Client";
     private static final String OPEN_TABLES_EXCEPTION_MSG = "Exception while opening tables";
+    private static final String SLEEP_INTERRUPTED_EXCEPTION_MSG = "Sleep interrupted";
 
     private CorfuRuntime runtime0 = null;
     private CorfuRuntime runtime1 = null;
@@ -162,7 +163,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                     null,
                     TableOptions.fromProtoSchema(CheckpointingStatus.class));
         } catch (Exception e) {
-            log.error("{}, ", OPEN_TABLES_EXCEPTION_MSG, e);
+            log.error(OPEN_TABLES_EXCEPTION_MSG, e);
             return null;
         }
     }
@@ -176,7 +177,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                     null,
                     TableOptions.fromProtoSchema(CheckpointingStatus.class));
         } catch (Exception e) {
-            log.error("{}, ", OPEN_TABLES_EXCEPTION_MSG, e);
+            log.error(OPEN_TABLES_EXCEPTION_MSG, e);
             return null;
         }
     }
@@ -190,7 +191,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                     null,
                     TableOptions.fromProtoSchema(CorfuCompactorManagement.ActiveCPStreamMsg.class));
         } catch (Exception e) {
-            log.error("{}, ", OPEN_TABLES_EXCEPTION_MSG, e);
+            log.error(OPEN_TABLES_EXCEPTION_MSG, e);
             return null;
         }
     }
@@ -204,7 +205,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                     null,
                     TableOptions.fromProtoSchema(RpcCommon.TokenMsg.class));
         } catch (Exception e) {
-            log.error("Exception while opening tables ", e);
+            log.error(OPEN_TABLES_EXCEPTION_MSG, e);
             return null;
         }
     }
@@ -283,7 +284,7 @@ public class CompactorServiceTest extends AbstractViewTest {
             openedStreams.put(streamName, table);
             return table;
         } catch (Exception e) {
-            log.error("Exception while opening tables ", e);
+            log.error(OPEN_TABLES_EXCEPTION_MSG, e);
         }
         return null;
     }
@@ -321,7 +322,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                 TimeUnit.MILLISECONDS.sleep(COMPACTOR_SERVICE_INTERVAL);
             }
         } catch (InterruptedException e) {
-            log.warn("Sleep interrupted, Exception: ", e);
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
         }
 
         assert verifyManagerStatus(StatusType.COMPLETED);
@@ -354,7 +355,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                 TimeUnit.MILLISECONDS.sleep(COMPACTOR_SERVICE_INTERVAL);
             }
         } catch (InterruptedException e) {
-            log.warn("Sleep interrupted, ", e);
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
         }
 
         assert verifyManagerStatus(StatusType.COMPLETED);
@@ -398,7 +399,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                 TimeUnit.MILLISECONDS.sleep(COMPACTOR_SERVICE_INTERVAL);
             }
         } catch (Exception e) {
-            log.warn("Sleep interrupted. Exception: ", e);
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
         }
 
         assert verifyManagerStatus(StatusType.COMPLETED);
@@ -475,7 +476,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                 distributedClientCheckpointer1.shutdown();
             }
         } catch (InterruptedException e) {
-            log.warn("Sleep interrupted, ", e);
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
         }
 
         assert verifyManagerStatus(StatusType.COMPLETED);
@@ -507,7 +508,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                 distributedClientCheckpointer.shutdown();
             }
         } catch (InterruptedException e) {
-            log.warn("Sleep interrupted, ", e);
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
         }
 
         assert verifyManagerStatus(StatusType.COMPLETED);
@@ -549,7 +550,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                 TimeUnit.MILLISECONDS.sleep(COMPACTOR_SERVICE_INTERVAL);
             }
         } catch (InterruptedException e) {
-            log.warn("Sleep interrupted, ", e);
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
         }
 
         assert verifyManagerStatus(StatusType.FAILED);
@@ -581,7 +582,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                 TimeUnit.MILLISECONDS.sleep(COMPACTOR_SERVICE_INTERVAL);
             }
         } catch (InterruptedException e) {
-            log.warn("Sleep interrupted, ", e);
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
         }
 
         assert verifyManagerStatus(StatusType.COMPLETED);
@@ -620,7 +621,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                 TimeUnit.MILLISECONDS.sleep(COMPACTOR_SERVICE_INTERVAL);
             }
         } catch (InterruptedException e) {
-            log.warn("Sleep interrupted, ", e);
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
         }
 
         long trimSequence = verifyCheckpointTable(DistributedCompactor.CHECKPOINT_KEY);
