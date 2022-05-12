@@ -56,6 +56,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
 
     private static final String CACHE_SIZE_HEAP_RATIO = "0.0";
     private static final String OPEN_TABLES_EXCEPTION_MSG = "Exception while opening tables";
+    private static final String SLEEP_INTERRUPTED_EXCEPTION_MSG = "Sleep interrupted";
 
     private MockLivenessUpdater mockLivenessUpdater;
 
@@ -153,7 +154,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
                     null,
                     TableOptions.fromProtoSchema(CheckpointingStatus.class));
         } catch (Exception e) {
-            log.error("{}, ", OPEN_TABLES_EXCEPTION_MSG, e);
+            log.error(OPEN_TABLES_EXCEPTION_MSG, e);
             return null;
         }
     }
@@ -167,7 +168,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
                     null,
                     TableOptions.fromProtoSchema(CheckpointingStatus.class));
         } catch (Exception e) {
-            log.error("{}, ", OPEN_TABLES_EXCEPTION_MSG, e);
+            log.error(OPEN_TABLES_EXCEPTION_MSG, e);
             return null;
         }
     }
@@ -181,7 +182,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
                     null,
                     TableOptions.fromProtoSchema(TokenMsg.class));
         } catch (Exception e) {
-            log.error("{}, ", OPEN_TABLES_EXCEPTION_MSG, e);
+            log.error(OPEN_TABLES_EXCEPTION_MSG, e);
             return null;
         }
     }
@@ -195,7 +196,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
                     null,
                     TableOptions.fromProtoSchema(ActiveCPStreamMsg.class));
         } catch (Exception e) {
-            log.error("{}, {} ", OPEN_TABLES_EXCEPTION_MSG, e);
+            log.error(OPEN_TABLES_EXCEPTION_MSG, e);
             return null;
         }
     }
@@ -385,7 +386,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
                 TimeUnit.MILLISECONDS.sleep(WAIT_FOR_FINISH_CYCLE);
             }
         } catch (InterruptedException e) {
-            log.warn("Sleep interrupted, Exception: ", e);
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
         }
 
         assert verifyManagerStatus(StatusType.COMPLETED);
@@ -410,7 +411,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
         try {
             TimeUnit.MILLISECONDS.sleep(LIVENESS_TIMEOUT);
         } catch (InterruptedException e) {
-            log.warn("Sleep interrupted. Exception: ", e);
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
         }
 
         assert verifyManagerStatus(StatusType.STARTED);
@@ -450,7 +451,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
                 TimeUnit.MILLISECONDS.sleep(WAIT_FOR_FINISH_CYCLE);
             }
         } catch (InterruptedException e) {
-            log.warn("Sleep interrupted, ", e);
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
         }
         assert verifyManagerStatus(StatusType.FAILED);
         assert verifyCheckpointStatusTable(StatusType.COMPLETED, 1);
@@ -492,7 +493,7 @@ public class DistributedCompactorTests extends AbstractViewTest {
                 TimeUnit.MILLISECONDS.sleep(WAIT_FOR_FINISH_CYCLE);
             }
         } catch (InterruptedException e) {
-            log.warn("Sleep interrupted, ", e);
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
         }
 
         assert verifyManagerStatus(StatusType.COMPLETED);
