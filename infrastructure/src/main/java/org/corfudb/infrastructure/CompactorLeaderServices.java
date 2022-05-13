@@ -213,7 +213,7 @@ public class CompactorLeaderServices {
         }
 
         long currentTime = System.currentTimeMillis();
-        if (tableNames.size() == 0) {
+        if (tableNames.isEmpty()) {
             handleNoActiveCheckpointers(timeout, currentTime);
         }
         for (TableName table : tableNames) {
@@ -250,25 +250,27 @@ public class CompactorLeaderServices {
         }
     }
 
-    private int findCheckpointProgress() {
+    private int getIdleCount() {
         int idleCount = 0;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            List<TableName> tableNames = new ArrayList<TableName>(txn.keySet(checkpointingStatusTable)
-                    .stream().collect(Collectors.toList()));
-            idleCount = tableNames.size();
-            for (TableName table : tableNames) {
-                CheckpointingStatus tableStatus = txn.getRecord(checkpointingStatusTable, table).getPayload();
-                if (tableStatus.getStatus() != StatusType.IDLE) {
-                    idleCount--;
-                }
-            }
-            syslog.trace("Number of idle tables: {} out of {}", idleCount, tableNames.size());
+            idleCount = txn.executeQuery(checkpointingStatusTable, record -> (
+                    record.getPayload()).getStatus() == StatusType.IDLE).size();
+            syslog.trace("Number of idle tables: {}", idleCount);
             txn.commit();
         }
         return idleCount;
     }
 
     private void handleNoActiveCheckpointers(long timeout, long currentTime) {
+
+        //Find the number of tables with IDLE status
+        long idleCount = getIdleCount();
+        if (LivenessValidatorHelper.getPrevActiveTime() < 0 || idleCount < LivenessValidatorHelper.getPrevIdleCount()) {
+            syslog.trace("Checkpointing in progress...");
+            LivenessValidatorHelper.setPrevIdleCount(idleCount);
+            LivenessValidatorHelper.setPrevActiveTime(currentTime);
+            return;
+        }
         CheckpointingStatus managerStatus = null;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             managerStatus = (CheckpointingStatus) txn.getRecord(
@@ -278,14 +280,7 @@ public class CompactorLeaderServices {
         } catch (Exception e) {
             syslog.warn("Unable to acquire Manager Status");
         }
-
-        //Find the number of tables with IDLE status
-        long idleCount = findCheckpointProgress();
-        if (LivenessValidatorHelper.getPrevActiveTime() < 0 || idleCount < LivenessValidatorHelper.getPrevIdleCount()) {
-            syslog.trace("Checkpointing in progress...");
-            LivenessValidatorHelper.setPrevIdleCount(idleCount);
-            LivenessValidatorHelper.setPrevActiveTime(currentTime);
-        } else if (idleCount == 0 || currentTime - LivenessValidatorHelper.getPrevActiveTime() > timeout &&
+        if (idleCount == 0 || currentTime - LivenessValidatorHelper.getPrevActiveTime() > timeout &&
                 managerStatus != null && managerStatus.getStatus() == StatusType.STARTED_ALL) {
             readCache.clear();
             LivenessValidatorHelper.clear();

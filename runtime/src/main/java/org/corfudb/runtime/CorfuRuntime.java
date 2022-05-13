@@ -321,7 +321,7 @@ public class CorfuRuntime {
         /**
          * How often should the local client checkpointer run? 0 disables it completely.
          */
-        long checkpointTriggerFreqMillis = 0;
+        Duration checkpointTriggerFreqMillis = Duration.ofMillis(0);
 
         /*
          * The period at which the runtime will run garbage collection
@@ -439,7 +439,7 @@ public class CorfuRuntime {
             private int streamingSchedulerPollThreshold = 5;
             private boolean cacheWrites = true;
             private String clientName = "CorfuClient";
-            private long checkpointTriggerFreqMillis = 0;
+            private Duration checkpointTriggerFreqMillis = Duration.ofMillis(0);
 
             public CorfuRuntimeParametersBuilder streamingWorkersThreadPoolSize(int streamingWorkersThreadPoolSize) {
                 this.streamingWorkersThreadPoolSize = streamingWorkersThreadPoolSize;
@@ -694,7 +694,7 @@ public class CorfuRuntime {
 
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder checkpointTriggerFreqMillis(
                     long checkpointTriggerFreqMillis) {
-                this.checkpointTriggerFreqMillis = checkpointTriggerFreqMillis;
+                this.checkpointTriggerFreqMillis = Duration.ofMillis(checkpointTriggerFreqMillis);
                 return this;
             }
 
