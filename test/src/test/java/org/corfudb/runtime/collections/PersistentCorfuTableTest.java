@@ -35,7 +35,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 
@@ -387,6 +389,67 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         assertThat(rt.getObjectsView().getMvoCache().keySet().size()).isEqualTo(writeSize);
         TimeUnit.SECONDS.sleep(MVO_AUTO_SYNC_PERIOD_SECONDS * 2);
         assertThat(rt.getObjectsView().getMvoCache().keySet().size()).isEqualTo(writeSize * 2);
+    }
+
+    @Test
+    public void testUncommittedChangesIsolationBetweenParallelTxns() throws Exception {
+        addSingleServer(SERVERS.PORT_0);
+        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(LARGE_CACHE_SIZE)
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+        setupSerializer();
+        openTable();
+
+        TestSchema.Uuid key1 = TestSchema.Uuid.newBuilder().setLsb(1).setMsb(1).build();
+        TestSchema.Uuid payload1 = TestSchema.Uuid.newBuilder().setLsb(1).setMsb(1).build();
+        TestSchema.Uuid payload2 = TestSchema.Uuid.newBuilder().setLsb(2).setMsb(2).build();
+        TestSchema.Uuid metadata1 = TestSchema.Uuid.newBuilder().setLsb(1).setMsb(1).build();
+        CorfuRecord value1 = new CorfuRecord(payload1, metadata1);
+
+        // put(k1, v1)
+        rt.getObjectsView().TXBegin();
+        corfuTable.insert(key1, value1);
+        rt.getObjectsView().TXEnd();
+        assertThat(corfuTable.get(key1).getPayload().getLsb()).isEqualTo(payload1.getLsb());
+
+        CountDownLatch readLatch = new CountDownLatch(1);
+        AtomicLong readerResult = new AtomicLong();
+        AtomicLong writerResult = new AtomicLong();
+
+        Thread readerThread = new Thread(() -> {
+            rt.getObjectsView().TXBegin();
+            try {
+                // Unblocked until writerThread puts uncommitted changes
+                readLatch.await();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            // Changes made by writeThread should be isolated.
+            readerResult.set(corfuTable.get(key1).getPayload().getLsb());
+            rt.getObjectsView().TXEnd();
+        });
+
+        // put(k1, v2) to overwrite the previous put, but do not commit
+        Thread writerThread = new Thread(() -> {
+            rt.getObjectsView().TXBegin();
+            CorfuRecord value2 = new CorfuRecord(payload2, metadata1);
+            corfuTable.insert(key1, value2);
+            writerResult.set(corfuTable.get(key1).getPayload().getLsb());
+
+            // Signals the readerThread to read
+            readLatch.countDown();
+            rt.getObjectsView().TXEnd();
+        });
+
+        readerThread.start();
+        writerThread.start();
+        readerThread.join();
+        writerThread.join();
+
+        assertThat(readerResult.get()).isEqualTo(payload1.getLsb());
+        assertThat(writerResult.get()).isEqualTo(payload2.getLsb());
     }
 
     // PersistentCorfuTable SecondaryIndexes Tests - Adapted From CorfuTableTest & CorfuStoreSecondaryIndexTest
