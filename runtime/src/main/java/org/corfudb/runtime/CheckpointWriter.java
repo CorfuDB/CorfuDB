@@ -148,7 +148,18 @@ public class CheckpointWriter<T extends StreamingMap> {
     }
 
     public Token appendCheckpoint() {
-        return appendCheckpoint(null);
+        ILivenessUpdater emptyLivenessUpdater = new ILivenessUpdater() {
+            @Override
+            public void updateLiveness(CorfuStoreMetadata.TableName tableName) {
+                //Leave blank
+            }
+
+            @Override
+            public void notifyOnSyncComplete() {
+                //Leave blank
+            }
+        };
+        return appendCheckpoint(emptyLivenessUpdater);
     }
 
     /**
@@ -179,9 +190,9 @@ public class CheckpointWriter<T extends StreamingMap> {
             // as the latter discards holes for resolution, hence if last address is a hole it would diverge
             // from the stream address space maintained by the sequencer.
 
-            if (livenessUpdater != null) {
+//            if (livenessUpdater != null) {
                 livenessUpdater.notifyOnSyncComplete();
-            }
+//            }
             startCheckpoint(snapshotTimestamp);
             int entryCount = appendObjectState(entries);
             finishCheckpoint();
