@@ -60,6 +60,7 @@ public class CorfuStoreCompactorMain {
     // Reduce checkpoint batch size due to disk-based nature and smaller compactor JVM size
     private static final int NON_CONFIG_DEFAULT_CP_MAX_WRITE_SIZE = 1 << 20;
     private static final int DEFAULT_CP_MAX_WRITE_SIZE = 25 << 20;
+    private static final int NUM_RETRIES = 9;
 
     private static List<String> hostname = new ArrayList<>();
     private static int port;
@@ -67,7 +68,7 @@ public class CorfuStoreCompactorMain {
     private static String runtimeKeystorePasswordFile;
     private static String runtimeTrustStore;
     private static String runtimeTrustStorePasswordFile;
-    private static String persistedCacheRoot = null;
+    private static String persistedCacheRoot = "";
     private static int maxWriteSize = -1;
     private static int bulkReadSize = 10;
     private static boolean isUpgrade = false;
@@ -148,19 +149,15 @@ public class CorfuStoreCompactorMain {
         getCompactorArgs(args);
 
         if (maxWriteSize == -1) {
-            if (persistedCacheRoot == null) {
+            if ("".equals(persistedCacheRoot)) {
                 // in-memory compaction
                 maxWriteSize = DEFAULT_CP_MAX_WRITE_SIZE;
+                Thread.currentThread().setName("CS-Config-chkpter");
             } else {
                 // disk-backed non-config compaction
                 maxWriteSize = NON_CONFIG_DEFAULT_CP_MAX_WRITE_SIZE;
+                Thread.currentThread().setName("CS-NonConfig-chkpter");
             }
-        }
-
-        if (port == 9040) {
-            Thread.currentThread().setName("CS-NonConfig-chkpter");
-        } else {
-            Thread.currentThread().setName("CS-Config-chkpter");
         }
 
         CorfuStoreCompactorMain corfuCompactorMain = new CorfuStoreCompactorMain();
@@ -177,7 +174,7 @@ public class CorfuStoreCompactorMain {
                 if (distributedCompactor.startCheckpointing() > 0) {
                     break;
                 }
-                TimeUnit.MILLISECONDS.sleep(1000);
+                TimeUnit.SECONDS.sleep(1);
             }
         } catch (Throwable throwable) {
             log.error("CorfuStoreCompactorMain crashed with error:", CORFU_LOG_CHECKPOINT_ERROR, throwable);
@@ -236,7 +233,7 @@ public class CorfuStoreCompactorMain {
             corfuRuntime.getSerializers().registerSerializer(protobufSerializer);
         }
 
-        int numRetries = 9;
+        int numRetries = NUM_RETRIES;
         CorfuStore corfuStore = new CorfuStore(corfuRuntime);
         while (true) {
             try (TxnContext tx = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {

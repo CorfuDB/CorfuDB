@@ -31,7 +31,7 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  */
 public class CompactorService implements ManagementService {
 
-    private long compactionTriggerFreqMs = TimeUnit.MINUTES.toMillis(8);
+    private Duration compactionTriggerFreqMs = Duration.ofMillis(TimeUnit.MINUTES.toMinutes(8));
 
     @Setter
     private static int livenessTimeout = 60000;
@@ -88,11 +88,11 @@ public class CompactorService implements ManagementService {
         this.compactorLeaderServices = new CompactorLeaderServices(getCorfuRuntime(), serverContext.getLocalEndpoint());
         this.corfuStore = new CorfuStore(getCorfuRuntime());
         this.compactionTriggerPolicy.setCorfuRuntime(getCorfuRuntime());
-        if (getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis() > 0) {
+        if (getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis().toMillis() > 0) {
             this.compactionTriggerFreqMs = getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis();
         }
 
-        orchestratorThread.scheduleAtFixedRate(
+        orchestratorThread.scheduleWithFixedDelay(
             this::runOrchestrator,
             interval.toMillis(),
             interval.toMillis(),
@@ -109,42 +109,42 @@ public class CompactorService implements ManagementService {
     private void runOrchestrator() {
         boolean isLeader = isNodePrimarySequencer(updateLayoutAndGet());
         compactorLeaderServices.setLeader(isLeader);
+        CheckpointingStatus managerStatus = null;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
+            managerStatus = (CheckpointingStatus) txn.getRecord(
                     DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
                     DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
             txn.commit();
-            syslog.trace("ManagerStatus: {}", managerStatus == null ? "null" : managerStatus.getStatus());
-            if (managerStatus != null) {
-                if (managerStatus.getStatus() == StatusType.FAILED || managerStatus.getStatus() == StatusType.COMPLETED) {
-                    checkpointerJvmManager.shutdown();
-                    invokedJvm = false;
-                } else if (managerStatus.getStatus() == StatusType.STARTED_ALL && !checkpointerJvmManager.isRunning()
-                        && !invokedJvm) {
-                    checkpointerJvmManager.invokeCheckpointing();
-                    invokedJvm = true;
-                }
-            }
-
-            if (isLeader) {
-                if (managerStatus != null && (managerStatus.getStatus() == StatusType.STARTED ||
-                        managerStatus.getStatus() == StatusType.STARTED_ALL)) {
-                    compactorLeaderServices.validateLiveness(livenessTimeout);
-                } else if (compactionTriggerPolicy.shouldTrigger(this.compactionTriggerFreqMs)) {
-                    compactorLeaderServices.trimAndTriggerDistributedCheckpointing();
-                    compactionTriggerPolicy.markCompactionCycleStart();
-                }
-            }
         } catch (Exception e) {
             syslog.warn("Exception in runOrchestrator: {}", e.getStackTrace());
+        }
+        syslog.trace("ManagerStatus: {}", managerStatus == null ? "null" : managerStatus.getStatus());
+        if (managerStatus != null) {
+            if (managerStatus.getStatus() == StatusType.FAILED || managerStatus.getStatus() == StatusType.COMPLETED) {
+                checkpointerJvmManager.shutdown();
+                invokedJvm = false;
+            } else if (managerStatus.getStatus() == StatusType.STARTED_ALL && !checkpointerJvmManager.isRunning()
+                    && !invokedJvm) {
+                checkpointerJvmManager.invokeCheckpointing();
+                invokedJvm = true;
+            }
+        }
+
+        if (isLeader) {
+            if (managerStatus != null && (managerStatus.getStatus() == StatusType.STARTED ||
+                    managerStatus.getStatus() == StatusType.STARTED_ALL)) {
+                compactorLeaderServices.validateLiveness(livenessTimeout);
+            } else if (compactionTriggerPolicy.shouldTrigger(this.compactionTriggerFreqMs.toMillis())) {
+                compactorLeaderServices.trimAndTriggerDistributedCheckpointing();
+                compactionTriggerPolicy.markCompactionCycleStart();
+            }
         }
     }
 
     private Layout updateLayoutAndGet() {
-        Layout layout = getCorfuRuntime()
+        return getCorfuRuntime()
                 .invalidateLayout()
                 .join();
-        return layout;
     }
 
     private boolean isNodePrimarySequencer(Layout layout) {

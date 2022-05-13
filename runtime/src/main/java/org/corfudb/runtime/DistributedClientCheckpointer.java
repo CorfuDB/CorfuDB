@@ -19,7 +19,7 @@ public class DistributedClientCheckpointer {
     private final DistributedCompactor distributedCompactor;
 
     public DistributedClientCheckpointer(@Nonnull CorfuRuntime runtime) {
-        if (runtime.getParameters().checkpointTriggerFreqMillis <= 0) {
+        if (runtime.getParameters().checkpointTriggerFreqMillis.toMillis() <= 0) {
             this.compactionScheduler = null;
             this.distributedCompactor = null;
             return;
@@ -31,8 +31,8 @@ public class DistributedClientCheckpointer {
                         .setNameFormat(runtime.getParameters().getClientName() + "-chkpter")
                         .build());
         compactionScheduler.scheduleAtFixedRate(this::checkpointAllMyOpenedTables,
-                runtime.getParameters().getCheckpointTriggerFreqMillis()*2,
-                runtime.getParameters().getCheckpointTriggerFreqMillis(),
+                runtime.getParameters().getCheckpointTriggerFreqMillis().toMillis()*2,
+                runtime.getParameters().getCheckpointTriggerFreqMillis().toMillis(),
                 TimeUnit.MILLISECONDS
         );
     }
