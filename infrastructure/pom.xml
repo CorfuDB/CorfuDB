@@ -22,39 +22,14 @@
     <profiles>
         <profile>
             <id>docker</id>
+            <repositories>
+                <repository>
+                    <id>clojars.org</id>
+                    <url>https://clojars.org/repo</url>
+                </repository>
+            </repositories>
             <build>
                 <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-dependency-plugin</artifactId>
-                        <version>3.3.0</version>
-                        <executions>
-                            <execution>
-                                <id>copy</id>
-                                <phase>package</phase>
-                                <goals>
-                                    <goal>copy</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                        <configuration>
-                            <artifactItems>
-                                <artifactItem>
-                                    <groupId>org.corfudb</groupId>
-                                    <artifactId>cmdlets</artifactId>
-                                    <version>${project.version}</version>
-                                    <type>jar</type>
-                                    <classifier>shaded</classifier>
-                                    <overWrite>false</overWrite>
-                                    <outputDirectory>${project.build.directory}</outputDirectory>
-                                    <destFileName>cmdlets-${project.version}-shaded.jar</destFileName>
-                                </artifactItem>
-                            </artifactItems>
-                            <overWriteReleases>false</overWriteReleases>
-                            <overWriteSnapshots>true</overWriteSnapshots>
-                        </configuration>
-                    </plugin>
-
                     <plugin>
                         <groupId>org.codehaus.mojo</groupId>
                         <artifactId>exec-maven-plugin</artifactId>
@@ -168,6 +143,9 @@
         </profile>
         <profile>
             <id>compatibility</id>
+            <repositories>
+
+            </repositories>
             <build>
                 <plugins>
                     <plugin>
