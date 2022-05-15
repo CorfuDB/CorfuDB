@@ -7,6 +7,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage;
@@ -28,22 +29,25 @@ import java.util.concurrent.TimeoutException;
 @Slf4j
 public class NegotiatingState implements LogReplicationRuntimeState {
 
-    private CorfuLogReplicationRuntime fsm;
+    private final CorfuLogReplicationRuntime fsm;
 
     private Optional<String> leaderNodeId;
 
-    private ThreadPoolExecutor worker;
+    private final ThreadPoolExecutor worker;
 
-    private LogReplicationClientRouter router;
+    private final LogReplicationClientRouter router;
 
-    private LogReplicationMetadataManager metadataManager;
+    private final LogReplicationMetadataManager metadataManager;
+
+    private final LogReplicationConfigManager tableManagerPlugin;
 
     public NegotiatingState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker, LogReplicationClientRouter router,
-                            LogReplicationMetadataManager metadataManager) {
+                            LogReplicationMetadataManager metadataManager, LogReplicationConfigManager tableManagerPlugin) {
         this.fsm = fsm;
         this.metadataManager = metadataManager;
         this.worker = worker;
         this.router = router;
+        this.tableManagerPlugin = tableManagerPlugin;
     }
 
     @Override
@@ -73,7 +77,15 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 return null;
             case NEGOTIATION_COMPLETE:
                 log.info("Negotiation complete, result={}", event.getNegotiationResult());
-                ((ReplicatingState)fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING)).setReplicationEvent(event.getNegotiationResult());
+                if (tableManagerPlugin.isUpgraded()) {
+                    // Force a snapshot sync if an upgrade has been identified. This will guarantee that
+                    // changes in the streams to replicate are captured by the destination.
+                    log.info("A forced snapshot sync will be done as Active side LR has been upgraded.");
+                    ((ReplicatingState) fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING))
+                            .setReplicationEvent(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST));
+                } else {
+                    ((ReplicatingState)fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING)).setReplicationEvent(event.getNegotiationResult());
+                }
                 return fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING);
             case NEGOTIATION_FAILED:
                 return this;
@@ -165,15 +177,6 @@ public class NegotiatingState implements LogReplicationRuntimeState {
             throws LogReplicationNegotiationException {
 
         log.debug("Process negotiation response {} from {}", negotiationResponse, fsm.getRemoteClusterId());
-
-        /*
-         * If the version are different, report an error.
-         */
-        if (!negotiationResponse.getVersion().equals(metadataManager.getVersion())) {
-            log.error("The active site version {} is different from standby site version {}",
-                    metadataManager.getVersion(), negotiationResponse.getVersion());
-            throw new LogReplicationNegotiationException(" Mismatch of version number");
-        }
 
         /*
          * The standby site has a smaller config ID, redo the discovery for this standby site when

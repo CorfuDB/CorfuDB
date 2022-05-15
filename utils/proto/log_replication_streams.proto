@@ -17,4 +17,7 @@ message VersionString {
 
 message Version {
     string version = 1;
+    // A boolean flag which indicates the cluster has been
+    // upgraded and a forced snapshot sync is needed.
+    bool is_upgraded = 2;
 }

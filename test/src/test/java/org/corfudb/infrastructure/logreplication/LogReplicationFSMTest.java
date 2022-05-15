@@ -43,6 +43,7 @@ import org.corfudb.infrastructure.logreplication.replication.send.logreader.Defa
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -504,12 +505,13 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, TEST_TOPOLOGY_CONFIG_ID,
                 TEST_LOCAL_CLUSTER_ID);
         LogReplicationConfig config = new LogReplicationConfig(new HashSet<>(Arrays.asList(TEST_STREAM_NAME)));
+        LogReplicationConfigManager tableManagerPlugin = new LogReplicationConfigManager(runtime);
         ackReader = new LogReplicationAckReader(metadataManager, config, runtime, TEST_LOCAL_CLUSTER_ID);
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
                 new DefaultReadProcessor(runtime), config, new ClusterDescriptor("Cluster-Local",
                 LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT),
                 Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()),
-                ackReader);
+                ackReader, tableManagerPlugin);
         ackReader.setLogEntryReader(fsm.getLogEntryReader());
         transitionObservable = fsm.getNumTransitions();
         transitionObservable.addObserver(this);

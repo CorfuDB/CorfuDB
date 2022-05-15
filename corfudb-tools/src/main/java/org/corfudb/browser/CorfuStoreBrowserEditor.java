@@ -425,10 +425,10 @@ public class CorfuStoreBrowserEditor {
                 defaultMetadataAny.getTypeUrl(), newMetadataMsg);
 
         try {
-            CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
+            ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
                 getTable(namespace, tableName);
             runtime.getObjectsView().TXBegin();
-            table.put(dynamicKey, dynamicRecord);
+            table.insert(dynamicKey, dynamicRecord);
             runtime.getObjectsView().TXEnd();
             System.out.println("\n======================\n");
             return dynamicRecord;

@@ -15,6 +15,7 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationS
 import org.corfudb.infrastructure.logreplication.replication.fsm.ObservableAckMsg;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -65,7 +66,7 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 @Slf4j
 public class LogReplicationIT extends AbstractIT implements Observer {
 
-    public final static String nettyConfig = "src/test/resources/transport/nettyConfig.properties";
+    public static final String nettyConfig = "./test/src/test/resources/transport/nettyConfig.properties";
 
     private static final String SOURCE_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
     private static final int WRITER_PORT = DEFAULT_PORT + 1;
@@ -1350,6 +1351,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig,
                 logReplicationMetadataManager, nettyConfig, function);
 
+        LogReplicationConfigManager tableManagerPlugin = new LogReplicationConfigManager(srcTestRuntime);
+
         // Source Manager
         LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(
                 LogReplicationRuntimeParameters.builder()
@@ -1357,7 +1360,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                                 LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT))
                                 .replicationConfig(config).localCorfuEndpoint(SOURCE_ENDPOINT).build(),
                 logReplicationMetadataManager,
-                sourceDataSender);
+                sourceDataSender, tableManagerPlugin);
 
         // Set Log Replication Source Manager so we can emulate the channel for data & control messages (required
         // for testing)
