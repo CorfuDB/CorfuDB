@@ -93,19 +93,15 @@ public class LogEntryWriter {
             // Skip Opaque entries with timestamp that are not larger than persistedTs
             OpaqueEntry[] newOpaqueEntryList = opaqueEntryList.stream().filter(x -> x.getVersion() > persistedLogTs).toArray(OpaqueEntry[]::new);
 
-            // Check that all opaque entries contain the correct streams
-            for (OpaqueEntry opaqueEntry : newOpaqueEntryList) {
-                if (!streamMap.keySet().containsAll(opaqueEntry.getEntries().keySet())) {
-                    log.error("txMessage contains noisy streams {}, expecting {}", opaqueEntry.getEntries().keySet(), streamMap);
-                    throw new ReplicationWriterException("Wrong streams set");
-                }
-            }
-
             logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
             logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED, entryTs);
 
             for (OpaqueEntry opaqueEntry : newOpaqueEntryList) {
                 for (UUID streamId : opaqueEntry.getEntries().keySet()) {
+                    if (!streamMap.containsKey(streamId)) {
+                        log.warn("Skip applying log entries for stream {} as it is noisy. LR could be undergoing a rolling upgrade", streamId);
+                        continue;
+                    }
                     for (SMREntry smrEntry : opaqueEntry.getEntries().get(streamId)) {
                         // If stream tags exist for the current stream, it means its intended for streaming on the Sink (receiver)
                         txnContext.logUpdate(streamId, smrEntry, dataStreamToTagsMap.get(streamId));

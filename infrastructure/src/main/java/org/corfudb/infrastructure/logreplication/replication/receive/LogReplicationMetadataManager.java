@@ -13,6 +13,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Re
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication;
@@ -234,11 +235,21 @@ public class LogReplicationMetadataManager {
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
                     for (LogReplicationMetadataType type : LogReplicationMetadataType.values()) {
-                        long val = Address.NON_ADDRESS;
                         if (type == LogReplicationMetadataType.TOPOLOGY_CONFIG_ID) {
-                            val = topologyConfigId;
+                            appendUpdate(txn, type, topologyConfigId);
+                        } else if (type == LogReplicationMetadataType.VERSION) {
+                            // TODO: We should update the version in metadata manager
+                            //  when the version is read from static file
+                            String version = LogReplicationConfigManager.getCurrentVersion();
+                            if (version == null) {
+                                log.error("Failed to fetch version from plugin.");
+                                appendUpdate(txn, type, Address.NON_ADDRESS);
+                            } else {
+                                appendUpdate(txn, type, version);
+                            }
+                        } else {
+                            appendUpdate(txn, type, Address.NON_ADDRESS);
                         }
-                        appendUpdate(txn, type, val);
                     }
                     txn.commit();
                 } catch (TransactionAbortedException e) {
@@ -253,36 +264,6 @@ public class LogReplicationMetadataManager {
             log.error("Unrecoverable exception when updating the topology " +
                 "config id", e);
             throw new UnrecoverableCorfuInterruptedError(e);
-        }
-    }
-
-    public void updateVersion(String version) {
-        try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-            String persistedVersion = queryMetadata(txn, LogReplicationMetadataType.VERSION)
-                    .get(LogReplicationMetadataType.VERSION).toString();
-
-            if (persistedVersion.equals(version)) {
-                log.warn("Skip update of the current version {} to {} as they are the same",
-                        persistedVersion, version);
-                return;
-            }
-
-            for (LogReplicationMetadataType key : LogReplicationMetadataType.values()) {
-                long val = Address.NON_ADDRESS;
-
-                // For version, it will be updated with the current version
-                if (key == LogReplicationMetadataType.VERSION) {
-                    appendUpdate(txn, key, version);
-                } else if (key == LogReplicationMetadataType.TOPOLOGY_CONFIG_ID) {
-                    // For siteConfig ID, it should not be changed. Update it to fence off other metadata updates.
-                    val = queryMetadata(txn, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID).get(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
-                    appendUpdate(txn, key, val);
-                } else {
-                    // Reset all other keys to -1.
-                    appendUpdate(txn, key, val);
-                }
-            }
-            txn.commit();
         }
     }
 
