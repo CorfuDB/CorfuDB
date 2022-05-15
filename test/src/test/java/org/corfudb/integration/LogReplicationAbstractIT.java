@@ -293,13 +293,13 @@ public class LogReplicationAbstractIT extends AbstractIT {
         }).run();
     }
 
-    private void validateSnapshotSyncPlugin(SnapshotSyncPluginListener listener) {
+    void validateSnapshotSyncPlugin(SnapshotSyncPluginListener listener) {
         assertThat(listener.getUpdates().size()).isEqualTo(2);
         assertThat(listener.getUpdates()).contains(DefaultSnapshotSyncPlugin.ON_START_VALUE);
         assertThat(listener.getUpdates()).contains(DefaultSnapshotSyncPlugin.ON_END_VALUE);
     }
 
-    private void subscribeToSnapshotSyncPluginTable(SnapshotSyncPluginListener listener) {
+    void subscribeToSnapshotSyncPluginTable(SnapshotSyncPluginListener listener) {
         try {
             corfuStoreStandby.openTable(DefaultSnapshotSyncPlugin.NAMESPACE,
                     DefaultSnapshotSyncPlugin.TABLE_NAME, ExampleSchemas.Uuid.class, SnapshotSyncPluginValue.class,
@@ -310,7 +310,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         }
     }
 
-    private class SnapshotSyncPluginListener implements StreamListener {
+    class SnapshotSyncPluginListener implements StreamListener {
 
         @Getter
         List<String> updates = new ArrayList<>();
@@ -334,7 +334,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         }
     }
 
-    private class ReplicationStatusListener implements StreamListener {
+    class ReplicationStatusListener implements StreamListener {
 
         @Getter
         List<Boolean> accumulatedStatus = new ArrayList<>();
@@ -677,6 +677,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
         CorfuTable<CorfuStoreMetadata.TableName, CorfuRecord<CorfuStoreMetadata.TableDescriptors,
                 CorfuStoreMetadata.TableMetadata>> tableRegistryCT = tableRegistry.getRegistryTable();
 
+        CorfuTable<CorfuStoreMetadata.ProtobufFileName,
+            CorfuRecord<CorfuStoreMetadata.ProtobufFileDescriptor, CorfuStoreMetadata.TableMetadata>>
+            protobufDescriptorTable =
+            tableRegistry.getProtobufDescriptorTable();
+
         // Save the regular serializer first..
         ISerializer protoBufSerializer = cpRuntime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
 
@@ -685,12 +690,16 @@ public class LogReplicationAbstractIT extends AbstractIT {
         ISerializer dynamicProtoBufSerializer = new DynamicProtobufSerializer(cpRuntime);
         cpRuntime.getSerializers().registerSerializer(dynamicProtoBufSerializer);
 
-        // First checkpoint the TableRegistry system table
         MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
 
         Token trimMark = null;
 
         for (CorfuStoreMetadata.TableName tableName : tableRegistry.listTables(null)) {
+            // ProtobufDescriptor table is an internal table which must not
+            // be checkpointed using the DynamicProtobufSerializer
+            if (tableName.getTableName().equals(TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME)) {
+                continue;
+            }
             String fullTableName = TableRegistry.getFullyQualifiedTableName(
                     tableName.getNamespace(), tableName.getTableName()
             );
@@ -706,17 +715,24 @@ public class LogReplicationAbstractIT extends AbstractIT {
             trimMark = trimMark == null ? token : Token.min(trimMark, token);
         }
 
-        // Finally checkpoint the TableRegistry system table itself..
+        // Finally checkpoint the ProtobufDescriptor and TableRegistry system
+        // tables
+        // Restore the regular protoBuf serializer and undo the dynamic
+        // protoBuf serializer
+        // otherwise the test cannot continue beyond this point.
+        log.info("Now checkpointing the ProtobufDescriptor and Registry " +
+            "Tables");
+        cpRuntime.getSerializers().registerSerializer(protoBufSerializer);
+        mcw.addMap(protobufDescriptorTable);
+        Token token1 = mcw.appendCheckpoints(cpRuntime, "checkpointer");
+        
         mcw.addMap(tableRegistryCT);
-        Token token = mcw.appendCheckpoints(cpRuntime, "checkpointer");
-        trimMark = trimMark != null ? Token.min(trimMark, token) : token;
+        Token token2 = mcw.appendCheckpoints(cpRuntime, "checkpointer");
+        Token minToken = Token.min(token1, token2);
+        trimMark = trimMark != null ? Token.min(trimMark, minToken) : minToken;
 
         cpRuntime.getAddressSpaceView().prefixTrim(trimMark);
         cpRuntime.getAddressSpaceView().gc();
-
-        // Lastly restore the regular protoBuf serializer and undo the dynamic protoBuf serializer
-        // otherwise the test cannot continue beyond this point.
-        cpRuntime.getSerializers().registerSerializer(protoBufSerializer);
 
         // Trim
         log.debug("**** Trim Log @address=" + trimMark);
