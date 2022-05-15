@@ -242,6 +242,15 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         }
         UUID regularStreamId = opaqueEntry.getEntries().keySet().stream().findFirst().get();
 
+
+        // When an upgrade has been performed and Active's streams to replicate set has streams not
+        // present in Standby's set, they will be dropped for version compatibility consideration
+        if (!regularToShadowStreamId.containsKey(regularStreamId)) {
+            log.warn("Stream {} sent from Active is not expected in Standby. LR could be undergoing a rolling upgrade", regularStreamId);
+            recvSeq++;
+            return;
+        }
+
         // Clear regular stream on-demand (i.e., as streams come) and only on the first occurrence
         if (!replicatedStreamIds.contains(regularStreamId)) {
             // Note: we should not clear the shadow stream as this could overwrite our mergeOnlyStreams when
@@ -250,6 +259,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             clearRegularStream(regularStreamId);
             replicatedStreamIds.add(regularStreamId);
         }
+
         processUpdatesShadowStream(opaqueEntry.getEntries().get(regularStreamId), message.getMetadata().getSnapshotSyncSeqNum(),
                 regularToShadowStreamId.get(regularStreamId), getUUID(message.getMetadata().getSyncRequestId()));
         recvSeq++;

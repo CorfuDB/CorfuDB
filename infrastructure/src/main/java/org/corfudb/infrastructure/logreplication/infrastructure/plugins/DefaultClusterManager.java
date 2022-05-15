@@ -41,7 +41,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  */
 @Slf4j
 public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAdapter {
-    public static final String CONFIG_FILE_PATH = "src/test/resources/corfu_replication_config.properties";
+    public static final String CONFIG_FILE_PATH = "./test/src/test/resources/corfu_replication_config.properties";
     private static final String DEFAULT_ACTIVE_CLUSTER_NAME = "primary_site";
     private static final String DEFAULT_STANDBY_CLUSTER_NAME = "standby_site";
 
