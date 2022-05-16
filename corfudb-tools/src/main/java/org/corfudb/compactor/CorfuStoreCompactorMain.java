@@ -52,7 +52,7 @@ public class CorfuStoreCompactorMain {
     private final CorfuRuntime corfuRuntime;
     private final CorfuStore corfuStore;
 
-    private DistributedCompactor distributedCompactor;
+    private final DistributedCompactor distributedCompactor;
     private Table<StringKey, TokenMsg, Message> checkpointTable;
     private int retryCheckpointing = 1;
 
@@ -122,7 +122,17 @@ public class CorfuStoreCompactorMain {
         corfuStore = new CorfuStore(corfuRuntime);
         distributedCompactor = new DistributedCompactor(corfuRuntime, cpRuntimeHelper.getRuntime(), persistedCacheRoot);
 
-        this.openCompactionTables();
+        try {
+            this.checkpointTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                    DistributedCompactor.CHECKPOINT,
+                    StringKey.class,
+                    TokenMsg.class,
+                    null,
+                    TableOptions.fromProtoSchema(TokenMsg.class));
+
+        } catch (Exception e) {
+            log.error("Caught an exception while opening Compaction management tables ", e);
+        }
     }
 
     private void upgrade() {
@@ -178,20 +188,6 @@ public class CorfuStoreCompactorMain {
             }
         } catch (Throwable throwable) {
             log.error("CorfuStoreCompactorMain crashed with error:", CORFU_LOG_CHECKPOINT_ERROR, throwable);
-        }
-    }
-
-    private void openCompactionTables() {
-        try {
-            checkpointTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.CHECKPOINT,
-                    StringKey.class,
-                    TokenMsg.class,
-                    null,
-                    TableOptions.fromProtoSchema(TokenMsg.class));
-
-        } catch (Exception e) {
-            log.error("Caught an exception while opening Compaction management tables ", e);
         }
     }
 

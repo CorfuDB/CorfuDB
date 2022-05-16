@@ -46,7 +46,7 @@ public class CompactorService implements ManagementService {
     private CompactorLeaderServices compactorLeaderServices;
     private CorfuStore corfuStore;
 
-    private boolean invokedJvm = false;
+//    private boolean invokedJvm = false;
     private Logger syslog;
 
     //TODO: make it a prop file and maybe pass it from the server
@@ -122,11 +122,10 @@ public class CompactorService implements ManagementService {
         if (managerStatus != null) {
             if (managerStatus.getStatus() == StatusType.FAILED || managerStatus.getStatus() == StatusType.COMPLETED) {
                 checkpointerJvmManager.shutdown();
-                invokedJvm = false;
+                checkpointerJvmManager.setIsInvoked(false);
             } else if (managerStatus.getStatus() == StatusType.STARTED_ALL && !checkpointerJvmManager.isRunning()
-                    && !invokedJvm) {
+                    && !checkpointerJvmManager.isInvoked()) {
                 checkpointerJvmManager.invokeCheckpointing();
-                invokedJvm = true;
             }
         }
 

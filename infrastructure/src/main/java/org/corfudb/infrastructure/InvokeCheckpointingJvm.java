@@ -16,6 +16,7 @@ public class InvokeCheckpointingJvm implements IInvokeCheckpointing {
     private final ServerContext serverContext;
     private volatile Process checkpointerProcess;
     private Logger syslog;
+    private boolean isInvoked;
 
     public InvokeCheckpointingJvm(ServerContext serverContext) {
         this.serverContext = serverContext;
@@ -42,6 +43,7 @@ public class InvokeCheckpointingJvm implements IInvokeCheckpointing {
                         port, "--compactorConfig", compactorConfigPath);
                 pb.inheritIO();
                 this.checkpointerProcess = pb.start();
+                this.isInvoked = true;
                 syslog.info("Triggered the compaction jvm");
                 break;
             } catch (RuntimeException re) {
@@ -71,6 +73,16 @@ public class InvokeCheckpointingJvm implements IInvokeCheckpointing {
     @Override
     public boolean isRunning() {
         return this.checkpointerProcess != null && this.checkpointerProcess.isAlive();
+    }
+
+    @Override
+    public boolean isInvoked() {
+        return this.isInvoked;
+    }
+
+    @Override
+    public void setIsInvoked(boolean isInvoked) {
+        this.isInvoked = isInvoked;
     }
 
     @Override
