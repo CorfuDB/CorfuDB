@@ -950,7 +950,7 @@ public class CorfuRuntime {
         isShutdown = true;
 
         // Shutdown the mvoCache sync thread
-        getObjectsView().getMvoCache().stopMVOCacheSync();
+        getObjectsView().getMvoCache().shutdown();
 
         TableRegistry tableRegistryObj = tableRegistry.get();
         if (tableRegistryObj != null) {

@@ -42,6 +42,8 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
     private final ISnapshotProxyGenerator<T> snapshotProxyGenerator;
 
+    private volatile long trimMark;
+
 
     public MultiVersionObject(CorfuRuntime corfuRuntime,
                               Supplier<T> newObjectFn,
@@ -297,5 +299,21 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
     private ICorfuSMRSnapshotProxy<T> getSMRSnapshotProxy(@NonNull VersionedObjectIdentifier voId, @NonNull T object,
                                                           @NonNull ISnapshotProxyGenerator<T> generator) {
         return generator.generate(voId, object);
+    }
+
+    /**
+     * Prefix evict any versions smaller than the trimMark
+     * @param trimMark trim up to this address, exclusive
+     */
+    public void gc(long trimMark) {
+        if (trimMark == this.trimMark) {
+            return;
+        }
+        this.trimMark = trimMark;
+
+        // Sequencer trim mark is exclusive. -=1 to convert it to inclusive
+        trimMark -= 1;
+        log.info("MVO GC evicts table {} versions up to {}", getID(), trimMark);
+        mvoCache.getMvoCacheEviction().add(new VersionedObjectIdentifier(getID(), trimMark));
     }
 }

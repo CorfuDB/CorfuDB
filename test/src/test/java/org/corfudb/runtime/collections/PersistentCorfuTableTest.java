@@ -15,6 +15,7 @@ import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.ExampleSchemas.Uuid;
 import org.corfudb.runtime.exceptions.StaleObjectVersionException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.MVOCacheEviction;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -33,6 +34,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -245,7 +247,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
      * version of the same object in MVOCache
      */
     @Test
-    public void testAccessStaleVersion() {
+    public void testAccessStaleVersion() throws InterruptedException {
         addSingleServer(SERVERS.PORT_0);
         rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
                 .maxCacheEntries(SMALL_CACHE_SIZE)
@@ -284,10 +286,14 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                 .build()
                 .begin();
 
+        TimeUnit.MILLISECONDS.sleep(MVOCacheEviction.getDEFAULT_EVICTION_INTERVAL_IN_MILLISECONDS());
+        TreeSet<Long> allVersions = (TreeSet<Long>) rt.getObjectsView().getMvoCache().getObjectVersions()
+                .get(corfuTable.getCorfuStreamID());
+        Assertions.assertThat(allVersions).containsExactlyInAnyOrder(1L, 2L, 3L);
+
         Assertions.assertThatExceptionOfType(TransactionAbortedException.class)
                 .isThrownBy(() -> corfuTable.get(key).getPayload())
                 .withCauseInstanceOf(StaleObjectVersionException.class);
-
     }
 
     @Test
@@ -450,6 +456,44 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         assertThat(readerResult.get()).isEqualTo(payload1.getLsb());
         assertThat(writerResult.get()).isEqualTo(payload2.getLsb());
+    }
+
+    @Test
+    public void testMVOGC() throws InterruptedException {
+        addSingleServer(SERVERS.PORT_0);
+        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(MEDIUM_CACHE_SIZE)
+                .runtimeGCPeriod(Duration.ofMillis(500))
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+        setupSerializer();
+        openTable();
+
+        // Create 4 versions of the table which takes address 0,1,2,3
+        for (int i = 0; i < 4; i++) {
+            TestSchema.Uuid key = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            TestSchema.Uuid payload = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            TestSchema.Uuid metadata = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            CorfuRecord value = new CorfuRecord(payload, metadata);
+            corfuTable.insert(key, value);
+        }
+
+        // Sync the corfu to latest, populate MVOCache
+        rt.getObjectsView().TXBegin();
+        assertThat(corfuTable.size()).isEqualTo(4);
+        rt.getObjectsView().TXEnd();
+
+        // Prefix trim removes versions 0,1,2
+        rt.getAddressSpaceView().prefixTrim(new Token(0, 2));
+
+        // Wait for Runtime GC to happen
+        TimeUnit.MILLISECONDS.sleep(rt.getParameters().getRuntimeGCPeriod().toMillis() +
+                MVOCacheEviction.getDEFAULT_EVICTION_INTERVAL_IN_MILLISECONDS());
+
+        // Verify that versions 0,1,2 has been evicted
+        assertThat(rt.getObjectsView().getMvoCache().keySet())
+                .containsExactlyInAnyOrder(new VersionedObjectIdentifier(corfuTable.getCorfuStreamID(),3L));
     }
 
     // PersistentCorfuTable SecondaryIndexes Tests - Adapted From CorfuTableTest & CorfuStoreSecondaryIndexTest

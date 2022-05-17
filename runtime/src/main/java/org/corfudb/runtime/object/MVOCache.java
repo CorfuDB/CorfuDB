@@ -38,6 +38,7 @@ public class MVOCache<T extends ICorfuSMR<T>> {
     private final CorfuRuntime runtime;
 
     // A registry to keep track of all opened MVOs
+    @Getter
     private final ConcurrentHashMap<UUID, MultiVersionObject<T>> allMVOs = new ConcurrentHashMap<>();
 
     // The objectCache holds the strong references to all versioned objects
@@ -53,6 +54,7 @@ public class MVOCache<T extends ICorfuSMR<T>> {
     // A: No. Although asMap() returns a thread-safe weakly-consistent map, it is
     //    not a tree structure so it's very inefficient to implement headMap() and
     //    floorEntry() on top of it.
+    @Getter
     private final ConcurrentHashMap<UUID, TreeSet<Long>> objectVersions = new ConcurrentHashMap<>();
 
     /**
@@ -63,10 +65,13 @@ public class MVOCache<T extends ICorfuSMR<T>> {
 
     private static final long DEFAULT_CACHE_EXPIRY_TIME_IN_SECONDS = 300;
 
-    final ScheduledExecutorService mvoCacheSyncThread = Executors.newSingleThreadScheduledExecutor(
+    private final ScheduledExecutorService mvoCacheSyncThread = Executors.newSingleThreadScheduledExecutor(
             new ThreadFactoryBuilder().setDaemon(true)
                     .setNameFormat("MVOCacheSyncThread")
                     .build());
+
+    @Getter
+    private final MVOCacheEviction mvoCacheEviction = new MVOCacheEviction(this::prefixEvict);
 
     public MVOCache(CorfuRuntime corfuRuntime) {
         runtime = corfuRuntime;
@@ -83,10 +88,13 @@ public class MVOCache<T extends ICorfuSMR<T>> {
                 runtime.getParameters().getMvoAutoSyncPeriod().toMillis(),
                 runtime.getParameters().getMvoAutoSyncPeriod().toMillis(),
                 TimeUnit.MILLISECONDS);
+
+        mvoCacheEviction.start();
     }
 
-    public void stopMVOCacheSync() {
+    public void shutdown() {
         mvoCacheSyncThread.shutdownNow();
+        mvoCacheEviction.shutdown();
     }
 
     /**
@@ -98,10 +106,7 @@ public class MVOCache<T extends ICorfuSMR<T>> {
         if (notification.getCause() == RemovalCause.EXPLICIT ||
                 notification.getCause() == RemovalCause.REPLACED)
             return;
-        VersionedObjectIdentifier voId = notification.getKey();
-        int evictCount = prefixEvict(voId);
-        log.info("evicted {} versions for object {} which is older than version {}",
-                evictCount, voId.getObjectId(), voId.getVersion());
+        mvoCacheEviction.add(notification.getKey());
     }
 
     /**
@@ -110,19 +115,19 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      * @param voId  the object and version to perform prefixEvict
      * @return number of versions that has been evicted
      */
-    private int prefixEvict(VersionedObjectIdentifier voId) {
+    public int prefixEvict(VersionedObjectIdentifier voId) {
         TreeSet<Long> allVersionsOfThisObject = objectVersions.get(voId.getObjectId());
+        if (allVersionsOfThisObject == null) {
+            return 0;
+        }
         int count;
 
         synchronized (allVersionsOfThisObject) {
-            Preconditions.checkState(!allVersionsOfThisObject.isEmpty());
-
             // Get the headset up to the given version. Exclude the given version
             // if it is the highest version in the set. This is to guarantee that
             // at least one version exist in the objectMap for any object
 
-            Set<Long> headSet = allVersionsOfThisObject.headSet(voId.getVersion(),
-                    voId.getVersion() != allVersionsOfThisObject.last());
+            Set<Long> headSet = allVersionsOfThisObject.headSet(voId.getVersion(), true);
             headSet.forEach(version -> {
                 voId.setVersion(version);
                 // this could cause excessive handleEviction calls
@@ -230,9 +235,12 @@ public class MVOCache<T extends ICorfuSMR<T>> {
 
                 final VersionedObjectIdentifier id = new VersionedObjectIdentifier(voId.getObjectId(), floorVersion);
                 final MVOCacheEntry cacheEntry = objectCache.getIfPresent(id);
+                // Cache eviction updates objectVersions asynchronously.
+                // The item is removed from objectVersions after cache eviction happens.
+                if (cacheEntry == null) {
+                    return Optional.empty();
+                }
 
-                // TODO: will always be present since objectVersions and objectCache should be in sync
-                Preconditions.checkState(cacheEntry != null);
                 final ICorfuSMRSnapshotProxy<T> snapshotProxy = snapshotProxyFn.generate(id, cacheEntry.getBaseSnapshot());
                 cacheEntry.getSnapshotProxies().add(snapshotProxy);
                 return Optional.of(snapshotProxy);
