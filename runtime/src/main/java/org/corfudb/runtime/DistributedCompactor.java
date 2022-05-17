@@ -39,6 +39,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Date;
+import java.util.Optional;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
@@ -266,7 +267,7 @@ public class DistributedCompactor {
         livenessUpdater.updateLiveness(tableName);
         CheckpointingStatus returnStatus = null;
         try {
-            mcw.appendCheckpoints(rt, "checkpointer", livenessUpdater);
+            mcw.appendCheckpoints(rt, "checkpointer", Optional.of(livenessUpdater));
             returnStatus = CheckpointingStatus.newBuilder()
                     .setStatus(CheckpointingStatus.StatusType.COMPLETED)
                     .setClientName(this.clientName)
