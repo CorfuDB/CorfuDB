@@ -454,10 +454,10 @@ public class CompactorServiceTest extends AbstractViewTest {
     @Test
     public void clientsCheckpointing() {
         testSetup(logSizeLimitPercentageFull);
-        runtime2.getParameters().setCheckpointTriggerFreqMillis(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
+        runtime2.getParameters().setCheckpointTriggerFreqMillis(COMPACTOR_SERVICE_INTERVAL);
         DistributedClientCheckpointer distributedClientCheckpointer0 = new DistributedClientCheckpointer(runtime2);
 
-        runtime1.getParameters().setCheckpointTriggerFreqMillis(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
+        runtime1.getParameters().setCheckpointTriggerFreqMillis(COMPACTOR_SERVICE_INTERVAL);
         DistributedClientCheckpointer distributedClientCheckpointer1 = new DistributedClientCheckpointer(runtime1);
 
         SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);
@@ -490,7 +490,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         testSetup(logSizeLimitPercentageFull);
         openStream(STREAM_NAME_PREFIX);
 
-        runtime2.getParameters().setCheckpointTriggerFreqMillis(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
+        runtime2.getParameters().setCheckpointTriggerFreqMillis(COMPACTOR_SERVICE_INTERVAL);
         DistributedClientCheckpointer distributedClientCheckpointer = new DistributedClientCheckpointer(runtime2);
 
         SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);

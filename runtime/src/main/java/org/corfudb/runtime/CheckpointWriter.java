@@ -30,12 +30,7 @@ import javax.annotation.Nullable;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.stream.Stream;
@@ -138,7 +133,7 @@ public class CheckpointWriter<T extends StreamingMap> {
      *
      * @return Token at which the snapshot for this checkpoint was taken.
      */
-    public Token appendCheckpoint(@Nullable ILivenessUpdater livenessUpdater) {
+    public Token appendCheckpoint(Optional<ILivenessUpdater> livenessUpdater) {
         // We enforce a NO_OP entry for every checkpoint, i.e., a hole with backpointer map info,
         // to materialize the stream up to this point (no future sequencer regression) and in addition ensure
         // log unit address maps reflect the latest update to the stream preventing tail regression in the
@@ -148,18 +143,7 @@ public class CheckpointWriter<T extends StreamingMap> {
     }
 
     public Token appendCheckpoint() {
-        ILivenessUpdater emptyLivenessUpdater = new ILivenessUpdater() {
-            @Override
-            public void updateLiveness(CorfuStoreMetadata.TableName tableName) {
-                //Leave blank
-            }
-
-            @Override
-            public void notifyOnSyncComplete() {
-                //Leave blank
-            }
-        };
-        return appendCheckpoint(emptyLivenessUpdater);
+        return appendCheckpoint(Optional.ofNullable(null));
     }
 
     /**
@@ -170,7 +154,7 @@ public class CheckpointWriter<T extends StreamingMap> {
      *  @param snapshotTimestamp snapshot at which the checkpoint is taken.
      *  */
     @VisibleForTesting
-    public Token appendCheckpoint(Token snapshotTimestamp, @Nullable ILivenessUpdater livenessUpdater) {
+    public Token appendCheckpoint(Token snapshotTimestamp, Optional<ILivenessUpdater> livenessUpdater) {
         long start = System.currentTimeMillis();
 
         rt.getObjectsView().TXBuild()
@@ -190,9 +174,8 @@ public class CheckpointWriter<T extends StreamingMap> {
             // as the latter discards holes for resolution, hence if last address is a hole it would diverge
             // from the stream address space maintained by the sequencer.
 
-//            if (livenessUpdater != null) {
-                livenessUpdater.notifyOnSyncComplete();
-//            }
+            livenessUpdater.ifPresent(updater -> updater.notifyOnSyncComplete());
+
             startCheckpoint(snapshotTimestamp);
             int entryCount = appendObjectState(entries);
             finishCheckpoint();

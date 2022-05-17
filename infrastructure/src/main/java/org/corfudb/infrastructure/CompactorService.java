@@ -31,7 +31,7 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  */
 public class CompactorService implements ManagementService {
 
-    private Duration compactionTriggerFreqMs = Duration.ofMillis(TimeUnit.MINUTES.toMinutes(8));
+    private long compactionTriggerFreqMs = TimeUnit.MINUTES.toMillis(8);
 
     @Setter
     private static int livenessTimeout = 60000;
@@ -88,7 +88,7 @@ public class CompactorService implements ManagementService {
         this.compactorLeaderServices = new CompactorLeaderServices(getCorfuRuntime(), serverContext.getLocalEndpoint());
         this.corfuStore = new CorfuStore(getCorfuRuntime());
         this.compactionTriggerPolicy.setCorfuRuntime(getCorfuRuntime());
-        if (getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis().toMillis() > 0) {
+        if (getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis() > 0) {
             this.compactionTriggerFreqMs = getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis();
         }
 
@@ -133,7 +133,7 @@ public class CompactorService implements ManagementService {
             if (managerStatus != null && (managerStatus.getStatus() == StatusType.STARTED ||
                     managerStatus.getStatus() == StatusType.STARTED_ALL)) {
                 compactorLeaderServices.validateLiveness(livenessTimeout);
-            } else if (compactionTriggerPolicy.shouldTrigger(this.compactionTriggerFreqMs.toMillis())) {
+            } else if (compactionTriggerPolicy.shouldTrigger(this.compactionTriggerFreqMs)) {
                 compactorLeaderServices.trimAndTriggerDistributedCheckpointing();
                 compactionTriggerPolicy.markCompactionCycleStart();
             }
