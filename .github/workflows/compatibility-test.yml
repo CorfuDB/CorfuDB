@@ -47,7 +47,7 @@ jobs:
 
       - name: Build universe-core
         working-directory: ./universe
-        run: rm -r ~/.m2/repository/org/corfudb && ./gradlew clean publishToMavenLocal
+        run: rm -rf ~/.m2/repository/org/corfudb && ./gradlew clean publishToMavenLocal
 
       - name: Run version compatibility tests
         working-directory: ./tests

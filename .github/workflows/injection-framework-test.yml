@@ -35,7 +35,9 @@ jobs:
         continue-on-error: true
 
       - name: Prepare top of trunk docker image
-        run: .ci/infrastructure-docker-build.sh docker
+        run: |
+          .ci/infrastructure-docker-build.sh docker
+          .ci/generator-docker-build.sh
         shell: bash
 
       - name: Set corfu server version env variable

@@ -35,4 +35,4 @@ jobs:
         shell: bash
 
       - name: Run universe tests
-        run: ./mvnw -pl :universe verify -Puniverse -Dmaven.javadoc.skip=true
+        run: ./mvnw -pl :universe --also-make -Puniverse -Dmaven.javadoc.skip=true verify
