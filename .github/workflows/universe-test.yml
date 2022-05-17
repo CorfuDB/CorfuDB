@@ -35,4 +35,6 @@ jobs:
         shell: bash
 
       - name: Run universe tests
-        run: ./mvnw -pl :universe --also-make -Puniverse -Dmaven.javadoc.skip=true verify
+        run: |
+          ./mvnw -Dmaven.javadoc.skip=true -DskipTests -T 1C clean install
+          ./mvnw -pl :universe -Puniverse -Dmaven.javadoc.skip=true verify
