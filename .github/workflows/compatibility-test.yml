@@ -35,7 +35,8 @@ jobs:
         continue-on-error: true
 
       - name: Prepare top of trunk docker image
-        run: ./mvnw clean install -DskipTests -Pcompatibility -Dmaven.javadoc.skip=true -T 1C
+        run: .ci/infrastructure-docker-build.sh compatibility
+        shell: bash
 
       - name: Pull docker image built from master parent commit
         run: docker pull corfudb/corfu-server:0.3.1-SNAPSHOT
@@ -46,7 +47,7 @@ jobs:
 
       - name: Build universe-core
         working-directory: ./universe
-        run: rm -r ~/.m2/repository/org/corfudb && ./gradlew clean publishToMavenLocal
+        run: rm -rf ~/.m2/repository/org/corfudb && ./gradlew clean publishToMavenLocal
 
       - name: Run version compatibility tests
         working-directory: ./tests
