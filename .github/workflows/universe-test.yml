@@ -31,7 +31,8 @@ jobs:
         continue-on-error: true
 
       - name: Prepare Corfu
-        run: ./mvnw clean install -Pdocker -DskipTests -Dmaven.javadoc.skip=true -Dcheckstyle.skip -T 1C
+        run: .ci/infrastructure-docker-build.sh docker
+        shell: bash
 
       - name: Run universe tests
         run: ./mvnw -pl :universe verify -Puniverse -Dmaven.javadoc.skip=true

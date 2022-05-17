@@ -42,7 +42,8 @@ jobs:
         continue-on-error: true
 
       - name: Prepare Corfu
-        run: ./mvnw clean install -Pdocker -DskipTests -Dmaven.javadoc.skip=true -Dcheckstyle.skip -T 1C
+        run: .ci/infrastructure-docker-build.sh docker
+        shell: bash
 
       - name: Publish corfu artifacts
         working-directory: ./
