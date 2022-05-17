@@ -155,7 +155,7 @@
                                     <classifier>shaded</classifier>
                                     <overWrite>false</overWrite>
                                     <outputDirectory>${project.build.directory}</outputDirectory>
-                                    <destFileName>infrastructure-${version}-shaded.jar</destFileName>
+                                    <destFileName>infrastructure-${project.version}-shaded.jar</destFileName>
                                 </artifactItem>
                             </artifactItems>
                         </configuration>
