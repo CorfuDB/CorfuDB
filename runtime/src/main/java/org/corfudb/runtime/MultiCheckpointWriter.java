@@ -10,10 +10,7 @@ import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.util.serializer.ISerializer;
 
 import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * Checkpoint multiple CorfuTables serially as a prerequisite for a later log trim.
@@ -44,7 +41,7 @@ public class MultiCheckpointWriter<T extends StreamingMap> {
      * @param author Author's name, stored in checkpoint metadata
      * @return Global log address of the first record of
      */
-    public Token appendCheckpoints(CorfuRuntime rt, String author, @Nullable ILivenessUpdater livenessUpdater) {
+    public Token appendCheckpoints(CorfuRuntime rt, String author, Optional<ILivenessUpdater> livenessUpdater) {
         int numRetries = rt.getParameters().getCheckpointRetries();
         int retry = 0;
 
@@ -98,7 +95,7 @@ public class MultiCheckpointWriter<T extends StreamingMap> {
     }
 
     public Token appendCheckpoints(CorfuRuntime rt, String author) {
-        return appendCheckpoints(rt, author, null);
+        return appendCheckpoints(rt, author, Optional.ofNullable(null));
     }
 
 }
