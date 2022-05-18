@@ -1149,7 +1149,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                 .setNamespace(someNamespace)
                 .setTableName(tableNamePrefix + "0")
                 .build();
-        final Collection<CorfuRecord<ProtobufFileDescriptor, CorfuStoreMetadata.TableMetadata>> records =
+        Collection<CorfuRecord<ProtobufFileDescriptor, CorfuStoreMetadata.TableMetadata>> records =
                 corfuRuntime.getTableRegistry().getProtobufDescriptorTable().values();
 
         shimStore.openTable(
@@ -1169,7 +1169,8 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                 corfuRuntime.getTableRegistry().getProtobufDescriptorTable().size();
         final Collection<CorfuRecord<ProtobufFileDescriptor, CorfuStoreMetadata.TableMetadata>>
                 recordsAfterChange = corfuRuntime.getTableRegistry().getProtobufDescriptorTable().values();
-        assertThat(numProtoFiles).isEqualTo(numProtoFilesAfterChange);
+        records = corfuRuntime.getTableRegistry().getProtobufDescriptorTable().values(); // refresh descriptor table
+        assertThat(numProtoFiles).isEqualTo(numProtoFilesAfterChange - 1); // we added new protofile logdata
         assertThat(records).containsExactlyElementsOf(recordsAfterChange);
     }
 
