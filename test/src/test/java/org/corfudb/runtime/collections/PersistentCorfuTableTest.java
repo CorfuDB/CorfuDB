@@ -487,9 +487,9 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         // Prefix trim removes versions 0,1,2
         rt.getAddressSpaceView().prefixTrim(new Token(0, 2));
 
-        // Wait for Runtime GC to happen
-        TimeUnit.MILLISECONDS.sleep(rt.getParameters().getRuntimeGCPeriod().toMillis() +
-                MVOCacheEviction.getDEFAULT_EVICTION_INTERVAL_IN_MILLISECONDS());
+        // Wait for Runtime GC and async prefix eviction to happen
+        TimeUnit.MILLISECONDS.sleep(2 * (rt.getParameters().getRuntimeGCPeriod().toMillis() +
+                MVOCacheEviction.getDEFAULT_EVICTION_INTERVAL_IN_MILLISECONDS()));
 
         // Verify that versions 0,1,2 has been evicted
         assertThat(rt.getObjectsView().getMvoCache().keySet())

@@ -224,8 +224,8 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                         final long globalAddress = entryList.get(0).getGlobalAddress();
                         snapshotProxy.logUpdate(entryList, () -> globalAddress);
 
-                        VersionedObjectIdentifier vloId = new VersionedObjectIdentifier(streamID, globalAddress);
-                        mvoCache.put(vloId, snapshotProxy.get());
+                        VersionedObjectIdentifier voId = new VersionedObjectIdentifier(streamID, globalAddress);
+                        mvoCache.put(voId, snapshotProxy.get());
 
                         // TODO: handle StaleObjectVersionException
                     } catch (Exception e) {
