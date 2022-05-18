@@ -283,7 +283,7 @@ public class TableRegistry {
      *
      * @param allTableDescriptors  - A map of all the names of the protobuf files with their
      *                               protobuf file descriptors.
-     * @return true if a schema changes was detected and new schema was updated, false otherwise
+     * @return true if a schema change was detected and new schema was updated, false otherwise
      */
     private boolean tryUpdateTableSchemas(Map<ProtobufFileName,
                                           CorfuRecord<ProtobufFileDescriptor, TableMetadata>> allTableDescriptors) {
@@ -350,8 +350,8 @@ public class TableRegistry {
             // Version the protobuf file so that we can detect if there is a schema change
             // this is needed to overcome the bug where protobuf file descriptor maps
             // are not deterministically constructed. So we can tell if we are coming up after
-            // a fresh upgrade, we conservatively we record the git repo version in each proto file
-            // and update it if this version were to change.
+            // a fresh upgrade, we conservatively record the git repo version in each proto file
+            // and update it if this version were to be different.
             long corfuCodeVersion = GitRepositoryState.getCorfuSourceCodeVersion();
             ProtobufFileName protoFileName = ProtobufFileName.newBuilder()
                     .setFileName(fileDescriptorProto.getName()).build();
