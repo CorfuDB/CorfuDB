@@ -5,8 +5,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 
 import javax.annotation.concurrent.NotThreadSafe;
+import java.util.Collection;
 import java.util.Map;
 import java.util.function.LongConsumer;
+import java.util.function.LongSupplier;
 
 @NotThreadSafe
 @Slf4j
@@ -14,7 +16,7 @@ public class SnapshotProxy<T> implements ICorfuSMRSnapshotProxy<T> {
 
     private T snapshot;
 
-    private final long baseSnapshotVersion;
+    private long baseSnapshotVersion;
 
     private final Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap;
 
@@ -40,6 +42,11 @@ public class SnapshotProxy<T> implements ICorfuSMRSnapshotProxy<T> {
 
         // TODO: update ICorfuSMRUpcallTarget interface to avoid cast
         snapshot = (T) target.upcall(snapshot, updateEntry.getSMRArguments());
+    }
+
+    public void logUpdate(@NonNull Collection<SMREntry> updateEntries, @NonNull LongSupplier updateVersion) {
+        updateEntries.forEach(this::logUpdate);
+        baseSnapshotVersion = updateVersion.getAsLong();
     }
 
     public long getVersion() {

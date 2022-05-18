@@ -269,7 +269,6 @@ public class SMRMapTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    @Ignore // TODO(Zach): address issue with cache
     public void loadsFollowedByGetsConcurrentMultiView() throws Exception {
         // Increasing hole fill delay to avoid intermittent AppendExceptions.
         final int longHoleFillRetryLimit = 50;

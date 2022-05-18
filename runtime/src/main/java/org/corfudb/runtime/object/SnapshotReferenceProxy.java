@@ -5,16 +5,18 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.exceptions.StaleObjectVersionException;
 
 import java.lang.ref.Reference;
+import java.util.Collection;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.LongConsumer;
+import java.util.function.LongSupplier;
 
 public class SnapshotReferenceProxy<T> implements ICorfuSMRSnapshotProxy<T> {
 
     private final Reference<ICorfuSMRSnapshotProxy<T>> snapshotProxyReference;
 
-    private final long baseSnapshotVersion;
+    private long baseSnapshotVersion;
 
     private final UUID id;
 
@@ -32,6 +34,11 @@ public class SnapshotReferenceProxy<T> implements ICorfuSMRSnapshotProxy<T> {
 
     public void logUpdate(@NonNull SMREntry updateEntry) {
         getSnapshotProxyOrThrow().logUpdate(updateEntry);
+    }
+
+    public void logUpdate(@NonNull Collection<SMREntry> updateEntries, @NonNull LongSupplier updateVersion) {
+        getSnapshotProxyOrThrow().logUpdate(updateEntries, updateVersion);
+        baseSnapshotVersion = updateVersion.getAsLong();
     }
 
     public long getVersion() {

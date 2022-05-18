@@ -1,5 +1,6 @@
 package org.corfudb.runtime.object;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
@@ -139,7 +140,6 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                 return snapshotProxyOptional;
             }
 
-            // TODO: why do we need retries here? We are retrying with the same TS
             for (int x = 0; x < TRIM_RETRY; x++) {
                 try {
                     ICorfuSMRSnapshotProxy<T> snapshotProxy = syncObjectUnsafe(timestamp);
@@ -153,7 +153,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
                     // TODO: version should now be in cache and return a snapshot proxy backed by a SoftReference
                     return mvoCache.get(
-                            new VersionedObjectIdentifier(streamID, getVersionUnsafe()),
+                            new VersionedObjectIdentifier(streamID, snapshotProxy.getVersion()),
                             snapshotReferenceProxyGenerator
                     );
                 } catch (TrimmedException te) {
@@ -175,42 +175,11 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         }
     }
 
-    /*
-    public void syncObjectUnsafe(T object, long timestamp) {
-        prepareObjectBeforeSync(object, timestamp);
-        syncStreamUnsafe(object, smrStream, timestamp);
-    }
-     */
-
     public ICorfuSMRSnapshotProxy<T> syncObjectUnsafe(long timestamp) {
         ICorfuSMRSnapshotProxy<T> snapshotProxy = prepareObjectBeforeSync(timestamp);
         syncStreamUnsafe(snapshotProxy, smrStream, timestamp);
         return snapshotProxy;
     }
-
-    /*
-    private void prepareObjectBeforeSync(T object, Long timestamp) {
-        // The first access to this object should always proceed
-        if (Boolean.FALSE.equals(mvoCache.containsObject(streamID))) {
-            resetUnsafe(object);
-            return;
-        }
-
-        // Find the entry with the greatest version less than or equal to the given version
-        SoftReference<Map.Entry<VersionedObjectIdentifier, ICorfuSMR>> floorEntry =
-                mvoCache.floorEntry(new VersionedObjectIdentifier(streamID, timestamp));
-        if (floorEntry.get() == null) {
-            resetUnsafe(object);
-            // Do not allow going back to previous versions
-            throw new StaleObjectVersionException(streamID, timestamp);
-        } else {
-            object.setImmutableState(floorEntry.get().getValue().getImmutableState());
-            // Next stream read begins from a given address (inclusive),
-            // so +1 to avoid applying the same update twice
-            smrStream.seek(floorEntry.get().getKey().getVersion() + 1);
-        }
-    }
-     */
 
     private ICorfuSMRSnapshotProxy<T> prepareObjectBeforeSync(Long timestamp) {
         // The first access to this object should always proceed
@@ -251,11 +220,11 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                 .forEachOrdered(entryList -> {
                     try {
                         // Apply all updates in a MultiSMREntry
-                        entryList.forEach(snapshotProxy::logUpdate);
-
                         // TODO: is it possible that a MultiSMREntry has 0 SMREntry?
-                        VersionedObjectIdentifier vloId = new VersionedObjectIdentifier(
-                                streamID, entryList.get(0).getGlobalAddress());
+                        final long globalAddress = entryList.get(0).getGlobalAddress();
+                        snapshotProxy.logUpdate(entryList, () -> globalAddress);
+
+                        VersionedObjectIdentifier vloId = new VersionedObjectIdentifier(streamID, globalAddress);
                         mvoCache.put(vloId, snapshotProxy.get());
 
                         // TODO: handle StaleObjectVersionException
@@ -315,5 +284,10 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         trimMark -= 1;
         log.info("MVO GC evicts table {} versions up to {}", getID(), trimMark);
         mvoCache.getMvoCacheEviction().add(new VersionedObjectIdentifier(getID(), trimMark));
+    }
+
+    @VisibleForTesting
+    public ISMRStream getSmrStream() {
+        return smrStream;
     }
 }

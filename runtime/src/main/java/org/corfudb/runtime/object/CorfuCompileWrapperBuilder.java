@@ -39,7 +39,7 @@ public class CorfuCompileWrapperBuilder {
                                                          VersioningMechanism versioningMechanism) throws Exception {
 
         if (versioningMechanism == VersioningMechanism.PERSISTENT) {
-            // TODO: make general
+            // TODO: make general - This should get cleaned up
             Class<T> immutableClass = (Class<T>)
                     Class.forName("org.corfudb.runtime.collections.ImmutableCorfuTable");
 
@@ -47,8 +47,9 @@ public class CorfuCompileWrapperBuilder {
 
             // Instantiate a new instance of this class.
             ICorfuSMR<T> wrapperObject = (ICorfuSMR<T>) ReflectionUtils.
-                    findMatchingConstructor(wrapperClass.getDeclaredConstructors(), args);
+                    findMatchingConstructor(wrapperClass.getDeclaredConstructors(), new Object[0]);
 
+            // Note: args are used when invoking the internal immutable data structure constructor
             wrapperObject.setProxy$CORFUSMR(new MVOCorfuCompileProxy<>(rt, streamID,
                     immutableClass, args, serializer, streamTags, wrapperObject));
             return (T) wrapperObject;
