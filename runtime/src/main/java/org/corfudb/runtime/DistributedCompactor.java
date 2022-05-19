@@ -298,7 +298,7 @@ public class DistributedCompactor {
                         .setStreamName(getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName()))
                         .setSerializer(serializer)
                         .addOpenOption(ObjectOpenOption.NO_CACHE);
-        if (!"".equals(persistedCacheRoot)) {
+        if (persistedCacheRoot == null || "".equals(persistedCacheRoot)) {
             log.warn("Table {}::{} should be opened in disk-mode, but disk cache path is invalid",
                     tableName.getNamespace(), tableName.getTableName());
         } else {
