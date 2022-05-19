@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view.stream;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -9,6 +10,7 @@ import java.util.Collections;
 import java.util.UUID;
 import java.util.stream.Stream;
 
+@Slf4j
 public class OpaqueStream {
     /**
      * The stream view backing this adapter.
@@ -20,6 +22,7 @@ public class OpaqueStream {
     }
 
     private OpaqueEntry processLogData(ILogData logData) {
+        log.info("processLogData {}", logData);
         if (logData == null) {
             return null;
         }
@@ -49,8 +52,11 @@ public class OpaqueStream {
     }
 
     public Stream<OpaqueEntry> streamUpTo(long snapshot) {
+        log.info("stream upto {} hasNext {}, {}", snapshot, streamView.hasNext(), streamView.getCurrentGlobalPosition());
         return streamView.streamUpTo(snapshot)
-                .filter(m -> m.getType() == DataType.DATA)
+                .filter(m -> {
+                    log.info("In streamUpTo, datatype {}...data {} ", m.getType(), m);
+                    return m.getType() == DataType.DATA; })
                 .map(this::processLogData)
                 .filter(e -> !e.getEntries().isEmpty());
 

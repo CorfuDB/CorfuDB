@@ -1,6 +1,7 @@
 package org.corfudb.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.runtime.view.ObjectsView.LOG_REPLICATOR_STREAM_INFO;
 import static org.junit.Assert.fail;
 
 
@@ -10,24 +11,24 @@ import java.io.InputStreamReader;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.StringJoiner;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultSnapshotSyncPlugin;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.ExampleSchemas;
@@ -56,6 +57,7 @@ import org.corfudb.util.retry.RetryNeededException;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
+import org.corfudb.util.serializer.Serializers;
 
 @Slf4j
 public class LogReplicationAbstractIT extends AbstractIT {
@@ -91,6 +93,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
     public final int lockLeaseDuration = 10;
 
     public final int activeSiteCorfuPort = 9000;
+    public final int newActiveSiteCorfuPort = 9010;
     public final int standbySiteCorfuPort = 9001;
 
     public final int activeReplicationServerPort = 9010;
@@ -110,6 +113,9 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     public CorfuStore corfuStoreActive;
     public CorfuStore corfuStoreStandby;
+
+    private final int TEN = 10;
+   private final long mediumInterval = 10L;
 
     public void testEndToEndSnapshotAndLogEntrySync() throws Exception {
         try {
@@ -198,11 +204,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
             log.info(">> Write data to active CorfuDB before LR is started ...");
             // Add Data for Snapshot Sync
-            writeToActive(0, numWrites);
+            writeToActive(0, TEN);
 
             // Confirm data does exist on Active Cluster
             for(Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapActive.values()) {
-                assertThat(map.count()).isEqualTo(numWrites);
+                assertThat(map.count()).isEqualTo(TEN);
             }
 
             // Confirm data does not exist on Standby Cluster
@@ -213,7 +219,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
             startLogReplicatorServers();
 
             log.info(">> Wait ... Snapshot log replication in progress ...");
-            verifyDataOnStandby(numWrites);
+            verifyDataOnStandby(TEN);
 
             // Confirm replication status reflects snapshot sync completed
             log.info(">> Verify replication status completed on active");
@@ -227,10 +233,10 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
             // Add Delta's for Log Entry Sync
             log.info(">> Write deltas");
-            writeToActive(numWrites, numWrites / 2);
+            writeToActive(TEN, TEN / 2);
 
             log.info(">> Wait ... Delta log replication in progress ...");
-            verifyDataOnStandby((numWrites + (numWrites / 2)));
+            verifyDataOnStandby((TEN + (TEN / 2)));
 
             // Verify Standby Status Listener received all expected updates (is_data_consistent)
             log.info(">> Wait ... Replication status UPDATE ...");
@@ -239,6 +245,92 @@ public class LogReplicationAbstractIT extends AbstractIT {
             // Confirm last updates are set to true (corresponding to snapshot sync completed and log entry sync started)
             assertThat(standbyListener.getAccumulatedStatus().get(standbyListener.getAccumulatedStatus().size() - 1)).isTrue();
             assertThat(standbyListener.getAccumulatedStatus()).contains(false);
+
+            log.info("======================================");
+            log.info("Stop and Start active node");
+            log.info("======================================");
+
+            stopLogReplicator(true);
+
+            shutdownCorfuServer(activeCorfu);
+
+            activeCorfu = runServer(activeSiteCorfuPort, true);
+
+
+            // Setup runtime's to active and standby Corfu
+            CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
+                    .builder()
+                    .build();
+
+            activeRuntime = CorfuRuntime.fromParameters(params);
+            activeRuntime.parseConfigurationString(activeEndpoint);
+            activeRuntime.connect();
+
+            corfuStoreActive = new CorfuStore(activeRuntime);
+
+
+            log.info(">> Open map(s) on active and standby");
+            openMapsOnActive(totalNumMaps, diskBased);
+
+            log.info("Write 10 entries, so it looks like there was a backup restore");
+
+            writeToActive(0, TEN);
+
+            // Confirm data does exist on Active Cluster
+            for(Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapActive.values()) {
+                assertThat(map.count()).isEqualTo(TEN);
+            }
+
+            startActiveLogReplicator();
+            log.info(">> Wait ... Snapshot log replication in progress ...");
+
+            TimeUnit.SECONDS.sleep(mediumInterval);
+            TimeUnit.SECONDS.sleep(mediumInterval);
+
+            Table<ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg>  configTable =
+                    corfuStoreActive.openTable(
+                    DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
+                    ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class,
+                    TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
+            );
+            try (TxnContext txn = corfuStoreActive.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+                txn.putRecord(configTable, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC,
+                        DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC);
+                txn.commit();
+            }
+
+            TimeUnit.SECONDS.sleep(mediumInterval);
+
+            Table<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, LogReplicationMetadata.ReplicationStatusVal>
+            replicationStatusTable = corfuStoreActive.openTable(LogReplicationMetadataManager.NAMESPACE,
+                    LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                    LogReplicationMetadata.ReplicationStatusKey.class,
+                    LogReplicationMetadata.ReplicationStatusVal.class,
+                    null,
+                    TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+
+            LogReplicationMetadata.ReplicationStatusKey key =
+                    LogReplicationMetadata.ReplicationStatusKey
+                            .newBuilder()
+                            .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                            .build();
+            LogReplicationMetadata.ReplicationStatusVal replicationStatusVal;
+            while(true) {
+                try (TxnContext txn = corfuStoreActive.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                    replicationStatusVal = (LogReplicationMetadata.ReplicationStatusVal) txn.getRecord("LogReplicationStatus", key).getPayload();
+                    txn.commit();
+                    if (replicationStatusVal.getSnapshotSyncInfo().getType().equals(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.FORCED) &&
+                            replicationStatusVal.getSnapshotSyncInfo().getStatus().equals(LogReplicationMetadata.SyncStatus.COMPLETED)) {
+                        break;
+                    }
+                }
+            }
+
+            log.info("replicationStatusVal {}", replicationStatusVal);
+            log.info(">> Check table on standby ...");
+            verifyDataOnStandby(TEN);
+
+
         } finally {
             executorService.shutdownNow();
 
@@ -412,6 +504,31 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
             assertThat(mapActive.count()).isEqualTo(0);
             assertThat(mapStandby.count()).isEqualTo(0);
+        }
+    }
+
+    public void openMapsOnActive(int mapCount, boolean diskBased) throws Exception {
+        mapNameToMapActive = new HashMap<>();
+        Path pathActive = null;
+
+        for(int i=1; i <= mapCount; i++) {
+            String mapName = TABLE_PREFIX + i;
+
+            if (diskBased) {
+                pathActive = Paths.get(com.google.common.io.Files.createTempDir().getAbsolutePath());
+            }
+
+            Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapActive = corfuStoreActive.openTable(
+                    NAMESPACE, mapName, Sample.StringKey.class, Sample.IntValueTag.class, Sample.Metadata.class,
+                    TableOptions.fromProtoSchema(Sample.IntValueTag.class, TableOptions.builder().persistentDataPath(pathActive).build()));
+
+            log.info("corfuStoreActive {}", corfuStoreActive);
+            log.info("mapActive {}", mapActive);
+
+
+            mapNameToMapActive.put(mapName, mapActive);
+
+            assertThat(mapActive.count()).isEqualTo(0);
         }
     }
 

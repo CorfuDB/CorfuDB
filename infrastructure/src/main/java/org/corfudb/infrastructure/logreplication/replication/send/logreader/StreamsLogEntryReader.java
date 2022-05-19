@@ -11,6 +11,7 @@ import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -80,7 +81,10 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     private StreamIteratorMetadata currentProcessedEntryMetadata;
 
+    private CorfuRuntime runtime;
+
     public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
+        this.runtime = runtime;
         runtime.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
@@ -213,10 +217,15 @@ public class StreamsLogEntryReader implements LogEntryReader {
                     lastOpaqueEntry = null;
                 }
 
+                Map<UUID, Long> tailMap = runtime.getAddressSpaceView().getAllTails().getStreamTails();
+//                StreamAddressRange rangeQuery2 = new StreamAddressRange(ObjectsView.getLogReplicatorStreamId(), 0, Address.MAX);
+//                runtime.getSequencerView().getStreamAddressSpace(rangeQuery2).getTail();
+                log.info("tx tail {} logtail: {} from sequencer {} ", tailMap.get(ObjectsView.getLogReplicatorStreamId()),
+                        runtime.getAddressSpaceView().getLogTail());
+
                 if (!txOpaqueStream.hasNext()) {
                     break;
                 }
-
                 lastOpaqueEntry = txOpaqueStream.next();
                 deltaCounter.ifPresent(Counter::increment);
                 lastOpaqueEntryValid = isValidTransactionEntry(lastOpaqueEntry);
@@ -224,6 +233,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
                     validDeltaCounter.ifPresent(Counter::increment);
                 }
                 currentProcessedEntryMetadata = new StreamIteratorMetadata(txOpaqueStream.txStream.pos(), lastOpaqueEntryValid);
+                log.info("currentProcessedEntryMetadata during read {} {}", currentProcessedEntryMetadata.timestamp, currentProcessedEntryMetadata.streamsToReplicatePresent);
             }
 
             log.trace("Generate LogEntryDataMessage size {} with {} entries for maxDataSizePerMsg {}. lastEntry size {}",
@@ -319,6 +329,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         private void streamUpTo(long snapshot) {
             log.trace("StreamUpTo {}", snapshot);
             iterator = txStream.streamUpTo(snapshot).iterator();
+            log.info("StreamUpTo {} {}", txStream,  iterator.hasNext());
         }
 
         /**
@@ -346,7 +357,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
                 return null;
 
             OpaqueEntry opaqueEntry = (OpaqueEntry) iterator.next();
-            log.trace("Address {} OpaqueEntry {}", opaqueEntry.getVersion(), opaqueEntry);
+            log.debug("Address {} OpaqueEntry {}", opaqueEntry.getVersion(), opaqueEntry);
             return opaqueEntry;
         }
 

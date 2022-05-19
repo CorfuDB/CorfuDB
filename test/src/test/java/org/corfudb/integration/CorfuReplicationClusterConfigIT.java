@@ -1317,6 +1317,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         }
         assertThat(mapActive.size()).isEqualTo(thirdBatch);
 
+        ///
         // Perform an enforce full snapshot sync
         try (TxnContext txn = activeCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
             txn.putRecord(configTable, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC,

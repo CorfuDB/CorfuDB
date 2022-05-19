@@ -150,6 +150,8 @@ public class LogReplicationAckReader {
             return ((baseSnapshotTimestamp - ackedTimestamp) +
                     getTxStreamTotalEntries(baseSnapshotTimestamp, txStreamTail));
         }
+        log.info("calculateRemainingEntriesIncrementalUpdates ackTs {}, txStreamTail {}, " +
+                "currentTxStreamProcessedTs {}",ackedTimestamp, txStreamTail, currentTxStreamProcessedTs);
 
         // In Log Entry Sync
         return calculateRemainingEntriesIncrementalUpdates(ackedTimestamp, txStreamTail, currentTxStreamProcessedTs);
@@ -259,6 +261,8 @@ public class LogReplicationAckReader {
                         log.trace("Log Entry Sync up to date, lastAckedTs={}, txStreamTail={}, currentTxProcessedTs={}, containsEntries={}", lastAckedTs,
                                 txStreamTail, currentTxStreamProcessedTs.getTimestamp(), currentTxStreamProcessedTs.isStreamsToReplicatePresent());
                     }
+                    log.info("Log Entry Sync up to date, lastAckedTs={}, txStreamTail={}, currentTxProcessedTs={}, containsEntries={}", lastAckedTs,
+                            txStreamTail, currentTxStreamProcessedTs.getTimestamp(), currentTxStreamProcessedTs.isStreamsToReplicatePresent());
                     // (Case 2.0)
                     return noRemainingEntriesToSend;
                 }
@@ -270,6 +274,8 @@ public class LogReplicationAckReader {
                     log.trace("Log Entry Sync pending ACKs, lastAckedTs={}, txStreamTail={}, currentTxProcessedTs={}, containsEntries={}", lastAckedTs,
                             txStreamTail, currentTxStreamProcessedTs.getTimestamp(), currentTxStreamProcessedTs.isStreamsToReplicatePresent());
                 }
+                log.info("Log Entry Sync pending ACKs, lastAckedTs={}, txStreamTail={}, currentTxProcessedTs={}, containsEntries={}", lastAckedTs,
+                        txStreamTail, currentTxStreamProcessedTs.getTimestamp(), currentTxStreamProcessedTs.isStreamsToReplicatePresent());
                 return getTxStreamTotalEntries(lastAckedTs, currentTxStreamProcessedTs.getTimestamp());
             }
 
@@ -281,6 +287,8 @@ public class LogReplicationAckReader {
                 log.trace("Log Entry Sync up to date, no pending ACKs, lastAckedTs={}, txStreamTail={}, currentTxProcessedTs={}, containsEntries={}", lastAckedTs,
                         txStreamTail, currentTxStreamProcessedTs.getTimestamp(), currentTxStreamProcessedTs.isStreamsToReplicatePresent());
             }
+            log.info("Log Entry Sync up to date, no pending ACKs, lastAckedTs={}, txStreamTail={}, currentTxProcessedTs={}, containsEntries={}", lastAckedTs,
+                    txStreamTail, currentTxStreamProcessedTs.getTimestamp(), currentTxStreamProcessedTs.isStreamsToReplicatePresent());
             return noRemainingEntriesToSend;
         }
 
@@ -305,6 +313,10 @@ public class LogReplicationAckReader {
                     txStreamTail, currentTxStreamProcessedTs.getTimestamp(),
                     currentTxStreamProcessedTs.isStreamsToReplicatePresent(), remainingEntries);
         }
+        log.info("Log Entry Sync pending entries for processing, lastAckedTs={}, txStreamTail={}, " +
+                        "currentTxProcessedTs={}, containsEntries={}, remaining={}", lastAckedTs,
+                txStreamTail, currentTxStreamProcessedTs.getTimestamp(),
+                currentTxStreamProcessedTs.isStreamsToReplicatePresent(), remainingEntries);
 
         return remainingEntries;
     }
@@ -321,7 +333,7 @@ public class LogReplicationAckReader {
             totalEntries = txStreamAddressSpace.size();
         }
 
-        log.trace("getTxStreamTotalEntries:: entries={} in range ({}, {}]", totalEntries, lowerBoundary, upperBoundary);
+        log.info("getTxStreamTotalEntries:: entries={} in range ({}, {}]", totalEntries, lowerBoundary, upperBoundary);
         return totalEntries;
     }
 
