@@ -159,7 +159,7 @@ public class CorfuStoreCompactorMain {
         getCompactorArgs(args);
 
         if (maxWriteSize == -1) {
-            if ("".equals(persistedCacheRoot)) {
+            if (persistedCacheRoot == null || "".equals(persistedCacheRoot)) {
                 // in-memory compaction
                 maxWriteSize = DEFAULT_CP_MAX_WRITE_SIZE;
                 Thread.currentThread().setName("CS-Config-chkpter");
