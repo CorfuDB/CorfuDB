@@ -15,7 +15,7 @@ COPY target/${CORFU_TOOLS_JAR} /usr/share/corfu/lib/${CORFU_TOOLS_JAR}
 COPY target/bin /usr/share/corfu/bin
 COPY target/corfu_scripts /usr/share/corfu/corfu_scripts
 COPY target/scripts /usr/share/corfu/scripts
-COPY target/logback.prod.xml usr/share/corfu/conf
+COPY target/logback.prod.xml /usr/share/corfu/conf/logback.prod.xml
 
 # For integration testing purposes
 COPY target/${CORFU_JAR} /app/corfu.jar
