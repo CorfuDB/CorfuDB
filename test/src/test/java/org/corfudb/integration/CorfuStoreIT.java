@@ -411,6 +411,7 @@ public class CorfuStoreIT extends AbstractIT {
                 ManagedResources.newBuilder().setCreateUser("CreateUser").build());
         tx.commit();
 
+        corfuStore.freeTableData(nsxManager, tableName);
         corfuStore.deleteTable(nsxManager, tableName);
 
         MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();

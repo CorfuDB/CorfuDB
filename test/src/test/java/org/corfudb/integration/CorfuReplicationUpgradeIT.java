@@ -849,8 +849,11 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             corfuStore = corfuStoreStandby;
         }
 
-        if (clear) {
-            corfuStore.deleteTable(NAMESPACE, STREAMS_TEST_TABLE);
+        if (clear) { // delete() is a heavy-weight operation, clear table instead
+            try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
+                txn.clear(STREAMS_TEST_TABLE);
+                txn.commit();
+            }
         }
 
         streamsNameTable = corfuStore.openTable(NAMESPACE, STREAMS_TEST_TABLE,
