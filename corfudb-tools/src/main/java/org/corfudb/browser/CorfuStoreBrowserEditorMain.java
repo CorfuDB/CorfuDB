@@ -32,6 +32,7 @@ public class CorfuStoreBrowserEditorMain {
         infoTable,
         showTable,
         listenOnTable,
+        dropTable,
         clearTable,
         listAllProtos,
         deleteRecord,
@@ -61,7 +62,7 @@ public class CorfuStoreBrowserEditorMain {
         + "Options:\n"
         + "--host=<host>   Hostname\n"
         + "--port=<port>   Port\n"
-        + "--operation=<listTables|infoTable|showTable|clearTable" +
+        + "--operation=<listTables|infoTable|showTable|dropTable|clearTable" +
         "|editTable|deleteRecord|loadTable|listenOnTable|listTags|listTagsMap" +
         "|listTablesForTag|listTagsForTable|listAllProtos> Operation\n"
         + "--namespace=<namespace>   Namespace\n"
@@ -134,14 +135,15 @@ public class CorfuStoreBrowserEditorMain {
             runtime.connect();
             log.info("Successfully connected to {}", singleNodeEndpoint);
 
-            CorfuStoreBrowserEditor browser;
+            boolean skipDynamicSerializer = Enum.valueOf(OperationType.class, operation)
+                    == OperationType.dropTable; // we only modify registry table here
+            String diskPath = null;
             if (opts.get("--diskPath") != null) {
-                browser = new CorfuStoreBrowserEditor(runtime, opts.get(
-                        "--diskPath").toString());
-            } else {
-                browser = new CorfuStoreBrowserEditor(runtime);
+                diskPath = opts.get("--diskPath").toString();
             }
-            final String namespace = Optional.ofNullable(opts.get("--namespace"))
+            CorfuStoreBrowserEditor browser;
+            browser = new CorfuStoreBrowserEditor(runtime, diskPath, skipDynamicSerializer);
+            String namespace = Optional.ofNullable(opts.get("--namespace"))
                     .map(Object::toString)
                     .orElse(null);
             final String tableName = Optional.ofNullable(opts.get("--tablename"))
@@ -165,8 +167,14 @@ public class CorfuStoreBrowserEditorMain {
                     Preconditions.checkArgument(isValid(namespace),
                             "Namespace is null or empty.");
                     Preconditions.checkArgument(isValid(tableName),
-                            "Table name is null or empty.");
+                        "Table name is null or empty.");
                     return browser.clearTable(namespace, tableName);
+                case dropTable:
+                    Preconditions.checkArgument(isValid(namespace),
+                            "Namespace is null or empty.");
+                    Preconditions.checkArgument(isValid(tableName),
+                            "Table name is null or empty.");
+                    return browser.dropTable(namespace, tableName);
                 case showTable:
                     Preconditions.checkArgument(isValid(namespace),
                             "Namespace is null or empty.");

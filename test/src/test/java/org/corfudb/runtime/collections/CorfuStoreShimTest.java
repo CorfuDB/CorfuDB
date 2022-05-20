@@ -235,6 +235,76 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     }
 
     /**
+     * Test that dropTable works and removes table & associated protobufs
+     *
+     * @throws Exception exception
+     */
+    @Test
+    public void checkDeleteTable() throws Exception {
+
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getTestRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "ManagedMetadata";
+        final String rpcCommonTable = "rpcCommonTable";
+
+        // Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        Table<UuidMsg, ManagedMetadata, ManagedMetadata> table = shimStore.openTable(
+                someNamespace,
+                tableName,
+                UuidMsg.class,
+                ManagedMetadata.class,
+                ManagedMetadata.class,
+                // TableOptions includes option to choose - Memory/Disk based corfu table.
+                TableOptions.builder().build());
+
+        Table<UuidMsg, UuidMsg, UuidMsg> table2 = shimStore.openTable(
+                someNamespace,
+                rpcCommonTable,
+                UuidMsg.class,
+                RpcCommon.UuidMsg.class,
+                RpcCommon.UuidMsg.class,
+                // TableOptions includes option to choose - Memory/Disk based corfu table.
+                TableOptions.builder().build());
+
+        // Now the above 2 tables have rpc_common & example_schemas
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
+            UUID uuid1 = UUID.nameUUIDFromBytes("1".getBytes());
+            UuidMsg key = UuidMsg.newBuilder().setMsb(i)
+                    .build();
+            ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
+
+            ManagedTxnContext txn = shimStore.tx(someNamespace);
+            txn.putRecord(tableName, key,
+                    ManagedMetadata.newBuilder().setCreateUser("abc").build(),
+                    user_1);
+            txn.commit();
+        }
+
+        // Validate that deleteTable cannot be called from within a transaction.
+        ManagedTxnContext txn = shimStore.tx(someNamespace);
+        assertThatThrownBy(() -> shimStore.deleteTable(someNamespace, tableName))
+                .isExactlyInstanceOf(IllegalStateException.class);
+        txn.commit();
+
+        // Validate that deleteTable cannot be called on an open table.
+        assertThatThrownBy(() -> shimStore.deleteTable(someNamespace, tableName))
+                .isExactlyInstanceOf(IllegalStateException.class);
+
+        shimStore.closeTable(someNamespace, tableName);
+        final int numDeletedProtos = 1;
+        // Verify that rpc_common should remain only example_schemas.proto should be gone.
+        assertThat(shimStore.deleteTable(someNamespace, tableName)).isEqualTo(numDeletedProtos);
+    }
+
+    /**
      * CorfuStore stores 3 pieces of information - key, value and metadata
      * This test demonstrates how metadata field options especially "version" can be used and verified.
      *

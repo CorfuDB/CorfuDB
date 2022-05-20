@@ -162,13 +162,20 @@ public class CorfuStore {
     }
 
     /**
-     * Deletes a table instance. [NOT SUPPORTED.]
+     * Deletes a table instance.
+     * WARNING: NOT THREAD SAFE! This is a special api meant for corner case table migrations
+     * WARNING: It is NOT meant to be run while the table might be accessed or opened.
+     * WARNING: Table must be close()ed or else IllegalStateException will be thrown.
+     * WARNING: DO not call this method from within an existing transaction.
+     * WARNING: After this method returns full compaction cycle must run to fully purge the table!
+     *          DO not reopen the table until checkpoint trim has completed after this function returns.
      *
      * @param namespace Namespace of the table.
      * @param tableName Table name.
+     * @return number of protobuf files deleted as a result of this table deletion
      */
-    public void deleteTable(String namespace, String tableName) {
-        runtime.getTableRegistry().deleteTable(namespace, tableName);
+    public int deleteTable(String namespace, String tableName) {
+        return runtime.getTableRegistry().deleteTable(namespace, tableName);
     }
 
     /**

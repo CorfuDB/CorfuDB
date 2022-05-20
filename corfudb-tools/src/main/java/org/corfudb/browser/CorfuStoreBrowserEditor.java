@@ -81,7 +81,7 @@ public class CorfuStoreBrowserEditor {
      * @param runtime CorfuRuntime which has connected to the server
      */
     public CorfuStoreBrowserEditor(CorfuRuntime runtime) {
-        this(runtime, null);
+        this(runtime, null, false);
     }
 
     /**
@@ -89,13 +89,19 @@ public class CorfuStoreBrowserEditor {
      * @param runtime CorfuRuntime which has connected to the server
      * @param diskPath path to temp disk directory for loading large tables
      *                 that won't fit into memory
+     * @param skipDynamicProtoSerializer - used in cases like dropTable where
+     *                                   only internal type(s) are modified
      */
-    public CorfuStoreBrowserEditor(CorfuRuntime runtime, String diskPath) {
+    public CorfuStoreBrowserEditor(CorfuRuntime runtime, String diskPath, boolean skipDynamicProtoSerializer) {
         this.runtime = runtime;
         this.diskPath = diskPath;
-        dynamicProtobufSerializer =
-            new DynamicProtobufSerializer(runtime);
-        runtime.getSerializers().registerSerializer(dynamicProtobufSerializer);
+        if (skipDynamicProtoSerializer) {
+            dynamicProtobufSerializer = null;
+        } else {
+            dynamicProtobufSerializer =
+                    new DynamicProtobufSerializer(runtime);
+            runtime.getSerializers().registerSerializer(dynamicProtobufSerializer);
+        }
     }
 
     /**
@@ -362,6 +368,104 @@ public class CorfuStoreBrowserEditor {
             }
         }
         return -1;
+    }
+
+    /**
+     *
+     * @param namespace - namespace of the table we are removing from registry
+     * @param tablename - tablename of table we are removing from registry
+     * @return number of associated protobuf files deleted on success,
+     *         negative number in case of failure
+     */
+    public int dropTable(String namespace, String tablename) {
+        System.out.println("\n======================\n");
+        String fullName = TableRegistry.getFullyQualifiedTableName(namespace, tablename);
+        System.out.println("\nWARNING about to drop " + fullName + " from registry\n");
+        try {
+            // ok to call without closing the table since browser should never have opened this table
+            int numProtosDeleted = runtime.getTableRegistry().deleteTable(namespace, tablename);
+            System.out.println("Table "+fullName+" erased from registry successfully");
+            System.out.println("WARNING MUST RUN COMPACTION CYCLE BEFORE REOPENING TABLE");
+            return numProtosDeleted;
+        } catch (RuntimeException e) {
+            System.out.println("Unable to delete the table " + e);
+        }
+        return -1;
+    }
+
+    /**
+     * Add a record in a table and namespace
+     * @param namespace namespace of the table
+     * @param tableName name of the table
+     * @param newKey JSON string representing the key to add
+     * @param newValue JSON string representing the value to add
+     * @param newMetadata JSON string representing the metadata to add
+     * @return CorfuDynamicRecord the newly added record.  null if no record
+     * was created
+     */
+    public CorfuDynamicRecord addRecord(String namespace, String tableName,
+                                        String newKey, String newValue,
+                                        String newMetadata) {
+        System.out.println("\n======================\n");
+
+        TableName tableNameProto = TableName.newBuilder().setTableName(tableName)
+            .setNamespace(namespace).build();
+
+        if (!dynamicProtobufSerializer.getCachedRegistryTable()
+            .containsKey(tableNameProto)) {
+            log.error("Table {} in namespace {} does not exist.", tableName,
+                namespace);
+            return null;
+        }
+
+        Any defaultKeyAny =
+            dynamicProtobufSerializer.getCachedRegistryTable().get(tableNameProto)
+                .getPayload().getKey();
+        Any defaultValueAny =
+            dynamicProtobufSerializer.getCachedRegistryTable().get(tableNameProto)
+                .getPayload().getValue();
+        Any defaultMetadataAny =
+            dynamicProtobufSerializer.getCachedRegistryTable().get(tableNameProto)
+                .getPayload().getMetadata();
+
+        DynamicMessage newKeyMsg =
+            dynamicProtobufSerializer.createDynamicMessageFromJson(defaultKeyAny,
+                newKey);
+        DynamicMessage newValueMsg =
+            dynamicProtobufSerializer.createDynamicMessageFromJson(defaultValueAny,
+                newValue);
+        DynamicMessage newMetadataMsg =
+            dynamicProtobufSerializer.createDynamicMessageFromJson(defaultMetadataAny,
+                newMetadata);
+
+        // Metadata can be empty or null but key or value should not
+        if (newKeyMsg == null || newValueMsg == null) {
+            log.error("New Key or Value message is null");
+            return null;
+        }
+
+        CorfuDynamicKey dynamicKey =
+            new CorfuDynamicKey(defaultKeyAny.getTypeUrl(), newKeyMsg);
+        CorfuDynamicRecord dynamicRecord =
+            new CorfuDynamicRecord(defaultValueAny.getTypeUrl(), newValueMsg,
+                defaultMetadataAny.getTypeUrl(), newMetadataMsg);
+
+        try {
+            CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
+                getTable(namespace, tableName);
+            runtime.getObjectsView().TXBegin();
+            table.put(dynamicKey, dynamicRecord);
+            runtime.getObjectsView().TXEnd();
+            System.out.println("\n======================\n");
+            return dynamicRecord;
+        } catch (TransactionAbortedException e) {
+            log.error("Transaction to add record aborted.", e);
+        } finally {
+            if (TransactionalContext.isInTransaction()) {
+                runtime.getObjectsView().TXAbort();
+            }
+        }
+        return null;
     }
 
     /**

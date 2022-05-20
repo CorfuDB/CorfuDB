@@ -203,10 +203,71 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
         // Invoke tableInfo and verify size
         Assert.assertEquals(browser.printTableInfo(namespace, tableName), one);
-        // Invoke dropTable and verify size
+        // Invoke clearTable and verify size
         Assert.assertEquals(browser.clearTable(namespace, tableName), one);
         // Invoke tableInfo and verify size
         Assert.assertEquals(browser.printTableInfo(namespace, tableName), 0);
+    }
+
+    /**
+     * Create a table and add data to it.  Verify that the browser tool is able
+     * to drop that table and all its associated un-shared metadata.
+     * @throws IOException
+     * @throws NoSuchMethodException
+     * @throws IllegalAccessException
+     * @throws InvocationTargetException
+     */
+    @Test
+    public void dropTableTest() throws
+            IOException,
+            NoSuchMethodException,
+            IllegalAccessException,
+            InvocationTargetException {
+        final String namespace = "namespace";
+        final String tableName = "table";
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost,
+                corfuStringNodePort);
+
+        // Start a Corfu runtime
+        runtime = createRuntime(singleNodeEndpoint);
+
+        CorfuStore store = new CorfuStore(runtime);
+
+        final Table<SampleSchema.Uuid, SampleSchema.Uuid, SampleSchema.Uuid> table1 = store.openTable(
+                namespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
+
+        final long keyUuid = 1L;
+        final long valueUuid = 3L;
+        final long metadataUuid = 5L;
+
+        SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder()
+                .setMsb(keyUuid)
+                .setLsb(keyUuid)
+                .build();
+        SampleSchema.Uuid uuidVal = SampleSchema.Uuid.newBuilder()
+                .setMsb(valueUuid)
+                .setLsb(valueUuid)
+                .build();
+        SampleSchema.Uuid metadata = SampleSchema.Uuid.newBuilder()
+                .setMsb(metadataUuid)
+                .setLsb(metadataUuid)
+                .build();
+        TxnContext tx = store.txn(namespace);
+        tx.putRecord(table1, uuidKey, uuidVal, metadata);
+        tx.commit();
+
+        int registryTableSizeBefore = runtime.getTableRegistry().getRegistryTable().size();
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, null, true);
+        store.closeTable(namespace, tableName);
+        Assert.assertEquals(2, browser.dropTable(namespace, tableName));
+        int registryTableSizeAfter = runtime.getTableRegistry().getRegistryTable().size();
+        Assert.assertEquals(registryTableSizeAfter, registryTableSizeBefore - 1);
+        runtime.shutdown();
     }
 
     /**
@@ -561,7 +622,8 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runtime = createRuntime(singleNodeEndpoint);
         String tempDir = com.google.common.io.Files.createTempDir()
                 .getAbsolutePath();
-        final CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime, tempDir);
+        final CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime,
+                tempDir, false);
         // Verify table count
         Assert.assertEquals(1, browser.printTable(namespace, tableName));
 
