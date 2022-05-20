@@ -66,7 +66,7 @@ public class CorfuServerParams implements NodeParams {
     private final Optional<ContainerResources> containerResources = Optional.empty();
 
     /**
-     * Corfu server version, for instance: 0.3.0-SNAPSHOT
+     * Corfu server version, for instance: 0.4.0-SNAPSHOT
      */
     @NonNull
     private final String serverVersion;
