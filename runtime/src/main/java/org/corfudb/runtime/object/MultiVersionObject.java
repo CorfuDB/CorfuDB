@@ -115,6 +115,8 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
             return snapshotProxyOptional.get();
         }
 
+        // Sleep
+
         AtomicLong vloAccessedVersion = new AtomicLong();
         snapshotProxyOptional = getVersionedObjectUnderLock(timestamp, vloAccessedVersion::set);
 
@@ -219,15 +221,19 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
             stream.streamUpToInList(timestamp)
                 .forEachOrdered(entryList -> {
                     try {
-                        // Apply all updates in a MultiSMREntry
-                        // TODO: is it possible that a MultiSMREntry has 0 SMREntry?
-                        final long globalAddress = entryList.get(0).getGlobalAddress();
-                        snapshotProxy.logUpdate(entryList, () -> globalAddress);
+                        if (!entryList.isEmpty()) {
+                            // Apply all updates in a MultiSMREntry
+                            // TODO: is it possible that a MultiSMREntry has 0 SMREntry? - Seems like it.
+                            final long globalAddress = entryList.get(0).getGlobalAddress();
+                            snapshotProxy.logUpdate(entryList, () -> globalAddress);
 
-                        VersionedObjectIdentifier voId = new VersionedObjectIdentifier(streamID, globalAddress);
-                        mvoCache.put(voId, snapshotProxy.get());
-
-                        // TODO: handle StaleObjectVersionException
+                            VersionedObjectIdentifier voId = new VersionedObjectIdentifier(streamID, globalAddress);
+                            mvoCache.put(voId, snapshotProxy.get());
+                            // TODO: handle StaleObjectVersionException
+                        } else {
+                            // TODO(Zach): Remove me
+                            log.warn("Empty entry list");
+                        }
                     } catch (Exception e) {
                         log.error("Sync[{}] Error: Couldn't execute upcall due to {}", this, e);
                         throw new UnrecoverableCorfuError(e);

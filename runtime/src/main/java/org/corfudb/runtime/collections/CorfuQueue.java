@@ -10,6 +10,7 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import io.netty.buffer.ByteBuf;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +27,7 @@ import org.corfudb.runtime.Queue.CorfuQueueIdMsg;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext.PreCommitListener;
 import org.corfudb.runtime.view.CorfuGuidGenerator;
+import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ICorfuHashable;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -49,7 +51,7 @@ public class CorfuQueue {
     /**
      * The main CorfuTable which contains the primary key-value mappings.
      */
-    private final CorfuTable<CorfuRecordId, ByteString> corfuTable;
+    private final PersistentCorfuTable<CorfuRecordId, ByteString> corfuTable;
     private final CorfuGuidGenerator guidGenerator;
 
     @VisibleForTesting
@@ -57,11 +59,15 @@ public class CorfuQueue {
         final Supplier<StreamingMap<CorfuRecordId, ByteString>> mapSupplier =
                 () -> new StreamingMapDecorator<>(new LinkedHashMap<CorfuRecordId, ByteString>());
         corfuTable = runtime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<CorfuRecordId, ByteString>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuRecordId, ByteString>>() {})
                 .setStreamName(streamName)
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setArguments(Index.Registry.empty(), mapSupplier)
                 .setSerializer(serializer)
                 .open();
+
+        // TODO(Zach): Probably broken - Fix setArguments
+
         guidGenerator = CorfuGuidGenerator.getInstance(runtime);
     }
 
@@ -237,7 +243,7 @@ public class CorfuQueue {
          log.trace("enqueue: Adding preCommitListener for Queue: " + id.toString());
          TransactionalContext.getRootContext().addPreCommitListener(addressGetter);
 
-         corfuTable.put(id, e);
+         corfuTable.insert(id, e);
          return id;
     }
 
@@ -359,8 +365,15 @@ public class CorfuQueue {
      *
      * @return The entry that was successfully removed or null if there was no mapping.
      */
+    /*
     public ByteString removeEntry(CorfuRecordId entryId) {
         return corfuTable.remove(entryId);
+    }
+    */
+
+    // TODO(Zach): Is this acceptable?
+    public void removeEntry(CorfuRecordId entryId) {
+        corfuTable.delete(entryId);
     }
 
     /**
@@ -381,9 +394,12 @@ public class CorfuQueue {
     public String toString(){
         StringBuilder stringBuilder = new StringBuilder(corfuTable.size());
         stringBuilder.append("{");
-        for (Map.Entry<CorfuRecordId, ByteString> entry : corfuTable.entrySet()) {
+
+        for (Iterator<Map.Entry<CorfuRecordId, ByteString>> it = corfuTable.entryStream().iterator(); it.hasNext(); ) {
+            Map.Entry<CorfuRecordId, ByteString> entry = it.next();
             stringBuilder.append(entry.toString()).append(", ");
         }
+
         stringBuilder.append("}");
         return stringBuilder.toString();
     }

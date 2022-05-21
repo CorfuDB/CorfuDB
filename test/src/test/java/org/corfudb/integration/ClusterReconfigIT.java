@@ -5,11 +5,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
-import com.google.common.reflect.TypeToken;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -41,7 +39,7 @@ import org.corfudb.runtime.clients.LayoutHandler;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.ManagementHandler;
 import org.corfudb.runtime.clients.NettyClientRouter;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -132,14 +130,15 @@ public class ClusterReconfigIT extends AbstractIT {
         assertThat(epochVerifier.test(refreshedLayout.getEpoch())).isTrue();
     }
 
-    private Thread startDaemonWriter(CorfuRuntime corfuRuntime, Random r, CorfuTable table,
+    private Thread startDaemonWriter(CorfuRuntime corfuRuntime, Random r,
+                                     PersistentCorfuTable<String, String> table,
                                      String data, AtomicBoolean stopFlag) {
         Thread t = new Thread(() -> {
             while (stopFlag.get()) {
                 assertThatCode(() -> {
                     try {
                         corfuRuntime.getObjectsView().TXBegin();
-                        table.put(Integer.toString(r.nextInt()), data);
+                        table.insert(Integer.toString(r.nextInt()), data);
                         corfuRuntime.getObjectsView().TXEnd();
                     } catch (TransactionAbortedException e) {
                         // A transaction aborted exception is expected during
@@ -178,18 +177,13 @@ public class ClusterReconfigIT extends AbstractIT {
 
         runtime = createDefaultRuntime();
 
-        CorfuTable<String, String> table = runtime.getObjectsView()
-                .build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setStreamName(testStream)
-                .open();
-
+        PersistentCorfuTable<String, String> table = createCorfuTable(runtime, testStream);
         final String data = createStringOfSize(1_000);
 
         Random r = getRandomNumberGenerator();
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             String key = Long.toString(r.nextLong());
-            table.put(key, data);
+            table.insert(key, data);
         }
 
         final AtomicBoolean moreDataToBeWritten = new AtomicBoolean(true);
@@ -387,13 +381,9 @@ public class ClusterReconfigIT extends AbstractIT {
         TimeUnit.SECONDS.sleep(1);
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
-        // Create map and set up daemon writer thread.
+        // Create table and set up daemon writer thread.
         runtime = createDefaultRuntime();
-        CorfuTable<String, String> table = runtime.getObjectsView()
-                .build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setStreamName(testStream)
-                .open();
+        PersistentCorfuTable<String, String> table = createCorfuTable(runtime, testStream);
         final String data = createStringOfSize(1_000);
         Random r = getRandomNumberGenerator();
         final AtomicBoolean moreDataToBeWritten = new AtomicBoolean(true);
@@ -402,7 +392,7 @@ public class ClusterReconfigIT extends AbstractIT {
         // Some preliminary writes into the corfu table.
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
             runtime.getObjectsView().TXBegin();
-            table.put(Integer.toString(r.nextInt()), data);
+            table.insert(Integer.toString(r.nextInt()), data);
             runtime.getObjectsView().TXEnd();
         }
 
@@ -423,7 +413,7 @@ public class ClusterReconfigIT extends AbstractIT {
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             try {
                 runtime.getObjectsView().TXBegin();
-                table.put(Integer.toString(r.nextInt()), data);
+                table.insert(Integer.toString(r.nextInt()), data);
                 runtime.getObjectsView().TXEnd();
                 writeAfterKillNode = true;
                 break;
@@ -543,7 +533,6 @@ public class ClusterReconfigIT extends AbstractIT {
      */
     @Test
     public void test1NodeBootstrapWithWrongBootstrappedLayoutServer() throws Exception {
-
         // Set up cluster of 1 node.
         final int PORT_0 = 9000;
         Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
@@ -627,18 +616,14 @@ public class ClusterReconfigIT extends AbstractIT {
 
         // Create map and set up daemon writer thread.
         runtime = createDefaultRuntime();
-        CorfuTable<String, String> table = runtime.getObjectsView()
-                .build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setStreamName(testStream)
-                .open();
+        PersistentCorfuTable<String, String> table = createCorfuTable(runtime, testStream);
         final String data = createStringOfSize(1_000);
         Random r = getRandomNumberGenerator();
 
         // Some preliminary writes into the corfu table.
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
             runtime.getObjectsView().TXBegin();
-            table.put(Integer.toString(r.nextInt()), data);
+            table.insert(Integer.toString(r.nextInt()), data);
             runtime.getObjectsView().TXEnd();
         }
 
@@ -661,7 +646,7 @@ public class ClusterReconfigIT extends AbstractIT {
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             try {
                 runtime.getObjectsView().TXBegin();
-                table.put(Integer.toString(r.nextInt()), data);
+                table.insert(Integer.toString(r.nextInt()), data);
                 runtime.getObjectsView().TXEnd();
                 writeAfterKillNode = true;
                 break;
@@ -716,18 +701,13 @@ public class ClusterReconfigIT extends AbstractIT {
                 .build();
 
         runtime = CorfuRuntime.fromParameters(corfuRuntimeParameters).connect();
-
-        CorfuTable<String, String> table = runtime.getObjectsView()
-                .build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setStreamName("test")
-                .open();
+        PersistentCorfuTable<String, String> table = createCorfuTable(runtime, "test");
         final String data = createStringOfSize(1_000);
         Random r = getRandomNumberGenerator();
 
         // A preliminary write into the corfu table.
         runtime.getObjectsView().TXBegin();
-        table.put(Integer.toString(r.nextInt()), data);
+        table.insert(Integer.toString(r.nextInt()), data);
         runtime.getObjectsView().TXEnd();
 
         // Killing the server.
@@ -737,7 +717,7 @@ public class ClusterReconfigIT extends AbstractIT {
             for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
                 try {
                     runtime.getObjectsView().TXBegin();
-                    table.put(Integer.toString(r.nextInt()), data);
+                    table.insert(Integer.toString(r.nextInt()), data);
                     runtime.getObjectsView().TXEnd();
                     break;
                 } catch (TransactionAbortedException tae) {
@@ -1111,18 +1091,15 @@ public class ClusterReconfigIT extends AbstractIT {
         Process server0 = runPersistentServer(corfuSingleNodeHost, PORT_0, true);
         runtime = createDefaultRuntime();
 
-        CorfuTable<String, String> table = runtime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setStreamID(streamId)
-                .open();
+        PersistentCorfuTable<String, String> table = createCorfuTable(runtime, streamName);
 
         final int numEntries = 3;
         for (int i = 0; i < numEntries; i++) {
-            table.put("k" + i, "v" + i);
+            table.insert("k" + i, "v" + i);
         }
 
         // Checkpoint and trim the stream, no further updates on this stream (subsumed by checkpoint).
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();
         mcw.addMap(table);
         Token token = mcw.appendCheckpoints(runtime, "author");
         if (trim) {
@@ -1150,10 +1127,7 @@ public class ClusterReconfigIT extends AbstractIT {
         assertThat(runtime2.getLayoutView().getLayout().getPrimarySequencer()).isNotEqualTo(getServerEndpoint(PORT_0));
         assertThat(runtime2.getSequencerView().query(streamId)).isEqualTo(numEntries);
 
-        CorfuTable<String, String> table2 = runtime2.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setStreamID(streamId)
-                .open();
+        PersistentCorfuTable<String, String> table2 = createCorfuTable(runtime2, streamName);
 
         // Verify sequencer has correct address map for this stream (addresses and trim mark)
         StreamAddressSpace streamAddressSpace = Utils.getLogAddressSpace(runtime2.getLayoutView()
@@ -1162,8 +1136,7 @@ public class ClusterReconfigIT extends AbstractIT {
         StreamAddressSpace cpStreamAddressSpace = Utils.getLogAddressSpace(runtime2.getLayoutView()
                 .getRuntimeLayout())
                 .getAddressMap().get(CorfuRuntime.getCheckpointStreamIdFromId(streamId));
-        long globalTail = Utils.getLogTail(runtime2.getLayoutView()
-                .getRuntimeLayout());
+        long globalTail = Utils.getLogTail(runtime2.getLayoutView().getRuntimeLayout());
 
         final int checkpointSize = 3;
 
@@ -1174,7 +1147,7 @@ public class ClusterReconfigIT extends AbstractIT {
         // Since on fail-over the sequencer state is built, it only accounts of the latest checkpoint
         if (trim) {
             // Verify that the trim has been materialized
-            assertThat(streamAddressSpace.size()).isEqualTo(0);
+            assertThat(streamAddressSpace.size()).isZero();
         } else {
             assertThat(streamAddressSpace.size()).isEqualTo(numEntries+1);
         }

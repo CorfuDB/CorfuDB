@@ -5,7 +5,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.NodeLocator;
 import org.junit.Before;
@@ -108,6 +110,7 @@ public class SecurityIT extends AbstractIT {
      * @throws Exception
      */
     @Test
+    // TODO(Zach): It looks like this test can be removed?
     public void testServerRuntimeTlsEnabledMethod() throws Exception {
         // Run a corfu server
         Process corfuServer = runSinglePersistentServerTls();
@@ -163,28 +166,20 @@ public class SecurityIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServerTls();
 
         // Create Runtime parameters for enabling TLS
-        final CorfuRuntime.CorfuRuntimeParameters runtimeParameters = CorfuRuntime.CorfuRuntimeParameters
+        final CorfuRuntimeParametersBuilder paramsBuilder = CorfuRuntime.CorfuRuntimeParameters
                 .builder()
                 .layoutServers(Arrays.asList(NodeLocator.parseString(singleNodeEndpoint)))
                 .tlsEnabled(tlsEnabled)
                 .keyStore(runtimePathToKeyStore)
                 .ksPasswordFile(runtimePathToKeyStorePassword)
                 .trustStore(runtimePathToTrustStore)
-                .tsPasswordFile(runtimePathToTrustStorePassword)
-                .build();
+                .tsPasswordFile(runtimePathToTrustStorePassword);
 
         // Start a Corfu runtime from parameters
-        runtime = CorfuRuntime
-                .fromParameters(runtimeParameters)
-                .connect();
+        runtime = createRuntime(DEFAULT_ENDPOINT, paramsBuilder);
 
         // Create CorfuTable
-        CorfuTable testTable = runtime
-                .getObjectsView()
-                .build()
-                .setTypeToken(new TypeToken<CorfuTable<String, Object>>() {})
-                .setStreamName("volbeat")
-                .open();
+        PersistentCorfuTable<String, Object> testTable = createCorfuTable(runtime, "volbeat");
 
         // CorfuTable stats before usage
         final int initialSize = testTable.size();
@@ -193,7 +188,7 @@ public class SecurityIT extends AbstractIT {
         final int count = 100;
         final int entrySize = 1000;
         for (int i = 0; i < count; i++) {
-            testTable.put(String.valueOf(i), new byte[entrySize]);
+            testTable.insert(String.valueOf(i), new byte[entrySize]);
         }
 
         // Assert that put operation was successful

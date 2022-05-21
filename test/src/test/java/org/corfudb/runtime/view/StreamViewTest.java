@@ -8,18 +8,15 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.TrimmedException;
-import org.corfudb.runtime.object.CorfuCompileProxy;
-import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
@@ -411,38 +408,38 @@ public class StreamViewTest extends AbstractViewTest {
     @Test
     public void testPreviousWithStreamCheckpoint() throws Exception {
         String stream = "stream1";
-        StreamingMap<String, String> map = r.getObjectsView()
+        r.getParameters().setMaxCacheEntries(MVO_CACHE_SIZE);
+        PersistentCorfuTable<String, String> table = r.getObjectsView()
                 .build()
                 .setStreamName(stream)
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
-        map.put("k1", "k1");
+        table.insert("k1", "k1");
 
         UUID streamId = CorfuRuntime.getStreamID(stream);
         long baseVersion = r.getSequencerView().query(streamId);
 
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap(map);
+        MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();
+        mcw.addMap(table);
         Token token = mcw.appendCheckpoints(r, "cp");
 
         // Add some more write after the checkpoint
-        map.put("k2", "k2");
-        map.put("k3", "k3");
+        table.insert("k2", "k2");
+        table.insert("k3", "k3");
 
-        Map<String, String> mapCopy = r.getObjectsView()
+        PersistentCorfuTable<String, String> tableCopy = r.getObjectsView()
                 .build()
                 .setStreamName(stream)
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .option(ObjectOpenOption.NO_CACHE)
                 .open();
 
-        mapCopy.size();
-        VersionLockedObject vlo = ((CorfuCompileProxy) ((ICorfuSMR) mapCopy).
-                getCorfuSMRProxy()).getUnderlyingObject();
+        tableCopy.size();
 
         Token finalVersion = r.getSequencerView().query().getToken();
-
         IStreamView sv = r.getStreamsView().get(CorfuRuntime.getStreamID(stream));
 
         // Need to call this to bump up the stream pointer
@@ -487,13 +484,15 @@ public class StreamViewTest extends AbstractViewTest {
         final UUID tagId = CorfuRuntime.getStreamID(streamTag);
         final CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
                 .builder()
+                .maxCacheEntries(MVO_CACHE_SIZE)
                 .build();
         final CorfuRuntime localRuntime = CorfuRuntime.fromParameters(params)
                 .parseConfigurationString(getDefaultConfigurationString())
                 .connect();
-        final CorfuTable<String, String>
-                instance1 = localRuntime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+        final PersistentCorfuTable<String, String> instance1 = localRuntime.getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("txTestMap")
                 .setStreamTags(tagId)
                 .open();
@@ -501,7 +500,7 @@ public class StreamViewTest extends AbstractViewTest {
         // Populate the Stream up to NUM_ITERATIONS_LOW entries.
         IntStream.range(0, PARAMETERS.NUM_ITERATIONS_LOW).forEach(idx -> {
             localRuntime.getObjectsView().TXBegin();
-            instance1.put(String.valueOf(idx), String.valueOf(idx));
+            instance1.insert(String.valueOf(idx), String.valueOf(idx));
             localRuntime.getObjectsView().TXEnd();
         });
 
@@ -525,7 +524,7 @@ public class StreamViewTest extends AbstractViewTest {
         // Populate the transaction stream with additional NUM_ITERATIONS_LOW entries.
         IntStream.range(0, PARAMETERS.NUM_ITERATIONS_LOW).forEach(idx -> {
             localRuntime.getObjectsView().TXBegin();
-            instance1.put(String.valueOf(idx), String.valueOf(idx));
+            instance1.insert(String.valueOf(idx), String.valueOf(idx));
             localRuntime.getObjectsView().TXEnd();
         });
 
@@ -549,18 +548,17 @@ public class StreamViewTest extends AbstractViewTest {
 
         String stream = "stream1";
         UUID id1 = CorfuRuntime.getStreamID(stream);
+        r.getParameters().setMaxCacheEntries(MVO_CACHE_SIZE);
 
-        StreamingMap<String, String> map = r.getObjectsView()
+        PersistentCorfuTable<String, String> table = r.getObjectsView()
                 .build()
                 .setStreamName(stream)
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
-        CorfuRuntime producer = getNewRuntime(getDefaultNode())
-                .connect();
-
-        CorfuRuntime consumer = getNewRuntime(getDefaultNode())
-                .connect();
+        CorfuRuntime producer = getNewRuntime(getDefaultNode()).connect();
+        CorfuRuntime consumer = getNewRuntime(getDefaultNode()).connect();
 
         IStreamView svProducer = producer.getStreamsView().get(id1);
         IStreamView svConsumer = consumer.getStreamsView().get(id1);
@@ -577,8 +575,8 @@ public class StreamViewTest extends AbstractViewTest {
         assertThat(svConsumer.nextUpTo(numWrites).getPayload(consumer)).isEqualTo(testPayload);
         assertThat(svConsumer.nextUpTo(numWrites).getPayload(consumer)).isEqualTo(testPayload);
 
-        MultiCheckpointWriter checkpointWriter = new MultiCheckpointWriter();
-        checkpointWriter.addMap(map);
+        MultiCheckpointWriter<PersistentCorfuTable<String, String>> checkpointWriter = new MultiCheckpointWriter<>();
+        checkpointWriter.addMap(table);
         checkpointWriter.appendCheckpoints(r, "Author");
 
         // Consume Until Tail

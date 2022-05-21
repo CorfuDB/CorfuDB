@@ -1,5 +1,6 @@
 package org.corfudb.runtime.collections;
 
+import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Message;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -12,6 +13,7 @@ import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.CorfuGuidGenerator;
+import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ISerializer;
 
 import javax.annotation.Nonnull;
@@ -38,7 +40,7 @@ import java.util.stream.Stream;
 @Slf4j
 public class Table<K extends Message, V extends Message, M extends Message> {
 
-    private final CorfuTable<K, CorfuRecord<V, M>> corfuTable;
+    private final PersistentCorfuTable<K, CorfuRecord<V, M>> corfuTable;
 
     /**
      * Namespace this table belongs in.
@@ -106,8 +108,12 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                         .build())
                 .orElse(MetadataOptions.builder().build());
 
+        // TODO(Zach): What if table is disk-backed?
+        // TODO(Zach): This is likely broken. Arguments won't match constructor. Fix me!
+        // TODO(Zach): Polish this up with TableRegistry
         this.corfuTable = corfuRuntime.getObjectsView().build()
-                .setTypeToken(CorfuTable.<K, CorfuRecord<V, M>>getTableType())
+                .setTypeToken(new TypeToken<PersistentCorfuTable<K, CorfuRecord<V, M>>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName(this.fullyQualifiedTableName)
                 .setSerializer(serializer)
                 .setArguments(new ProtobufIndexer(tableParameters.getValueSchema(),
@@ -347,7 +353,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
             @Nonnull final Predicate<CorfuStoreEntry<K, V, M>> entryPredicate) {
         long startTime = System.nanoTime();
         try(Stream<Map.Entry<K, CorfuRecord<V, M>>> stream = corfuTable.entryStream()) {
-            List<CorfuStoreEntry<K, V, M>> res = CorfuTable.pool.submit(() -> stream
+            List<CorfuStoreEntry<K, V, M>> res = PersistentCorfuTable.pool.submit(() -> stream
                     .filter(recordEntry ->
                             entryPredicate.test(new CorfuStoreEntry<>(
                                     recordEntry.getKey(),

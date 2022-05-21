@@ -18,6 +18,7 @@ import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileDescriptor;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.StreamingMapDecorator;
 import org.corfudb.runtime.collections.Table;
@@ -101,17 +102,17 @@ public class TableRegistry {
     private final ISerializer protobufSerializer;
 
     /**
-     * This {@link CorfuTable} holds the schemas of the key, payload and metadata for every table created.
+     * This {@link PersistentCorfuTable} holds the schemas of the key, payload and metadata for every table created.
      */
     @Getter
-    private final CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable;
+    private final PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable;
 
     /**
      * To avoid duplicating the protobuf file descriptors that repeat across different tables store all
      * descriptors in a single table indexed by its protobuf file name.
      */
     @Getter
-    private final CorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> protobufDescriptorTable;
+    private final PersistentCorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> protobufDescriptorTable;
 
     public TableRegistry(CorfuRuntime runtime) {
         this.runtime = runtime;
@@ -130,19 +131,21 @@ public class TableRegistry {
         }
         this.protobufSerializer = protoSerializer;
         this.registryTable = this.runtime.getObjectsView().build()
-            .setTypeToken(new TypeToken<CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>>() {
+            .setTypeToken(new TypeToken<PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>>() {
             })
             .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, REGISTRY_TABLE_NAME))
             .setSerializer(this.protobufSerializer)
             .setStreamTags(LOG_REPLICATOR_STREAM_INFO.getStreamId())
+            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
             .open();
 
         this.protobufDescriptorTable = this.runtime.getObjectsView().build()
-            .setTypeToken(new TypeToken<CorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>>() {
+            .setTypeToken(new TypeToken<PersistentCorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>>() {
             })
             .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, PROTOBUF_DESCRIPTOR_TABLE_NAME))
             .setSerializer(this.protobufSerializer)
             .setStreamTags(LOG_REPLICATOR_STREAM_INFO.getStreamId())
+            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
             .open();
 
         // Register the table schemas to schema table.
@@ -255,7 +258,7 @@ public class TableRegistry {
                 this.runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
                 CorfuRecord<TableDescriptors, TableMetadata> oldRecord = this.registryTable.get(tableNameKey);
                 if (oldRecord == null) {
-                    this.registryTable.put(tableNameKey,
+                    this.registryTable.insert(tableNameKey,
                         new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
 
                     allDescriptors.forEach(this::recordNewSchema);
@@ -291,7 +294,7 @@ public class TableRegistry {
             // If schema is not present, add to protobufDescriptorTable, otherwise,
             // we assume schema definitions only change between upgrades/migration for which
             // dedicated APIs are available
-            this.protobufDescriptorTable.put(protoName, newProtoFd);
+            this.protobufDescriptorTable.insert(protoName, newProtoFd);
         } else {
             if (log.isTraceEnabled() && !protoName.getFileName().startsWith("google/protobuf")
                     && !currentSchema.getPayload().getFileDescriptor()
@@ -561,7 +564,7 @@ public class TableRegistry {
             throw new NoSuchElementException("closeTable: Did not find any table "+ fullyQualifiedTableName);
         }
         tableMap.remove(fullyQualifiedTableName);
-        ObjectsView.ObjectID oid = new ObjectsView.ObjectID(table.getStreamUUID(), CorfuTable.class);
+        ObjectsView.ObjectID oid = new ObjectsView.ObjectID(table.getStreamUUID(), PersistentCorfuTable.class);
         Object tableObject = runtime.getObjectsView().getObjectCache().remove(oid);
         if (tableObject == null) {
             throw new NoSuchElementException("closeTable: No object cache entry for "+ fullyQualifiedTableName);

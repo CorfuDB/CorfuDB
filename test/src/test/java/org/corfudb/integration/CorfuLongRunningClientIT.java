@@ -1,12 +1,10 @@
 package org.corfudb.integration;
 
-import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.junit.Test;
-
 
 import java.util.ArrayList;
 import java.util.List;
@@ -33,8 +31,8 @@ public class CorfuLongRunningClientIT extends AbstractIT {
     private CorfuRuntime client1;
     private CorfuRuntime cpClient;
 
-    private CorfuTable<String, Integer> mapAClient1;
-    private CorfuTable<String, Integer> mapAClientCP;
+    private PersistentCorfuTable<String, Integer> tableAClient1;
+    private PersistentCorfuTable<String, Integer> tableAClientCP;
 
     private final int cpCycles = 4;
 
@@ -44,7 +42,7 @@ public class CorfuLongRunningClientIT extends AbstractIT {
             testLongRunningClient();
 
             // Single Thread access from Client 1 (long running client)
-            assertThat(mapAClient1.get("KeyClient2")).isEqualTo(2);
+            assertThat(tableAClient1.get("KeyClient2")).isEqualTo(2);
         } finally {
             corfuServer.destroy();
         }
@@ -66,7 +64,7 @@ public class CorfuLongRunningClientIT extends AbstractIT {
 
             // Multi-thread access from Client 1 (long running client)
             Runnable nonTransactionalAccess = () -> {
-                Integer value = mapAClient1.get("KeyClient2");
+                Integer value = tableAClient1.get("KeyClient2");
                 if (value == null) {
                     totalExceptions.incrementAndGet();
                 }
@@ -82,8 +80,7 @@ public class CorfuLongRunningClientIT extends AbstractIT {
             executor.shutdown();
             executor.awaitTermination(Long.MAX_VALUE, TimeUnit.MILLISECONDS);
 
-            assertThat(totalExceptions.get()).isEqualTo(0);
-
+            assertThat(totalExceptions.get()).isZero();
         } finally {
             client1.shutdown();
             corfuServer.destroy();
@@ -107,7 +104,7 @@ public class CorfuLongRunningClientIT extends AbstractIT {
             // Multi-thread access from Client 1 (long running client)
             Runnable transactionalAccess = () -> {
                 client1.getObjectsView().TXBegin();
-                Integer value = mapAClient1.get("KeyClient2");
+                Integer value = tableAClient1.get("KeyClient2");
                 client1.getObjectsView().TXBegin();
                 if (value == null) {
                     totalExceptions.incrementAndGet();
@@ -124,8 +121,7 @@ public class CorfuLongRunningClientIT extends AbstractIT {
             executor.shutdown();
             executor.awaitTermination(Long.MAX_VALUE, TimeUnit.MILLISECONDS);
 
-            assertThat(totalExceptions.get()).isEqualTo(0);
-
+            assertThat(totalExceptions.get()).isZero();
         } finally {
             client1.shutdown();
             corfuServer.destroy();
@@ -149,7 +145,7 @@ public class CorfuLongRunningClientIT extends AbstractIT {
             // Multi-thread access from Client 1 (long running client)
             Runnable transactionalAccess = () -> {
                 client1.getObjectsView().TXBegin();
-                Integer value = mapAClient1.get("KeyClient2");
+                Integer value = tableAClient1.get("KeyClient2");
                 client1.getObjectsView().TXEnd();
                 if (value == null) {
                     totalExceptions.incrementAndGet();
@@ -158,7 +154,7 @@ public class CorfuLongRunningClientIT extends AbstractIT {
             };
 
             Runnable nonTransactionalAccess = () -> {
-                Integer value = mapAClient1.get("KeyClient2");
+                Integer value = tableAClient1.get("KeyClient2");
                 if (value == null) {
                     totalExceptions.incrementAndGet();
                 }
@@ -178,8 +174,7 @@ public class CorfuLongRunningClientIT extends AbstractIT {
             executor.shutdown();
             executor.awaitTermination(Long.MAX_VALUE, TimeUnit.MILLISECONDS);
 
-            assertThat(totalExceptions.get()).isEqualTo(0);
-
+            assertThat(totalExceptions.get()).isZero();
         } finally {
             client1.shutdown();
             corfuServer.destroy();
@@ -209,61 +204,33 @@ public class CorfuLongRunningClientIT extends AbstractIT {
         CorfuRuntime client2 = null;
 
         try {
-            CorfuTable<String, Integer> mapAClient2;
+            PersistentCorfuTable<String, Integer> tableAClient2;
 
             // Start Corfu Server
             corfuServer = runServer(DEFAULT_PORT, true);
 
             // Setup Runtime's for 3 clients
-            CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
-                    .builder()
-                    .build();
+            client1 = createRuntimeWithCache(DEFAULT_HOST + ":" + DEFAULT_PORT);
+            client2 = createRuntimeWithCache(DEFAULT_HOST + ":" + DEFAULT_PORT);
+            cpClient = createRuntimeWithCache(DEFAULT_HOST + ":" + DEFAULT_PORT);
 
-            client1 = CorfuRuntime.fromParameters(params);
-            client1.parseConfigurationString(DEFAULT_HOST + ":" + DEFAULT_PORT);
-            client1.connect();
+            // Open Table for Client 1
+            tableAClient1 = createCorfuTable(client1, streamName);
 
-            client2 = CorfuRuntime.fromParameters(params);
-            client2.parseConfigurationString(DEFAULT_HOST + ":" + DEFAULT_PORT);
-            client2.connect();
-
-            cpClient = CorfuRuntime.fromParameters(params);
-            cpClient.parseConfigurationString(DEFAULT_HOST + ":" + DEFAULT_PORT);
-            cpClient.connect();
-
-            // Open Map for Client 1
-            mapAClient1 = client1.getObjectsView()
-                    .build()
-                    .setStreamName(streamName)
-                    .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {
-                    })
-                    .open();
-
-            // Open Map for Client CP
-            mapAClientCP = cpClient.getObjectsView()
-                    .build()
-                    .setStreamName(streamName)
-                    .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {
-                    })
-                    .open();
+            // Open Table for Client CP
+            tableAClientCP = createCorfuTable(cpClient, streamName);
 
             // Write Client 1
-            mapAClient1.put("KeyClient1", 1);
+            tableAClient1.insert("KeyClient1", 1);
 
             // Run Checkpoint
             checkpoint();
 
             // Write Client 2
             // Open Map for Client 2
-            mapAClient2 = client2.getObjectsView()
-                    .build()
-                    .setStreamName(streamName)
-                    .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {
-                    })
-                    .open();
-
-            mapAClient2.put("KeyClient2", 2);
-            assertThat(mapAClient2.size()).isEqualTo(2);
+            tableAClient2 = createCorfuTable(client2, streamName);
+            tableAClient2.insert("KeyClient2", 2);
+            assertThat(tableAClient2.size()).isEqualTo(2);
 
             // Run 4 checkpoint cpCycles
             Token trimMark = null;
@@ -278,15 +245,17 @@ public class CorfuLongRunningClientIT extends AbstractIT {
             cpClient.getAddressSpaceView().prefixTrim(trimMark);
             cpClient.getAddressSpaceView().gc();
         } finally {
-            client2.shutdown();
+            if (client2 != null) {
+                client2.shutdown();
+            }
+
             cpClient.shutdown();
         }
     }
 
     private Token checkpoint() {
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap(mapAClientCP);
-        Token trimMark = mcw.appendCheckpoints(cpClient, "author");
-        return trimMark;
+        MultiCheckpointWriter<PersistentCorfuTable<String, Integer>> mcw = new MultiCheckpointWriter<>();
+        mcw.addMap(tableAClientCP);
+        return mcw.appendCheckpoints(cpClient, "author");
     }
 }
