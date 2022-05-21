@@ -275,6 +275,7 @@ public class CorfuStoreIT extends AbstractIT {
                     .setStreamName(fullTableName)
                     .setSerializer(dynamicProtobufSerializer);
 
+            // TODO(Zach): Broken - PersistentCorfuTable does not work when disk-based
             // Find out if a table needs to be backed up by disk path to even checkpoint
             boolean diskBased = tableRegistryCT.get(tableName).getMetadata().getDiskBased();
             if (diskBased) {

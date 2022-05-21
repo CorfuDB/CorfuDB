@@ -168,7 +168,6 @@ public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
 
         log.info("appendCheckpoint: Started checkpoint for {} at snapshot {}", streamId, snapshotTimestamp);
         try (Stream<? extends Map.Entry<?, ?>> entries = this.corfuTable.entryStream()) {
-
             // A checkpoint writer will do two accesses one to obtain the object
             // vlo version and to get a shallow copy of the entry set
             // The vloVersion which will determine the checkpoint START_LOG_ADDRESS (last observed update for this

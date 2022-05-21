@@ -11,9 +11,18 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ForkJoinWorkerThread;
 import java.util.stream.Stream;
 
 public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<PersistentCorfuTable<K, V>> {
+
+    protected static final ForkJoinPool pool = new ForkJoinPool(Math.max(Runtime.getRuntime().availableProcessors() - 1, 1),
+            pool -> {
+                final ForkJoinWorkerThread worker = ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(pool);
+                worker.setName("PersistentCorfuTable-Forkjoin-pool-" + worker.getPoolIndex());
+                return worker;
+            }, null, true);
 
     private ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy;
 

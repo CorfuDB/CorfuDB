@@ -17,11 +17,11 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
-import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SMRObject;
