@@ -11,7 +11,7 @@
 
     <artifactId>coverage</artifactId>
 
-    <dependencies>
+    <!--<dependencies>
         <dependency>
             <groupId>org.corfudb</groupId>
             <artifactId>runtime</artifactId>
@@ -44,7 +44,7 @@
             <scope>test</scope>
         </dependency>
 
-    </dependencies>
+    </dependencies>-->
 
     <build>
         <plugins>
@@ -52,10 +52,50 @@
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <version>${jacoco.version}</version>
+
+
+
                 <executions>
                     <execution>
+                        <id>merge-unit-and-integration</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>merge</goal>
+                        </goals>
+                        <configuration>
+                            <fileSets>
+                                <fileSet>
+                                    <directory>${project.parent.basedir}/infrastructure/target/coverage-reports/</directory>
+                                    <includes>
+                                        <include>*.exec</include>
+                                    </includes>
+                                </fileSet>
+                                <fileSet>
+                                    <directory>${project.parent.basedir}/runtime/target/coverage-reports/</directory>
+                                    <includes>
+                                        <include>*.exec</include>
+                                    </includes>
+                                </fileSet>
+                                <fileSet>
+                                    <directory>${project.parent.basedir}/test/target/coverage-reports/</directory>
+                                    <includes>
+                                        <include>*.exec</include>
+                                    </includes>
+                                </fileSet>
+                                <fileSet>
+                                    <directory>${project.parent.basedir}/universe/target/coverage-reports/</directory>
+                                    <includes>
+                                        <include>*.exec</include>
+                                    </includes>
+                                </fileSet>
+                            </fileSets>
+                            <destFile>${project.build.directory}/coverage-reports/merged.exec</destFile>
+                        </configuration>
+                    </execution>
+
+                    <execution>
                         <id>report-aggregate</id>
-                        <phase>test</phase>
+                        <phase>verify</phase>
                         <goals>
                             <goal>report-aggregate</goal>
                         </goals>
@@ -81,6 +121,12 @@
                                 <exclude>org/corfudb/infrastructure/logreplication/LogReplicationTransport*</exclude>
                                 <exclude>org/corfudb/infrastructure/logreplication/LogReplicationChannelGrpc*</exclude>
                             </excludes>
+                            <dataFileIncludes>
+                                <dataFileInclude>
+                                    **/coverage-reports/*.exec
+                                </dataFileInclude>
+                            </dataFileIncludes>
+                            <outputDirectory>${project.reporting.outputDirectory}/jacoco-aggregate</outputDirectory>
                         </configuration>
                     </execution>
                 </executions>

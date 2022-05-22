@@ -134,6 +134,165 @@
             <build>
                 <plugins>
                     <plugin>
+                        <groupId>org.jacoco</groupId>
+                        <artifactId>jacoco-maven-plugin</artifactId>
+                        <version>${jacoco.version}</version>
+                        <executions>
+                            <!--
+                                Prepares the property pointing to the JaCoCo runtime agent which
+                                is passed as VM argument when Maven the Surefire plugin is executed.
+                            -->
+                            <execution>
+                                <id>pre-unit-test</id>
+                                <goals>
+                                    <goal>prepare-agent</goal>
+                                </goals>
+                                <configuration>
+                                    <!-- Sets the path to the file which contains the execution data. -->
+                                    <destFile>${project.build.directory}/coverage-reports/jacoco-ut.exec</destFile>
+                                    <!--
+                                        Sets the name of the property containing the settings
+                                        for JaCoCo runtime agent.
+                                    -->
+                                    <propertyName>surefireArgLine</propertyName>
+                                </configuration>
+                            </execution>
+                            <!--
+                                Ensures that the code coverage report for unit tests is created after
+                                unit tests have been run.
+                            -->
+                            <execution>
+                                <id>post-unit-test</id>
+                                <phase>test</phase>
+                                <goals>
+                                    <goal>report</goal>
+                                </goals>
+                                <configuration>
+                                    <excludes>
+                                        <exclude>**/*$CORFUSMR.*</exclude>
+                                        <exclude>**/format/*</exclude>
+
+                                        <!-- All packages that contain proto keyword -->
+                                        <exclude>**/proto/**</exclude>
+                                        <!-- Classes with Msg in their name (Rename ObservableAckMsg?) -->
+                                        <exclude>**/*Msg*</exclude>
+
+                                        <!-- Runtime specific protobuf files -->
+                                        <exclude>org/corfudb/runtime/CorfuOptions*</exclude>
+                                        <exclude>org/corfudb/runtime/CorfuStoreMetadata*</exclude>
+                                        <exclude>org/corfudb/runtime/ExampleSchemas*</exclude>
+                                        <exclude>org/corfudb/runtime/Queue*</exclude>
+                                        <exclude>org/corfudb/runtime/LogReplication*</exclude>
+
+                                        <!-- Infrastructure specific protobuf files -->
+                                        <exclude>org/corfudb/infrastructure/log/LogFormat*</exclude>
+                                        <exclude>org/corfudb/infrastructure/logreplication/LogReplicationTransport*</exclude>
+                                        <exclude>org/corfudb/infrastructure/logreplication/LogReplicationChannelGrpc*</exclude>
+                                    </excludes>
+                                    <!-- Sets the path to the file which contains the execution data. -->
+                                    <dataFile>${project.build.directory}/coverage-reports/jacoco-ut.exec</dataFile>
+                                    <!-- Sets the output directory for the code coverage report. -->
+                                    <outputDirectory>${project.reporting.outputDirectory}/jacoco-ut</outputDirectory>
+                                </configuration>
+                            </execution>
+
+                            <!-- The Executions required by unit tests are omitted. -->
+                            <!--
+                                Prepares the property pointing to the JaCoCo runtime agent which
+                                is passed as VM argument when Maven the Failsafe plugin is executed.
+                            -->
+                            <execution>
+                                <id>pre-integration-test</id>
+                                <phase>pre-integration-test</phase>
+                                <goals>
+                                    <goal>prepare-agent</goal>
+                                </goals>
+                                <configuration>
+                                    <!-- Sets the path to the file which contains the execution data. -->
+                                    <destFile>${project.build.directory}/coverage-reports/jacoco-it.exec</destFile>
+                                    <!--
+                                        Sets the name of the property containing the settings
+                                        for JaCoCo runtime agent.
+                                    -->
+                                    <propertyName>failsafeArgLine</propertyName>
+                                </configuration>
+                            </execution>
+                            <!--
+                                Ensures that the code coverage report for integration tests after
+                                integration tests have been run.
+                            -->
+                            <execution>
+                                <id>post-integration-test</id>
+                                <phase>post-integration-test</phase>
+                                <goals>
+                                    <goal>report</goal>
+                                </goals>
+                                <configuration>
+                                    <excludes>
+                                        <exclude>**/*$CORFUSMR.*</exclude>
+                                        <exclude>**/format/*</exclude>
+
+                                        <!-- All packages that contain proto keyword -->
+                                        <exclude>**/proto/**</exclude>
+                                        <!-- Classes with Msg in their name (Rename ObservableAckMsg?) -->
+                                        <exclude>**/*Msg*</exclude>
+
+                                        <!-- Runtime specific protobuf files -->
+                                        <exclude>org/corfudb/runtime/CorfuOptions*</exclude>
+                                        <exclude>org/corfudb/runtime/CorfuStoreMetadata*</exclude>
+                                        <exclude>org/corfudb/runtime/ExampleSchemas*</exclude>
+                                        <exclude>org/corfudb/runtime/Queue*</exclude>
+                                        <exclude>org/corfudb/runtime/LogReplication*</exclude>
+
+                                        <!-- Infrastructure specific protobuf files -->
+                                        <exclude>org/corfudb/infrastructure/log/LogFormat*</exclude>
+                                        <exclude>org/corfudb/infrastructure/logreplication/LogReplicationTransport*</exclude>
+                                        <exclude>org/corfudb/infrastructure/logreplication/LogReplicationChannelGrpc*</exclude>
+                                    </excludes>
+                                    <!-- Sets the path to the file which contains the execution data. -->
+                                    <dataFile>${project.build.directory}/coverage-reports/jacoco-it.exec</dataFile>
+                                    <!-- Sets the output directory for the code coverage report. -->
+                                    <outputDirectory>${project.reporting.outputDirectory}/jacoco-it</outputDirectory>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <version>3.0.0-M5</version>
+                        <configuration combine.self="append">
+                            <argLine>${surefireArgLine}</argLine>
+                        </configuration>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <version>3.0.0-M5</version>
+                        <configuration>
+                            <argLine>${failsafeArgLine}</argLine>
+                            <includes>
+                                <include>**/*IT.java</include>
+                            </includes>
+                            <systemPropertyVariables>
+                                <propertyName>test.seed</propertyName>
+                            </systemPropertyVariables>
+                            <skipTests>false</skipTests>
+                            <skipAfterFailureCount>1</skipAfterFailureCount>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-dependency-plugin</artifactId>
                         <executions>
