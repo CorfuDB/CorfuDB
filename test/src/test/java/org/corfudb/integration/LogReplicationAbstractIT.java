@@ -19,10 +19,13 @@ import java.util.StringJoiner;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultSnapshotSyncPlugin;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
@@ -111,6 +114,8 @@ public class LogReplicationAbstractIT extends AbstractIT {
     public CorfuStore corfuStoreActive;
     public CorfuStore corfuStoreStandby;
 
+    private final long longInterval = 20L;
+
     public void testEndToEndSnapshotAndLogEntrySync() throws Exception {
         try {
             log.debug("Setup active and standby Corfu's");
@@ -161,11 +166,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     }
 
-    public void testEndToEndSnapshotAndLogEntrySyncUFO(boolean diskBased) throws Exception {
-        testEndToEndSnapshotAndLogEntrySyncUFO(1, diskBased);
+    public void testEndToEndSnapshotAndLogEntrySyncUFO(boolean diskBased, boolean checkRemainingEntriesOnSecondLogEntrySync) throws Exception {
+        testEndToEndSnapshotAndLogEntrySyncUFO(1, diskBased, checkRemainingEntriesOnSecondLogEntrySync);
     }
 
-    public void testEndToEndSnapshotAndLogEntrySyncUFO(int totalNumMaps, boolean diskBased) throws Exception {
+    public void testEndToEndSnapshotAndLogEntrySyncUFO(int totalNumMaps, boolean diskBased, boolean checkRemainingEntriesOnSecondLogEntrySync) throws Exception {
         // For the purpose of this test, standby should only update status 2 times:
         // (1) When starting snapshot sync apply : is_data_consistent = false
         // (2) When completing snapshot sync apply : is_data_consistent = true
@@ -189,7 +194,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
                     TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
             CountDownLatch statusUpdateLatch = new CountDownLatch(totalStandbyStatusUpdates);
-            ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch);
+            ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
             corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
                     LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
@@ -239,6 +244,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
             // Confirm last updates are set to true (corresponding to snapshot sync completed and log entry sync started)
             assertThat(standbyListener.getAccumulatedStatus().get(standbyListener.getAccumulatedStatus().size() - 1)).isTrue();
             assertThat(standbyListener.getAccumulatedStatus()).contains(false);
+
+            if (checkRemainingEntriesOnSecondLogEntrySync) {
+                triggerSnapshotAndTestRemainingEntries();
+            }
+
         } finally {
             executorService.shutdownNow();
 
@@ -258,6 +268,53 @@ public class LogReplicationAbstractIT extends AbstractIT {
                 standbyReplicationServer.destroy();
             }
         }
+    }
+
+    private void triggerSnapshotAndTestRemainingEntries() throws Exception{
+
+        // enforce a snapshot sync
+        Table<ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg> configTable =
+                corfuStoreActive.openTable(
+                        DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
+                        ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class,
+                        TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
+                );
+        try (TxnContext txn = corfuStoreActive.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC,
+                    DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC);
+            txn.commit();
+        }
+
+        // Sleep, so we have remainingEntries populated from the scheduled polling task instead of
+        // from method that marks snapshot complete
+        TimeUnit.SECONDS.sleep(longInterval);
+
+        CountDownLatch statusUpdateLatch = new CountDownLatch(1);
+        ReplicationStatusListener activeListener = new ReplicationStatusListener(statusUpdateLatch, true);
+        corfuStoreActive.subscribeListener(activeListener, LogReplicationMetadataManager.NAMESPACE,
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+
+        corfuStoreActive.openTable(LogReplicationMetadataManager.NAMESPACE,
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class,
+                null,
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+
+        LogReplicationMetadata.ReplicationStatusKey key =
+                LogReplicationMetadata.ReplicationStatusKey
+                        .newBuilder()
+                        .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                        .build();
+        LogReplicationMetadata.ReplicationStatusVal replicationStatusVal;
+
+        statusUpdateLatch.await();
+        try (TxnContext txn = corfuStoreActive.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            replicationStatusVal = (LogReplicationMetadata.ReplicationStatusVal) txn.getRecord("LogReplicationStatus", key).getPayload();
+            txn.commit();
+        }
+
+        assertThat(replicationStatusVal.getRemainingEntriesToSend()).isEqualTo(0);
     }
 
     private void verifyReplicationStatusFromActive() throws Exception {
@@ -338,21 +395,28 @@ public class LogReplicationAbstractIT extends AbstractIT {
         List<Boolean> accumulatedStatus = new ArrayList<>();
 
         private final CountDownLatch countDownLatch;
+        private boolean waitSnapshotStatusComplete;
 
-        public ReplicationStatusListener(CountDownLatch countdownLatch) {
+        public ReplicationStatusListener(CountDownLatch countdownLatch, boolean waitSnapshotStatusComplete) {
             this.countDownLatch = countdownLatch;
+            this.waitSnapshotStatusComplete = waitSnapshotStatusComplete;
         }
 
         @Override
         public void onNext(CorfuStreamEntries results) {
-            results.getEntries().forEach((schema, entries) -> entries.forEach(e ->
-                    accumulatedStatus.add(((LogReplicationMetadata.ReplicationStatusVal)e.getPayload()).getDataConsistent())));
+            results.getEntries().forEach((schema, entries) -> entries.forEach(e -> {
+                    LogReplicationMetadata.ReplicationStatusVal statusVal = (LogReplicationMetadata.ReplicationStatusVal)e.getPayload();
+                    accumulatedStatus.add(statusVal.getDataConsistent());
+                    if (this.waitSnapshotStatusComplete && statusVal.getSnapshotSyncInfo().getStatus().equals(LogReplicationMetadata.SyncStatus.COMPLETED)) {
+                        countDownLatch.countDown();
+                    }
+            }));
             countDownLatch.countDown();
         }
 
         @Override
         public void onError(Throwable throwable) {
-            fail("onError for ReplicationStatusListener");
+            fail("onError for ReplicationStatusListener : " + throwable.toString());
         }
     }
 

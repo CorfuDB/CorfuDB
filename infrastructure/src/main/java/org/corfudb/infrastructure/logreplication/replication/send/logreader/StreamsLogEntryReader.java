@@ -288,6 +288,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
     @Override
     public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
         messageExceededSize = false;
+        this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         setGlobalBaseSnapshot(lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
     }
 

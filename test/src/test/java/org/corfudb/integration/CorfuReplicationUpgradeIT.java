@@ -113,7 +113,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         CountDownLatch statusUpdateLatch = new CountDownLatch(2);
-        ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch);
+        ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
             LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
@@ -215,7 +215,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         CountDownLatch statusUpdateLatch = new CountDownLatch(2);
-        ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch);
+        ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
             LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
@@ -263,7 +263,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         subscribeToSnapshotSyncPluginTable(snapshotSyncPluginListener);
 
         statusUpdateLatch = new CountDownLatch(2);
-        standbyListener = new ReplicationStatusListener(statusUpdateLatch);
+        standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
             LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
@@ -319,7 +319,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         CountDownLatch statusUpdateLatch = new CountDownLatch(2);
-        ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch);
+        ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
             LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
@@ -386,7 +386,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         subscribeToSnapshotSyncPluginTable(snapshotSyncPluginListener);
 
         statusUpdateLatch = new CountDownLatch(2);
-        standbyListener = new ReplicationStatusListener(statusUpdateLatch);
+        standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
             LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
@@ -459,7 +459,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         CountDownLatch statusUpdateLatch = new CountDownLatch(2);
-        ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch);
+        ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
             LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
@@ -570,7 +570,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         CountDownLatch statusUpdateLatch = new CountDownLatch(2);
-        ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch);
+        ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
             LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
@@ -630,7 +630,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         subscribeToSnapshotSyncPluginTable(snapshotSyncPluginListener);
 
         statusUpdateLatch = new CountDownLatch(2);
-        standbyListener = new ReplicationStatusListener(statusUpdateLatch);
+        standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
             LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
@@ -716,7 +716,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
                 TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         CountDownLatch statusUpdateLatch = new CountDownLatch(2);
-        ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch);
+        ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
                 LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
@@ -803,7 +803,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         subscribeToSnapshotSyncPluginTable(snapshotSyncPluginListener);
 
         statusUpdateLatch = new CountDownLatch(2);
-        standbyListener = new ReplicationStatusListener(statusUpdateLatch);
+        standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
                 LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
