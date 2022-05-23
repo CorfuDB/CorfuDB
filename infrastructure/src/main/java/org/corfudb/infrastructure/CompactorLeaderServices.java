@@ -47,7 +47,7 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  * 2. Set CompactionManager's status as STARTED, marking the start of a compaction cycle.
  * 3. Validate liveness of tables in the ActiveCheckpoints table in order to detect slow or dead clients.
  * 4. Set CompactoinManager's status as COMPLETED or FAILED based on the checkpointing status of all the tables. This
- *    marks the end of the compactoin cycle.
+ * marks the end of the compactoin cycle.
  */
 
 public class CompactorLeaderServices {
@@ -128,6 +128,7 @@ public class CompactorLeaderServices {
      * Trims the log till 'trimtoken' saved in the checkpoint table
      * Mark the start of the compaction cycle and populate CheckpointStatusTable with all the
      * tables in the registry.
+     *
      * @return
      */
     @VisibleForTesting
@@ -192,13 +193,14 @@ public class CompactorLeaderServices {
      * to execute continuously by the leader, which monitors the checkpoint activity of the tables present in
      * ActiveCheckpointTable.
      * if there are no tables present,
-     *      ... check the CheckpointStatusTable for any progress made (this step is done to include the
-     *              tables which are checkpointed really fast)
-     *      ... if there's no progress for timeout ms, call finishCompactionCycle() to mark the end of the cycle
+     * ... check the CheckpointStatusTable for any progress made (this step is done to include the
+     * tables which are checkpointed really fast)
+     * ... if there's no progress for timeout ms, call finishCompactionCycle() to mark the end of the cycle
      * if there are any slow checkpointers,
-     *      ... monitor checkpointing of the table by observing if the checkpointStream's tail moves forward
-     *      ... if it does not move forward for timeout ms, then mark it as failed
+     * ... monitor checkpointing of the table by observing if the checkpointStream's tail moves forward
+     * ... if it does not move forward for timeout ms, then mark it as failed
      * Also, when checkpoint of a table is found to be failed, the cycle is immediately marks as failed.
+     *
      * @param timeout in ms
      */
     public void validateLiveness(long timeout) {

@@ -3,7 +3,7 @@ package org.corfudb.infrastructure;
 import lombok.Setter;
 import org.corfudb.runtime.CorfuRuntime;
 
-public class MockCompactionTriggerPolicy implements ICompactionTriggerPolicy{
+public class MockCompactionTriggerPolicy implements ICompactionTriggerPolicy {
 
     @Setter
     private boolean shouldTrigger;
