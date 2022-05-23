@@ -34,7 +34,7 @@ public class CompactorService implements ManagementService {
     private long compactionTriggerFreqMs = TimeUnit.MINUTES.toMillis(8);
 
     @Setter
-    private static int livenessTimeout = 60000;
+    private static Duration livenessTimeout = Duration.ofMillis(60000);
 
     private final ServerContext serverContext;
     private final SingletonResource<CorfuRuntime> runtimeSingletonResource;
@@ -46,8 +46,7 @@ public class CompactorService implements ManagementService {
     private CompactorLeaderServices compactorLeaderServices;
     private CorfuStore corfuStore;
 
-    //    private boolean invokedJvm = false;
-    private Logger syslog;
+    private final Logger syslog;
 
     //TODO: make it a prop file and maybe pass it from the server
     List<TableName> sensitiveTables = new ArrayList<>();
@@ -71,7 +70,7 @@ public class CompactorService implements ManagementService {
                         .build());
         this.checkpointerJvmManager = checkpointerJvmManager;
         this.compactionTriggerPolicy = compactionTriggerPolicy;
-        syslog = LoggerFactory.getLogger("SYSLOG");
+        syslog = LoggerFactory.getLogger("syslog");
     }
 
     CorfuRuntime getCorfuRuntime() {
@@ -132,10 +131,10 @@ public class CompactorService implements ManagementService {
         if (isLeader) {
             if (managerStatus != null && (managerStatus.getStatus() == StatusType.STARTED ||
                     managerStatus.getStatus() == StatusType.STARTED_ALL)) {
-                compactorLeaderServices.validateLiveness(livenessTimeout);
+                compactorLeaderServices.validateLiveness(livenessTimeout.toMillis());
             } else if (compactionTriggerPolicy.shouldTrigger(this.compactionTriggerFreqMs)) {
-                compactorLeaderServices.trimAndTriggerDistributedCheckpointing();
                 compactionTriggerPolicy.markCompactionCycleStart();
+                compactorLeaderServices.trimAndTriggerDistributedCheckpointing();
             }
         }
     }

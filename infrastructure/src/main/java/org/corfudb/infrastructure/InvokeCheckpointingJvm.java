@@ -20,17 +20,20 @@ public class InvokeCheckpointingJvm implements IInvokeCheckpointing {
 
     public InvokeCheckpointingJvm(ServerContext serverContext) {
         this.serverContext = serverContext;
-        syslog = LoggerFactory.getLogger("SYSLOG");
+        syslog = LoggerFactory.getLogger("syslog");
     }
 
     @Override
     public void invokeCheckpointing() {
         for (int i = 1; i <= MAX_COMPACTION_RETRIES; i++) {
             try {
-                String compactorScriptPath = (String) serverContext.getCompactorScriptPath();
-                String compactorConfigPath = (String) serverContext.getCompactorConfig();
+                if (!serverContext.getCompactorScriptPath().isPresent() || !serverContext.getCompactorConfig().isPresent()) {
+                    syslog.warn("Compactor client runner script or config file not found");
+                    return;
+                }
 
-                syslog.trace("Script path: {}, configPath: {}", compactorScriptPath, compactorConfigPath);
+                String compactorScriptPath = (String) serverContext.getCompactorScriptPath().get();
+                String compactorConfigPath = (String) serverContext.getCompactorConfig().get();
                 List<String> endpoint = Arrays.asList(serverContext.getLocalEndpoint().split(":"));
                 String hostName = endpoint.get(0);
                 String port = endpoint.get(1);

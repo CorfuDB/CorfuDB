@@ -24,6 +24,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -381,14 +382,14 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
                     runtime, CorfuRuntime.getStreamID(stream1),
                     cpAuthor, mapA
             );
-            Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress), null);
+            Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress), Optional.ofNullable(null));
 
             // Start checkpoint with snapshot time 9 for mapB
             CheckpointWriter<StreamingMap<String, Integer>> cpwB = new CheckpointWriter<>(
                     runtime, CorfuRuntime.getStreamID(stream2),
                     cpAuthor, mapB
             );
-            cpwB.appendCheckpoint(new Token(0, snapshotAddress), null);
+            cpwB.appendCheckpoint(new Token(0, snapshotAddress), Optional.ofNullable(null));
 
             // Trim the log
             runtime.getAddressSpaceView().prefixTrim(cpAddress);
@@ -508,7 +509,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             CheckpointWriter<StreamingMap<String, Integer>> cpw = new CheckpointWriter<>(
                     runtime, CorfuRuntime.getStreamID(streamNameA),
                     "checkpoint-test", mapA);
-            Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress), null);
+            Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress), Optional.ofNullable(null));
 
             // Trim the log
             runtime.getAddressSpaceView().prefixTrim(cpAddress);
@@ -608,7 +609,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Checkpoint A with snapshot @ 9
             CheckpointWriter<StreamingMap<String, Integer>> cpw = new CheckpointWriter<>(
                     runtime, CorfuRuntime.getStreamID(streamNameA), cpAuthor, mapA);
-            Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress - 1), null);
+            Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress - 1), Optional.ofNullable(null));
 
             // Trim the log
             runtime.getAddressSpaceView().prefixTrim(cpAddress);
