@@ -19,44 +19,18 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy {
      */
     @Getter
     private long lastCompactionCycleStartTS = 0;
-    private long lastAddressSpaceSizeAfterTrim = 0;
 
     private CorfuRuntime corfuRuntime;
     private Logger syslog;
 
     public DynamicTriggerPolicy() {
         lastCompactionCycleStartTS = System.currentTimeMillis();
-        lastAddressSpaceSizeAfterTrim = 0;
         syslog = LoggerFactory.getLogger("syslog");
     }
 
     @Override
     public void markCompactionCycleStart() {
         this.lastCompactionCycleStartTS = System.currentTimeMillis();
-    }
-
-    @Override
-    public long getLastCompactionCycleStartTime() {
-        return this.lastCompactionCycleStartTS;
-    }
-
-    @Override
-    public void markTrimComplete() {
-        this.lastAddressSpaceSizeAfterTrim = getCurrentAddressSpaceSize();
-    }
-
-    private long getCurrentAddressSpaceSize() {
-        long currentAddressSpaceSize = 0;
-        final int maxRetries = 10;
-        for (int retry = 0; retry < maxRetries; retry++) {
-            try {
-                currentAddressSpaceSize = corfuRuntime.getAddressSpaceView().getLogTail()
-                        - corfuRuntime.getAddressSpaceView().getTrimMark().getSequence();
-            } catch (Exception e) {
-                syslog.warn("getCurrentAddressSpaceSize hit exception {}. StackTrace {}", e, e.getStackTrace());
-            }
-        }
-        return currentAddressSpaceSize;
     }
 
     private boolean shouldForceTrigger() {
@@ -93,8 +67,7 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy {
 
         final long currentTime = System.currentTimeMillis();
         final long timeSinceLastCycleMillis = currentTime - lastCompactionCycleStartTS;
-        if (timeSinceLastCycleMillis > interval && lastAddressSpaceSizeAfterTrim == 0) {
-            // no record of previous trim & safe trim period elapsed when lastAddressSpaceSizeAfterTrim is 0
+        if (timeSinceLastCycleMillis > interval) {
             syslog.info("DynamicTriggerPolicy: Trigger as elapsedTime {} > safeTrimPeriod {}",
                     TimeUnit.MILLISECONDS.toSeconds(timeSinceLastCycleMillis),
                     TimeUnit.MILLISECONDS.toSeconds(interval));
