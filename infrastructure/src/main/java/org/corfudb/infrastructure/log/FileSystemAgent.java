@@ -93,6 +93,7 @@ public final class FileSystemAgent {
     }
 
     /**
+     * Estimate the size (in bytes) of a directory.
      * From https://stackoverflow.com/a/19869323
      */
     @VisibleForTesting
