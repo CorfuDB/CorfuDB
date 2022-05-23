@@ -79,12 +79,12 @@ public class CorfuStoreCompactorMain {
             "--port=<port>" +
             "[--keystore=<keystore_file>] [--ks_password=<keystore_password>] " +
             "[--truststore=<truststore_file>] [--truststore_password=<truststore_password>] " +
-            "[--persistedCacheRoot=<pathToTempDirForLargeTables>] "+
-            "[--maxWriteSize=<maxWriteSizeLimit>] "+
-            "[--bulkReadSize=<bulkReadSize>] "+
-            "[--trim=<trim>] "+
-            "[--isUpgrade=<isUpgrade>] "+
-            "[--upgradeDescriptorTable=<upgradeDescriptorTable>] "+
+            "[--persistedCacheRoot=<pathToTempDirForLargeTables>] " +
+            "[--maxWriteSize=<maxWriteSizeLimit>] " +
+            "[--bulkReadSize=<bulkReadSize>] " +
+            "[--trim=<trim>] " +
+            "[--isUpgrade=<isUpgrade>] " +
+            "[--upgradeDescriptorTable=<upgradeDescriptorTable>] " +
             "[--tlsEnabled=<tls_enabled>]\n"
             + "Options:\n"
             + "--hostname=<hostname>   Hostname\n"
@@ -159,7 +159,7 @@ public class CorfuStoreCompactorMain {
         getCompactorArgs(args);
 
         if (maxWriteSize == -1) {
-            if (persistedCacheRoot == null || "".equals(persistedCacheRoot)) {
+            if (persistedCacheRoot == null || persistedCacheRoot.equals(DistributedCompactor.EMPTY_STRING)) {
                 // in-memory compaction
                 maxWriteSize = DEFAULT_CP_MAX_WRITE_SIZE;
                 Thread.currentThread().setName("CS-Config-chkpter");
@@ -180,7 +180,7 @@ public class CorfuStoreCompactorMain {
 
     private void checkpoint() {
         try {
-            for (int i = 0; i< retryCheckpointing; i++) {
+            for (int i = 0; i < retryCheckpointing; i++) {
                 if (distributedCompactor.startCheckpointing() > 0) {
                     break;
                 }
@@ -234,9 +234,9 @@ public class CorfuStoreCompactorMain {
         while (true) {
             try (TxnContext tx = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                 CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>
-                    registryTable = corfuRuntime.getTableRegistry().getRegistryTable();
+                        registryTable = corfuRuntime.getTableRegistry().getRegistryTable();
                 CorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>
-                    descriptorTable = corfuRuntime.getTableRegistry().getProtobufDescriptorTable();
+                        descriptorTable = corfuRuntime.getTableRegistry().getProtobufDescriptorTable();
 
                 Set<TableName> allTableNames = registryTable.keySet();
                 for (TableName tableName : allTableNames) {

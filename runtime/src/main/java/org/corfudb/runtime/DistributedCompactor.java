@@ -69,6 +69,7 @@ public class DistributedCompactor {
     private final String clientName;
 
     public static final long CONN_RETRY_DELAY_MILLISEC = 500;
+    public static final String EMPTY_STRING = "";
     public static final String COMPACTION_MANAGER_TABLE_NAME = "CompactionManager";
     public static final String CHECKPOINT_STATUS_TABLE_NAME = "CheckpointStatusTable";
     public static final String ACTIVE_CHECKPOINTS_TABLE_NAME = "ActiveCheckpoints";
@@ -90,6 +91,7 @@ public class DistributedCompactor {
     public static class CorfuTableNamePair {
         public TableName tableName;
         public CorfuTable corfuTable;
+
         public CorfuTableNamePair(TableName tableName, CorfuTable corfuTable) {
             this.tableName = tableName;
             this.corfuTable = corfuTable;
@@ -165,7 +167,7 @@ public class DistributedCompactor {
             txn.commit();
             if (managerStatus == null ||
                     managerStatus.getStatus() != StatusType.STARTED &&
-                    managerStatus.getStatus() != StatusType.STARTED_ALL) {
+                            managerStatus.getStatus() != StatusType.STARTED_ALL) {
                 return false;
             }
         } catch (Exception e) {
@@ -178,6 +180,7 @@ public class DistributedCompactor {
     /**
      * An entry for all the clients participating in checkpointing
      * Tries to checkpoint tables that are marked as IDLE
+     *
      * @return count - the number of tables checkpointed by the client
      */
     public int startCheckpointing() {
@@ -298,7 +301,7 @@ public class DistributedCompactor {
                         .setStreamName(getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName()))
                         .setSerializer(serializer)
                         .addOpenOption(ObjectOpenOption.NO_CACHE);
-        if (persistedCacheRoot == null || "".equals(persistedCacheRoot)) {
+        if (persistedCacheRoot == null || persistedCacheRoot.equals(EMPTY_STRING)) {
             log.warn("Table {}::{} should be opened in disk-mode, but disk cache path is invalid",
                     tableName.getNamespace(), tableName.getTableName());
         } else {
@@ -316,6 +319,7 @@ public class DistributedCompactor {
 
     /**
      * Checkpoint all tables already opened by the current JVM to save on reads & memory.
+     *
      * @return positive count on success and negative value on failure
      */
     public synchronized int checkpointOpenedTables() {
@@ -339,6 +343,7 @@ public class DistributedCompactor {
      * 1. Acquire distributed lock on the table to be checkpointed using transactions.
      * 2. Attempt to checkpoint the table, retry on retryable errors like WrongEpochException.
      * 3. If successful, unlock the table. if unsuccessful mark the checkpoint as failed.
+     *
      * @param corfuTable - the locally opened Table instance to be checkpointed
      * @return 1 on success, 0 if lock failed and negative value on error
      */
@@ -355,7 +360,7 @@ public class DistributedCompactor {
     /**
      * @param tableName - protobuf name of the table used as key for the granular lock
      * @return true if the table can be checkpointed by me
-     *          false if lock acquisition fails due to race or a different error
+     * false if lock acquisition fails due to race or a different error
      */
     private boolean tryLockMyTableToCheckpoint(TableName tableName) {
         final int maxRetries = 5;
@@ -403,7 +408,8 @@ public class DistributedCompactor {
 
     /**
      * This is the routine where the actual checkpointing is invoked
-     * @param tableName - protobuf name of the table to be checkpointed
+     *
+     * @param tableName  - protobuf name of the table to be checkpointed
      * @param corfuTable - the table to be checkpointed
      * @return the token returned from the checkpointing, null if failure happens
      */
@@ -431,7 +437,8 @@ public class DistributedCompactor {
 
     /**
      * Mark the checkpointed table as either done or failed based on endToken
-     * @param tableName - protobuf name of the table just checkpointed
+     *
+     * @param tableName        - protobuf name of the table just checkpointed
      * @param checkpointStatus - status of checkpoint with all the info
      * @return - 1 on success, 0 or negative value on failure
      */
@@ -466,9 +473,8 @@ public class DistributedCompactor {
     }
 
     /**
-     *
-     * @param re - the exception this method is called on
-     * @param retry - the number of times retries have been done
+     * @param re         - the exception this method is called on
+     * @param retry      - the number of times retries have been done
      * @param maxRetries - max number of times retries need to happen
      * @return - True if we should stop & return. False if we can retry!
      */
@@ -500,7 +506,7 @@ public class DistributedCompactor {
         String fullName = table.getFullyQualifiedTableName();
         return TableName.newBuilder()
                 .setNamespace(table.getNamespace())
-                .setTableName(fullName.substring(fullName.indexOf("$")+1))
+                .setTableName(fullName.substring(fullName.indexOf("$") + 1))
                 .build();
     }
 
@@ -512,6 +518,7 @@ public class DistributedCompactor {
      * If the freeze request is within 2 hours it will honor it and step aside.
      * Otherwise it will angrily remove the freezeToken and continue about
      * its business.
+     *
      * @return - true if checkpointing should be skipped, false if not.
      */
     public static boolean isCheckpointFrozen(CorfuStore corfuStore, final Table<StringKey, TokenMsg, Message> chkptMap) {
