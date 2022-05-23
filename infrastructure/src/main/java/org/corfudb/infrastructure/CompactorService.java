@@ -46,7 +46,7 @@ public class CompactorService implements ManagementService {
     private CompactorLeaderServices compactorLeaderServices;
     private CorfuStore corfuStore;
 
-//    private boolean invokedJvm = false;
+    //    private boolean invokedJvm = false;
     private Logger syslog;
 
     //TODO: make it a prop file and maybe pass it from the server
@@ -93,18 +93,18 @@ public class CompactorService implements ManagementService {
         }
 
         orchestratorThread.scheduleWithFixedDelay(
-            this::runOrchestrator,
-            interval.toMillis(),
-            interval.toMillis(),
-            TimeUnit.MILLISECONDS
+                this::runOrchestrator,
+                interval.toMillis(),
+                interval.toMillis(),
+                TimeUnit.MILLISECONDS
         );
     }
 
     /**
      * Invokes and cleans up the CorfuStoreCompactor jvm based on the status of CompactionManager
      * Additionally, If the current node is the leader,
-     *      a. Invokes ValidateLiveness() to keep track of checkpointing progress by each client
-     *      b. Triggers the distributed compaction cycle based on the TriggerPolicy
+     * a. Invokes ValidateLiveness() to keep track of checkpointing progress by each client
+     * b. Triggers the distributed compaction cycle based on the TriggerPolicy
      */
     private void runOrchestrator() {
         boolean isLeader = isNodePrimarySequencer(updateLayoutAndGet());

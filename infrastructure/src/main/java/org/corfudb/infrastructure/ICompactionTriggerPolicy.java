@@ -11,6 +11,7 @@ public interface ICompactionTriggerPolicy {
     boolean shouldTrigger(long interval);
 
     long getLastCompactionCycleStartTime();
+
     void markCompactionCycleStart();
 
     void markTrimComplete();
