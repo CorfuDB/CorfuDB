@@ -44,7 +44,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     ServerContext sc1;
     ServerContext sc2;
 
-    private static final int LIVENESS_TIMEOUT = 5000;
+    private static final Duration LIVENESS_TIMEOUT = Duration.ofMillis(5000);
     private static final int WAIT_TO_KILL = 3000;
     private static final int COMPACTOR_SERVICE_INTERVAL = 10;
 
@@ -531,7 +531,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         mockCompactionTriggerPolicy1.setShouldTrigger(true);
 
         try {
-            TimeUnit.MILLISECONDS.sleep(LIVENESS_TIMEOUT);
+            TimeUnit.MILLISECONDS.sleep(LIVENESS_TIMEOUT.toMillis());
             Table<TableName, CorfuCompactorManagement.ActiveCPStreamMsg, Message> activeCheckpointTable = openActiveCheckpointsTable();
             Table<TableName, CheckpointingStatus, Message> checkpointStatusTable = openCheckpointStatusTable();
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {

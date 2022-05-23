@@ -3,13 +3,13 @@
  * ****************************************************************************/
 package org.corfudb.compactor;
 
-import java.util.ArrayList;
 import java.util.Map;
 
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
 import org.corfudb.runtime.DistributedCompactor;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
@@ -17,6 +17,7 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.UnreachableClusterException;
 import org.corfudb.runtime.proto.RpcCommon.TokenMsg;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
@@ -34,7 +35,6 @@ import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
 
 import java.util.Set;
-import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
@@ -54,26 +54,29 @@ public class CorfuStoreCompactorMain {
 
     private final DistributedCompactor distributedCompactor;
     private Table<StringKey, TokenMsg, Message> checkpointTable;
-    private int retryCheckpointing = 1;
 
     private static final int CORFU_LOG_CHECKPOINT_ERROR = 3;
     // Reduce checkpoint batch size due to disk-based nature and smaller compactor JVM size
     private static final int NON_CONFIG_DEFAULT_CP_MAX_WRITE_SIZE = 1 << 20;
     private static final int DEFAULT_CP_MAX_WRITE_SIZE = 25 << 20;
     private static final int NUM_RETRIES = 9;
+    private static final int CHECKPOINT_RETRY_UPGRADE = 10;
 
-    private static List<String> hostname = new ArrayList<>();
+    private static final int systemDownHandlerTriggerLimit = 100;  // Corfu default is 20
+    private static final Runnable defaultSystemDownHandler = new Runnable() {
+        @Override
+        public void run() {
+            throw new UnreachableClusterException("Cluster is unavailable");
+        }
+    };
+
+    private static CorfuRuntime.CorfuRuntimeParameters params;
+    private static String hostname;
     private static int port;
-    private static String runtimeKeyStore;
-    private static String runtimeKeystorePasswordFile;
-    private static String runtimeTrustStore;
-    private static String runtimeTrustStorePasswordFile;
     private static String persistedCacheRoot = "";
-    private static int maxWriteSize = -1;
-    private static int bulkReadSize = 10;
     private static boolean isUpgrade = false;
     private static boolean upgradeDescriptorTable = false;
-    private static boolean tlsEnabled;
+    private static int retryCheckpointing = 1;
 
     private static final String USAGE = "Usage: corfu-compactor --hostname=<host> " +
             "--port=<port>" +
@@ -103,24 +106,12 @@ public class CorfuStoreCompactorMain {
             + "--tlsEnabled=<tls_enabled>";
 
     public CorfuStoreCompactorMain() {
-        CorfuRuntimeHelper corfuRuntimeHelper;
-        CorfuRuntimeHelper cpRuntimeHelper;
-        if (tlsEnabled) {
-            corfuRuntimeHelper = new CorfuRuntimeHelper(hostname, port, maxWriteSize, bulkReadSize,
-                    runtimeKeyStore, runtimeKeystorePasswordFile,
-                    runtimeTrustStore, runtimeTrustStorePasswordFile);
-            cpRuntimeHelper = new CorfuRuntimeHelper(hostname, port, maxWriteSize, bulkReadSize,
-                    runtimeKeyStore, runtimeKeystorePasswordFile,
-                    runtimeTrustStore, runtimeTrustStorePasswordFile);
+        String connectionString = hostname + ":" + port;
 
-        } else {
-            corfuRuntimeHelper = new CorfuRuntimeHelper(hostname, port, maxWriteSize, bulkReadSize);
-            cpRuntimeHelper = new CorfuRuntimeHelper(hostname, port, maxWriteSize, bulkReadSize);
-        }
-
-        corfuRuntime = corfuRuntimeHelper.getRuntime();
+        CorfuRuntime cpRuntime = (CorfuRuntime.fromParameters(params)).parseConfigurationString(connectionString).connect();
+        corfuRuntime = (CorfuRuntime.fromParameters(params)).parseConfigurationString(connectionString).connect();
         corfuStore = new CorfuStore(corfuRuntime);
-        distributedCompactor = new DistributedCompactor(corfuRuntime, cpRuntimeHelper.getRuntime(), persistedCacheRoot);
+        distributedCompactor = new DistributedCompactor(corfuRuntime, cpRuntime, persistedCacheRoot);
 
         try {
             this.checkpointTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
@@ -136,7 +127,7 @@ public class CorfuStoreCompactorMain {
     }
 
     private void upgrade() {
-        retryCheckpointing = 10;
+        retryCheckpointing = CHECKPOINT_RETRY_UPGRADE;
         if (upgradeDescriptorTable) {
             syncProtobufDescriptorTable();
         }
@@ -156,19 +147,7 @@ public class CorfuStoreCompactorMain {
      */
     @SuppressWarnings("UncommentedMain")
     public static void main(String[] args) throws Exception {
-        getCompactorArgs(args);
-
-        if (maxWriteSize == -1) {
-            if (persistedCacheRoot == null || persistedCacheRoot.equals(DistributedCompactor.EMPTY_STRING)) {
-                // in-memory compaction
-                maxWriteSize = DEFAULT_CP_MAX_WRITE_SIZE;
-                Thread.currentThread().setName("CS-Config-chkpter");
-            } else {
-                // disk-backed non-config compaction
-                maxWriteSize = NON_CONFIG_DEFAULT_CP_MAX_WRITE_SIZE;
-                Thread.currentThread().setName("CS-NonConfig-chkpter");
-            }
-        }
+        parseAndBuildRuntimeParameters(args);
 
         CorfuStoreCompactorMain corfuCompactorMain = new CorfuStoreCompactorMain();
 
@@ -181,6 +160,7 @@ public class CorfuStoreCompactorMain {
     private void checkpoint() {
         try {
             for (int i = 0; i < retryCheckpointing; i++) {
+                //startCheckpointing() returns the num of tables checkpointed
                 if (distributedCompactor.startCheckpointing() > 0) {
                     break;
                 }
@@ -284,35 +264,15 @@ public class CorfuStoreCompactorMain {
         }
     }
 
-    private static void getCompactorArgs(String[] args) {
-        // Parse the options given, using docopt.
+    private static void parseAndBuildRuntimeParameters(String[] args) {
         Map<String, Object> opts =
                 new Docopt(USAGE)
                         .withVersion(GitRepositoryState.getRepositoryState().describe)
                         .parse(args);
-        hostname.add(opts.get("--hostname").toString());
+        hostname = opts.get("--hostname").toString();
         port = Integer.parseInt(opts.get("--port").toString());
-
-        if (opts.get("--keystore") != null) {
-            runtimeKeyStore = opts.get("--keystore").toString();
-        }
-        if (opts.get("--ks_password") != null) {
-            runtimeKeystorePasswordFile = opts.get("--ks_password").toString();
-        }
-        if (opts.get("--truststore") != null) {
-            runtimeTrustStore = opts.get("--truststore").toString();
-        }
-        if (opts.get("--truststore_password") != null) {
-            runtimeTrustStorePasswordFile = opts.get("--truststore_password").toString();
-        }
         if (opts.get("--persistedCacheRoot") != null) {
             persistedCacheRoot = opts.get("--persistedCacheRoot").toString();
-        }
-        if (opts.get("--maxWriteSize") != null) {
-            maxWriteSize = Integer.parseInt(opts.get("--maxWriteSize").toString());
-        }
-        if (opts.get("--bulkReadSize") != null) {
-            bulkReadSize = Integer.parseInt(opts.get("--bulkReadSize").toString());
         }
         if (opts.get("--isUpgrade") != null) {
             isUpgrade = true;
@@ -320,8 +280,37 @@ public class CorfuStoreCompactorMain {
         if (opts.get("--upgradeDescriptorTable") != null) {
             upgradeDescriptorTable = true;
         }
+
+        CorfuRuntimeParametersBuilder builder = CorfuRuntime.CorfuRuntimeParameters.builder();
         if (opts.get("--tlsEnabled") != null) {
-            tlsEnabled = Boolean.parseBoolean(opts.get("--tlsEnabled").toString());
+            Boolean tlsEnabled = Boolean.parseBoolean(opts.get("--tlsEnabled").toString());
+            builder.tlsEnabled(tlsEnabled);
+            if (tlsEnabled) {
+                builder.keyStore(opts.get("--keystore").toString());
+                builder.ksPasswordFile(opts.get("--ks_password").toString());
+                builder.trustStore(opts.get("--truststore").toString());
+                builder.tsPasswordFile(opts.get("--truststore_password").toString());
+            }
         }
+        if (opts.get("--maxWriteSize") != null) {
+            builder.maxWriteSize(Integer.parseInt(opts.get("--maxWriteSize").toString()));
+        } else {
+            if (persistedCacheRoot == null || persistedCacheRoot.equals(DistributedCompactor.EMPTY_STRING)) {
+                // in-memory compaction
+                builder.maxWriteSize(DEFAULT_CP_MAX_WRITE_SIZE);
+                Thread.currentThread().setName("CS-Config-chkpter");
+            } else {
+                // disk-backed non-config compaction
+                builder.maxWriteSize(NON_CONFIG_DEFAULT_CP_MAX_WRITE_SIZE);
+                Thread.currentThread().setName("CS-NonConfig-chkpter");
+            }
+        }
+        if (opts.get("--bulkReadSize") != null) {
+            builder.bulkReadSize(Integer.parseInt(opts.get("--bulkReadSize").toString()));
+        }
+        builder.systemDownHandlerTriggerLimit(systemDownHandlerTriggerLimit)
+                .systemDownHandler(defaultSystemDownHandler);
+
+        params = builder.build();
     }
 }
