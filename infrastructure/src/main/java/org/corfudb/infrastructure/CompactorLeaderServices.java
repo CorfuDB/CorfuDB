@@ -5,7 +5,6 @@ import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
-import org.corfudb.common.util.Tuple;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
@@ -56,8 +55,7 @@ public class CompactorLeaderServices {
     private Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointsTable;
     private Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable;
 
-    private Map<TableName, Tuple<Tuple<Long, Long>, Long>> readCache = new HashMap<>();
-
+    private Map<TableName, LivenessMetadata> readCache = new HashMap<>();
     private final CorfuRuntime corfuRuntime;
     private final CorfuStore corfuStore;
     private final String nodeEndpoint;
@@ -69,17 +67,37 @@ public class CompactorLeaderServices {
     private long epoch;
     private Logger syslog;
 
+    private static final long LIVENESS_INIT_VALUE = -1;
+
+    private class LivenessMetadata {
+        @Getter
+        private long heartbeat;
+        @Getter
+        private long streamTail;
+        @Getter
+        private long time;
+
+        public LivenessMetadata(long heartbeat, long streamTail, long time) {
+            this.heartbeat = heartbeat;
+            this.streamTail = streamTail;
+            this.time = time;
+        }
+    }
+
     private static class LivenessValidatorHelper {
         @Getter
-        @Setter
-        private static long prevIdleCount = -1;
+        private static long prevIdleCount = LIVENESS_INIT_VALUE;
         @Getter
-        @Setter
-        private static long prevActiveTime = -1;
+        private static long prevActiveTime = LIVENESS_INIT_VALUE;
+
+        public static void updateValues(long idleCount, long activeTime) {
+            prevIdleCount = idleCount;
+            prevActiveTime = activeTime;
+        }
 
         public static void clear() {
-            prevIdleCount = -1;
-            prevActiveTime = -1;
+            prevIdleCount = LIVENESS_INIT_VALUE;
+            prevActiveTime = LIVENESS_INIT_VALUE;
         }
     }
 
@@ -87,7 +105,7 @@ public class CompactorLeaderServices {
         this.corfuRuntime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);
         this.nodeEndpoint = nodeEndpoint;
-        syslog = LoggerFactory.getLogger("SYSLOG");
+        syslog = LoggerFactory.getLogger("syslog");
 
         try {
             this.compactionManagerTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
@@ -233,21 +251,19 @@ public class CompactorLeaderServices {
                 syslog.warn("Unable to acquire table status");
             }
             if (readCache.containsKey(table)) {
-                //previousStatus.first is syncHeartbeat
-                //previousStatus.second is StreamTail
-                Tuple<Long, Long> previousStatus = readCache.get(table).first;
-                if (previousStatus.second < currentStreamTail) {
-                    readCache.put(table, Tuple.of(Tuple.of(previousStatus.first, currentStreamTail), currentTime));
-                } else if (previousStatus.first < syncHeartBeat) {
-                    readCache.put(table, Tuple.of(Tuple.of(syncHeartBeat, previousStatus.second), currentTime));
-                } else if (previousStatus.second == currentStreamTail || previousStatus.first == syncHeartBeat) {
-                    if (currentTime - readCache.get(table).second > timeout && !handleSlowCheckpointers(table)) {
+                LivenessMetadata previousStatus = readCache.get(table);
+                if (previousStatus.getStreamTail() < currentStreamTail) {
+                    readCache.put(table, new LivenessMetadata(previousStatus.getHeartbeat(), currentStreamTail, currentTime));
+                } else if (previousStatus.getHeartbeat() < syncHeartBeat) {
+                    readCache.put(table, new LivenessMetadata(syncHeartBeat, previousStatus.getStreamTail(), currentTime));
+                } else if (previousStatus.getStreamTail() == currentStreamTail || previousStatus.getHeartbeat() == syncHeartBeat) {
+                    if (currentTime - previousStatus.getTime() > timeout && !handleSlowCheckpointers(table)) {
                         readCache.clear();
                         return;
                     }
                 }
             } else {
-                readCache.put(table, Tuple.of(Tuple.of(syncHeartBeat, currentStreamTail), currentTime));
+                readCache.put(table, new LivenessMetadata(syncHeartBeat, currentStreamTail, currentTime));
             }
         }
     }
@@ -255,8 +271,8 @@ public class CompactorLeaderServices {
     private int getIdleCount() {
         int idleCount = 0;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            idleCount = txn.executeQuery(checkpointingStatusTable, record -> (
-                    record.getPayload()).getStatus() == StatusType.IDLE).size();
+            idleCount = txn.executeQuery(checkpointingStatusTable, entry -> (
+                    entry.getPayload()).getStatus() == StatusType.IDLE).size();
             syslog.trace("Number of idle tables: {}", idleCount);
             txn.commit();
         }
@@ -269,8 +285,7 @@ public class CompactorLeaderServices {
         long idleCount = getIdleCount();
         if (LivenessValidatorHelper.getPrevActiveTime() < 0 || idleCount < LivenessValidatorHelper.getPrevIdleCount()) {
             syslog.trace("Checkpointing in progress...");
-            LivenessValidatorHelper.setPrevIdleCount(idleCount);
-            LivenessValidatorHelper.setPrevActiveTime(currentTime);
+            LivenessValidatorHelper.updateValues(idleCount, currentTime);
             return;
         }
         CheckpointingStatus managerStatus = null;

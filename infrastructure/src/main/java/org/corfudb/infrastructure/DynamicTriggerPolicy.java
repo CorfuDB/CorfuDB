@@ -27,7 +27,7 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy {
     public DynamicTriggerPolicy() {
         lastCompactionCycleStartTS = System.currentTimeMillis();
         lastAddressSpaceSizeAfterTrim = 0;
-        syslog = LoggerFactory.getLogger("SYSLOG");
+        syslog = LoggerFactory.getLogger("syslog");
     }
 
     @Override
