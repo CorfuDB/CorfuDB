@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
-public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
+public class DynamicTriggerPolicy implements ICompactionTriggerPolicy {
     /**
      * What time did the previous cycle start
      */
@@ -74,10 +74,10 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
 
     /**
      * 1. if ((currentTime - lastCompactionCycleStart) > minTimeBetweenCompactionStarts)
-     *        if (lastAddressSpaceSizeOnTrim == 0)
-     *            return true // no record of previous trim & safe trim period elapsed
-     *            ... once trim happens, we record the lastAddressSpaceSizeOnTrim
-     *            ... once checkpoint starts we record the lastCompactionCycleStartTS
+     * if (lastAddressSpaceSizeOnTrim == 0)
+     * return true // no record of previous trim & safe trim period elapsed
+     * ... once trim happens, we record the lastAddressSpaceSizeOnTrim
+     * ... once checkpoint starts we record the lastCompactionCycleStartTS
      * 2. if ((currentTime - lastCompactionCycleStart) > maxTimeBetweenCompactionStarts)
      *
      * @param interval - ignored for now
@@ -101,10 +101,10 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy{
             return true;
         }
 
-        if (timeSinceLastCycleMillis > interval*2) {
+        if (timeSinceLastCycleMillis > interval * 2) {
             syslog.info("DynamicTriggerPolicy: Trigger as elapsedTime {} > maxTimeToChkpt {}",
                     TimeUnit.MILLISECONDS.toMinutes(timeSinceLastCycleMillis),
-                    TimeUnit.MILLISECONDS.toMinutes(interval*2));
+                    TimeUnit.MILLISECONDS.toMinutes(interval * 2));
             return true;
         }
 
