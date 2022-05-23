@@ -243,7 +243,7 @@ public class CompactorLeaderServices {
             long currentStreamTail = corfuRuntime.getSequencerView()
                     .getStreamAddressSpace(new StreamAddressRange(streamId, Address.MAX, Address.NON_ADDRESS)).getTail();
 
-            long syncHeartBeat = -1;
+            long syncHeartBeat = LIVENESS_INIT_VALUE;
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                 syncHeartBeat = txn.getRecord(activeCheckpointsTable, table).getPayload().getSyncHeartbeat();
                 txn.commit();

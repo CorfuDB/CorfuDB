@@ -14,16 +14,6 @@ public class MockCompactionTriggerPolicy implements ICompactionTriggerPolicy {
     }
 
     @Override
-    public long getLastCompactionCycleStartTime() {
-        return 0;
-    }
-
-    @Override
-    public void markTrimComplete() {
-        //Not invoked
-    }
-
-    @Override
     public boolean shouldTrigger(long interval) {
         if (shouldTrigger) {
             shouldTrigger = false;
