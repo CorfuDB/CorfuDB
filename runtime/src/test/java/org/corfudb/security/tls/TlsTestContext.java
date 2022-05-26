@@ -19,9 +19,9 @@ public class TlsTestContext {
             "definitely fake location",
             "fake password"
     );
-    public static final TrustStoreConfig FAKE_PASS = TrustStoreConfig.from(
-            "client_trust_with_server.jks",
-            "fake password"
+    public static final TrustStoreConfig FAKE_PASS = new TrustStoreConfig(
+            CERT_DIR.resolve("client_trust_with_server.jks"),
+            CERT_DIR.resolve("fake-password")
     );
 
     private static TrustStoreConfig buildTrustStore(String trustStoreFile) {

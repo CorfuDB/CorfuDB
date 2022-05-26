@@ -37,7 +37,7 @@ public class TlsUtilsTest {
     }
 
     @Test
-    public void testOpenKeyStoreBadPassword() throws Exception {
+    public void testOpenKeyStoreBadPassword() {
         try {
             TlsUtils.openCertStore(TlsTestContext.FAKE_PASS);
         } catch (SSLException e) {
