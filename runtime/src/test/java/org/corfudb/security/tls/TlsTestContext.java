@@ -26,14 +26,14 @@ public final class TlsTestContext {
             CERT_DIR.resolve("fake-password")
     );
 
-    private static TrustStoreConfig buildTrustStore(String trustStoreFile) {
-        return new TrustStoreConfig(CERT_DIR.resolve(trustStoreFile), PASSWORD_FILE);
-    }
-
     public static final Path CLIENT_CERT = CERT_DIR.resolve("client.cert");
     public static final Path SERVER_CERT = CERT_DIR.resolve("server.cert");
 
     private TlsTestContext() {
         //prevent creating new instances
+    }
+
+    private static TrustStoreConfig buildTrustStore(String trustStoreFile) {
+        return new TrustStoreConfig(CERT_DIR.resolve(trustStoreFile), PASSWORD_FILE);
     }
 }
