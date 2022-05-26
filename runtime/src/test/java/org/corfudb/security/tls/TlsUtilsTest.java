@@ -1,6 +1,5 @@
 package org.corfudb.security.tls;
 
-import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 import org.junit.jupiter.api.Test;
 
 import javax.net.ssl.SSLException;
