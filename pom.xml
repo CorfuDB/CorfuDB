@@ -53,6 +53,7 @@
         <assertj.version>3.19.0</assertj.version>
         <zero.allocation.hashing.version>0.8</zero.allocation.hashing.version>
         <jacoco.version>0.8.8</jacoco.version>
+        <gson.version>2.9.0</gson.version>
     </properties>
 
     <scm>
