@@ -1,41 +1,35 @@
 package org.corfudb.security.tls;
 
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
+
+import javax.net.ssl.SSLException;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import javax.net.ssl.SSLException;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.TrustManagerFactory;
-import javax.net.ssl.X509TrustManager;
-import lombok.extern.slf4j.Slf4j;
 
 /**
  * This trust manager reloads the trust store whenever a checkClientTrusted
  * or checkServerTrusted is called.
- *
- * Created by zjohnny on 9/18/17.
  */
 @Slf4j
 public class ReloadableTrustManager implements X509TrustManager {
-    private final String trustStorePath;
-    private final String trustPasswordPath;
+    private final TrustStoreConfig trustStoreConfig;
     private X509TrustManager trustManager;
 
     /**
      * Constructor.
      *
-     * @param trustStorePath
-     *          Location of trust store.
-     * @param trustPasswordPath
-     *          Location of trust store password.
-     * @throws SSLException
-     *          Thrown when there's an issue with loading the trust store.
+     * @param TrustStoreConfig Location of trust store.
+     * @throws SSLException Thrown when there's an issue with loading the trust store.
      */
-    public ReloadableTrustManager(String trustStorePath, String trustPasswordPath) throws SSLException {
-        this.trustStorePath = trustStorePath;
-        this.trustPasswordPath = trustPasswordPath;
+    public ReloadableTrustManager(TrustStoreConfig trustStoreConfig) throws SSLException {
+        this.trustStoreConfig = trustStoreConfig;
         reloadTrustStore();
     }
 
@@ -59,15 +53,13 @@ public class ReloadableTrustManager implements X509TrustManager {
     /**
      * Just a wrapper due to IDE pointing out duplicate code.
      *
-     * @throws CertificateException
-     *          Wrapper for any exception from reloading the trust store.
+     * @throws CertificateException Wrapper for any exception from reloading the trust store.
      */
     private void reloadTrustStoreWrapper() throws CertificateException {
         try {
             reloadTrustStore();
         } catch (SSLException e) {
-            String message = "Unable to reload trust store " + trustStorePath + ".";
-            log.error(message, e);
+            String message = "Unable to reload trust store " + trustStoreConfig.getTrustStoreFile() + ".";
             throw new CertificateException(message, e);
         }
     }
@@ -75,12 +67,10 @@ public class ReloadableTrustManager implements X509TrustManager {
     /**
      * Reload the trust manager.
      *
-     * @throws SSLException
-     *          Thrown when there's an issue with loading the trust store.
+     * @throws SSLException Thrown when there's an issue with loading the trust store.
      */
     private void reloadTrustStore() throws SSLException {
-        String trustPassword = TlsUtils.getKeyStorePassword(trustPasswordPath);
-        KeyStore trustStore = TlsUtils.openKeyStore(trustStorePath, trustPassword);
+        KeyStore trustStore = TlsUtils.openCertStore(trustStoreConfig);
 
         TrustManagerFactory tmf;
         try {
@@ -89,17 +79,15 @@ public class ReloadableTrustManager implements X509TrustManager {
         } catch (NoSuchAlgorithmException e) {
             String errorMessage = "No support for TrustManagerFactory default algorithm "
                     + TrustManagerFactory.getDefaultAlgorithm() + ".";
-            log.error(errorMessage, e);
             throw new SSLException(errorMessage, e);
         } catch (KeyStoreException e) {
-            String errorMessage = "Unable to load trust store " + trustStorePath + ".";
-            log.error(errorMessage, e);
+            String errorMessage = "Unable to load trust store " + trustStoreConfig.getTrustStoreFile() + ".";
             throw new SSLException(errorMessage, e);
         }
 
-        for (TrustManager tm: tmf.getTrustManagers()) {
+        for (TrustManager tm : tmf.getTrustManagers()) {
             if (tm instanceof X509TrustManager) {
-                trustManager = (X509TrustManager)tm;
+                trustManager = (X509TrustManager) tm;
                 return;
             }
         }

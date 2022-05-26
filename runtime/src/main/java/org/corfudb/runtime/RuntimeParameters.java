@@ -7,8 +7,12 @@ import lombok.Data;
 import lombok.ToString;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.runtime.clients.NettyClientRouter;
+import org.corfudb.security.tls.TlsUtils;
+import org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig;
+import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 
 import java.lang.Thread.UncaughtExceptionHandler;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
@@ -200,5 +204,13 @@ public class RuntimeParameters {
 
         public static RuntimeParametersBuilder builder() {
                 return new RuntimeParametersBuilder();
+        }
+
+        public KeyStoreConfig getKeyStoreConfig() {
+                return KeyStoreConfig.from(keyStore, ksPasswordFile);
+        }
+
+        public TrustStoreConfig getTrustStoreConfig(){
+                return TrustStoreConfig.from(trustStore, tsPasswordFile);
         }
 }
