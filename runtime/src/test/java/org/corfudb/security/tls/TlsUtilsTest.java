@@ -51,7 +51,7 @@ public class TlsUtilsTest {
     }
 
     @Test
-    public void testOpenKeyStoreBadLocation() {
+    public void testOpenKeyStoreBadLocation() throws Exception {
         try {
             TlsUtils.openCertStore(FAKE_LOCATION_AND_PASS);
             fail("Must throw SSLException");
