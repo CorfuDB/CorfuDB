@@ -16,7 +16,7 @@
     <url>http://maven.apache.org</url>
 
     <properties>
-        <immutables.version>2.6.1</immutables.version>
+        <immutables.version>2.9.0</immutables.version>
     </properties>
     <dependencies>
         <dependency>
