@@ -29,7 +29,6 @@ import org.corfudb.util.GitRepositoryState;
 
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLException;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -254,7 +253,7 @@ public class CorfuServerNode implements AutoCloseable {
                                                                   @Nonnull NettyServerRouter router) {
 
         // Generate the initializer.
-        return new ChannelInitializer() {
+        return new ChannelInitializer<Channel>() {
             @Override
             protected void initChannel(@Nonnull Channel ch) throws Exception {
 
@@ -290,24 +289,19 @@ public class CorfuServerNode implements AutoCloseable {
                         enabledTlsProtocols = new String[]{};
                     }
 
-                    try {
-                        KeyStoreConfig keyStoreConfig = KeyStoreConfig.from(
-                                context.getServerConfig(String.class, "--keystore"),
-                                context.getServerConfig(String.class, "--keystore-password-file")
-                        );
+                    KeyStoreConfig keyStoreConfig = KeyStoreConfig.from(
+                            context.getServerConfig(String.class, "--keystore"),
+                            context.getServerConfig(String.class, "--keystore-password-file")
+                    );
 
-                        TrustStoreConfig trustStoreConfig = TrustStoreConfig.from(
-                                context.getServerConfig(String.class, "--truststore"),
-                                context.getServerConfig(String.class, "--truststore-password-file")
-                        );
+                    TrustStoreConfig trustStoreConfig = TrustStoreConfig.from(
+                            context.getServerConfig(String.class, "--truststore"),
+                            context.getServerConfig(String.class, "--truststore-password-file")
+                    );
 
-                        sslContext = SslContextConstructor.constructSslContext(
-                                true, keyStoreConfig, trustStoreConfig
-                        );
-                    } catch (SSLException e) {
-                        log.error("Could not build the SSL context", e);
-                        throw new RuntimeException("Couldn't build the SSL context", e);
-                    }
+                    sslContext = SslContextConstructor.constructSslContext(
+                            true, keyStoreConfig, trustStoreConfig
+                    );
                 } else {
                     enabledTlsCipherSuites = new String[]{};
                     enabledTlsProtocols = new String[]{};

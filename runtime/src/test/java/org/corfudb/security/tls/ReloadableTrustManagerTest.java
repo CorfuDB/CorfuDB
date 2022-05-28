@@ -1,15 +1,18 @@
 package org.corfudb.security.tls;
 
 import org.apache.xerces.impl.dv.util.Base64;
+import org.corfudb.security.tls.ReloadableTrustManager.TrustStoreWatcher.TrustManagerContext;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import javax.net.ssl.X509TrustManager;
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.time.LocalDateTime;
 
 import static org.corfudb.security.tls.TlsTestContext.CLIENT_CERT;
 import static org.corfudb.security.tls.TlsTestContext.CLIENT_TRUST_NO_SERVER;
@@ -17,6 +20,8 @@ import static org.corfudb.security.tls.TlsTestContext.CLIENT_TRUST_WITH_SERVER;
 import static org.corfudb.security.tls.TlsTestContext.SERVER_CERT;
 import static org.corfudb.security.tls.TlsTestContext.SERVER_TRUST_NO_CLIENT;
 import static org.corfudb.security.tls.TlsTestContext.SERVER_TRUST_WITH_CLIENT;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
 
 public class ReloadableTrustManagerTest {
 
@@ -60,6 +65,17 @@ public class ReloadableTrustManagerTest {
         } catch (CertificateException e) {
             //ignore
         }
+    }
+
+    @Test
+    public void trustManagerContextTest(){
+        LocalDateTime finishTime50SecondsAgo = LocalDateTime.now().minusSeconds(50);
+        TrustManagerContext ctx = new TrustManagerContext(
+                mock(X509TrustManager.class),
+                finishTime50SecondsAgo
+        );
+
+        assertTrue(ctx.isExpired());
     }
 
     private X509Certificate getCertificate(Path certFile) throws Exception {

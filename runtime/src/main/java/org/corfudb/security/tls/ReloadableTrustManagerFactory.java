@@ -25,7 +25,7 @@ public class ReloadableTrustManagerFactory extends SimpleTrustManagerFactory {
      * @throws SSLException
      *          Thrown when there's an issue with loading the trust store.
      */
-    public ReloadableTrustManagerFactory(TrustStoreConfig trustStoreConfig) throws SSLException {
+    public ReloadableTrustManagerFactory(TrustStoreConfig trustStoreConfig) {
         trustManager = new ReloadableTrustManager(trustStoreConfig);
     }
 

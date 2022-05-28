@@ -7,7 +7,6 @@ import org.apache.commons.io.IOUtils;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig;
 
 import javax.net.ssl.KeyManagerFactory;
-import javax.net.ssl.SSLException;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -18,6 +17,7 @@ import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 /**
@@ -38,82 +38,97 @@ public class TlsUtils {
      *
      * @param certStoreCfg certificate store config
      * @return KeyStore object
-     * @throws SSLException Thrown when there's an issue with loading the cert store.
      */
-    public static KeyStore openCertStore(CertStoreConfig certStoreCfg) throws SSLException {
-        certStoreCfg.checkCertStoreExists();
-        Path certStore = certStoreCfg.getCertStore();
+    public static CompletableFuture<KeyStore> openCertStore(CertStoreConfig certStoreCfg) {
+        return CompletableFuture
+                //validation step
+                .runAsync(certStoreCfg::checkCertStoreExists)
+                .thenCompose(empty -> getKeyStorePassword(certStoreCfg.getPasswordFile()))
+                .thenApply(certStorePassword -> {
+                    KeyStore keyStore = getKeyStoreInstance();
 
-        String certStorePassword = getKeyStorePassword(certStoreCfg.getPasswordFile());
+                    Path certStore = certStoreCfg.getCertStore();
+                    FileInputStream inputStream = null;
+                    try {
+                        inputStream = new FileInputStream(certStore.toFile());
+                        keyStore.load(inputStream, certStorePassword.toCharArray());
+                        return keyStore;
+                    } catch (IOException e) {
+                        String errorMessage = String.format("Unable to read key store file %s.", certStore);
+                        throw new IllegalStateException(errorMessage, e);
+                    } catch (CertificateException e) {
+                        String errorMessage = String.format("Unable to read certificates in key store file %s.", certStore);
+                        throw new IllegalStateException(errorMessage, e);
+                    } catch (NoSuchAlgorithmException e) {
+                        String errorMessage = String.format("No support for algorithm [%s] in key store %s.",
+                                KeyStore.getDefaultType(), certStore);
+                        throw new IllegalStateException(errorMessage, e);
+                    } finally {
+                        Consumer<IOException> emptyExceptionHandler = ex -> {
+                        };
+                        IOUtils.closeQuietly(inputStream, emptyExceptionHandler);
+                    }
+                });
+    }
 
-        FileInputStream inputStream = null;
+    private static KeyStore getKeyStoreInstance() {
+        KeyStore keyStore;
         try {
-            inputStream = new FileInputStream(certStore.toFile());
-            KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
-            keyStore.load(inputStream, certStorePassword.toCharArray());
-            return keyStore;
-        } catch (IOException e) {
-            String errorMessage = String.format("Unable to read key store file %s.", certStore);
-            throw new SSLException(errorMessage, e);
-        } catch (CertificateException e) {
-            String errorMessage = String.format("Unable to read certificates in key store file %s.", certStore);
-            throw new SSLException(errorMessage, e);
-        } catch (NoSuchAlgorithmException e) {
-            String errorMessage = String.format("No support for algorithm [%s] in key store %s.",
-                    KeyStore.getDefaultType(), certStore);
-            throw new SSLException(errorMessage, e);
+            keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
         } catch (KeyStoreException e) {
             String errorMessage = String.format("Error creating a key store object of algorithm [%s].",
                     KeyStore.getDefaultType());
-            throw new SSLException(errorMessage, e);
-        } finally {
-            Consumer<IOException> emptyExceptionHandler = ex -> {
-            };
-            IOUtils.closeQuietly(inputStream, emptyExceptionHandler);
+            throw new IllegalStateException(errorMessage, e);
         }
+
+        return keyStore;
     }
 
-    public static String getKeyStorePassword(Path passwordFilePath) throws SSLException {
-        if (!Files.exists(passwordFilePath)) {
-            throw new SSLException(PASSWORD_FILE_NOT_FOUND_ERROR);
-        }
+    public static CompletableFuture<String> getKeyStorePassword(Path passwordFilePath) {
+        return CompletableFuture.supplyAsync(() -> {
+            if (!Files.exists(passwordFilePath)) {
+                throw new IllegalStateException(PASSWORD_FILE_NOT_FOUND_ERROR);
+            }
 
-        String password;
-        try {
-            password = new String(Files.readAllBytes(passwordFilePath)).trim();
-        } catch (IOException e) {
-            String errorMessage = "Unable to read password file " + passwordFilePath + ".";
-            throw new SSLException(errorMessage, e);
-        }
+            String password;
+            try {
+                password = new String(Files.readAllBytes(passwordFilePath)).trim();
+            } catch (IOException e) {
+                String errorMessage = "Unable to read password file " + passwordFilePath + ".";
+                throw new IllegalStateException(errorMessage, e);
+            }
 
-        if (password.isEmpty()) {
-            throw new SSLException("Empty password");
-        }
+            if (password.isEmpty()) {
+                throw new IllegalStateException("Empty password");
+            }
 
-        return password;
+            return password;
+        });
     }
 
-    public static KeyManagerFactory createKeyManagerFactory(KeyStoreConfig cfg) throws SSLException {
+    public static CompletableFuture<KeyManagerFactory> createKeyManagerFactory(KeyStoreConfig cfg) {
 
-        KeyStore keyStore = TlsUtils.openCertStore(cfg);
-        String keyStorePassword = getKeyStorePassword(cfg.getPasswordFile());
+        CompletableFuture<String> passwordAsync = getKeyStorePassword(cfg.getPasswordFile());
+        CompletableFuture<KeyStore> keyStoreAsync = TlsUtils.openCertStore(cfg);
 
-        KeyManagerFactory kmf;
-        try {
-            kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-            kmf.init(keyStore, keyStorePassword.toCharArray());
-            return kmf;
-        } catch (UnrecoverableKeyException e) {
-            String errorMessage = "Unrecoverable key in key store " + cfg.getKeyStoreFile() + ".";
-            throw new SSLException(errorMessage, e);
-        } catch (NoSuchAlgorithmException e) {
-            String errorMessage = "Can not create key manager factory with default algorithm "
-                    + KeyManagerFactory.getDefaultAlgorithm() + ".";
-            throw new SSLException(errorMessage, e);
-        } catch (KeyStoreException e) {
-            String errorMessage = "Can not initialize key manager factory from " + cfg.getKeyStoreFile() + ".";
-            throw new SSLException(errorMessage, e);
-        }
+        return passwordAsync.thenCombine(keyStoreAsync, (password, keyStore) -> {
+                    KeyManagerFactory kmf;
+                    try {
+                        kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+                        kmf.init(keyStore, password.toCharArray());
+                        return kmf;
+                    } catch (UnrecoverableKeyException e) {
+                        String errorMessage = "Unrecoverable key in key store " + cfg.getKeyStoreFile() + ".";
+                        throw new IllegalStateException(errorMessage, e);
+                    } catch (NoSuchAlgorithmException e) {
+                        String errorMessage = "Can not create key manager factory with default algorithm "
+                                + KeyManagerFactory.getDefaultAlgorithm() + ".";
+                        throw new IllegalStateException(errorMessage, e);
+                    } catch (KeyStoreException e) {
+                        String errorMessage = "Can not initialize key manager factory from " + cfg.getKeyStoreFile() + ".";
+                        throw new IllegalStateException(errorMessage, e);
+                    }
+                });
     }
 
     /**
@@ -124,10 +139,10 @@ public class TlsUtils {
 
         Path getCertStore();
 
-        default void checkCertStoreExists() throws SSLException {
+        default void checkCertStoreExists() {
             if (Files.notExists(getCertStore())) {
                 String errorMessage = String.format("Key store file {%s} doesn't exist.", getCertStore());
-                throw new SSLException(errorMessage);
+                throw new IllegalStateException(errorMessage);
             }
         }
 
@@ -153,7 +168,7 @@ public class TlsUtils {
         @Getter
         class TrustStoreConfig implements CertStoreConfig {
             /**
-             * KeyStore or TrustStore path
+             * TrustStore path
              */
             private final Path trustStoreFile;
             private final Path passwordFile;

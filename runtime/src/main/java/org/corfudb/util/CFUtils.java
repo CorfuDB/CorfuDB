@@ -4,7 +4,6 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -14,6 +13,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
@@ -23,18 +23,17 @@ import java.util.function.Supplier;
  * Created by mwei on 9/15/15.
  */
 public final class CFUtils {
+    private static final ThreadFactory THREAD_FACTORY = new ThreadFactoryBuilder()
+            .setDaemon(true)
+            .setNameFormat("failAfter-%d")
+            .build();
     private static final ScheduledExecutorService SCHEDULER =
-            Executors.newScheduledThreadPool(
-                    1,
-                    new ThreadFactoryBuilder()
-                            .setDaemon(true)
-                            .setNameFormat("failAfter-%d")
-                            .build());
+            Executors.newSingleThreadScheduledExecutor(THREAD_FACTORY);
 
     /**
      * A static timeout exception that we complete futures exceptionally with.
      */
-    static final TimeoutException TIMEOUT_EXCEPTION = new TimeoutException();
+    private static final TimeoutException TIMEOUT_EXCEPTION = new TimeoutException();
 
     private CFUtils() {
         // Prevent initializing a utility class
@@ -115,9 +114,13 @@ public final class CFUtils {
      * @return A completable future that will time out.
      */
     public static <T> CompletableFuture<T> failAfter(Duration duration) {
-        final CompletableFuture<T> promise = new CompletableFuture<>();
-        SCHEDULER.schedule(() -> promise.completeExceptionally(TIMEOUT_EXCEPTION),
-                duration.toMillis(), TimeUnit.MILLISECONDS);
+        CompletableFuture<T> promise = new CompletableFuture<>();
+        SCHEDULER.schedule(
+                () -> promise.completeExceptionally(TIMEOUT_EXCEPTION),
+                duration.toMillis(),
+                TimeUnit.MILLISECONDS
+        );
+
         return promise;
     }
 
