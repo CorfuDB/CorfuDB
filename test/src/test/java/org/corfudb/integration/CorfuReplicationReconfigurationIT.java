@@ -221,7 +221,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         LogReplicationMetadata.ReplicationStatusKey key =
                 LogReplicationMetadata.ReplicationStatusKey
                         .newBuilder()
-                        .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                        .setClusterId(new DefaultClusterConfig().getStandbyClusterIds().get(0))
                         .build();
 
         ReplicationStatusVal replicationStatusVal;
@@ -468,7 +468,8 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
             // Start Listener on the 'stream_tag' of interest, on standby site + tables to listen (which accounts
             // for the notification for 'clear' table)
-            CountDownLatch streamingStandbySnapshotCompletion = new CountDownLatch(totalEntries*2 + tablesToListen.size());
+            CountDownLatch streamingStandbySnapshotCompletion =
+                new CountDownLatch(totalEntries*tablesToListen.size() + tablesToListen.size());
             StreamingStandbyListener listener = new StreamingStandbyListener(streamingStandbySnapshotCompletion,
                     tablesToListen);
             corfuStoreStandby.subscribeListener(listener, NAMESPACE, DefaultLogReplicationConfigAdapter.TAG_ONE);
@@ -512,33 +513,32 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
             log.info("** Wait for data change notifications (snapshot)");
             streamingStandbySnapshotCompletion.await();
-            assertThat(listener.messages.size()).isEqualTo(totalEntries*2 + tablesToListen.size());
+            assertThat(listener.messages.size()).isEqualTo(
+                totalEntries*tablesToListen.size() + tablesToListen.size());
 
             // Verify both extra and local table are opened on Standby
             verifyTableOpened(corfuStoreStandby, "local");
             verifyTableOpened(corfuStoreStandby, "extra");
 
             // Attach new listener for deltas (the same listener could be used) but simplifying the use of the latch
-            CountDownLatch streamingStandbyDeltaCompletion = new CountDownLatch(totalEntries*2);
+            CountDownLatch streamingStandbyDeltaCompletion =
+                new CountDownLatch(totalEntries*tablesToListen.size());
             StreamingStandbyListener listenerDeltas = new StreamingStandbyListener(streamingStandbyDeltaCompletion,
                     new DefaultLogReplicationConfigAdapter().getStreamingConfigOnSink().keySet());
             corfuStoreStandby.subscribeListener(listenerDeltas, NAMESPACE, DefaultLogReplicationConfigAdapter.TAG_ONE);
 
             // Add Delta's for Log Entry Sync
             writeToActiveDifferentTypes(totalEntries, totalEntries);
-            openTable(corfuStoreActive, "extra_delta");
 
             // Verify Delta's are replicated to standby
             verifyStandbyData((totalEntries*2));
-
-            // Verify tableRegistry's delta is replicated to Standby
-            verifyTableOpened(corfuStoreStandby, "extra_delta");
 
             // Confirm data has been received by standby streaming listeners (deltas generated)
             // Block until all updates are received
             log.info("** Wait for data change notifications (delta)");
             streamingStandbyDeltaCompletion.await();
-            assertThat(listenerDeltas.messages.size()).isEqualTo(totalEntries*2);
+            assertThat(listenerDeltas.messages.size()).isEqualTo(
+                totalEntries*tablesToListen.size());
 
             // Add a delta to a 'mergeOnly' stream and confirm it is replicated. RegistryTable is a 'mergeOnly' stream
             openTable(corfuStoreActive, "extra_delta");
@@ -570,7 +570,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         LogReplicationMetadata.ReplicationStatusKey key =
                 LogReplicationMetadata.ReplicationStatusKey
                         .newBuilder()
-                        .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                        .setClusterId(new DefaultClusterConfig().getStandbyClusterIds().get(0))
                         .build();
 
         ReplicationStatusVal replicationStatusVal;
