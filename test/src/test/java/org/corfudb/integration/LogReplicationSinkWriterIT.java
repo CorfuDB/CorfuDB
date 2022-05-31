@@ -194,7 +194,7 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
         LogReplicationMetadata.ReplicationStatusKey key =
                 LogReplicationMetadata.ReplicationStatusKey
                         .newBuilder()
-                        .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                        .setClusterId(new DefaultClusterConfig().getStandbyClusterIds().get(0))
                         .build();
 
         ReplicationStatusVal replicationStatusVal = null;
