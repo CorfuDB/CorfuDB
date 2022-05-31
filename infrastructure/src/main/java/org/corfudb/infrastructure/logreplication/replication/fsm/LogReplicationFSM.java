@@ -260,7 +260,8 @@ public class LogReplicationFSM {
         this.state = states.get(LogReplicationStateType.INITIALIZED);
         this.logReplicationFSMWorkers = workers;
         this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
-                ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer").build());
+            ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer-" +
+            remoteCluster.getClusterId()).build());
 
         logReplicationFSMConsumer.submit(this::consume);
 
