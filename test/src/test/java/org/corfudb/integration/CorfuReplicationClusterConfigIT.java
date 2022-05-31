@@ -355,15 +355,15 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         log.info("Log replication succeeds without config change!");
 
         // Verify Sync Status before switchover
-        LogReplicationSession sessionKey = LogReplicationSession.newBuilder()
-            .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
-            .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
-            .build();
+        LogReplicationMetadata.ReplicationStatusKey key =
+                LogReplicationMetadata.ReplicationStatusKey
+                        .newBuilder()
+                        .setClusterId(new DefaultClusterConfig().getStandbyClusterIds().get(0))
+                        .build();
 
-        ReplicationStatus replicationStatus;
-        try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
+        ReplicationStatusVal replicationStatusVal;
+        try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
             txn.commit();
         }
 
@@ -408,17 +408,16 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         sleepUninterruptibly(5);
 
         // Verify Sync Status during the first switchover
-        LogReplicationSession oldKey = sessionKey;
+        LogReplicationMetadata.ReplicationStatusKey StandbyKey =
+                LogReplicationMetadata.ReplicationStatusKey
+                        .newBuilder()
+                        .setClusterId(new DefaultClusterConfig().getActiveClusterIds().get(0))
+                        .build();
 
-        sessionKey = LogReplicationSession.newBuilder()
-            .setSourceClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSinkClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
-            .build();
-
-        try (TxnContext txn = sinkCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
-            assertThat(txn.getRecord(REPLICATION_STATUS_TABLE, oldKey).getPayload()).isNull();
+        ReplicationStatusVal standbyStatusVal;
+        try (TxnContext txn = standbyCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            standbyStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, StandbyKey).getPayload();
+            assertThat(txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload()).isNull();
             txn.commit();
         }
 
@@ -553,16 +552,14 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // data after snapshot sync
         verifyNoDataOnSinkOpenedTables();
 
-        LogReplicationSession sessionKey = LogReplicationSession.newBuilder()
-            .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
-            .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
-            .build();
-
-        ReplicationStatus replicationStatus;
-
-        try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
+        LogReplicationMetadata.ReplicationStatusKey key =
+            LogReplicationMetadata.ReplicationStatusKey
+                .newBuilder()
+                .setClusterId(new DefaultClusterConfig().getStandbyClusterIds().get(0))
+                .build();
+        ReplicationStatusVal replicationStatusVal;
+        try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
             txn.commit();
         }
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSyncType()).isEqualTo(SyncType.LOG_ENTRY);
@@ -616,16 +613,14 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         sleepUninterruptibly(20);
 
         // Verify snapshot sync completes as expected
-        LogReplicationSession sessionKey = LogReplicationSession.newBuilder()
-            .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
-            .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
-            .build();
-
-        ReplicationStatus replicationStatus;
-
-        try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
+        LogReplicationMetadata.ReplicationStatusKey key =
+            LogReplicationMetadata.ReplicationStatusKey
+                .newBuilder()
+                .setClusterId(new DefaultClusterConfig().getStandbyClusterIds().get(0))
+                .build();
+        ReplicationStatusVal replicationStatusVal;
+        try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            replicationStatusVal = (ReplicationStatusVal) txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
             txn.commit();
         }
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSyncType())
@@ -645,7 +640,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         checkpointAndTrim(false);
 
         // Perform Switchover and verify it succeeds
-        try (TxnContext txn = sourceCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+        try (TxnContext txn = activeCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
             txn.putRecord(configTable, DefaultClusterManager.OP_SWITCH,
                 DefaultClusterManager.OP_SWITCH, DefaultClusterManager.OP_SWITCH);
             txn.commit();
@@ -654,10 +649,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         sleepUninterruptibly(10);
 
         // Verify snapshot sync completes as expected
-        sessionKey = LogReplicationSession.newBuilder()
-            .setSourceClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSinkClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
+        key = LogReplicationMetadata.ReplicationStatusKey
+            .newBuilder()
+            .setClusterId(new DefaultClusterConfig().getActiveClusterIds().get(0))
             .build();
 
         // Block until snapshot sync completes
@@ -825,13 +819,10 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         assertThat(mapSource.count()).isEqualTo(firstBatch);
 
         // Verify Sync Status
-        LogReplicationSession sessionKey = LogReplicationSession.newBuilder()
-            .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
-            .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
-            .build();
-
-        ReplicationStatus replicationStatus;
+        ReplicationStatusKey standbyClusterId = ReplicationStatusKey.newBuilder()
+                        .setClusterId(new DefaultClusterConfig().getStandbyClusterIds().get(0))
+                        .build();
+        ReplicationStatusVal standbyStatus;
 
         try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
             // Since LR has never been started, the table should not exist in the registry
@@ -1331,15 +1322,14 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         }
 
         //verify the status table before topology change
-        LogReplicationSession sessionKey = LogReplicationSession.newBuilder()
-            .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
-            .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
-            .build();
-
-        ReplicationStatus replicationStatus;
-        try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
+        LogReplicationMetadata.ReplicationStatusKey key =
+                LogReplicationMetadata.ReplicationStatusKey
+                        .newBuilder()
+                        .setClusterId(new DefaultClusterConfig().getStandbyClusterIds().get(0))
+                        .build();
+        ReplicationStatusVal replicationStatus;
+        try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            replicationStatus = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
             txn.commit();
         }
         assertThat(replicationStatus).isNotNull();
@@ -1444,17 +1434,15 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         // Verify Sync Status
         Sleep.sleepUninterruptibly(Duration.ofSeconds(3));
+        LogReplicationMetadata.ReplicationStatusKey key =
+                LogReplicationMetadata.ReplicationStatusKey
+                        .newBuilder()
+                        .setClusterId(new DefaultClusterConfig().getStandbyClusterIds().get(0))
+                        .build();
 
-        LogReplicationSession sessionKey = LogReplicationSession.newBuilder()
-            .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
-            .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
-            .build();
-
-        ReplicationStatus replicationStatus;
-
-        try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
+        LogReplicationMetadata.ReplicationStatusVal replicationStatusVal;
+        try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
             txn.commit();
         }
 

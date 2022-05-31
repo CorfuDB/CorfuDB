@@ -1,25 +1,39 @@
 package org.corfudb.integration;
 
+import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultLogReplicationConfigAdapter;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.ExampleSchemas;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
-import org.corfudb.runtime.LogReplication.ReplicationStatus;
+import org.corfudb.runtime.MultiCheckpointWriter;
+import org.corfudb.runtime.collections.CorfuDynamicKey;
+import org.corfudb.runtime.collections.CorfuDynamicRecord;
+import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
+import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.view.SMRObject;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.test.SampleSchema;
+import org.corfudb.util.serializer.DynamicProtobufSerializer;
+import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.ProtobufSerializer;
 import org.junit.After;
 import org.junit.Assert;
 import java.util.ArrayList;
@@ -31,33 +45,30 @@ import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.fail;
-import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
-import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
-import static org.corfudb.integration.LogReplicationAbstractIT.NAMESPACE;
-import static org.corfudb.integration.LogReplicationAbstractIT.runCommandForOutput;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LR_STATUS_STREAM_TAG;
 
 @Slf4j
 public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
-    protected final List<Integer> sourceCorfuPorts = Arrays.asList(9000, 9002, 9004);
-    protected final List<Integer> sinkCorfuPorts = Arrays.asList(9001, 9003, 9005);
+    private final List<Integer> sourceCorfuPorts = Arrays.asList(9000, 9002, 9004);
+    private final List<Integer> sinkCorfuPorts = Arrays.asList(9001, 9003, 9005);
+
+    private final List<Integer> sourceReplicationPorts = Arrays.asList(9010, 9011, 9012);
+    private final List<Integer> sinkReplicationPorts = Arrays.asList(9020, 9021, 9022);
 
     private final List<Process> sourceCorfuProcesses = new ArrayList<>();
     private final List<Process> sinkCorfuProcesses = new ArrayList<>();
 
-    protected final List<Integer> sourceReplicationPorts = Arrays.asList(9010, 9011, 9012);
-    protected final List<Integer> sinkReplicationPorts = Arrays.asList(9020, 9021, 9022);
+    private final List<Process> sourceReplicationServers = new ArrayList<>();
+    private final List<Process> sinkReplicationServers = new ArrayList<>();
 
-    protected final List<Process> sourceReplicationServers = new ArrayList<>();
-    protected final List<Process> sinkReplicationServers = new ArrayList<>();
-
-    protected List<CorfuRuntime> sourceRuntimes = new ArrayList<>();
-    protected List<CorfuRuntime> sinkRuntimes = new ArrayList<>();
+    private List<CorfuRuntime> sourceRuntimes = new ArrayList<>();
+    private List<CorfuRuntime> sinkRuntimes = new ArrayList<>();
 
     protected List<CorfuStore> sourceCorfuStores = new ArrayList<>();
     protected List<CorfuStore> sinkCorfuStores = new ArrayList<>();
 
-    protected final List<String> sourceEndpoints = new ArrayList<>();
-    protected final List<String> sinkEndpoints = new ArrayList<>();
+    private final List<String> sourceEndpoints = new ArrayList<>();
+    private final List<String> sinkEndpoints = new ArrayList<>();
 
     private int numSourceClusters;
     private int numSinkClusters;
@@ -70,11 +81,18 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
     protected final List<Table<Sample.StringKey, SampleSchema.ValueFieldTagOne, Message>> srcTables = new ArrayList<>();
     protected final List<Table<Sample.StringKey, SampleSchema.ValueFieldTagOne, Message>> sinkTables = new ArrayList<>();
 
+    protected static final String NAMESPACE = "LR_Test";
+
     protected static final String STREAM_TAG = "tag_one";
 
     // DefaultClusterConfig contains 3 Source and Sink clusters each.  Depending on how many clusters the test
     // starts, the number of functional/available clusters may be less but 3 is the max number.
     protected static final int MAX_REMOTE_CLUSTERS = 3;
+
+    // The number of updates on the ReplicationStatus table on the Sink during initial startup is 3(one for each
+    // Source cluster - the number of available Source clusters may be <3 but the topology from DefaultClusterConfig
+    // contains 3 Source clusters)
+    protected static final int NUM_INITIAL_REPLICATION_STATUS_UPDATES = MAX_REMOTE_CLUSTERS;
 
     // The number of updates on the Sink ReplicationStatus Table during Snapshot Sync from single cluster
     // (1) When starting snapshot sync apply : is_data_consistent = false
@@ -85,34 +103,23 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
 
     protected String pluginConfigFilePath;
 
-    protected String transportType = "GRPC";
-
     // Listens to incoming data on streams/tables on a Sink cluster
     private List<ReplicatedStreamsListener> dataListeners = new ArrayList<>();
 
     // Listens to replication status updates on a Sink cluster
     private List<ReplicationStatusListener> replicationStatusListeners = new ArrayList<>();
 
-    protected void setUp(int numSourceClusters, int numSinkClusters, ExampleSchemas.ClusterUuidMsg topologyType) throws Exception {
+    /*protected ReplicationStatusListener sourceListener1;
+    protected ReplicationStatusListener sourceListener2;
+    protected ReplicationStatusListener sourceListener3;
+    protected ReplicationStatusListener sinkListener1;
+    protected ReplicationStatusListener sinkListener2;
+    protected ReplicationStatusListener sinkListener3;*/
+
+    protected void setUp(int numSourceClusters, int numSinkClusters) throws Exception {
         this.numSourceClusters = numSourceClusters;
         this.numSinkClusters = numSinkClusters;
         setupSourceAndSinkCorfu(numSourceClusters, numSinkClusters);
-        initMultiSinkTopology(topologyType);
-    }
-
-    private void initMultiSinkTopology(ExampleSchemas.ClusterUuidMsg topologyType) throws Exception {
-        for (int i = 0; i < numSourceClusters; i++) {
-            Table<ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg> configTable =
-                    sourceCorfuStores.get(i).openTable(
-                            DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
-                            ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class,
-                            TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
-                    );
-            try (TxnContext txn = sourceCorfuStores.get(i).txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-                txn.putRecord(configTable, topologyType, topologyType, topologyType);
-                txn.commit();
-            }
-        }
     }
 
     private void setupSourceAndSinkCorfu(int numSourceClusters, int numSinkClusters) throws Exception {
@@ -159,38 +166,12 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
 
     protected void startReplicationServers() throws Exception {
         for (int i = 0; i < numSourceClusters; i++) {
-            sourceReplicationServers.add(runReplicationServer(sourceReplicationPorts.get(i), sourceCorfuPorts.get(i),
-                    pluginConfigFilePath, transportType));
+            sourceReplicationServers.add(runReplicationServer(sourceReplicationPorts.get(i), pluginConfigFilePath));
         }
 
         for (int i = 0; i < numSinkClusters; i++) {
-            sinkReplicationServers.add(runReplicationServer(sinkReplicationPorts.get(i), sinkCorfuPorts.get(i),
-                    pluginConfigFilePath, transportType));
+            sinkReplicationServers.add(runReplicationServer(sinkReplicationPorts.get(i), pluginConfigFilePath));
         }
-    }
-
-    protected void stopReplicationServer(int serverPort, Process serverProcess) {
-        List<String> paramsPs = Arrays.asList("/bin/sh", "-c", "ps aux | grep CorfuInterClusterReplicationServer | grep " + serverPort);
-        String result = runCommandForOutput(paramsPs);
-
-        // Get PID
-        String[] output = result.split(" ");
-        int i = 0;
-        String pid = "";
-        for (String st : output) {
-            if (!st.equals("")) {
-                i++;
-                if (i == 2) {
-                    pid = st;
-                    break;
-                }
-            }
-        }
-
-        List<String> paramsKill = Arrays.asList("/bin/sh", "-c", "kill -9 " + pid);
-        runCommandForOutput(paramsKill);
-
-        serverProcess.destroyForcibly();
     }
 
     protected void openMaps() throws Exception {
@@ -261,10 +242,11 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
         CountDownLatch dataLatch;
         ReplicatedStreamsListener dataListener;
 
-        // Number of expected status updates with data_consistent = true.  This is equal to the number of Source
-        // Clusters(1 update per snapshot sync with a Source Cluster)
-        int numDataConsistentUpdates = numSourceClusters;
-
+        // On startup, an initial default replication status is written for each remote cluster
+        // (NUM_INITIAL_REPLICATION_STATUS_UPDATES).  Subsequently, the table will be updated on snapshot sync from
+        // each Source cluster.
+        int numExpectedUpdates = NUM_INITIAL_REPLICATION_STATUS_UPDATES +
+            calculateSnapshotSyncUpdatesOnSinkStatusTable(numSourceClusters);
         List<CountDownLatch> statusLatches = new ArrayList<>();
         CountDownLatch statusLatch;
         ReplicationStatusListener statusListener;
@@ -283,10 +265,10 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
 
             // Replication Status Listeners
             sinkCorfuStores.get(i).openTable(LogReplicationMetadataManager.NAMESPACE,
-                REPLICATION_STATUS_TABLE_NAME, LogReplicationSession.class,
-                ReplicationStatus.class, null,
-                TableOptions.fromProtoSchema(ReplicationStatus.class));
-            statusLatch = new CountDownLatch(numDataConsistentUpdates);
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE, LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class, null,
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+            statusLatch = new CountDownLatch(numExpectedUpdates);
             statusLatches.add(statusLatch);
 
             statusListener = new ReplicationStatusListener(statusLatch);
@@ -307,6 +289,7 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
                 txn.commit();
             }
             Assert.assertEquals(1, configTable.count());
+
         } else {
             // Start Log Replication
             startReplicationServers();
@@ -341,9 +324,9 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
         for (int i = 0; i < numSinkClusters; i++) {
             logEntryWritesLatch = new CountDownLatch(2);
             logEntryWritesLatches.add(logEntryWritesLatch);
-            dataListeners.get(i).setSnapshotSync(false);
             dataListeners.get(i).setCountdownLatch(logEntryWritesLatch);
             dataListeners.get(i).clearTableToOpTypeMap();
+            dataListeners.get(i).setSnapshotSync(false);
         }
         log.info("Add a record on table on Sender-1, Table-1");
         writeData(sourceCorfuStores.get(0), tableNames.get(0), srcTables.get(0), NUM_RECORDS_IN_TABLE, 1);
@@ -458,10 +441,10 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
     }
 
     @After
-    public void tearDown() throws Exception {
-        if (!dataListeners.isEmpty() && !replicationStatusListeners.isEmpty()) {
-            unsubscribeListeners();
-        }
+    public void tearDown() {
+        unsubscribeListeners();
+        shutdownCorfuServers();
+        shutdownLogReplicationServers();
 
         for (CorfuRuntime runtime : sourceRuntimes) {
             runtime.shutdown();
@@ -469,14 +452,11 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
         for (CorfuRuntime runtime : sinkRuntimes) {
             runtime.shutdown();
         }
-
-        shutdownLogReplicationServers();
-        shutdownCorfuServers();
     }
 
-    private void shutdownCorfuServers() throws Exception {
+    private void shutdownCorfuServers() {
         for (Process process : sourceCorfuProcesses) {
-           process.destroy();
+            process.destroy();
         }
 
         for (Process process : sinkCorfuProcesses) {
@@ -484,7 +464,7 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
         }
     }
 
-    private void shutdownLogReplicationServers() throws Exception {
+    private void shutdownLogReplicationServers() {
         for (Process lrProcess : sourceReplicationServers) {
             lrProcess.destroy();
         }
@@ -496,6 +476,9 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
 
     protected class ReplicationStatusListener implements StreamListener {
 
+        @Getter
+        List<Boolean> accumulatedStatus = new ArrayList<>();
+
         private final CountDownLatch countDownLatch;
 
         public ReplicationStatusListener(CountDownLatch countdownLatch) {
@@ -504,12 +487,10 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
 
         @Override
         public void onNext(CorfuStreamEntries results) {
-            // Only consider updates where data consistent changed to 'true' for counting the latch down.
-            // Ignore 'clear' and 'delete' operations which get sent on a role change and have no payload (to avoid NPE)
+            // Replication Status Table gets cleared on a role change.  Ignore the 'clear' updates
             results.getEntries().forEach((schema, entries) -> entries.forEach(e -> {
-                if (e.getOperation() != CorfuStreamEntry.OperationType.CLEAR &&
-                    e.getOperation() != CorfuStreamEntry.OperationType.DELETE &&
-                    ((ReplicationStatus)e.getPayload()).getSinkStatus().getDataConsistent()) {
+                if (e.getOperation() != CorfuStreamEntry.OperationType.CLEAR) {
+                    accumulatedStatus.add(((LogReplicationMetadata.ReplicationStatusVal)e.getPayload()).getDataConsistent());
                     countDownLatch.countDown();
                 }
             }));
@@ -540,44 +521,18 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
 
         @Override
         public void onNext(CorfuStreamEntries results) {
-            // TODO: LR currently has a limitation that the Snapshot Writers on Sink cannot differentiate between
-            //  the replicated streams received from their own vs other sessions.  So if multiple writers find a
-            //  stream in the global list of streams to be replicated, each will apply updates from the shadow
-            //  stream of that stream, even though no data was received for it from the writer's own session.
-            //  In this test, Source-1 has data in Table-1, Source-2 in Table-2 and so on.  Each Source has a
-            //  separate session with the Sink.  Even though the session corresponding to Source-2 does not receive
-            //  data from Source-1(Table-1), the Sink writer will apply it because both Tables 1 and 2 are included
-            //  in the global streams to replicate set.
-            //  So the number of updates received on the Sink on a snapshot sync can be more than expected.
-            //  Hence, we perform the following modified check:
-            //  If Snapshot Sync:  Only consider the 1st set of updates(1st transaction) received for a given table.
-            //  However, this will lead to another test issue that subsequent async updates on the table will still
-            //  be received by this listener and interfere with the verification of log entry sync updates.
-            //  So we filter out these updates by looking at the number of entries in the transaction(1 entry = log
-            //  entry sync.  This assumption can work for the test as it writes single entries during log entry sync.)
-            //  Once the above limitation is addressed, these special checks must be removed.
-
-            // TODO: These special checks should also be removed if multi-model replication support comes before the
-            //  above fix and no replicated stream is common between the models, because in that case, the above
-            //  issue will not be hit.
             results.getEntries().forEach((schema, entries) -> {
-                // Ignore single 'clear' updates made to clear local writes on the Sink
-                if (snapshotSync && entries.size() > 1) {
-                    processUpdate(schema, entries);
-                } else if (!snapshotSync && entries.size() == 1) {
-                    // If in Log Entry sync, ignore updates with >1 entries (as they are from the redundant updates
-                    // received during snapshot sync), as explained in the TODO
+                if (snapshotSync) {
+                    if (entries.size() > 1) {
+                        processUpdate(schema, entries);
+                    }
+                } else {
                     processUpdate(schema, entries);
                 }
             });
         }
 
         private void processUpdate(TableSchema schema, List<CorfuStreamEntry> entries) {
-            // Ignore redundant updates received for a given table during snapshot sync, as explained in the above TODO
-            if (snapshotSync && tableToOpTypeMap.containsKey(schema.getTableName())) {
-                return;
-            }
-
             List<CorfuStreamEntry.OperationType> opList = tableToOpTypeMap.getOrDefault(
                 schema.getTableName(), new ArrayList<>());
             entries.forEach(entry -> opList.add(entry.getOperation()));

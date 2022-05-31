@@ -5,10 +5,9 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
-import org.corfudb.infrastructure.logreplication.LogReplicationGrpc;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientServerRouter;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
-import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
+import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
@@ -40,18 +39,17 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
     Map<Pair<LogReplicationSession, Long>, CorfuStreamObserver<ResponseMsg>> unaryCallStreamObserverMap;
 
     /*
-     * Used when Source is the connection starter.
-     * Map of session to Stream Observer to send responses back to the client. Used for async calls.
-     *
+     * Map of (Remote Cluster Id, Request Id) pair to Stream Observer to send responses back to the client. Used for
+     * blocking calls.
      */
-    Map<Pair<LogReplicationSession, Long>, CorfuStreamObserver<ResponseMsg>>  replicationStreamObserverMap;
+    Map<Pair<UuidMsg, Long>, StreamObserver<ResponseMsg>> streamObserverMap;
 
     /*
-     * Used when Sink is the connection starter. Source drives the replication using the streamObserver.
-     * Map of session to StreamObserver to send requests to the clients.
+     * Map of (Remote Cluster Id, Sync Request Id) pair to Stream Observer to send responses back to the client. Used
+     * for async calls.
      *
      */
-    Map<LogReplicationSession, CorfuStreamObserver<RequestMsg>> reverseReplicationStreamObserverMap;
+    Map<Pair<UuidMsg, Long>, StreamObserver<ResponseMsg>> replicationStreamObserverMap;
 
     public GRPCLogReplicationServerHandler(LogReplicationClientServerRouter router) {
         this.router = router;
@@ -67,14 +65,16 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
         unaryCallStreamObserverMap.put(Pair.of(request.getHeader().getSession(), request.getHeader().getRequestId()),
                 new CorfuStreamObserver<>(responseObserver));
         router.receive(request);
+        streamObserverMap.put(Pair.of(request.getHeader().getClusterId(), request.getHeader().getRequestId()),
+            responseObserver);
     }
 
     @Override
     public void queryLeadership(RequestMsg request, StreamObserver<ResponseMsg> responseObserver) {
         log.info("Received[{}]: {}", request.getHeader().getRequestId(),
                 request.getPayload().getPayloadCase().name());
-        unaryCallStreamObserverMap.put(Pair.of(request.getHeader().getSession(), request.getHeader().getRequestId()),
-            new CorfuStreamObserver<>(responseObserver));
+        streamObserverMap.put(Pair.of(request.getHeader().getClusterId(), request.getHeader().getRequestId()),
+            responseObserver);
         router.receive(request);
     }
 
@@ -90,8 +90,8 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
 
                 // Register at the observable first.
                 try {
-                    replicationStreamObserverMap.putIfAbsent(Pair.of(replicationCorfuMessage.getHeader().getSession(), requestId),
-                            new CorfuStreamObserver<>(responseObserver));
+                    replicationStreamObserverMap.putIfAbsent(
+                        Pair.of(replicationCorfuMessage.getHeader().getClusterId(), requestId), responseObserver);
                 } catch (Exception e) {
                     log.error("Exception caught when unpacking log replication entry {}. Skipping message.",
                             requestId, e);
@@ -154,19 +154,22 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
 
     public void send(ResponseMsg msg) {
         long requestId = msg.getHeader().getRequestId();
-        LogReplicationSession session = msg.getHeader().getSession();
+        UuidMsg clusterId = msg.getHeader().getClusterId();
 
         // Case: message to send is an ACK (async observers)
         if (msg.getPayload().getPayloadCase().equals(ResponsePayloadMsg.PayloadCase.LR_ENTRY_ACK)) {
             try {
-                if (!replicationStreamObserverMap.containsKey(Pair.of(session, requestId))) {
+                if (!replicationStreamObserverMap.containsKey(
+                    Pair.of(clusterId, requestId))) {
                     log.warn("Corfu Message {} has no pending observer. Message {} will not be sent.",
                         msg.getHeader().getRequestId(), msg.getPayload().getPayloadCase().name());
+                    log.info("Stream observers in map: {}", replicationStreamObserverMap.keySet());
                     return;
                 }
 
-                StreamObserver<ResponseMsg> observer = replicationStreamObserverMap.get(Pair.of(session, requestId));
-                log.trace("Sending[{}:{}]: {}", session, requestId, msg.getPayload().getPayloadCase().name());
+                StreamObserver<ResponseMsg> observer = replicationStreamObserverMap.get(Pair.of(clusterId, requestId));
+                log.info("Sending[{}:{}]: {}", clusterId, requestId,
+                    msg.getPayload().getPayloadCase().name());
                 observer.onNext(msg);
                 observer.onCompleted();
 
@@ -174,55 +177,28 @@ public class GRPCLogReplicationServerHandler extends LogReplicationGrpc.LogRepli
                 // Since we send summarized ACKs (to avoid memory leaks) remove all observers lower or equal than
                 // the one for which a response is being sent.
                 replicationStreamObserverMap.keySet().removeIf(id ->
-                        id.getRight() <= requestId &&
-                                Objects.equals(id.getLeft(), session));
+                    id.getRight() <= requestId &&
+                    Objects.equals(id.getLeft(), clusterId));
             } catch (Exception e) {
                 log.error("Caught exception while trying to send message {}", msg.getHeader().getRequestId(), e);
             }
 
         } else {
 
-            if (!unaryCallStreamObserverMap.containsKey(Pair.of(session, requestId))) {
+            if (!streamObserverMap.containsKey(Pair.of(clusterId, requestId))) {
                 log.warn("Corfu Message {} has no pending observer. Message {} will not be sent.",
                     requestId, msg.getPayload().getPayloadCase().name());
+                log.info("Stream observers in map: {}", streamObserverMap.keySet());
                 return;
             }
 
-            CorfuStreamObserver<ResponseMsg> observer = unaryCallStreamObserverMap.get(Pair.of(session, requestId));
+            StreamObserver<ResponseMsg> observer = streamObserverMap.get(Pair.of(clusterId, requestId));
+            log.info("Sending[{}]: {}", requestId, msg.getPayload().getPayloadCase().name());
             observer.onNext(msg);
             observer.onCompleted();
 
             // Remove observer as response was already sent
-            unaryCallStreamObserverMap.remove(Pair.of(session, requestId));
-        }
-    }
-
-    public void send(RequestMsg msg) {
-
-        LogReplicationSession session = msg.getHeader().getSession();
-        try {
-
-            if (!reverseReplicationStreamObserverMap.containsKey(session)) {
-                log.warn("Corfu Message {} has no pending observer. Message {} will not be sent.",
-                        msg.getHeader().getRequestId(), msg.getPayload().getPayloadCase().name());
-                router.completeExceptionally(session, msg.getHeader().getRequestId(),
-                        new NetworkException(String.format("No pending observer for session %s", session),
-                                session.getSinkClusterId()));
-                return;
-            }
-
-            CorfuStreamObserver<RequestMsg> observer = reverseReplicationStreamObserverMap.get(session);
-            observer.onNext(msg);
-
-        } catch (StatusRuntimeException e) {
-            if (e.getStatus().getCode().equals(Status.Code.CANCELLED)) {
-                log.error("StreamObserver is cancelled for session {} with exception", msg.getHeader().getSession(), e);
-                router.onConnectionDown(msg.getHeader().getSession());
-            }
-            router.completeExceptionally(session, msg.getHeader().getRequestId(), e);
-        } catch (Exception e) {
-            log.error("Caught exception while trying to send message {}", msg.getHeader().getRequestId(), e);
-            router.completeExceptionally(session, msg.getHeader().getRequestId(), e);
+            streamObserverMap.remove(Pair.of(clusterId, requestId));
         }
 
     }

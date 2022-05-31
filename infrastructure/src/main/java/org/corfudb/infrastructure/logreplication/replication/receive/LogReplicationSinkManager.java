@@ -92,6 +92,10 @@ public class LogReplicationSinkManager implements DataReceiver {
     // Current topologyConfigId, used to drop out of date messages.
     private long topologyConfigId = 0;
 
+    // Cluster id of the Source cluster from which this Sink Manager receives updates
+    @Getter
+    private String sourceClusterId = null;
+
     @VisibleForTesting
     private int rxMessageCounter = 0;
 
@@ -118,9 +122,10 @@ public class LogReplicationSinkManager implements DataReceiver {
      * @param session log replication session unique identifier
      * @param replicationContext log replication context
      */
-    public LogReplicationSinkManager(LogReplicationMetadataManager metadataManager,
-                                     ServerContext serverContext, LogReplicationSession session,
-                                     LogReplicationContext replicationContext) {
+    public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config,
+                                     LogReplicationMetadataManager metadataManager,
+                                     ServerContext context, long topologyConfigId,
+                                     String remoteClusterId) {
 
         this.replicationContext = replicationContext;
         this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
@@ -132,12 +137,10 @@ public class LogReplicationSinkManager implements DataReceiver {
                 .maxCacheEntries(replicationContext.getConfig(session).getMaxCacheSize())
                 .maxWriteSize(serverContext.getMaxWriteSize())
                 .build())
-                .parseConfigurationString(replicationContext.getLocalCorfuEndpoint()).connect();
-        this.topologyConfigId = replicationContext.getTopologyConfigId();
-        this.session = session;
-        this.metadataManager = metadataManager;
-
-        init();
+                .parseConfigurationString(localCorfuEndpoint).connect();
+        this.pluginConfigFilePath = context.getPluginConfigFilePath();
+        this.topologyConfigId = topologyConfigId;
+        init(metadataManager, config, remoteClusterId);
     }
 
     @VisibleForTesting
@@ -145,13 +148,10 @@ public class LogReplicationSinkManager implements DataReceiver {
                                      LogReplicationSession session,
                                      LogReplicationContext context) {
         this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
-                .maxCacheEntries(context.getConfig(session).getMaxCacheSize()).build())
+                .maxCacheEntries(config.getMaxCacheSize()).build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
-        this.metadataManager = metadataManager;
-        this.session = session;
-        this.replicationContext = context;
-
-        init();
+        this.pluginConfigFilePath = pluginConfigFilePath;
+        init(metadataManager, config, sourceClusterId);
     }
 
     @VisibleForTesting
@@ -170,7 +170,12 @@ public class LogReplicationSinkManager implements DataReceiver {
     /**
      * Initialize common parameters
      */
-    private void init() {
+    private void init(LogReplicationMetadataManager metadataManager,
+                      LogReplicationConfig config, String remoteClusterId) {
+        this.sourceClusterId = remoteClusterId;
+        this.logReplicationMetadataManager = metadataManager;
+        this.config = config;
+
         // When the server is up, it will be at LOG_ENTRY_SYNC state by default.
         // The sender will query receiver's status and decide what type of replication to start with.
         // It will transit to SNAPSHOT_SYNC state if it received a SNAPSHOT_START message from the sender.
@@ -179,7 +184,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         this.applyExecutor = Executors.newSingleThreadExecutor(
                 new ThreadFactoryBuilder()
                         .setDaemon(true)
-                        .setNameFormat("snapshotSyncApplyExecutor-" + session.hashCode())
+                        .setNameFormat("snapshotSyncApplyExecutor-" + remoteClusterId)
                         .build());
 
         initWriterAndBufferMgr();
@@ -616,7 +621,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         LogReplicationEntryMetadataMsg metadataMsg = LogReplicationEntryMetadataMsg.newBuilder()
                 .setEntryType(LogReplicationEntryType.SNAPSHOT_END)
                 .setTopologyConfigID(topologyConfigId)
-                .setTimestamp(Address.NON_ADDRESS)
+                .setTimestamp(-1L)
                 .setSnapshotTimestamp(snapshotTransferTs)
                 .setSyncRequestId(metadata.getCurrentSnapshotCycleId())
                 .build();

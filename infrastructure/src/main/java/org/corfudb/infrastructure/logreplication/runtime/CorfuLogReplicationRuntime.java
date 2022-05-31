@@ -161,26 +161,29 @@ public class CorfuLogReplicationRuntime {
     /**
      * Default Constructor
      */
-    public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters,
-                                      LogReplicationMetadataManager metadataManager, LogReplicationSession session,
-                                      LogReplicationContext replicationContext, LogReplicationClientServerRouter router) {
-        this.remoteClusterId = session.getSinkClusterId();
-        this.session = session;
-        this.router = router;
-        this.sourceManager = new LogReplicationSourceManager(parameters,router, metadataManager,
-                session, replicationContext);
+    public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters, LogReplicationMetadataManager metadataManager,
+                                      LogReplicationConfigManager replicationConfigManager) {
+        this.remoteClusterId = parameters.getRemoteClusterDescriptor().getClusterId();
+        this.metadataManager = metadataManager;
+        this.router = new LogReplicationClientRouter(parameters, this);
+        this.router.addClient(new LogReplicationHandler());
+        this.sourceManager = new LogReplicationSourceManager(parameters,
+            new LogReplicationClient(router, remoteClusterId), metadataManager,
+            replicationConfigManager);
         this.connectedNodes = new HashSet<>();
-        this.replicationContext = replicationContext;
 
-        ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker-"+session.hashCode())
-            .build();
+        ThreadFactory threadFactory =
+            new ThreadFactoryBuilder().setNameFormat(
+                "runtime-fsm-worker-"+remoteClusterId).build();
 
         this.communicationFSMWorkers = new ThreadPoolExecutor(1, 1, 0L,
             TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), threadFactory);
 
         this.communicationFSMConsumer = Executors.newSingleThreadExecutor(new
                 ThreadFactoryBuilder().setNameFormat(
-                    "runtime-fsm-consumer-"+session.hashCode()).build());
+                    "runtime-fsm-consumer-"+remoteClusterId).build());
+
+        this.replicationConfigManager = replicationConfigManager;
 
         initializeStates(metadataManager);
         this.state = states.get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY);

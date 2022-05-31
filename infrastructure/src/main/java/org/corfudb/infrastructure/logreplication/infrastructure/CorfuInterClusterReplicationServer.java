@@ -327,93 +327,14 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      */
     private void startDiscoveryService(ServerContext serverContext) {
 
-        ILogReplicationVersionAdapter versionPlugin = initVersionPlugin(serverContext.getPluginConfigFilePath());
-        CorfuSaasEndpointProvider.init(serverContext.getPluginConfigFilePath(), versionPlugin.isSaasDeployment());
-
-        CorfuRuntime runtime = getRuntime(serverContext);
-        CorfuStore corfuStore = new CorfuStore(runtime);
-
-        LogReplicationUpgradeManager upgradeManager =
-                new LogReplicationUpgradeManager(corfuStore, versionPlugin);
-
-        // Check if an upgrade is in progress.  If it is, wait for it to complete
-        log.info("Wait for any ongoing rolling upgrade to complete.");
-
-        while(isUpgradeInProgress(upgradeManager, corfuStore)) {
-            // Wait before checking again.
-            sleep();
-        }
-
-        // Upgrade has completed.  Start the discovery Service
         log.info("Start Discovery Service.");
 
         // Start LogReplicationDiscovery Service, responsible for
         // acquiring lock, retrieving Site Manager Info and processing this info
         // so this node is initialized as Source (sender) or Sink (receiver)
-        replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext, runtime);
-        replicationDiscoveryService.start();
-    }
-
-    private ILogReplicationVersionAdapter initVersionPlugin(String pluginConfigFilePath) {
-        log.info("Version plugin :: {}", pluginConfigFilePath);
-        LogReplicationPluginConfig config = new LogReplicationPluginConfig(pluginConfigFilePath);
-        File jar = new File(config.getStreamFetcherPluginJARPath());
-        try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
-            Class plugin = Class.forName(config.getStreamFetcherClassCanonicalName(), true, child);
-            return (ILogReplicationVersionAdapter)
-                    plugin.getDeclaredConstructor().newInstance();
-        } catch (Exception e) {
-            log.error("Fatal error: Failed to get Log Replicator Version Plugin", e);
-            throw new UnrecoverableCorfuError(e);
-        }
-    }
-
-    private CorfuRuntime getRuntime(ServerContext serverContext) {
-
-        String localCorfuEndpoint = CorfuSaasEndpointProvider.getCorfuSaasEndpoint()
-                .orElseGet(() ->getCorfuEndpoint(getHostFromEndpointURL(serverContext.getLocalEndpoint()),
-            serverContext.getCorfuServerConnectionPort()));
-        return CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
-            .trustStore((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE))
-            .tsPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE_PASS_FILE))
-            .keyStore((String) serverContext.getServerConfig().get(ConfigParamNames.KEY_STORE))
-            .ksPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.KEY_STORE_PASS_FILE))
-            .tlsEnabled((Boolean) serverContext.getServerConfig().get("--enable-tls"))
-            .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
-            .maxCacheEntries(serverContext.getLogReplicationCacheMaxSize()/2)
-            .maxUncompressedWriteSize(serverContext.getMaxUncompressedTxSize())
-            .build())
-            .parseConfigurationString(localCorfuEndpoint).connect();
-    }
-
-    private String getCorfuEndpoint(String localHostAddress, int port) {
-        return getVersionFormattedEndpointURL(localHostAddress, port);
-    }
-
-    private boolean isUpgradeInProgress(LogReplicationUpgradeManager upgradeManager, CorfuStore corfuStore) {
-        boolean isUpgraded = true;
-        try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            isUpgraded = upgradeManager.getLrRollingUpgradeHandler()
-                    .isLRUpgradeInProgress(txnContext);
-            txnContext.commit();
-        } catch (TransactionAbortedException e) {
-            // TODO V2: This exception needs to be caught to handle concurrent writes to the Replication Event table
-            //  from multiple nodes.  The retry should be done in LRRollingUpgradeHandler where the event is
-            //  written.  It is not currently possible because the transaction is committed outside
-            //  LRRollingUpgradeHandler.  When the new wrapper for isLRUpgradeInProgress() without TxnContext is
-            //  available, this try-catch block should be moved there.
-            log.warn("TX Abort when writing to the Replication Event Table.  The table was already updated by another" +
-                    " node.", e);
-        }
-        return isUpgraded;
-    }
-
-    private void sleep() {
-        try {
-            TimeUnit.MILLISECONDS.sleep(DEFAULT_UPGRADE_CHECK_DELAY_MS);
-        } catch (InterruptedException e) {
-            log.debug("Sleep Interrupted", e);
-        }
+        replicationDiscoveryService = new CorfuReplicationDiscoveryService(
+            serverContext);
+        replicationDiscoveryService.run();
     }
 
     /**

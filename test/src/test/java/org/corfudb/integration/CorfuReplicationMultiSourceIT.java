@@ -1,7 +1,6 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -32,8 +31,8 @@ public class CorfuReplicationMultiSourceIT extends CorfuReplicationMultiSourceSi
     public static Collection input() {
 
         List<String> transportPlugins = Arrays.asList(
-            "src/test/resources/transport/pluginConfig.properties"
-        );
+            "src/test/resources/transport/grpcConfig.properties",
+            "src/test/resources/transport/nettyConfig.properties");
 
         List<String> absolutePathPlugins = new ArrayList<>();
         transportPlugins.forEach(plugin -> {
@@ -46,7 +45,7 @@ public class CorfuReplicationMultiSourceIT extends CorfuReplicationMultiSourceSi
     @Before
     public void setUp() throws Exception {
         // Setup Corfu on 3 LR Source Sites and 1 LR Sink Site
-        super.setUp(MAX_REMOTE_CLUSTERS, 1, DefaultClusterManager.TP_MULTI_SOURCE);
+        super.setUp(MAX_REMOTE_CLUSTERS, 1);
     }
 
     /**
@@ -68,18 +67,6 @@ public class CorfuReplicationMultiSourceIT extends CorfuReplicationMultiSourceSi
      */
     @Test
     public void testUpdatesOnReplicatedTables() throws Exception {
-        // Setup Corfu on 3 LR Source Sites and 1 LR Sink Site
-        super.setUp(MAX_REMOTE_CLUSTERS, 1, DefaultClusterManager.TP_MULTI_SOURCE);
-        verifySnapshotAndLogEntrySink(false);
-    }
-
-    /**
-     * Same as testUpdatesOnReplicatedTables(), but the sink is the one which starts the connection
-     */
-    @Test
-    public void testUpdatesOnReplicatedTablesSinkConnectionStarter() throws Exception {
-        // Setup Corfu on 3 LR Source Sites and 1 LR Sink Site
-        super.setUp(MAX_REMOTE_CLUSTERS, 1, DefaultClusterManager.TP_MULTI_SOURCE_REV_CONNECTION);
         verifySnapshotAndLogEntrySink(false);
     }
 
@@ -91,7 +78,6 @@ public class CorfuReplicationMultiSourceIT extends CorfuReplicationMultiSourceSi
      */
     @Test
     public void testRoleChange() throws Exception {
-        super.setUp(MAX_REMOTE_CLUSTERS, 1, DefaultClusterManager.TP_MULTI_SOURCE);
         verifySnapshotAndLogEntrySink(false);
         log.info("Preparing for role change");
         prepareTestTopologyForRoleChange(1, MAX_REMOTE_CLUSTERS);

@@ -332,6 +332,11 @@ public class LogReplicationFSM {
         // Initialize Log Replication 5 FSM states - single instance per state
         initializeStates(snapshotSender, logEntrySender, dataSender);
         this.state = states.get(LogReplicationStateType.INITIALIZED);
+        this.logReplicationFSMWorkers = workers;
+        this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
+            ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer-" +
+            remoteCluster.getClusterId()).build());
+
         logReplicationFSMConsumer.submit(this::consume);
         log.info("Log Replication FSM initialized for session={}", session);
     }

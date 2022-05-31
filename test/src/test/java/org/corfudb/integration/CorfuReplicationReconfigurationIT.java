@@ -243,21 +243,20 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
                 LogReplication.SyncStatus.COMPLETED, true);
     }
 
-    private void verifyReplicationStatus(LogReplication.SyncType targetSyncType,
-                                      LogReplication.SyncStatus targetSyncStatus,
-                                         LogReplication.SnapshotSyncInfo.SnapshotSyncType targetSnapshotSyncType,
-                                         LogReplication.SyncStatus targetSnapshotSyncStatus,
-                                         boolean verifyNoMoreEntriesToSend) {
+    private long verifyReplicationStatus(ReplicationStatusVal.SyncType targetSyncType,
+                                         LogReplicationMetadata.SyncStatus targetSyncStatus,
+                                         LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType targetSnapshotSyncType,
+                                         LogReplicationMetadata.SyncStatus targetSnapshotSyncStatus) {
 
-        LogReplicationSession session = LogReplicationSession.newBuilder()
-            .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
-            .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
-            .build();
+        LogReplicationMetadata.ReplicationStatusKey key =
+                LogReplicationMetadata.ReplicationStatusKey
+                        .newBuilder()
+                        .setClusterId(new DefaultClusterConfig().getStandbyClusterIds().get(0))
+                        .build();
 
-        LogReplication.ReplicationStatus replicationStatus;
-        try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatus = (LogReplication.ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE_NAME, session).getPayload();
+        ReplicationStatusVal replicationStatusVal;
+        try (TxnContext txn = corfuStoreActive.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            replicationStatusVal = (ReplicationStatusVal)txn.getRecord(LogReplicationMetadataManager.REPLICATION_STATUS_TABLE, key).getPayload();
             txn.commit();
         }
 
@@ -512,7 +511,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
             // Start Listener on the 'stream_tag' of interest, on sink site + tables to listen (which accounts
             // for the notification for 'clear' table)
-            CountDownLatch streamingSinkSnapshotCompletion = new CountDownLatch(
+            CountDownLatch streamingStandbySnapshotCompletion = new CountDownLatch(
                     totalEntries*tablesToListen.size() + tablesToListen.size());
 
             // Countdown latch for the number of expected transactions to be received on the listener.  All updates
@@ -570,7 +569,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             verifyTableOpened(corfuStoreSink, "extra");
 
             // Attach new listener for deltas (the same listener could be used) but simplifying the use of the latch
-            CountDownLatch streamingSinkDeltaCompletion = new CountDownLatch(
+            CountDownLatch streamingStandbyDeltaCompletion = new CountDownLatch(
                     totalEntries*tablesToListen.size());
 
             // The number of expected transactions to be received on the listener during delta sync.  The total
@@ -583,12 +582,12 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             corfuStoreSink.subscribeListener(listenerDeltas, NAMESPACE, TAG_ONE);
 
             // Add Delta's for Log Entry Sync
-            writeToSourceDifferentTypes(totalEntries, totalEntries);
+            writeToActiveDifferentTypes(totalEntries, totalEntries);
 
             // Verify Delta's are replicated to sink
             verifySinkData(totalEntries*2);
 
-            // Confirm data has been received by sink streaming listeners (deltas generated)
+            // Confirm data has been received by standby streaming listeners (deltas generated)
             // Block until all updates are received
             log.info("** Wait for data change notifications (delta)");
             streamingSinkDeltaCompletion.await();
@@ -623,11 +622,11 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     }
 
     private void blockUntilSnapshotSyncCompleted() {
-        LogReplicationSession key = LogReplicationSession.newBuilder()
-            .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
-            .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
-            .build();
+        LogReplicationMetadata.ReplicationStatusKey key =
+                LogReplicationMetadata.ReplicationStatusKey
+                        .newBuilder()
+                        .setClusterId(new DefaultClusterConfig().getStandbyClusterIds().get(0))
+                        .build();
 
         LogReplication.ReplicationStatus replicationStatus;
         boolean snapshotSyncCompleted = false;

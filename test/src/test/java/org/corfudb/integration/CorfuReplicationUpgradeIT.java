@@ -37,8 +37,21 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
     private static final int NUM_WRITES = 500;
 
-    private static final String UPGRADE_PLUGIN_PATH =
-            "./test/src/test/resources/transport/pluginConfigForUpgrade.properties";
+    // The number of updates on the ReplicationStatus table on the Sink during initial startup is 3(one for each
+    // Source cluster)
+    private static final int NUM_INIT_UPDATES_ON_SINK_STATUS_TABLE = 3;
+
+    // The number of subsequent updates on the ReplicationStatus Table
+    // (1) When starting snapshot sync apply : is_data_consistent = false
+    // (2) When completing snapshot sync apply : is_data_consistent = true
+    private static final int NUM_SNAPSHOT_SYNC_UPDATES_ON_SINK_STATUS_TABLE = 2;
+
+    // The number of updates on the ReplicationStatus table on the Sink after a Snapshot Sync following a restart
+    private static final int TOTAL_SINK_UPDATES_INIT_SNAPSHOT_SYNC = NUM_INIT_UPDATES_ON_SINK_STATUS_TABLE +
+        NUM_SNAPSHOT_SYNC_UPDATES_ON_SINK_STATUS_TABLE;
+
+    private static final String STREAMS_TEST_TABLE =
+            "StreamsToReplicateTestTable";
 
     private static final String NON_UPGRADE_PLUGIN_PATH =
             "./test/src/test/resources/transport/pluginConfig.properties";
@@ -69,56 +82,97 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
      * @throws Exception
      */
     @Test
-    public void testLRNotStartedUntilRollingUpgradeCompletes() throws Exception {
-        verifyInitialSnapshotSyncAfterStartup(FIVE, NUM_WRITES);
+    public void testLogEntrySyncAfterStandbyUpgraded() throws Exception {
+        log.info(">> Setup active and standby Corfu's");
+        setupActiveAndStandbyCorfu();
 
-        // Simulate a rolling upgrade on the plugin
-        stopSinkLogReplicator();
-        DefaultAdapterForUpgrade defaultAdapterForUpgrade = new DefaultAdapterForUpgrade();
-        defaultAdapterForUpgrade.openVersionTable(sinkRuntime);
-        defaultAdapterForUpgrade.startRollingUpgrade();
+        log.info(">> Open map(s) on active and standby");
+        openMaps(FIVE, false);
 
-        // Wait till the Sink Cluster is in a paused state after starting.  This is indicated by a 'CLEAR' entry
-        // written to the Replication Status table.
-        CountDownLatch clearEntryLatch = new CountDownLatch(1);
-        ClearOpListenerOnUpgrade clearOpListener = new ClearOpListenerOnUpgrade(clearEntryLatch);
-        corfuStoreSink.subscribeListener(clearOpListener, CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
-        startSinkLogReplicator();
-        clearEntryLatch.await();
-        corfuStoreSink.unsubscribeListener(clearOpListener);
+        log.info(">> Write data to active CorfuDB before LR is started ...");
+        // Add Data for Snapshot Sync
+        writeToActive(0, NUM_WRITES);
 
-        // Write some more entries on the Source
-        writeToSource(NUM_WRITES, NUM_WRITES/2);
+        // Confirm data does exist on Active Cluster
+        for(Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapActive.values()) {
+            assertThat(map.count()).isEqualTo(NUM_WRITES);
+        }
 
-        // Verify that these entries are not found on the Sink as it is paused
-        verifyNoMoreDataOnSink(NUM_WRITES);
+        // Confirm data does not exist on Standby Cluster
+        for(Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapStandby.values()) {
+            assertThat(map.count()).isEqualTo(0);
+        }
 
-        // End the rolling upgrade and verify that the new entries are now present
-        defaultAdapterForUpgrade.endRollingUpgrade();
-        verifyDataOnSink(NUM_WRITES + NUM_WRITES/2);
+        // Two updates are expected onStart of snapshot sync and onEnd.
+        CountDownLatch latchSnapshotSyncPlugin = new CountDownLatch(2);
+        SnapshotSyncPluginListener snapshotSyncPluginListener = new SnapshotSyncPluginListener(latchSnapshotSyncPlugin);
+        subscribeToSnapshotSyncPluginTable(snapshotSyncPluginListener);
 
-        defaultAdapterForUpgrade.reset();
+        // Subscribe to replication status table on Standby (to be sure data change on status are captured)
+        corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class,
+                null,
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
-        // Simulate a rolling upgrade on Source
-        stopSourceLogReplicator();
-        defaultAdapterForUpgrade = new DefaultAdapterForUpgrade();
-        defaultAdapterForUpgrade.openVersionTable(sourceRuntime);
-        defaultAdapterForUpgrade.openVersionTable(sourceRuntime);
-        defaultAdapterForUpgrade.startRollingUpgrade();
+        CountDownLatch statusUpdateLatch = new CountDownLatch(TOTAL_SINK_UPDATES_INIT_SNAPSHOT_SYNC);
+        ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
+        corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
-        CountDownLatch statusUpdateLatch = new CountDownLatch(1);
-        sinkStatusListener = new SnapshotApplyCompletionListener(statusUpdateLatch);
-        corfuStoreSink.subscribeListener(sinkStatusListener, CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
-        startSourceLogReplicator();
+        setupVersionTable(corfuStoreActive, false);
+        setupVersionTable(corfuStoreStandby, false);
 
-        verifyNoSnapshotSync(statusUpdateLatch);
+        pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_ACTIVE;
+        startActiveLogReplicator();
 
-        // End the rolling upgrade
-        defaultAdapterForUpgrade.endRollingUpgrade();
+        pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_STANDBY;
+        startStandbyLogReplicator();
 
-        // Verify that a forced snapshot sync gets triggered
+        log.info(">> Wait ... Snapshot log replication in progress ...");
+        verifyDataOnStandby(NUM_WRITES);
+
+        // Verify that snapshot sync was triggered by checking the number of
+        // updates to the ReplicationStatus table on the standby.
+        latchSnapshotSyncPlugin.await();
+        validateSnapshotSyncPlugin(snapshotSyncPluginListener);
         statusUpdateLatch.await();
-        verifyDataOnSink(NUM_WRITES + NUM_WRITES/2);
+
+        Assert.assertEquals(TOTAL_SINK_UPDATES_INIT_SNAPSHOT_SYNC, standbyListener.getAccumulatedStatus().size());
+        Assert.assertTrue(standbyListener.getAccumulatedStatus().get(4));
+        Assert.assertFalse(standbyListener.getAccumulatedStatus().get(3));
+
+        // Upgrade the standby site
+        log.info(">> Upgrading the standby site ...");
+        pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_STANDBY;
+        upgradeSite(false, corfuStoreStandby);
+        verifyVersion(corfuStoreStandby, UPGRADE_VERSION_STRING, true);
+        verifyVersion(corfuStoreActive, VERSION_STRING, false);
+
+        // Verify that subsequent log entry sync is successful
+        log.info("Write more data on the active");
+        writeToActive(NUM_WRITES, NUM_WRITES / 2);
+
+        log.info("Verify that data is replicated on the standby after it is upgraded");
+        verifyDataOnStandby(NUM_WRITES + (NUM_WRITES / 2));
+
+        corfuStoreStandby.unsubscribeListener(snapshotSyncPluginListener);
+        corfuStoreStandby.unsubscribeListener(standbyListener);
+        executorService.shutdownNow();
+
+        if (activeCorfu != null) {
+            activeCorfu.destroy();
+        }
+        if (standbyCorfu != null) {
+            standbyCorfu.destroy();
+        }
+        if (activeReplicationServer != null) {
+            activeReplicationServer.destroy();
+        }
+        if (standbyReplicationServer != null) {
+            standbyReplicationServer.destroy();
+        }
     }
 
     @Test
@@ -130,17 +184,127 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         log.info(">> Upgrading the sink site ...");
         performRollingUpgrade(false);
 
-        // Verify that subsequent log entry sync is successful
-        log.info("Write more data on the source");
-        writeToSource(NUM_WRITES, NUM_WRITES / 2);
+        // Subscribe to replication status table on Standby (to be sure data change on status are captured)
+        corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class,
+                null,
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+
+        CountDownLatch statusUpdateLatch = new CountDownLatch(TOTAL_SINK_UPDATES_INIT_SNAPSHOT_SYNC);
+        ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
+        corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+
+        setupVersionTable(corfuStoreActive, false);
+        setupVersionTable(corfuStoreStandby, false);
+
+        pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_ACTIVE;
+        startActiveLogReplicator();
+
+        pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_STANDBY;
+        startStandbyLogReplicator();
+
+        log.info(">> Wait ... Snapshot log replication in progress ...");
+        verifyDataOnStandby(NUM_WRITES);
+
+        // Verify that snapshot sync was triggered by checking the number of
+        // updates to the ReplicationStatus table on the standby.
+        latchSnapshotSyncPlugin.await();
+        validateSnapshotSyncPlugin(snapshotSyncPluginListener);
+        statusUpdateLatch.await();
+
+        Assert.assertEquals(TOTAL_SINK_UPDATES_INIT_SNAPSHOT_SYNC, standbyListener.getAccumulatedStatus().size());
+        Assert.assertTrue(standbyListener.getAccumulatedStatus().get(4));
+        Assert.assertFalse(standbyListener.getAccumulatedStatus().get(3));
+        corfuStoreStandby.unsubscribeListener(standbyListener);
+        corfuStoreStandby.unsubscribeListener(snapshotSyncPluginListener);
+
+        // Upgrade the standby site
+
+        statusUpdateLatch = new CountDownLatch(TOTAL_SINK_UPDATES_INIT_SNAPSHOT_SYNC);
+        standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
+        corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
+            LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+
+        log.info(">> Upgrading the standby site ...");
+        pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_STANDBY;
+        upgradeSite(false, corfuStoreStandby);
+        verifyVersion(corfuStoreStandby, UPGRADE_VERSION_STRING, true);
+        verifyVersion(corfuStoreActive, VERSION_STRING, false);
+
+        latchSnapshotSyncPlugin = new CountDownLatch(2);
+        snapshotSyncPluginListener = new SnapshotSyncPluginListener(latchSnapshotSyncPlugin);
+        subscribeToSnapshotSyncPluginTable(snapshotSyncPluginListener);
+
+        // Trigger a snapshot sync by stopping the active LR and running a CP+trim
+        stopActiveLogReplicator();
+        checkpointAndTrim(true);
+        pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_ACTIVE;
+        startActiveLogReplicator();
+
+        // Verify that snapshot sync between the different versions was successful
+        latchSnapshotSyncPlugin.await();
+        statusUpdateLatch.await();
+        Assert.assertEquals(TOTAL_SINK_UPDATES_INIT_SNAPSHOT_SYNC, standbyListener.getAccumulatedStatus().size());
+        Assert.assertTrue(standbyListener.getAccumulatedStatus().get(4));
+        Assert.assertFalse(standbyListener.getAccumulatedStatus().get(3));
+        verifyDataOnStandby(NUM_WRITES);
+
+        corfuStoreStandby.unsubscribeListener(snapshotSyncPluginListener);
+        corfuStoreStandby.unsubscribeListener(standbyListener);
+        executorService.shutdownNow();
 
         log.info("Verify that data is replicated on the sink after it is upgraded");
         verifyDataOnSink(NUM_WRITES + (NUM_WRITES / 2));
     }
 
     @Test
-    public void testSnapshotSyncAfterSinkUpgraded() throws Exception {
-        verifyInitialSnapshotSyncAfterStartup(FIVE, NUM_WRITES);
+    public void testSnapshotSyncAfterStandbyAndActiveUpgraded() throws Exception {
+        log.info(">> Setup active and standby Corfu");
+        setupActiveAndStandbyCorfu();
+
+        // Two updates are expected onStart of snapshot sync and onEnd.
+        CountDownLatch latchSnapshotSyncPlugin = new CountDownLatch(2);
+        SnapshotSyncPluginListener snapshotSyncPluginListener = new SnapshotSyncPluginListener(latchSnapshotSyncPlugin);
+        subscribeToSnapshotSyncPluginTable(snapshotSyncPluginListener);
+
+        // Subscribe to replication status table on Standby (to be sure data change on status are captured)
+        corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class,
+                null,
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+
+        CountDownLatch statusUpdateLatch = new CountDownLatch(TOTAL_SINK_UPDATES_INIT_SNAPSHOT_SYNC);
+        ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
+        corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+
+        log.info(">> Open map(s) on active and standby");
+        openMaps(FIVE, false);
+
+        log.info(">> Write data to active CorfuDB before LR is started ...");
+        // Add Data for Snapshot Sync
+        writeToActive(0, NUM_WRITES);
+
+        // Confirm data does exist on Active Cluster
+        for (Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapActive.values()) {
+            assertThat(map.count()).isEqualTo(NUM_WRITES);
+        }
+
+        // Confirm data does not exist on Standby Cluster
+        for (Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapStandby.values()) {
+            assertThat(map.count()).isEqualTo(0);
+        }
+
+        setupVersionTable(corfuStoreActive, false);
+        setupVersionTable(corfuStoreStandby, false);
+
+        pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_ACTIVE;
+        startActiveLogReplicator();
 
         // Upgrade the sink site
         log.info(">> Upgrading the sink site ...");
@@ -150,13 +314,46 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         // place
         verifySnapshotSyncAfterCPTrim();
 
-        // Verify the number of entries on the sink
-        verifyDataOnSink(NUM_WRITES);
-    }
+        Assert.assertEquals(TOTAL_SINK_UPDATES_INIT_SNAPSHOT_SYNC, standbyListener.getAccumulatedStatus().size());
+        Assert.assertTrue(standbyListener.getAccumulatedStatus().get(4));
+        Assert.assertFalse(standbyListener.getAccumulatedStatus().get(3));
+        corfuStoreStandby.unsubscribeListener(standbyListener);
+        corfuStoreStandby.unsubscribeListener(snapshotSyncPluginListener);
 
-    @Test
-    public void testSnapshotSyncAfterBothUpgraded() throws Exception {
-        verifyInitialSnapshotSyncAfterStartup(FIVE, NUM_WRITES);
+        // Upgrade the standby site first
+        log.info(">> Upgrading the standby site ...");
+        pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_STANDBY;
+        upgradeSite(false, corfuStoreStandby);
+        verifyVersion(corfuStoreStandby, UPGRADE_VERSION_STRING, true);
+        verifyVersion(corfuStoreActive, VERSION_STRING, false);
+        log.info(">> Plugin config verified after standby upgrade");
+
+        // Upgrading the active site will force a snapshot sync
+        latchSnapshotSyncPlugin = new CountDownLatch(2);
+        snapshotSyncPluginListener = new SnapshotSyncPluginListener(latchSnapshotSyncPlugin);
+        subscribeToSnapshotSyncPluginTable(snapshotSyncPluginListener);
+
+        statusUpdateLatch = new CountDownLatch(TOTAL_SINK_UPDATES_INIT_SNAPSHOT_SYNC);
+        standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
+        corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+
+        // Upgrade the active site
+        log.info(">> Upgrading the active site ...");
+        pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_ACTIVE;
+        upgradeSite(true, corfuStoreActive);
+        verifyVersion(corfuStoreActive, UPGRADE_VERSION_STRING, true);
+        verifyVersion(corfuStoreStandby, UPGRADE_VERSION_STRING, true);
+
+        // Verify that snapshot sync was triggered by checking the number of
+        // updates to the ReplicationStatus table on the standby.
+        latchSnapshotSyncPlugin.await();
+        validateSnapshotSyncPlugin(snapshotSyncPluginListener);
+        statusUpdateLatch.await();
+
+        Assert.assertEquals(TOTAL_SINK_UPDATES_INIT_SNAPSHOT_SYNC, standbyListener.getAccumulatedStatus().size());
+        Assert.assertTrue(standbyListener.getAccumulatedStatus().get(4));
+        Assert.assertFalse(standbyListener.getAccumulatedStatus().get(3));
 
         // Upgrade the sink site first
         log.info(">> Upgrading the sink site ...");
@@ -177,7 +374,62 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             streamsToReplicateSource.add(TABLE_PREFIX + i);
         }
 
-        verifyInitialSnapshotSyncAfterStartup(streamsToReplicateSource.size(), NUM_WRITES);
+        setupVersionTable(corfuStoreActive, false);
+        setupVersionTable(corfuStoreStandby, false);
+
+        // Two updates are expected onStart of snapshot sync and onEnd.
+        CountDownLatch latchSnapshotSyncPlugin = new CountDownLatch(2);
+        SnapshotSyncPluginListener snapshotSyncPluginListener = new SnapshotSyncPluginListener(latchSnapshotSyncPlugin);
+        subscribeToSnapshotSyncPluginTable(snapshotSyncPluginListener);
+
+        // Subscribe to replication status table on Standby (to be sure data change on status are captured)
+        corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class,
+                null,
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+
+        CountDownLatch statusUpdateLatch = new CountDownLatch(TOTAL_SINK_UPDATES_INIT_SNAPSHOT_SYNC);
+        ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
+        corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+
+        log.info(">> Open map(s) on active and standby");
+        openMaps(2, false);
+
+        log.info(">> Write data to active CorfuDB before LR is started ...");
+        // Add Data for Snapshot Sync
+        writeToActive(0, NUM_WRITES);
+
+        // Confirm data does exist on Active Cluster
+        for(Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapActive.values()) {
+            assertThat(map.count()).isEqualTo(NUM_WRITES);
+        }
+
+        // Confirm data does not exist on Standby Cluster
+        for(Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapStandby.values()) {
+            assertThat(map.count()).isEqualTo(0);
+        }
+
+        pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_ACTIVE;
+        startActiveLogReplicator();
+
+        pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_STANDBY;
+        startStandbyLogReplicator();
+
+        log.info(">> Wait ... Snapshot log replication in progress ...");
+        verifyDataOnStandby(NUM_WRITES);
+
+        // Verify that snapshot sync was triggered by checking the number of
+        // updates to the ReplicationStatus table on the standby.
+        latchSnapshotSyncPlugin.await();
+        validateSnapshotSyncPlugin(snapshotSyncPluginListener);
+        statusUpdateLatch.await();
+
+        Assert.assertEquals(TOTAL_SINK_UPDATES_INIT_SNAPSHOT_SYNC, standbyListener.getAccumulatedStatus().size());
+        Assert.assertTrue(standbyListener.getAccumulatedStatus().get(4));
+        Assert.assertFalse(standbyListener.getAccumulatedStatus().get(3));
 
         Set<String> streamsToReplicateSink = new HashSet<>();
         for (int i = 2; i <= 3; i++) {
@@ -225,7 +477,44 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         Set<String> streamsToReplicateSource = new HashSet<>();
         for (int i = 1; i <= 2; i++) {
-            streamsToReplicateSource.add(TABLE_PREFIX + i);
+            streamsToReplicateActive.add(TABLE_PREFIX + i);
+        }
+        setupVersionTable(corfuStoreActive, false);
+        setupVersionTable(corfuStoreStandby, false);
+
+        // Two updates are expected onStart of snapshot sync and onEnd.
+        CountDownLatch latchSnapshotSyncPlugin = new CountDownLatch(2);
+        SnapshotSyncPluginListener snapshotSyncPluginListener = new SnapshotSyncPluginListener(latchSnapshotSyncPlugin);
+        subscribeToSnapshotSyncPluginTable(snapshotSyncPluginListener);
+
+        // Subscribe to replication status table on Standby (to be sure data change on status are captured)
+        corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class,
+                null,
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+
+        CountDownLatch statusUpdateLatch = new CountDownLatch(TOTAL_SINK_UPDATES_INIT_SNAPSHOT_SYNC);
+        ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
+        corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+
+        log.info(">> Open map(s) on active and standby");
+        openMaps(2, false);
+
+        log.info(">> Write data to active CorfuDB before LR is started ...");
+        // Add Data for Snapshot Sync
+        writeToActive(0, NUM_WRITES);
+
+        // Confirm data does exist on Active Cluster
+        for(Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapActive.values()) {
+            assertThat(map.count()).isEqualTo(NUM_WRITES);
+        }
+
+        // Confirm data does not exist on Standby Cluster
+        for(Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapStandby.values()) {
+            assertThat(map.count()).isEqualTo(0);
         }
         verifyInitialSnapshotSyncAfterStartup(streamsToReplicateSource.size(), NUM_WRITES);
 
@@ -233,15 +522,38 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         log.info(">> Upgrading the sink site ...");
         performRollingUpgrade(false);
 
-        Set<String> streamsToReplicateSink = new HashSet<>();
+        log.info(">> Wait ... Snapshot log replication in progress ...");
+        verifyDataOnStandby(NUM_WRITES);
+
+        // Verify that snapshot sync was triggered by checking the number of
+        // updates to the ReplicationStatus table on the standby.
+        latchSnapshotSyncPlugin.await();
+        validateSnapshotSyncPlugin(snapshotSyncPluginListener);
+        statusUpdateLatch.await();
+
+        Assert.assertEquals(TOTAL_SINK_UPDATES_INIT_SNAPSHOT_SYNC, standbyListener.getAccumulatedStatus().size());
+        Assert.assertTrue(standbyListener.getAccumulatedStatus().get(4));
+        Assert.assertFalse(standbyListener.getAccumulatedStatus().get(3));
+        corfuStoreStandby.unsubscribeListener(standbyListener);
+        corfuStoreStandby.unsubscribeListener(snapshotSyncPluginListener);
+
+        // Upgrade the standby site
+
+        statusUpdateLatch = new CountDownLatch(TOTAL_SINK_UPDATES_INIT_SNAPSHOT_SYNC);
+        standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
+        corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
+            LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+
+        log.info(">> Upgrading the standby site ...");
+        Set<String> streamsToReplicateStandby = new HashSet<>();
         for (int i = 2; i <= 3; i++) {
             streamsToReplicateSink.add(TABLE_PREFIX + i);
         }
 
-        stopSourceLogReplicator();
+        stopActiveLogReplicator();
 
-        List<String> sourceOnlyStreams = streamsToReplicateSource.stream()
-                .filter(s -> !streamsToReplicateSink.contains(s))
+        List<String> activeOnlyStreams = streamsToReplicateActive.stream()
+                .filter(s -> !streamsToReplicateStandby.contains(s))
                 .collect(Collectors.toList());
 
         List<String> sinkOnlyStreams = streamsToReplicateSink.stream()
@@ -274,7 +586,11 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         initSingleSourceSinkCluster();
 
         // Verify that snapshot sync between the different versions was successful
+        latchSnapshotSyncPlugin.await();
         statusUpdateLatch.await();
+        Assert.assertEquals(TOTAL_SINK_UPDATES_INIT_SNAPSHOT_SYNC, standbyListener.getAccumulatedStatus().size());
+        Assert.assertTrue(standbyListener.getAccumulatedStatus().get(4));
+        Assert.assertFalse(standbyListener.getAccumulatedStatus().get(3));
 
         verifyDataOnSink(sourceOnlyStreams, NUM_WRITES);
 
@@ -302,9 +618,10 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         performRollingUpgrade(false);
 
-        List<String> sourceOnlyStreams = streamsToReplicateSource.stream()
-                .filter(s -> !streamsToReplicateSink.contains(s))
-                .collect(Collectors.toList());
+        CountDownLatch statusUpdateLatch = new CountDownLatch(TOTAL_SINK_UPDATES_INIT_SNAPSHOT_SYNC);
+        ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
+        corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         List<String> sinkOnlyStreams = streamsToReplicateSink.stream()
                 .filter(s -> !streamsToReplicateSource.contains(s))
@@ -334,9 +651,9 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         sinkStatusListener = new SnapshotApplyCompletionListener(statusUpdateLatch);
         corfuStoreSink.subscribeListener(sinkStatusListener, CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
 
-        // Now upgrade the source site
-        openMapsAfterUpgradeSource(sourceOnlyStreams, sinkOnlyStreams);
-        performRollingUpgrade(true);
+        Assert.assertEquals(TOTAL_SINK_UPDATES_INIT_SNAPSHOT_SYNC, standbyListener.getAccumulatedStatus().size());
+        Assert.assertTrue(standbyListener.getAccumulatedStatus().get(4));
+        Assert.assertFalse(standbyListener.getAccumulatedStatus().get(3));
 
         // Verify that snapshot sync was triggered by checking the completion status on the ReplicationStatus table
         // on Source
@@ -390,8 +707,10 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         statusUpdateLatch.await();
         verifyDataOnSink(numWrites);
 
-        corfuStoreSink.unsubscribeListener(sinkStatusListener);
-    }
+        statusUpdateLatch = new CountDownLatch(NUM_SNAPSHOT_SYNC_UPDATES_ON_SINK_STATUS_TABLE);
+        standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
+        corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
     private void verifySnapshotSyncAfterCPTrim() throws Exception {
         CountDownLatch statusUpdateLatch = new CountDownLatch(1);
@@ -407,7 +726,18 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         log.info("Waiting for updates after CP+Trim on the Source");
         statusUpdateLatch.await();
 
-        corfuStoreSink.unsubscribeListener(sinkStatusListener);
+        Assert.assertEquals(NUM_SNAPSHOT_SYNC_UPDATES_ON_SINK_STATUS_TABLE, standbyListener.getAccumulatedStatus().size());
+        Assert.assertTrue(standbyListener.getAccumulatedStatus().get(1));
+        Assert.assertFalse(standbyListener.getAccumulatedStatus().get(0));
+
+        // Verify that the streams only on standby prior to upgrade have data
+        // and no data is lost for the common streams
+        verifyDataOnStandby(commonStreams, NUM_WRITES + NUM_WRITES / 2);
+        verifyDataOnStandby(standbyOnlyStreams, NUM_WRITES);
+        verifyDataOnStandby(activeOnlyStreams, NUM_WRITES);
+
+        corfuStoreStandby.unsubscribeListener(snapshotSyncPluginListener);
+        corfuStoreStandby.unsubscribeListener(standbyListener);
     }
 
     private void verifySnapshotSyncAfterSourceUpgrade() throws Exception {
