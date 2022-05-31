@@ -1,11 +1,17 @@
-package org.corfudb.infrastructure;
+package org.corfudb.infrastructure.logreplication.infrastructure;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.TextFormat;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.AbstractServer;
+import org.corfudb.infrastructure.IServerRouter;
+import org.corfudb.infrastructure.RequestHandler;
+import org.corfudb.infrastructure.RequestHandlerMethods;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
@@ -19,6 +25,9 @@ import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -26,15 +35,14 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeade
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeadershipResponse;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
+import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 
 /**
- * This class represents the Log Replication Server, which is
- * responsible of providing Log Replication across sites.
+ * This class represents the Log Replication Server, which is responsible of providing Log Replication across sites.
  *
- * The Log Replication Server, handles log replication entries--which
- * represent parts of a Snapshot (full) sync or a Log Entry (delta) sync
- * and also handles negotiation messages, which allows the Source Replicator
- * to get a view of the last synchronized point at the remote cluster.
+ * The Log Replication Server, handles log replication entries--which represent parts of a Snapshot (full) sync or a
+ * Log Entry (delta) sync and also handles negotiation messages, which allows the Source Replicator to get a view of
+ * the last synchronized point at the remote cluster.
  */
 @Slf4j
 public class LogReplicationServer extends AbstractServer {
@@ -47,15 +55,11 @@ public class LogReplicationServer extends AbstractServer {
 
     private final ExecutorService executor;
 
-    @Getter
-    private final LogReplicationMetadataManager metadataManager;
+    private static final String EXECUTOR_NAME_PREFIX = "LogReplicationServer-";
 
-    @Getter
-    private final LogReplicationSinkManager sinkManager;
+    private Map<String, LogReplicationSinkManager> sourceClientToSinkManagerMap = new HashMap<>();
 
     private final AtomicBoolean isLeader = new AtomicBoolean(false);
-    private final AtomicBoolean isActive = new AtomicBoolean(false);
-    private final AtomicBoolean isStandby = new AtomicBoolean(false);
 
     /**
      * RequestHandlerMethods for the LogReplication server
@@ -67,20 +71,35 @@ public class LogReplicationServer extends AbstractServer {
         return RequestHandlerMethods.generateHandler(MethodHandles.lookup(), this);
     }
 
-    public LogReplicationServer(@Nonnull ServerContext context, @Nonnull  LogReplicationConfig logReplicationConfig,
-                                @Nonnull LogReplicationMetadataManager metadataManager, String corfuEndpoint,
-                                long topologyConfigId, String localNodeId) {
-        this(context, metadataManager, new LogReplicationSinkManager(corfuEndpoint, logReplicationConfig,
-                metadataManager, context, topologyConfigId), localNodeId);
+    public LogReplicationServer(@Nonnull ServerContext context, String localNodeId, LogReplicationConfig config,
+        Set<String> remoteClusterIds, String localEndpoint, long topologyConfigId,
+        Map<String, LogReplicationMetadataManager> sourceClientToMetadataManagerMap) {
+        this.localNodeId = localNodeId;
+        createSinkManagers(config, remoteClusterIds, localEndpoint, context, sourceClientToMetadataManagerMap,
+            topologyConfigId);
+        this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
 
-    public LogReplicationServer(@Nonnull ServerContext context,
-                                @Nonnull LogReplicationMetadataManager metadataManager,
-                                @Nonnull LogReplicationSinkManager sinkManager, String localNodeId) {
+    @VisibleForTesting
+    public LogReplicationServer(@Nonnull ServerContext context, LogReplicationSinkManager sinkManager,
+        String localNodeId) {
+        sourceClientToSinkManagerMap.put(sinkManager.getSourceClusterId(), sinkManager);
         this.localNodeId = localNodeId;
-        this.metadataManager = metadataManager;
-        this.sinkManager = sinkManager;
-        this.executor = context.getExecutorService(1, "LogReplicationServer-");
+        this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
+    }
+
+     private void createSinkManagers(LogReplicationConfig logReplicationConfig, Set<String> remoteClusterIds,
+        String localEndpoint, ServerContext serverContext,
+        Map<String, LogReplicationMetadataManager> sourceClientToMetadataManagerMap, long topologyConfigId) {
+        for (String remoteClusterId : remoteClusterIds) {
+            LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(localEndpoint, logReplicationConfig,
+                sourceClientToMetadataManagerMap.get(remoteClusterId), serverContext, topologyConfigId, remoteClusterId);
+            sourceClientToSinkManagerMap.put(remoteClusterId, sinkManager);
+        }
+    }
+
+    public void updateTopologyConfigId(long topologyConfigId) {
+        sourceClientToSinkManagerMap.values().forEach(sinkManager -> sinkManager.updateTopologyConfigId(topologyConfigId));
     }
 
     /* ************ Override Methods ************ */
@@ -94,6 +113,8 @@ public class LogReplicationServer extends AbstractServer {
     public void shutdown() {
         super.shutdown();
         executor.shutdown();
+        sourceClientToSinkManagerMap.values().forEach(sinkManager -> sinkManager.shutdown());
+        sourceClientToSinkManagerMap.clear();
     }
 
     /* ************ Server Handlers ************ */
@@ -113,27 +134,39 @@ public class LogReplicationServer extends AbstractServer {
                                       @Nonnull IServerRouter router) {
         log.trace("Log Replication Entry received by Server.");
 
-        if (isStandby.get() && isLeader(request, ctx, router, true)) {
+        if (isLeader.get()) {
+            // Get the Sink Manager corresponding to the remote cluster
+            LogReplicationSinkManager sinkManager = sourceClientToSinkManagerMap.get(getUUID(request.getHeader()
+                .getClusterId()).toString());
+
+            // If no sink Manager is found, drop the message and log an error
+            if (sinkManager == null) {
+                log.error("Sink Manager not found for remote cluster {}.  This could be due to a topology mismatch.",
+                    getUUID(request.getHeader().getClusterId()).toString());
+                return;
+            }
+
             // Forward the received message to the Sink Manager for apply
-            LogReplicationEntryMsg ack =
-                    sinkManager.receive(request.getPayload().getLrEntry());
+            LogReplicationEntryMsg ack = sourceClientToSinkManagerMap.get(getUUID(request.getHeader().getClusterId())
+                .toString()).receive(request.getPayload().getLrEntry());
 
             if (ack != null) {
                 long ts = ack.getMetadata().getEntryType().equals(LogReplicationEntryType.LOG_ENTRY_REPLICATED) ?
-                        ack.getMetadata().getTimestamp() : ack.getMetadata().getSnapshotTimestamp();
+                    ack.getMetadata().getTimestamp() : ack.getMetadata().getSnapshotTimestamp();
                 log.info("Sending ACK {} on {} to Client ", TextFormat.shortDebugString(ack.getMetadata()), ts);
 
-                ResponsePayloadMsg payload = ResponsePayloadMsg.newBuilder()
-                        .setLrEntryAck(ack)
-                        .build();
+                ResponsePayloadMsg payload = ResponsePayloadMsg.newBuilder().setLrEntryAck(ack).build();
                 HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
                 ResponseMsg response = getResponseMsg(responseHeader, payload);
                 router.sendResponse(response, ctx);
             }
-        } else if (!isStandby.get()) {
-            log.warn("Dropping log replication entry as this cluster's role is not Standby");
         } else {
-            log.warn("Dropping log replication entry as this node is not the leader.");
+            LogReplicationEntryMsg entryMsg = request.getPayload().getLrEntry();
+            LogReplicationEntryType entryType = entryMsg.getMetadata().getEntryType();
+            log.warn("Dropping received message of type {} while NOT LEADER. snapshotSyncSeqNumber={}, ts={}," +
+                "syncRequestId={}", entryType, entryMsg.getMetadata().getSnapshotSyncSeqNum(),
+                entryMsg.getMetadata().getTimestamp(), entryMsg.getMetadata().getSyncRequestId());
+            sendLeadershipLoss(request, ctx, router);
         }
     }
 
@@ -152,8 +185,19 @@ public class LogReplicationServer extends AbstractServer {
                                        @Nonnull IServerRouter router) {
         log.info("Log Replication Metadata Request received by Server.");
 
-        if (isLeader(request, ctx, router, false)) {
+        if (isLeader.get()) {
+            LogReplicationSinkManager sinkManager = sourceClientToSinkManagerMap.get(
+                getUUID(request.getHeader().getClusterId()).toString());
+
+            // If no sink Manager is found, drop the message and log an error
+            if (sinkManager == null) {
+                log.error("Sink Manager not found for remote cluster {}.  This could be due to a topology mismatch.",
+                    getUUID(request.getHeader().getClusterId()).toString());
+                return;
+            }
+
             LogReplicationMetadataManager metadataMgr = sinkManager.getLogReplicationMetadataManager();
+
             ResponseMsg response = metadataMgr.getMetadataResponse(getHeaderMsg(request.getHeader()));
             log.info("Send Metadata response :: {}", TextFormat.shortDebugString(response.getPayload()));
             router.sendResponse(response, ctx);
@@ -163,7 +207,9 @@ public class LogReplicationServer extends AbstractServer {
                 sinkManager.resumeSnapshotApply();
             }
         } else {
-            log.warn("Dropping metadata request as this node is not the leader.");
+            log.warn("Dropping metadata request as this node is not the leader.  Request id = {}",
+                request.getHeader().getRequestId());
+            sendLeadershipLoss(request, ctx, router);
         }
     }
 
@@ -181,15 +227,10 @@ public class LogReplicationServer extends AbstractServer {
                                                      @Nonnull ChannelHandlerContext ctx,
                                                      @Nonnull IServerRouter router) {
         log.debug("Log Replication Query Leadership Request received by Server.");
-        if (!isStandby.get() && isLeader.get()) {
-            log.warn("This node is the leader but the current role of the cluster is not STANDBY");
-        }
         HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
-        ResponseMsg response = getLeadershipResponse(responseHeader, isLeader.get(), localNodeId, isStandby.get());
+        ResponseMsg response = getLeadershipResponse(responseHeader, isLeader.get(), localNodeId);
         router.sendResponse(response, ctx);
     }
-
-    /* ************ Private / Utility Methods ************ */
 
     private boolean isSnapshotApplyPending(LogReplicationMetadataManager metadataMgr) {
         return (metadataMgr.getLastStartedSnapshotTimestamp() == metadataMgr.getLastTransferredSnapshotTimestamp()) &&
@@ -197,54 +238,27 @@ public class LogReplicationServer extends AbstractServer {
     }
 
     /**
-     * Verify if current node is still the lead receiving node.
-     *
-     * @return true, if leader node.
-     *         false, otherwise.
+     * Send a leadership loss response.  This will re-trigger leadership discovery on the Source.
+     * @param request Incoming request message
+     * @param ctx Channel context
+     * @param router Client router for sending the NACK
      */
-    protected synchronized boolean isLeader(@Nonnull RequestMsg request,
-                                            @Nonnull ChannelHandlerContext ctx,
-                                            @Nonnull IServerRouter router, boolean isLogEntry) {
-        // If the current cluster has switched to the active role (no longer the receiver) or it is no longer the leader,
-        // skip message processing (drop received message) and nack on leadership (loss of leadership)
-        // This will re-trigger leadership discovery on the sender.
-        boolean lostLeadership = isActive.get() || !isLeader.get();
-
-        if (lostLeadership) {
-
-            if (isLogEntry) {
-                LogReplicationEntryMsg entryMsg = request.getPayload().getLrEntry();
-                LogReplicationEntryType entryType = entryMsg.getMetadata().getEntryType();
-                log.warn("Received message of type {} while NOT LEADER. snapshotSyncSeqNumber={}, ts={}, syncRequestId={}", entryType,
-                        entryMsg.getMetadata().getSnapshotSyncSeqNum(), entryMsg.getMetadata().getTimestamp(),
-                        entryMsg.getMetadata().getSyncRequestId());
-            }
-
-            log.warn("This node has changed, active={}, leader={}. Dropping message type={}, id={}", isActive.get(),
-                    isLeader.get(), request.getPayload().getPayloadCase(), request.getHeader().getRequestId());
-            HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
-            ResponseMsg response = getLeadershipLoss(responseHeader, localNodeId);
-            router.sendResponse(response, ctx);
-        }
-
-        return !lostLeadership;
+    private void sendLeadershipLoss(@Nonnull RequestMsg request,
+        @Nonnull ChannelHandlerContext ctx, @Nonnull IServerRouter router) {
+        HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
+        ResponseMsg response = getLeadershipLoss(responseHeader, localNodeId);
+        router.sendResponse(response, ctx);
     }
 
-    /* ************ Public Methods ************ */
-
-    public synchronized void setLeadership(boolean leader) {
+    public void setLeadership(boolean leader) {
         isLeader.set(leader);
-    }
 
-    public void stopSink() {
-        sinkManager.stopOnLeadershipLoss();
-    }
-
-    public synchronized void setActive(boolean active) {
-        isActive.set(active);
-    }
-
-    public synchronized void setStandby(boolean standby) {
-        isStandby.set(standby);
+        if (isLeader.get()) {
+            // Reset the Sink Managers on acquiring leadership
+            sourceClientToSinkManagerMap.values().forEach(sinkManager -> sinkManager.reset());
+        } else {
+            // Stop the Sink Managers if leadership is lost
+            sourceClientToSinkManagerMap.values().forEach(sinkManager -> sinkManager.stopOnLeadershipLoss());
+        }
     }
 }
