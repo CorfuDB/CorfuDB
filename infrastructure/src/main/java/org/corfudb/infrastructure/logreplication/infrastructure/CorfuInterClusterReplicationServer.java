@@ -187,15 +187,6 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + " --version                                                                "
                     + "              Show version\n";
 
-    // Active Corfu Server Node.
-    private volatile CorfuInterClusterReplicationServerNode activeServer;
-
-    // Flag if set to true - causes the Corfu Server to shutdown.
-    private volatile boolean shutdownServer = false;
-
-    // If set to true - triggers a reset of the server by wiping off all the data.
-    private volatile boolean cleanupServer = false;
-
     // Error code required to detect an ungraceful shutdown.
     private static final int EXIT_ERROR_CODE = 100;
 
@@ -203,17 +194,14 @@ public class CorfuInterClusterReplicationServer implements Runnable {
 
     private static final String DEFAULT_METRICS_LOGGER_NAME = "LogReplicationMetrics";
 
-    // Getter for testing
-    @Getter
-    private CorfuReplicationClusterManagerAdapter clusterManagerAdapter;
-
     @Getter
     private CorfuReplicationDiscoveryService replicationDiscoveryService;
 
     private final String[] args;
 
     public static void main(String[] args) {
-        CorfuInterClusterReplicationServer corfuReplicationServer = new CorfuInterClusterReplicationServer(args);
+        CorfuInterClusterReplicationServer corfuReplicationServer =
+            new CorfuInterClusterReplicationServer(args);
         corfuReplicationServer.run();
     }
 
@@ -251,34 +239,12 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         shutdownThread.setName("ShutdownThread");
         Runtime.getRuntime().addShutdownHook(shutdownThread);
 
-        // Manages the lifecycle of the Corfu Log Replication Server.
-        while (!shutdownServer) {
-            try {
-                CompletableFuture<CorfuInterClusterReplicationServerNode> discoveryServiceCallback = startDiscoveryService(serverContext);
-
-                log.info("Wait for Discovery Service to provide a view of the topology...");
-
-                // Block until the replication context is provided by the Discovery service
-                activeServer = discoveryServiceCallback.get();
-
-                log.info("Discovery Service completed. Start Log Replication Service...");
-
-                activeServer.startAndListen();
-            } catch (Throwable th) {
-                log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
-                System.exit(EXIT_ERROR_CODE);
-            }
-
-            if (cleanupServer) {
-                cleanupServer = false;
-            }
-
-            if (!shutdownServer) {
-                log.info("main: Server restarting.");
-            }
+        try {
+            startDiscoveryService(serverContext);
+        } catch (Throwable th) {
+            log.error("Corfu Replication Service exiting due to unrecoverable error: ", th);
+            System.exit(EXIT_ERROR_CODE);
         }
-
-        log.info("main: Server exiting due to shutdown");
         flushAsyncLogAppender();
     }
 
@@ -304,25 +270,17 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      * Start Corfu Log Replication Discovery Service
      *
      * @param serverContext server context (server information)
-     * @return completable future for discovered topology
      */
-    private CompletableFuture<CorfuInterClusterReplicationServerNode> startDiscoveryService(ServerContext serverContext) {
+    private void startDiscoveryService(ServerContext serverContext) {
 
         log.info("Start Discovery Service.");
-        CompletableFuture<CorfuInterClusterReplicationServerNode> discoveryServiceCallback = new CompletableFuture<>();
-
-        this.clusterManagerAdapter = buildClusterManagerAdapter(serverContext.getPluginConfigFilePath());
 
         // Start LogReplicationDiscovery Service, responsible for
         // acquiring lock, retrieving Site Manager Info and processing this info
         // so this node is initialized as Source (sender) or Sink (receiver)
-        replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext,
-                clusterManagerAdapter, discoveryServiceCallback);
-
-        Thread replicationDiscoveryThread = new Thread(replicationDiscoveryService, "discovery-service");
-        replicationDiscoveryThread.start();
-
-        return discoveryServiceCallback;
+        replicationDiscoveryService = new CorfuReplicationDiscoveryService(
+            serverContext);
+        replicationDiscoveryService.run();
     }
 
     /**
@@ -344,8 +302,8 @@ public class CorfuInterClusterReplicationServer implements Runnable {
             try {
                 LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
                 Optional.ofNullable(context.exists(DEFAULT_METRICS_LOGGER_NAME))
-                        .ifPresent(logger -> MeterRegistryProvider.MeterRegistryInitializer.initServerMetrics(logger,
-                                DEFAULT_METRICS_LOGGING_INTERVAL_DURATION, localEndpoint));
+                    .ifPresent(logger -> MeterRegistryProvider.MeterRegistryInitializer.initServerMetrics(logger,
+                        DEFAULT_METRICS_LOGGING_INTERVAL_DURATION, localEndpoint));
             } catch (IllegalStateException ise) {
                 log.warn("Registry has been previously initialized. Skipping.");
             }
@@ -357,10 +315,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      */
     public void cleanShutdown() {
         log.info("CleanShutdown: Starting Cleanup.");
-        shutdownServer = true;
-        if (activeServer != null) {
-            activeServer.close();
-        }
+
         if (replicationDiscoveryService != null) {
             replicationDiscoveryService.shutdown();
         }
@@ -415,24 +370,5 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         println("Serving on port " + port);
         println("------------------------------------");
         println("");
-    }
-
-    /**
-     * Retrieve Cluster Manager Adapter, i.e., the adapter to external provider of the topology.
-     *
-     * @return cluster manager adapter instance
-     */
-    private CorfuReplicationClusterManagerAdapter buildClusterManagerAdapter(String pluginConfigFilePath) {
-
-        LogReplicationPluginConfig config = new LogReplicationPluginConfig(pluginConfigFilePath);
-        File jar = new File(config.getTopologyManagerAdapterJARPath());
-
-        try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
-            Class adapter = Class.forName(config.getTopologyManagerAdapterName(), true, child);
-            return (CorfuReplicationClusterManagerAdapter) adapter.getDeclaredConstructor().newInstance();
-        } catch (Exception e) {
-            log.error("Fatal error: Failed to create serverAdapter", e);
-            throw new UnrecoverableCorfuError(e);
-        }
     }
 }
