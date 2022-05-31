@@ -136,7 +136,7 @@ public class LogReplicationConfigManager {
      */
     public boolean loadRegistryTableEntries() {
         try {
-            log.info("Sync in-memory registry table entries with retry.");
+            log.trace("Sync in-memory registry table entries with retry.");
             return IRetry.build(ExponentialBackoffRetry.class, () -> {
                 try {
                     StreamAddressSpace currentAddressSpace = rt.getSequencerView().getStreamAddressSpace(
