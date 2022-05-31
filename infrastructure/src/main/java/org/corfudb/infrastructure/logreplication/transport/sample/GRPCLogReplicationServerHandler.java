@@ -2,13 +2,16 @@ package org.corfudb.infrastructure.logreplication.transport.sample;
 
 import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
+import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -27,17 +30,19 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
     LogReplicationServerRouter router;
 
     /*
-     * Map of Request ID to Stream Observer to send responses back to the client. Used for blocking calls.
+     * Map of (Remote Cluster Id, Request Id) pair to Stream Observer to send responses back to the client. Used for
+     * blocking calls.
      */
-    Map<Long, StreamObserver<ResponseMsg>> streamObserverMap;
+    Map<Pair<UuidMsg, Long>, StreamObserver<ResponseMsg>> streamObserverMap;
 
     /*
-     * Map of Sync Request ID to Stream Observer to send responses back to the client. Used for async calls.
+     * Map of (Remote Cluster Id, Sync Request Id) pair to Stream Observer to send responses back to the client. Used
+     * for async calls.
      *
      * Note: we cannot rely on the request ID, because for client streaming APIs this will change for each
      * message, despite being part of the same stream.
      */
-    Map<Long, StreamObserver<ResponseMsg>> replicationStreamObserverMap;
+    Map<Pair<UuidMsg, Long>, StreamObserver<ResponseMsg>> replicationStreamObserverMap;
 
     public GRPCLogReplicationServerHandler(LogReplicationServerRouter router) {
         this.router = router;
@@ -50,14 +55,16 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
         log.trace("Received[{}]: {}", request.getHeader().getRequestId(),
                 request.getPayload().getPayloadCase().name());
         router.receive(request);
-        streamObserverMap.put(request.getHeader().getRequestId(), responseObserver);
+        streamObserverMap.put(Pair.of(request.getHeader().getClusterId(), request.getHeader().getRequestId()),
+            responseObserver);
     }
 
     @Override
     public void queryLeadership(RequestMsg request, StreamObserver<ResponseMsg> responseObserver) {
         log.trace("Received[{}]: {}", request.getHeader().getRequestId(),
                 request.getPayload().getPayloadCase().name());
-        streamObserverMap.put(request.getHeader().getRequestId(), responseObserver);
+        streamObserverMap.put(Pair.of(request.getHeader().getClusterId(), request.getHeader().getRequestId()),
+            responseObserver);
         router.receive(request);
     }
 
@@ -73,7 +80,8 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
 
                 // Register at the observable first.
                 try {
-                    replicationStreamObserverMap.putIfAbsent(requestId, responseObserver);
+                    replicationStreamObserverMap.putIfAbsent(
+                        Pair.of(replicationCorfuMessage.getHeader().getClusterId(), requestId), responseObserver);
                 } catch (Exception e) {
                     log.error("Exception caught when unpacking log replication entry {}. Skipping message.",
                             requestId, e);
@@ -96,47 +104,52 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
     }
 
     public void send(ResponseMsg msg) {
+        long requestId = msg.getHeader().getRequestId();
+        UuidMsg clusterId = msg.getHeader().getClusterId();
+
         // Case: message to send is an ACK (async observers)
         if (msg.getPayload().getPayloadCase().equals(ResponsePayloadMsg.PayloadCase.LR_ENTRY_ACK)) {
             try {
-                long requestId = msg.getHeader().getRequestId();
-
-                if (!replicationStreamObserverMap.containsKey(requestId)) {
+                if (!replicationStreamObserverMap.containsKey(
+                    Pair.of(clusterId, requestId))) {
                     log.warn("Corfu Message {} has no pending observer. Message {} will not be sent.",
-                            msg.getHeader().getRequestId(), msg.getPayload().getPayloadCase().name());
+                        msg.getHeader().getRequestId(), msg.getPayload().getPayloadCase().name());
                     log.info("Stream observers in map: {}", replicationStreamObserverMap.keySet());
                     return;
                 }
 
-                StreamObserver<ResponseMsg> observer = replicationStreamObserverMap.get(requestId);
-                log.info("Sending[{}]: {}", requestId, msg.getPayload().getPayloadCase().name());
+                StreamObserver<ResponseMsg> observer = replicationStreamObserverMap.get(Pair.of(clusterId, requestId));
+                log.info("Sending[{}:{}]: {}", clusterId, requestId,
+                    msg.getPayload().getPayloadCase().name());
                 observer.onNext(msg);
                 observer.onCompleted();
 
-                // Remove observer as response was already sent
+                // Remove observer as response was already sent.
                 // Since we send summarized ACKs (to avoid memory leaks) remove all observers lower or equal than
                 // the one for which a response is being sent.
-                replicationStreamObserverMap.keySet().removeIf(id -> id <= requestId);
+                replicationStreamObserverMap.keySet().removeIf(id ->
+                    id.getRight() <= requestId &&
+                    Objects.equals(id.getLeft(), clusterId));
             } catch (Exception e) {
                 log.error("Caught exception while trying to send message {}", msg.getHeader().getRequestId(), e);
             }
 
         } else {
 
-            if (!streamObserverMap.containsKey(msg.getHeader().getRequestId())) {
+            if (!streamObserverMap.containsKey(Pair.of(clusterId, requestId))) {
                 log.warn("Corfu Message {} has no pending observer. Message {} will not be sent.",
-                        msg.getHeader().getRequestId(), msg.getPayload().getPayloadCase().name());
+                    requestId, msg.getPayload().getPayloadCase().name());
                 log.info("Stream observers in map: {}", streamObserverMap.keySet());
                 return;
             }
 
-            StreamObserver<ResponseMsg> observer = streamObserverMap.get(msg.getHeader().getRequestId());
-            log.info("Sending[{}]: {}", msg.getHeader().getRequestId(), msg.getPayload().getPayloadCase().name());
+            StreamObserver<ResponseMsg> observer = streamObserverMap.get(Pair.of(clusterId, requestId));
+            log.info("Sending[{}]: {}", requestId, msg.getPayload().getPayloadCase().name());
             observer.onNext(msg);
             observer.onCompleted();
 
             // Remove observer as response was already sent
-            streamObserverMap.remove(msg.getHeader().getRequestId());
+            streamObserverMap.remove(Pair.of(clusterId, requestId));
         }
     }
 

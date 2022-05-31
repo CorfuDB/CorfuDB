@@ -101,16 +101,20 @@ public class LogReplicationSourceManager {
             throw new IllegalArgumentException("Invalid Log Replication: Streams to replicate is EMPTY");
         }
 
-        ExecutorService logReplicationFSMWorkers = Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
-                ThreadFactoryBuilder().setNameFormat("state-machine-worker").build());
+        ExecutorService logReplicationFSMWorkers = Executors.newFixedThreadPool(
+            DEFAULT_FSM_WORKER_THREADS, new ThreadFactoryBuilder()
+                .setNameFormat("state-machine-worker-" +
+                    params.getRemoteClusterDescriptor().getClusterId()).build());
+
         ReadProcessor readProcessor = new DefaultReadProcessor(runtime);
         this.metadataManager = metadataManager;
         // Ack Reader for Snapshot and LogEntry Sync
-        this.ackReader = new LogReplicationAckReader(this.metadataManager, config, runtime,
-                params.getRemoteClusterDescriptor().getClusterId());
+        this.ackReader = new LogReplicationAckReader(this.metadataManager, config,
+            runtime, params.getRemoteClusterDescriptor().getClusterId());
 
-        this.logReplicationFSM = new LogReplicationFSM(this.runtime, config, params.getRemoteClusterDescriptor(),
-                dataSender, readProcessor, logReplicationFSMWorkers, ackReader, tableManagerPlugin);
+        this.logReplicationFSM = new LogReplicationFSM(this.runtime, config,
+            params.getRemoteClusterDescriptor(), dataSender, readProcessor,
+            logReplicationFSMWorkers, ackReader, tableManagerPlugin);
 
         this.logReplicationFSM.setTopologyConfigId(params.getTopologyConfigId());
         this.ackReader.setLogEntryReader(this.logReplicationFSM.getLogEntryReader());
