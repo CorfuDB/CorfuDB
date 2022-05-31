@@ -2,13 +2,11 @@ package org.corfudb.infrastructure.logreplication;
 
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Observable;
 import java.util.Observer;
@@ -21,10 +19,10 @@ import com.google.protobuf.ByteString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.common.util.ObservableValue;
-import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
-import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.EmptyDataSender;
 import org.corfudb.infrastructure.logreplication.replication.fsm.EmptySnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.InSnapshotSyncState;
@@ -40,10 +38,11 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.TestSnapshotRea
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.DefaultReadProcessor;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -51,6 +50,7 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.TableRegistry;
 import org.junit.After;
@@ -70,10 +70,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private static final String TEST_STREAM_NAME = "StreamA";
     private static final int BATCH_SIZE = 2;
     private static final int WAIT_TIME = 100;
-    private static final int CORFU_PORT = 9000;
     private static final int TEST_TOPOLOGY_CONFIG_ID = 1;
-    private static final String TEST_LOCAL_CLUSTER_ID = "local_cluster";
-    private static final int MAX_SNAPSHOT_ENTRIES_APPLIED = 50;
+    private static final String LOCAL_SOURCE_CLUSTER_ID = "456e4567-e89b-12d3-a456-556642440001";
+
 
     // This semaphore is used to block until the triggering event causes the transition to a new state
     private final Semaphore transitionAvailable = new Semaphore(1, true);
@@ -91,6 +90,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private DataSender dataSender;
     private SnapshotReader snapshotReader;
     private LogReplicationAckReader ackReader;
+
+    private static final String pluginConfigFilePath = "src/test/resources/transport/nettyConfig.properties";
 
     @Before
     public void setRuntime() {
@@ -452,7 +453,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Read to verify data is there
         int index = 0;
         for (TokenResponse token : writeTokens) {
-            assertThat(runtime.getAddressSpaceView().read((long)token.getSequence()).getPayload(getRuntime()))
+            assertThat(runtime.getAddressSpaceView().read(token.getSequence()).getPayload(getRuntime()))
                     .isEqualTo( String.format(PAYLOAD_FORMAT, index).getBytes());
             index++;
         }
@@ -470,12 +471,11 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         String fullyQualifiedStreamName = TableRegistry.getFullyQualifiedTableName(TEST_NAMESPACE, TEST_STREAM_NAME);
         LogEntryReader logEntryReader = new TestLogEntryReader();
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, TEST_TOPOLOGY_CONFIG_ID,
-                TEST_LOCAL_CLUSTER_ID);
-        CorfuRuntime newRT = getNewRuntime(getDefaultNode()).connect();
-        LogReplicationConfigManager tableManagerPlugin = new LogReplicationConfigManager(newRT);
-        LogReplicationConfig config = new LogReplicationConfig(tableManagerPlugin, DEFAULT_MAX_NUM_MSG_PER_BATCH,
-                MAX_DATA_MSG_SIZE_SUPPORTED, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
+
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime, LOCAL_SOURCE_CLUSTER_ID);
+        LogReplicationUpgradeManager upgradeManager = new LogReplicationUpgradeManager(runtime, pluginConfigFilePath);
+        LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
+        configManager.generateConfig(Collections.singleton(session));
 
         switch(readerImpl) {
             case EMPTY:
@@ -498,20 +498,24 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 dataSender = new TestDataSender();
                 break;
             case STREAMS:
-                // Default implementation used for Log Replication (stream-based)
-                snapshotReader = new StreamsSnapshotReader(newRT, config);
+                CorfuRuntime runtime = getNewRuntime(getDefaultNode()).connect();
+                snapshotReader = new StreamsSnapshotReader(runtime, session,
+                        new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
+                                "test:" + SERVERS.PORT_0));
                 dataSender = new TestDataSender();
                 break;
             default:
                 break;
         }
 
-        ackReader = new LogReplicationAckReader(metadataManager, config, runtime, TEST_LOCAL_CLUSTER_ID);
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, TEST_TOPOLOGY_CONFIG_ID);
+        LogReplicationContext context = new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
+                "test:" + SERVERS.PORT_0);
+        ackReader = new LogReplicationAckReader(metadataManager, runtime, session, context);
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
-                new DefaultReadProcessor(runtime), config, new ClusterDescriptor("Cluster-Local",
-                LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT),
+                new DefaultReadProcessor(runtime), upgradeManager,
                 Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()),
-                ackReader, tableManagerPlugin);
+                ackReader, session, context);
         ackReader.setLogEntryReader(fsm.getLogEntryReader());
         transitionObservable = fsm.getNumTransitions();
         transitionObservable.addObserver(this);
@@ -519,7 +523,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         if (observeSnapshotSync) {
             log.debug("Observe snapshot sync");
             snapshotMessageCounterObservable = ((InSnapshotSyncState) fsm.getStates()
-                    .get(LogReplicationStateType.IN_SNAPSHOT_SYNC)).getSnapshotSender().getObservedCounter();
+                .get(LogReplicationStateType.IN_SNAPSHOT_SYNC)).getSnapshotSender().getObservedCounter();
             snapshotMessageCounterObservable.addObserver(this);
         }
     }
