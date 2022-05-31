@@ -9,18 +9,14 @@ import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
+import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.view.Layout;
 
-import java.io.File;
-import java.net.URL;
-import java.net.URLClassLoader;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -33,14 +29,18 @@ import java.util.Optional;
  * Created by annym on 14/5/20.
  */
 @Slf4j
-public class LogReplicationServerRouter implements IServerRouter {
+public class LogReplicationSinkServerRouter implements IServerRouter {
 
+    /**
+     * Server transport adapter
+     */
     @Getter
-    private final IServerChannelAdapter serverAdapter;
+    private IServerChannelAdapter serverAdapter;
 
     /**
      * This map stores the mapping from message type to netty server handler.
      */
+    @Getter
     private final Map<RequestPayloadMsg.PayloadCase, AbstractServer> handlerMap;
 
     /**
@@ -50,17 +50,18 @@ public class LogReplicationServerRouter implements IServerRouter {
     @Setter
     private volatile long serverEpoch;
 
-    /** The {@link AbstractServer}s this {@link LogReplicationServerRouter} routes messages for. */
+    /** The {@link AbstractServer}s this {@link LogReplicationSinkServerRouter} routes messages for. */
     final List<AbstractServer> servers;
 
-    /** Construct a new {@link LogReplicationServerRouter}.
+
+    /** Construct a new {@link LogReplicationSinkServerRouter}.
      *
-     * @param servers   A list of {@link AbstractServer}s this router will route
+     * @param serverMap   A map of {@link AbstractServer}s this router will route
      *                  messages for.
      */
-    public LogReplicationServerRouter(List<AbstractServer> servers) {
-        this.serverEpoch = ((BaseServer) servers.get(0)).serverContext.getServerEpoch();
-        this.servers = ImmutableList.copyOf(servers);
+    public LogReplicationSinkServerRouter(Map<Class, AbstractServer> serverMap) {
+        this.serverEpoch = ((BaseServer) serverMap.get(BaseServer.class)).serverContext.getServerEpoch();
+        this.servers = ImmutableList.copyOf(serverMap.values());
         this.handlerMap = new EnumMap<>(RequestPayloadMsg.PayloadCase.class);
 
         servers.forEach(server -> {
@@ -70,32 +71,19 @@ public class LogReplicationServerRouter implements IServerRouter {
                 log.trace("No registered CorfuMsg handler for server {}", server, ex);
             }
         });
-
-        this.serverAdapter = getAdapter(((BaseServer) servers.get(0)).serverContext);
     }
 
-    private IServerChannelAdapter getAdapter(ServerContext serverContext) {
-
-        LogReplicationPluginConfig config = new LogReplicationPluginConfig(serverContext.getPluginConfigFilePath());
-        File jar = new File(config.getTransportAdapterJARPath());
-
-        try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
-            Class adapter = Class.forName(config.getTransportServerClassCanonicalName(), true, child);
-            return (IServerChannelAdapter) adapter.getDeclaredConstructor(
-                    ServerContext.class, LogReplicationServerRouter.class).newInstance(serverContext, this);
-        } catch (Exception e) {
-            log.error("Fatal error: Failed to create serverAdapter", e);
-            throw new UnrecoverableCorfuError(e);
-        }
+    public void setAdapter(IServerChannelAdapter serverAdapter) {
+        this.serverAdapter = serverAdapter;
     }
 
     // ============ IServerRouter Methods =============
 
     @Override
     public void sendResponse(ResponseMsg response, ChannelHandlerContext ctx) {
-        log.trace("Ready to send response {}", response.getPayload().getPayloadCase());
+        log.info("In SinkServerRouter Ready to send response {}", response.getPayload().getPayloadCase());
         try {
-            serverAdapter.send(response);
+                serverAdapter.send(response);
             log.trace("Sent response: {}", response);
         } catch (IllegalArgumentException e) {
             log.warn("Illegal response type. Ignoring message.", e);
@@ -126,7 +114,7 @@ public class LogReplicationServerRouter implements IServerRouter {
      * @param message
      */
     public void receive(RequestMsg message) {
-        log.trace("Received message {}", message.getPayload().getPayloadCase());
+        log.debug("Received message {}", message.getPayload().getPayloadCase());
 
         AbstractServer handler = handlerMap.get(message.getPayload().getPayloadCase());
         if (handler == null) {
@@ -152,6 +140,10 @@ public class LogReplicationServerRouter implements IServerRouter {
         }
     }
 
+    public void receive(ResponseMsg message) {
+        // no op.
+    }
+
     /**
      * Validate the epoch of a CorfuMsg, and send a WRONG_EPOCH response if
      * the server is in the wrong epoch. Ignored if the message type is reset (which
@@ -160,7 +152,7 @@ public class LogReplicationServerRouter implements IServerRouter {
      * @param header The incoming header to validate.
      * @return True, if the epoch is correct, but false otherwise.
      */
-    private boolean validateEpoch(HeaderMsg header) {
+    protected boolean validateEpoch(HeaderMsg header) {
         long serverEpoch = getServerEpoch();
         if (!header.getIgnoreEpoch() && header.getEpoch()!= serverEpoch) {
             log.trace("Incoming message with wrong epoch, got {}, expected {}",
