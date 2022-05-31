@@ -8,19 +8,34 @@ package org.corfudb.utils.lock;
 
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.protobuf.Message;
 import lombok.Data;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.CorfuStreamEntries;
+import org.corfudb.runtime.collections.CorfuStreamEntry;
+import org.corfudb.runtime.collections.StreamListener;
+import org.corfudb.runtime.ExampleSchemas.LockOp;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.utils.CommonTypes;
 import org.corfudb.utils.lock.LockDataTypes.LockId;
 import org.corfudb.utils.lock.persistence.LockStore;
 import org.corfudb.utils.lock.states.LockEvent;
+import org.corfudb.utils.lock.states.LockStateType;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 import java.util.concurrent.*;
+
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * Applications can register interest for a lock using the LockClient. When a lock is acquired on behalf of an instance
@@ -54,12 +69,18 @@ public class LockClient {
 
     private final ExecutorService lockListenerExecutor;
 
+    private final ScheduledExecutorService leaseMonitorScheduler;
+
+    private final TestLockEventListener testLockEventListener;
+
     // duration between monitoring runs
     @Setter
     private static int durationBetweenLockMonitorRuns = 10;
 
     // The context contains objects that are shared across the locks in this client.
     private final ClientContext clientContext;
+
+    private static final String LOCK_OP_TABLE_NAME = "LOCK_OP";
 
     @Getter
     private final UUID clientId;
@@ -87,7 +108,7 @@ public class LockClient {
         // Single threaded scheduler to monitor the acquired locks (lease)
         // A dedicated scheduler is required in case the task scheduler is stuck in some database operation
         // and the previous lock owner can effectively expire the lock.
-        ScheduledExecutorService leaseMonitorScheduler = Executors.newScheduledThreadPool(SINGLE_THREAD, runnable ->
+        leaseMonitorScheduler = Executors.newScheduledThreadPool(SINGLE_THREAD, runnable ->
         {
             Thread t = Executors.defaultThreadFactory().newThread(runnable);
             t.setName("LeaseMonitorThread");
@@ -114,6 +135,22 @@ public class LockClient {
         this.clientId = clientId;
         this.lockStore = new LockStore(corfuRuntime, clientId);
         this.clientContext = new ClientContext(clientId, lockStore, taskScheduler, lockListenerExecutor, leaseMonitorScheduler);
+        testLockEventListener = new TestLockEventListener(this, corfuRuntime);
+        try {
+            lockStore.getCorfuStore().openTable(
+                CORFU_SYSTEM_NAMESPACE, LOCK_OP_TABLE_NAME,
+                LockOp.class, LockOp.class, null,
+                TableOptions.fromProtoSchema(LockOp.class));
+            long trimMark =
+                corfuRuntime.getLayoutView().getRuntimeLayout().getLogUnitClient(corfuRuntime.getLayoutServers().get(0)).getTrimMark().get();
+            CorfuStoreMetadata.Timestamp ts = CorfuStoreMetadata.Timestamp.newBuilder()
+                .setEpoch(corfuRuntime.getLayoutView().getRuntimeLayout().getLayout().getEpoch())
+                .setSequence(trimMark).build();
+            lockStore.getCorfuStore().subscribeListener(testLockEventListener,
+                CORFU_SYSTEM_NAMESPACE, "lock_test", ts);
+        } catch(ExecutionException | InterruptedException e) {
+            log.error("Could not start Test Listener", e);
+        }
     }
 
     /**
@@ -155,7 +192,8 @@ public class LockClient {
                     try {
                         Collection<LockId> locksWithExpiredLeases = lockStore.filterLocksWithExpiredLeases(locks.keySet());
                         for (LockId lockId : locksWithExpiredLeases) {
-                            log.debug("LockClient: lease revoked for lock {}", lockId.getLockName());
+                            log.debug("LockClient: lease revoked for lock {}",
+                                lockId.getLockName());
                             locks.get(lockId).input(LockEvent.LEASE_REVOKED);
                         }
                     } catch (Exception ex) {
@@ -174,6 +212,8 @@ public class LockClient {
         this.lockMonitorScheduler.shutdown();
         this.taskScheduler.shutdown();
         this.lockListenerExecutor.shutdown();
+        this.leaseMonitorScheduler.shutdown();
+        lockStore.getCorfuStore().unsubscribeListener(testLockEventListener);
     }
 
     /**
@@ -190,7 +230,8 @@ public class LockClient {
         private final ExecutorService lockListenerExecutor;
 
         public ClientContext(UUID clientUuid, LockStore lockStore, ScheduledExecutorService taskScheduler,
-                             ExecutorService lockListenerExecutor, ScheduledExecutorService leaseMonitorScheduler) {
+                             ExecutorService lockListenerExecutor,
+                             ScheduledExecutorService leaseMonitorScheduler) {
             this.clientUuid = clientUuid;
             this.lockStore = lockStore;
             this.taskScheduler = taskScheduler;
@@ -199,5 +240,101 @@ public class LockClient {
         }
     }
 
+    private static class TestLockEventListener implements StreamListener {
+        private LockClient lockClient;
+        private CorfuStore corfuStore;
+        private static final String LOCK_GROUP = "Log_Replication_Group";
+        private static final String LOCK_NAME = "Log_Replication_Lock";
+        private LockId lockId = LockDataTypes.LockId.newBuilder()
+            .setLockGroup(LOCK_GROUP).setLockName(LOCK_NAME).build();
 
+        private static final String NAMESPACE = CORFU_SYSTEM_NAMESPACE;
+        private static final String TABLE_NAME = "LOCK";
+
+        private final Table<LockId, LockDataTypes.LockData, Message> table;
+
+        TestLockEventListener(LockClient lockClient,
+            CorfuRuntime corfuRuntime) throws NoSuchMethodException,
+            InvocationTargetException, IllegalAccessException {
+            this.lockClient = lockClient;
+            corfuStore = new CorfuStore(corfuRuntime);
+            this.table = this.corfuStore.openTable(NAMESPACE,
+                TABLE_NAME,
+                LockId.class,
+                LockDataTypes.LockData.class,
+                null,
+                TableOptions.fromProtoSchema(LockDataTypes.LockData.class));
+        }
+
+        @Override
+        public void onNext(CorfuStreamEntries results) {
+
+            String flipOp = "Flip Lock";
+            CorfuStreamEntry entry =
+                results.getEntries().values().stream().findFirst()
+                .map(corfuStreamEntries -> corfuStreamEntries.get(0))
+                .orElse(null);
+            
+            if (Objects.equals(((LockOp)entry.getKey()).getOp(), flipOp)) {
+                if (lockClient.getLocks().get(lockId).getState().getType() == LockStateType.HAS_LEASE) {
+                    lockClient.getLocks().get(lockId).input(LockEvent.LEASE_REVOKED);
+                } else {
+                    CommonTypes.Uuid clientId = CommonTypes.Uuid.newBuilder()
+                        .setMsb(lockClient.getClientId().getMostSignificantBits())
+                        .setLsb(lockClient.getClientId().getLeastSignificantBits())
+                        .build();
+
+                    Optional<LockDataTypes.LockData> lockInDataStore = get(lockId);
+
+                    int leaseAcquisitionNumber;
+
+                    if (lockInDataStore.isPresent()) {
+                          leaseAcquisitionNumber =
+                              lockInDataStore.get().getLeaseAcquisitionNumber() + 1;
+                    } else {
+                        leaseAcquisitionNumber = 1;
+                    }
+
+                    LockDataTypes.LockData newLockData = LockDataTypes.LockData.newBuilder()
+                        .setLockId(lockId)
+                        .setLeaseOwnerId(clientId)
+                        .setLeaseRenewalNumber(0)
+                        .setLeaseAcquisitionNumber(leaseAcquisitionNumber)
+                        .build();
+                    update(lockId, newLockData);
+                    lockClient.getLocks().get(lockId).input(LockEvent.LEASE_ACQUIRED);
+                }
+            }
+        }
+
+        private Optional<LockDataTypes.LockData> get(LockId lockId) {
+            try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
+                CorfuStoreEntry entry = txn.getRecord(TABLE_NAME, lockId);
+                txn.commit();
+                if (entry.getPayload() != null) {
+                    return Optional.of((LockDataTypes.LockData) entry.getPayload());
+                } else {
+                    return Optional.empty();
+                }
+            } catch (Exception e) {
+                log.error("Lock: {} Exception during get.", lockId, e);
+                return Optional.empty();
+            }
+        }
+
+        private void update(LockId lockId, LockDataTypes.LockData lockData) {
+            try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
+                txn.putRecord(table, lockId, lockData, null);
+                txn.commit();
+            } catch (Exception e) {
+                log.error("Lock: {} Exception during update.", lockId, e);
+            }
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            throw new IllegalStateException(
+                "Exception in TestLockEventListener");
+        }
+    }
 }

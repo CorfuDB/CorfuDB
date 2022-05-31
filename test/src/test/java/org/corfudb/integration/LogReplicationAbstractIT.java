@@ -110,6 +110,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     public CorfuStore corfuStoreActive;
     public CorfuStore corfuStoreStandby;
+    private final String author = "checkpointer";
 
     public void testEndToEndSnapshotAndLogEntrySync() throws Exception {
         try {
@@ -335,9 +336,9 @@ public class LogReplicationAbstractIT extends AbstractIT {
     class ReplicationStatusListener implements StreamListener {
 
         @Getter
-        List<Boolean> accumulatedStatus = new ArrayList<>();
+        private List<Boolean> accumulatedStatus = new ArrayList<>();
 
-        private final CountDownLatch countDownLatch;
+        private CountDownLatch countDownLatch;
 
         public ReplicationStatusListener(CountDownLatch countdownLatch) {
             this.countDownLatch = countdownLatch;
@@ -353,6 +354,10 @@ public class LogReplicationAbstractIT extends AbstractIT {
         @Override
         public void onError(Throwable throwable) {
             fail("onError for ReplicationStatusListener");
+        }
+
+        void updateCountdownLatch(CountDownLatch newCountdownLatch) {
+            countDownLatch = newCountdownLatch;
         }
     }
 
@@ -627,7 +632,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         Token trimMark = null;
         if (tables.size() != 0) {
             mcw.addAllMaps(tables);
-            trimMark = mcw.appendCheckpoints(cpRuntime, "author");
+            trimMark = mcw.appendCheckpoints(cpRuntime, author);
         }
 
         checkpointAndTrimCorfuStore(cpRuntime, trimMark);
@@ -674,6 +679,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         }
 
         checkpointAndTrimCorfuStore(cpRuntime);
+        cpRuntime.shutdown();
     }
 
     public void checkpointAndTrimCorfuStore(CorfuRuntime cpRuntime) {
@@ -713,10 +719,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
                     .setStreamName(fullTableName)
                     .setSerializer(dynamicProtoBufSerializer);
 
+            log.info("Checkpointing - {}", fullTableName);
             mcw = new MultiCheckpointWriter<>();
             mcw.addMap(corfuTableBuilder.open());
 
-            Token token = mcw.appendCheckpoints(cpRuntime, "checkpointer");
+            Token token = mcw.appendCheckpoints(cpRuntime, author);
             trimMark = trimMark == null ? token : Token.min(trimMark, token);
         }
 
@@ -729,10 +736,10 @@ public class LogReplicationAbstractIT extends AbstractIT {
             "Tables");
         cpRuntime.getSerializers().registerSerializer(protoBufSerializer);
         mcw.addMap(protobufDescriptorTable);
-        Token token1 = mcw.appendCheckpoints(cpRuntime, "checkpointer");
-        
+        Token token1 = mcw.appendCheckpoints(cpRuntime, author);
+
         mcw.addMap(tableRegistryCT);
-        Token token2 = mcw.appendCheckpoints(cpRuntime, "checkpointer");
+        Token token2 = mcw.appendCheckpoints(cpRuntime, author);
         Token minToken = Token.min(token1, token2);
         trimMark = trimMark != null ? Token.min(trimMark, minToken) : minToken;
 
@@ -775,13 +782,13 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
             mcw = new MultiCheckpointWriter<>();
             mcw.addMap(corfuTableBuilder.open());
-            Token token = mcw.appendCheckpoints(cpRuntime, "checkpointer");
+            Token token = mcw.appendCheckpoints(cpRuntime, author);
             trimMark = trimMark == null ? token : Token.min(trimMark, token);
         }
 
         // Finally checkpoint the TableRegistry system table itself..
         mcw.addMap(tableRegistryCT);
-        Token token = mcw.appendCheckpoints(cpRuntime, "checkpointer");
+        Token token = mcw.appendCheckpoints(cpRuntime, author);
         trimMark = Token.min(trimMark, token);
 
         cpRuntime.getAddressSpaceView().prefixTrim(trimMark);

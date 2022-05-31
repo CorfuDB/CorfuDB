@@ -324,3 +324,8 @@ message Address {
     string street = 4;
     string unit = 5;
 }
+
+message LockOp {
+    option (org.corfudb.runtime.table_schema).stream_tag = "lock_test";
+    string op = 1;
+}
