@@ -3,8 +3,8 @@ package org.corfudb.infrastructure.logreplication;
 import lombok.Data;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryService;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.TableRegistry;
 
@@ -31,7 +31,7 @@ public class LogReplicationConfig {
     // Log Replication message timeout time in milliseconds
     public static final int DEFAULT_TIMEOUT_MS = 5000;
 
-    // Log Replication default max number of messages generated at the active cluster for each batch
+    // Log Replication default max number of messages generated at the source cluster for each batch
     public static final int DEFAULT_MAX_NUM_MSG_PER_BATCH = 10;
 
     // Log Replication default max data message size is 64MB
@@ -47,33 +47,32 @@ public class LogReplicationConfig {
     public static final int DATA_FRACTION_PER_MSG = 90;
 
     public static final UUID REGISTRY_TABLE_ID = CorfuRuntime.getStreamID(
-            getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME));
+        getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME));
+
+    // A map consisting of the streams to replicate for each supported replication model
+    private Map<ReplicationSubscriber, Set<String>> replicationSubscriberToStreamsMap = new HashMap<>();
 
     public static final UUID PROTOBUF_TABLE_ID = CorfuRuntime.getStreamID(
             getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME));
 
-    // Set of streams that shouldn't be cleared on snapshot apply phase, as these
-    // streams should be the result of "merging" the replicated data (from active) + local data (on standby).
-    // For instance, RegistryTable (to avoid losing local opened tables on standby)
+
+    // Set of streams that shouldn't be cleared on snapshot apply phase, as these streams should be the result of
+    // "merging" the replicated data (from source) + local data (on sink).
+    // For instance, RegistryTable (to avoid losing local opened tables on sink)
     public static final Set<UUID> MERGE_ONLY_STREAMS = new HashSet<>(Arrays.asList(
             REGISTRY_TABLE_ID,
             PROTOBUF_TABLE_ID
     ));
 
-    // Suite of utility methods for updating the configuration
-    private LogReplicationConfigManager configManager;
-
-    // Unique identifiers for all streams to be replicated across sites
-    private Set<String> streamsToReplicate;
-
     // Mapping from stream ids to their fully qualified names.
-    private Map<UUID, String> streamsIdToNameMap;
+    private Map<UUID, String> streamIdsToNameMap;
 
     // Streaming tags on Sink (map data stream id to list of tags associated to it)
     private Map<UUID, List<UUID>> dataStreamToTagsMap = new HashMap<>();
 
-    // Set of streams to drop on Sink if federated flag differs from Source during cluster upgrades.
-    private Set<UUID> replicatedStreamsToDrop;
+    // Set of streams to drop on Sink if replication subscriber info differs from Source when both are on different
+    // versions
+    private Map<ReplicationSubscriber, Set<UUID>> subscriberToNonReplicatedStreamsMap = new HashMap<>();
 
     // Snapshot Sync Batch Size(number of messages)
     private int maxNumMsgPerBatch;
@@ -89,41 +88,29 @@ public class LogReplicationConfig {
      */
     private int maxDataSizePerMsg;
 
-    /**
-     * Constructor exposed to {@link CorfuReplicationDiscoveryService}
-     */
-    public LogReplicationConfig(LogReplicationConfigManager configManager,
-                                int maxNumMsgPerBatch, int maxMsgSize, int cacheSize) {
-        this.configManager = configManager;
-        this.maxNumMsgPerBatch = maxNumMsgPerBatch;
-        this.maxMsgSize = maxMsgSize;
-        this.maxCacheSize = cacheSize;
-        this.maxDataSizePerMsg = maxMsgSize * DATA_FRACTION_PER_MSG / 100;
-        syncWithRegistry();
-    }
+    public static final String SAMPLE_CLIENT = "Sample Client";
 
-    /**
-     * Provide the ability to sync LogReplicationConfig with the latest registry table.
-     */
-    public void syncWithRegistry() {
-        if (configManager.loadRegistryTableEntries()) {
-            update();
-            log.info("Synced with registry table. Streams to replicate total = {}, streams names = {}",
-                    streamsToReplicate.size(), streamsToReplicate);
+    public LogReplicationConfig(Map<ReplicationSubscriber, Set<String>> subscriberToStreamsMap,
+                                Map<ReplicationSubscriber, Set<UUID>> subscriberToNonReplicatedStreamsMap,
+                                Map<UUID, List<UUID>> streamToTagsMap, ServerContext serverContext) {
+        replicationSubscriberToStreamsMap = subscriberToStreamsMap;
+        dataStreamToTagsMap = streamToTagsMap;
+        this.subscriberToNonReplicatedStreamsMap = subscriberToNonReplicatedStreamsMap;
+
+        if (serverContext == null) {
+            this.maxNumMsgPerBatch = DEFAULT_MAX_NUM_MSG_PER_BATCH;
+            this.maxMsgSize = MAX_DATA_MSG_SIZE_SUPPORTED;
+            this.maxCacheSize = MAX_CACHE_NUM_ENTRIES;
         } else {
-            log.trace("Registry table address space did not change, using last fetched config.");
+            this.maxNumMsgPerBatch = serverContext.getLogReplicationMaxNumMsgPerBatch();
+            this.maxMsgSize = serverContext.getLogReplicationMaxDataMessageSize();
+            this.maxCacheSize = serverContext.getLogReplicationCacheMaxSize();
         }
+        this.maxDataSizePerMsg = maxMsgSize * DATA_FRACTION_PER_MSG / 100;
     }
 
-    /**
-     * Update LogReplicationConfig fields. This method should be invoked after successfully refreshing the in-memory
-     * registry table entries in {@link LogReplicationConfigManager}.
-     */
-    private void update() {
-        this.streamsToReplicate = configManager.getStreamsToReplicate();
-        this.dataStreamToTagsMap = configManager.getStreamToTagsMap();
-        this.replicatedStreamsToDrop = configManager.getStreamsToDrop();
-        this.streamsIdToNameMap = new HashMap<>();
-        streamsToReplicate.forEach(stream -> streamsIdToNameMap.put(CorfuRuntime.getStreamID(stream), stream));
+    // An enum of all supported Replication Models
+    public static enum ReplicationModel {
+        SINGLE_SOURCE_SINK
     }
 }

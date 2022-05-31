@@ -7,9 +7,9 @@ import org.corfudb.runtime.collections.CorfuStore;
  * This class is created for LR rolling upgrade tests to serve as the plugin for Active cluster to
  * get the set of streams to replicate.
  */
-public class DefaultAdapterForUpgradeActive extends DefaultAdapterForUpgrade {
+public class DefaultAdapterForUpgradeSource extends DefaultAdapterForUpgrade {
 
-    public DefaultAdapterForUpgradeActive() {
+    public DefaultAdapterForUpgradeSource() {
         String ENDPOINT = "localhost:9000";
         CorfuRuntime runtime =
             CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())

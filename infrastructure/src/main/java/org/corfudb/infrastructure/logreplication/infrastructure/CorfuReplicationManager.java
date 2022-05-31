@@ -1,11 +1,8 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
-import com.google.common.collect.Sets;
-import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
@@ -17,31 +14,26 @@ import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * This class manages Log Replication for multiple remote (standby) clusters.
+ * This class manages Log Replication for multiple remote (sink) clusters.
  */
 @Slf4j
 public class CorfuReplicationManager {
 
-    // Keep map of remote cluster ID and the associated log replication runtime (an abstract
-    // client to that cluster)
-    private final Map<String, CorfuLogReplicationRuntime> runtimeToRemoteCluster = new HashMap<>();
+    // Keep map of remote session and the associated log replication runtime (an abstract client to that cluster)
+    private final Map<ReplicationSession, CorfuLogReplicationRuntime> runtimeToRemoteSession = new HashMap<>();
 
     @Setter
-    @Getter
-    private TopologyDescriptor topology;
-
-    private final LogReplicationContext context;
+    private LogReplicationContext context;
 
     private final NodeDescriptor localNodeDescriptor;
 
     private final CorfuRuntime corfuRuntime;
 
-    private final LogReplicationMetadataManager metadataManager;
+    private final Map<ReplicationSession, LogReplicationMetadataManager> metadataManagerMap;
 
     private final String pluginFilePath;
 
@@ -51,10 +43,11 @@ public class CorfuReplicationManager {
      * Constructor
      */
     public CorfuReplicationManager(LogReplicationContext context, NodeDescriptor localNodeDescriptor,
-                                   LogReplicationMetadataManager metadataManager, String pluginFilePath,
-                                   CorfuRuntime corfuRuntime, LogReplicationConfigManager replicationConfigManager) {
+                                   Map<ReplicationSession, LogReplicationMetadataManager> metadataManagerMap,
+                                   String pluginFilePath, CorfuRuntime corfuRuntime,
+                                   LogReplicationConfigManager replicationConfigManager) {
         this.context = context;
-        this.metadataManager = metadataManager;
+        this.metadataManagerMap = metadataManagerMap;
         this.pluginFilePath = pluginFilePath;
         this.corfuRuntime = corfuRuntime;
         this.localNodeDescriptor = localNodeDescriptor;
@@ -63,23 +56,28 @@ public class CorfuReplicationManager {
 
     /**
      * Start Log Replication Manager, this will initiate a runtime against
-     * each standby cluster, to further start log replication.
+     * each Sink session(cluster + replication model + client), to further start log replication.
      */
     public void start() {
-        for (ClusterDescriptor remoteCluster : topology.getStandbyClusters().values()) {
-            try {
-                startLogReplicationRuntime(remoteCluster);
-            } catch (Exception e) {
-                log.error("Failed to start log replication runtime for remote cluster {}", remoteCluster.getClusterId());
+        for (ClusterDescriptor remoteCluster : context.getTopology().getSinkClusters().values()) {
+            for (ReplicationSubscriber subscriber : context.getConfig().getReplicationSubscriberToStreamsMap().keySet()) {
+                try {
+                    startLogReplicationRuntime(remoteCluster, new ReplicationSession(remoteCluster.getClusterId(),
+                        subscriber));
+                } catch (Exception e) {
+                    log.error("Failed to start log replication runtime for remote session {}, replication model {}, " +
+                        "client {}", remoteCluster.getClusterId(), subscriber.getReplicationModel(),
+                        subscriber.getClient());
+                }
             }
         }
     }
 
     /**
-     * Stop log replication for all the standby sites
+     * Stop log replication for all the sink sites
      */
     public void stop() {
-        runtimeToRemoteCluster.values().forEach(runtime -> {
+        runtimeToRemoteSession.values().forEach(runtime -> {
             try {
                 log.info("Stop log replication runtime to remote cluster id={}", runtime.getRemoteClusterId());
                 runtime.stop();
@@ -87,32 +85,25 @@ public class CorfuReplicationManager {
                 log.warn("Failed to stop log replication runtime to remote cluster id={}", runtime.getRemoteClusterId());
             }
         });
-        runtimeToRemoteCluster.clear();
+        runtimeToRemoteSession.clear();
     }
 
     /**
-     * Restart connection to remote cluster
+     * Start Log Replication Runtime to a specific Sink Session
      */
-    public void restart(ClusterDescriptor remoteCluster) {
-        stopLogReplicationRuntime(remoteCluster.getClusterId());
-        startLogReplicationRuntime(remoteCluster);
-    }
-
-    /**
-     * Start Log Replication Runtime to a specific standby Cluster
-     */
-    private void startLogReplicationRuntime(ClusterDescriptor remoteClusterDescriptor) {
-        String remoteClusterId = remoteClusterDescriptor.getClusterId();
+    private void startLogReplicationRuntime(ClusterDescriptor remoteClusterDescriptor,
+                                            ReplicationSession replicationSession) {
         try {
-            if (!runtimeToRemoteCluster.containsKey(remoteClusterId)) {
-                log.info("Starting Log Replication Runtime to Standby Cluster id={}", remoteClusterId);
-                connect(remoteClusterDescriptor);
+            if (!runtimeToRemoteSession.containsKey(replicationSession)) {
+                log.info("Starting Log Replication Runtime for session {}", replicationSession);
+                connect(remoteClusterDescriptor, replicationSession);
             } else {
-                log.warn("Log Replication Runtime to remote cluster {}, already exists. Skipping init.", remoteClusterId);
+                log.warn("Log Replication Runtime to remote session {}, already exists. Skipping init.",
+                    replicationSession);
             }
         } catch (Exception e) {
-            log.error("Caught exception, stop log replication runtime to {}", remoteClusterDescriptor, e);
-            stopLogReplicationRuntime(remoteClusterId);
+            log.error("Caught exception, stop log replication runtime to {}", replicationSession, e);
+            stopLogReplicationRuntime(replicationSession);
         }
     }
 
@@ -121,7 +112,7 @@ public class CorfuReplicationManager {
      *
      * @throws InterruptedException
      */
-    private void connect(ClusterDescriptor remoteCluster) throws InterruptedException {
+    private void connect(ClusterDescriptor remoteCluster, ReplicationSession session) throws InterruptedException {
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
@@ -131,7 +122,7 @@ public class CorfuReplicationManager {
                             .localClusterId(localNodeDescriptor.getClusterId())
                             .replicationConfig(context.getConfig())
                             .pluginFilePath(pluginFilePath)
-                            .topologyConfigId(topology.getTopologyConfigId())
+                            .topologyConfigId(context.getTopology().getTopologyConfigId())
                             .keyStore(corfuRuntime.getParameters().getKeyStore())
                             .tlsEnabled(corfuRuntime.getParameters().isTlsEnabled())
                             .ksPasswordFile(corfuRuntime.getParameters().getKsPasswordFile())
@@ -140,104 +131,87 @@ public class CorfuReplicationManager {
                             .maxWriteSize(corfuRuntime.getParameters().getMaxWriteSize())
                             .build();
                     CorfuLogReplicationRuntime replicationRuntime = new CorfuLogReplicationRuntime(parameters,
-                            metadataManager, replicationConfigManager);
+                        metadataManagerMap.get(session), replicationConfigManager, session);
                     replicationRuntime.start();
-                    runtimeToRemoteCluster.put(remoteCluster.getClusterId(), replicationRuntime);
+                    runtimeToRemoteSession.put(session, replicationRuntime);
                 } catch (Exception e) {
-                    log.error("Exception {}. Failed to connect to remote cluster {}. Retry after 1 second.",
-                            e, remoteCluster.getClusterId());
+                    log.error("Exception {}. Failed to connect to remote cluster for session {}. Retry after 1 second.",
+                        e, session);
                     throw new RetryNeededException();
                 }
                 return null;
             }).run();
         } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to connect to remote cluster.", e);
+            log.error("Unrecoverable exception when attempting to connect to remote session.", e);
             throw e;
         }
     }
 
     /**
-     * Stop Log Replication to a specific standby Cluster
+     * Stop Log Replication to a specific Sink session
      */
-    private void stopLogReplicationRuntime(String remoteClusterId) {
-        CorfuLogReplicationRuntime logReplicationRuntime = runtimeToRemoteCluster.get(remoteClusterId);
+    private void stopLogReplicationRuntime(ReplicationSession replicationSession) {
+        CorfuLogReplicationRuntime logReplicationRuntime = runtimeToRemoteSession.get(replicationSession);
         if (logReplicationRuntime != null) {
-            log.info("Stop log replication runtime to remote cluster id={}", remoteClusterId);
+            log.info("Stop log replication runtime for remote session {}", replicationSession);
             logReplicationRuntime.stop();
-            runtimeToRemoteCluster.remove(remoteClusterId);
+            runtimeToRemoteSession.remove(replicationSession);
         } else {
-            log.warn("Runtime not found to remote cluster {}", remoteClusterId);
-        }
-    }
-
-    private void removeClusterInfoFromStatusTable(String clusterId) {
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try {
-                    metadataManager.removeFromStatusTable(clusterId);
-                } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to remove clusterInfo from LR status tables", tae);
-                    throw new RetryNeededException();
-                }
-
-                log.debug("removeClusterInfoFromStatusTable succeeds, removed clusterID {}", clusterId);
-
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to removeClusterInfoFromStatusTable", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
+            log.warn("Runtime not found for remote session {}", replicationSession);
         }
     }
 
     /**
      * Update Log Replication Runtime config id.
      */
-    public void updateRuntimeConfigId(TopologyDescriptor newConfig) {
-        runtimeToRemoteCluster.values().forEach(runtime -> runtime.updateFSMConfigId(newConfig));
+    private void updateRuntimeConfigId(TopologyDescriptor newConfig) {
+        runtimeToRemoteSession.values().forEach(runtime -> runtime.updateFSMConfigId(newConfig));
     }
 
     /**
-     * The notification of change of adding/removing standby's without epoch change.
+     * The notification of adding/removing Sinks with/without topology configId change.
      *
      * @param newConfig should have the same topologyConfigId as the current config
+     * @param sinksToAdd the new sink clusters to be added
+     * @param sinksToRemove sink clusters which are not found in the new topology
+     * @param intersection Sink clusters found in both old and new topologies
      */
-    public void processStandbyChange(TopologyDescriptor newConfig) {
-        // ConfigId mismatch could happen if customized cluster manager does not follow protocol
-        if (newConfig.getTopologyConfigId() != topology.getTopologyConfigId()) {
-            log.warn("Detected changes in the topology. The new topology descriptor {} doesn't have the same " +
-                    "topologyConfigId as the current one {}", newConfig, topology);
-        }
+    public void processSinkChange(TopologyDescriptor newConfig, Set<String> sinksToAdd, Set<String> sinksToRemove,
+                                  Set<String> intersection) {
 
-        Set<String> currentStandbys = new HashSet<>(topology.getStandbyClusters().keySet());
-        Set<String> newStandbys = new HashSet<>(newConfig.getStandbyClusters().keySet());
-        Set<String> intersection = Sets.intersection(currentStandbys, newStandbys);
+        long oldTopologyConfigId = context.getTopology().getTopologyConfigId();
+        context.setTopology(newConfig);
 
-        Set<String> standbysToRemove = new HashSet<>(currentStandbys);
-        standbysToRemove.removeAll(intersection);
+        // Get all subscribers
+        Set<ReplicationSubscriber> subscribers = context.getConfig().getReplicationSubscriberToStreamsMap().keySet();
 
-        // Remove standbys that are not in the new config
-        for (String clusterId : standbysToRemove) {
-            stopLogReplicationRuntime(clusterId);
-            removeClusterInfoFromStatusTable(clusterId);
-            topology.removeStandbyCluster(clusterId);
-        }
-
-        // Start the standbys that are in the new config but not in the current config
-        for (String clusterId : newStandbys) {
-            if (!runtimeToRemoteCluster.containsKey(clusterId)) {
-                ClusterDescriptor clusterInfo = newConfig.getStandbyClusters().get(clusterId);
-                topology.addStandbyCluster(clusterInfo);
-                startLogReplicationRuntime(clusterInfo);
+        // Remove Sinks that are not in the new config
+        for (String clusterId : sinksToRemove) {
+            for (ReplicationSubscriber subscriber : subscribers) {
+                stopLogReplicationRuntime(new ReplicationSession(clusterId, subscriber));
             }
         }
 
-        // The connection id or other transportation plugin's info could've changed for
-        // existing standby cluster's, updating the routers will re-establish the connection
-        // to the correct endpoints/nodes
+        // Start the newly added Sinks
+        for (String clusterId : sinksToAdd) {
+            ClusterDescriptor clusterInfo = newConfig.getSinkClusters().get(clusterId);
+            for (ReplicationSubscriber subscriber : subscribers) {
+                startLogReplicationRuntime(clusterInfo, new ReplicationSession(clusterId, subscriber));
+            }
+        }
+
+        // The connection id or other transportation plugin's info could've changed for existing Sink clusters,
+        // updating the routers will re-establish the connection to the correct endpoints/nodes
         for (String clusterId : intersection) {
-            ClusterDescriptor clusterInfo = newConfig.getStandbyClusters().get(clusterId);
-            runtimeToRemoteCluster.get(clusterId).updateRouterClusterDescriptor(clusterInfo);
+            ClusterDescriptor clusterInfo = newConfig.getSinkClusters().get(clusterId);
+            for (ReplicationSubscriber subscriber : subscribers) {
+                runtimeToRemoteSession.get(new ReplicationSession(clusterId, subscriber))
+                    .updateRouterClusterDescriptor(clusterInfo);
+            }
+        }
+
+        if (oldTopologyConfigId != newConfig.getTopologyConfigId()) {
+            updateRuntimeConfigId(newConfig);
         }
     }
 
@@ -245,26 +219,15 @@ public class CorfuReplicationManager {
      * Stop the current log replication event and start a full snapshot sync for the given remote cluster.
      */
     public void enforceSnapshotSync(DiscoveryServiceEvent event) {
-        CorfuLogReplicationRuntime standbyRuntime = runtimeToRemoteCluster.get(event.getRemoteClusterInfo().getClusterId());
-        if (standbyRuntime == null) {
-            log.warn("Failed to start enforceSnapshotSync for cluster {} as it is not on the standby list.",
-                    event.getRemoteClusterInfo());
+        CorfuLogReplicationRuntime sinkRuntime = runtimeToRemoteSession.get(
+            ReplicationSession.getDefaultReplicationSessionForCluster(event.getRemoteClusterInfo().getClusterId()));
+        if (sinkRuntime == null) {
+            log.warn("Failed to start enforceSnapshotSync for cluster {} as no runtime to it was found",
+                event.getRemoteClusterInfo().getClusterId());
         } else {
-            log.info("EnforceSnapshotSync for cluster {}", standbyRuntime.getRemoteClusterId());
-            standbyRuntime.getSourceManager().stopLogReplication();
-            standbyRuntime.getSourceManager().startForcedSnapshotSync(event.getEventId());
+            log.info("EnforceSnapshotSync for cluster {}", sinkRuntime.getRemoteClusterId());
+            sinkRuntime.getSourceManager().stopLogReplication();
+            sinkRuntime.getSourceManager().startForcedSnapshotSync(event.getEventId());
         }
-    }
-
-    /**
-     * Update Replication Status as NOT_STARTED.
-     * Should be called only once in an active lifecycle.
-     */
-    public void updateStatusAsNotStarted() {
-        runtimeToRemoteCluster.values().forEach(corfuLogReplicationRuntime ->
-                corfuLogReplicationRuntime
-                        .getSourceManager()
-                        .getAckReader()
-                        .markSyncStatus(SyncStatus.NOT_STARTED));
     }
 }

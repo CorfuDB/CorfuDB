@@ -6,8 +6,8 @@ import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.utils.CommonTypes;
 import org.corfudb.utils.LogReplicationStreams;
 
-
 public abstract class DefaultAdapterForUpgrade implements ILogReplicationVersionAdapter {
+
     public static final String VERSION_TEST_TABLE = "VersionTestTable";
 
     public static final String NAMESPACE = "LR-Test";
