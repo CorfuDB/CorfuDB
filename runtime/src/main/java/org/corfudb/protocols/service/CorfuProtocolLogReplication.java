@@ -163,10 +163,10 @@ public final class CorfuProtocolLogReplication {
     }
 
     public static ResponseMsg getLeadershipResponse(
-            HeaderMsg header, boolean isLeader, String nodeId, boolean isStandby) {
+            HeaderMsg header, boolean isLeader, String nodeId) {
         LogReplication.LogReplicationLeadershipResponseMsg request = LogReplication.LogReplicationLeadershipResponseMsg
                 .newBuilder()
-                .setIsLeader(isLeader && isStandby)
+                .setIsLeader(isLeader)
                 .setNodeId(nodeId).build();
         ResponsePayloadMsg payload = ResponsePayloadMsg.newBuilder()
                 .setLrLeadershipResponse(request).build();
