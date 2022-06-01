@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.NodeLocator;
@@ -15,6 +16,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.Collections;
 
 /**
  * This test suit exercises the ability to enable TLS on Corfu servers and runtime
@@ -23,6 +25,8 @@ import java.util.Arrays;
  */
 @Slf4j
 public class SecurityIT extends AbstractIT {
+    private static final TypeToken<CorfuTable<String, Object>> TYPE_TOKEN = new TypeToken<CorfuTable<String, Object>>() {
+    };
     private String corfuSingleNodeHost;
     private int corfuStringNodePort;
     private String singleNodeEndpoint;
@@ -105,7 +109,7 @@ public class SecurityIT extends AbstractIT {
      * {@link CorfuRuntime}'s API and then asserts that operations on a CorfuTable is executed
      * as Expected.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testServerRuntimeTlsEnabledMethod() throws Exception {
@@ -122,10 +126,10 @@ public class SecurityIT extends AbstractIT {
                                     .connect();
 
         // Create CorfuTable
-        CorfuTable testTable = runtime
+        CorfuTable<String, Object> testTable = runtime
                 .getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<CorfuTable<String, Object>>() {})
+                .setTypeToken(TYPE_TOKEN)
                 .setStreamName("volbeat")
                 .open();
 
@@ -152,10 +156,10 @@ public class SecurityIT extends AbstractIT {
     /**
      * This test creates Corfu runtime and a single Corfu server according to the configuration
      * provided in CorfuDB.properties. Corfu runtime configures TLS related parameters using
-     * {@link org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters} and then asserts that
+     * {@link CorfuRuntimeParameters} and then asserts that
      * operations on a CorfuTable is executed as Expected.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testServerRuntimeTlsEnabledByParameter() throws Exception {
@@ -163,9 +167,9 @@ public class SecurityIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServerTls();
 
         // Create Runtime parameters for enabling TLS
-        final CorfuRuntime.CorfuRuntimeParameters runtimeParameters = CorfuRuntime.CorfuRuntimeParameters
+        final CorfuRuntimeParameters runtimeParameters = CorfuRuntimeParameters
                 .builder()
-                .layoutServers(Arrays.asList(NodeLocator.parseString(singleNodeEndpoint)))
+                .layoutServers(Collections.singletonList(NodeLocator.parseString(singleNodeEndpoint)))
                 .tlsEnabled(tlsEnabled)
                 .keyStore(runtimePathToKeyStore)
                 .ksPasswordFile(runtimePathToKeyStorePassword)
@@ -179,10 +183,10 @@ public class SecurityIT extends AbstractIT {
                 .connect();
 
         // Create CorfuTable
-        CorfuTable testTable = runtime
+        CorfuTable<String, Object> testTable = runtime
                 .getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<CorfuTable<String, Object>>() {})
+                .setTypeToken(TYPE_TOKEN)
                 .setStreamName("volbeat")
                 .open();
 
@@ -210,7 +214,7 @@ public class SecurityIT extends AbstractIT {
      * Testing that configuring incorrect TLS parameters will lead to throwing
      * {@link UnrecoverableCorfuError} exception.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test(expected = UnrecoverableCorfuError.class)
     public void testIncorrectKeyStoreException() throws Exception {
@@ -218,9 +222,9 @@ public class SecurityIT extends AbstractIT {
         runSinglePersistentServerTls();
 
         // Start a Corfu runtime with incorrect truststore
-        final CorfuRuntime.CorfuRuntimeParameters runtimeParameters = CorfuRuntime.CorfuRuntimeParameters
+        CorfuRuntimeParameters runtimeParameters = CorfuRuntimeParameters
                 .builder()
-                .layoutServers(Arrays.asList(NodeLocator.parseString(singleNodeEndpoint)))
+                .layoutServers(Collections.singletonList(NodeLocator.parseString(singleNodeEndpoint)))
                 .tlsEnabled(tlsEnabled)
                 .keyStore(runtimePathToKeyStore)
                 .ksPasswordFile(runtimePathToKeyStorePassword)
