@@ -7,6 +7,8 @@ import static org.junit.Assert.fail;
 import com.google.common.reflect.TypeToken;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -159,15 +161,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     }
 
-    public void testEndToEndSnapshotAndLogEntrySyncUFO() throws Exception {
-        // TODO: when ObjectsView.TRANSACTION_STREAM_ID is removed or LOG_REPLICATOR_STREAM_ID name is changed,
-        //  change these tests such that UFO tables used in the tests have the is_federated tag set,
-        //  as these will determine which tables will be written to the LOG_REPLICATOR_STREAM_ID
-        //  (for now, it is not required as they're written to the same TRANSACTION_STREAM_ID from legacy impl.)
-        testEndToEndSnapshotAndLogEntrySyncUFO(1);
+    public void testEndToEndSnapshotAndLogEntrySyncUFO(boolean diskBased) throws Exception {
+        testEndToEndSnapshotAndLogEntrySyncUFO(1, diskBased);
     }
 
-    public void testEndToEndSnapshotAndLogEntrySyncUFO(int totalNumMaps) throws Exception {
+    public void testEndToEndSnapshotAndLogEntrySyncUFO(int totalNumMaps, boolean diskBased) throws Exception {
         // For the purpose of this test, standby should only update status 2 times:
         // (1) When starting snapshot sync apply : is_data_consistent = false
         // (2) When completing snapshot sync apply : is_data_consistent = true
@@ -196,7 +194,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
                     LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
             log.info(">> Open map(s) on active and standby");
-            openMaps(totalNumMaps);
+            openMaps(totalNumMaps, diskBased);
 
             log.info(">> Write data to active CorfuDB before LR is started ...");
             // Add Data for Snapshot Sync
@@ -293,13 +291,13 @@ public class LogReplicationAbstractIT extends AbstractIT {
         }).run();
     }
 
-    private void validateSnapshotSyncPlugin(SnapshotSyncPluginListener listener) {
+    void validateSnapshotSyncPlugin(SnapshotSyncPluginListener listener) {
         assertThat(listener.getUpdates().size()).isEqualTo(2);
         assertThat(listener.getUpdates()).contains(DefaultSnapshotSyncPlugin.ON_START_VALUE);
         assertThat(listener.getUpdates()).contains(DefaultSnapshotSyncPlugin.ON_END_VALUE);
     }
 
-    private void subscribeToSnapshotSyncPluginTable(SnapshotSyncPluginListener listener) {
+    void subscribeToSnapshotSyncPluginTable(SnapshotSyncPluginListener listener) {
         try {
             corfuStoreStandby.openTable(DefaultSnapshotSyncPlugin.NAMESPACE,
                     DefaultSnapshotSyncPlugin.TABLE_NAME, ExampleSchemas.Uuid.class, SnapshotSyncPluginValue.class,
@@ -310,7 +308,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         }
     }
 
-    private class SnapshotSyncPluginListener implements StreamListener {
+    class SnapshotSyncPluginListener implements StreamListener {
 
         @Getter
         List<String> updates = new ArrayList<>();
@@ -334,7 +332,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         }
     }
 
-    private class ReplicationStatusListener implements StreamListener {
+    class ReplicationStatusListener implements StreamListener {
 
         @Getter
         List<Boolean> accumulatedStatus = new ArrayList<>();
@@ -387,20 +385,27 @@ public class LogReplicationAbstractIT extends AbstractIT {
         }
     }
 
-    public void openMaps(int mapCount) throws Exception {
+    public void openMaps(int mapCount, boolean diskBased) throws Exception {
         mapNameToMapActive = new HashMap<>();
         mapNameToMapStandby = new HashMap<>();
+        Path pathActive = null;
+        Path pathStandby = null;
 
         for(int i=1; i <= mapCount; i++) {
             String mapName = TABLE_PREFIX + i;
 
+            if (diskBased) {
+                pathActive = Paths.get(com.google.common.io.Files.createTempDir().getAbsolutePath());
+                pathStandby = Paths.get(com.google.common.io.Files.createTempDir().getAbsolutePath());
+            }
+
             Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapActive = corfuStoreActive.openTable(
                     NAMESPACE, mapName, Sample.StringKey.class, Sample.IntValueTag.class, Sample.Metadata.class,
-                    TableOptions.fromProtoSchema(Sample.IntValueTag.class));
+                    TableOptions.fromProtoSchema(Sample.IntValueTag.class, TableOptions.builder().persistentDataPath(pathActive).build()));
 
             Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapStandby = corfuStoreStandby.openTable(
                     NAMESPACE, mapName, Sample.StringKey.class, Sample.IntValueTag.class, Sample.Metadata.class,
-                    TableOptions.fromProtoSchema(Sample.IntValueTag.class));
+                    TableOptions.fromProtoSchema(Sample.IntValueTag.class, TableOptions.builder().persistentDataPath(pathStandby).build()));
 
             mapNameToMapActive.put(mapName, mapActive);
             mapNameToMapStandby.put(mapName, mapStandby);
@@ -677,6 +682,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
         CorfuTable<CorfuStoreMetadata.TableName, CorfuRecord<CorfuStoreMetadata.TableDescriptors,
                 CorfuStoreMetadata.TableMetadata>> tableRegistryCT = tableRegistry.getRegistryTable();
 
+        CorfuTable<CorfuStoreMetadata.ProtobufFileName,
+            CorfuRecord<CorfuStoreMetadata.ProtobufFileDescriptor, CorfuStoreMetadata.TableMetadata>>
+            protobufDescriptorTable =
+            tableRegistry.getProtobufDescriptorTable();
+
         // Save the regular serializer first..
         ISerializer protoBufSerializer = cpRuntime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
 
@@ -685,12 +695,16 @@ public class LogReplicationAbstractIT extends AbstractIT {
         ISerializer dynamicProtoBufSerializer = new DynamicProtobufSerializer(cpRuntime);
         cpRuntime.getSerializers().registerSerializer(dynamicProtoBufSerializer);
 
-        // First checkpoint the TableRegistry system table
         MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
 
         Token trimMark = null;
 
         for (CorfuStoreMetadata.TableName tableName : tableRegistry.listTables(null)) {
+            // ProtobufDescriptor table is an internal table which must not
+            // be checkpointed using the DynamicProtobufSerializer
+            if (tableName.getTableName().equals(TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME)) {
+                continue;
+            }
             String fullTableName = TableRegistry.getFullyQualifiedTableName(
                     tableName.getNamespace(), tableName.getTableName()
             );
@@ -706,17 +720,24 @@ public class LogReplicationAbstractIT extends AbstractIT {
             trimMark = trimMark == null ? token : Token.min(trimMark, token);
         }
 
-        // Finally checkpoint the TableRegistry system table itself..
+        // Finally checkpoint the ProtobufDescriptor and TableRegistry system
+        // tables
+        // Restore the regular protoBuf serializer and undo the dynamic
+        // protoBuf serializer
+        // otherwise the test cannot continue beyond this point.
+        log.info("Now checkpointing the ProtobufDescriptor and Registry " +
+            "Tables");
+        cpRuntime.getSerializers().registerSerializer(protoBufSerializer);
+        mcw.addMap(protobufDescriptorTable);
+        Token token1 = mcw.appendCheckpoints(cpRuntime, "checkpointer");
+        
         mcw.addMap(tableRegistryCT);
-        Token token = mcw.appendCheckpoints(cpRuntime, "checkpointer");
-        trimMark = trimMark != null ? Token.min(trimMark, token) : token;
+        Token token2 = mcw.appendCheckpoints(cpRuntime, "checkpointer");
+        Token minToken = Token.min(token1, token2);
+        trimMark = trimMark != null ? Token.min(trimMark, minToken) : minToken;
 
         cpRuntime.getAddressSpaceView().prefixTrim(trimMark);
         cpRuntime.getAddressSpaceView().gc();
-
-        // Lastly restore the regular protoBuf serializer and undo the dynamic protoBuf serializer
-        // otherwise the test cannot continue beyond this point.
-        cpRuntime.getSerializers().registerSerializer(protoBufSerializer);
 
         // Trim
         log.debug("**** Trim Log @address=" + trimMark);
