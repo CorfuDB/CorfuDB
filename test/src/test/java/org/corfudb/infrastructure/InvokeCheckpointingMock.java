@@ -30,11 +30,6 @@ public class InvokeCheckpointingMock implements IInvokeCheckpointing {
     }
 
     @Override
-    public void setIsInvoked(boolean isInvoked) {
-        this.isInvoked = isInvoked;
-    }
-
-    @Override
     public void shutdown() {
         //Not invoked
     }

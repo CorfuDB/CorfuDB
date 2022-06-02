@@ -67,17 +67,18 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy {
 
         final long currentTime = System.currentTimeMillis();
         final long timeSinceLastCycleMillis = currentTime - lastCompactionCycleStartTS;
-        if (timeSinceLastCycleMillis > interval) {
-            syslog.info("DynamicTriggerPolicy: Trigger as elapsedTime {} > safeTrimPeriod {}",
-                    TimeUnit.MILLISECONDS.toSeconds(timeSinceLastCycleMillis),
-                    TimeUnit.MILLISECONDS.toSeconds(interval));
-            return true;
-        }
 
         if (timeSinceLastCycleMillis > interval * 2) {
             syslog.info("DynamicTriggerPolicy: Trigger as elapsedTime {} > maxTimeToChkpt {}",
                     TimeUnit.MILLISECONDS.toMinutes(timeSinceLastCycleMillis),
                     TimeUnit.MILLISECONDS.toMinutes(interval * 2));
+            return true;
+        }
+
+        if (timeSinceLastCycleMillis > interval) {
+            syslog.info("DynamicTriggerPolicy: Trigger as elapsedTime {} > safeTrimPeriod {}",
+                    TimeUnit.MILLISECONDS.toSeconds(timeSinceLastCycleMillis),
+                    TimeUnit.MILLISECONDS.toSeconds(interval));
             return true;
         }
 
