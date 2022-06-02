@@ -37,8 +37,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.List;
+import java.util.Collections;
 import java.util.Date;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
@@ -114,44 +115,40 @@ public class DistributedCompactor {
         this.clientName = corfuRuntime.getParameters().getClientName();
     }
 
-    private void openCheckpointingMetadataTables() {
-        try {
-            if (this.corfuStore != null) { // only run this method once
-                return;
-            }
-            this.corfuStore = new CorfuStore(this.runtime);
-            livenessUpdater = new CheckpointLivenessUpdater(corfuStore);
-            log.debug("Opening all the checkpoint metadata tables");
-            this.compactionManagerTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
-                    StringKey.class,
-                    CheckpointingStatus.class,
-                    null,
-                    TableOptions.fromProtoSchema(CheckpointingStatus.class));
-
-            this.checkpointingStatusTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.CHECKPOINT_STATUS_TABLE_NAME,
-                    TableName.class,
-                    CheckpointingStatus.class,
-                    null,
-                    TableOptions.fromProtoSchema(CheckpointingStatus.class));
-
-            this.activeCheckpointsTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.ACTIVE_CHECKPOINTS_TABLE_NAME,
-                    TableName.class,
-                    ActiveCPStreamMsg.class,
-                    null,
-                    TableOptions.fromProtoSchema(ActiveCPStreamMsg.class));
-
-            checkpointTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.CHECKPOINT,
-                    StringKey.class,
-                    RpcCommon.TokenMsg.class,
-                    null,
-                    TableOptions.fromProtoSchema(RpcCommon.TokenMsg.class));
-        } catch (Exception e) {
-            log.error("Caught an exception while opening checkpoint management tables ", e);
+    private void openCheckpointingMetadataTables() throws Exception {
+        if (this.corfuStore != null) { // only run this method once
+            return;
         }
+        this.corfuStore = new CorfuStore(this.runtime);
+        livenessUpdater = new CheckpointLivenessUpdater(corfuStore);
+        log.debug("Opening all the checkpoint metadata tables");
+        this.compactionManagerTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
+                StringKey.class,
+                CheckpointingStatus.class,
+                null,
+                TableOptions.fromProtoSchema(CheckpointingStatus.class));
+
+        this.checkpointingStatusTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                DistributedCompactor.CHECKPOINT_STATUS_TABLE_NAME,
+                TableName.class,
+                CheckpointingStatus.class,
+                null,
+                TableOptions.fromProtoSchema(CheckpointingStatus.class));
+
+        this.activeCheckpointsTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                DistributedCompactor.ACTIVE_CHECKPOINTS_TABLE_NAME,
+                TableName.class,
+                ActiveCPStreamMsg.class,
+                null,
+                TableOptions.fromProtoSchema(ActiveCPStreamMsg.class));
+
+        checkpointTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                DistributedCompactor.CHECKPOINT,
+                StringKey.class,
+                RpcCommon.TokenMsg.class,
+                null,
+                TableOptions.fromProtoSchema(RpcCommon.TokenMsg.class));
     }
 
     private boolean checkCompactionManagerStartTrigger() {
@@ -186,7 +183,13 @@ public class DistributedCompactor {
     public int startCheckpointing() {
         long startCp = System.currentTimeMillis();
         log.trace("Starting Checkpointing in-memory tables..");
-        openCheckpointingMetadataTables();
+        try {
+            openCheckpointingMetadataTables();
+        } catch (Exception ex) {
+            log.error("Caught exception while opening checkpoint management tables ", ex);
+            corfuStore = null;
+            return 0;
+        }
 
         if (!checkCompactionManagerStartTrigger()) {
             log.trace("Checkpoint hasn't started");
@@ -242,7 +245,7 @@ public class DistributedCompactor {
     }
 
     private List<TableName> getAllTablesToCheckpoint() {
-        List<TableName> tablesToCheckpoint = null;
+        List<TableName> tablesToCheckpoint = Collections.emptyList();
         final int maxRetry = 5;
         for (int retry = 0; retry < maxRetry; retry++) {
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -251,7 +254,7 @@ public class DistributedCompactor {
                 txn.commit();
             } catch (RuntimeException re) {
                 if (!isCriticalRuntimeException(re, retry, maxRetry)) {
-                    return null;
+                    return tablesToCheckpoint;
                 }
             } catch (Throwable t) {
                 log.error("getAllTablesToCheckpoint: encountered unexpected exception", t);
@@ -268,7 +271,7 @@ public class DistributedCompactor {
                 tableName.getNamespace(), tableName.getTableName());
 
         livenessUpdater.updateLiveness(tableName);
-        CheckpointingStatus returnStatus = null;
+        CheckpointingStatus returnStatus;
         try {
             mcw.appendCheckpoints(rt, "checkpointer", Optional.of(livenessUpdater));
             returnStatus = CheckpointingStatus.newBuilder()
@@ -301,10 +304,7 @@ public class DistributedCompactor {
                         .setStreamName(getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName()))
                         .setSerializer(serializer)
                         .addOpenOption(ObjectOpenOption.NO_CACHE);
-        if (persistedCacheRoot == null || persistedCacheRoot.equals(EMPTY_STRING)) {
-            log.warn("Table {}::{} should be opened in disk-mode, but disk cache path is invalid",
-                    tableName.getNamespace(), tableName.getTableName());
-        } else {
+        if (persistedCacheRoot != null && !persistedCacheRoot.equals(EMPTY_STRING)) {
             final String persistentCacheDirName = String.format("compactor_%s_%s",
                     tableName.getNamespace(), tableName.getTableName());
             final Path persistedCacheLocation = Paths.get(persistedCacheRoot).resolve(persistentCacheDirName);
@@ -322,7 +322,7 @@ public class DistributedCompactor {
      *
      * @return positive count on success and negative value on failure
      */
-    public synchronized int checkpointOpenedTables() {
+    public int checkpointOpenedTables() {
         log.trace("Checkpointing opened tables");
         int count = 0;
         for (CorfuTableNamePair openedTable :

@@ -38,8 +38,8 @@ public class InvokeCheckpointingJvm implements IInvokeCheckpointing {
                 String hostName = endpoint.get(0);
                 String port = endpoint.get(1);
 
-                if (this.checkpointerProcess != null && this.checkpointerProcess.isAlive()) {
-                    this.checkpointerProcess.destroy();
+                if (isRunning()) {
+                    shutdown();
                 }
 
                 ProcessBuilder pb = new ProcessBuilder(compactorScriptPath, "--hostname", hostName, "--port",
@@ -84,15 +84,10 @@ public class InvokeCheckpointingJvm implements IInvokeCheckpointing {
     }
 
     @Override
-    public void setIsInvoked(boolean isInvoked) {
-        this.isInvoked = isInvoked;
-    }
-
-    @Override
     public void shutdown() {
-        if (this.checkpointerProcess != null && this.checkpointerProcess.isAlive()) {
+        if (isRunning()) {
             this.checkpointerProcess.destroy();
-            this.checkpointerProcess = null;
         }
+        this.isInvoked = false;
     }
 }

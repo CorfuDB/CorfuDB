@@ -2,6 +2,7 @@ package org.corfudb.infrastructure;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Message;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
@@ -59,16 +60,16 @@ public class CompactorLeaderServices {
     private final CorfuRuntime corfuRuntime;
     private final CorfuStore corfuStore;
     private final String nodeEndpoint;
+    private final LivenessValidatorHelper livenessValidatorHelper;
 
     @Setter
     private boolean isLeader;
 
-    @Setter
-    private long epoch;
     private Logger syslog;
 
     private static final long LIVENESS_INIT_VALUE = -1;
 
+    @AllArgsConstructor
     private class LivenessMetadata {
         @Getter
         private long heartbeat;
@@ -76,26 +77,20 @@ public class CompactorLeaderServices {
         private long streamTail;
         @Getter
         private long time;
-
-        public LivenessMetadata(long heartbeat, long streamTail, long time) {
-            this.heartbeat = heartbeat;
-            this.streamTail = streamTail;
-            this.time = time;
-        }
     }
 
-    private static class LivenessValidatorHelper {
+    private class LivenessValidatorHelper {
         @Getter
-        private static long prevIdleCount = LIVENESS_INIT_VALUE;
+        private long prevIdleCount = LIVENESS_INIT_VALUE;
         @Getter
-        private static long prevActiveTime = LIVENESS_INIT_VALUE;
+        private long prevActiveTime = LIVENESS_INIT_VALUE;
 
-        public static void updateValues(long idleCount, long activeTime) {
+        public void updateValues(long idleCount, long activeTime) {
             prevIdleCount = idleCount;
             prevActiveTime = activeTime;
         }
 
-        public static void clear() {
+        public void clear() {
             prevIdleCount = LIVENESS_INIT_VALUE;
             prevActiveTime = LIVENESS_INIT_VALUE;
         }
@@ -105,39 +100,42 @@ public class CompactorLeaderServices {
         this.corfuRuntime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);
         this.nodeEndpoint = nodeEndpoint;
+        this.livenessValidatorHelper = new LivenessValidatorHelper();
         syslog = LoggerFactory.getLogger("syslog");
+        final int maxRetries = 5;
+        for (int retry = 0; retry < maxRetries; retry++) {
+            try {
+                this.compactionManagerTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                        DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
+                        StringKey.class,
+                        CheckpointingStatus.class,
+                        null,
+                        TableOptions.fromProtoSchema(CheckpointingStatus.class));
 
-        try {
-            this.compactionManagerTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
-                    StringKey.class,
-                    CheckpointingStatus.class,
-                    null,
-                    TableOptions.fromProtoSchema(CheckpointingStatus.class));
+                this.checkpointingStatusTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                        DistributedCompactor.CHECKPOINT_STATUS_TABLE_NAME,
+                        TableName.class,
+                        CheckpointingStatus.class,
+                        null,
+                        TableOptions.fromProtoSchema(CheckpointingStatus.class));
 
-            this.checkpointingStatusTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.CHECKPOINT_STATUS_TABLE_NAME,
-                    TableName.class,
-                    CheckpointingStatus.class,
-                    null,
-                    TableOptions.fromProtoSchema(CheckpointingStatus.class));
+                this.activeCheckpointsTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                        DistributedCompactor.ACTIVE_CHECKPOINTS_TABLE_NAME,
+                        TableName.class,
+                        ActiveCPStreamMsg.class,
+                        null,
+                        TableOptions.fromProtoSchema(ActiveCPStreamMsg.class));
 
-            this.activeCheckpointsTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.ACTIVE_CHECKPOINTS_TABLE_NAME,
-                    TableName.class,
-                    ActiveCPStreamMsg.class,
-                    null,
-                    TableOptions.fromProtoSchema(ActiveCPStreamMsg.class));
-
-            this.checkpointTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.CHECKPOINT,
-                    StringKey.class,
-                    RpcCommon.TokenMsg.class,
-                    null,
-                    TableOptions.fromProtoSchema(RpcCommon.TokenMsg.class));
-
-        } catch (Exception e) {
-            syslog.error("Caught an exception while opening Compaction management tables ", e);
+                this.checkpointTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                        DistributedCompactor.CHECKPOINT,
+                        StringKey.class,
+                        RpcCommon.TokenMsg.class,
+                        null,
+                        TableOptions.fromProtoSchema(RpcCommon.TokenMsg.class));
+                break;
+            } catch (Exception e) {
+                syslog.error("Caught an exception while opening Compaction management tables ", e);
+            }
         }
     }
 
@@ -174,7 +172,6 @@ public class CompactorLeaderServices {
             List<TableName> tableNames = new ArrayList<>(corfuStore.listTables(null));
             CheckpointingStatus idleStatus = buildCheckpointStatus(StatusType.IDLE);
 
-            TransactionalContext.getCurrentContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
             txn.clear(checkpointingStatusTable);
             txn.clear(activeCheckpointsTable);
             //Populate CheckpointingStatusTable
@@ -188,7 +185,6 @@ public class CompactorLeaderServices {
             long minAddressBeforeCycleStarts = corfuRuntime.getAddressSpaceView().getLogTail();
             txn.putRecord(checkpointTable, DistributedCompactor.CHECKPOINT_KEY,
                     RpcCommon.TokenMsg.newBuilder()
-                            .setEpoch(this.epoch)
                             .setSequence(minAddressBeforeCycleStarts)
                             .build(),
                     null);
@@ -224,8 +220,7 @@ public class CompactorLeaderServices {
     public void validateLiveness(long timeout) {
         List<TableName> tableNames;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            tableNames = new ArrayList<>(txn.keySet(activeCheckpointsTable)
-                    .stream().collect(Collectors.toList()));
+            tableNames = txn.keySet(activeCheckpointsTable).stream().collect(Collectors.toList());
             txn.commit();
         } catch (Exception e) {
             syslog.warn("Unable to acquire tableNames");
@@ -237,7 +232,7 @@ public class CompactorLeaderServices {
             handleNoActiveCheckpointers(timeout, currentTime);
         }
         for (TableName table : tableNames) {
-            LivenessValidatorHelper.clear();
+            livenessValidatorHelper.clear();
             String streamName = TableRegistry.getFullyQualifiedTableName(table.getNamespace(), table.getTableName());
             UUID streamId = CorfuRuntime.getCheckpointStreamIdFromName(streamName);
             long currentStreamTail = corfuRuntime.getSequencerView()
@@ -283,9 +278,9 @@ public class CompactorLeaderServices {
 
         //Find the number of tables with IDLE status
         long idleCount = getIdleCount();
-        if (LivenessValidatorHelper.getPrevActiveTime() < 0 || idleCount < LivenessValidatorHelper.getPrevIdleCount()) {
+        if (livenessValidatorHelper.getPrevActiveTime() < 0 || idleCount < livenessValidatorHelper.getPrevIdleCount()) {
             syslog.trace("Checkpointing in progress...");
-            LivenessValidatorHelper.updateValues(idleCount, currentTime);
+            livenessValidatorHelper.updateValues(idleCount, currentTime);
             return;
         }
         CheckpointingStatus managerStatus = null;
@@ -297,12 +292,12 @@ public class CompactorLeaderServices {
         } catch (Exception e) {
             syslog.warn("Unable to acquire Manager Status");
         }
-        if (idleCount == 0 || currentTime - LivenessValidatorHelper.getPrevActiveTime() > timeout &&
+        if (idleCount == 0 || currentTime - livenessValidatorHelper.getPrevActiveTime() > timeout &&
                 managerStatus != null && managerStatus.getStatus() == StatusType.STARTED_ALL) {
             readCache.clear();
-            LivenessValidatorHelper.clear();
+            livenessValidatorHelper.clear();
             finishCompactionCycle();
-        } else if (currentTime - LivenessValidatorHelper.getPrevActiveTime() > timeout &&
+        } else if (currentTime - livenessValidatorHelper.getPrevActiveTime() > timeout &&
                 managerStatus != null && managerStatus.getStatus() == StatusType.STARTED) {
             syslog.info("No active client checkpointers available...");
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -310,7 +305,6 @@ public class CompactorLeaderServices {
                         DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
                         DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
 
-                TransactionalContext.getCurrentContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
                 txn.putRecord(compactionManagerTable,
                         DistributedCompactor.COMPACTION_MANAGER_KEY,
                         buildCheckpointStatus(StatusType.STARTED_ALL,
@@ -318,7 +312,7 @@ public class CompactorLeaderServices {
                                 managerStatus.getTimeTaken()),
                         null);
                 txn.commit();
-                LivenessValidatorHelper.clear();
+                livenessValidatorHelper.clear();
             } catch (Exception e) {
                 syslog.warn("Exception in handleNoActiveCheckpointers, e: {}. StackTrace: {}", e, e.getStackTrace());
             }
@@ -330,7 +324,6 @@ public class CompactorLeaderServices {
             CheckpointingStatus tableStatus = txn.getRecord(
                     checkpointingStatusTable, table).getPayload();
             if (tableStatus.getStatus() != StatusType.COMPLETED && tableStatus.getStatus() != StatusType.FAILED) {
-                TransactionalContext.getCurrentContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
                 txn.putRecord(checkpointingStatusTable,
                         table,
                         buildCheckpointStatus(StatusType.FAILED),
@@ -363,11 +356,6 @@ public class CompactorLeaderServices {
      * Finish compaction cycle by the leader
      */
     public void finishCompactionCycle() {
-        if (!isLeader) {
-            syslog.warn("finishCompactionCycle Lost leadership, giving up");
-            return;
-        }
-
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
                     DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME, DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
@@ -398,7 +386,6 @@ public class CompactorLeaderServices {
                     tableNames.size());
             MicroMeterUtils.time(Duration.ofMillis(totalTimeElapsed), "compaction.total.timer",
                     "nodeEndpoint", nodeEndpoint);
-            TransactionalContext.getCurrentContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
             txn.putRecord(compactionManagerTable, DistributedCompactor.COMPACTION_MANAGER_KEY,
                     buildCheckpointStatus(cpFailed ? StatusType.FAILED : StatusType.COMPLETED,
                             tableNames.size(), totalTimeElapsed),

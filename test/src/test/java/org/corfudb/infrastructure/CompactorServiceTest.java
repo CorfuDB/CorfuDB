@@ -16,6 +16,7 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.proto.RpcCommon;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.concurrent.SingletonResource;
@@ -140,6 +141,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         runtime0 = getRuntime(layout).connect();
         runtime1 = getRuntime(layout).connect();
         runtime2 = getRuntime(layout).connect();
+        runtime0.getParameters().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
         runtime0.getParameters().setClientName(CLIENT_NAME_PREFIX + "0");
         runtime1.getParameters().setClientName(CLIENT_NAME_PREFIX + "1");
         runtime2.getParameters().setClientName(CLIENT_NAME_PREFIX + "2");
@@ -291,7 +293,6 @@ public class CompactorServiceTest extends AbstractViewTest {
 
     private void populateStream(String streamName, int numRecords) {
         CorfuStore localCorfuStore = new CorfuStore(runtime2);
-        openCompactionManagerTable(localCorfuStore);
         for (int i = 0; i < numRecords; i++) {
             try (TxnContext txn = localCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                 byte[] array = new byte[ITEM_SIZE];

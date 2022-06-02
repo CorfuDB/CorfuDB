@@ -7,7 +7,5 @@ public interface IInvokeCheckpointing {
 
     boolean isInvoked();
 
-    void setIsInvoked(boolean isInvoked);
-
     void shutdown();
 }
