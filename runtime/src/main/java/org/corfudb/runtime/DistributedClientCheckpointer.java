@@ -40,14 +40,14 @@ public class DistributedClientCheckpointer {
     /**
      * Attempt to checkpoint all the tables already materialized in my JVM heap
      */
-    private synchronized void checkpointAllMyOpenedTables() {
+    private void checkpointAllMyOpenedTables() {
         this.distributedCompactor.startCheckpointing();
     }
 
     /**
      * Shutdown the streaming manager and clean up resources.
      */
-    public synchronized void shutdown() {
+    public void shutdown() {
         if (compactionScheduler != null) {
             this.compactionScheduler.shutdown();
         }

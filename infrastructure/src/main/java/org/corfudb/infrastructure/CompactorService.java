@@ -58,15 +58,9 @@ public class CompactorService implements ManagementService {
         this.serverContext = serverContext;
         this.runtimeSingletonResource = runtimeSingletonResource;
 
-        String threadName;
-        if (serverContext.getServerConfig().get("<port>").toString().equals("9040")) {
-            threadName = "Cmpt-NonConfig-chkpter";
-        } else {
-            threadName = "Cmpt-Config-chkpter";
-        }
         this.orchestratorThread = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
-                        .setNameFormat(threadName)
+                        .setNameFormat("Cmpt-" + serverContext.getServerConfig().get("<port>") + "-chkpter")
                         .build());
         this.checkpointerJvmManager = checkpointerJvmManager;
         this.compactionTriggerPolicy = compactionTriggerPolicy;
@@ -115,27 +109,29 @@ public class CompactorService implements ManagementService {
                     DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
             txn.commit();
         } catch (Exception e) {
-            syslog.warn("Exception in runOrchestrator: {}", e.getStackTrace());
+            syslog.warn("Unable to acquire manager status: {}", e.getStackTrace());
         }
-        syslog.trace("ManagerStatus: {}", managerStatus == null ? "null" : managerStatus.getStatus());
-        if (managerStatus != null) {
-            if (managerStatus.getStatus() == StatusType.FAILED || managerStatus.getStatus() == StatusType.COMPLETED) {
-                checkpointerJvmManager.shutdown();
-                checkpointerJvmManager.setIsInvoked(false);
-            } else if (managerStatus.getStatus() == StatusType.STARTED_ALL && !checkpointerJvmManager.isRunning()
-                    && !checkpointerJvmManager.isInvoked()) {
-                checkpointerJvmManager.invokeCheckpointing();
+        try {
+            if (managerStatus != null) {
+                if (managerStatus.getStatus() == StatusType.FAILED || managerStatus.getStatus() == StatusType.COMPLETED) {
+                    checkpointerJvmManager.shutdown();
+                } else if (managerStatus.getStatus() == StatusType.STARTED_ALL && !checkpointerJvmManager.isRunning()
+                        && !checkpointerJvmManager.isInvoked()) {
+                    checkpointerJvmManager.invokeCheckpointing();
+                }
             }
-        }
 
-        if (isLeader) {
-            if (managerStatus != null && (managerStatus.getStatus() == StatusType.STARTED ||
-                    managerStatus.getStatus() == StatusType.STARTED_ALL)) {
-                compactorLeaderServices.validateLiveness(livenessTimeout.toMillis());
-            } else if (compactionTriggerPolicy.shouldTrigger(this.compactionTriggerFreqMs)) {
-                compactionTriggerPolicy.markCompactionCycleStart();
-                compactorLeaderServices.trimAndTriggerDistributedCheckpointing();
+            if (isLeader) {
+                if (managerStatus != null && (managerStatus.getStatus() == StatusType.STARTED ||
+                        managerStatus.getStatus() == StatusType.STARTED_ALL)) {
+                    compactorLeaderServices.validateLiveness(livenessTimeout.toMillis());
+                } else if (compactionTriggerPolicy.shouldTrigger(this.compactionTriggerFreqMs)) {
+                    compactionTriggerPolicy.markCompactionCycleStart();
+                    compactorLeaderServices.trimAndTriggerDistributedCheckpointing();
+                }
             }
+        } catch (Exception ex) {
+            syslog.warn("Exception in runOrcestrator(): {}", ex.getStackTrace());
         }
     }
 
