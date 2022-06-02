@@ -40,14 +40,14 @@ public class ReloadableTrustManager implements X509TrustManager {
 
     @Override
     public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-        getTrustManager()
-                .checkClientTrusted(chain, authType);
+        X509TrustManager trustManager = getTrustManager();
+        trustManager.checkClientTrusted(chain, authType);
     }
 
     @Override
     public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-        getTrustManager()
-                .checkServerTrusted(chain, authType);
+        X509TrustManager trustManager = getTrustManager();
+        trustManager.checkServerTrusted(chain, authType);
     }
 
     @Override
@@ -56,13 +56,13 @@ public class ReloadableTrustManager implements X509TrustManager {
     }
 
     private X509TrustManager getTrustManager() throws CertificateException {
-        X509TrustManager tm;
+        X509TrustManager trustManager;
         try {
-            tm = watcher.getTrustManager().join().trustManager;
+            trustManager = watcher.getTrustManager();
         } catch (Exception e) {
             throw new CertificateException(e);
         }
-        return tm;
+        return trustManager;
     }
 
     public static class TrustStoreWatcher {
@@ -76,11 +76,23 @@ public class ReloadableTrustManager implements X509TrustManager {
         public TrustStoreWatcher(@NonNull TrustStoreConfig trustStoreConfig) {
             this.trustStoreConfig = trustStoreConfig;
             trustManagerAsync = loadTrustStore();
+            //init trust manager synchronously
+            getTrustManager();
         }
 
-        public CompletableFuture<TrustManagerContext> getTrustManager() {
+        public CompletableFuture<TrustManagerContext> reloadTrustManagerAsync() {
             trustManagerAsync = reloadTrustStore();
             return trustManagerAsync;
+        }
+
+        private X509TrustManager getTrustManager() {
+            X509TrustManager tm;
+            try {
+                tm = reloadTrustManagerAsync().join().trustManager;
+            } catch (CompletionException e) {
+                throw new IllegalStateException(e.getCause());
+            }
+            return tm;
         }
 
         /**

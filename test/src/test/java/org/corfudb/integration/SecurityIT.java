@@ -1,26 +1,31 @@
 package org.corfudb.integration;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.security.tls.ReloadableTrustManager.TrustStoreWatcher;
+import org.corfudb.security.tls.SslContextConstructor;
+import org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig;
+import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 import org.corfudb.util.NodeLocator;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.Arrays;
 import java.util.Collections;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * This test suit exercises the ability to enable TLS on Corfu servers and runtime
- *
+ * <p>
  * Created by Sam Behnam on 8/13/18.
  */
 @Slf4j
@@ -63,7 +68,7 @@ public class SecurityIT extends AbstractIT {
      * are not well-formed. If the CorfuDB.properties has invalid or non existent values for the keystore or
      * truststore, it will lead to throwing {@link IllegalArgumentException}.
      */
-    @Before
+    @BeforeEach
     public void loadProperties() {
         // Load host and port properties
         corfuSingleNodeHost = PROPERTIES.getProperty("corfuSingleNodeHost");
@@ -94,10 +99,10 @@ public class SecurityIT extends AbstractIT {
      */
     private String getPropertyAbsolutePath(String pathProperty) {
         if ((PROPERTIES.getProperty(pathProperty)) == null ||
-            Files.notExists(Paths.get(PROPERTIES.getProperty(pathProperty)).toAbsolutePath())) {
+                Files.notExists(Paths.get(PROPERTIES.getProperty(pathProperty)).toAbsolutePath())) {
             throw new IllegalArgumentException(
                     String.format("CorfuDB.properties contains invalid or non existent value for :%s",
-                    pathProperty));
+                            pathProperty));
         }
 
         return Paths.get(PROPERTIES.getProperty(pathProperty)).toAbsolutePath().toString();
@@ -117,13 +122,22 @@ public class SecurityIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServerTls();
 
         // Start a Corfu runtime
-        runtime = new CorfuRuntime(singleNodeEndpoint)
-                                    .enableTls(runtimePathToKeyStore,
-                                               runtimePathToKeyStorePassword,
-                                               runtimePathToTrustStore,
-                                               runtimePathToTrustStorePassword)
-                                    .setCacheDisabled(true)
-                                    .connect();
+        CorfuRuntimeParameters runtimeParameters = CorfuRuntimeParameters
+                .builder()
+                .layoutServers(Collections.singletonList(NodeLocator.parseString(singleNodeEndpoint)))
+                .tlsEnabled(tlsEnabled)
+                .keyStore(runtimePathToKeyStore)
+                .ksPasswordFile(runtimePathToKeyStorePassword)
+                .trustStore(runtimePathToTrustStore)
+                .tsPasswordFile(runtimePathToTrustStorePassword)
+                .cacheDisabled(true)
+                .systemDownHandler(() -> fail("Can't connect to corfu server"))
+                .build();
+
+        // Connecting to runtime
+        runtime = CorfuRuntime
+                .fromParameters(runtimeParameters)
+                .connect();
 
         // Create CorfuTable
         CorfuTable<String, Object> testTable = runtime
@@ -175,6 +189,7 @@ public class SecurityIT extends AbstractIT {
                 .ksPasswordFile(runtimePathToKeyStorePassword)
                 .trustStore(runtimePathToTrustStore)
                 .tsPasswordFile(runtimePathToTrustStorePassword)
+                .systemDownHandler(() -> fail("Can't connect to corfu server"))
                 .build();
 
         // Start a Corfu runtime from parameters
@@ -213,26 +228,25 @@ public class SecurityIT extends AbstractIT {
     /**
      * Testing that configuring incorrect TLS parameters will lead to throwing
      * {@link UnrecoverableCorfuError} exception.
-     *
-     * @throws Exception error
      */
-    @Test(expected = UnrecoverableCorfuError.class)
-    public void testIncorrectKeyStoreException() throws Exception {
-        // Run a corfu server with incorrect truststore
-        runSinglePersistentServerTls();
+    @Test
+    public void testInvalidKeyStore() {
+        assertThrows(IllegalStateException.class, () -> {
+            SslContextConstructor.constructSslContext(
+                    false,
+                    KeyStoreConfig.from(runtimePathToTrustStore, runtimePathToKeyStorePassword),
+                    TrustStoreConfig.from(runtimePathToTrustStore, runtimePathToTrustStorePassword)
+            );
+        });
+    }
 
-        // Start a Corfu runtime with incorrect truststore
-        CorfuRuntimeParameters runtimeParameters = CorfuRuntimeParameters
-                .builder()
-                .layoutServers(Collections.singletonList(NodeLocator.parseString(singleNodeEndpoint)))
-                .tlsEnabled(tlsEnabled)
-                .keyStore(runtimePathToKeyStore)
-                .ksPasswordFile(runtimePathToKeyStorePassword)
-                .trustStore(runtimePathToKeyStore)
-                .tsPasswordFile(runtimePathToTrustStorePassword)
-                .build();
+    @Test
+    public void testInvalidTrustStore() {
+        TrustStoreConfig invalidTrustStore = TrustStoreConfig.from(
+                runtimePathToKeyStore,
+                runtimePathToTrustStorePassword
+        );
 
-        // Connecting to runtime
-        runtime = CorfuRuntime.fromParameters(runtimeParameters).connect();
+        assertThrows(IllegalStateException.class, () -> new TrustStoreWatcher(invalidTrustStore));
     }
 }

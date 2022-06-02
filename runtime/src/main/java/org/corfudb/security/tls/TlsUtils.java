@@ -2,6 +2,7 @@ package org.corfudb.security.tls;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig;
@@ -43,7 +44,7 @@ public class TlsUtils {
         return CompletableFuture
                 //validation step
                 .runAsync(certStoreCfg::checkCertStoreExists)
-                .thenCompose(empty -> getKeyStorePassword(certStoreCfg.getPasswordFile()))
+                .thenCompose(empty -> getCertStorePassword(certStoreCfg.getPasswordFile()))
                 .thenApply(certStorePassword -> {
                     KeyStore keyStore = getKeyStoreInstance();
 
@@ -84,7 +85,7 @@ public class TlsUtils {
         return keyStore;
     }
 
-    public static CompletableFuture<String> getKeyStorePassword(Path passwordFilePath) {
+    public static CompletableFuture<String> getCertStorePassword(Path passwordFilePath) {
         return CompletableFuture.supplyAsync(() -> {
             if (!Files.exists(passwordFilePath)) {
                 throw new IllegalStateException(PASSWORD_FILE_NOT_FOUND_ERROR);
@@ -108,7 +109,7 @@ public class TlsUtils {
 
     public static CompletableFuture<KeyManagerFactory> createKeyManagerFactory(KeyStoreConfig cfg) {
 
-        CompletableFuture<String> passwordAsync = getKeyStorePassword(cfg.getPasswordFile());
+        CompletableFuture<String> passwordAsync = getCertStorePassword(cfg.getPasswordFile());
         CompletableFuture<KeyStore> keyStoreAsync = TlsUtils.openCertStore(cfg);
 
         return passwordAsync.thenCombine(keyStoreAsync, (password, keyStore) -> {
@@ -150,6 +151,7 @@ public class TlsUtils {
 
         @AllArgsConstructor
         @Getter
+        @ToString
         class KeyStoreConfig implements CertStoreConfig {
             private final Path keyStoreFile;
             private final Path passwordFile;
@@ -166,6 +168,7 @@ public class TlsUtils {
 
         @AllArgsConstructor
         @Getter
+        @ToString
         class TrustStoreConfig implements CertStoreConfig {
             /**
              * TrustStore path

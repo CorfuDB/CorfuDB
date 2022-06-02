@@ -11,6 +11,7 @@ import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 @Slf4j
 public class SslContextConstructor {
@@ -35,7 +36,12 @@ public class SslContextConstructor {
 
         SslProvider provider = getSslProvider();
 
-        KeyManagerFactory kmf = kmfAsync.join();
+        KeyManagerFactory kmf;
+        try {
+            kmf = kmfAsync.join();
+        } catch (CompletionException e) {
+            throw (IllegalStateException) e.getCause();
+        }
 
         SslContextBuilder sslContextBuilder;
         if (isServer) {
