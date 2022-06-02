@@ -148,9 +148,9 @@ public class CorfuStoreCompactorMain {
     @SuppressWarnings("UncommentedMain")
     public static void main(String[] args) throws Exception {
         parseAndBuildRuntimeParameters(args);
-
+        
+        Thread.currentThread().setName("CorfuStore-" + port + "-chkpter");
         CorfuStoreCompactorMain corfuCompactorMain = new CorfuStoreCompactorMain();
-
         if (isUpgrade) {
             corfuCompactorMain.upgrade();
         }
@@ -298,11 +298,9 @@ public class CorfuStoreCompactorMain {
             if (persistedCacheRoot == null || persistedCacheRoot.equals(DistributedCompactor.EMPTY_STRING)) {
                 // in-memory compaction
                 builder.maxWriteSize(DEFAULT_CP_MAX_WRITE_SIZE);
-                Thread.currentThread().setName("CS-Config-chkpter");
             } else {
                 // disk-backed non-config compaction
                 builder.maxWriteSize(NON_CONFIG_DEFAULT_CP_MAX_WRITE_SIZE);
-                Thread.currentThread().setName("CS-NonConfig-chkpter");
             }
         }
         if (opts.get("--bulkReadSize") != null) {

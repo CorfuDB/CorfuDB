@@ -123,12 +123,6 @@ public class RuntimeLayout {
             return endpointClientMap;
         }).get(endpoint);
 
-        //Thread priority overrides Client Priority in a TransactionalContext
-        if (TransactionalContext.isInTransaction() &&
-                TransactionalContext.getCurrentContext().getPriorityLevel() != null) {
-            returnClient.setPriorityLevel(TransactionalContext.getRootContext().getPriorityLevel());
-        }
-
         return returnClient;
     }
 
