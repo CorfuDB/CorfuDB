@@ -38,7 +38,7 @@
         <revision>0.4.0-SNAPSHOT</revision>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <logback.classic.version>1.2.3</logback.classic.version>
+        <logback.classic.version>1.2.11</logback.classic.version>
 
         <!-- Dependency versions -->
         <slf4j.version>1.7.32</slf4j.version>
