@@ -14,7 +14,7 @@
     <properties>
         <maven.deploy.skip>false</maven.deploy.skip>
 
-        <rocksdb.version>6.8.1</rocksdb.version>
+        <rocksdb.version>7.2.2</rocksdb.version>
         <kryo.version>4.0.0</kryo.version>
         <kryo.serializers.version>0.41</kryo.serializers.version>
         <plexus.version>3.0.24</plexus.version>
