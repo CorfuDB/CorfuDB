@@ -142,6 +142,11 @@ public class WrappedRocksIterator implements RocksIteratorInterface {
         }
     }
 
+    @Override
+    public void refresh(){
+        throw new UnsupportedOperationException("refresh");
+    }
+
     public boolean isOpen() {
         return iterator.isOwningHandle();
     }
