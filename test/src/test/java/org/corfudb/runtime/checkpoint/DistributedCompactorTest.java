@@ -3,6 +3,7 @@ package org.corfudb.runtime.checkpoint;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.CompactorLeaderServices;
+import org.corfudb.infrastructure.CompactorLeaderServices.LeaderServicesStatus;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestLayoutBuilder;
@@ -253,8 +254,8 @@ public class DistributedCompactorTest extends AbstractViewTest {
         CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime1, SERVERS.ENDPOINT_1);
         compactorLeaderServices2.setLeader(false);
 
-        assert compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
-        assert !compactorLeaderServices2.trimAndTriggerDistributedCheckpointing();
+        assert compactorLeaderServices1.trimAndTriggerDistributedCheckpointing() == LeaderServicesStatus.SUCCESS;
+        assert compactorLeaderServices2.trimAndTriggerDistributedCheckpointing() == LeaderServicesStatus.FAIL;
         assert verifyManagerStatus(StatusType.STARTED);
         assert verifyCheckpointStatusTable(StatusType.IDLE, 0);
     }
@@ -266,10 +267,10 @@ public class DistributedCompactorTest extends AbstractViewTest {
         CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime1, SERVERS.ENDPOINT_1);
         compactorLeaderServices2.setLeader(true);
 
-        boolean init1 = compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
-        boolean init2 = compactorLeaderServices2.trimAndTriggerDistributedCheckpointing();
+        LeaderServicesStatus init1 = compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
+        LeaderServicesStatus init2 = compactorLeaderServices2.trimAndTriggerDistributedCheckpointing();
 
-        assert init1 ^ init2;
+        assert !init1.equals(init2);
         assert verifyManagerStatus(StatusType.STARTED);
         assert verifyCheckpointStatusTable(StatusType.IDLE, 0);
     }
@@ -282,15 +283,16 @@ public class DistributedCompactorTest extends AbstractViewTest {
         compactorLeaderServices2.setLeader(true);
 
         ExecutorService scheduler = Executors.newFixedThreadPool(2);
-        Future<Boolean> future1 = scheduler.submit(() -> compactorLeaderServices1.trimAndTriggerDistributedCheckpointing());
-        Future<Boolean> future2 = scheduler.submit(() -> compactorLeaderServices2.trimAndTriggerDistributedCheckpointing());
+        Future<LeaderServicesStatus> future1 = scheduler.submit(() -> compactorLeaderServices1.trimAndTriggerDistributedCheckpointing());
+        Future<LeaderServicesStatus> future2 = scheduler.submit(() -> compactorLeaderServices2.trimAndTriggerDistributedCheckpointing());
         compactorLeaderServices1.setLeader(false);
 
         try {
-            assert !(future1.get() && future2.get());
-            if (future1.get() ^ future1.get()) {
+            if (!future1.get().equals(future2)) {
                 assert verifyManagerStatus(StatusType.STARTED);
                 assert verifyCheckpointStatusTable(StatusType.IDLE, 0);
+            } else {
+                assert future1.get() != LeaderServicesStatus.SUCCESS && future2.get() != LeaderServicesStatus.SUCCESS;
             }
         } catch (Exception e) {
             log.warn("Unable to get results");
