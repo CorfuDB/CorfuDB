@@ -22,9 +22,7 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.proto.RpcCommon;
-import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
 import org.slf4j.Logger;
@@ -70,19 +68,16 @@ public class CompactorLeaderServices {
     private static final long LIVENESS_INIT_VALUE = -1;
 
     @AllArgsConstructor
+    @Getter
     private class LivenessMetadata {
-        @Getter
         private long heartbeat;
-        @Getter
         private long streamTail;
-        @Getter
         private long time;
     }
 
+    @Getter
     private class LivenessValidatorHelper {
-        @Getter
         private long prevIdleCount = LIVENESS_INIT_VALUE;
-        @Getter
         private long prevActiveTime = LIVENESS_INIT_VALUE;
 
         public void updateValues(long idleCount, long activeTime) {
@@ -94,6 +89,16 @@ public class CompactorLeaderServices {
             prevIdleCount = LIVENESS_INIT_VALUE;
             prevActiveTime = LIVENESS_INIT_VALUE;
         }
+    }
+
+    /**
+     * This enum contains the status of the leader services of the current node
+     * If the status is SUCCESS, the leader services will continue
+     * If the status is FAIL, the leader services will return
+     */
+    public enum LeaderServicesStatus {
+        SUCCESS,
+        FAIL
     }
 
     public CompactorLeaderServices(CorfuRuntime corfuRuntime, String nodeEndpoint) {
@@ -148,15 +153,15 @@ public class CompactorLeaderServices {
      * @return
      */
     @VisibleForTesting
-    public boolean trimAndTriggerDistributedCheckpointing() {
+    public LeaderServicesStatus trimAndTriggerDistributedCheckpointing() {
         syslog.info("=============Initiating Distributed Checkpointing============");
         if (!isLeader) {
-            return false;
+            return LeaderServicesStatus.FAIL;
         }
         trimLog();
         if (DistributedCompactor.isCheckpointFrozen(corfuStore, checkpointTable)) {
             syslog.warn("Will not start checkpointing since checkpointing has been frozen");
-            return false;
+            return LeaderServicesStatus.FAIL;
         }
 
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -166,7 +171,7 @@ public class CompactorLeaderServices {
 
             if (managerStatus != null && (managerStatus.getStatus() == StatusType.STARTED ||
                     managerStatus.getStatus() == StatusType.STARTED_ALL)) {
-                return false;
+                return LeaderServicesStatus.FAIL;
             }
 
             List<TableName> tableNames = new ArrayList<>(corfuStore.listTables(null));
@@ -196,9 +201,9 @@ public class CompactorLeaderServices {
             txn.commit();
         } catch (Exception e) {
             syslog.error("triggerDistributedCheckpoint hit an exception {}. Stack Trace {}", e, e.getStackTrace());
-            return false;
+            return LeaderServicesStatus.FAIL;
         }
-        return true;
+        return LeaderServicesStatus.SUCCESS;
     }
 
     /**
@@ -243,7 +248,7 @@ public class CompactorLeaderServices {
                 syncHeartBeat = txn.getRecord(activeCheckpointsTable, table).getPayload().getSyncHeartbeat();
                 txn.commit();
             } catch (Exception e) {
-                syslog.warn("Unable to acquire table status");
+                syslog.warn("Unable to acquire table status", e);
             }
             if (readCache.containsKey(table)) {
                 LivenessMetadata previousStatus = readCache.get(table);
@@ -252,7 +257,8 @@ public class CompactorLeaderServices {
                 } else if (previousStatus.getHeartbeat() < syncHeartBeat) {
                     readCache.put(table, new LivenessMetadata(syncHeartBeat, previousStatus.getStreamTail(), currentTime));
                 } else if (previousStatus.getStreamTail() == currentStreamTail || previousStatus.getHeartbeat() == syncHeartBeat) {
-                    if (currentTime - previousStatus.getTime() > timeout && !handleSlowCheckpointers(table)) {
+                    if (currentTime - previousStatus.getTime() > timeout &&
+                            handleSlowCheckpointers(table) == LeaderServicesStatus.FAIL) {
                         readCache.clear();
                         return;
                     }
@@ -319,7 +325,7 @@ public class CompactorLeaderServices {
         }
     }
 
-    private boolean handleSlowCheckpointers(TableName table) {
+    private LeaderServicesStatus handleSlowCheckpointers(TableName table) {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus tableStatus = txn.getRecord(
                     checkpointingStatusTable, table).getPayload();
@@ -337,7 +343,7 @@ public class CompactorLeaderServices {
                 txn.commit();
                 syslog.warn("Finished compaction cycle. FAILED due to table: {}${}", table.getNamespace(),
                         table.getTableName());
-                return false;
+                return LeaderServicesStatus.FAIL;
             } else {
                 txn.delete(activeCheckpointsTable, table);
                 txn.commit();
@@ -346,10 +352,10 @@ public class CompactorLeaderServices {
             if (ex.getAbortCause() == AbortCause.CONFLICT) {
                 syslog.warn("Another node tried to commit");
                 readCache.clear();
-                return true;
+                return LeaderServicesStatus.SUCCESS;
             }
         }
-        return true;
+        return LeaderServicesStatus.SUCCESS;
     }
 
     /**

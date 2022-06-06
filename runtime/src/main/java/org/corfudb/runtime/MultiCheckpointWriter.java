@@ -91,7 +91,6 @@ public class MultiCheckpointWriter<T extends StreamingMap> {
             // TODO(Maithem): print cp id?
             log.trace("appendCheckpoints: finished, author '{}' at min globalAddress {}",
                     author, minSnapshot);
-            rt.getObjectsView().TXEnd();
         }
 
         return minSnapshot;

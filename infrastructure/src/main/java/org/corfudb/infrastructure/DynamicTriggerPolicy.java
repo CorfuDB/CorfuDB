@@ -54,7 +54,7 @@ public class DynamicTriggerPolicy implements ICompactionTriggerPolicy {
      * ... once checkpoint starts we record the lastCompactionCycleStartTS
      * 2. if ((currentTime - lastCompactionCycleStart) > maxTimeBetweenCompactionStarts)
      *
-     * @param interval - ignored for now
+     * @param interval - trigger interval in ms
      * @return true if compaction cycle should run, false otherwise
      */
     @Override
