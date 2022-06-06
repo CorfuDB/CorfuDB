@@ -1,14 +1,17 @@
 package org.corfudb.runtime;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import org.apache.commons.io.FileUtils;
+import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.BackupRestoreException;
+import org.corfudb.runtime.view.CacheOption;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.Serializers;
 
@@ -22,6 +25,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -48,6 +52,8 @@ public class Restore {
     // The filename of each table's backup file, format: uuid.namespace$tableName.
     private final List<String> tableBackups;
 
+    private CorfuRuntime rt;
+
     // The Corfu Store associated with the runtime
     private CorfuStore corfuStore;
 
@@ -68,6 +74,7 @@ public class Restore {
     public Restore(String filePath, CorfuRuntime runtime, RestoreMode restoreMode) throws IOException {
         this.filePath = filePath;
         this.tableBackups = new ArrayList<>();
+        this.rt = runtime;
         this.corfuStore = new CorfuStore(runtime);
         this.restoreMode = restoreMode;
     }
@@ -126,15 +133,15 @@ public class Restore {
         long startTime = System.currentTimeMillis();
 
         try (FileInputStream fileInput = new FileInputStream(filePath.toString())) {
-            TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE);
 
             // Clear table before restore
             if (restoreMode == RestoreMode.PARTIAL) {
                 SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
-                txn.logUpdate(streamId, entry);
+                nonCachedAppendSMREntries(streamId, entry);
             }
 
-            long numEntries = 0;
+            StreamBatchWriter sbw = new StreamBatchWriter(rt.getParameters().getRestoreBatchSize(),
+                    rt.getParameters().getMaxWriteSize(), streamId);
             while (fileInput.available() > 0) {
                 OpaqueEntry opaqueEntry = OpaqueEntry.read(fileInput);
                 List<SMREntry> smrEntries = opaqueEntry.getEntries().get(streamId);
@@ -142,15 +149,14 @@ public class Restore {
                     continue;
                 }
 
-                txn.logUpdate(streamId, smrEntries);
-                numEntries += smrEntries.size();
+                sbw.batchWrite(smrEntries);
             }
-            txn.commit();
+            sbw.shutdown();
 
             long elapsedTime = System.currentTimeMillis() - startTime;
 
-            log.info("completed restore of table {} with {} numEntries, elapsed time {}ms",
-                    streamId, numEntries, elapsedTime);
+            log.info("completed restore of table {} with {} numEntries, total size {} byte(s), elapsed time {}ms",
+                    streamId, sbw.getTotalNumSMREntries(), sbw.getTotalWriteSize(), elapsedTime);
         } catch (FileNotFoundException e) {
             log.error("restoreTable can not find file {}", filePath);
             throw e;
@@ -227,8 +233,64 @@ public class Restore {
         txn.commit();
     }
 
+    private void nonCachedAppendSMREntries(UUID streamId, SMREntry... smrEntries) {
+        MultiSMREntry multiSMREntry = new MultiSMREntry();
+        multiSMREntry.addTo(Arrays.asList(smrEntries));
+        rt.getStreamsView().append(multiSMREntry, null, CacheOption.WRITE_AROUND, streamId);
+    }
+
     public enum RestoreMode {
         FULL,   // Clean up ALL tables before restore
         PARTIAL // Clean up ONLY tables that are to be restored
+    }
+
+    class StreamBatchWriter {
+
+        private final int maxBatchSize;
+        private final int maxWriteSize;
+        private final UUID streamId;
+
+        @Getter
+        private int totalNumSMREntries = 0;
+        @Getter
+        private int totalWriteSize = 0;
+
+        private final List<SMREntry> buffer = new ArrayList<>();
+        private int bufferWriteSize = 0;
+
+        StreamBatchWriter(int maxBatchSize, int maxWriteSize, UUID streamId) {
+            this.maxBatchSize = maxBatchSize;
+            this.maxWriteSize = maxWriteSize;
+            this.streamId = streamId;
+        }
+
+        public void batchWrite(List<SMREntry> smrEntries) {
+            if (smrEntries.isEmpty()) {
+                return;
+            }
+
+            for (SMREntry smrEntry : smrEntries) {
+                if (buffer.size() == maxBatchSize || bufferWriteSize + smrEntry.getSerializedSize() > maxWriteSize) {
+                    flushBuffer();
+                }
+                buffer.add(smrEntry);
+                bufferWriteSize += smrEntry.getSerializedSize();
+            }
+        }
+
+        public void shutdown() {
+            flushBuffer();
+        }
+
+        private void flushBuffer() {
+            totalNumSMREntries += buffer.size();
+            totalWriteSize += bufferWriteSize;
+
+            nonCachedAppendSMREntries(streamId, buffer.toArray(new SMREntry[0]));
+
+            bufferWriteSize = 0;
+            buffer.clear();
+        }
+
     }
 }
