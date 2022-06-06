@@ -96,7 +96,7 @@ public class CompactorLeaderServices {
      * If the status is SUCCESS, the leader services will continue
      * If the status is FAIL, the leader services will return
      */
-    public enum LeaderServicesStatus {
+    public static enum LeaderServicesStatus {
         SUCCESS,
         FAIL
     }
@@ -362,6 +362,7 @@ public class CompactorLeaderServices {
      * Finish compaction cycle by the leader
      */
     public void finishCompactionCycle() {
+        StatusType finalStatus = StatusType.FAILED;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
                     DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME, DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
@@ -374,7 +375,6 @@ public class CompactorLeaderServices {
 
             List<TableName> tableNames = new ArrayList<TableName>(txn.keySet(checkpointingStatusTable)
                     .stream().collect(Collectors.toList()));
-
             boolean cpFailed = false;
 
             for (TableName table : tableNames) {
@@ -392,9 +392,9 @@ public class CompactorLeaderServices {
                     tableNames.size());
             MicroMeterUtils.time(Duration.ofMillis(totalTimeElapsed), "compaction.total.timer",
                     "nodeEndpoint", nodeEndpoint);
+            finalStatus = cpFailed ? StatusType.FAILED : StatusType.COMPLETED;
             txn.putRecord(compactionManagerTable, DistributedCompactor.COMPACTION_MANAGER_KEY,
-                    buildCheckpointStatus(cpFailed ? StatusType.FAILED : StatusType.COMPLETED,
-                            tableNames.size(), totalTimeElapsed),
+                    buildCheckpointStatus(finalStatus, tableNames.size(), totalTimeElapsed),
                     null);
             txn.commit();
         } catch (Exception e) {
@@ -412,7 +412,7 @@ public class CompactorLeaderServices {
             }
         }
 
-        syslog.info("Finished the compaction cycle");
+        syslog.info("Finished the compaction cycle with status {}", finalStatus);
     }
 
     /**
