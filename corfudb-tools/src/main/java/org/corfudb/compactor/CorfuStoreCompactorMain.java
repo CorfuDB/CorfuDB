@@ -24,7 +24,6 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 public class CorfuStoreCompactorMain {
 
     private final CorfuStoreCompactorConfig config;
-    private final CorfuRuntime corfuRuntime;
     private final CorfuStore corfuStore;
     private final DistributedCompactor distributedCompactor;
 
@@ -35,9 +34,10 @@ public class CorfuStoreCompactorMain {
         this.config = new CorfuStoreCompactorConfig();
         config.parseAndBuildRuntimeParameters(args);
 
-        String connectionString = config.getPort() + ":" + config.getHostname();
-        CorfuRuntime cpRuntime = (CorfuRuntime.fromParameters(config.getParams())).parseConfigurationString(connectionString).connect();
-        corfuRuntime = (CorfuRuntime.fromParameters(config.getParams())).parseConfigurationString(connectionString).connect();
+        CorfuRuntime cpRuntime = (CorfuRuntime.fromParameters(
+                config.getParams())).parseConfigurationString(config.getNodeLocator().toEndpointUrl()).connect();
+        CorfuRuntime corfuRuntime = (CorfuRuntime.fromParameters(
+                config.getParams())).parseConfigurationString(config.getNodeLocator().toEndpointUrl()).connect();
         corfuStore = new CorfuStore(corfuRuntime);
         distributedCompactor = new DistributedCompactor(corfuRuntime, cpRuntime, config.getPersistedCacheRoot());
         try {
@@ -69,7 +69,7 @@ public class CorfuStoreCompactorMain {
     }
 
     private void startCompaction() {
-        Thread.currentThread().setName("CorfuStore-" + config.getPort() + "-chkpter");
+        Thread.currentThread().setName("CorfuStore-" + config.getNodeLocator().getPort() + "-chkpter");
         if (config.isUpgrade()) {
             upgrade();
         }

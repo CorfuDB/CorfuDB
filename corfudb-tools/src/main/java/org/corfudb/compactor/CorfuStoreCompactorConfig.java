@@ -5,6 +5,7 @@ import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.DistributedCompactor;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
 import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.NodeLocator;
 import org.docopt.Docopt;
 
 import java.util.Map;
@@ -27,18 +28,19 @@ public class CorfuStoreCompactorConfig {
     };
 
     private CorfuRuntimeParameters params;
-    private String hostname;
-    private int port;
+    private NodeLocator nodeLocator;
     private String persistedCacheRoot = "";
     private boolean isUpgrade = false;
 
     public void parseAndBuildRuntimeParameters(String[] args) {
         Map<String, Object> opts =
-                new Docopt(CorfuStoreCompactorCmdLine.USAGE)
+                new Docopt(CompactorCmdLineHelper.USAGE)
                         .withVersion(GitRepositoryState.getRepositoryState().describe)
                         .parse(args);
-        hostname = opts.get("--hostname").toString();
-        port = Integer.parseInt(opts.get("--port").toString());
+        String hostname = opts.get("--hostname").toString();
+        int port = Integer.parseInt(opts.get("--port").toString());
+
+        nodeLocator = NodeLocator.builder().host(hostname).port(port).build();
 
         if (opts.get("--persistedCacheRoot") != null) {
             persistedCacheRoot = opts.get("--persistedCacheRoot").toString();
@@ -78,7 +80,7 @@ public class CorfuStoreCompactorConfig {
         params = builder.build();
     }
 
-    public static class CorfuStoreCompactorCmdLine {
+    public static class CompactorCmdLineHelper {
         public static final String USAGE = "Usage: corfu-compactor --hostname=<host> " +
                 "--port=<port>" +
                 "[--keystore=<keystore_file>] [--ks_password=<keystore_password>] " +
