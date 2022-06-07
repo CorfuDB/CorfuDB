@@ -597,7 +597,9 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
             IUndoRecordFunction<T> undoRecordTarget =
                     undoRecordFunctionMap.get(entry.getSMRMethod());
             // If there was no previously calculated undo entry
-            if (undoRecordTarget != null) {
+            // The undo records shouldn't be computed for objects with a MONOTONIC version
+            // policy because they simply don't sync backwards to older versions.
+            if (undoRecordTarget != null && object.getVersionPolicy() != ICorfuVersionPolicy.MONOTONIC) {
                 // Calculate the undo record.
                 entry.setUndoRecord(undoRecordTarget
                         .getUndoRecord(object.getContext(context), entry.getSMRArguments()));
