@@ -245,7 +245,11 @@ public class CompactorLeaderServices {
 
             long syncHeartBeat = LIVENESS_INIT_VALUE;
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                syncHeartBeat = txn.getRecord(activeCheckpointsTable, table).getPayload().getSyncHeartbeat();
+                ActiveCPStreamMsg activeCPStreamMsg = txn.getRecord(activeCheckpointsTable, table).getPayload();
+                if (activeCPStreamMsg == null) {
+                    continue;
+                }
+                syncHeartBeat = activeCPStreamMsg.getSyncHeartbeat();
                 txn.commit();
             } catch (Exception e) {
                 syslog.warn("Unable to acquire table status", e);

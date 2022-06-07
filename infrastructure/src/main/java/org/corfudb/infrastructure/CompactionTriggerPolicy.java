@@ -2,7 +2,7 @@ package org.corfudb.infrastructure;
 
 import org.corfudb.runtime.CorfuRuntime;
 
-public interface ICompactionTriggerPolicy {
+public interface CompactionTriggerPolicy {
     /**
      * Computes if the compaction jvm should be triggered or not.
      *

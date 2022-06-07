@@ -69,6 +69,7 @@ public class CompactorServiceTest extends AbstractViewTest {
 
     private static final String STREAM_NAME_PREFIX = "StreamName";
     private static final String STREAM_KEY_PREFIX = "StreamKey";
+    private static final long CHECKPOINT_TRIGGER_FREQ_MS = TimeUnit.MINUTES.toMillis(5);
     private static final int ITEM_SIZE = 10000;
     private static final int NUM_RECORDS = 100;
 
@@ -145,6 +146,9 @@ public class CompactorServiceTest extends AbstractViewTest {
         runtime0.getParameters().setClientName(CLIENT_NAME_PREFIX + "0");
         runtime1.getParameters().setClientName(CLIENT_NAME_PREFIX + "1");
         runtime2.getParameters().setClientName(CLIENT_NAME_PREFIX + "2");
+        runtime0.getParameters().setCheckpointTriggerFreqMillis(CHECKPOINT_TRIGGER_FREQ_MS);
+        runtime1.getParameters().setCheckpointTriggerFreqMillis(CHECKPOINT_TRIGGER_FREQ_MS);
+        runtime2.getParameters().setCheckpointTriggerFreqMillis(CHECKPOINT_TRIGGER_FREQ_MS);
 
         cpRuntime0 = getRuntime(layout).connect();
         cpRuntime1 = getRuntime(layout).connect();

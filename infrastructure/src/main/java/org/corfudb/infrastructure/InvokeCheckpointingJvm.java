@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-public class InvokeCheckpointingJvm implements IInvokeCheckpointing {
+public class InvokeCheckpointingJvm implements InvokeCheckpointing {
 
     private static final long CONN_RETRY_DELAY_MILLISEC = 500;
     private static final int MAX_COMPACTION_RETRIES = 8;

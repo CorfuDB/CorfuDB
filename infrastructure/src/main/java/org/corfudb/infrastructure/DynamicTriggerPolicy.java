@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
-public class DynamicTriggerPolicy implements ICompactionTriggerPolicy {
+public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
     /**
      * What time did the previous cycle start
      */

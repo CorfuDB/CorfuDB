@@ -1,6 +1,6 @@
 package org.corfudb.infrastructure;
 
-public interface IInvokeCheckpointing {
+public interface InvokeCheckpointing {
     void invokeCheckpointing();
 
     boolean isRunning();
