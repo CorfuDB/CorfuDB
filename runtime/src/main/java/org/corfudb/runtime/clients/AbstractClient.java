@@ -6,7 +6,6 @@ import lombok.Getter;
 import lombok.Setter;
 
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
@@ -41,14 +40,7 @@ public abstract class AbstractClient implements IClient {
 
     <T> CompletableFuture<T> sendRequestWithFuture(RequestPayloadMsg payload,
                                                    ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
-
-        PriorityLevel pl = this.priorityLevel;
-        if (TransactionalContext.isInTransaction() &&
-                TransactionalContext.getCurrentContext().getPriorityLevel() != null) {
-            pl = TransactionalContext.getRootContext().getPriorityLevel();
-        }
-
         return router.sendRequestAndGetCompletable(payload, epoch,
-                getUuidMsg(clusterID), pl, ignoreClusterId, ignoreEpoch);
+                getUuidMsg(clusterID), priorityLevel, ignoreClusterId, ignoreEpoch);
     }
 }

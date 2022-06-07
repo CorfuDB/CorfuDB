@@ -24,10 +24,8 @@ import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.proto.RpcCommon.TokenMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.KeyDynamicProtobufSerializer;
@@ -369,7 +367,6 @@ public class DistributedCompactor {
                 final CorfuStoreEntry<TableName, CheckpointingStatus, Message> tableToChkpt =
                         txn.getRecord(checkpointingStatusTable, tableName);
                 if (tableToChkpt.getPayload().getStatus() == StatusType.IDLE) {
-                    TransactionalContext.getCurrentContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
                     txn.putRecord(checkpointingStatusTable,
                             tableName,
                             CheckpointingStatus.newBuilder()
@@ -382,12 +379,11 @@ public class DistributedCompactor {
                                     .setIsClientTriggered(isClient) // This will stall server side compaction!
                                     .build(),
                             null);
-                } else { // This table is already being checkpointed by someone else
                     txn.commit();
-                    return false;
+                    return true; // Lock successfully acquired!
                 }
                 txn.commit();
-                return true; // Lock successfully acquired!
+                return false; // This table is already being checkpointed by someone else
             } catch (TransactionAbortedException e) {
                 if (e.getAbortCause() == AbortCause.CONFLICT) {
                     log.info("My opened table {}${} is being checkpointed by someone else",
@@ -449,7 +445,6 @@ public class DistributedCompactor {
         final int maxRetries = 5;
         for (int retry = 0; retry < maxRetries; retry++) {
             try (TxnContext endTxn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                TransactionalContext.getCurrentContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
                 endTxn.putRecord(checkpointingStatusTable, tableName, checkpointStatus, null);
                 if (checkpointStatus.getStatus() != CheckpointingStatus.StatusType.COMPLETED) {
                     log.error("clientCheckpointer: Marking checkpointing as failed on table {}", tableName);
@@ -459,6 +454,7 @@ public class DistributedCompactor {
                 }
                 endTxn.delete(activeCheckpointsTable, tableName);
                 endTxn.commit();
+                break;
             } catch (RuntimeException re) {
                 if (isCriticalRuntimeException(re, retry, maxRetries)) {
                     return checkpointFailedError; // stop on non-retryable exceptions
@@ -467,6 +463,7 @@ public class DistributedCompactor {
                 log.error("Unexpected exception encountered while unlocking my checkpoint table, ", t);
                 log.error("StackTrace : {}", t.getStackTrace());
                 isSuccess = checkpointFailedError;
+                break;
             }
         }
         return isSuccess;
