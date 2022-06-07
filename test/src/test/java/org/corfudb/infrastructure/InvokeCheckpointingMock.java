@@ -3,7 +3,7 @@ package org.corfudb.infrastructure;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.DistributedCompactor;
 
-public class InvokeCheckpointingMock implements IInvokeCheckpointing {
+public class InvokeCheckpointingMock implements InvokeCheckpointing {
 
     private final DistributedCompactor distributedCompactor;
     private boolean isInvoked;

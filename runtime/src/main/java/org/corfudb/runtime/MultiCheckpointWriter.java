@@ -44,7 +44,7 @@ public class MultiCheckpointWriter<T extends StreamingMap> {
      * @param author Author's name, stored in checkpoint metadata
      * @return Global log address of the first record of
      */
-    public Token appendCheckpoints(CorfuRuntime rt, String author, Optional<ILivenessUpdater> livenessUpdater) {
+    public Token appendCheckpoints(CorfuRuntime rt, String author, Optional<LivenessUpdater> livenessUpdater) {
         int numRetries = rt.getParameters().getCheckpointRetries();
         int retry = 0;
 
@@ -97,7 +97,7 @@ public class MultiCheckpointWriter<T extends StreamingMap> {
     }
 
     public Token appendCheckpoints(CorfuRuntime rt, String author) {
-        return appendCheckpoints(rt, author, Optional.ofNullable(null));
+        return appendCheckpoints(rt, author, Optional.empty());
     }
 
 }

@@ -6,7 +6,6 @@ import lombok.Setter;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.DistributedCompactor;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
@@ -16,8 +15,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -31,30 +28,25 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  */
 public class CompactorService implements ManagementService {
 
-    private long compactionTriggerFreqMs = TimeUnit.MINUTES.toMillis(8);
-
     @Setter
-    private static Duration livenessTimeout = Duration.ofMillis(60000);
+    private static Duration livenessTimeout = Duration.ofMinutes(1);
 
     private final ServerContext serverContext;
     private final SingletonResource<CorfuRuntime> runtimeSingletonResource;
 
     private final ScheduledExecutorService orchestratorThread;
-    private final IInvokeCheckpointing checkpointerJvmManager;
+    private final InvokeCheckpointing checkpointerJvmManager;
 
-    private final ICompactionTriggerPolicy compactionTriggerPolicy;
+    private final CompactionTriggerPolicy compactionTriggerPolicy;
     private CompactorLeaderServices compactorLeaderServices;
     private CorfuStore corfuStore;
 
     private final Logger syslog;
 
-    //TODO: make it a prop file and maybe pass it from the server
-    List<TableName> sensitiveTables = new ArrayList<>();
-
     CompactorService(@NonNull ServerContext serverContext,
                      @NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
-                     @NonNull IInvokeCheckpointing checkpointerJvmManager,
-                     @NonNull ICompactionTriggerPolicy compactionTriggerPolicy) {
+                     @NonNull InvokeCheckpointing checkpointerJvmManager,
+                     @NonNull CompactionTriggerPolicy compactionTriggerPolicy) {
         this.serverContext = serverContext;
         this.runtimeSingletonResource = runtimeSingletonResource;
 
@@ -81,8 +73,8 @@ public class CompactorService implements ManagementService {
         this.compactorLeaderServices = new CompactorLeaderServices(getCorfuRuntime(), serverContext.getLocalEndpoint());
         this.corfuStore = new CorfuStore(getCorfuRuntime());
         this.compactionTriggerPolicy.setCorfuRuntime(getCorfuRuntime());
-        if (getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis() > 0) {
-            this.compactionTriggerFreqMs = getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis();
+        if (getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis() <= 0) {
+            return;
         }
 
         orchestratorThread.scheduleWithFixedDelay(
@@ -118,6 +110,7 @@ public class CompactorService implements ManagementService {
                 } else if (managerStatus.getStatus() == StatusType.STARTED_ALL && !checkpointerJvmManager.isRunning()
                         && !checkpointerJvmManager.isInvoked()) {
                     checkpointerJvmManager.invokeCheckpointing();
+                    checkpointerJvmManager.shutdown();
                 }
             }
 
@@ -125,7 +118,7 @@ public class CompactorService implements ManagementService {
                 if (managerStatus != null && (managerStatus.getStatus() == StatusType.STARTED ||
                         managerStatus.getStatus() == StatusType.STARTED_ALL)) {
                     compactorLeaderServices.validateLiveness(livenessTimeout.toMillis());
-                } else if (compactionTriggerPolicy.shouldTrigger(this.compactionTriggerFreqMs)) {
+                } else if (compactionTriggerPolicy.shouldTrigger(getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis())) {
                     compactionTriggerPolicy.markCompactionCycleStart();
                     compactorLeaderServices.trimAndTriggerDistributedCheckpointing();
                 }
