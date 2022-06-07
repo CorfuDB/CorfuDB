@@ -17,8 +17,6 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.object.transactions.TransactionType;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
-import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.view.CacheOption;
 import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.runtime.view.TableRegistry;
@@ -138,7 +136,7 @@ public class CheckpointWriter<T extends StreamingMap> {
      *
      * @return Token at which the snapshot for this checkpoint was taken.
      */
-    public Token appendCheckpoint(Optional<ILivenessUpdater> livenessUpdater) {
+    public Token appendCheckpoint(Optional<LivenessUpdater> livenessUpdater) {
         // We enforce a NO_OP entry for every checkpoint, i.e., a hole with backpointer map info,
         // to materialize the stream up to this point (no future sequencer regression) and in addition ensure
         // log unit address maps reflect the latest update to the stream preventing tail regression in the
@@ -148,7 +146,7 @@ public class CheckpointWriter<T extends StreamingMap> {
     }
 
     public Token appendCheckpoint() {
-        return appendCheckpoint(Optional.ofNullable(null));
+        return appendCheckpoint(Optional.empty());
     }
 
     /**
@@ -159,7 +157,7 @@ public class CheckpointWriter<T extends StreamingMap> {
      *  @param snapshotTimestamp snapshot at which the checkpoint is taken.
      *  */
     @VisibleForTesting
-    public Token appendCheckpoint(Token snapshotTimestamp, Optional<ILivenessUpdater> livenessUpdater) {
+    public Token appendCheckpoint(Token snapshotTimestamp, Optional<LivenessUpdater> livenessUpdater) {
         long start = System.currentTimeMillis();
 
         rt.getObjectsView().TXBuild()
@@ -167,7 +165,6 @@ public class CheckpointWriter<T extends StreamingMap> {
                 .snapshot(snapshotTimestamp)
                 .build()
                 .begin();
-        TransactionalContext.getRootContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
 
         log.info("appendCheckpoint: Started checkpoint for {} at snapshot {}", streamId, snapshotTimestamp);
 

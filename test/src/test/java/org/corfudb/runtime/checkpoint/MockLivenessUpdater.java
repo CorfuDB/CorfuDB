@@ -6,7 +6,7 @@ import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.DistributedCompactor;
-import org.corfudb.runtime.ILivenessUpdater;
+import org.corfudb.runtime.LivenessUpdater;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
-public class MockLivenessUpdater implements ILivenessUpdater {
+public class MockLivenessUpdater implements LivenessUpdater {
 
     private ScheduledExecutorService executorService;
     private static final int updateInterval = 250;

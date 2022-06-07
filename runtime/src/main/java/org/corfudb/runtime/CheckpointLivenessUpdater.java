@@ -7,8 +7,6 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
-import org.corfudb.runtime.proto.service.CorfuMessage;
 
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -17,7 +15,7 @@ import java.util.concurrent.TimeUnit;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
-public class CheckpointLivenessUpdater implements ILivenessUpdater {
+public class CheckpointLivenessUpdater implements LivenessUpdater {
     private ScheduledExecutorService executorService;
     private static final int UPDATE_INTERVAL = 15000;
 
@@ -51,7 +49,6 @@ public class CheckpointLivenessUpdater implements ILivenessUpdater {
                         .setSyncHeartbeat(currentStatus.getSyncHeartbeat() + 1)
                         .setIsClientTriggered(currentStatus.getIsClientTriggered())
                         .build();
-                TransactionalContext.getCurrentContext().setPriorityLevel(CorfuMessage.PriorityLevel.HIGH);
                 txn.putRecord(activeCheckpointsTable, tableName, newStatus, null);
                 txn.commit();
             } catch (Exception e) {

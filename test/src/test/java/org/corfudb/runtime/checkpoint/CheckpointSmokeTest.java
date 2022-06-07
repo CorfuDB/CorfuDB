@@ -1246,11 +1246,11 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
         // Checkpoint Writer 2 @15
         CheckpointWriter cpw2 = new CheckpointWriter(r, CorfuRuntime.getStreamID(streamA), "checkpointer-2", mA);
-        Token cp2Token = cpw2.appendCheckpoint(new Token(0, snapshotAddress2 - 1), Optional.ofNullable(null));
+        Token cp2Token = cpw2.appendCheckpoint(new Token(0, snapshotAddress2 - 1), Optional.empty());
 
         // Checkpoint Writer 1 @10
         CheckpointWriter cpw1 = new CheckpointWriter(r, CorfuRuntime.getStreamID(streamA), "checkpointer-1", mA);
-        cpw1.appendCheckpoint(new Token(0, snapshotAddress1 - 1), Optional.ofNullable(null));
+        cpw1.appendCheckpoint(new Token(0, snapshotAddress1 - 1), Optional.empty());
 
         // Trim @snapshotAddress=15
         r.getAddressSpaceView().prefixTrim(cp2Token);
