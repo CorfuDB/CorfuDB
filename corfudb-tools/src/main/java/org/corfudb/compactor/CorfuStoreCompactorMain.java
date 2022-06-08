@@ -31,8 +31,7 @@ public class CorfuStoreCompactorMain {
     private int retryCheckpointing = 1;
 
     public CorfuStoreCompactorMain(String[] args) {
-        this.config = new CorfuStoreCompactorConfig();
-        config.parseAndBuildRuntimeParameters(args);
+        this.config = new CorfuStoreCompactorConfig(args);
 
         CorfuRuntime cpRuntime = (CorfuRuntime.fromParameters(
                 config.getParams())).parseConfigurationString(config.getNodeLocator().toEndpointUrl()).connect();
