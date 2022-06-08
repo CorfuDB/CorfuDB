@@ -28,6 +28,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -305,11 +306,11 @@ public class DistributedCompactorTest extends AbstractViewTest {
         compactorLeaderServices1.setLeader(true);
         compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
         DistributedCompactor distributedCompactor1 =
-                new DistributedCompactor(runtime0, cpRuntime0, null);
+                new DistributedCompactor(runtime0, cpRuntime0, Optional.empty());
         DistributedCompactor distributedCompactor2 =
-                new DistributedCompactor(runtime1, cpRuntime1, null);
+                new DistributedCompactor(runtime1, cpRuntime1, Optional.empty());
         DistributedCompactor distributedCompactor3 =
-                new DistributedCompactor(runtime2, cpRuntime2, null);
+                new DistributedCompactor(runtime2, cpRuntime2, Optional.empty());
 
         int count1 = distributedCompactor1.startCheckpointing();
         int count2 = distributedCompactor2.startCheckpointing();
@@ -331,7 +332,7 @@ public class DistributedCompactorTest extends AbstractViewTest {
         compactorLeaderServices1.setLeader(true);
         compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
 
-        DistributedCompactor distributedCompactor = new DistributedCompactor(runtime0, cpRuntime0, null);
+        DistributedCompactor distributedCompactor = new DistributedCompactor(runtime0, cpRuntime0, Optional.empty());
         distributedCompactor.startCheckpointing();
 
         compactorLeaderServices1.finishCompactionCycle();
@@ -377,7 +378,7 @@ public class DistributedCompactorTest extends AbstractViewTest {
         compactorLeaderServices1.setLeader(true);
         compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
 
-        DistributedCompactor distributedCompactor = new DistributedCompactor(runtime0, cpRuntime0, null);
+        DistributedCompactor distributedCompactor = new DistributedCompactor(runtime0, cpRuntime0, Optional.empty());
         distributedCompactor.startCheckpointing();
 
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
@@ -403,7 +404,7 @@ public class DistributedCompactorTest extends AbstractViewTest {
         compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
         compactorLeaderServices1.setLeader(false);
 
-        DistributedCompactor distributedCompactor = new DistributedCompactor(runtime0, cpRuntime0, null);
+        DistributedCompactor distributedCompactor = new DistributedCompactor(runtime0, cpRuntime0, Optional.empty());
         distributedCompactor.startCheckpointing();
 
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
@@ -445,7 +446,7 @@ public class DistributedCompactorTest extends AbstractViewTest {
                 LIVENESS_TIMEOUT, TimeUnit.MILLISECONDS);
 
         DistributedCompactor distributedCompactor = new DistributedCompactor(runtime0, cpRuntime0,
-                null);
+                Optional.empty());
         distributedCompactor.startCheckpointing();
 
         try {
@@ -484,7 +485,7 @@ public class DistributedCompactorTest extends AbstractViewTest {
                 LIVENESS_TIMEOUT, TimeUnit.MILLISECONDS);
 
         DistributedCompactor distributedCompactor = new DistributedCompactor(runtime0, cpRuntime0,
-                null);
+                Optional.empty());
 
         try {
             TimeUnit.MILLISECONDS.sleep(WAIT_IN_SYNC_STATE);
