@@ -43,6 +43,9 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
     // Log Replication Channel Context
     private IChannelContext channelContext;
 
+    // Max write size(in bytes) for LR's runtime
+    private int maxWriteSize;
+
     public static LogReplicationRuntimeParametersBuilder builder() {
         return new LogReplicationRuntimeParametersBuilder();
     }
@@ -56,6 +59,7 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
         private long topologyConfigId;
         private LogReplicationConfig replicationConfig;
         private IChannelContext channelContext;
+        private int maxWriteSize;
 
         private LogReplicationRuntimeParametersBuilder() {
         }
@@ -92,6 +96,11 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
 
         public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder channelContext(IChannelContext channelContext) {
             this.channelContext = channelContext;
+            return this;
+        }
+
+        public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder maxWriteSize(int maxWriteSize) {
+            this.maxWriteSize = maxWriteSize;
             return this;
         }
 
@@ -249,6 +258,7 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
             runtimeParameters.setPluginFilePath(pluginFilePath);
             runtimeParameters.setChannelContext(channelContext);
             runtimeParameters.setReplicationConfig(replicationConfig);
+            runtimeParameters.setMaxWriteSize(maxWriteSize);
             return runtimeParameters;
         }
     }
