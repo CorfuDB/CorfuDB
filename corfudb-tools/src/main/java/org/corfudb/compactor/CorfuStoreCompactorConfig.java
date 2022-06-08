@@ -2,13 +2,14 @@ package org.corfudb.compactor;
 
 import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
-import org.corfudb.runtime.DistributedCompactor;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.NodeLocator;
 import org.docopt.Docopt;
 
 import java.util.Map;
+import java.util.Optional;
 
 @Getter
 public class CorfuStoreCompactorConfig {
@@ -20,38 +21,34 @@ public class CorfuStoreCompactorConfig {
     public static final int CORFU_LOG_CHECKPOINT_ERROR = 3;
     public static final int CHECKPOINT_RETRY_UPGRADE = 10;
 
-    private final Runnable defaultSystemDownHandler = new Runnable() {
-        @Override
-        public void run() {
-            throw new UnreachableClusterException("Cluster is unavailable");
-        }
+    private final Runnable defaultSystemDownHandler = () -> {
+        throw new UnreachableClusterException("Cluster is unavailable");
     };
 
-    private CorfuRuntimeParameters params;
-    private NodeLocator nodeLocator;
-    private String persistedCacheRoot = "";
-    private boolean isUpgrade = false;
+    private final Map<String, Object> opts;
 
-    public void parseAndBuildRuntimeParameters(String[] args) {
-        Map<String, Object> opts =
-                new Docopt(CompactorCmdLineHelper.USAGE)
-                        .withVersion(GitRepositoryState.getRepositoryState().describe)
-                        .parse(args);
-        String hostname = opts.get("--hostname").toString();
-        int port = Integer.parseInt(opts.get("--port").toString());
+    private final CorfuRuntimeParameters params;
+    private final NodeLocator nodeLocator;
+    private final Optional<String> persistedCacheRoot;
+    private final boolean isUpgrade;
 
-        nodeLocator = NodeLocator.builder().host(hostname).port(port).build();
+    public CorfuStoreCompactorConfig(String[] args) {
+        this.opts = parseOpts(args);
 
-        if (opts.get("--persistedCacheRoot") != null) {
-            persistedCacheRoot = opts.get("--persistedCacheRoot").toString();
-        }
-        if (opts.get("--isUpgrade") != null) {
-            isUpgrade = true;
-        }
+        String host = getOpt("--hostname").orElseThrow(() -> new IllegalStateException("Empty host"));
+        int port = getOpt("--port").map(Integer::parseInt)
+                .orElseThrow(() -> new IllegalStateException("Port not defined"));
 
-        CorfuRuntimeParameters.CorfuRuntimeParametersBuilder builder = CorfuRuntimeParameters.builder();
-        if (opts.get("--tlsEnabled") != null) {
-            Boolean tlsEnabled = Boolean.parseBoolean(opts.get("--tlsEnabled").toString());
+        this.nodeLocator = NodeLocator.builder().host(host).port(port).build();
+
+        persistedCacheRoot = getOpt("--persistedCacheRoot");
+
+        isUpgrade = opts.containsKey("--isUpgrade");
+
+        CorfuRuntimeParametersBuilder builder = CorfuRuntimeParameters.builder();
+
+        getOpt("--tlsEnabled").ifPresent(tlsEnabledStr -> {
+            boolean tlsEnabled = Boolean.parseBoolean(tlsEnabledStr);
             builder.tlsEnabled(tlsEnabled);
             if (tlsEnabled) {
                 builder.keyStore(opts.get("--keystore").toString());
@@ -59,25 +56,46 @@ public class CorfuStoreCompactorConfig {
                 builder.trustStore(opts.get("--truststore").toString());
                 builder.tsPasswordFile(opts.get("--truststore_password").toString());
             }
-        }
-        if (opts.get("--maxWriteSize") != null) {
-            builder.maxWriteSize(Integer.parseInt(opts.get("--maxWriteSize").toString()));
+        });
+
+        Optional<String> maybeMaxWriteSize = getOpt("--maxWriteSize");
+        int maxWriteSize;
+        if (maybeMaxWriteSize.isPresent()) {
+            maxWriteSize = Integer.parseInt(maybeMaxWriteSize.get());
         } else {
-            if (persistedCacheRoot == null || persistedCacheRoot.equals(DistributedCompactor.EMPTY_STRING)) {
+            if (!persistedCacheRoot.isPresent()) {
                 // in-memory compaction
-                builder.maxWriteSize(DEFAULT_CP_MAX_WRITE_SIZE);
+                maxWriteSize = DEFAULT_CP_MAX_WRITE_SIZE;
             } else {
                 // disk-backed non-config compaction
-                builder.maxWriteSize(NON_CONFIG_DEFAULT_CP_MAX_WRITE_SIZE);
+                maxWriteSize = NON_CONFIG_DEFAULT_CP_MAX_WRITE_SIZE;
             }
         }
-        if (opts.get("--bulkReadSize") != null) {
-            builder.bulkReadSize(Integer.parseInt(opts.get("--bulkReadSize").toString()));
-        }
+
+        builder.maxWriteSize(maxWriteSize);
+
+        getOpt("--bulkReadSize").ifPresent(bulkReadSizeStr -> {
+            builder.bulkReadSize(Integer.parseInt(bulkReadSizeStr));
+        });
+
         builder.systemDownHandlerTriggerLimit(SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT)
                 .systemDownHandler(defaultSystemDownHandler);
 
         params = builder.build();
+    }
+
+    private Map<String, Object> parseOpts(String[] args) {
+        return new Docopt(CompactorCmdLineHelper.USAGE)
+                .withVersion(GitRepositoryState.getRepositoryState().describe)
+                .parse(args);
+    }
+
+    private Optional<String> getOpt(String param) {
+        if (opts.containsKey(param)) {
+            return Optional.of(opts.get(param).toString());
+        } else {
+            return Optional.empty();
+        }
     }
 
     public static class CompactorCmdLineHelper {

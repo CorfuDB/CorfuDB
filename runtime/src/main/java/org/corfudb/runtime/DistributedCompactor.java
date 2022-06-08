@@ -64,7 +64,7 @@ import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 public class DistributedCompactor {
     private final CorfuRuntime runtime;
     private final CorfuRuntime cpRuntime;
-    private final String persistedCacheRoot;
+    private final Optional<String> persistedCacheRoot;
     private final boolean isClient;
 
     private final String clientName;
@@ -99,7 +99,7 @@ public class DistributedCompactor {
         }
     }
 
-    public DistributedCompactor(CorfuRuntime corfuRuntime, CorfuRuntime cpRuntime, String persistedCacheRoot) {
+    public DistributedCompactor(CorfuRuntime corfuRuntime, CorfuRuntime cpRuntime, Optional<String> persistedCacheRoot) {
         this.runtime = corfuRuntime;
         this.cpRuntime = cpRuntime;
         this.persistedCacheRoot = persistedCacheRoot;
@@ -110,7 +110,7 @@ public class DistributedCompactor {
     public DistributedCompactor(CorfuRuntime corfuRuntime) {
         this.runtime = corfuRuntime;
         this.cpRuntime = null;
-        this.persistedCacheRoot = null;
+        this.persistedCacheRoot = Optional.empty();
         this.isClient = true;
         this.clientName = corfuRuntime.getParameters().getClientName();
     }
@@ -304,11 +304,11 @@ public class DistributedCompactor {
                         .setStreamName(getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName()))
                         .setSerializer(serializer)
                         .addOpenOption(ObjectOpenOption.NO_CACHE);
-        if (persistedCacheRoot != null && !persistedCacheRoot.equals(EMPTY_STRING)) {
-            final String persistentCacheDirName = String.format("compactor_%s_%s",
+        if (persistedCacheRoot.isPresent()) {
+            String persistentCacheDirName = String.format("compactor_%s_%s",
                     tableName.getNamespace(), tableName.getTableName());
-            final Path persistedCacheLocation = Paths.get(persistedCacheRoot).resolve(persistentCacheDirName);
-            final Supplier<StreamingMap<CorfuDynamicKey, OpaqueCorfuDynamicRecord>> mapSupplier =
+            Path persistedCacheLocation = Paths.get(persistedCacheRoot.get()).resolve(persistentCacheDirName);
+            Supplier<StreamingMap<CorfuDynamicKey, OpaqueCorfuDynamicRecord>> mapSupplier =
                     () -> new PersistedStreamingMap<>(
                             persistedCacheLocation, PersistedStreamingMap.getPersistedStreamingMapOptions(),
                             serializer, rt);
