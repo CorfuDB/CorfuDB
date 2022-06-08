@@ -12,6 +12,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.CompactionOptionsUniversal;
 import org.rocksdb.CompressionType;
+import org.rocksdb.Holder;
 import org.rocksdb.Options;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
@@ -23,6 +24,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.Set;
 import java.util.Spliterator;
 import java.util.Spliterators;
@@ -192,8 +194,9 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
 
         // Only increment the count if the value is not present. In other words,
         // increment the count if this is an update operation.
+        final Holder<byte[]> holder = new Holder<>();
         final boolean keyExists = rocksDb.keyMayExist(keyPayload.array(),
-                keyPayload.arrayOffset(), keyPayload.readableBytes(), null);
+                keyPayload.arrayOffset(), keyPayload.readableBytes(), holder);
         if (!keyExists) {
             dataSetSize.incrementAndGet();
         }
@@ -210,7 +213,13 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
             MicroMeterUtils.time(recordSample, "corfu_table.write.timer", DISK_BACKED, TRUE);
         }
 
-        return value;
+        // Although keyMayExist is probabilistic, the found value should be returned to better approximate
+        // the Map.java interface semantics
+        if (Objects.nonNull(holder.getValue())) {
+            return (V) serializer.deserialize(Unpooled.wrappedBuffer(holder.getValue()), corfuRuntime);
+        }
+
+        return null;
     }
 
     /**

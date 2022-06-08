@@ -710,7 +710,8 @@ public class CheckpointTest extends AbstractObjectTest {
 
         final int numKeys = 303;
         for (int x = 0; x < numKeys; x++) {
-            diskBackedMap.put(String.valueOf(x), "payload" + x);
+            String oldValue = diskBackedMap.put(String.valueOf(x), "payload" + x);
+            assertThat(oldValue).isNull();
         }
 
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
@@ -736,5 +737,10 @@ public class CheckpointTest extends AbstractObjectTest {
 
         assertThat(Iterators.elementsEqual(newDiskBackedMap.entryStream().iterator(),
                 diskBackedMap.entryStream().iterator())).isTrue();
+
+        // Over write a key and verify that the previous value can be retrieved
+        String oldValue = diskBackedMap.put(String.valueOf(0), "payload0Prime");
+        assertThat(oldValue).isEqualTo("payload0");
+        assertThat(diskBackedMap.get(String.valueOf(0))).isEqualTo("payload0Prime");
     }
 }
