@@ -1,7 +1,9 @@
 package org.corfudb.runtime;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
@@ -9,17 +11,23 @@ import org.apache.commons.lang.RandomStringUtils;
 import org.corfudb.integration.AbstractIT;
 import org.corfudb.protocols.wireprotocol.Token;
 
+import org.corfudb.runtime.collections.CorfuDynamicKey;
+import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.BackupRestoreException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.Uuid;
+import org.corfudb.util.serializer.DynamicProtobufSerializer;
+import org.corfudb.util.serializer.ISerializer;
 import org.junit.Test;
 
 import java.io.File;
@@ -31,6 +39,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -765,4 +774,129 @@ public class BackupRestoreIT extends AbstractIT {
 
         assertThat(dir1).doesNotExist();
         assertThat(dir2).doesNotExist();
-    }}
+    }
+
+    /**
+     * The following workflow could hit TrimmedException
+     * 1. open table A
+     * 2. take a full backup
+     * 3. open table B
+     * 4. restore DB (full) using the backup from 2
+     * 5. perform checkpoint and trim
+     * 6. open table B again
+     * 7. read table B
+     * Step 7 will hit TrimmedException.
+     *
+     * Reason:
+     * A full backup operation will back up RegistryTable which only contains table A.
+     * After full restore is performed, the RegistryTable is restored and subsequent
+     * compaction only checkpoints table A, causing table B to be trimmed. Later access
+     * to table B will hit TrimmedException because
+     */
+    @Test
+    public void backupRestoreAllTablesTest2() throws IOException, InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+        // Set up the test environment
+        setupEnv();
+
+        // Create Corfu Store to add entries into server
+        CorfuRuntime runtime = createRuntime(SOURCE_ENDPOINT);
+        CorfuStore corfuStore = new CorfuStore(runtime);
+
+        // Create and load table A
+        Table<SampleSchema.Uuid, SampleSchema.EventInfo, SampleSchema.Uuid> tableA = corfuStore.openTable(NAMESPACE,
+                "TableA",
+                SampleSchema.Uuid.class,
+                SampleSchema.EventInfo.class,
+                SampleSchema.Uuid.class,
+                TableOptions.fromProtoSchema(SampleSchema.EventInfo.class));;
+        TxnContext txn = corfuStore.txn(NAMESPACE);
+        for (int i = 0; i < numEntries; i++) {
+            uuidKey = SampleSchema.Uuid.newBuilder()
+                    .setMsb(i)
+                    .setLsb(i)
+                    .build();
+            String name = RandomStringUtils.random(valSize, true, true);
+            SampleSchema.EventInfo eventInfo = SampleSchema.EventInfo.newBuilder().setName(name).build();
+            txn.putRecord(tableA, uuidKey, eventInfo, uuidKey);
+        }
+        txn.commit();
+
+        // Backup all tables: table A + RegistryTable + ProtobufDescriptorTable
+        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, runtime, false);
+        backup.start();
+
+        // Create and load table B
+        Table<SampleSchema.Uuid, SampleSchema.EventInfo, SampleSchema.Uuid> tableB = corfuStore.openTable(NAMESPACE,
+                "TableB",
+                SampleSchema.Uuid.class,
+                SampleSchema.EventInfo.class,
+                SampleSchema.Uuid.class,
+                TableOptions.fromProtoSchema(SampleSchema.EventInfo.class));
+        txn = corfuStore.txn(NAMESPACE);
+        SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder().setMsb(-1).setLsb(-1).build();
+        SampleSchema.EventInfo eventInfo = SampleSchema.EventInfo.newBuilder().setName("-1").build();
+        txn.putRecord(tableB, uuidKey, eventInfo, uuidKey);
+        txn.commit();
+
+        // Shut down runtime
+        runtime.shutdown();
+
+        // Restore source server using backup files
+        runtime = createRuntime(SOURCE_ENDPOINT);
+        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, runtime, Restore.RestoreMode.FULL);
+        restore.start();
+        runtime.shutdown();
+
+        // Checkpoint table A and trim. This simulates compactor's behavior.
+        // Since RegistryTable has been restored, it only knows to CP table A
+        CorfuRuntime cpRuntime = createRuntime(SOURCE_ENDPOINT);
+        ISerializer serializer = new DynamicProtobufSerializer(cpRuntime);
+        cpRuntime.getSerializers().registerSerializer(serializer);
+        MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
+
+        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> corfuTableA = cpRuntime.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
+                .setStreamName(getFullyQualifiedTableName(NAMESPACE, "TableA"))
+                .setSerializer(serializer)
+                .addOpenOption(ObjectOpenOption.NO_CACHE)
+                .open();
+        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> tableRegistry = cpRuntime.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {
+                })
+                .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
+                        TableRegistry.REGISTRY_TABLE_NAME))
+                .setSerializer(serializer)
+                .addOpenOption(ObjectOpenOption.NO_CACHE)
+                .open();
+        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> descriptorTable = cpRuntime.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {
+                })
+                .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
+                        TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME))
+                .setSerializer(serializer)
+                .addOpenOption(ObjectOpenOption.NO_CACHE)
+                .open();
+
+        mcw.addMap(corfuTableA);
+        mcw.addMap(tableRegistry);
+        mcw.addMap(descriptorTable);
+        Token trimPoint = mcw.appendCheckpoints(cpRuntime, "checkpointer");
+
+        cpRuntime.getAddressSpaceView().prefixTrim(trimPoint);
+        cpRuntime.shutdown();
+
+        // Reopen the table B and read
+        CorfuRuntime readRuntime = createRuntime(SOURCE_ENDPOINT);
+        CorfuStore readCorfuStore = new CorfuStore(readRuntime);
+        Table<SampleSchema.Uuid, SampleSchema.EventInfo, SampleSchema.Uuid> tableBReopened = readCorfuStore.openTable(NAMESPACE,
+                "TableB",
+                SampleSchema.Uuid.class,
+                SampleSchema.EventInfo.class,
+                SampleSchema.Uuid.class,
+                TableOptions.fromProtoSchema(SampleSchema.EventInfo.class));
+        tableBReopened.count();
+
+        // Close servers and runtime before exiting
+        cleanEnv();
+    }
+}
