@@ -43,7 +43,7 @@ import java.util.UUID;
 @Slf4j
 public class BackupRestoreIT extends AbstractIT {
 
-    final static public int numEntries = 100;
+    final static public int numEntries = 123;
     final static public int valSize = 2000;
     static final public int numTables = 5;
     static final private String NAMESPACE = "test_namespace";
@@ -321,6 +321,7 @@ public class BackupRestoreIT extends AbstractIT {
         for (String tableName : tableNames) {
             generateData(destDataCorfuStore, tableName, true);
         }
+        long preRestoreEntryCnt = destDataCorfuStore.getRuntime().getStreamsView().get(streamIDs.get(0)).stream().count();
 
         // Restore using backup files
         Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.PARTIAL);
@@ -331,6 +332,11 @@ public class BackupRestoreIT extends AbstractIT {
             openTableWithoutBackupTag(destDataCorfuStore, tableName);
             compareCorfuStoreTables(srcDataCorfuStore, tableName, destDataCorfuStore, tableName);
         }
+
+        long postRestoreEntryCnt = destDataCorfuStore.getRuntime().getStreamsView().get(streamIDs.get(0)).stream().count();
+        // New updates are 1 (clear) + N (batched restore writes)
+        assertThat(postRestoreEntryCnt - preRestoreEntryCnt - 1).isEqualTo(
+                (long)Math.ceil((1.0 * numEntries) / destDataCorfuStore.getRuntime().getParameters().getRestoreBatchSize()));
 
         // Close servers and runtime before exiting
         cleanEnv();
