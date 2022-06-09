@@ -130,6 +130,13 @@ public class MicroMeterUtils {
         return MeterRegistryProvider.getInstance().map(Timer::start);
     }
 
+    public static Optional<Timer.Sample> startTimer(Optional<Counter> counter, int sampleAt) {
+        if (counter.isPresent() && counter.get().count() % sampleAt == 0) {
+            return MeterRegistryProvider.getInstance().map(Timer::start);
+        }
+        return Optional.empty();
+    }
+
     public static void measure(double measuredValue, String name, String... tags) {
         Optional<DistributionSummary> summary = createOrGetDistSummary(name, tags);
         summary.ifPresent(s -> s.record(measuredValue));
