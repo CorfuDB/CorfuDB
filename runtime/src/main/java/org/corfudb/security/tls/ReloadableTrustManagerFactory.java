@@ -1,34 +1,32 @@
 package org.corfudb.security.tls;
 
 import io.netty.handler.ssl.util.SimpleTrustManagerFactory;
-import java.security.InvalidAlgorithmParameterException;
-import java.security.KeyStore;
-import java.security.KeyStoreException;
+import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
+
 import javax.net.ssl.ManagerFactoryParameters;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.TrustManager;
+import java.security.InvalidAlgorithmParameterException;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
 
 /**
  * A trust manager factory that returns a ReloadableTrustManager.
  *
- * Created by zjohnny on 9/19/17.
  */
 public class ReloadableTrustManagerFactory extends SimpleTrustManagerFactory {
 
-    private ReloadableTrustManager trustManager;
+    private final ReloadableTrustManager trustManager;
 
     /**
      * Constructor.
      *
-     * @param trustStorePath
-     *          Location of trust store.
-     * @param trustPasswordPath
-     *          Location of trust store password.
+     * @param trustStoreConfig Location of trust store.
      * @throws SSLException
      *          Thrown when there's an issue with loading the trust store.
      */
-    public ReloadableTrustManagerFactory(String trustStorePath, String trustPasswordPath) throws SSLException {
-        trustManager = new ReloadableTrustManager(trustStorePath, trustPasswordPath);
+    public ReloadableTrustManagerFactory(TrustStoreConfig trustStoreConfig) throws SSLException {
+        trustManager = new ReloadableTrustManager(trustStoreConfig);
     }
 
     @Override
