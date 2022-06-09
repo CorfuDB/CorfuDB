@@ -207,11 +207,11 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
 
         if (parameters.isTlsEnabled()) {
             try {
-                sslContext = SslContextConstructor.constructSslContext(false,
-                        parameters.getKeyStore(),
-                        parameters.getKsPasswordFile(),
-                        parameters.getTrustStore(),
-                        parameters.getTsPasswordFile());
+                sslContext = SslContextConstructor.constructSslContext(
+                        false,
+                        parameters.getKeyStoreConfig(),
+                        parameters.getTrustStoreConfig()
+                );
             } catch (SSLException e) {
                 throw new UnrecoverableCorfuError(e);
             }

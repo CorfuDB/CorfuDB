@@ -21,6 +21,8 @@ import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
 import org.corfudb.security.tls.SslContextConstructor;
+import org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig;
+import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 import org.corfudb.util.GitRepositoryState;
 
 import javax.annotation.Nonnull;
@@ -287,12 +289,19 @@ public class CorfuServerNode implements AutoCloseable {
                     }
 
                     try {
-                        sslContext = SslContextConstructor.constructSslContext(true,
+                        KeyStoreConfig keyStoreConfig = KeyStoreConfig.from(
                                 context.getServerConfig(String.class, "--keystore"),
-                                context.getServerConfig(String.class, "--keystore-password-file"),
+                                context.getServerConfig(String.class, "--keystore-password-file")
+                        );
+
+                        TrustStoreConfig trustStoreConfig = TrustStoreConfig.from(
                                 context.getServerConfig(String.class, "--truststore"),
-                                context.getServerConfig(String.class,
-                                        "--truststore-password-file"));
+                                context.getServerConfig(String.class, "--truststore-password-file")
+                        );
+
+                        sslContext = SslContextConstructor.constructSslContext(
+                                true, keyStoreConfig, trustStoreConfig
+                        );
                     } catch (SSLException e) {
                         log.error("Could not build the SSL context", e);
                         throw new RuntimeException("Couldn't build the SSL context", e);
