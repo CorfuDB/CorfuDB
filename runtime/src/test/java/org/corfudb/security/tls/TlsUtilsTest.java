@@ -10,6 +10,7 @@ import static org.corfudb.security.tls.TlsTestContext.CLIENT_TRUST_WITH_SERVER;
 import static org.corfudb.security.tls.TlsTestContext.FAKE_LOCATION_AND_PASS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 
 public class TlsUtilsTest {
@@ -24,6 +25,7 @@ public class TlsUtilsTest {
     public void testBadPasswordFile() {
         try {
             TlsUtils.getKeyStorePassword(Paths.get("definitely fake location"));
+            fail("Must throw SSLException");
         } catch (SSLException e) {
             assertEquals(TlsUtils.PASSWORD_FILE_NOT_FOUND_ERROR, e.getMessage());
         }
@@ -39,6 +41,7 @@ public class TlsUtilsTest {
     public void testOpenKeyStoreBadPassword() {
         try {
             TlsUtils.openCertStore(TlsTestContext.FAKE_PASS);
+            fail("Must throw SSLException");
         } catch (SSLException e) {
             assertEquals(
                     "Keystore was tampered with, or password was incorrect",
@@ -48,9 +51,10 @@ public class TlsUtilsTest {
     }
 
     @Test
-    public void testOpenKeyStoreBadLocation() throws Exception {
+    public void testOpenKeyStoreBadLocation() {
         try {
             TlsUtils.openCertStore(FAKE_LOCATION_AND_PASS);
+            fail("Must throw SSLException");
         } catch (SSLException e) {
             assertTrue(e.getMessage().endsWith("doesn't exist."));
         }
