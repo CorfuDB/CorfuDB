@@ -1,5 +1,7 @@
 package org.corfudb.runtime.collections;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Timer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.NonNull;
@@ -17,10 +19,10 @@ import org.rocksdb.RocksDBException;
 
 import java.io.File;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.Spliterator;
 import java.util.Spliterators;
@@ -41,6 +43,10 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
 
     public static final String DISK_BACKED = "diskBacked";
     public static final String TRUE = "true";
+    public static final int BATCH_SIZE = 1000;
+
+    private final Optional<Counter> getCounter;
+    private final Optional<Counter> putCounter;
 
     static {
         RocksDB.loadLibrary();
@@ -95,6 +101,8 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
         }
         this.serializer = serializer;
         this.corfuRuntime = corfuRuntime;
+        getCounter = MicroMeterUtils.counter("persisted_map.get.counter");
+        putCounter = MicroMeterUtils.counter("persisted_map.put.counter");
     }
 
     /**
@@ -146,7 +154,8 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
      */
     @Override
     public V get(@NonNull Object key) {
-        long start = System.currentTimeMillis();
+        getCounter.ifPresent(Counter::increment);
+        Optional<Timer.Sample> recordSample = MicroMeterUtils.startTimer(getCounter, BATCH_SIZE);
         final ByteBuf keyPayload = Unpooled.buffer();
         serializer.serialize(key, keyPayload);
 
@@ -161,8 +170,7 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
             throw new UnrecoverableCorfuError(ex);
         } finally {
             keyPayload.release();
-            MicroMeterUtils.time(Duration.ofMillis(System.currentTimeMillis() - start), "corfu_table.read.timer",
-                    DISK_BACKED, TRUE);
+            MicroMeterUtils.time(recordSample, "corfu_table.read.timer", DISK_BACKED, TRUE);
         }
     }
 
@@ -171,7 +179,8 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
      */
     @Override
     public V put(@NonNull K key, @NonNull V value) {
-        long start = System.currentTimeMillis();
+        putCounter.ifPresent(Counter::increment);
+        Optional<Timer.Sample> recordSample = MicroMeterUtils.startTimer(putCounter, BATCH_SIZE);
         final ByteBuf keyPayload = Unpooled.buffer();
         final ByteBuf valuePayload = Unpooled.buffer();
         serializer.serialize(key, keyPayload);
@@ -194,9 +203,8 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
         } finally {
             keyPayload.release();
             valuePayload.release();
+            MicroMeterUtils.time(recordSample, "corfu_table.write.timer", DISK_BACKED, TRUE);
         }
-        MicroMeterUtils.time(Duration.ofMillis(System.currentTimeMillis() - start), "corfu_table.write.timer",
-                DISK_BACKED, TRUE);
         return value;
     }
 
