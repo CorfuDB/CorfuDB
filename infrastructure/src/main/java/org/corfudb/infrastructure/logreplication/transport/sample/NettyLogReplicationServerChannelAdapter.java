@@ -22,7 +22,6 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
 import org.corfudb.security.tls.SslContextConstructor;
-import org.corfudb.security.tls.TlsUtils;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 
