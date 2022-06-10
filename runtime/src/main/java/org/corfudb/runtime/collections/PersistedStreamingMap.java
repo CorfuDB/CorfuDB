@@ -12,10 +12,10 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.CompactionOptionsUniversal;
 import org.rocksdb.CompressionType;
-import org.rocksdb.Holder;
 import org.rocksdb.Options;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
+import org.rocksdb.WriteOptions;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -47,6 +47,10 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
 
     private final Optional<Counter> getCounter;
     private final Optional<Counter> putCounter;
+
+    private final WriteOptions writeOptions = new WriteOptions()
+            .setDisableWAL(true)
+            .setSync(false);
 
     static {
         RocksDB.loadLibrary();
@@ -189,13 +193,13 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
         // Only increment the count if the value is not present. In other words,
         // increment the count if this is an update operation.
         final boolean keyExists = rocksDb.keyMayExist(keyPayload.array(),
-                keyPayload.arrayOffset(), keyPayload.readableBytes(), new Holder<>());
+                keyPayload.arrayOffset(), keyPayload.readableBytes(), null);
         if (!keyExists) {
             dataSetSize.incrementAndGet();
         }
 
         try {
-            rocksDb.put(
+            rocksDb.put(writeOptions,
                     keyPayload.array(), keyPayload.arrayOffset(), keyPayload.readableBytes(),
                     valuePayload.array(), valuePayload.arrayOffset(), valuePayload.readableBytes());
         } catch (RocksDBException ex) {
@@ -205,6 +209,7 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
             valuePayload.release();
             MicroMeterUtils.time(recordSample, "corfu_table.write.timer", DISK_BACKED, TRUE);
         }
+
         return value;
     }
 
@@ -218,7 +223,7 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
         try {
             V value = get(key);
             if (value != null) {
-                rocksDb.delete(
+                rocksDb.delete(writeOptions,
                         keyPayload.array(), keyPayload.arrayOffset(), keyPayload.readableBytes());
                 dataSetSize.decrementAndGet();
                 return value;
