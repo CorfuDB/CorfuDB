@@ -9,8 +9,6 @@ import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
-import org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig;
-import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.time.Duration;

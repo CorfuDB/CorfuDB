@@ -24,8 +24,6 @@ import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
 import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
-import org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig;
-import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLEngine;
