@@ -2,14 +2,17 @@ package org.corfudb.security.tls;
 
 import org.junit.jupiter.api.Test;
 
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.KeyStore;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.function.Consumer;
 
 import static org.corfudb.security.tls.TlsTestContext.CLIENT_TRUST_WITH_SERVER;
 import static org.corfudb.security.tls.TlsTestContext.FAKE_LOCATION_AND_PASS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
+import static org.junit.jupiter.api.Assertions.fail;
 
 public class TlsUtilsTest {
 
@@ -21,11 +24,11 @@ public class TlsUtilsTest {
 
     @Test
     public void testBadPasswordFile() {
-        try {
-            TlsUtils.getCertStorePassword(Paths.get("definitely fake location"));
-        } catch (Exception e) {
-            assertEquals(TlsUtils.PASSWORD_FILE_NOT_FOUND_ERROR, e.getMessage());
-        }
+        Path fakeLocation = Paths.get("definitely fake location");
+        CompletableFuture<String> async = TlsUtils.getCertStorePassword(fakeLocation);
+        checkTaskError(async, ex -> {
+            assertEquals(TlsUtils.PASSWORD_FILE_NOT_FOUND_ERROR, ex.getMessage());
+        });
     }
 
     @Test
@@ -36,22 +39,34 @@ public class TlsUtilsTest {
 
     @Test
     public void testOpenKeyStoreBadPassword() {
-        try {
-            TlsUtils.openCertStore(TlsTestContext.FAKE_PASS);
-        } catch (Exception e) {
-            assertEquals(
-                    "Keystore was tampered with, or password was incorrect",
-                    e.getCause().getMessage()
-            );
-        }
+        String expectedErrMsg = "Keystore was tampered with, or password was incorrect";
+
+        CompletableFuture<KeyStore> async = TlsUtils.openCertStore(TlsTestContext.FAKE_PASS);
+        checkTaskError(async, ex -> {
+            assertEquals(expectedErrMsg, ex.getCause().getMessage());
+        });
     }
 
     @Test
     public void testOpenKeyStoreBadLocation() {
+        CompletableFuture<KeyStore> async = TlsUtils.openCertStore(FAKE_LOCATION_AND_PASS);
+        String expectedErrorMessage = "Key store file {definitely fake location} doesn't exist.";
+        checkTaskError(async, (IllegalStateException ex) -> {
+            assertEquals(expectedErrorMessage, ex.getMessage());
+        });
+    }
+
+    private <T> void checkTaskError(CompletableFuture<T> async, Consumer<IllegalStateException> errHandler) {
         try {
-            TlsUtils.openCertStore(FAKE_LOCATION_AND_PASS);
-        } catch (Exception e) {
-            assertTrue(e.getMessage().endsWith("doesn't exist."));
+            async.join();
+            fail("Must throw exception");
+        } catch (CompletionException ex) {
+            if (ex.getCause() instanceof IllegalStateException) {
+                IllegalStateException error = (IllegalStateException) ex.getCause();
+                errHandler.accept(error);
+            } else {
+                fail("Unexpected exception", ex.getCause());
+            }
         }
     }
 }
