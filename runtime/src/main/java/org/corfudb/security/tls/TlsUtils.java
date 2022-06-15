@@ -38,7 +38,7 @@ public class TlsUtils {
      * Both trustStores and keyStores are represented by the KeyStore object
      *
      * @param certStoreCfg certificate store config
-     * @return KeyStore object
+     * @return KeyStore keyStore object taken asynchronously
      */
     public static CompletableFuture<KeyStore> openCertStore(CertStoreConfig certStoreCfg) {
         return CompletableFuture
