@@ -8,6 +8,7 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 
+import java.time.Duration;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -17,7 +18,7 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @Slf4j
 public class CheckpointLivenessUpdater implements LivenessUpdater {
     private ScheduledExecutorService executorService;
-    private static final int UPDATE_INTERVAL = 15000;
+    private static final Duration UPDATE_INTERVAL = Duration.ofSeconds(15);
 
     private final CorfuStore corfuStore;
     private Table<TableName, CorfuCompactorManagement.ActiveCPStreamMsg, Message> activeCheckpointsTable = null;
@@ -54,7 +55,7 @@ public class CheckpointLivenessUpdater implements LivenessUpdater {
             } catch (Exception e) {
                 log.error("Unable to update liveness for table: {}", tableName);
             }
-        }, UPDATE_INTERVAL / 2, UPDATE_INTERVAL, TimeUnit.MILLISECONDS);
+        }, UPDATE_INTERVAL.toMillis() / 2, UPDATE_INTERVAL.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     @Override

@@ -26,7 +26,6 @@ public class CorfuStoreCompactorConfig {
     };
 
     private final Map<String, Object> opts;
-
     private final CorfuRuntimeParameters params;
     private final NodeLocator nodeLocator;
     private final Optional<String> persistedCacheRoot;
