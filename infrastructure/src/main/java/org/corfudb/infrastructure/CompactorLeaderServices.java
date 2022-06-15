@@ -54,7 +54,7 @@ public class CompactorLeaderServices {
     private Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointsTable;
     private Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable;
 
-    private Map<TableName, LivenessMetadata> readCache = new HashMap<>();
+    private final Map<TableName, LivenessMetadata> validateLivenessMap = new HashMap<>();
     private final CorfuRuntime corfuRuntime;
     private final CorfuStore corfuStore;
     private final String nodeEndpoint;
@@ -63,7 +63,7 @@ public class CompactorLeaderServices {
     @Setter
     private boolean isLeader;
 
-    private Logger syslog;
+    private final Logger syslog;
 
     private static final long LIVENESS_INIT_VALUE = -1;
 
@@ -152,7 +152,6 @@ public class CompactorLeaderServices {
      *
      * @return
      */
-    @VisibleForTesting
     public LeaderServicesStatus trimAndTriggerDistributedCheckpointing() {
         syslog.info("=============Initiating Distributed Checkpointing============");
         if (!isLeader) {
@@ -225,7 +224,7 @@ public class CompactorLeaderServices {
     public void validateLiveness(long timeout) {
         List<TableName> tableNames;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            tableNames = txn.keySet(activeCheckpointsTable).stream().collect(Collectors.toList());
+            tableNames = new ArrayList<>(txn.keySet(activeCheckpointsTable));
             txn.commit();
         } catch (Exception e) {
             syslog.warn("Unable to acquire tableNames");
@@ -252,23 +251,23 @@ public class CompactorLeaderServices {
                 syncHeartBeat = activeCPStreamMsg.getSyncHeartbeat();
                 txn.commit();
             } catch (Exception e) {
-                syslog.warn("Unable to acquire table status", e);
+                syslog.warn("Unable to acquire table status for {}", table, e);
             }
-            if (readCache.containsKey(table)) {
-                LivenessMetadata previousStatus = readCache.get(table);
+            if (validateLivenessMap.containsKey(table)) {
+                LivenessMetadata previousStatus = validateLivenessMap.get(table);
                 if (previousStatus.getStreamTail() < currentStreamTail) {
-                    readCache.put(table, new LivenessMetadata(previousStatus.getHeartbeat(), currentStreamTail, currentTime));
+                    validateLivenessMap.put(table, new LivenessMetadata(previousStatus.getHeartbeat(), currentStreamTail, currentTime));
                 } else if (previousStatus.getHeartbeat() < syncHeartBeat) {
-                    readCache.put(table, new LivenessMetadata(syncHeartBeat, previousStatus.getStreamTail(), currentTime));
+                    validateLivenessMap.put(table, new LivenessMetadata(syncHeartBeat, previousStatus.getStreamTail(), currentTime));
                 } else if (previousStatus.getStreamTail() == currentStreamTail || previousStatus.getHeartbeat() == syncHeartBeat) {
                     if (currentTime - previousStatus.getTime() > timeout &&
                             handleSlowCheckpointers(table) == LeaderServicesStatus.FAIL) {
-                        readCache.clear();
+                        validateLivenessMap.clear();
                         return;
                     }
                 }
             } else {
-                readCache.put(table, new LivenessMetadata(syncHeartBeat, currentStreamTail, currentTime));
+                validateLivenessMap.put(table, new LivenessMetadata(syncHeartBeat, currentStreamTail, currentTime));
             }
         }
     }
@@ -285,7 +284,6 @@ public class CompactorLeaderServices {
     }
 
     private void handleNoActiveCheckpointers(long timeout, long currentTime) {
-
         //Find the number of tables with IDLE status
         long idleCount = getIdleCount();
         if (livenessValidatorHelper.getPrevActiveTime() < 0 || idleCount < livenessValidatorHelper.getPrevIdleCount()) {
@@ -304,7 +302,7 @@ public class CompactorLeaderServices {
         }
         if (idleCount == 0 || currentTime - livenessValidatorHelper.getPrevActiveTime() > timeout &&
                 managerStatus != null && managerStatus.getStatus() == StatusType.STARTED_ALL) {
-            readCache.clear();
+            validateLivenessMap.clear();
             livenessValidatorHelper.clear();
             finishCompactionCycle();
         } else if (currentTime - livenessValidatorHelper.getPrevActiveTime() > timeout &&
@@ -355,7 +353,7 @@ public class CompactorLeaderServices {
         } catch (TransactionAbortedException ex) {
             if (ex.getAbortCause() == AbortCause.CONFLICT) {
                 syslog.warn("Another node tried to commit");
-                readCache.clear();
+                validateLivenessMap.clear();
                 return LeaderServicesStatus.SUCCESS;
             }
         }
@@ -377,8 +375,7 @@ public class CompactorLeaderServices {
                 return;
             }
 
-            List<TableName> tableNames = new ArrayList<TableName>(txn.keySet(checkpointingStatusTable)
-                    .stream().collect(Collectors.toList()));
+            List<TableName> tableNames = new ArrayList<>(txn.keySet(checkpointingStatusTable));
             boolean cpFailed = false;
 
             for (TableName table : tableNames) {
@@ -475,7 +472,7 @@ public class CompactorLeaderServices {
                 .build();
     }
 
-    public static String printCheckpointStatus(TableName tableName, CheckpointingStatus status) {
+    public String printCheckpointStatus(TableName tableName, CheckpointingStatus status) {
         StringBuilder str = new StringBuilder("\n");
         str.append(status.getClientName()).append(":");
         if (status.getStatus() != StatusType.COMPLETED) {
