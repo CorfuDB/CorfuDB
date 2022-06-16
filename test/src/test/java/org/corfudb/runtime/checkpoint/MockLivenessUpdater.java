@@ -2,10 +2,10 @@ package org.corfudb.runtime.checkpoint;
 
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
-import org.corfudb.runtime.DistributedCompactor;
 import org.corfudb.runtime.LivenessUpdater;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
@@ -36,14 +36,14 @@ public class MockLivenessUpdater implements LivenessUpdater {
         this.corfuStore = corfuStore;
         try {
             this.activeCheckpointsTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.ACTIVE_CHECKPOINTS_TABLE_NAME,
+                    CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME,
                     TableName.class,
                     ActiveCPStreamMsg.class,
                     null,
                     TableOptions.fromProtoSchema(ActiveCPStreamMsg.class));
 
             this.checkpointingStatusTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.CHECKPOINT_STATUS_TABLE_NAME,
+                    CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME,
                     TableName.class,
                     CheckpointingStatus.class,
                     null,
@@ -88,7 +88,7 @@ public class MockLivenessUpdater implements LivenessUpdater {
                     .setTimeTaken(tableStatus.getTimeTaken())
                     .build();
             txn.putRecord(checkpointingStatusTable, tableName, newStatus, null);
-            txn.delete(DistributedCompactor.ACTIVE_CHECKPOINTS_TABLE_NAME, tableName);
+            txn.delete(CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME, tableName);
             txn.commit();
         } catch (Exception e) {
             log.error("Unable to mark status as COMPLETED for table: {}, {} StackTrace: {}",

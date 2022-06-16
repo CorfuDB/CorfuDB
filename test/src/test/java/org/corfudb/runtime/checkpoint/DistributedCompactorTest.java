@@ -8,6 +8,7 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
+import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
@@ -150,7 +151,7 @@ public class DistributedCompactorTest extends AbstractViewTest {
     private Table<StringKey, CheckpointingStatus, Message> openCompactionManagerTable() {
         try {
             return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
+                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                     StringKey.class,
                     CheckpointingStatus.class,
                     null,
@@ -164,7 +165,7 @@ public class DistributedCompactorTest extends AbstractViewTest {
     private Table<TableName, CheckpointingStatus, Message> openCheckpointStatusTable() {
         try {
             return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.CHECKPOINT_STATUS_TABLE_NAME,
+                    CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME,
                     TableName.class,
                     CheckpointingStatus.class,
                     null,
@@ -178,7 +179,7 @@ public class DistributedCompactorTest extends AbstractViewTest {
     private Table<StringKey, TokenMsg, Message> openCheckpointTable() {
         try {
             return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.CHECKPOINT,
+                    CompactorMetadataTables.CHECKPOINT,
                     StringKey.class,
                     TokenMsg.class,
                     null,
@@ -192,7 +193,7 @@ public class DistributedCompactorTest extends AbstractViewTest {
     private Table<TableName, ActiveCPStreamMsg, Message> openActiveCheckpointsTable() {
         try {
             return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.ACTIVE_CHECKPOINTS_TABLE_NAME,
+                    CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME,
                     TableName.class,
                     ActiveCPStreamMsg.class,
                     null,
@@ -207,8 +208,8 @@ public class DistributedCompactorTest extends AbstractViewTest {
         openCompactionManagerTable();
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                    DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
-                    DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
+                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                    CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
             if (managerStatus.getStatus() == targetStatus) {
                 return true;
             }
@@ -226,7 +227,7 @@ public class DistributedCompactorTest extends AbstractViewTest {
                     .stream().collect(Collectors.toList()));
             for (TableName table : tableNames) {
                 CheckpointingStatus cpStatus = (CheckpointingStatus) txn.getRecord(
-                        DistributedCompactor.CHECKPOINT_STATUS_TABLE_NAME, table).getPayload();
+                        CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, table).getPayload();
                 if (cpStatus.getStatus() != targetStatus) {
                     failed++;
                 }
@@ -241,7 +242,7 @@ public class DistributedCompactorTest extends AbstractViewTest {
 
         TokenMsg token;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            token = (TokenMsg) txn.getRecord(DistributedCompactor.CHECKPOINT, DistributedCompactor.CHECKPOINT_KEY).getPayload();
+            token = (TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT, CompactorMetadataTables.CHECKPOINT_KEY).getPayload();
             txn.commit();
         }
 
@@ -251,12 +252,10 @@ public class DistributedCompactorTest extends AbstractViewTest {
     @Test
     public void initTest() {
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0);
-        compactorLeaderServices1.setLeader(true);
         CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime1, SERVERS.ENDPOINT_1);
-        compactorLeaderServices2.setLeader(false);
 
-        assert compactorLeaderServices1.trimAndTriggerDistributedCheckpointing() == LeaderServicesStatus.SUCCESS;
-        assert compactorLeaderServices2.trimAndTriggerDistributedCheckpointing() == LeaderServicesStatus.FAIL;
+        assert compactorLeaderServices1.initDistributedCompaction() == LeaderServicesStatus.SUCCESS;
+        assert compactorLeaderServices2.initDistributedCompaction() == LeaderServicesStatus.FAIL;
         assert verifyManagerStatus(StatusType.STARTED);
         assert verifyCheckpointStatusTable(StatusType.IDLE, 0);
     }
@@ -264,12 +263,10 @@ public class DistributedCompactorTest extends AbstractViewTest {
     @Test
     public void initMultipleLeadersTest1() {
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0);
-        compactorLeaderServices1.setLeader(true);
         CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime1, SERVERS.ENDPOINT_1);
-        compactorLeaderServices2.setLeader(true);
 
-        LeaderServicesStatus init1 = compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
-        LeaderServicesStatus init2 = compactorLeaderServices2.trimAndTriggerDistributedCheckpointing();
+        LeaderServicesStatus init1 = compactorLeaderServices1.initDistributedCompaction();
+        LeaderServicesStatus init2 = compactorLeaderServices2.initDistributedCompaction();
 
         assert !init1.equals(init2);
         assert verifyManagerStatus(StatusType.STARTED);
@@ -279,14 +276,11 @@ public class DistributedCompactorTest extends AbstractViewTest {
     @Test
     public void initMultipleLeadersTest2() {
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0);
-        compactorLeaderServices1.setLeader(true);
         CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime1, SERVERS.ENDPOINT_1);
-        compactorLeaderServices2.setLeader(true);
 
         ExecutorService scheduler = Executors.newFixedThreadPool(2);
-        Future<LeaderServicesStatus> future1 = scheduler.submit(() -> compactorLeaderServices1.trimAndTriggerDistributedCheckpointing());
-        Future<LeaderServicesStatus> future2 = scheduler.submit(() -> compactorLeaderServices2.trimAndTriggerDistributedCheckpointing());
-        compactorLeaderServices1.setLeader(false);
+        Future<LeaderServicesStatus> future1 = scheduler.submit(() -> compactorLeaderServices1.initDistributedCompaction());
+        Future<LeaderServicesStatus> future2 = scheduler.submit(() -> compactorLeaderServices2.initDistributedCompaction());
 
         try {
             if (!future1.get().equals(future2)) {
@@ -303,8 +297,7 @@ public class DistributedCompactorTest extends AbstractViewTest {
     @Test
     public void startCheckpointingTest() {
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0);
-        compactorLeaderServices1.setLeader(true);
-        compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
+        compactorLeaderServices1.initDistributedCompaction();
         DistributedCompactor distributedCompactor1 =
                 new DistributedCompactor(runtime0, cpRuntime0, Optional.empty());
         DistributedCompactor distributedCompactor2 =
@@ -319,7 +312,7 @@ public class DistributedCompactorTest extends AbstractViewTest {
 
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             //This assert ensures each table is checkpointed by only one of the clients
-            Assert.assertEquals(txn.count(DistributedCompactor.CHECKPOINT_STATUS_TABLE_NAME), total);
+            Assert.assertEquals(txn.count(CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME), total);
             txn.commit();
         }
         assert verifyManagerStatus(StatusType.STARTED);
@@ -329,8 +322,7 @@ public class DistributedCompactorTest extends AbstractViewTest {
     @Test
     public void finishCompactionCycleSuccessTest() {
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0);
-        compactorLeaderServices1.setLeader(true);
-        compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
+        compactorLeaderServices1.initDistributedCompaction();
 
         DistributedCompactor distributedCompactor = new DistributedCompactor(runtime0, cpRuntime0, Optional.empty());
         distributedCompactor.startCheckpointing();
@@ -345,8 +337,7 @@ public class DistributedCompactorTest extends AbstractViewTest {
     @Test
     public void finishCompactionCycleFailureTest() {
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0);
-        compactorLeaderServices1.setLeader(true);
-        compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
+        compactorLeaderServices1.initDistributedCompaction();
 
         //Checkpointing not done
         compactorLeaderServices1.finishCompactionCycle();
@@ -358,8 +349,8 @@ public class DistributedCompactorTest extends AbstractViewTest {
     private boolean pollForFinishCheckpointing() {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                    DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
-                    DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
+                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                    CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
             txn.commit();
             log.debug("managerStatus in test: {}", managerStatus == null ? "null" : managerStatus.getStatus());
             if (managerStatus != null && (managerStatus.getStatus() == StatusType.COMPLETED
@@ -375,8 +366,7 @@ public class DistributedCompactorTest extends AbstractViewTest {
         //make some client to start cp
         //verifyCheckpointStatusTable
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0);
-        compactorLeaderServices1.setLeader(true);
-        compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
+        compactorLeaderServices1.initDistributedCompaction();
 
         DistributedCompactor distributedCompactor = new DistributedCompactor(runtime0, cpRuntime0, Optional.empty());
         distributedCompactor.startCheckpointing();
@@ -400,9 +390,7 @@ public class DistributedCompactorTest extends AbstractViewTest {
     @Test
     public void validateLivenessNonLeaderTest() {
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0);
-        compactorLeaderServices1.setLeader(true);
-        compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
-        compactorLeaderServices1.setLeader(false);
+        compactorLeaderServices1.initDistributedCompaction();
 
         DistributedCompactor distributedCompactor = new DistributedCompactor(runtime0, cpRuntime0, Optional.empty());
         distributedCompactor.startCheckpointing();
@@ -424,8 +412,7 @@ public class DistributedCompactorTest extends AbstractViewTest {
     @Test
     public void validateLivenessFailureTest() {
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, SERVERS.ENDPOINT_0);
-        compactorLeaderServices1.setLeader(true);
-        compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
+        compactorLeaderServices1.initDistributedCompaction();
 
         Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointTable = openActiveCheckpointsTable();
         Table<TableName, CheckpointingStatus, Message> checkpointStatusTable = openCheckpointStatusTable();
@@ -463,8 +450,7 @@ public class DistributedCompactorTest extends AbstractViewTest {
     @Test
     public void validateLivenessSyncStateTest() {
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, SERVERS.ENDPOINT_0);
-        compactorLeaderServices1.setLeader(true);
-        compactorLeaderServices1.trimAndTriggerDistributedCheckpointing();
+        compactorLeaderServices1.initDistributedCompaction();
 
         Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointTable = openActiveCheckpointsTable();
         Table<TableName, CheckpointingStatus, Message> checkpointStatusTable = openCheckpointStatusTable();

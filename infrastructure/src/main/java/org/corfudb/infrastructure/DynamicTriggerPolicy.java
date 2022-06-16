@@ -1,8 +1,8 @@
 package org.corfudb.infrastructure;
 
 import lombok.Getter;
+import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.DistributedCompactor;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.RpcCommon;
@@ -36,8 +36,8 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
     private boolean shouldForceTrigger() {
         CorfuStore corfuStore = new CorfuStore(corfuRuntime);
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            RpcCommon.TokenMsg upgradeToken = (RpcCommon.TokenMsg) txn.getRecord(DistributedCompactor.CHECKPOINT,
-                    DistributedCompactor.UPGRADE_KEY).getPayload();
+            RpcCommon.TokenMsg upgradeToken = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT,
+                    CompactorMetadataTables.UPGRADE_KEY).getPayload();
             txn.commit();
             if (upgradeToken != null) {
                 return true;

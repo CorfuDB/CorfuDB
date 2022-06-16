@@ -28,7 +28,7 @@ public class CheckpointLivenessUpdater implements LivenessUpdater {
         this.corfuStore = corfuStore;
         try {
             this.activeCheckpointsTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.ACTIVE_CHECKPOINTS_TABLE_NAME,
+                    CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME,
                     TableName.class,
                     CorfuCompactorManagement.ActiveCPStreamMsg.class,
                     null,
