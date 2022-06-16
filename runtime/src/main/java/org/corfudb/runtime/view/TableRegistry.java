@@ -573,24 +573,20 @@ public class TableRegistry {
     }
 
     /**
-     * Close a table that is already opened.
+     * Allow underlying objects of this table to be garbage collected
+     * while still retaining the metadata of the table.
      *
      * @param namespace Namespace of the table.
      * @param tableName Name of the table.
      * @throws NoSuchElementException - if the table does not exist.
      */
-    public void closeTable(String namespace, String tableName) {
+    public void freeTableData(String namespace, String tableName) {
         String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
         Table<Message, Message, Message> table = tableMap.get(fullyQualifiedTableName);
         if (table == null) {
-            throw new NoSuchElementException("closeTable: Did not find any table "+ fullyQualifiedTableName);
+            throw new NoSuchElementException("freeTableData: Did not find any table "+ fullyQualifiedTableName);
         }
-        tableMap.remove(fullyQualifiedTableName);
-        ObjectsView.ObjectID oid = new ObjectsView.ObjectID(table.getStreamUUID(), CorfuTable.class);
-        Object tableObject = runtime.getObjectsView().getObjectCache().remove(oid);
-        if (tableObject == null) {
-            throw new NoSuchElementException("closeTable: No object cache entry for "+ fullyQualifiedTableName);
-        }
+        table.resetTableData(runtime, this.protobufSerializer);
     }
 
     /**
