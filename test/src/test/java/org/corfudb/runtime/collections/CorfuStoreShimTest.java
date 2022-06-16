@@ -156,12 +156,14 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     }
 
     /**
-     * Test that closeTable works and removes table from cache
+     * Test that freeTableData works and removes table from cache
+     * Also validates that the subscribeListener() does not throw any exceptions
+     * if called after freeTableData() is invoked.
      *
      * @throws Exception exception
      */
     @Test
-    public void checkCloseTable() throws Exception {
+    public void checkFreeTableData() throws Exception {
 
         // Get a Corfu Runtime instance.
         CorfuRuntime corfuRuntime = getTestRuntime();
@@ -176,43 +178,11 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         // Create & Register the table.
         // This is required to initialize the table for the current corfu client.
-        Table<UuidMsg, ManagedMetadata, ManagedMetadata> table = shimStore.openTable(
+        Table<UuidMsg, ExampleSchemas.ClusterUuidMsg, ManagedMetadata> table = shimStore.openTable(
                 someNamespace,
                 tableName,
                 UuidMsg.class,
-                ManagedMetadata.class,
-                ManagedMetadata.class,
-                // TableOptions includes option to choose - Memory/Disk based corfu table.
-                TableOptions.builder().build());
-
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LARGE; i++) {
-            UUID uuid1 = UUID.nameUUIDFromBytes("1".getBytes());
-            UuidMsg key = UuidMsg.newBuilder().setMsb(i)
-                    .build();
-            ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
-
-            ManagedTxnContext txn = shimStore.tx(someNamespace);
-            txn.putRecord(tableName, key,
-                    ManagedMetadata.newBuilder().setCreateUser("abc").build(),
-                    user_1);
-            txn.commit();
-        }
-
-        assertThatThrownBy(() -> shimStore.closeTable("non", "existent"))
-                .isExactlyInstanceOf(NoSuchElementException.class);
-
-        shimStore.closeTable(someNamespace, tableName);
-
-        // Validate externally that the entry vanishes from corfu's object cache
-        ObjectsView.ObjectID oid = new ObjectsView.ObjectID(table.getStreamUUID(), PersistentCorfuTable.class);
-        assertThat(corfuRuntime.getObjectsView().getObjectCache().containsKey(oid)).isFalse();
-
-        // Now re-open a table after it is closed to check that it works..
-        table = shimStore.openTable(
-                someNamespace,
-                tableName,
-                UuidMsg.class,
-                ManagedMetadata.class,
+                ExampleSchemas.ClusterUuidMsg.class,
                 ManagedMetadata.class,
                 // TableOptions includes option to choose - Memory/Disk based corfu table.
                 TableOptions.builder().build());
@@ -225,15 +195,47 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
             ManagedTxnContext txn = shimStore.tx(someNamespace);
             txn.putRecord(table, key,
-                    ManagedMetadata.newBuilder().setCreateUser("abc").build(),
+                    ExampleSchemas.ClusterUuidMsg.newBuilder().setMsb(i).build(),
                     user_1);
+            txn.commit();
+        }
+
+        assertThatThrownBy(() -> shimStore.freeTableData("non", "existent"))
+                .isExactlyInstanceOf(NoSuchElementException.class);
+
+        // Release all the cached objects from the insertions above
+        shimStore.freeTableData(someNamespace, tableName);
+
+        class EmptyStreamListener implements StreamListener {
+            @Override
+            public void onNext(CorfuStreamEntries results) {
+            }
+            @Override
+            public void onError(Throwable throwable) {
+            }
+        }
+        EmptyStreamListener emptyStreamListener = new EmptyStreamListener();
+
+        // verify that subscription does not throw any exceptions because the table was closed
+        shimStore.subscribeListener(emptyStreamListener, someNamespace, "cluster_manager_test");
+
+        // Now simple access the table after free to validate that it works
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LARGE; i++) {
+            UUID uuid1 = UUID.nameUUIDFromBytes("1".getBytes());
+            UuidMsg key = UuidMsg.newBuilder().setMsb(i)
+                    .build();
+            ManagedTxnContext txn = shimStore.tx(someNamespace);
+            CorfuStoreEntry<UuidMsg, ExampleSchemas.ClusterUuidMsg, ManagedMetadata> record = txn.getRecord(table, key);
+            assertThat(record.getPayload()).isNotNull();
+            assertThat(record.getPayload().getMsb()).isEqualTo(i);
             txn.commit();
         }
 
         // By some future bug should the table disappear from the object cache ensure that
         // the method still fails gracefully with a NoSuchElementException
+        ObjectsView.ObjectID oid = new ObjectsView.ObjectID(table.getStreamUUID(), CorfuTable.class);
         corfuRuntime.getObjectsView().getObjectCache().remove(oid);
-        assertThatThrownBy(() -> shimStore.closeTable(someNamespace, tableName))
+        assertThatThrownBy(() -> shimStore.freeTableData(someNamespace, tableName))
                 .isExactlyInstanceOf(NoSuchElementException.class);
     }
 

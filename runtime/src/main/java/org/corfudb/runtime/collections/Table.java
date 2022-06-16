@@ -14,6 +14,7 @@ import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.CorfuGuidGenerator;
 import org.corfudb.runtime.view.SMRObject;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.ISerializer;
 
 import javax.annotation.Nonnull;
@@ -23,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -41,7 +43,6 @@ import java.util.stream.Stream;
  */
 @Slf4j
 public class Table<K extends Message, V extends Message, M extends Message> {
-
     // Accessor/Mutator threads can interleave in a way that create a deadlock because they can create a
     // circular dependency between the VersionLockedObject(VLO) lock and the common forkjoin thread pool. In order
     // to break the dependency, parallel stream operations have to execute on a separate pool that applications
@@ -57,7 +58,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                 return worker;
             }, null, true);
 
-    private final ICorfuTable<K, CorfuRecord<V, M>> corfuTable;
+    private ICorfuTable<K, CorfuRecord<V, M>> corfuTable;
 
     /**
      * Namespace this table belongs in.
@@ -89,6 +90,9 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     @Getter
     private final Set<UUID> streamTags;
 
+    private final TableParameters<K, V, M> tableParameters;
+    private final Supplier<StreamingMap<K, V>> streamingMapSupplier;
+
     /**
      * In case this table is opened as a Queue, we need the Guid generator to support enqueue operations.
      */
@@ -111,7 +115,8 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                  @Nonnull final CorfuRuntime corfuRuntime,
                  @Nonnull final ISerializer serializer,
                  @NonNull final Set<UUID> streamTags,
-                 final Supplier<StreamingMap<K, V>> streamingMapSupplier) {
+                 @Nullable final Supplier<StreamingMap<K, V>> streamingMapSupplier,
+                 @Nullable final PersistentCorfuTable<K, CorfuRecord<V, M>> corfuTable) {
 
         this.namespace = tableParameters.getNamespace();
         this.fullyQualifiedTableName = tableParameters.getFullyQualifiedTableName();
@@ -124,41 +129,33 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                         .build())
                 .orElse(MetadataOptions.builder().build());
 
+        this.tableParameters = tableParameters;
+        this.streamingMapSupplier = streamingMapSupplier;
+
+        if (corfuTable == null) {
+            initializeCorfuTable(corfuRuntime, serializer);
+        } else {
+            this.corfuTable = corfuTable;
+        }
+
         this.keyClass = tableParameters.getKClass();
         this.valueClass = tableParameters.getVClass();
         this.metadataClass = tableParameters.getMClass();
+
         if (keyClass == Queue.CorfuGuidMsg.class &&
                 metadataClass == Queue.CorfuQueueMetadataMsg.class) { // Really a Queue
             this.guidGenerator = CorfuGuidGenerator.getInstance(corfuRuntime);
         } else {
             this.guidGenerator = null;
         }
+    }
 
-        // TODO(Zach): What if table is disk-backed?
-        // TODO(Zach): This is likely broken. Arguments won't match constructor. Fix me!
-        // TODO(Zach): Polish this up with TableRegistry
-        SMRObject.Builder<? extends ICorfuTable<K, CorfuRecord<V, M>>> builder;
-
-        if (streamingMapSupplier == null) {
-            // PersistentCorfuTable
-            builder = corfuRuntime.getObjectsView().build()
-                    .setTypeToken(new TypeToken<PersistentCorfuTable<K, CorfuRecord<V, M>>>() {})
-                    .setArguments(new ProtobufIndexer(tableParameters.getValueSchema(), tableParameters.getSchemaOptions()))
-                    .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT);
-        } else {
-            // Disk-backed CorfuTable
-            builder = corfuRuntime.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<K, CorfuRecord<V, M>>>() {})
-                    .setArguments(
-                    new ProtobufIndexer(tableParameters.getValueSchema(), tableParameters.getSchemaOptions()),
-                    streamingMapSupplier,
-                    ICorfuVersionPolicy.MONOTONIC);
-        }
-
-        this.corfuTable = builder.setStreamName(this.fullyQualifiedTableName)
-                .setStreamTags(streamTags)
-                .setSerializer(serializer)
-                .open();
+    public Table(@Nonnull final TableParameters<K, V, M> tableParameters,
+                 @Nonnull final CorfuRuntime corfuRuntime,
+                 @Nonnull final ISerializer serializer,
+                 @Nullable final Supplier<StreamingMap<K, V>> streamingMapSupplier,
+                 @NonNull final Set<UUID> streamTags) {
+        this(tableParameters, corfuRuntime, serializer, streamTags, streamingMapSupplier, null);
     }
 
     /**
@@ -204,6 +201,58 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      */
     public void clearAll() {
         corfuTable.clear();
+    }
+
+    /**
+     * Allow GC to remove all the in-memory objects associated with the CorfuTable
+     * and make it look like the table is a newly opened one
+     * This is useful for JVMs who do not wish to keep the entire table
+     * around in memory.
+     * @param runtime - the runtime that was used to create this table
+     * @param serializer - the serializer used to materialize table data
+     */
+    public void resetTableData(CorfuRuntime runtime, ISerializer serializer) {
+        ObjectsView.ObjectID oid;
+
+        if (streamingMapSupplier == null) {
+            // PersistentCorfuTable
+            oid = new ObjectsView.ObjectID(getStreamUUID(), PersistentCorfuTable.class);
+        } else {
+            // Disk-backed CorfuTable
+            oid = new ObjectsView.ObjectID(getStreamUUID(), CorfuTable.class);
+        }
+
+        Object tableObject = runtime.getObjectsView().getObjectCache().remove(oid);
+        if (tableObject == null) {
+            throw new NoSuchElementException("resetTableData: No object cache entry for "+ fullyQualifiedTableName);
+        }
+
+        initializeCorfuTable(runtime, serializer);
+    }
+
+    private void initializeCorfuTable(CorfuRuntime runtime, ISerializer serializer) {
+        SMRObject.Builder<? extends ICorfuTable<K, CorfuRecord<V, M>>> builder;
+
+        if (streamingMapSupplier == null) {
+            // PersistentCorfuTable
+            builder = runtime.getObjectsView().build()
+                    .setTypeToken(new TypeToken<PersistentCorfuTable<K, CorfuRecord<V, M>>>() {})
+                    .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT);
+        } else {
+            // Disk-backed CorfuTable
+            builder = runtime.getObjectsView().build()
+                    .setTypeToken(new TypeToken<CorfuTable<K, CorfuRecord<V, M>>>() {})
+                    .setArguments(new ProtobufIndexer(
+                                    tableParameters.getValueSchema(),
+                                    tableParameters.getSchemaOptions()),
+                            streamingMapSupplier,
+                            ICorfuVersionPolicy.MONOTONIC);
+        }
+
+        this.corfuTable = builder.setStreamName(this.fullyQualifiedTableName)
+                .setStreamTags(streamTags)
+                .setSerializer(serializer)
+                .open();
     }
 
     /**

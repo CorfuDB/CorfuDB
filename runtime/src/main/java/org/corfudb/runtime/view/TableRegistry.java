@@ -16,18 +16,15 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileName;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileDescriptor;
 import org.corfudb.runtime.collections.CorfuRecord;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
-import org.corfudb.runtime.collections.StreamingMapDecorator;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableParameters;
 import org.corfudb.runtime.collections.streaming.StreamingManager;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.ObjectsView.StreamTagInfo;
@@ -529,8 +526,8 @@ public class TableRegistry {
                         .build(),
                 this.runtime,
                 this.protobufSerializer,
-                streamTagIdsForTable,
-                mapSupplier);
+                mapSupplier,
+                streamTagIdsForTable);
         tableMap.put(fullyQualifiedTableName, (Table<Message, Message, Message>) table);
 
         registerTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
@@ -575,24 +572,20 @@ public class TableRegistry {
     }
 
     /**
-     * Close a table that is already opened.
+     * Allow underlying objects of this table to be garbage collected
+     * while still retaining the metadata of the table.
      *
      * @param namespace Namespace of the table.
      * @param tableName Name of the table.
      * @throws NoSuchElementException - if the table does not exist.
      */
-    public void closeTable(String namespace, String tableName) {
+    public void freeTableData(String namespace, String tableName) {
         String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
         Table<Message, Message, Message> table = tableMap.get(fullyQualifiedTableName);
         if (table == null) {
-            throw new NoSuchElementException("closeTable: Did not find any table "+ fullyQualifiedTableName);
+            throw new NoSuchElementException("freeTableData: Did not find any table "+ fullyQualifiedTableName);
         }
-        tableMap.remove(fullyQualifiedTableName);
-        ObjectsView.ObjectID oid = new ObjectsView.ObjectID(table.getStreamUUID(), PersistentCorfuTable.class);
-        Object tableObject = runtime.getObjectsView().getObjectCache().remove(oid);
-        if (tableObject == null) {
-            throw new NoSuchElementException("closeTable: No object cache entry for "+ fullyQualifiedTableName);
-        }
+        table.resetTableData(runtime, this.protobufSerializer);
     }
 
     /**
