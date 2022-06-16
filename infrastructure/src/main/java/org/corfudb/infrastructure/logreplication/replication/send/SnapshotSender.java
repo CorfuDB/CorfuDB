@@ -204,7 +204,7 @@ public class SnapshotSender {
 
         if (MeterRegistryProvider.getInstance().isPresent()) {
             dataSenderBufferManager.sendWithBuffering(logReplicationEntries,
-                    "logreplication.sender.duration.seconds",
+                    "logreplication.sender.duration.nanoseconds",
                     Tag.of("replication.type", "snapshot"));
         } else {
             dataSenderBufferManager.sendWithBuffering(logReplicationEntries);

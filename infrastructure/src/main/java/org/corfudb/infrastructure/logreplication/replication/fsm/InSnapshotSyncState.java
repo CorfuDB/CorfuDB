@@ -28,7 +28,7 @@ public class InSnapshotSyncState implements LogReplicationState {
 
     private final Optional<AtomicLong> snapshotSyncAcksCounter;
 
-    private Optional<Timer.Sample> snapshotSyncTimerSample = Optional.empty();
+    private Optional<Timer.Sample> snapshotSyncTransferTimerSample = Optional.empty();
 
     /**
      * Uniquely identifies the event that caused the transition to this state.
@@ -114,13 +114,6 @@ public class InSnapshotSyncState implements LogReplicationState {
                 fsm.setBaseSnapshot(event.getMetadata().getLastTransferredBaseSnapshot());
                 fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
                 snapshotSyncAcksCounter.ifPresent(AtomicLong::getAndIncrement);
-                snapshotSyncTimerSample
-                        .flatMap(sample -> MeterRegistryProvider.getInstance()
-                                .map(registry -> {
-                                    Timer timer = registry.timer("logreplication.snapshot" +
-                                            ".duration.seconds");
-                                    return sample.stop(timer);
-                                }));
                 return waitSnapshotApplyState;
             case SYNC_CANCEL:
                 // If cancel was intended for current snapshot sync task, cancel and transition to new state
@@ -161,7 +154,7 @@ public class InSnapshotSyncState implements LogReplicationState {
             if (from != this) {
                 snapshotSender.reset();
                 fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionEventId);
-                snapshotSyncTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
+                snapshotSyncTransferTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
             }
             transmitFuture = fsm.getLogReplicationFSMWorkers()
                     .submit(() -> snapshotSender.transmit(transitionEventId));
@@ -172,6 +165,14 @@ public class InSnapshotSyncState implements LogReplicationState {
 
     @Override
     public void onExit(LogReplicationState to) {
+        if (to.getType().equals(LogReplicationStateType.WAIT_SNAPSHOT_APPLY)) {
+            snapshotSyncTransferTimerSample
+                    .flatMap(sample -> MeterRegistryProvider.getInstance()
+                            .map(registry -> {
+                                Timer timer = registry.timer("logreplication.snapshot.transfer.duration");
+                                return sample.stop(timer);
+                            }));
+        }
         if (to.getType().equals(LogReplicationStateType.INITIALIZED)) {
             fsm.getAckReader().markSyncStatus(SyncStatus.STOPPED);
             log.debug("Snapshot sync status changed to STOPPED");

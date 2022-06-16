@@ -1,13 +1,16 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -63,6 +66,8 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     private final ScheduledExecutorService snapshotSyncApplyMonitorExecutor;
 
     private final AtomicBoolean stopSnapshotApply = new AtomicBoolean(false);
+
+    private Optional<Timer.Sample> snapshotSyncApplyTimerSample = Optional.empty();
 
     /**
      * Constructor
@@ -154,7 +159,22 @@ public class WaitSnapshotApplyState implements LogReplicationState {
             stopSnapshotApply.set(false);
             fsm.getAckReader().markSnapshotSyncInfoOngoing();
         }
+        if (from != this) {
+            snapshotSyncApplyTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
+        }
         this.fsm.getLogReplicationFSMWorkers().submit(this::verifyStatusOfSnapshotSyncApply);
+    }
+
+    @Override
+    public void onExit(LogReplicationState to) {
+        if (to.getType().equals(LogReplicationStateType.IN_LOG_ENTRY_SYNC)) {
+            snapshotSyncApplyTimerSample
+                    .flatMap(sample -> MeterRegistryProvider.getInstance()
+                            .map(registry -> {
+                                Timer timer = registry.timer("logreplication.snapshot.apply.duration");
+                                return sample.stop(timer);
+                            }));
+        }
     }
 
     private void verifyStatusOfSnapshotSyncApply() {

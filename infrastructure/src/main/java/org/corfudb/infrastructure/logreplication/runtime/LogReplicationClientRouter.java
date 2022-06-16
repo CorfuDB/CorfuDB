@@ -1,10 +1,8 @@
 package org.corfudb.infrastructure.logreplication.runtime;
 
-import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
@@ -99,8 +97,6 @@ public class LogReplicationClientRouter implements IClientRouter {
      * The outstanding requests on this router.
      */
     public final Map<Long, CompletableFuture> outstandingRequests;
-
-    private Optional<Timer.Sample> requestSample = Optional.empty();
 
     /**
      * Adapter to the channel implementation
@@ -372,13 +368,6 @@ public class LogReplicationClientRouter implements IClientRouter {
      */
     public void receive(CorfuMessage.ResponseMsg msg) {
         try {
-            requestSample.flatMap(sample -> MeterRegistryProvider.getInstance()
-                    .map(registry -> {
-                        Timer timer = registry
-                                .timer("logreplication.rtt.seconds");
-                        return sample.stop(timer);
-                    }));
-
             // If it is a Leadership Loss Message re-trigger leadership discovery
             if (msg.getPayload().getPayloadCase() == PayloadCase.LR_LEADERSHIP_LOSS) {
                 String nodeId = msg.getPayload().getLrLeadershipLoss().getNodeId();

@@ -8,12 +8,13 @@
 ### Current metrics collected for LR:
 
 *   **logreplication.message.size.bytes**: Message size in bytes (throughput, mean and max), distinguished by replication type (snapshot, logentry).
-*   **logreplication.lock.duration**: Duration of holding a leadership lock in seconds, distinguished by role (active, standby).
+*   **logreplication.lock.duration.nanoseconds**: Duration of holding a leadership lock in nanoseconds, distinguished by role (active, standby).
 *   **logreplication.lock.acquire.count**: Number of times a leadership lock was acquired, distinguised by role (active, standby).
-*   **logreplication.sender.duration.seconds**: Duration of sending a log entry in seconds (throughput, mean and max), distinguished by replication type (snapshot, logentry) and status (success, failure).
-*   **logreplication.rtt.seconds**: Duration of sending a message overall (throughput, mean and max).
+*   **logreplication.sender.duration.nanoseconds**: Duration of sending a log entry in nanoseconds (throughput, mean and max), distinguished by replication type (snapshot, logentry) and status (success, failure).
 *   **logreplication.snapshot.completed.count**: Number of snapshot syncs completed.
-*   **logreplication.snapshot.duration.seconds**: Duration of completing a snapshot sync in seconds (throughput, mean and max).
+*   **logreplication.snapshot.transfer.duration**: Duration of the TRANSFER phase of a snapshot sync in nanoseconds (throughput, mean and max).
+*   **logreplication.snapshot.apply.duration**: Duration of the APPLY phase of a snapshot sync in nanoseconds (throughput, mean and max).
+*   **logreplication.snapshot.duration**: Duration of completing a snapshot sync in nanoseconds (throughput, mean and max).
 *   **logreplication.acks**: Number of acks, distinguished by replication type (snapshot, logentry).
 *   **logreplication.messages**: Number of messages sent, distinguished by replication type (snapshot, logentry).
 *   **logreplication.opaque.count\_per\_message**: Number of opaque entries per message (rate, mean, max).
