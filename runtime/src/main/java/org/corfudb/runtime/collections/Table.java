@@ -12,6 +12,7 @@ import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.CorfuGuidGenerator;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.ISerializer;
 
 import javax.annotation.Nonnull;
@@ -21,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -38,7 +40,7 @@ import java.util.stream.Stream;
 @Slf4j
 public class Table<K extends Message, V extends Message, M extends Message> {
 
-    private final CorfuTable<K, CorfuRecord<V, M>> corfuTable;
+    private CorfuTable<K, CorfuRecord<V, M>> corfuTable;
 
     /**
      * Namespace this table belongs in.
@@ -70,6 +72,9 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     @Getter
     private final Set<UUID> streamTags;
 
+    private final TableParameters<K, V, M> tableParameters;
+    private final Supplier<StreamingMap<K, V>> streamingMapSupplier;
+    private final ICorfuVersionPolicy.VersionPolicy versionPolicy;
     /**
      * In case this table is opened as a Queue, we need the Guid generator to support enqueue operations.
      */
@@ -105,6 +110,9 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                         .defaultMetadataInstance(schema)
                         .build())
                 .orElse(MetadataOptions.builder().build());
+        this.tableParameters = tableParameters;
+        this.streamingMapSupplier = streamingMapSupplier;
+        this.versionPolicy = versionPolicy;
 
         this.corfuTable = corfuRuntime.getObjectsView().build()
                 .setTypeToken(CorfuTable.<K, CorfuRecord<V, M>>getTableType())
@@ -169,6 +177,31 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      */
     public void clearAll() {
         corfuTable.clear();
+    }
+
+    /**
+     * Allow GC to remove all the in-memory objects associated with the CorfuTable
+     * and make it look like the table is a newly opened one
+     * This is useful for JVMs who do not wish to keep the entire table
+     * around in memory.
+     * @param runtime - the runtime that was used to create this table
+     * @param serializer - the serializer used to materialize table data
+     */
+    public void resetTableData(CorfuRuntime runtime, ISerializer serializer) {
+        ObjectsView.ObjectID oid = new ObjectsView.ObjectID(getStreamUUID(), CorfuTable.class);
+        Object tableObject = runtime.getObjectsView().getObjectCache().remove(oid);
+        if (tableObject == null) {
+            throw new NoSuchElementException("resetTableData: No object cache entry for "+ fullyQualifiedTableName);
+        }
+        this.corfuTable = runtime.getObjectsView().build()
+                .setTypeToken(CorfuTable.<K, CorfuRecord<V, M>>getTableType())
+                .setStreamName(this.fullyQualifiedTableName)
+                .setSerializer(serializer)
+                .setArguments(new ProtobufIndexer(tableParameters.getValueSchema(),
+                                tableParameters.getSchemaOptions()),
+                        streamingMapSupplier, versionPolicy)
+                .setStreamTags(streamTags)
+                .open();
     }
 
     /**
