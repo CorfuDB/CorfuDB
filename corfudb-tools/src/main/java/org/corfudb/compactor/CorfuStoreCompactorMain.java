@@ -3,6 +3,7 @@ package org.corfudb.compactor;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.DistributedCompactor;
@@ -17,7 +18,7 @@ import java.util.concurrent.TimeUnit;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
- * Invokes the startCheckpointing() method of DistributedCompactor to checkpoint remaining tables that weren't
+ * Invokes the startCheckpointing() method of DistributedCompactor to checkpoint tables that weren't
  * checkpointed by any of the clients
  */
 @Slf4j
@@ -41,7 +42,7 @@ public class CorfuStoreCompactorMain {
         distributedCompactor = new DistributedCompactor(corfuRuntime, cpRuntime, config.getPersistedCacheRoot());
         try {
             this.checkpointTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.CHECKPOINT,
+                    CompactorMetadataTables.CHECKPOINT,
                     StringKey.class,
                     TokenMsg.class,
                     null,
@@ -79,7 +80,7 @@ public class CorfuStoreCompactorMain {
         retryCheckpointing = CorfuStoreCompactorConfig.CHECKPOINT_RETRY_UPGRADE;
 
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            txn.putRecord(checkpointTable, DistributedCompactor.UPGRADE_KEY, TokenMsg.getDefaultInstance(),
+            txn.putRecord(checkpointTable, CompactorMetadataTables.UPGRADE_KEY, TokenMsg.getDefaultInstance(),
                     null);
             txn.commit();
         } catch (Exception e) {

@@ -3,10 +3,10 @@ package org.corfudb.infrastructure;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.NonNull;
 import lombok.Setter;
+import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.DistributedCompactor;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.Layout;
@@ -40,6 +40,7 @@ public class CompactorService implements ManagementService {
     private final CompactionTriggerPolicy compactionTriggerPolicy;
     private CompactorLeaderServices compactorLeaderServices;
     private CorfuStore corfuStore;
+    private TrimLog trimLog;
 
     private final Logger syslog;
 
@@ -56,6 +57,7 @@ public class CompactorService implements ManagementService {
                         .build());
         this.checkpointerJvmManager = checkpointerJvmManager;
         this.compactionTriggerPolicy = compactionTriggerPolicy;
+
         syslog = LoggerFactory.getLogger("syslog");
     }
 
@@ -72,6 +74,7 @@ public class CompactorService implements ManagementService {
     public void start(Duration interval) {
         this.compactorLeaderServices = new CompactorLeaderServices(getCorfuRuntime(), serverContext.getLocalEndpoint());
         this.corfuStore = new CorfuStore(getCorfuRuntime());
+        this.trimLog = new TrimLog(getCorfuRuntime(), corfuStore);
         this.compactionTriggerPolicy.setCorfuRuntime(getCorfuRuntime());
         if (getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis() <= 0) {
             return;
@@ -93,12 +96,11 @@ public class CompactorService implements ManagementService {
      */
     private void runOrchestrator() {
         boolean isLeader = isNodePrimarySequencer(updateLayoutAndGet());
-        compactorLeaderServices.setLeader(isLeader);
         CheckpointingStatus managerStatus = null;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             managerStatus = (CheckpointingStatus) txn.getRecord(
-                    DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
-                    DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
+                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                    CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
             txn.commit();
         } catch (Exception e) {
             syslog.warn("Unable to acquire manager status: {}", e.getStackTrace());
@@ -120,7 +122,8 @@ public class CompactorService implements ManagementService {
                     compactorLeaderServices.validateLiveness(livenessTimeout.toMillis());
                 } else if (compactionTriggerPolicy.shouldTrigger(getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis())) {
                     compactionTriggerPolicy.markCompactionCycleStart();
-                    compactorLeaderServices.trimAndTriggerDistributedCheckpointing();
+                    trimLog.invokePrefixTrim();
+                    compactorLeaderServices.initDistributedCompaction();
                 }
             }
         } catch (Exception ex) {
