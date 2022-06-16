@@ -876,7 +876,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private Optional<LongTaskTimer.Sample> recordLockAcquire(ClusterRole role) {
         return MeterRegistryProvider.getInstance()
                 .map(registry -> registry.more()
-                        .longTaskTimer("logreplication.lock.duration",
+                        .longTaskTimer("logreplication.lock.duration.nanoseconds",
                                 ImmutableList.of(
                                         Tag.of("cluster.role", role.toString().toLowerCase())))
                         .start());
