@@ -10,48 +10,57 @@ import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLException;
-import java.security.KeyStore;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
-import java.security.UnrecoverableKeyException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 @Slf4j
 public class SslContextConstructor {
     /**
      * Create SslContext object based on a spec of individual configuration strings.
      *
-     * @param isServer Server or client
-     * @param keyStoreConfig Key store path
+     * @param isServer         Server or client
+     * @param keyStoreConfig   Key store path
      * @param trustStoreConfig Trust store path
      * @return SslContext object.
-     * @throws SSLException Wrapper exception for any issue reading the key/trust store.
      */
     public static SslContext constructSslContext(
-            boolean isServer, KeyStoreConfig keyStoreConfig, TrustStoreConfig trustStoreConfig) throws SSLException {
+            boolean isServer, KeyStoreConfig keyStoreConfig, TrustStoreConfig trustStoreConfig) {
         log.info("Construct ssl context based on the following information:");
         log.info("Key store file path: {}.", keyStoreConfig.getKeyStoreFile());
         log.info("Key store password file path: {}.", keyStoreConfig.getPasswordFile());
         log.info("Trust store file path: {}.", trustStoreConfig.getTrustStoreFile());
         log.info("Trust store password file path: {}.", trustStoreConfig.getPasswordFile());
 
-        KeyManagerFactory kmf = TlsUtils.createKeyManagerFactory(keyStoreConfig);
+        CompletableFuture<KeyManagerFactory> kmfAsync = TlsUtils.createKeyManagerFactory(keyStoreConfig);
         ReloadableTrustManagerFactory tmf = new ReloadableTrustManagerFactory(trustStoreConfig);
 
         SslProvider provider = getSslProvider();
 
+        KeyManagerFactory kmf;
+        try {
+            kmf = kmfAsync.join();
+        } catch (CompletionException e) {
+            throw (IllegalStateException) e.getCause();
+        }
+
+        SslContextBuilder sslContextBuilder;
         if (isServer) {
-            return SslContextBuilder
+            sslContextBuilder = SslContextBuilder
                     .forServer(kmf)
                     .sslProvider(provider)
-                    .trustManager(tmf)
-                    .build();
+                    .trustManager(tmf);
         } else {
-            return SslContextBuilder
+            sslContextBuilder = SslContextBuilder
                     .forClient()
                     .sslProvider(provider)
                     .keyManager(kmf)
-                    .trustManager(tmf)
-                    .build();
+                    .trustManager(tmf);
+        }
+
+        try {
+            return sslContextBuilder.build();
+        } catch (SSLException e) {
+            throw new IllegalStateException("Can't build SSL context", e);
         }
     }
 
