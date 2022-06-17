@@ -1,11 +1,8 @@
 package org.corfudb.infrastructure.logreplication.runtime;
 
-import com.google.protobuf.TextFormat;
-import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
@@ -100,8 +97,6 @@ public class LogReplicationClientRouter implements IClientRouter {
      * The outstanding requests on this router.
      */
     public final Map<Long, CompletableFuture> outstandingRequests;
-
-    private Optional<Timer.Sample> requestSample = Optional.empty();
 
     /**
      * Adapter to the channel implementation
@@ -236,7 +231,7 @@ public class LogReplicationClientRouter implements IClientRouter {
             } catch (Exception e) {
                 outstandingRequests.remove(requestId);
                 log.error("sendMessageAndGetCompletable: Remove request {} to {} due to exception! Message:{}",
-                        requestId, remoteClusterId, payload, e);
+                        requestId, remoteClusterId, payload.getPayloadCase(), e);
                 cf.completeExceptionally(e);
                 return cf;
             }
@@ -249,7 +244,7 @@ public class LogReplicationClientRouter implements IClientRouter {
                 if (e.getCause() instanceof TimeoutException) {
                     outstandingRequests.remove(requestId);
                     log.debug("sendMessageAndGetCompletable: Remove request {} to {} due to timeout! Message:{}",
-                            requestId, remoteClusterId, TextFormat.shortDebugString(payload));
+                            requestId, remoteClusterId, payload.getPayloadCase());
                 }
                 return null;
             });
@@ -373,16 +368,10 @@ public class LogReplicationClientRouter implements IClientRouter {
      */
     public void receive(CorfuMessage.ResponseMsg msg) {
         try {
-            requestSample.flatMap(sample -> MeterRegistryProvider.getInstance()
-                    .map(registry -> {
-                        Timer timer = registry
-                                .timer("logreplication.rtt.seconds");
-                        return sample.stop(timer);
-                    }));
-
             // If it is a Leadership Loss Message re-trigger leadership discovery
             if (msg.getPayload().getPayloadCase() == PayloadCase.LR_LEADERSHIP_LOSS) {
-                runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
+                String nodeId = msg.getPayload().getLrLeadershipLoss().getNodeId();
+                runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, nodeId));
                 return;
             }
 
@@ -494,4 +483,12 @@ public class LogReplicationClientRouter implements IClientRouter {
     public Optional<String> getRemoteLeaderNodeId() {
         return runtimeFSM.getRemoteLeaderNodeId();
     }
+
+    public void resetRemoteLeader() {
+        if (channelAdapter != null) {
+            log.debug("Reset remote leader from channel adapter.");
+            channelAdapter.resetRemoteLeader();
+        }
+    }
+
 }

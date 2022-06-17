@@ -33,46 +33,6 @@
         </dependency>
     </dependencies>
 
-    <profiles>
-        <profile>
-            <id>docker</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.codehaus.mojo</groupId>
-                        <artifactId>exec-maven-plugin</artifactId>
-                        <version>3.0.0</version>
-                        <executions>
-                            <execution>
-                                <id>Docker build</id>
-                                <phase>package</phase>
-                                <goals>
-                                    <goal>exec</goal>
-                                </goals>
-                                <configuration>
-                                    <executable>docker</executable>
-                                    <arguments>
-                                        <argument>build</argument>
-                                        <argument>--network=host</argument>
-                                        <argument>-t</argument>
-                                        <argument>
-                                            corfudb/generator:${project.version}
-                                        </argument>
-                                        <argument>-t</argument>
-                                        <argument>
-                                            corfudb-universe/generator:${project.version}
-                                        </argument>
-                                        <argument>.</argument>
-                                    </arguments>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
-
     <build>
         <plugins>
             <plugin>

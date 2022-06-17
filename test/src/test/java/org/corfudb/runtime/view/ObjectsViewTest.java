@@ -39,13 +39,13 @@ public class ObjectsViewTest extends AbstractViewTest {
     public void abortedTransactionDoesNotConflict()
             throws Exception {
         final String mapA = "map a";
-        //Enable transaction logging
-        CorfuRuntime r = getDefaultRuntime()
-                .setTransactionLogging(true);
+        final String streamA = "streamA";
+        CorfuRuntime r = getDefaultRuntime();
 
         CorfuTable<String, String> map = getDefaultRuntime().getObjectsView()
                 .build()
                 .setStreamName(mapA)
+                .setStreamTags(CorfuRuntime.getStreamID(streamA))
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
@@ -53,10 +53,10 @@ public class ObjectsViewTest extends AbstractViewTest {
         CorfuTable<String, String> mapCopy = getDefaultRuntime().getObjectsView()
                 .build()
                 .setStreamName(mapA)
+                .setStreamTags(CorfuRuntime.getStreamID(streamA))
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .option(ObjectOpenOption.NO_CACHE)
                 .open();
-
 
         map.put("initial", "value");
 
@@ -93,13 +93,15 @@ public class ObjectsViewTest extends AbstractViewTest {
         assertThat(map)
                 .containsEntry("k", "v2");
 
-        IStreamView txStream = r.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID);
-        List<ILogData> txns = txStream.remainingUpTo(Long.MAX_VALUE);
-        assertThat(txns).hasSize(1);
-        assertThat(txns.get(0).getLogEntry(getRuntime()).getType())
+        IStreamView taggedStream =
+            r.getStreamsView().get(CorfuRuntime.getStreamID(streamA));
+        List<ILogData> updates = taggedStream.remainingUpTo(Long.MAX_VALUE);
+        assertThat(updates).hasSize(1);
+        assertThat(updates.get(0).getLogEntry(getRuntime()).getType())
                 .isEqualTo(LogEntry.LogEntryType.MULTIOBJSMR);
 
-        MultiObjectSMREntry tx1 = (MultiObjectSMREntry)txns.get(0).getLogEntry
+        MultiObjectSMREntry tx1 =
+            (MultiObjectSMREntry)updates.get(0).getLogEntry
                 (getRuntime());
         MultiSMREntry entryMap = tx1.getEntryMap().get(CorfuRuntime.getStreamID(mapA));
         assertThat(entryMap).isNotNull();

@@ -53,6 +53,7 @@ public class CorfuServer {
                     + "\tcorfu_server (-l <path>|-m) [-nsNA] [-a <address>|-q <interface-name>] "
                     + "[--max-replication-data-message-size=<msg-size>] "
                     + "[-c <ratio>] [-d <level>] [-p <seconds>] "
+                    + "[--lrCacheSize=<cache-num-entries>]"
                     + "[--plugin=<plugin-config-file-path>]"
                     + "[--base-server-threads=<base_server_threads>] "
                     + "[--log-size-quota-percentage=<max_log_size_percentage>]"
@@ -174,6 +175,8 @@ public class CorfuServer {
                     + "              Enable metrics provider.\n                                  "
                     + " --snapshot-batch=<batch-size>                                            "
                     + "              Snapshot (Full) Sync batch size (number of entries)\n       "
+                    + " --lrCacheSize=<cache-num-entries>"
+                    + "              LR's cache max number of entries.\n                              "
                     + " --max-replication-data-message-size=<msg-size>                                       "
                     + "              The max size of replication data message in bytes.\n   "
                     + " --lock-lease=<lease-duration>                                            "
@@ -232,17 +235,10 @@ public class CorfuServer {
             try {
                 LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
                 Optional.ofNullable(context.exists(DEFAULT_METRICS_LOGGER_NAME))
-                        .ifPresent(logger -> {
-                            RegistryInitializer loggingRegistryInitializer =
-                                    LoggingRegistryInitializer.builder()
-                                            .exportDuration(DEFAULT_METRICS_LOGGING_INTERVAL)
-                                            .logger(logger).build();
-                            ImmutableList<RegistryInitializer> registryInitializersList =
-                                    ImmutableList.of(loggingRegistryInitializer);
-                            MeterRegistryProvider.MeterRegistryInitializer.initServerMetrics(
-                                    registryInitializersList,
-                                    localEndpoint);
-                        });
+                        .ifPresent(logger -> MeterRegistryProvider.MeterRegistryInitializer.initServerMetrics(
+                                logger,
+                                DEFAULT_METRICS_LOGGING_INTERVAL,
+                                localEndpoint));
             }  catch (IllegalStateException ise) {
                 log.warn("Registry has been previously initialized. Skipping.");
             }

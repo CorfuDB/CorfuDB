@@ -1,12 +1,14 @@
 package org.corfudb.runtime.object.transactions;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import javax.annotation.Nullable;
+
+import com.google.common.base.Preconditions;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -75,12 +77,6 @@ public abstract class AbstractTransactionalContext implements
     public static final long ABORTED_ADDRESS = -3L;
 
     /**
-     * Constant for committing a transaction which did not
-     * modify the log at all.
-     */
-    public static final long NOWRITE_ADDRESS = -4L;
-
-    /**
      * The ID of the transaction. This is used for tracking only, it is
      * NOT recorded in the log.
      */
@@ -112,6 +108,9 @@ public abstract class AbstractTransactionalContext implements
     @Getter
     public long commitAddress = AbstractTransactionalContext.UNCOMMITTED_ADDRESS;
 
+    @Getter
+    private final List<PreCommitListener> preCommitListeners = new ArrayList<>();
+
     /**
      * The parent context of this transaction, if in a nested transaction.
      */
@@ -132,18 +131,9 @@ public abstract class AbstractTransactionalContext implements
     private final ConflictSetInfo readSetInfo = new ConflictSetInfo();
 
     /**
-     * A future which gets completed when this transaction commits.
-     * It is completed exceptionally when the transaction aborts.
-     */
-    @Getter
-    public CompletableFuture<Boolean> completionFuture =
-            new CompletableFuture<>();
-
-    /**
      * Cache of last known position of streams accessed in this transaction.
      */
-    @Getter
-    private final Map<UUID, Long> knownStreamPosition = new HashMap<>();
+    protected final Map<UUID, Long> knownStreamsPosition = new HashMap<>();
 
     AbstractTransactionalContext(Transaction transaction) {
         transactionID = Utils.genPseudorandomUUID();
@@ -151,6 +141,17 @@ public abstract class AbstractTransactionalContext implements
         this.startTime = System.currentTimeMillis();
         this.parentContext = TransactionalContext.getCurrentContext();
         AbstractTransactionalContext.log.debug("TXBegin[{}]", this);
+    }
+
+    protected void updateKnownStreamPosition(UUID streamId, long position) {
+        Long val = knownStreamsPosition.get(streamId);
+        if (val != null) {
+            Preconditions.checkState(val == position, "inconsistent stream positions %s and %s",
+                    val, position);
+            return;
+        }
+
+        knownStreamsPosition.put(streamId, position);
     }
 
     /**
@@ -234,6 +235,8 @@ public abstract class AbstractTransactionalContext implements
 
     public abstract void logUpdate(UUID streamId, SMREntry updateEntry);
 
+    public abstract void logUpdate(UUID streamId, SMREntry updateEntry, List<UUID> streamTags);
+
     /**
      * Log a list of SMR updates to the specified Corfu stream log
      *
@@ -258,18 +261,12 @@ public abstract class AbstractTransactionalContext implements
      */
     public abstract void addPreCommitListener(PreCommitListener preCommitListener);
 
-    @Getter
-    private List<PreCommitListener> preCommitListeners = new ArrayList<>();
-
     /**
      * Commit the transaction to the log.
      *
      * @throws TransactionAbortedException If the transaction is aborted.
      */
-    public long commitTransaction() throws TransactionAbortedException {
-        completionFuture.complete(true);
-        return NOWRITE_ADDRESS;
-    }
+    public abstract long commitTransaction() throws TransactionAbortedException;
 
     /**
      * Forcefully abort the transaction.
@@ -277,8 +274,17 @@ public abstract class AbstractTransactionalContext implements
     public void abortTransaction(TransactionAbortedException ae) {
         AbstractTransactionalContext.log.debug("TXAbort[{}]", this);
         commitAddress = ABORTED_ADDRESS;
-        completionFuture
-                .completeExceptionally(ae);
+    }
+
+    /**
+     * Retrieves the max address that has been read in this transaction.
+     * @return highest sequence number observed while reading
+     */
+    protected long getMaxAddressRead() {
+        if (knownStreamsPosition.isEmpty()) {
+            return Address.NON_ADDRESS;
+        }
+        return Collections.max(knownStreamsPosition.values());
     }
 
     /**
@@ -351,6 +357,10 @@ public abstract class AbstractTransactionalContext implements
 
     void addToWriteSet(UUID streamId, SMREntry updateEntry) {
         getWriteSetInfo().add(streamId, updateEntry);
+    }
+
+    void addToWriteSet(UUID streamId, SMREntry updateEntry, List<UUID> streamTags) {
+        getWriteSetInfo().add(streamId, updateEntry, streamTags);
     }
 
     public void addToWriteSet(UUID streamId, List<SMREntry> updateEntries) {

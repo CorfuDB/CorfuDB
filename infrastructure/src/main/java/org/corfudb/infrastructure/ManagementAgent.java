@@ -14,8 +14,6 @@ import org.corfudb.util.concurrent.SingletonResource;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
-import static org.corfudb.infrastructure.RecoveryHandler.runRecoveryReconfiguration;
-
 /**
  * Instantiates and performs failure detection and handling asynchronously,
  * as well as the auto commit service.
@@ -63,11 +61,11 @@ public class ManagementAgent {
      */
     private final Thread initializationTaskThread;
 
-    private boolean recovered = false;
-
     private final SingletonResource<CorfuRuntime> runtimeSingletonResource;
 
     private volatile boolean shutdown = false;
+
+    private boolean recovered = false;
 
     /**
      * LocalMonitoringService to poll local server metrics:
@@ -120,10 +118,6 @@ public class ManagementAgent {
         serverContext.saveManagementLayout(serverContext.getCurrentLayout());
         serverContext.saveManagementLayout(managementLayout);
 
-        if (!recovered) {
-            log.info("Attempting to recover. Layout before shutdown: {}", managementLayout);
-        }
-
         this.remoteMonitoringService = new RemoteMonitoringService(
                 serverContext,
                 runtimeSingletonResource,
@@ -146,10 +140,37 @@ public class ManagementAgent {
         this.initializationTaskThread.start();
     }
 
+    private void tryImmediateRecovery() {
+        log.info("Attempting immediate recovery");
+        for(int i = 0; i < 3; i++) {
+            try {
+                getCorfuRuntime().invalidateLayout();
+                Layout layout = getCorfuRuntime().getLayoutView().getLayout();
+                serverContext.saveManagementLayout(layout);
+                boolean serverRecovered = getCorfuRuntime()
+                        .getLayoutManagementView()
+                        .attemptClusterRecovery(serverContext.copyManagementLayout());
+                if (serverRecovered) {
+                    getCorfuRuntime().invalidateLayout();
+                    Layout updatedLayout = getCorfuRuntime().getLayoutView().getLayout();
+                    log.info("Cluster recovery succeeded. Latest management layout: {}", updatedLayout);
+                    serverContext.saveManagementLayout(updatedLayout);
+                    return;
+                }
+                TimeUnit.MILLISECONDS.sleep(RECOVERY_RETRY_INTERVAL.toMillis());
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(ie);
+            }
+
+        }
+        log.warn("Failed to recover immediately after the restart. The recovery will be completed " +
+                "by the failure detector.");
+    }
+
     /**
      * Initialization task.
      * This task is blocked until the management server is bootstrapped and has a connected runtime.
-     * Performs recovery if required.
      * Initiates the monitoring services which performs failure detection and healing detection tasks.
      */
     private void initializationTask() {
@@ -168,34 +189,14 @@ public class ManagementAgent {
             return;
         }
 
-        // Retry layout recovery if need until success.
-        long recoveryAttempts = 0;
-        while (!shutdown && !recovered) {
-            try {
-                boolean recoveredSuccessfully = runRecoveryReconfiguration(
-                        serverContext.copyManagementLayout(), getCorfuRuntime()
-                );
-
-                if (recoveredSuccessfully) {
-                    // If recovery succeeds, reconfiguration was successful.
-                    // Save the latest management layout.
-                    serverContext.saveManagementLayout(getCorfuRuntime().getLayoutView().getLayout());
-                    log.info("initializationTask: Recovery completed");
-                    this.recovered = true;
-                    continue;
-                }
-
-                log.error("initializationTask: Recovery failed {} times. Retrying in {}s.",
-                        ++recoveryAttempts, RECOVERY_RETRY_INTERVAL);
-                TimeUnit.MILLISECONDS.sleep(RECOVERY_RETRY_INTERVAL.toMillis());
-            } catch (InterruptedException e) {
-                // Due to shutdown, which interrupts this thread
-                log.debug("initializationTask: Initialization task interrupted without being recovered");
-                return;
-            } catch (Exception e) {
-                // Retry recovering for any exception encountered.
-                log.error("initializationTask: exception happened during layout recovery, {}", e);
-            }
+        if (!recovered) {
+            // If the node is found with a management layout - it has been restarted previously.
+            // Attempt to update the local management layout to the most recent cluster layout and
+            // bump the epoch. If the consensus can not be reached for some reason,
+            // the remote monitoring service of the current node will attempt to heal/rejoin
+            // during one of the failure detection rounds.
+            tryImmediateRecovery();
+            recovered = true;
         }
 
         // Start management services that deals with failure & healing detection and auto commit.

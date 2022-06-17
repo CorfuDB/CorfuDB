@@ -1,13 +1,11 @@
 package org.corfudb.infrastructure.management;
 
 import lombok.Builder;
-import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.runtime.view.Layout;
 
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -24,7 +22,6 @@ public class ClusterStateContext {
     /**
      * Current cluster state, updated by failure detector on current iteration.
      */
-    @Getter
     @NonNull
     private final AtomicReference<ClusterState> clusterView;
 
@@ -42,9 +39,10 @@ public class ClusterStateContext {
 
     /**
      * Returns current cluster state.
+     *
      * @return current cluster state
      */
-    public ClusterState getClusterView(){
+    public ClusterState getClusterView() {
         return clusterView.get();
     }
 }

@@ -65,7 +65,7 @@ public class LayoutManagementView extends AbstractView {
             sealEpoch(layout);
             attemptConsensus(layout);
         } catch (Exception e) {
-            log.error("Error: recovery: {}", e);
+            log.error("Error: recovery: {}.", e);
             return false;
         }
         return true;
@@ -465,7 +465,7 @@ public class LayoutManagementView extends AbstractView {
      */
     public CompletableFuture<Boolean> asyncSequencerBootstrap(
             @NonNull Layout layout, @NonNull ExecutorService service) {
-
+        log.debug("Bootstrapping with layout: " + layout);
         return sequencerRecoveryFuture.updateAndGet(sequencerRecovery -> {
             if (!sequencerRecovery.isDone()) {
                 log.info("triggerSequencerBootstrap: a bootstrap task is already in progress.");

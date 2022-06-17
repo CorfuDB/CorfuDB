@@ -1,13 +1,17 @@
 package org.corfudb.runtime;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import org.apache.commons.io.FileUtils;
+import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.BackupRestoreException;
+import org.corfudb.runtime.view.CacheOption;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.Serializers;
 
@@ -21,6 +25,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -42,10 +47,12 @@ public class Restore {
     private final String filePath;
 
     // The path of a temporary directory under which the unpacked table's backup files are stored
-    private final String restoreTempDirPath;
+    private String restoreTempDirPath;
 
     // The filename of each table's backup file, format: uuid.namespace$tableName.
     private final List<String> tableBackups;
+
+    private CorfuRuntime rt;
 
     // The Corfu Store associated with the runtime
     private CorfuStore corfuStore;
@@ -66,8 +73,8 @@ public class Restore {
      */
     public Restore(String filePath, CorfuRuntime runtime, RestoreMode restoreMode) throws IOException {
         this.filePath = filePath;
-        this.restoreTempDirPath = Files.createTempDirectory(RESTORE_TEMP_DIR_PREFIX).toString();
         this.tableBackups = new ArrayList<>();
+        this.rt = runtime;
         this.corfuStore = new CorfuStore(runtime);
         this.restoreMode = restoreMode;
     }
@@ -78,13 +85,16 @@ public class Restore {
      * @throws IOException
      */
     public void start() throws IOException {
+        log.info("started corfu restore");
         try {
+            // The cleanup() in finally block is not guaranteed to have
+            // been run in previous restore if there was OOM
+            cleanup();
             openTarFile();
             verify();
             restore();
-        } catch (IOException e) {
-            log.error("failed to restore from backup tar file {}", filePath);
-            throw e;
+        } catch (Exception e) {
+            throw new BackupRestoreException("failed to restore from backup file " + filePath, e);
         } finally {
             cleanup();
         }
@@ -123,15 +133,15 @@ public class Restore {
         long startTime = System.currentTimeMillis();
 
         try (FileInputStream fileInput = new FileInputStream(filePath.toString())) {
-            TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE);
 
             // Clear table before restore
             if (restoreMode == RestoreMode.PARTIAL) {
                 SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
-                txn.logUpdate(streamId, entry);
+                nonCachedAppendSMREntries(streamId, entry);
             }
 
-            long numEntries = 0;
+            StreamBatchWriter sbw = new StreamBatchWriter(rt.getParameters().getRestoreBatchSize(),
+                    rt.getParameters().getMaxWriteSize(), streamId);
             while (fileInput.available() > 0) {
                 OpaqueEntry opaqueEntry = OpaqueEntry.read(fileInput);
                 List<SMREntry> smrEntries = opaqueEntry.getEntries().get(streamId);
@@ -139,15 +149,14 @@ public class Restore {
                     continue;
                 }
 
-                txn.logUpdate(streamId, smrEntries);
-                numEntries += smrEntries.size();
+                sbw.batchWrite(smrEntries);
             }
-            txn.commit();
+            sbw.shutdown();
 
             long elapsedTime = System.currentTimeMillis() - startTime;
 
-            log.info("completed restore of table {} with {} numEntries, elapsed time {}ms",
-                    streamId, numEntries, elapsedTime);
+            log.info("completed restore of table {} with {} numEntries, total size {} byte(s), elapsed time {}ms",
+                    streamId, sbw.getTotalNumSMREntries(), sbw.getTotalWriteSize(), elapsedTime);
         } catch (FileNotFoundException e) {
             log.error("restoreTable can not find file {}", filePath);
             throw e;
@@ -158,6 +167,7 @@ public class Restore {
      * Open the backup tar file and save the table backups to tableDir directory
      */
     private void openTarFile() throws IOException {
+        this.restoreTempDirPath = Files.createTempDirectory(RESTORE_TEMP_DIR_PREFIX).toString();
         try (FileInputStream fileInput = new FileInputStream(filePath);
              TarArchiveInputStream tarInput = new TarArchiveInputStream(fileInput)) {
             getTablesFromTarFile(tarInput);
@@ -193,10 +203,21 @@ public class Restore {
     }
 
     /**
-     * Cleanup the table backup files under the tableDir directory.
+     * Delete all temp restore directories under the system temp directory.
      */
-    private void cleanup() throws IOException {
-        FileUtils.deleteDirectory(new File(restoreTempDirPath));
+    private void cleanup() {
+        File tmpdir = new File(System.getProperty("java.io.tmpdir"));
+        File[] restoreDirs = tmpdir.listFiles(file -> file.getName().contains(RESTORE_TEMP_DIR_PREFIX));
+        if (restoreDirs != null) {
+            for (File file : restoreDirs) {
+                try {
+                    FileUtils.deleteDirectory(file);
+                    log.info("removed temporary backup directory {}", file.getAbsolutePath());
+                } catch (IOException e) {
+                    log.error("failed to delete the temporary backup directory {}", file.getAbsolutePath());
+                }
+            }
+        }
     }
 
     private void clearAllTables() {
@@ -212,8 +233,64 @@ public class Restore {
         txn.commit();
     }
 
+    private void nonCachedAppendSMREntries(UUID streamId, SMREntry... smrEntries) {
+        MultiSMREntry multiSMREntry = new MultiSMREntry();
+        multiSMREntry.addTo(Arrays.asList(smrEntries));
+        rt.getStreamsView().append(multiSMREntry, null, CacheOption.WRITE_AROUND, streamId);
+    }
+
     public enum RestoreMode {
         FULL,   // Clean up ALL tables before restore
         PARTIAL // Clean up ONLY tables that are to be restored
+    }
+
+    class StreamBatchWriter {
+
+        private final int maxBatchSize;
+        private final int maxWriteSize;
+        private final UUID streamId;
+
+        @Getter
+        private int totalNumSMREntries = 0;
+        @Getter
+        private int totalWriteSize = 0;
+
+        private final List<SMREntry> buffer = new ArrayList<>();
+        private int bufferWriteSize = 0;
+
+        StreamBatchWriter(int maxBatchSize, int maxWriteSize, UUID streamId) {
+            this.maxBatchSize = maxBatchSize;
+            this.maxWriteSize = maxWriteSize;
+            this.streamId = streamId;
+        }
+
+        public void batchWrite(List<SMREntry> smrEntries) {
+            if (smrEntries.isEmpty()) {
+                return;
+            }
+
+            for (SMREntry smrEntry : smrEntries) {
+                if (buffer.size() == maxBatchSize || bufferWriteSize + smrEntry.getSerializedSize() > maxWriteSize) {
+                    flushBuffer();
+                }
+                buffer.add(smrEntry);
+                bufferWriteSize += smrEntry.getSerializedSize();
+            }
+        }
+
+        public void shutdown() {
+            flushBuffer();
+        }
+
+        private void flushBuffer() {
+            totalNumSMREntries += buffer.size();
+            totalWriteSize += bufferWriteSize;
+
+            nonCachedAppendSMREntries(streamId, buffer.toArray(new SMREntry[0]));
+
+            bufferWriteSize = 0;
+            buffer.clear();
+        }
+
     }
 }

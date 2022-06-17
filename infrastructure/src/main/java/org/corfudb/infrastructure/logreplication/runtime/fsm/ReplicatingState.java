@@ -39,7 +39,7 @@ public class ReplicatingState implements LogReplicationRuntimeState {
                 // Update list of valid connections.
                 fsm.updateDisconnectedNodes(nodeIdDown);
 
-                // If the leader is the node that become unavailable, verify new leader and attempt to reconnect.
+                // If the leader is the node that became unavailable, verify new leader and attempt to reconnect.
                 if (fsm.getRemoteLeaderNodeId().isPresent() && fsm.getRemoteLeaderNodeId().get().equals(nodeIdDown)) {
                     log.warn("Connection to remote leader id={} is down. Attempt to reconnect.", nodeIdDown);
                     fsm.resetRemoteLeaderNodeId();
@@ -51,6 +51,14 @@ public class ReplicatingState implements LogReplicationRuntimeState {
 
                 log.debug("Connection lost to non-leader node {}", nodeIdDown);
                 // If a non-leader node loses connectivity, reconnect async and continue.
+                return null;
+            case REMOTE_LEADER_LOSS:
+                if (fsm.getRemoteLeaderNodeId().get().equals(event.getNodeId())) {
+                    log.warn("Remote node {} lost leadership, stop replication & discover new leader.", event.getNodeId());
+                    fsm.resetRemoteLeaderNodeId();
+                    replicationSourceManager.stopLogReplication();
+                    return fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
+                }
                 return null;
             case ON_CONNECTION_UP:
                 // Some node got connected, update connected endpoints
@@ -67,6 +75,7 @@ public class ReplicatingState implements LogReplicationRuntimeState {
 
     @Override
     public void onEntry(LogReplicationRuntimeState from) {
+
         switch (replicationEvent.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
                 UUID snapshotSyncRequestId = replicationSourceManager.startSnapshotSync();

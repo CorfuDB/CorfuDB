@@ -1,14 +1,10 @@
 package org.corfudb.runtime.object.transactions;
 
-import com.google.common.collect.ImmutableSet;
-
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
-import lombok.Getter;
-
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
@@ -24,12 +20,6 @@ import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
  */
 public class SnapshotTransactionalContext extends AbstractTransactionalContext {
 
-    /** In a snapshot transaction, no proxies are ever modified.
-     *
-     */
-    @Getter
-    private Set<ICorfuSMRProxyInternal> modifiedProxies = ImmutableSet.of();
-
     public SnapshotTransactionalContext(Transaction transaction) {
         super(transaction);
     }
@@ -41,17 +31,23 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     public <R, T extends ICorfuSMR<T>> R access(ICorfuSMRProxyInternal<T> proxy,
                                                 ICorfuSMRAccess<R, T> accessFunction,
                                                 Object[] conflictObject) {
-
         // In snapshot transactions, there are no conflicts.
         // Hence, we do not need to add this access to a conflict set
         // do not add: addToReadSet(proxy, conflictObject);
         return proxy.getUnderlyingObject().access(o -> o.getVersionUnsafe()
                         == getSnapshotTimestamp().getSequence()
                         && !o.isOptimisticallyModifiedUnsafe(),
-                o -> {
-                    syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy, null);
-                },
-                o -> accessFunction.access(o));
+                o -> syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy, null),
+                accessFunction::access,
+                version -> updateKnownStreamPosition(proxy.getStreamID(), version));
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public long commitTransaction() throws TransactionAbortedException {
+        return getMaxAddressRead();
     }
 
     /**
@@ -85,6 +81,11 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
 
     @Override
     public void logUpdate(UUID streamId, SMREntry updateEntry) {
+        throw new UnsupportedOperationException("Can't modify object during a read-only transaction!");
+    }
+
+    @Override
+    public void logUpdate(UUID streamId, SMREntry updateEntry, List<UUID> streamTags) {
         throw new UnsupportedOperationException("Can't modify object during a read-only transaction!");
     }
 

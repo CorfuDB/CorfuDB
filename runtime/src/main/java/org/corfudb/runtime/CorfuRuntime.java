@@ -16,6 +16,8 @@ import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistry
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.common.metrics.micrometer.initializers.LoggingRegistryInitializer;
 import org.corfudb.common.metrics.micrometer.initializers.RegistryInitializer;
+import org.corfudb.common.metrics.micrometer.initializers.LoggingRegistryInitializer;
+import org.corfudb.common.metrics.micrometer.initializers.RegistryInitializer;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
@@ -62,6 +64,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -222,6 +225,11 @@ public class CorfuRuntime {
         Duration holeFillTimeout = Duration.ofSeconds(10);
 
         /*
+        * cache metrics are to be enabled only for the tuning exercise.
+        */
+        boolean cacheEntryMetricsDisabled = true;
+
+        /*
          * Whether or not to disable the cache.
          */
         boolean cacheDisabled = false;
@@ -283,6 +291,11 @@ public class CorfuRuntime {
         int checkpointBatchSize = 50;
 
         /*
+         * The maximum number of SMR entries that will be grouped in a MultiSMREntry during Restore
+         */
+        int restoreBatchSize = 50;
+
+        /*
          * Stream Batch Size: number of addresses to fetch in advance when stream address discovery mechanism
          * relies on address maps instead of follow backpointers, i.e., followBackpointersEnabled = false;
          */
@@ -293,6 +306,16 @@ public class CorfuRuntime {
          * address discovery mechanism relies on address maps instead of follow backpointers;
          */
         int checkpointReadBatchSize = 5;
+
+        /*
+         * Cache Option for local writes.
+         *
+         * If set to 'false', writes won't be cached on the write path.
+         * Note that even if cacheWrites is set, the addressSpaceView
+         *
+         */
+        boolean cacheWrites = true;
+
         // endregion
 
         /*
@@ -353,40 +376,25 @@ public class CorfuRuntime {
         int highestSequenceNumberBatchSize = 4;
 
         /*
-         * Total time in milliseconds for polling task to block until buffer space is available.
+         * Number of worker threads that will read streaming data
          */
-        private long streamingPollingBlockingTimeMs = 5;
+        private int streamingWorkersThreadPoolSize = 2;
 
         /*
-         * Period of time in ms to sleep before next cycle, when poller gets no new data changes.
+         * Streaming scheduler poll period
          */
-        private int streamingPollingIdleWaitTimeMs = 50;
+        private Duration streamingPollPeriod = Duration.ofMillis(50);
 
         /*
-         * Capacity of queue shared by by streaming polling and notification tasks.
+         * Number of stream tags (batch size) that the scheduler will query on every poll
          */
-        private int streamingQueueSize = 100;
+        private int streamingSchedulerPollBatchSize = 25;
 
         /*
-         * Total number of threads in Polling Executor Pool (shared across all listeners)
+         * Available space that a stream should have before it can be polled. This parameter is used to
+         * avoid overwhelming the consumer.
          */
-        private int streamingPollingThreadPoolSize = 2;
-
-        /*
-         * Total number of threads in Notification Executor Pool (shared across all listeners)
-         */
-        private int streamingNotificationThreadPoolSize = 4;
-
-        /*
-         * Total time in milliseconds to block for new updates to appear in the queue, if empty.
-         */
-        private long streamingNotificationBlockingTimeMs = 5;
-
-        /*
-         * Notification batch size (should be lower or equal to streamingQueueSize)
-         */
-        private int streamingNotificationBatchSize = 50;
-        // TODO: make it a function of the streaming Queue Size
+        private int streamingSchedulerPollThreshold = 5;
 
         /**
          * List of the configuration classes for the metric registries.
@@ -403,6 +411,7 @@ public class CorfuRuntime {
             private int holeFillRetry = 10;
             private Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
             private Duration holeFillTimeout = Duration.ofSeconds(10);
+            private boolean cacheEntryMetricsDisabled = true;
             private boolean cacheDisabled = false;
             private long maxCacheEntries;
             private long maxCacheWeight;
@@ -413,6 +422,7 @@ public class CorfuRuntime {
             private int trimRetry = 2;
             private int checkpointRetries = 5;
             private int checkpointBatchSize = 50;
+            private int restoreBatchSize = 50;
             private int streamBatchSize = 10;
             private int checkpointReadBatchSize = 5;
             private Duration runtimeGCPeriod = Duration.ofMinutes(20);
@@ -423,13 +433,31 @@ public class CorfuRuntime {
             private PriorityLevel priorityLevel = PriorityLevel.NORMAL;
             private Codec.Type codecType = Codec.Type.ZSTD;
             private boolean metricsEnabled = true;
-            private long streamingPollingBlockingTimeMs = 5;
-            private int streamingQueueSize = 100;
-            private int streamingPollingThreadPoolSize = 2;
-            private int streamingPollingIdleWaitTimeMs = 50;
-            private int streamingNotificationThreadPoolSize = 4;
-            private long streamingNotificationBlockingTimeMs = 5;
-            private int streamingNotificationBatchSize = 50;
+            private int streamingWorkersThreadPoolSize = 2;
+            private Duration streamingPollPeriod = Duration.ofMillis(50);
+            private int streamingSchedulerPollBatchSize = 25;
+            private int streamingSchedulerPollThreshold = 5;
+            private boolean cacheWrites = true;
+
+            public CorfuRuntimeParametersBuilder streamingWorkersThreadPoolSize(int streamingWorkersThreadPoolSize) {
+                this.streamingWorkersThreadPoolSize = streamingWorkersThreadPoolSize;
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder streamingPollPeriod(Duration streamingPollPeriod) {
+                this.streamingPollPeriod = streamingPollPeriod;
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder streamingSchedulerPollBatchSize(int streamingSchedulerPollBatchSize) {
+                this.streamingSchedulerPollBatchSize = streamingSchedulerPollBatchSize;
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder streamingSchedulerPollThreshold(int streamingSchedulerPollThreshold) {
+                this.streamingSchedulerPollThreshold = streamingSchedulerPollThreshold;
+                return this;
+            }
             private Supplier<List<RegistryInitializer>> metricRegistryConfigs = () -> {
                 List<RegistryInitializer> list = new ArrayList<>();
                 Logger logger = LoggerFactory.getLogger("org.corfudb.client.metricsdata");
@@ -589,6 +617,11 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder cacheEntryMetricsDisabled(boolean cacheEntryMetricsDisabled) {
+                this.cacheEntryMetricsDisabled = cacheEntryMetricsDisabled;
+                return this;
+            }
+
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder cacheDisabled(boolean cacheDisabled) {
                 this.cacheDisabled = cacheDisabled;
                 return this;
@@ -639,6 +672,11 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder restoreBatchSize(int restoreBatchSize) {
+                this.restoreBatchSize = restoreBatchSize;
+                return this;
+            }
+
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamBatchSize(int streamBatchSize) {
                 this.streamBatchSize = streamBatchSize;
                 return this;
@@ -646,6 +684,11 @@ public class CorfuRuntime {
 
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder checkpointReadBatchSize(int checkpointReadBatchSize) {
                 this.checkpointReadBatchSize = checkpointReadBatchSize;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder cacheWrites(boolean cacheWrites) {
+                this.cacheWrites = cacheWrites;
                 return this;
             }
 
@@ -694,41 +737,6 @@ public class CorfuRuntime {
                 return this;
             }
 
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingPollingBlockingTimeMs(long streamingPollingBlockingTimeMs) {
-                this.streamingPollingBlockingTimeMs = streamingPollingBlockingTimeMs;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingQueueSize(int streamingQueueSize) {
-                this.streamingQueueSize = streamingQueueSize;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingPollingThreadPoolSize(int streamingPollingThreadPoolSize) {
-                this.streamingPollingThreadPoolSize = streamingPollingThreadPoolSize;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingPollingIdleWaitTimeMs(int streamingPollingIdleWaitTimeMs) {
-                this.streamingPollingIdleWaitTimeMs = streamingPollingIdleWaitTimeMs;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingNotificationThreadPoolSize(int streamingNotificationThreadPoolSize) {
-                this.streamingNotificationThreadPoolSize = streamingNotificationThreadPoolSize;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingNotificationBlockingTimeMs(long streamingNotificationBlockingTimeMs) {
-                this.streamingNotificationBlockingTimeMs = streamingNotificationBlockingTimeMs;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingNotificationBatchSize(int streamingNotificationBatchSize) {
-                this.streamingNotificationBatchSize = streamingNotificationBatchSize;
-                return this;
-            }
-
             public CorfuRuntimeParameters build() {
                 CorfuRuntimeParameters corfuRuntimeParameters = new CorfuRuntimeParameters();
                 corfuRuntimeParameters.setTlsEnabled(tlsEnabled);
@@ -760,6 +768,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setHoleFillRetry(holeFillRetry);
                 corfuRuntimeParameters.setHoleFillRetryThreshold(holeFillRetryThreshold);
                 corfuRuntimeParameters.setHoleFillTimeout(holeFillTimeout);
+                corfuRuntimeParameters.setCacheEntryMetricsDisabled(cacheEntryMetricsDisabled);
                 corfuRuntimeParameters.setCacheDisabled(cacheDisabled);
                 corfuRuntimeParameters.setMaxCacheEntries(maxCacheEntries);
                 corfuRuntimeParameters.setMaxCacheWeight(maxCacheWeight);
@@ -770,6 +779,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setTrimRetry(trimRetry);
                 corfuRuntimeParameters.setCheckpointRetries(checkpointRetries);
                 corfuRuntimeParameters.setCheckpointBatchSize(checkpointBatchSize);
+                corfuRuntimeParameters.setRestoreBatchSize(restoreBatchSize);
                 corfuRuntimeParameters.setStreamBatchSize(streamBatchSize);
                 corfuRuntimeParameters.setCheckpointReadBatchSize(checkpointReadBatchSize);
                 corfuRuntimeParameters.setRuntimeGCPeriod(runtimeGCPeriod);
@@ -781,14 +791,11 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setPriorityLevel(priorityLevel);
                 corfuRuntimeParameters.setCodecType(codecType);
                 corfuRuntimeParameters.setMetricsEnabled(metricsEnabled);
-                corfuRuntimeParameters.setStreamingPollingBlockingTimeMs(streamingPollingBlockingTimeMs);
-                corfuRuntimeParameters.setStreamingPollingIdleWaitTimeMs(streamingPollingIdleWaitTimeMs);
-                corfuRuntimeParameters.setStreamingQueueSize(streamingQueueSize);
-                corfuRuntimeParameters.setStreamingPollingThreadPoolSize(streamingPollingThreadPoolSize);
-                corfuRuntimeParameters.setStreamingNotificationThreadPoolSize(streamingNotificationThreadPoolSize);
-                corfuRuntimeParameters.setStreamingNotificationBlockingTimeMs(streamingNotificationBlockingTimeMs);
-                corfuRuntimeParameters.setStreamingNotificationBatchSize(streamingNotificationBatchSize);
-
+                corfuRuntimeParameters.setStreamingWorkersThreadPoolSize(streamingWorkersThreadPoolSize);
+                corfuRuntimeParameters.setStreamingPollPeriod(streamingPollPeriod);
+                corfuRuntimeParameters.setStreamingSchedulerPollBatchSize(streamingSchedulerPollBatchSize);
+                corfuRuntimeParameters.setStreamingSchedulerPollThreshold(streamingSchedulerPollThreshold);
+                corfuRuntimeParameters.setCacheWrites(cacheWrites);
                 return corfuRuntimeParameters;
             }
         }
@@ -909,8 +916,15 @@ public class CorfuRuntime {
         nodeRouterPool = new NodeRouterPool(getRouterFunction);
 
         if (parameters.metricsEnabled) {
-            MeterRegistryInitializer.initClientMetrics(parameters.metricRegistryConfigs,
-                    parameters.clientId.toString());
+            Logger logger = LoggerFactory.getLogger("org.corfudb.client.metricsdata");
+            if (logger.isDebugEnabled()) {
+                MeterRegistryInitializer.initClientMetrics(logger,
+                        Duration.ofMinutes(1),
+                        parameters.clientId.toString());
+            } else {
+                log.warn("No registered metrics logger provided.");
+            }
+
         } else {
             log.warn("Runtime metrics are disabled.");
         }
@@ -983,7 +997,13 @@ public class CorfuRuntime {
         if (parameters.shutdownNettyEventLoop) {
             nettyEventLoop.shutdownGracefully();
         }
-        MeterRegistryProvider.close();
+
+        // If it's the client who initialized the registry - shut it down
+        MeterRegistryProvider.getMetricType().ifPresent(type -> {
+            if (type == MeterRegistryProvider.MetricType.CLIENT) {
+                MeterRegistryProvider.close();
+            }
+        });
     }
 
     /**
@@ -1020,18 +1040,6 @@ public class CorfuRuntime {
 
     public static UUID getCheckpointStreamIdFromName(String streamName) {
         return getCheckpointStreamIdFromId(CorfuRuntime.getStreamID(streamName));
-    }
-
-    /**
-     * If enabled, successful transactions will be written to a special transaction stream
-     * (i.e. TRANSACTION_STREAM_ID)
-     *
-     * @param enable indicates if transaction logging is enabled
-     * @return corfu runtime object
-     */
-    public CorfuRuntime setTransactionLogging(boolean enable) {
-        this.getObjectsView().setTransactionLogging(enable);
-        return this;
     }
 
     /**

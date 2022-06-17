@@ -9,6 +9,7 @@ import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * This class is an implementation of {@link ClusterType} where the ideal state
@@ -47,8 +48,8 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
      * - find a failed node. Check if decision maker is not equal to failed node and failed node is not in unresponsive
      * servers already.
      *
-     * @param clusterState        represents the state of connectivity amongst the Corfu cluster
-     *                            nodes from a node's perspective.
+     * @param clusterState represents the state of connectivity amongst the Corfu cluster
+     *                     nodes from a node's perspective.
      * @return a server considered as failed according to the underlying strategy.
      */
     @Override
@@ -56,34 +57,17 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
 
         log.trace("Detecting failed nodes for: ClusterState= {}", clusterState);
 
-        ClusterGraph graph = ClusterGraph.toClusterGraph(clusterState);
-
-        ClusterGraph symmetric = graph.toSymmetric();
-        Optional<NodeRank> maybeDecisionMaker = symmetric.getDecisionMaker();
-
-        if (!maybeDecisionMaker.isPresent()) {
-            log.error("Decision maker not found for graph: {}", symmetric.toJson());
-            return Optional.empty();
-        }
-
-        NodeRank decisionMaker = maybeDecisionMaker.get();
-        if (!decisionMaker.is(localEndpoint)) {
-            String message = "The node can't be a decision maker, skip operation. Decision maker node is: {}";
-            log.trace(message, decisionMaker);
-            return Optional.empty();
-        }
+        ClusterGraph symmetric = ClusterGraph
+                .toClusterGraph(clusterState)
+                .toSymmetric();
 
         Optional<NodeRank> maybeFailedNode = symmetric.findFailedNode();
+
         if (!maybeFailedNode.isPresent()) {
             return Optional.empty();
         }
 
         NodeRank failedNode = maybeFailedNode.get();
-
-        if (decisionMaker.equals(failedNode)) {
-            log.error("Decision maker and failed node are same node: {}", decisionMaker);
-            return Optional.empty();
-        }
 
         ImmutableList<String> unresponsiveNodes = clusterState.getUnresponsiveNodes();
         if (unresponsiveNodes.contains(failedNode.getEndpoint())) {
@@ -105,8 +89,8 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
      * node in the layout. It helps us to simplify analysis/debugging process and brings simple and reliable algorithm
      * for healing process.
      *
-     * @param clusterState        represents the state of connectivity amongst the Corfu cluster
-     *                            nodes from a node's perspective.
+     * @param clusterState represents the state of connectivity amongst the Corfu cluster
+     *                     nodes from a node's perspective.
      * @return a {@link List} of servers considered as healed according to the underlying
      * {@link ClusterType}.
      */
@@ -142,5 +126,14 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
     @Override
     public ClusterGraph getGraph(ClusterState clusterState) {
         return ClusterGraph.toClusterGraph(clusterState).toSymmetric();
+    }
+
+    @Override
+    public Optional<NodeRank> findDecisionMaker(ClusterState clusterState, Set<String> healthyNodes) {
+        ClusterGraph symmetric = ClusterGraph
+                .toClusterGraph(clusterState)
+                .toSymmetric();
+
+        return symmetric.getDecisionMaker(healthyNodes);
     }
 }

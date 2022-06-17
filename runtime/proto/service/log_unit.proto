@@ -71,9 +71,8 @@ message TrimMarkResponseMsg {
  */
 message TailRequestMsg {
   enum Type {
-    INVALID = 0;
-    LOG_TAIL = 1;
-    ALL_STREAMS_TAIL = 2;
+    LOG_TAIL = 0;
+    ALL_STREAMS_TAIL = 1;
   }
 
   Type req_type = 1;

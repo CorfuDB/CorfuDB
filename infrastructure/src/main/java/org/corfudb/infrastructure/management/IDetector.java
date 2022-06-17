@@ -1,14 +1,15 @@
 package org.corfudb.infrastructure.management;
 
-import javax.annotation.Nonnull;
-
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 
+import javax.annotation.Nonnull;
+
 /**
  * Detection Executors.
- *
+ * <p>
  * Created by zlokhandwala on 9/29/16.
  */
 public interface IDetector {
@@ -19,5 +20,6 @@ public interface IDetector {
      *
      * @return A poll report containing the results of the poll.
      */
-    PollReport poll(@Nonnull Layout layout, @Nonnull CorfuRuntime corfuRuntime, SequencerMetrics sequencerMetrics);
+    PollReport poll(@Nonnull Layout layout, @Nonnull CorfuRuntime corfuRuntime, SequencerMetrics sequencerMetrics,
+                    FileSystemStats fileSystemStats);
 }

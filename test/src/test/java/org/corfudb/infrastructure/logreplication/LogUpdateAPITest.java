@@ -50,11 +50,11 @@ public class LogUpdateAPITest extends AbstractViewTest {
         String tableCName = "tableC";
 
         // Start runtime 1, populate some data for table A, table C
-        CorfuRuntime runtime1 = getDefaultRuntime().setTransactionLogging(true).connect();
+        CorfuRuntime runtime1 = getDefaultRuntime().connect();
         CorfuStore corfuStore1 = new CorfuStore(runtime1);
 
         Table<Uuid, Uuid, Uuid> tableA = corfuStore1.openTable(namespace, tableAName,
-                Uuid.class, Uuid.class, Uuid.class, TableOptions.builder().build());
+                Uuid.class, Uuid.class, Uuid.class, TableOptions.fromProtoSchema(Uuid.class));
 
         UUID uuidA = CorfuRuntime.getStreamID(tableA.getFullyQualifiedTableName());
 
@@ -70,10 +70,10 @@ public class LogUpdateAPITest extends AbstractViewTest {
         }
 
         // Start runtime 2, open A, B as a stream and C as an UFO
-        CorfuRuntime runtime2 = getNewRuntime(getDefaultNode()).setTransactionLogging(true).connect();
+        CorfuRuntime runtime2 = getNewRuntime(getDefaultNode()).connect();
         CorfuStore corfuStore2 = new CorfuStore(runtime2);
         Table<Uuid, Uuid, Uuid> tableC2 = corfuStore2.openTable(namespace, tableCName,
-                Uuid.class, Uuid.class, Uuid.class, TableOptions.builder().build());
+                Uuid.class, Uuid.class, Uuid.class, TableOptions.fromProtoSchema(Uuid.class));
 
         StreamOptions options = StreamOptions.builder()
                 .ignoreTrimmed(false)
@@ -83,16 +83,12 @@ public class LogUpdateAPITest extends AbstractViewTest {
         Stream streamA = (new OpaqueStream(runtime2.getStreamsView().
                 get(uuidA, options))).streamUpTo(runtime2.getAddressSpaceView().getLogTail());
 
-        IStreamView txStream = runtime2.getStreamsView()
-                .getUnsafe(ObjectsView.TRANSACTION_STREAM_ID, StreamOptions.builder()
-                        .cacheEntries(false)
-                        .build());
         long tail = runtime2.getAddressSpaceView().getLogTail();
 
         Iterator<OpaqueEntry> iterator = streamA.iterator();
 
         Table<Uuid, Uuid, Uuid> tableB = corfuStore1.openTable(namespace, tableBName,
-                Uuid.class, Uuid.class, Uuid.class, TableOptions.builder().build());
+                Uuid.class, Uuid.class, Uuid.class, TableOptions.fromProtoSchema(Uuid.class));
 
         UUID uuidB = CorfuRuntime.getStreamID(tableB.getFullyQualifiedTableName());
 
@@ -114,14 +110,6 @@ public class LogUpdateAPITest extends AbstractViewTest {
                     txnContext.logUpdate(CorfuRuntime.getStreamID(tableB.getFullyQualifiedTableName()), smrEntry);
             }
             txnContext.commit();
-        }
-
-        // Verify data at B and C with runtime 1
-        txStream.seek(tail);
-        Iterator<ILogData> iterator1 = txStream.streamUpTo(runtime2.getAddressSpaceView().getLogTail()).iterator();
-        while (iterator1.hasNext()) {
-            ILogData data = iterator1.next();
-            data.getStreams().contains(uuidB);
         }
 
         try (TxnContext txn = corfuStore1.txn(namespace)) {

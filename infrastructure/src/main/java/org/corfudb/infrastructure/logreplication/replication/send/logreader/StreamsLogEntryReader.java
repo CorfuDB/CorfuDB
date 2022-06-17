@@ -115,7 +115,6 @@ public class StreamsLogEntryReader implements LogEntryReader {
                 .setSnapshotSyncSeqNum(sequence)
                 .build();
 
-
         LogReplicationEntryMsg txMessage = getLrEntryMsg(unsafeWrap(generatePayload(opaqueEntryList)), metadata);
 
         preMsgTs = currentMsgTs;
@@ -289,6 +288,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
     @Override
     public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
         messageExceededSize = false;
+        this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         setGlobalBaseSnapshot(lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
     }
 

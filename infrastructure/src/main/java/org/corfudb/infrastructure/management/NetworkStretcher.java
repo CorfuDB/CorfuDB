@@ -54,7 +54,7 @@ public class NetworkStretcher {
     @VisibleForTesting
     Duration getIncreasedPeriod() {
         Duration increasedPeriod = currentPeriod.plus(periodDelta);
-        if (increasedPeriod.toMillis() > maxPeriod.toMillis()){
+        if (increasedPeriod.toMillis() > maxPeriod.toMillis()) {
             return maxPeriod;
         }
 
@@ -78,7 +78,6 @@ public class NetworkStretcher {
 
     /**
      * Tune timeouts after each poll iteration, according to list of failed and connected nodes
-     *
      */
     public void modifyIterationTimeouts() {
         currentPeriod = getIncreasedPeriod();
@@ -86,13 +85,14 @@ public class NetworkStretcher {
 
     /**
      * Calculates rest interval according to the time already spent on network calls
+     *
      * @param elapsedTime time already spent by making network calls
      * @return rest interval
      */
-    public Duration getRestInterval(Duration elapsedTime){
+    public Duration getRestInterval(Duration elapsedTime) {
 
         Duration restInterval = currentPeriod.minus(elapsedTime);
-        if (restInterval.toMillis() < initialPollInterval.toMillis()){
+        if (restInterval.toMillis() < initialPollInterval.toMillis()) {
             restInterval = initialPollInterval;
         }
         return restInterval;

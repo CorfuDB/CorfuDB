@@ -41,7 +41,7 @@ public class SaslUtils {
         }
 
 
-        String password = null;
+        String password;
         try {
             password =
                 (new String(Files.readAllBytes(Paths.get(passwordFile)))).trim();
@@ -50,7 +50,7 @@ public class SaslUtils {
                 + e.getClass().getSimpleName(), e);
         }
 
-        PlainTextSaslNettyClient saslNettyClient = null;
+        PlainTextSaslNettyClient saslNettyClient;
 
         try {
             saslNettyClient = new PlainTextSaslNettyClient(username, password);

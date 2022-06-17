@@ -21,11 +21,12 @@ import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
 import org.corfudb.security.tls.SslContextConstructor;
+import org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig;
+import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 import org.corfudb.util.GitRepositoryState;
 
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLException;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -156,7 +157,12 @@ public class CorfuServerNode implements AutoCloseable {
 
         CompletableFuture.allOf(shutdownFutures).join();
         shutdownService.shutdown();
-        MeterRegistryProvider.close();
+        // If it's the server who initialized the registry - shut it down
+        MeterRegistryProvider.getMetricType().ifPresent(type -> {
+            if (type == MeterRegistryProvider.MetricType.SERVER) {
+                MeterRegistryProvider.close();
+            }
+        });
         log.info("close: Server shutdown and resources released");
     }
 
@@ -245,7 +251,7 @@ public class CorfuServerNode implements AutoCloseable {
                                                                   @Nonnull NettyServerRouter router) {
 
         // Generate the initializer.
-        return new ChannelInitializer() {
+        return new ChannelInitializer<Channel>() {
             @Override
             protected void initChannel(@Nonnull Channel ch) throws Exception {
 
@@ -281,17 +287,19 @@ public class CorfuServerNode implements AutoCloseable {
                         enabledTlsProtocols = new String[]{};
                     }
 
-                    try {
-                        sslContext = SslContextConstructor.constructSslContext(true,
-                                context.getServerConfig(String.class, "--keystore"),
-                                context.getServerConfig(String.class, "--keystore-password-file"),
-                                context.getServerConfig(String.class, "--truststore"),
-                                context.getServerConfig(String.class,
-                                        "--truststore-password-file"));
-                    } catch (SSLException e) {
-                        log.error("Could not build the SSL context", e);
-                        throw new RuntimeException("Couldn't build the SSL context", e);
-                    }
+                    KeyStoreConfig keyStoreConfig = KeyStoreConfig.from(
+                            context.getServerConfig(String.class, "--keystore"),
+                            context.getServerConfig(String.class, "--keystore-password-file")
+                    );
+
+                    TrustStoreConfig trustStoreConfig = TrustStoreConfig.from(
+                            context.getServerConfig(String.class, "--truststore"),
+                            context.getServerConfig(String.class, "--truststore-password-file")
+                    );
+
+                    sslContext = SslContextConstructor.constructSslContext(
+                            true, keyStoreConfig, trustStoreConfig
+                    );
                 } else {
                     enabledTlsCipherSuites = new String[]{};
                     enabledTlsProtocols = new String[]{};

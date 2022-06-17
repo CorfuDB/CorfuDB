@@ -2,6 +2,7 @@ package org.corfudb.infrastructure;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
 
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -30,7 +31,6 @@ import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
-import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -79,9 +79,6 @@ public class ServerContext implements AutoCloseable {
     private static final String PREFIX_MANAGEMENT = "MANAGEMENT";
     private static final String MANAGEMENT_LAYOUT = "LAYOUT";
 
-    // Failure detector
-    private static final String PREFIX_FAILURE_DETECTOR = "FAILURE_DETECTOR";
-
     // LogUnit Server
     private static final String PREFIX_LOGUNIT = "LOGUNIT";
     private static final String EPOCH_WATER_MARK = "EPOCH_WATER_MARK";
@@ -108,7 +105,7 @@ public class ServerContext implements AutoCloseable {
             KEY_SEQUENCER, PREFIX_SEQUENCER_EPOCH, Long.class
     );
 
-    private static final KvRecord<Layout> MANAGEMENT_LAYOUT_RECORD = KvRecord.of(
+    public static final KvRecord<Layout> MANAGEMENT_LAYOUT_RECORD = KvRecord.of(
             PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT, Layout.class
     );
 
@@ -248,11 +245,22 @@ public class ServerContext implements AutoCloseable {
     /**
      * Get the max size of the log replication data message used by both snapshot data message and
      * log entry sync data message.
-     * @return
+     *
+     * @return max data message size
      */
     public int getLogReplicationMaxDataMessageSize() {
         String val = getServerConfig(String.class, "--max-replication-data-message-size");
         return val == null ? MAX_DATA_MSG_SIZE_SUPPORTED : Integer.parseInt(val);
+    }
+
+    /**
+     * Get the max size of LR's runtime cache in number of entries.
+     *
+     * @return max cache number of entries
+     */
+    public int getLogReplicationCacheMaxSize() {
+        String val = getServerConfig(String.class, "--lrCacheSize");
+        return val == null ? MAX_CACHE_NUM_ENTRIES : Integer.parseInt(val);
     }
 
     /**
@@ -458,7 +466,7 @@ public class ServerContext implements AutoCloseable {
      * @return The current stored {@link Layout}
      */
     public Layout getCurrentLayout() {
-        return getDataStore().get(CURR_LAYOUT_RECORD);
+        return dataStore.get(CURR_LAYOUT_RECORD);
     }
 
     /**
@@ -556,63 +564,6 @@ public class ServerContext implements AutoCloseable {
 
         return currentLayout;
 
-    }
-
-    /**
-     * Save detected failure in a history. History represents all cluster state changes.
-     * Disabled by default.
-     *
-     * @param detector failure detector state
-     */
-    public synchronized void saveFailureDetectorMetrics(FailureDetectorMetrics detector) {
-        boolean enabled = Boolean.parseBoolean(System.getProperty("corfu.failuredetector", Boolean.FALSE.toString()));
-        if (!enabled){
-            return;
-        }
-
-        KvRecord<FailureDetectorMetrics> fdRecord = KvRecord.of(
-                PREFIX_FAILURE_DETECTOR,
-                String.valueOf(getManagementLayout().getEpoch()),
-                FailureDetectorMetrics.class
-        );
-
-        dataStore.put(fdRecord, detector);
-    }
-
-    /**
-     * Get latest change in a cluster state saved in data store. Or provide default value if history is disabled.
-     *
-     * @return latest failure saved in the history
-     */
-    public FailureDetectorMetrics getFailureDetectorMetrics() {
-        boolean enabled = Boolean.parseBoolean(System.getProperty("corfu.failuredetector", Boolean.FALSE.toString()));
-        if(!enabled){
-            return getDefaultFailureDetectorMetric(getManagementLayout());
-        }
-
-        KvRecord<FailureDetectorMetrics> fdRecord = KvRecord.of(
-                PREFIX_FAILURE_DETECTOR,
-                String.valueOf(getManagementLayout().getEpoch()),
-                FailureDetectorMetrics.class
-        );
-
-        return Optional
-                .ofNullable(dataStore.get(fdRecord))
-                .orElseGet(() -> getDefaultFailureDetectorMetric(getManagementLayout()));
-    }
-
-    /**
-     * Provide default metric.
-     * @param layout current layout
-     * @return default value
-     */
-    private FailureDetectorMetrics getDefaultFailureDetectorMetric(Layout layout) {
-        return FailureDetectorMetrics.builder()
-                .localNode(getLocalEndpoint())
-                .layout(layout.getLayoutServers())
-                .unresponsiveNodes(layout.getUnresponsiveServers())
-                .epoch(layout.getEpoch())
-                .build();
     }
 
     /**

@@ -18,6 +18,7 @@ import org.corfudb.infrastructure.logreplication.replication.send.logreader.Read
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 
@@ -48,7 +49,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  *  - In_Log_Entry_Sync
  *  - In_Snapshot_Sync
  *  - Wait_Snapshot_Apply
- *  - Stopped
+ *  - Error
  *
  * Events:
  * ------
@@ -113,7 +114,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  *
  *
  *     +-------------+
- *     |   STOPPED   <-----REPLICATION-----  ALL_STATES
+ *     |   ERROR      <-----REPLICATION-----  ALL_STATES
  *     +-------------+       SHUTDOWN
  *
  *
@@ -171,6 +172,11 @@ public class LogReplicationFSM {
     private final SnapshotReader snapshotReader;
 
     /**
+     * Used for checking if LR is in upgrading path
+     */
+    private final LogReplicationConfigManager tableManagerPlugin;
+
+    /**
      * Version on which snapshot sync is based on.
      */
     @Getter
@@ -187,6 +193,7 @@ public class LogReplicationFSM {
     /**
      * Log Entry Sender (send incremental updates to remote cluster)
      */
+    @Getter
     private final LogEntrySender logEntrySender;
 
     /**
@@ -212,10 +219,11 @@ public class LogReplicationFSM {
      * @param workers FSM executor service for state tasks
      */
     public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfig config, ClusterDescriptor remoteCluster, DataSender dataSender,
-                             ReadProcessor readProcessor, ExecutorService workers, LogReplicationAckReader ackReader) {
+                             ReadProcessor readProcessor, ExecutorService workers, LogReplicationAckReader ackReader,
+                             LogReplicationConfigManager tableManagerPlugin) {
         // Use stream-based readers for snapshot and log entry sync reads
         this(runtime, new StreamsSnapshotReader(runtime, config), dataSender,
-                new StreamsLogEntryReader(runtime, config), readProcessor, config, remoteCluster, workers, ackReader);
+                new StreamsLogEntryReader(runtime, config), readProcessor, config, remoteCluster, workers, ackReader, tableManagerPlugin);
     }
 
     /**
@@ -233,16 +241,18 @@ public class LogReplicationFSM {
     @VisibleForTesting
     public LogReplicationFSM(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
                              LogEntryReader logEntryReader, ReadProcessor readProcessor, LogReplicationConfig config,
-                             ClusterDescriptor remoteCluster, ExecutorService workers, LogReplicationAckReader ackReader) {
+                             ClusterDescriptor remoteCluster, ExecutorService workers, LogReplicationAckReader ackReader,
+                             LogReplicationConfigManager tableManagerPlugin) {
 
         this.snapshotReader = snapshotReader;
         this.logEntryReader = logEntryReader;
         this.ackReader = ackReader;
+        this.tableManagerPlugin = tableManagerPlugin;
 
         // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and send data
         // through the callbacks provided by the application
         snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor, config.getMaxNumMsgPerBatch(), this);
-        logEntrySender = new LogEntrySender(logEntryReader, dataSender, readProcessor, this);
+        logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
 
         // Initialize Log Replication 5 FSM states - single instance per state
         initializeStates(snapshotSender, logEntrySender, dataSender);
@@ -254,8 +264,7 @@ public class LogReplicationFSM {
 
         logReplicationFSMConsumer.submit(this::consume);
 
-        log.info("Log Replication FSM initialized, streams to replicate {} to remote cluster {}",
-                config.getStreamsToReplicate(), remoteCluster.getClusterId());
+        log.info("Log Replication FSM initialized, replicate to remote cluster {}", remoteCluster.getClusterId());
     }
 
     /**
@@ -271,9 +280,9 @@ public class LogReplicationFSM {
          */
         states.put(LogReplicationStateType.INITIALIZED, new InitializedState(this));
         states.put(LogReplicationStateType.IN_SNAPSHOT_SYNC, new InSnapshotSyncState(this, snapshotSender));
-        states.put(LogReplicationStateType.WAIT_SNAPSHOT_APPLY, new WaitSnapshotApplyState(this, dataSender));
+        states.put(LogReplicationStateType.WAIT_SNAPSHOT_APPLY, new WaitSnapshotApplyState(this, dataSender, tableManagerPlugin));
         states.put(LogReplicationStateType.IN_LOG_ENTRY_SYNC, new InLogEntrySyncState(this, logEntrySender));
-        states.put(LogReplicationStateType.STOPPED, new StoppedState(this));
+        states.put(LogReplicationStateType.ERROR, new ErrorState(this));
     }
 
     /**
@@ -285,7 +294,7 @@ public class LogReplicationFSM {
      */
     public synchronized void input(LogReplicationEvent event) {
         try {
-            if (state.getType().equals(LogReplicationStateType.STOPPED)) {
+            if (state.getType().equals(LogReplicationStateType.ERROR)) {
                 // Log: not accepting events, in stopped state
                 return;
             }
@@ -305,7 +314,7 @@ public class LogReplicationFSM {
      */
     private void consume() {
         try {
-            if (state.getType() == LogReplicationStateType.STOPPED) {
+            if (state.getType() == LogReplicationStateType.ERROR) {
                 log.info("Log Replication State Machine has been stopped. No more events will be processed.");
                 return;
             }
@@ -365,19 +374,11 @@ public class LogReplicationFSM {
     }
 
     /**
-     * Start consumer again due to cluster switch.
-     * It will clean the queue first and prepare the new transfer
-     *
-     * @param topologyConfigId topology configuration identifier
+     * Shutdown Log Replication FSM
      */
-    public void startFSM(long topologyConfigId) {
-        if (state.getType() != LogReplicationStateType.INITIALIZED) {
-            log.error("The FSM is not in the correct state {}, expecting state {}",
-                    state, LogReplicationStateType.INITIALIZED);
-        }
-
-        log.info("start the log replication with topologyConfigId {}", topologyConfigId);
-        eventQueue.clear();
-        setTopologyConfigId(topologyConfigId);
+    public void shutdown() {
+        this.ackReader.shutdown();
+        this.logReplicationFSMConsumer.shutdown();
+        this.logReplicationFSMWorkers.shutdown();
     }
 }

@@ -49,7 +49,8 @@ public class CorfuStoreShim {
                              @Nullable Class<M> mClass,
                              @Nonnull TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        return corfuStore.openTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
+        return corfuStore.openTable(namespace, tableName, kClass, vClass, mClass,
+                TableOptions.fromProtoSchema(vClass, tableOptions));
     }
 
     /**
@@ -97,6 +98,16 @@ public class CorfuStoreShim {
      */
     public void deleteTable(String namespace, String tableName) {
         corfuStore.deleteTable(namespace, tableName);
+    }
+
+    /**
+     *
+     * @param namespace the namespace this table belongs to
+     * @param tableName name of the table
+     * @throws java.util.NoSuchElementException if the table does not exist.
+     */
+    public void freeTableData(String namespace, String tableName) {
+        corfuStore.freeTableData(namespace, tableName);
     }
 
     /**
@@ -150,6 +161,24 @@ public class CorfuStoreShim {
      */
     public long getHighestSequence(@Nonnull String namespace, @Nonnull String tableName) {
         return corfuStore.getHighestSequence(namespace, tableName);
+    }
+
+    /**
+     * Subscribe to transaction updates on specific tables with the streamTag in the namespace.
+     * Objects returned will honor transactional boundaries.
+     * <p>
+     * This will subscribe to transaction updates starting from the latest state of the log.
+     * <p>
+     * Note: if memory is a consideration consider use the other version of subscribe that is
+     * able to specify the size of buffered transactions entries.
+     *
+     * @param streamListener   callback context
+     * @param namespace        the CorfuStore namespace to subscribe to
+     * @param streamTag        only updates of tables with the stream tag will be polled
+     */
+    public void subscribeListener(@Nonnull StreamListener streamListener, @Nonnull String namespace,
+                                  @Nonnull String streamTag) {
+        corfuStore.subscribeListener(streamListener, namespace, streamTag);
     }
 
     /**

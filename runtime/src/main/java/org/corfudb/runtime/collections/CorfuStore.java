@@ -49,22 +49,10 @@ public class CorfuStore {
     /**
      * Creates a new CorfuStore.
      *
-     * @param runtime Connected instance of the Corfu Runtime.
+     * @param runtime         Connected instance of the Corfu Runtime.
      */
     @Nonnull
     public CorfuStore(@Nonnull final CorfuRuntime runtime) {
-        this(runtime, true);
-    }
-
-    /**
-     * Creates a new CorfuStore.
-     *
-     * @param runtime         Connected instance of the Corfu Runtime.
-     * @param enableTxLogging
-     */
-    @Nonnull
-    public CorfuStore(@Nonnull final CorfuRuntime runtime, boolean enableTxLogging) {
-        runtime.setTransactionLogging(enableTxLogging);
         this.runtime = runtime;
         this.corfuStoreMetrics = new CorfuStoreMetrics();
     }
@@ -111,11 +99,9 @@ public class CorfuStore {
                              @Nonnull final TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
         long startTime = System.currentTimeMillis();
-        Optional<Timer.Sample> sample = MeterRegistryProvider.getInstance().map(Timer::start);
         Table table =
                 runtime.getTableRegistry().openTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
         corfuStoreMetrics.recordTableCount();
-        table.getMetrics().recordTableOpenTime(sample);
         log.info("openTable {}${} took {}ms", namespace, tableName, (System.currentTimeMillis() - startTime));
         return table;
     }
@@ -159,6 +145,23 @@ public class CorfuStore {
 
         return runtime.getTableRegistry().openTable(namespace, queueName,
                 Queue.CorfuGuidMsg.class, vClass, Queue.CorfuQueueMetadataMsg.class, tableOptions);
+    }
+
+    /**
+     * This api is to optimize the use of memory by only allowing
+     * the underlying corfu table's objects to be garbage collected.
+     * The metadata associated with the table (such as schema) are not freed.
+     * The effects of this function are fully reversible as the
+     * table will be re-synced on the next access.
+     * Note that the table entries in the AddressSpaceView's cache may still linger around until
+     * timeout or eviction as this method only removes references from ObjectViewCache
+     *
+     * @param namespace namespace this table belongs to
+     * @param tableName name of table
+     * @throws java.util.NoSuchElementException thrown if table was not found.
+     */
+    public void freeTableData(String namespace, String tableName) {
+        runtime.getTableRegistry().freeTableData(namespace, tableName);
     }
 
     /**

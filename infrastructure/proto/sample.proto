@@ -13,6 +13,7 @@ message IntValue {
 
 message IntValueTag {
     option (org.corfudb.runtime.table_schema).stream_tag = "test";
+    option (org.corfudb.runtime.table_schema).is_federated = true;
     int32 value = 2;
 }
 

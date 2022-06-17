@@ -1,20 +1,15 @@
 package org.corfudb.infrastructure;
 
-import io.micrometer.core.instrument.DistributionSummary;
-import io.micrometer.core.instrument.Gauge;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.common.util.Memory;
 import org.corfudb.runtime.view.Address;
 
 import javax.annotation.concurrent.NotThreadSafe;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.Optional;
 import java.util.PriorityQueue;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -41,7 +36,7 @@ import java.util.function.Supplier;
  */
 @NotThreadSafe
 @Slf4j
-public class SequencerServerCache {
+public class SequencerServerCache implements AutoCloseable {
     /**
      * TX conflict-resolution information:
      * a cache of recent conflict keys and their latest global-log position.
@@ -215,6 +210,11 @@ public class SequencerServerCache {
             invalidateSmallestTxVersion();
         }
         return true;
+    }
+
+    @Override
+    public void close() {
+        MicroMeterUtils.removeGaugesWithNoTags(windowSizeName, conflictKeysCounterName);
     }
 
     /**

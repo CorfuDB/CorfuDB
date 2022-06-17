@@ -792,7 +792,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         // Restart server 3 and wait for heal node workflow to modify the layout.
         corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
-        waitForEpochChange(refreshedEpoch -> refreshedEpoch > layoutAfterFailure.getEpoch(), runtime);
+        waitForLayoutChange(l -> l.getUnresponsiveServers().isEmpty(), runtime);
 
         // Write at address 5-9.
         final long startAddress = 0L;
@@ -1039,11 +1039,19 @@ public class ClusterReconfigIT extends AbstractIT {
         }
 
         // Assert that the live node has been sealed.
-        assertThatThrownBy(
-                () -> CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout()
-                        .getManagementClient(corfuSingleNodeHost + ":" + PORT_0)
-                        .sendNodeStateRequest(), WrongEpochException.class))
-                .isInstanceOf(WrongEpochException.class);
+        boolean retry = true;
+        while (retry) {
+            try {
+                retry = false;
+                assertThatThrownBy(
+                        () -> CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout()
+                                .getManagementClient(corfuSingleNodeHost + ":" + PORT_0)
+                                .sendNodeStateRequest(), WrongEpochException.class))
+                        .isInstanceOf(WrongEpochException.class);
+            } catch (AssertionError ae) {
+                retry = true;
+            }
+        }
 
         runtime.getManagementView().forceRemoveNode(
                 corfuSingleNodeHost + ":" + PORT_1,

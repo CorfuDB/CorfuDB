@@ -22,10 +22,11 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
 import org.corfudb.security.tls.SslContextConstructor;
+import org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig;
+import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLException;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
@@ -183,17 +184,18 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
                         enabledTlsProtocols = new String[]{};
                     }
 
-                    try {
-                        sslContext = SslContextConstructor.constructSslContext(true,
-                                context.getServerConfig(String.class, "--keystore"),
-                                context.getServerConfig(String.class, "--keystore-password-file"),
-                                context.getServerConfig(String.class, "--truststore"),
-                                context.getServerConfig(String.class,
-                                        "--truststore-password-file"));
-                    } catch (SSLException e) {
-                        log.error("Could not build the SSL context", e);
-                        throw new RuntimeException("Couldn't build the SSL context", e);
-                    }
+                    KeyStoreConfig keyStoreConfig = KeyStoreConfig.from(
+                            context.getServerConfig(String.class, "--keystore"),
+                            context.getServerConfig(String.class, "--keystore-password-file")
+                    );
+
+                    TrustStoreConfig trustStoreConfig = TrustStoreConfig.from(
+                            context.getServerConfig(String.class, "--truststore"),
+                            context.getServerConfig(String.class, "--truststore-password-file")
+                    );
+
+                    sslContext = SslContextConstructor.constructSslContext(true, keyStoreConfig, trustStoreConfig);
+
                 } else {
                     enabledTlsCipherSuites = new String[]{};
                     enabledTlsProtocols = new String[]{};

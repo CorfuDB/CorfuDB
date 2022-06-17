@@ -21,6 +21,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -43,9 +45,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     private final Map<String, LogReplicationChannelStub> asyncStubMap;
     private final ExecutorService executorService;
 
-    private StreamObserver<RequestMsg> requestObserver;
-    private StreamObserver<ResponseMsg> responseObserver;
-
+    private final ConcurrentMap<Long, StreamObserver<RequestMsg>> requestObserverMap;
+    private final ConcurrentMap<Long, StreamObserver<ResponseMsg>> responseObserverMap;
 
     /** A {@link CompletableFuture} which is completed when a connection to a remote leader is set,
      * and  messages can be sent to the remote node.
@@ -65,6 +66,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         this.asyncStubMap = new HashMap<>();
         this.executorService = Executors.newSingleThreadExecutor();
         this.connectionFuture = new CompletableFuture<>();
+        this.requestObserverMap = new ConcurrentHashMap<>();
+        this.responseObserverMap = new ConcurrentHashMap<>();
     }
 
     @Override
@@ -168,8 +171,9 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     }
 
     private void replicate(String nodeId, RequestMsg request) {
-        if (requestObserver == null) {
-            responseObserver = new StreamObserver<ResponseMsg>() {
+        long requestId = request.getHeader().getRequestId();
+        if (!requestObserverMap.containsKey(requestId)) {
+            StreamObserver<ResponseMsg> responseObserver = new StreamObserver<ResponseMsg>() {
                 @Override
                 public void onNext(ResponseMsg response) {
                     try {
@@ -178,28 +182,31 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                     } catch (Exception e) {
                         log.error("Caught exception while receiving ACK", e);
                         getRouter().completeExceptionally(response.getHeader().getRequestId(), e);
-                        requestObserver = null;
+                        requestObserverMap.remove(requestId);
                     }
                 }
 
                 @Override
                 public void onError(Throwable t) {
                     log.error("Error from response observer", t);
-                    getRouter().completeExceptionally(request.getHeader().getRequestId(), t);
-                    requestObserver = null;
+                    getRouter().completeExceptionally(requestId, t);
+                    requestObserverMap.remove(requestId);
                 }
 
                 @Override
                 public void onCompleted() {
                     log.info("Completed");
-                    requestObserver = null;
+                    requestObserverMap.remove(requestId);
                 }
             };
+
+            responseObserverMap.put(requestId, responseObserver);
 
             log.info("Initiate stub for replication");
 
             if(asyncStubMap.containsKey(nodeId)) {
-                requestObserver = asyncStubMap.get(nodeId).replicate(responseObserver);
+                StreamObserver<RequestMsg> requestObserver = asyncStubMap.get(nodeId).replicate(responseObserver);
+                requestObserverMap.put(requestId, requestObserver);
             } else {
                 log.error("No stub found for remote node {}@{}. Message dropped type={}",
                         nodeId, getRemoteClusterDescriptor().getEndpointByNodeId(nodeId),
@@ -209,9 +216,9 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
         log.info("Send replication entry: {} to node {}@{}", request.getHeader().getRequestId(),
                 nodeId, getRemoteClusterDescriptor().getEndpointByNodeId(nodeId));
-        if (responseObserver != null) {
+        if (responseObserverMap.containsKey(requestId)) {
             // Send log replication entries across channel
-            requestObserver.onNext(request);
+            requestObserverMap.get(requestId).onNext(request);
         }
     }
 
@@ -227,4 +234,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         });
     }
 
+    @Override
+    public void resetRemoteLeader() {
+        // No-op
+    }
 }

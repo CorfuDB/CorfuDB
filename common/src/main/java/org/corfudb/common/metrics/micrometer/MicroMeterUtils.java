@@ -1,15 +1,18 @@
 package org.corfudb.common.metrics.micrometer;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Tag;
+import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MetricType;
+import org.corfudb.common.util.Tuple;
 
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -17,7 +20,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 import java.util.function.ToDoubleFunction;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 public class MicroMeterUtils {
 
@@ -26,7 +28,7 @@ public class MicroMeterUtils {
     /**
      * A list of server metrics that will be ignored.
      */
-    private static final Set<String> serverMetricsBlackList = ImmutableSet.of(
+    private static final Set<String> serverMetricsBlockList = ImmutableSet.of(
             "corfu.infrastructure.message-handler.bootstrap_management_request",
             "corfu.infrastructure.message-handler.bootstrap_sequencer_request",
             "corfu.infrastructure.message-handler.committed_tail_request",
@@ -46,17 +48,16 @@ public class MicroMeterUtils {
     /**
      * A list of client metrics that will be ignored.
      */
-    private static final Set<String> clientMetricsBlackList = ImmutableSet.of(
+    private static final Set<String> clientMetricsBlockList = ImmutableSet.of(
             "openTable",
-            "vlo_read_timer",
-            "vlo_sync_timer",
-            "vlo_write_timer",
-            "multi_object_smrentry_serialize_stream",
-            "multi_object_smrentry_serialize_stream_size",
-            "multi_object_smrentry_serialize_stream_updates",
-            "multi_object_smrentry_deserialize_stream",
-            "multi_object_smrentry_deserialize_stream_size",
-            "multi_object_smrentry_deserialize_stream_lazy",
+            "vlo.sync.timer",
+            "vlo.write.timer",
+            "multi.object.smrentry.serialize.stream",
+            "multi.object.smrentry.serialize.stream.size",
+            "multi.object.smrentry.serialize.stream.updates",
+            "multi.object.smrentry.deserialize.stream",
+            "multi.object.smrentry.deserialize.stream.size",
+            "multi.object.smrentry.deserialize.stream.lazy",
             "logdata.compress",
             "logdata.decompress"
     );
@@ -66,19 +67,19 @@ public class MicroMeterUtils {
 
     }
 
-    private static Optional<Set<String>> getMetricsBlackList() {
+    private static Optional<Set<String>> getMetricsBlockList() {
         return MeterRegistryProvider.getMetricType().map(type -> {
             if (type == MetricType.CLIENT) {
-                return clientMetricsBlackList;
+                return clientMetricsBlockList;
             } else if (type == MetricType.SERVER) {
-                return serverMetricsBlackList;
+                return serverMetricsBlockList;
             }
             throw new IllegalArgumentException("Unsupported metrics type");
         });
     }
 
     private static Optional<MeterRegistry> filterGetInstance(String name) {
-        return getMetricsBlackList()
+        return getMetricsBlockList()
                 .filter(list -> !list.contains(name))
                 .flatMap(list -> MeterRegistryProvider.getInstance());
     }
@@ -129,36 +130,71 @@ public class MicroMeterUtils {
         return MeterRegistryProvider.getInstance().map(Timer::start);
     }
 
+    /**
+     * Start sampling conditionally, based on the given rate
+     *
+     * @param counter  contains the total count
+     * @param sampleAt rate at which sampling should be done
+     * @return
+     */
+    public static Optional<Timer.Sample> startTimer(Optional<Counter> counter, int sampleAt) {
+        if (counter.isPresent() && counter.get().count() % sampleAt == 0) {
+            return MeterRegistryProvider.getInstance().map(Timer::start);
+        }
+        return Optional.empty();
+    }
+
     public static void measure(double measuredValue, String name, String... tags) {
         Optional<DistributionSummary> summary = createOrGetDistSummary(name, tags);
         summary.ifPresent(s -> s.record(measuredValue));
     }
 
-    private static List<Tag> toTagIterable(String... tags) {
-        if (tags.length % 2 != 0) {
-            throw new IllegalArgumentException("Only key-value pairs allowed.");
-        }
-        if (tags.length == 0) {
-            return ImmutableList.of();
-        }
-        return IntStream.range(1, tags.length)
-                .filter(i -> i % 2 != 0)
-                .mapToObj(i -> Tag.of(tags[i - 1], tags[i]))
-                .collect(Collectors.toList());
-    }
-
     public static <T> Optional<T> gauge(String name, T state, ToDoubleFunction<T> valueFunction, String... tags) {
         return filterGetInstance(name).map(registry -> {
-            List<Tag> tagsList = toTagIterable(tags);
-            return registry.gauge(name, tagsList, state, valueFunction);
+            Gauge.builder(name, state, valueFunction)
+                    .tags(tags)
+                    .strongReference(true)
+                    .register(registry);
+            return state;
         });
     }
 
     public static <T extends Number> Optional<T> gauge(String name, T state, String... tags) {
         return filterGetInstance(name).map(registry -> {
-            List<Tag> tagsList = toTagIterable(tags);
-            return registry.gauge(name, tagsList, state);
+            Gauge.builder(name, state, Number::doubleValue)
+                    .tags(tags)
+                    .strongReference(true)
+                    .register(registry);
+            return state;
         });
+    }
+
+    private static void removeMeters(List<Tuple<String, Tags>> ids, Meter.Type meterType) {
+        MeterRegistryProvider
+                .getTagId()
+                .ifPresent(tid ->
+                        ids.forEach(id -> {
+                            String name = id.first;
+                            Tags tags = id.second;
+                            Tags allTags = tags.and(tid);
+                            Meter.Id meterId = new Meter.Id(name, allTags,
+                                    null, null, meterType);
+                            MeterRegistryProvider.deregisterByMeterId(meterId);
+                        }));
+    }
+
+    public static void removeGauges(List<Tuple<String, Tags>> gids) {
+        removeMeters(gids, Meter.Type.GAUGE);
+    }
+
+    public static void removeGaugesWithNoTags(String... metricNames) {
+        MicroMeterUtils.removeGauges(
+                Arrays
+                        .stream(metricNames)
+                        .map(name ->
+                                Tuple.of(name, Tags.empty()))
+                        .collect(Collectors.toList())
+        );
     }
 
     public static Optional<Counter> counter(String name, String... tags) {

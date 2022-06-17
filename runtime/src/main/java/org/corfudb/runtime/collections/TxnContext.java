@@ -1,10 +1,8 @@
 package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
-import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -24,7 +22,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiFunction;
@@ -51,17 +48,12 @@ public class TxnContext implements AutoCloseable {
     @Getter
     private final String namespace;
     private final IsolationLevel isolationLevel;
-    private final List<Runnable> operations;
-    @Getter
-    private final Map<UUID, Table> tablesInTxn;
+
     private final List<CommitCallback> commitCallbacks;
-    private Optional<Timer.Sample> startTxSample = Optional.empty();
-    private static final byte READ_ONLY = 0x01;
-    private static final byte WRITE_ONLY = 0x02;
-    private static final byte READ_WRITE = 0x03;
-    private byte txnType;
 
     private boolean iDidNotStartCorfuTxn;
+
+    private final Map<UUID, Table> tablesUpdated;
 
     /**
      * Creates a new TxnContext.
@@ -82,9 +74,8 @@ public class TxnContext implements AutoCloseable {
         this.tableRegistry = tableRegistry;
         this.namespace = namespace;
         this.isolationLevel = isolationLevel;
-        this.operations = new ArrayList<>();
-        this.tablesInTxn = new HashMap<>();
         this.commitCallbacks = new ArrayList<>();
+        this.tablesUpdated = new HashMap<>();
         txBeginInternal(allowNestedTransactions); // May throw exception if transaction was already started
     }
 
@@ -101,7 +92,6 @@ public class TxnContext implements AutoCloseable {
             if (txnContext != null) {
                 throw new TransactionAlreadyStartedException(TransactionalContext.getRootContext().toString());
             }
-            this.startTxSample = MeterRegistryProvider.getInstance().map(Timer::start);
             log.warn("Reusing the transactional context created outside this layer!");
             this.iDidNotStartCorfuTxn = true;
             TransactionalContext.getRootContext().setTxnContext(this);
@@ -109,7 +99,6 @@ public class TxnContext implements AutoCloseable {
         }
 
         log.trace("TxnContext: begin transaction in namespace {}", namespace);
-        this.startTxSample = MeterRegistryProvider.getInstance().map(Timer::start);
         Transaction.TransactionBuilder transactionBuilder = this.objectsView
                 .TXBuild()
                 .type(TransactionType.WRITE_AFTER_WRITE);
@@ -142,9 +131,6 @@ public class TxnContext implements AutoCloseable {
     private <K extends Message, V extends Message, M extends Message>
     void validateWrite(@Nonnull Table<K, V, M> table, K key, boolean validateKey) {
         baseValidateWrite(table, key, validateKey);
-
-        txnType |= WRITE_ONLY;
-        tablesInTxn.putIfAbsent(table.getStreamUUID(), table);
     }
 
     /**
@@ -163,9 +149,6 @@ public class TxnContext implements AutoCloseable {
         if (table.getMetadataClass() == null && metadata != null) {
             throw new IllegalArgumentException("Metadata schema for table " + table.getFullyQualifiedTableName() + " is defined as NULL, non-null metadata is not allowed.");
         }
-
-        txnType |= WRITE_ONLY;
-        tablesInTxn.putIfAbsent(table.getStreamUUID(), table);
     }
 
     private <K extends Message, V extends Message, M extends Message>
@@ -217,10 +200,8 @@ public class TxnContext implements AutoCloseable {
                    @Nonnull final V value,
                    @Nullable final M metadata) {
         validateWrite(table, key, metadata);
-        operations.add(() -> {
-            table.put(key, value, metadata);
-            table.getMetrics().incNumPuts();
-        });
+        table.put(key, value, metadata);
+        tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
     }
 
     public long getEpoch() {
@@ -267,25 +248,23 @@ public class TxnContext implements AutoCloseable {
                @Nonnull MergeCallback mergeCallback,
                @Nonnull final CorfuRecord<V, M> recordDelta) {
         validateWrite(table, key);
-        operations.add(() -> {
-            CorfuRecord<V, M> oldRecord = table.get(key);
-            CorfuRecord<V, M> mergedRecord;
-            try {
-                mergedRecord = mergeCallback.doMerge(table, key, oldRecord, recordDelta);
-            } catch (Exception ex) {
-                txAbort(); // explicitly abort this transaction and then throw the abort manually
-                log.error("TX Abort merge: {}", table.getFullyQualifiedTableName(), ex);
-                throw ex;
-            }
-            if (mergedRecord == null) {
-                table.getMetrics().incNumDeletes();
-                table.deleteRecord(key);
-            } else {
-                table.getMetrics().incNumPuts();
-                table.put(key, mergedRecord.getPayload(), mergedRecord.getMetadata());
-            }
-            table.getMetrics().incNumMerges();
-        });
+        CorfuRecord<V, M> oldRecord = table.get(key);
+        CorfuRecord<V, M> mergedRecord;
+        try {
+            mergedRecord = mergeCallback.doMerge(table, key, oldRecord, recordDelta);
+        } catch (Exception ex) {
+            txAbort(); // explicitly abort this transaction and then throw the abort manually
+            log.error("TX Abort merge: {}", table.getFullyQualifiedTableName(), ex);
+            throw ex;
+        }
+        if (mergedRecord == null) {
+            table.deleteRecord(key);
+        } else {
+            table.put(key, mergedRecord.getPayload(), mergedRecord.getMetadata());
+        }
+
+        tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
+
     }
 
     /**
@@ -301,19 +280,17 @@ public class TxnContext implements AutoCloseable {
     void touch(@Nonnull Table<K, V, M> table,
                @Nonnull final K key) {
         validateWrite(table, key);
-        operations.add(() -> {
-            CorfuRecord<V, M> touchedObject = table.get(key);
-            if (touchedObject != null) {
-                table.put(key, touchedObject.getPayload(), touchedObject.getMetadata());
-            } else { // TODO: add support for touch()ing an object that hasn't been created.
-                txAbort(); // explicitly abort this transaction and then throw the abort manually
-                log.error("TX Abort touch on non-existing object: in " + table.getFullyQualifiedTableName());
-                throw new UnsupportedOperationException(
-                        "Attempt to touch() a non-existing object in "
-                                + table.getFullyQualifiedTableName());
-            }
-            table.getMetrics().incNumTouches();
-        });
+        CorfuRecord<V, M> touchedObject = table.get(key);
+        if (touchedObject != null) {
+            table.put(key, touchedObject.getPayload(), touchedObject.getMetadata());
+            tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
+        } else { // TODO: add support for touch()ing an object that hasn't been created.
+            txAbort(); // explicitly abort this transaction and then throw the abort manually
+            log.error("TX Abort touch on non-existing object: in " + table.getFullyQualifiedTableName());
+            throw new UnsupportedOperationException(
+                    "Attempt to touch() a non-existing object in "
+                            + table.getFullyQualifiedTableName());
+        }
     }
 
     /**
@@ -338,9 +315,26 @@ public class TxnContext implements AutoCloseable {
      * @param updateEntry - the actual State Machine Replicated entry.
      */
     public void logUpdate(UUID streamId, SMREntry updateEntry) {
-        operations.add(() -> {
+        TransactionalContext.getCurrentContext().logUpdate(streamId, updateEntry);
+    }
+
+    /**
+     * Apply a Corfu SMREntry directly to a stream. This can be used for replaying the mutations
+     * directly into the underlying stream bypassing the object layer entirely.
+     * <p>
+     * This API is used for LR feature, as streaming is selectively required on standby (receiver)
+     * by means of a static configuration file.
+     *
+     * @param streamId    - UUID of the stream on which the logUpdate is being added to.
+     * @param updateEntry - the actual State Machine Replicated entry.
+     * @param streamTags  - stream tags associated to the given stream id
+     */
+    public void logUpdate(UUID streamId, SMREntry updateEntry, List<UUID> streamTags) {
+        if (streamTags != null) {
+            TransactionalContext.getCurrentContext().logUpdate(streamId, updateEntry, streamTags);
+        } else {
             TransactionalContext.getCurrentContext().logUpdate(streamId, updateEntry);
-        });
+        }
     }
 
     /**
@@ -351,15 +345,13 @@ public class TxnContext implements AutoCloseable {
      * @param updateEntries - the actual State Machine Replicated entries.
      */
     public void logUpdate(UUID streamId, List<SMREntry> updateEntries) {
-        operations.add(() -> {
-            TransactionalContext.getCurrentContext().logUpdate(streamId, updateEntries);
-        });
+        TransactionalContext.getCurrentContext().logUpdate(streamId, updateEntries);
     }
 
     /**
      * Clears the entire table.
      *
-     * @param table Table object to perform the delete on.
+     * @param table Table object to perform the clear on.
      * @param <K>   Type of Key.
      * @param <V>   Type of Value.
      * @param <M>   Type of Metadata.
@@ -367,10 +359,8 @@ public class TxnContext implements AutoCloseable {
     public <K extends Message, V extends Message, M extends Message>
     void clear(@Nonnull Table<K, V, M> table) {
         validateWrite(table);
-        operations.add(() -> {
-            table.clearAll();
-            table.getMetrics().incNumClears();
-        });
+        table.clearAll();
+        tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
     }
 
     /**
@@ -401,8 +391,8 @@ public class TxnContext implements AutoCloseable {
     TxnContext delete(@Nonnull Table<K, V, M> table,
                       @Nonnull final K key) {
         validateWrite(table);
-        table.getMetrics().incNumDeletes();
-        operations.add(() -> table.deleteRecord(key));
+        table.deleteRecord(key);
+        tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
         return this;
     }
 
@@ -438,9 +428,9 @@ public class TxnContext implements AutoCloseable {
     K enqueue(@Nonnull Table<K, V, M> table,
               @Nonnull final V record) {
         validateWrite(table);
-        applyWritesForReadOnTable(table);
-        table.getMetrics().incNumEnqueues();
-        return table.enqueue(record);
+        K ret = table.enqueue(record);
+        tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
+        return ret;
     }
 
     // *************************** READ API *****************************************
@@ -458,9 +448,7 @@ public class TxnContext implements AutoCloseable {
     public <K extends Message, V extends Message, M extends Message>
     CorfuStoreEntry<K, V, M> getRecord(@Nonnull Table<K, V, M> table,
                                        @Nonnull final K key) {
-        applyWritesForReadOnTable(table);
         CorfuRecord<V, M> record = table.get(key);
-        table.getMetrics().incNumGets();
         if (record == null) {
             return new CorfuStoreEntry<K, V, M>(key, null, null);
         }
@@ -499,8 +487,6 @@ public class TxnContext implements AutoCloseable {
     List<CorfuStoreEntry<K, V, M>> getByIndex(@Nonnull Table<K, V, M> table,
                                               @Nonnull final String indexName,
                                               @Nonnull final I indexKey) {
-        applyWritesForReadOnTable(table);
-        table.getMetrics().incNumGetByIndexes();
         return table.getByIndex(indexName, indexKey);
     }
 
@@ -531,8 +517,6 @@ public class TxnContext implements AutoCloseable {
      */
     public <K extends Message, V extends Message, M extends Message>
     int count(@Nonnull final Table<K, V, M> table) {
-        applyWritesForReadOnTable(table);
-        table.getMetrics().incNumCounts();
         return table.count();
     }
 
@@ -554,8 +538,6 @@ public class TxnContext implements AutoCloseable {
      */
     public <K extends Message, V extends Message, M extends Message>
     Set<K> keySet(@Nonnull final Table<K, V, M> table) {
-        applyWritesForReadOnTable(table);
-        table.getMetrics().incNumKeySets();
         return table.keySet();
     }
 
@@ -580,8 +562,6 @@ public class TxnContext implements AutoCloseable {
     public <K extends Message, V extends Message, M extends Message>
     List<CorfuStoreEntry<K, V, M>> executeQuery(@Nonnull final Table<K, V, M> table,
                                                 @Nonnull final Predicate<CorfuStoreEntry<K, V, M>> entryPredicate) {
-        applyWritesForReadOnTable(table);
-        table.getMetrics().incNumScans();
         return table.scanAndFilterByEntry(entryPredicate);
     }
 
@@ -666,10 +646,6 @@ public class TxnContext implements AutoCloseable {
             @Nonnull final BiPredicate<R, S> joinPredicate,
             @Nonnull final BiFunction<R, S, T> joinFunction,
             final Function<T, U> joinProjection) {
-        applyWritesForReadOnTable(table1);
-        table1.getMetrics().incNumJoins();
-        applyWritesForReadOnTable(table2);
-        table2.getMetrics().incNumJoins();
         return JoinQuery.executeJoinQuery(table1, table2,
                 query1, query2, queryOptions1,
                 queryOptions2, joinPredicate, joinFunction, joinProjection);
@@ -716,8 +692,6 @@ public class TxnContext implements AutoCloseable {
      */
     public <K extends Message, V extends Message, M extends Message>
     List<Table.CorfuQueueRecord> entryList(@Nonnull final Table<K, V, M> table) {
-        applyWritesForReadOnTable(table);
-        table.getMetrics().incNumEntryLists();
         return table.entryList();
     }
 
@@ -740,19 +714,6 @@ public class TxnContext implements AutoCloseable {
     }
 
     /** -------------------------- internal private methods ------------------------------*/
-
-    /**
-     * Apply all pending writes (if any) to serve read queries.
-     */
-    private <K extends Message, V extends Message, M extends Message>
-    void applyWritesForReadOnTable(Table<K, V, M> tableBeingRead) {
-        tablesInTxn.putIfAbsent(tableBeingRead.getStreamUUID(), tableBeingRead);
-        txnType |= READ_ONLY;
-        if (!operations.isEmpty()) {
-            operations.forEach(Runnable::run);
-            operations.clear();
-        }
-    }
 
     /**
      * Protobuf objects are immutable. So any metadata modifications made by any merge() callback
@@ -792,11 +753,6 @@ public class TxnContext implements AutoCloseable {
             throw new IllegalStateException("commit() called without a transaction!");
         }
 
-        if (operations.size() > 0) {
-            // Apply any buffered up operations.
-            operations.forEach(Runnable::run);
-        }
-
         // CorfuStore should have only one transactional context since nesting is prohibited.
         AbstractTransactionalContext rootContext = TransactionalContext.getRootContext();
         // Regardless of transaction outcome remove any TxnContext association from ThreadLocal.
@@ -806,46 +762,21 @@ public class TxnContext implements AutoCloseable {
         if (iDidNotStartCorfuTxn) {
             log.warn("commit() called on an inner transaction not started by CorfuStore");
         } else {
-            try {
-                commitAddress = this.objectsView.TXEnd();
-            } catch (Exception ex) {
-                tablesInTxn.values().forEach(t -> t.getMetrics().incNumTxnAborts());
-                tablesInTxn.clear();
-                throw ex;
-            }
-        }
-
-        switch (txnType) {
-            case READ_ONLY:
-                tablesInTxn.values().forEach(t -> t.getMetrics().recordReadOnlyTxnTime(startTxSample));
-                break;
-            case WRITE_ONLY:
-                tablesInTxn.values().forEach(t -> t.getMetrics().recordWriteOnlyTxnTime(startTxSample));
-                break;
-            case READ_WRITE:
-                tablesInTxn.values().forEach(t -> t.getMetrics().recordReadWriteTxnTime(startTxSample));
-                break;
-            default:
-                log.trace("Started a transaction but neither read nor writes were actually done");
-                break;
+            commitAddress = this.objectsView.TXEnd();
         }
 
         // These can be moved to trace once stability improves.
         log.trace("Txn committed on namespace {}", namespace);
 
-        if (txnType != READ_ONLY) {
-            // If we are here this means commit was successful, now invoke the callback with
-            // the final versions of all the mutated objects.
-            MultiObjectSMREntry writeSet = rootContext.getWriteSetInfo().getWriteSet();
-            final Map<String, List<CorfuStreamEntry>> mutations = new HashMap<>();
-            tablesInTxn.forEach((uuid, table) -> {
-                List<CorfuStreamEntry> writesInTable = writeSet.getSMRUpdates(uuid).stream().map(entry ->
-                        CorfuStreamEntry.fromSMREntry(entry, 0)).collect(Collectors.toList());
-                mutations.put(table.getFullyQualifiedTableName(), writesInTable);
-            });
-            commitCallbacks.forEach(cb -> cb.onCommit(mutations));
-            operations.clear();
-        }
+        MultiObjectSMREntry writeSet = rootContext.getWriteSetInfo().getWriteSet();
+        final Map<String, List<CorfuStreamEntry>> mutations = new HashMap<>(tablesUpdated.size());
+        tablesUpdated.forEach((uuid, table) -> {
+            List<CorfuStreamEntry> writesInTable = writeSet.getSMRUpdates(uuid).stream()
+                    .map(CorfuStreamEntry::fromSMREntry).collect(Collectors.toList());
+            mutations.put(table.getFullyQualifiedTableName(), writesInTable);
+        });
+
+        commitCallbacks.forEach(cb -> cb.onCommit(mutations));
 
         return Timestamp.newBuilder()
                 .setEpoch(getEpoch())
@@ -868,14 +799,11 @@ public class TxnContext implements AutoCloseable {
      * Explicitly abort a transaction in case of an external failure
      */
     public void txAbort() {
-        operations.clear();
         if (TransactionalContext.isInTransaction()) {
             // Regardless of transaction outcome remove any TxnContext association from ThreadLocal.
             TransactionalContext.getRootContext().setTxnContext(null);
             this.objectsView.TXAbort();
-            tablesInTxn.values().forEach(t -> t.getMetrics().incNumTxnAborts());
         }
-        tablesInTxn.clear();
     }
 
     /**
@@ -885,20 +813,15 @@ public class TxnContext implements AutoCloseable {
     @Override
     public void close() {
         if (TransactionalContext.isInTransaction()) {
-            TransactionalContext.getRootContext().setTxnContext(null);
-            log.warn("close()ing a {} transaction without calling commit()!", txnType);
-            if (txnType == READ_ONLY) {
-                tablesInTxn.values().forEach(t -> t.getMetrics().recordReadOnlyTxnTime(startTxSample));
-            } else {
-                tablesInTxn.values().forEach(t -> t.getMetrics().incNumTxnAborts());
-            }
+            AbstractTransactionalContext rootContext = TransactionalContext.getRootContext();
+            rootContext.setTxnContext(null);
+            log.trace("closing {} transaction without calling commit()!", rootContext);
+
             if (iDidNotStartCorfuTxn) {
                 log.warn("close() called on an inner transaction not started by CorfuStore");
             } else {
                 this.objectsView.TXAbort();
             }
         }
-        operations.clear();
-        tablesInTxn.clear();
     }
 }

@@ -17,6 +17,7 @@ public class ResourceQuota {
     @Getter
     private final long limit;
 
+    @Getter
     private final AtomicLong used = new AtomicLong();
 
     public ResourceQuota(String name, long limit) {
@@ -55,4 +56,7 @@ public class ResourceQuota {
         return Math.max(limit - used.get(), 0);
     }
 
+    public void reset() {
+        used.set(0);
+    }
 }

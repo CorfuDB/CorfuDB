@@ -36,7 +36,7 @@ public class CorfuClusterParams<T extends CorfuServerParams> implements GroupPar
     private final int numNodes = 3;
 
     /**
-     * Corfu server version, for instance: 0.3.0-SNAPSHOT
+     * Corfu server version, for instance: 0.4.0-SNAPSHOT
      */
     @NonNull
     @Getter

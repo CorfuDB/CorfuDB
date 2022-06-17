@@ -23,7 +23,6 @@ import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.exceptions.NetworkException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.security.sasl.SaslUtils;
@@ -32,7 +31,6 @@ import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.util.Sleep;
 
 import javax.annotation.Nonnull;
-import javax.net.ssl.SSLException;
 import java.util.concurrent.ThreadFactory;
 
 @Slf4j
@@ -119,15 +117,11 @@ public class CorfuNettyClientChannel extends SimpleChannelInboundHandler<Respons
     }
 
     private void setSslContext() {
-         try {
-            sslContext = SslContextConstructor.constructSslContext(false,
-                    parameters.getKeyStore(),
-                    parameters.getKsPasswordFile(),
-                    parameters.getTrustStore(),
-                    parameters.getTsPasswordFile());
-        } catch (SSLException e) {
-            throw new UnrecoverableCorfuError(e);
-        }
+        sslContext = SslContextConstructor.constructSslContext(
+                false,
+                parameters.getKeyStoreConfig(),
+                parameters.getTrustStoreConfig()
+        );
     }
 
     @Override
@@ -140,7 +134,7 @@ public class CorfuNettyClientChannel extends SimpleChannelInboundHandler<Respons
      * Channel event that is triggered when a new connected channel is created.
      *
      * @param ctx channel handler context
-     * @throws Exception
+     * @throws Exception exception
      */
     @Override
     public void channelActive(ChannelHandlerContext ctx) {

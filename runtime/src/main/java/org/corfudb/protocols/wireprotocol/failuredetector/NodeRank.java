@@ -1,23 +1,22 @@
 package org.corfudb.protocols.wireprotocol.failuredetector;
 
-import io.netty.buffer.ByteBuf;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
-import org.corfudb.protocols.CorfuProtocolCommon;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats.PartitionAttributeStats;
 
 /**
  * The rank of the node in a graph. Sorting nodes according to rank used to search for
  * decision makers, failed nodes and so on. Sorting according to:
- *  - Descending order of number of connections
- *  - Ascending order of a node name (alphabetically)
+ * - Descending order of number of connections
+ * - Ascending order of a node name (alphabetically)
  */
 @AllArgsConstructor
 @EqualsAndHashCode
 @Getter
 @ToString
-public class NodeRank implements Comparable<NodeRank> {
+public class NodeRank implements Comparable<NodeRank>, NodeRanking {
     public static final NodeRank EMPTY_NODE_RANK = new NodeRank("--", Integer.MIN_VALUE);
 
     private final String endpoint;
@@ -28,9 +27,10 @@ public class NodeRank implements Comparable<NodeRank> {
 
     /**
      * Comparator, sorting nodes according to their number of connections and alphabetically
+     *
      * @param other another node
-     * @return  a negative integer, zero, or a positive integer as this object
-     *          is less than, equal to, or greater than the specified object.
+     * @return a negative integer, zero, or a positive integer as this object
+     * is less than, equal to, or greater than the specified object.
      */
     @Override
     public int compareTo(NodeRank other) {
@@ -48,8 +48,24 @@ public class NodeRank implements Comparable<NodeRank> {
         return this.endpoint.equals(endpoint);
     }
 
-    public NodeRank(ByteBuf buf){
-        endpoint = CorfuProtocolCommon.fromBuffer(buf, String.class);
-        numConnections = CorfuProtocolCommon.fromBuffer(buf, Integer.class);
+    @AllArgsConstructor
+    @EqualsAndHashCode
+    @Getter
+    @ToString
+    public static class NodeRankByPartitionAttributes implements Comparable<NodeRankByPartitionAttributes>, NodeRanking {
+        private final String endpoint;
+        private final PartitionAttributeStats attr;
+
+        @Override
+        public int compareTo(NodeRankByPartitionAttributes other) {
+            //Descending order
+            int readOnly = Boolean.compare(other.attr.isReadOnly(), attr.isReadOnly());
+            if (readOnly != 0) {
+                return readOnly;
+            }
+
+            //Ascending order
+            return endpoint.compareTo(other.endpoint);
+        }
     }
 }

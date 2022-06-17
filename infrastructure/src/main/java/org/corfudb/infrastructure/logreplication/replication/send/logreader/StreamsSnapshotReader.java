@@ -110,7 +110,6 @@ public class StreamsSnapshotReader implements SnapshotReader {
             //mark the end of the current stream.
             currentMsgTs = snapshotTimestamp;
         }
-
         LogReplication.LogReplicationEntryMetadataMsg metadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
                 .setEntryType(LogReplicationEntryType.SNAPSHOT_MESSAGE)
                 .setTopologyConfigID(topologyConfigId)

@@ -4,9 +4,8 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
-
-import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
+import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 
@@ -46,7 +45,11 @@ public class NettyLogReplicationClientChannelAdapter extends IClientChannelAdapt
             ClusterDescriptor remoteCluster = getRemoteClusterDescriptor();
             for (NodeDescriptor node : remoteCluster.getNodesDescriptors()) {
                 log.info("Create Netty Channel to remote node {}@{}:{}", node.getNodeId(), node.getHost(), node.getPort());
-                CorfuNettyClientChannel channel = new CorfuNettyClientChannel(node, getRouter().getParameters().getNettyEventLoop(), this);
+                CorfuNettyClientChannel channel = new CorfuNettyClientChannel(
+                        node,
+                        getRouter().getParameters().getNettyEventLoop(),
+                        this
+                );
                 this.channels.put(node.getNodeId(), channel);
             }
         });
@@ -89,5 +92,10 @@ public class NettyLogReplicationClientChannelAdapter extends IClientChannelAdapt
 
     public void completeExceptionally(Exception exception) {
         getRouter().completeAllExceptionally(exception);
+    }
+
+    @Override
+    public void resetRemoteLeader() {
+        // No-op
     }
 }

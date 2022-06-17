@@ -4,9 +4,13 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.ToString;
+import org.corfudb.protocols.wireprotocol.failuredetector.FileSystemStats;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
+
+import java.util.Optional;
 
 /**
  * Contains a Node's state:
@@ -25,26 +29,25 @@ import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeC
 @EqualsAndHashCode
 public class NodeState {
 
+    @NonNull
     private final NodeConnectivity connectivity;
 
-
+    @NonNull
+    private final Optional<FileSystemStats> fileSystem;
     /**
      * Sequencer metrics of the node.
      */
+    @NonNull
     private final SequencerMetrics sequencerMetrics;
 
     public static NodeState getUnavailableNodeState(String endpoint){
-        return new NodeState(
-                NodeConnectivity.unavailable(endpoint),
-                SequencerMetrics.UNKNOWN
-        );
+        NodeConnectivity unavailable = NodeConnectivity.unavailable(endpoint);
+        return new NodeState(unavailable, Optional.empty(), SequencerMetrics.UNKNOWN);
     }
 
     public static NodeState getNotReadyNodeState(String endpoint){
-        return new NodeState(
-                NodeConnectivity.notReady(endpoint),
-                SequencerMetrics.UNKNOWN
-        );
+        NodeConnectivity notReady = NodeConnectivity.notReady(endpoint);
+        return new NodeState(notReady, Optional.empty(), SequencerMetrics.UNKNOWN);
     }
 
     public boolean isConnected() {

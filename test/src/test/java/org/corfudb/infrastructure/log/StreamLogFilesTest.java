@@ -25,6 +25,8 @@ import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
+import org.corfudb.infrastructure.log.FileSystemAgent.FileSystemConfig;
+import org.corfudb.infrastructure.log.StreamLog.PersistenceMode;
 import org.corfudb.infrastructure.log.StreamLogFiles.Checksum;
 import org.corfudb.infrastructure.log.LogFormat.Metadata;
 import org.corfudb.infrastructure.log.LogFormat.LogHeader;
@@ -42,8 +44,7 @@ import org.junit.Test;
 /**
  * Created by maithem on 11/2/16.
  */
-public class
-StreamLogFilesTest extends AbstractCorfuTest {
+public class StreamLogFilesTest extends AbstractCorfuTest {
 
     private String getDirPath() {
         return PARAMETERS.TEST_TEMP_DIR;
@@ -746,8 +747,14 @@ StreamLogFilesTest extends AbstractCorfuTest {
         parentDirFile.close();
         childDirFile.close();
 
-        long parentSize = StreamLogFiles.estimateSize(parentDir.toPath());
-        long childDirSize = StreamLogFiles.estimateSize(childDir.toPath());
+
+        final double limit = 100.0;
+        final PersistenceMode mode = PersistenceMode.DISK;
+        FileSystemAgent.init(new FileSystemConfig(parentDir.toPath(), limit, mode));
+        long parentSize = FileSystemAgent.getResourceQuota().getUsed().get();
+
+        FileSystemAgent.init(new FileSystemConfig(childDir.toPath(), limit, mode));
+        long childDirSize = FileSystemAgent.getResourceQuota().getUsed().get();
 
         assertThat(parentSize).isEqualTo(parentDirFilePayloadSize + childDirFilePayloadSize);
         assertThat(childDirSize).isEqualTo(childDirFilePayloadSize);

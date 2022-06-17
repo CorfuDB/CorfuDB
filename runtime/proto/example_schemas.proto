@@ -19,6 +19,11 @@ message Uuid {
     fixed64 lsb = 2;
 }
 
+message SnapshotSyncPluginValue {
+    option (org.corfudb.runtime.table_schema).stream_tag = "snapshotSyncPlugin";
+    string value = 1;
+}
+
 message ClusterUuidMsg {
     option (org.corfudb.runtime.table_schema).stream_tag = "cluster_manager_test";
     fixed64 msb = 1;
@@ -32,18 +37,24 @@ message ExampleValue {
     option (org.corfudb.runtime.table_schema).is_federated = true;
 
     string payload = 1;
-    fixed64 anotherKey = 2 [(org.corfudb.runtime.schema).secondary_key = true];
-    Uuid uuid = 3 [(org.corfudb.runtime.schema).secondary_key = true];
+    fixed64 anotherKey = 2;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "anotherKey"};
+    Uuid uuid = 3;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "uuid"};
     fixed64 entryIndex = 4;
-    NonPrimitiveValue non_primitive_field_level_0 = 5 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "non_primitive_field_level_0.key_1_level_1"},
-                                                      (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "non_primitive_field_level_0.key_2_level_1.key_1_level_2"}];
+    NonPrimitiveValue non_primitive_field_level_0 = 5;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "non_primitive_field_level_0.key_1_level_1"};
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "non_primitive_field_level_0.key_2_level_1.key_1_level_2"};
 }
 
 message ActivitySchedule {
     string activity = 1;
-    Time time = 2 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "time.day" index_name: "day" }];
-    Day freeDay = 3 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "freeDay" index_name: "free" }];
-    Day optionalDay = 4 [(org.corfudb.runtime.schema).secondary_key = true];
+    Time time = 2;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "time.day" index_name: "day" };
+    Day freeDay = 3;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "freeDay" index_name: "free" };
+    Day optionalDay = 4;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "optionalDay"};
 }
 
 message Time {
@@ -77,32 +88,37 @@ message NonPrimitiveNestedValue {
     fixed64 level_number = 2;
 }
 
-message InvalidExampleValue {
+message InvalidExampleNonExistentIndexField {
     string field1 = 1;
-    NonPrimitiveValue field2 = 2 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "field1.key1Level1"},
-                                 (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "field2.key2Level1.key1Level2"}];
+    NonPrimitiveValue field2 = 2;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "field3"};
 }
 
 message InvalidNestedSecondaryIndex {
     string field1 = 1;
-    NonPrimitiveValue field2 = 2 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "field2.key_1_level_1"},
-                                 (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "field2.key_2_level_1.deprecated"}];
+    NonPrimitiveValue field2 = 2;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "field2.key_1_level_1"};
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "field2.key_2_level_1.deprecated"};
 }
 
 message InvalidFullNestedSecondaryIndex {
     string field1 = 1;
-    NonPrimitiveValue field2 = 2 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "field2.key_1_level_1.key_1_level_2"},
-                                 (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "field2.key_2_level_1.key_1_level_2"}];
+    NonPrimitiveValue field2 = 2;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "field2.key_1_level_1.key_1_level_2"};
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "field2.key_2_level_1.key_1_level_2"};
 }
 
 message NotNestedSecondaryIndex {
     string field1 = 1;
-    NonPrimitiveValue field2 = 2 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "field2"}];
-    fixed64 field3 = 3 [(org.corfudb.runtime.schema).nested_secondary_key = {index_path: "field3"}];
+    NonPrimitiveValue field2 = 2;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "field2"};
+    fixed64 field3 = 3;
+    option (org.corfudb.runtime.table_schema).secondary_key = {index_path: "field3"};
 }
 
 message ClassRoom {
-    repeated Student students = 1 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "students.age"}];
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "students.age"};
+    repeated Student students = 1;
     Infrastructure classInfra = 2;
 }
 
@@ -112,46 +128,58 @@ message Student {
 }
 
 message Person {
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "phoneNumber.mobile"};
     string name = 1;
     fixed64 age = 2;
-    PhoneNumber phoneNumber = 3 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "phoneNumber.mobile"}];
+    PhoneNumber phoneNumber = 3;
     Children children = 4;
 }
 
 message InvalidAdultDefaultIndexName {
-    Person person = 1 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "person.age"},
-                      (org.corfudb.runtime.schema).nested_secondary_key = { index_path:"person.children.child.age"}];
+    Person person = 1;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "person.age"};
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "person.children.child.age"};
     Company work = 2;
 }
 
 message InvalidAdultCustomIndexName {
-    Person person = 1 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "person.age" index_name: "howOld"},
-                      (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "person.children.child.age" index_name: "howOld"}];
+    Person person = 1;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "person.age" index_name: "howOld"};
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "person.children.child.age" index_name: "howOld"};
     Company work = 2;
 }
 
 message Adult {
-    Person person = 1 [
-                       // Default Index Name will be 'age'
-                       (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "person.age"},
-                       // Explicit (custom) Index Name
-                       (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "person.children.child.age" index_name: "kidsAge" },
-                       // Index on a non-primitive type (which won't always be set)
-                       (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "person.children.child"}];
-    Company work = 2 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "work.company_id" }];
-    repeated Address addresses = 3 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "addresses.unique_address_id" index_name: "address"}];
+    Person person = 1;
+    // Default Index Name will be 'age'
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "person.age"};
+    // Explicit (custom) Index Name
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "person.children.child.age" index_name: "kidsAge" };
+    // Index on a non-primitive type (which won't always be set)
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "person.children.child"};
+
+    Company work = 2;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "work.company_id" };
+
+    repeated Address addresses = 3;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "addresses.unique_address_id" index_name: "address"};
 }
 
 message SportsProfessional {
     Person person  = 1;
+    Hobby profession = 3;
     // Non-Repeated Field followed by oneOf non-primitive sub-field
-    Hobby profession = 3 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "profession.basket" index_name: "basketPlayers"},
-                             (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "profession.baseball" index_name: "baseballPlayers"}];
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "profession.basket" index_name: "basketPlayers"};
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "profession.baseball" index_name: "baseballPlayers"};
+
+    repeated Hobby hobby = 4;
     // Repeated Field followed by oneOf non-primitive sub-field
-    repeated Hobby hobby = 4 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "hobby.basket" index_name: "basketAsHobby"},
-                             (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "hobby.baseball" index_name: "baseballAsHobby"}];
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "hobby.basket" index_name: "basketAsHobby"};
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "hobby.baseball" index_name: "baseballAsHobby"};
+
+    repeated TrainingPlan training = 5;
     // Repeated Field followed by repeated field sub-field
-    repeated TrainingPlan training = 5 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "training.exercises" }];
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "training.exercises" };
 }
 
 message TrainingPlan {
@@ -198,12 +226,14 @@ message PhoneNumber {
 
 message Office {
     string office_nickname = 1;
-    repeated Department departments = 2 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "departments.members.phoneNumbers"}];
+    repeated Department departments = 2;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "departments.members.phoneNumbers"};
 }
 
 message Company {
     Uuid company_id = 1;
-    repeated Office office = 2 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "office.departments"}];
+    repeated Office office = 2;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "office.departments"};
 }
 
 message Department {
@@ -217,8 +247,9 @@ message Member {
 }
 
 message School {
-    repeated ClassRoom classRooms = 1 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "classRooms.classInfra.numberDesks"},
-                                      (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "classRooms.classInfra.others"}];
+    repeated ClassRoom classRooms = 1;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "classRooms.classInfra.numberDesks"};
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "classRooms.classInfra.others"};
 }
 
 message Infrastructure {
@@ -228,7 +259,8 @@ message Infrastructure {
 }
 
 message Network {
-    repeated Device devices = 1 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "devices.router"}];
+    repeated Device devices = 1;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "devices.router"};
 }
 
 message Device {
@@ -243,18 +275,23 @@ message Router {
 }
 
 message ContactBook {
-    repeated Contact contacts = 1 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "contacts.number"},
-                                  (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "contacts.address.city"},
-                                  (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "contacts.number.mobile"},
-                                  (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "contacts.photo.file"}];
-    ContactBookId id = 2 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "id.uuid"},
-                          (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "id.name"}];
+    repeated Contact contacts = 1;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "contacts.number"};
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "contacts.address.city"};
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "contacts.number.mobile"};
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "contacts.photo.file"};
+
+    ContactBookId id = 2;
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "id.uuid"};
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "id.name"};
     oneof type {
-        // If physical Contact Book, brand
-        string brand = 3 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "brand"}];
-        // If virtual Contact Book, application for contacts
-        string application = 4 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "application"}];
+        string brand = 3;
+        string application = 4;
     }
+    // If physical Contact Book, brand
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "brand"};
+    // If virtual Contact Book, application for contacts
+    option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "application"};
 }
 
 message ContactBookId {

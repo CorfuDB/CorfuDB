@@ -71,7 +71,7 @@ public class PollReport {
      * It doesn't contain nodes answered with WrongEpochException.
      */
     public Set<String> getReachableNodes() {
-        Set<String> connectedNodes =  clusterState.getLocalNodeConnectivity().getConnectedNodes();
+        Set<String> connectedNodes = clusterState.getLocalNodeConnectivity().getConnectedNodes();
         return Sets.difference(connectedNodes, wrongEpochs.keySet());
     }
 

@@ -18,7 +18,34 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.handler.timeout.IdleStateHandler;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.CorfuProtocolCommon;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
+import org.corfudb.protocols.wireprotocol.ClientHandshakeHandler;
+import org.corfudb.protocols.wireprotocol.ClientHandshakeHandler.ClientHandshakeEvent;
+import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
+import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
+import org.corfudb.runtime.RuntimeParameters;
+import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.proto.RpcCommon;
+import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg.ErrorCase;
+import org.corfudb.runtime.proto.service.CorfuMessage;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
+import org.corfudb.security.sasl.SaslUtils;
+import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyClient;
+import org.corfudb.security.tls.SslContextConstructor;
+import org.corfudb.util.CFUtils;
+import org.corfudb.util.NodeLocator;
+import org.corfudb.util.Sleep;
 
+import javax.annotation.Nonnull;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -31,37 +58,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
-import javax.annotation.Nonnull;
-import javax.net.ssl.SSLException;
-
-import lombok.Getter;
-import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.protocols.CorfuProtocolCommon;
-import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
-import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
-import org.corfudb.protocols.wireprotocol.ClientHandshakeHandler;
-import org.corfudb.protocols.wireprotocol.ClientHandshakeHandler.ClientHandshakeEvent;
-import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
-import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
-import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
-import org.corfudb.runtime.exceptions.NetworkException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.runtime.proto.RpcCommon;
-import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg.ErrorCase;
-import org.corfudb.runtime.proto.service.CorfuMessage;
-import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
-import org.corfudb.runtime.RuntimeParameters;
-import org.corfudb.security.sasl.SaslUtils;
-import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyClient;
-import org.corfudb.security.tls.SslContextConstructor;
-import org.corfudb.util.CFUtils;
-import org.corfudb.util.NodeLocator;
-import org.corfudb.util.Sleep;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
@@ -206,15 +202,11 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
         shutdown = true;
 
         if (parameters.isTlsEnabled()) {
-            try {
-                sslContext = SslContextConstructor.constructSslContext(false,
-                        parameters.getKeyStore(),
-                        parameters.getKsPasswordFile(),
-                        parameters.getTrustStore(),
-                        parameters.getTsPasswordFile());
-            } catch (SSLException e) {
-                throw new UnrecoverableCorfuError(e);
-            }
+            sslContext = SslContextConstructor.constructSslContext(
+                    false,
+                    parameters.getKeyStoreConfig(),
+                    parameters.getTrustStoreConfig()
+            );
         }
 
         addClient(new BaseHandler());

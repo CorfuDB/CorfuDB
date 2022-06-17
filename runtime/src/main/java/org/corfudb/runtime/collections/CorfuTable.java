@@ -68,7 +68,7 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     // gets block on parallel stream, because the pool is exhausted with threads that are trying to acquire the VLO
     // look, which creates a circular dependency. In other words, a deadlock.
 
-    private final static ForkJoinPool pool = new ForkJoinPool(Math.max(Runtime.getRuntime().availableProcessors() - 1, 1),
+    protected final static ForkJoinPool pool = new ForkJoinPool(Math.max(Runtime.getRuntime().availableProcessors() - 1, 1),
             pool -> {
                 final ForkJoinWorkerThread worker = ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(pool);
                 worker.setName("CorfuTable-Forkjoin-pool-" + worker.getPoolIndex());
@@ -219,6 +219,7 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     @Override
     @Accessor
     public V get(@ConflictParameter Object key) {
+
         return mainMap.get(key);
     }
 

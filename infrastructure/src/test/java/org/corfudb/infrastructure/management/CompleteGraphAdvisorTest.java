@@ -143,13 +143,15 @@ public class CompleteGraphAdvisorTest {
         assertTrue(nodeAFailedServer.isPresent());
         assertEquals(new NodeRank("c", 2), nodeAFailedServer.get());
 
-        //Node B knows that node A is a decision maker, so do nothing
+        //Node B can detect that node C has failed
+        // (but in the end node C will be ignored by Node B because of a decision maker)
         Optional<NodeRank> nodeBFailedServer = nodeBAdvisor.failedServer(nodeBClusterState);
-        assertFalse(nodeBFailedServer.isPresent());
+        assertTrue(nodeBFailedServer.isPresent());
 
-        //Node C know that node A is a decision maker, so do nothing
+        //Node C will detect its own failure
+        //(but in the end node this failure will be ignored because of a decision maker)
         Optional<NodeRank> nodeCFailedServer = nodeCAdvisor.failedServer(nodeCClusterState);
-        assertFalse(nodeCFailedServer.isPresent());
+        assertTrue(nodeCFailedServer.isPresent());
     }
 
     @Test

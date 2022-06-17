@@ -55,6 +55,7 @@ public class LogReplicationServer extends AbstractServer {
 
     private final AtomicBoolean isLeader = new AtomicBoolean(false);
     private final AtomicBoolean isActive = new AtomicBoolean(false);
+    private final AtomicBoolean isStandby = new AtomicBoolean(false);
 
     /**
      * RequestHandlerMethods for the LogReplication server
@@ -70,13 +71,13 @@ public class LogReplicationServer extends AbstractServer {
                                 @Nonnull LogReplicationMetadataManager metadataManager, String corfuEndpoint,
                                 long topologyConfigId, String localNodeId) {
         this(context, metadataManager, new LogReplicationSinkManager(corfuEndpoint, logReplicationConfig,
-                metadataManager, context, topologyConfigId));
-        this.localNodeId = localNodeId;
+                metadataManager, context, topologyConfigId), localNodeId);
     }
 
     public LogReplicationServer(@Nonnull ServerContext context,
                                 @Nonnull LogReplicationMetadataManager metadataManager,
-                                @Nonnull LogReplicationSinkManager sinkManager) {
+                                @Nonnull LogReplicationSinkManager sinkManager, String localNodeId) {
+        this.localNodeId = localNodeId;
         this.metadataManager = metadataManager;
         this.sinkManager = sinkManager;
         this.executor = context.getExecutorService(1, "LogReplicationServer-");
@@ -98,7 +99,8 @@ public class LogReplicationServer extends AbstractServer {
     /* ************ Server Handlers ************ */
 
     /**
-     * Given a log-entry request message, send back the log-data entries.
+     * Given a log-entry request message, send back an acknowledgement
+     * after processing the message.
      *
      * @param request leadership query
      * @param ctx     enables a {@link ChannelHandler} to interact with its
@@ -111,7 +113,7 @@ public class LogReplicationServer extends AbstractServer {
                                       @Nonnull IServerRouter router) {
         log.trace("Log Replication Entry received by Server.");
 
-        if (isLeader(request, ctx, router)) {
+        if (isStandby.get() && isLeader(request, ctx, router, true)) {
             // Forward the received message to the Sink Manager for apply
             LogReplicationEntryMsg ack =
                     sinkManager.receive(request.getPayload().getLrEntry());
@@ -128,6 +130,8 @@ public class LogReplicationServer extends AbstractServer {
                 ResponseMsg response = getResponseMsg(responseHeader, payload);
                 router.sendResponse(response, ctx);
             }
+        } else if (!isStandby.get()) {
+            log.warn("Dropping log replication entry as this cluster's role is not Standby");
         } else {
             log.warn("Dropping log replication entry as this node is not the leader.");
         }
@@ -148,7 +152,7 @@ public class LogReplicationServer extends AbstractServer {
                                        @Nonnull IServerRouter router) {
         log.info("Log Replication Metadata Request received by Server.");
 
-        if (isLeader(request, ctx, router)) {
+        if (isLeader(request, ctx, router, false)) {
             LogReplicationMetadataManager metadataMgr = sinkManager.getLogReplicationMetadataManager();
             ResponseMsg response = metadataMgr.getMetadataResponse(getHeaderMsg(request.getHeader()));
             log.info("Send Metadata response :: {}", TextFormat.shortDebugString(response.getPayload()));
@@ -177,8 +181,11 @@ public class LogReplicationServer extends AbstractServer {
                                                      @Nonnull ChannelHandlerContext ctx,
                                                      @Nonnull IServerRouter router) {
         log.debug("Log Replication Query Leadership Request received by Server.");
+        if (!isStandby.get() && isLeader.get()) {
+            log.warn("This node is the leader but the current role of the cluster is not STANDBY");
+        }
         HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
-        ResponseMsg response = getLeadershipResponse(responseHeader, isLeader.get(), localNodeId);
+        ResponseMsg response = getLeadershipResponse(responseHeader, isLeader.get(), localNodeId, isStandby.get());
         router.sendResponse(response, ctx);
     }
 
@@ -197,13 +204,22 @@ public class LogReplicationServer extends AbstractServer {
      */
     protected synchronized boolean isLeader(@Nonnull RequestMsg request,
                                             @Nonnull ChannelHandlerContext ctx,
-                                            @Nonnull IServerRouter router) {
+                                            @Nonnull IServerRouter router, boolean isLogEntry) {
         // If the current cluster has switched to the active role (no longer the receiver) or it is no longer the leader,
         // skip message processing (drop received message) and nack on leadership (loss of leadership)
         // This will re-trigger leadership discovery on the sender.
         boolean lostLeadership = isActive.get() || !isLeader.get();
 
         if (lostLeadership) {
+
+            if (isLogEntry) {
+                LogReplicationEntryMsg entryMsg = request.getPayload().getLrEntry();
+                LogReplicationEntryType entryType = entryMsg.getMetadata().getEntryType();
+                log.warn("Received message of type {} while NOT LEADER. snapshotSyncSeqNumber={}, ts={}, syncRequestId={}", entryType,
+                        entryMsg.getMetadata().getSnapshotSyncSeqNum(), entryMsg.getMetadata().getTimestamp(),
+                        entryMsg.getMetadata().getSyncRequestId());
+            }
+
             log.warn("This node has changed, active={}, leader={}. Dropping message type={}, id={}", isActive.get(),
                     isLeader.get(), request.getPayload().getPayloadCase(), request.getHeader().getRequestId());
             HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
@@ -220,7 +236,15 @@ public class LogReplicationServer extends AbstractServer {
         isLeader.set(leader);
     }
 
+    public void stopSink() {
+        sinkManager.stopOnLeadershipLoss();
+    }
+
     public synchronized void setActive(boolean active) {
         isActive.set(active);
+    }
+
+    public synchronized void setStandby(boolean standby) {
+        isStandby.set(standby);
     }
 }

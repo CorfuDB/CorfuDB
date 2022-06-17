@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
@@ -26,6 +27,7 @@ import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 
 import javax.annotation.Nonnull;
+import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -37,18 +39,12 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class ObjectsView extends AbstractView {
 
-    /**
-     * The Transaction stream is used to log/write successful transactions from different clients.
-     * Transaction data and meta data can be obtained by reading this stream.
-     */
-    @Deprecated
-    public static final UUID TRANSACTION_STREAM_ID = CorfuRuntime.getStreamID("Transaction_Stream");
+    private static final String LOG_REPLICATOR_STREAM_NAME =
+        "LR_Transaction_Stream";
 
-    // We are temporarily naming this stream with the same name as TRANSACTION_STREAM_ID to avoid breaking LR code
-    // while transition to UFO is completed (once migration is complete to UFO this stream can be renamed)
-    // add a prefix to the name: e.g., org.corfudb.logreplication.transactionstream
-    static final StreamTagInfo LOG_REPLICATOR_STREAM_INFO =
-            new StreamTagInfo("Transaction_Stream", CorfuRuntime.getStreamID("Transaction_Stream"));
+    public static final StreamTagInfo LOG_REPLICATOR_STREAM_INFO =
+            new StreamTagInfo(LOG_REPLICATOR_STREAM_NAME,
+                CorfuRuntime.getStreamID(LOG_REPLICATOR_STREAM_NAME));
 
     /**
      * @return the ID of the log replicator stream.
@@ -56,10 +52,6 @@ public class ObjectsView extends AbstractView {
     public static UUID getLogReplicatorStreamId() {
         return LOG_REPLICATOR_STREAM_INFO.getStreamId();
     }
-
-    @Getter
-    @Setter
-    boolean transactionLogging = false;
 
     @Getter
     Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();
@@ -162,9 +154,23 @@ public class ObjectsView extends AbstractView {
         log.trace("TXEnd[{}] time={} ms", context, totalTime);
 
         try {
-            return TransactionalContext.getCurrentContext().commitTransaction();
+            long commitAddress = TransactionalContext.getCurrentContext().commitTransaction();
+            MicroMeterUtils.time(Duration.ofMillis(System.currentTimeMillis() - context.getStartTime()),
+                    "transaction.duration");
+            if (commitAddress == Address.NON_ADDRESS) {
+                // If no streams were touched or only empty streams were touched, the returned address would be -1
+                // But -1 can be detrimental to stream subscription which is just looking for a safe spot
+                // to resume subscription from, so instead return the address from the snapshot token taken.
+                long snapshotAddress = context.getSnapshotTimestamp().getSequence();
+                if (snapshotAddress >= 0) {
+                    // Perform a read at this address to force materialization.
+                    runtime.getAddressSpaceView().read(snapshotAddress);
+                }
+                return snapshotAddress;
+            }
+            return commitAddress;
         } catch (TransactionAbortedException e) {
-            log.warn("TXEnd[{}] Aborted Exception {}", context, e);
+            log.warn("TXEnd[{}] Aborted Exception ", context, e);
             TransactionalContext.getCurrentContext().abortTransaction(e);
             throw e;
         } catch (NetworkException | WriteSizeException | QuotaExceededException e) {
@@ -233,7 +239,7 @@ public class ObjectsView extends AbstractView {
     @AllArgsConstructor
     @Getter
     @EqualsAndHashCode
-    static final class StreamTagInfo {
+    public static final class StreamTagInfo {
         @NonNull
         private final String tagName;
         @NonNull

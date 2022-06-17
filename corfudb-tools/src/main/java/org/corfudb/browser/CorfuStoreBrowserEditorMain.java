@@ -7,6 +7,7 @@ import com.google.common.base.Preconditions;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 
@@ -31,7 +32,9 @@ public class CorfuStoreBrowserEditorMain {
         listTags,
         listTablesForTag,
         listTagsForTable,
-        listTagsMap
+        listTagsMap,
+        printMetadataMap,
+        addRecord
     }
 
     private static final String USAGE = "Usage: corfu-browser --host=<host> " +
@@ -41,10 +44,12 @@ public class CorfuStoreBrowserEditorMain {
         "[--truststore=<truststore_file>] [--truststore_password=<truststore_password>] " +
         "[--diskPath=<pathToTempDirForLargeTables>] "+
         "[--numItems=<numItems>] "+
+        "[--address=<address>] "+
         "[--batchSize=<itemsPerTransaction>] "+
         "[--itemSize=<sizeOfEachRecordValue>] "
         + "[--keyToEdit=<keyToEdit>] [--newRecord=<newRecord>] [--tag=<tag>]"
         + "[--keyToDelete=<keyToDelete>]"
+        + "[--keyToAdd=<keyToAdd>] [--valueToAdd=<valueToAdd>] [--metadataToAdd=<metadataToAdd>]"
         + "[--tlsEnabled=<tls_enabled>]\n"
         + "Options:\n"
         + "--host=<host>   Hostname\n"
@@ -61,11 +66,15 @@ public class CorfuStoreBrowserEditorMain {
         + "--truststore_password=<truststore_password> Truststore Password\n"
         + "--diskPath=<pathToTempDirForLargeTables> Path to Temp Dir\n"
         + "--numItems=<numItems> Total Number of items for loadTable\n"
+        + "--address=<address> Log global address\n"
         + "--batchSize=<batchSize> Number of records per transaction for loadTable\n"
         + "--itemSize=<itemSize> Size of each item's payload for loadTable\n"
         + "--keyToEdit=<keyToEdit> Key of the record to edit\n"
         + "--keyToDelete=<keyToDelete> Key of the record to be deleted\n"
         + "--newRecord=<newRecord> New Edited record to insert\n"
+        + "--keyToAdd=<keyToAdd>"
+        + "--valueToAdd=<valueToAdd>"
+        + "--metadataToAdd=<metadataToAdd>"
         + "--tlsEnabled=<tls_enabled>";
 
     public static void main(String[] args) {
@@ -84,12 +93,13 @@ public class CorfuStoreBrowserEditorMain {
             String operation = opts.get("--operation").toString();
 
             final int SYSTEM_EXIT_ERROR_CODE = 1;
-            final int SYSTEM_DOWN_RETRIES = 5;
+            final int SYSTEM_DOWN_RETRIES = 60;
             CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder
                 builder = CorfuRuntime.CorfuRuntimeParameters.builder()
                 .cacheDisabled(true)
                 .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
                 .systemDownHandlerTriggerLimit(SYSTEM_DOWN_RETRIES)
+                .priorityLevel(CorfuMessage.PriorityLevel.HIGH)
                 .tlsEnabled(tlsEnabled);
             if (tlsEnabled) {
                 String keystore = opts.get("--keystore").toString();
@@ -184,6 +194,37 @@ public class CorfuStoreBrowserEditorMain {
                             "Key To Delete is Null.");
                     browser.deleteRecord(namespace, tableName, keyToDelete);
                     break;
+                case addRecord:
+                    String keyToAdd = null;
+                    String valueToAdd = null;
+                    String metadataToAdd = null;
+
+                    String keyArg = "--keyToAdd";
+                    String valueArg = "--valueToAdd";
+                    String metadataArg = "--metadataToAdd";
+
+                    if (opts.get(keyArg) != null) {
+                        keyToAdd = String.valueOf(opts.get(keyArg));
+                    }
+                    if (opts.get(valueArg) != null) {
+                        valueToAdd = String.valueOf(opts.get(valueArg));
+                    }
+                    if (opts.get(metadataArg) != null) {
+                        metadataToAdd = String.valueOf(opts.get(metadataArg));
+                    }
+                    Preconditions.checkArgument(isValid(namespace),
+                        "Namespace is null or empty.");
+                    Preconditions.checkArgument(isValid(tableName),
+                        "Table name is null or empty.");
+                    Preconditions.checkNotNull(keyToAdd,
+                        "Key To Add is Null.");
+                    Preconditions.checkNotNull(valueToAdd,
+                        "New Value is null");
+                    Preconditions.checkNotNull(metadataToAdd,
+                        "New Metadata is null");
+                    browser.addRecord(namespace, tableName, keyToAdd,
+                        valueToAdd, metadataToAdd);
+                    break;
                 case loadTable:
                     int numItems = 1000;
                     if (opts.get("--numItems") != null) {
@@ -239,6 +280,13 @@ public class CorfuStoreBrowserEditorMain {
                 case listAllProtos:
                     browser.printAllProtoDescriptors();
                     break;
+                case printMetadataMap:
+                    if (opts.get("--address") != null) {
+                        long address = Integer.parseInt(opts.get("--address").toString());
+                        browser.printMetadataMap(address);
+                    } else {
+                        log.error("Print metadata map for a specific address. Specify using tag --address");
+                    }
                 default:
                     break;
             }

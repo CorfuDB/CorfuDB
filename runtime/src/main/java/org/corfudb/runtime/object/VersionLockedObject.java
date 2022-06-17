@@ -1,10 +1,9 @@
 package org.corfudb.runtime.object;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Counter;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.exceptions.NoRollbackException;
@@ -121,7 +120,8 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      */
     private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
 
-    private final Optional<AtomicLong> noRollBackExceptionCounter;
+    private static final String noRollbackName = "vlo.no_rollback_exception.count";
+    private final Optional<Counter> noRollBackExceptionCounter;
 
     /*
      * The VersionLockedObject maintains a versioned object which is backed by an ISMRStream,
@@ -145,8 +145,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
         this.pendingUpcalls = ConcurrentHashMap.newKeySet();
         this.upcallResults = new ConcurrentHashMap<>();
         lock = new StampedLock();
-        noRollBackExceptionCounter = MicroMeterUtils.gauge("vlo.no_rollback_exception.count",
-                new AtomicLong(0L));
+        noRollBackExceptionCounter = MicroMeterUtils.counter(noRollbackName);
     }
 
     /**
@@ -197,25 +196,29 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      * @param accessFunction            A function which allows the user to directly access
      *                                  the object while locked in the state enforced by
      *                                  either the directAccessCheckFunction or updateFunction.
+     * @param versionAccessed           A function which allows for learning the version of
+     *                                  the object during access
      * @param <R>                       The type of the access function return.
      * @return Returns the access function.
      */
     public <R> R access(Function<VersionLockedObject<T>, Boolean> directAccessCheckFunction,
                         Consumer<VersionLockedObject<T>> updateFunction,
-                        Function<T, R> accessFunction) {
+                        Function<T, R> accessFunction,
+                        Consumer<Long> versionAccessed) {
         // First, we try to do an optimistic read on the object, in case it
         // meets the conditions for direct access.
         long ts = lock.tryOptimisticRead();
         if (ts != 0) {
             try {
                 if (directAccessCheckFunction.apply(this)) {
+                    long vloAccessedVersion = getVersionUnsafe();
                     log.trace("Access [{}] Direct (optimistic-read) access at {}",
-                            this, getVersionUnsafe());
+                            this, vloAccessedVersion);
                     R ret = accessFunction.apply(object.getContext(ICorfuExecutionContext.DEFAULT));
 
-                    long versionForCorrectness = getVersionUnsafe();
                     if (lock.validate(ts)) {
-                        correctnessLogger.trace("Version, {}", versionForCorrectness);
+                        correctnessLogger.trace("Version, {}", vloAccessedVersion);
+                        versionAccessed.accept(vloAccessedVersion);
                         return ret;
                     }
                 }
@@ -244,15 +247,19 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
             }
             // Check if direct access is possible (unlikely).
             if (directAccessCheckFunction.apply(this)) {
-                log.trace("Access [{}] Direct (writelock) access at {}", this, getVersionUnsafe());
+                long vloAccessedVersion = getVersionUnsafe();
+                log.trace("Access [{}] Direct (writelock) access at {}", this, vloAccessedVersion);
                 R ret = accessFunction.apply(object.getContext(ICorfuExecutionContext.DEFAULT));
-                correctnessLogger.trace("Version, {}", getVersionUnsafe());
+                correctnessLogger.trace("Version, {}", vloAccessedVersion);
+                versionAccessed.accept(vloAccessedVersion);
                 return ret;
             }
             // If not, perform the update operations
             updateFunction.accept(this);
-            correctnessLogger.trace("Version, {}", getVersionUnsafe());
-            log.trace("Access [{}] Updated (writelock) access at {}", this, getVersionUnsafe());
+            long vloAccessedVersion = getVersionUnsafe();
+            correctnessLogger.trace("Version, {}", vloAccessedVersion);
+            log.trace("Access [{}] Updated (writelock) access at {}", this, vloAccessedVersion);
+            versionAccessed.accept(vloAccessedVersion);
             return accessFunction.apply(object.getContext(ICorfuExecutionContext.DEFAULT));
             // And perform the access
         } finally {
@@ -305,7 +312,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
             log.trace("Rollback[{}] completed", this);
         } catch (NoRollbackException nre) {
             log.warn("SyncObjectUnsafe[{}] to {} failed {}", this, timestamp, nre);
-            noRollBackExceptionCounter.ifPresent(AtomicLong::getAndIncrement);
+            noRollBackExceptionCounter.ifPresent(Counter::increment);
             resetUnsafe();
         }
     }
@@ -590,7 +597,9 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
             IUndoRecordFunction<T> undoRecordTarget =
                     undoRecordFunctionMap.get(entry.getSMRMethod());
             // If there was no previously calculated undo entry
-            if (undoRecordTarget != null) {
+            // The undo records shouldn't be computed for objects with a MONOTONIC version
+            // policy because they simply don't sync backwards to older versions.
+            if (undoRecordTarget != null && object.getVersionPolicy() != ICorfuVersionPolicy.MONOTONIC) {
                 // Calculate the undo record.
                 entry.setUndoRecord(undoRecordTarget
                         .getUndoRecord(object.getContext(context), entry.getSMRArguments()));
@@ -674,6 +683,8 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                 ? "Optimistic" : "to " + timestamp);
         long syncTo = (timestamp == Address.OPTIMISTIC) ? Address.MAX : timestamp;
 
+        AtomicLong numBytes = new AtomicLong();
+        AtomicLong numEntries = new AtomicLong();
         Runnable syncStreamRunnable = () ->
                 stream.streamUpTo(syncTo)
                         .forEachOrdered(entry -> {
@@ -689,6 +700,8 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                                     pendingUpcalls.remove(entry.getGlobalAddress());
                                 }
                                 entry.setUpcallResult(res);
+                                numEntries.getAndIncrement();
+                                numBytes.getAndAdd(entry.getSerializedSize()==null ? 0: entry.getSerializedSize());
                             } catch (Exception e) {
                                 log.error("Sync[{}] Error: Couldn't execute upcall due to {}", this, e);
                                 throw new UnrecoverableCorfuError(e);
@@ -696,6 +709,8 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                         });
         MicroMeterUtils.time(syncStreamRunnable, "vlo.sync.timer",
                 "streamId", getID().toString());
+        MicroMeterUtils.measure(numBytes.longValue(), "vlo.sync.read_size");
+        MicroMeterUtils.measure(numEntries.longValue(), "vlo.sync.read_entries");
     }
 
     /**
@@ -710,20 +725,9 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
             log.trace("OptimisticRollback[{}] complete", this);
         } catch (NoRollbackException nre) {
             log.warn("OptimisticRollback[{}] failed", this);
-            noRollBackExceptionCounter.ifPresent(AtomicLong::getAndIncrement);
+            noRollBackExceptionCounter.ifPresent(Counter::increment);
             resetUnsafe();
         }
-    }
-
-    /**
-     * Apply an SMREntry to the version object, while
-     * doing bookkeeping for the underlying stream.
-     *
-     * @param entry smr entry
-     */
-    public void applyUpdateToStreamUnsafe(SMREntry entry, long globalAddress) {
-        applyUpdateUnsafe(entry, globalAddress);
-        seek(globalAddress + 1);
     }
 
     @VisibleForTesting

@@ -42,6 +42,7 @@ public class ClusterState {
     private final ImmutableMap<String, NodeState> nodes;
 
     @NonNull
+    @Singular
     private final ImmutableList<String> unresponsiveNodes;
 
     @NonNull
@@ -49,6 +50,10 @@ public class ClusterState {
 
     public int size() {
         return nodes.size();
+    }
+
+    public Optional<NodeState> getLocalNode() {
+        return getNode(localEndpoint);
     }
 
     public Optional<NodeState> getNode(String endpoint) {

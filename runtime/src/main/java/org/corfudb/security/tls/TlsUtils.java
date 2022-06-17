@@ -1,18 +1,25 @@
 package org.corfudb.security.tls;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
+import org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig;
 
-import javax.net.ssl.SSLException;
-import java.io.File;
+import javax.net.ssl.KeyManagerFactory;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 /**
  * Utilities for common options parsing and session configuration for
@@ -20,78 +27,163 @@ import java.security.cert.CertificateException;
  */
 @Slf4j
 public class TlsUtils {
+    public static final String PASSWORD_FILE_NOT_FOUND_ERROR = "Password file not found";
 
     private TlsUtils() {
         // prevent instantiation of this class
     }
 
     /**
-     * Open up a key store. Wraps all the exceptions.
+     * Opens KeyStore or TrustStore.
+     * Both trustStores and keyStores are represented by the KeyStore object
      *
-     * @param keyStorePath Key store path string
-     * @param password Key store password
-     * @return SslContext object or null on error
-     * @throws SSLException
-     *          Thrown when there's an issue with loading the trust store.
+     * @param certStoreCfg certificate store config
+     * @return KeyStore keyStore object taken asynchronously
      */
-    public static KeyStore openKeyStore(String keyStorePath,
-                                        String password) throws SSLException {
-        File keyStoreFile = new File(keyStorePath);
-        if (!keyStoreFile.exists()) {
-            String errorMessage = "Key store file {" + keyStorePath + "} doesn't exist.";
-            log.error(errorMessage);
-            throw new SSLException(errorMessage);
+    public static CompletableFuture<KeyStore> openCertStore(CertStoreConfig certStoreCfg) {
+        return CompletableFuture
+                //validation step
+                .runAsync(certStoreCfg::checkCertStoreExists)
+                .thenCompose(empty -> getCertStorePassword(certStoreCfg.getPasswordFile()))
+                .thenApply(certStorePassword -> {
+                    KeyStore keyStore = getKeyStoreInstance();
+
+                    Path certStore = certStoreCfg.getCertStore();
+                    FileInputStream inputStream = null;
+                    try {
+                        inputStream = new FileInputStream(certStore.toFile());
+                        keyStore.load(inputStream, certStorePassword.toCharArray());
+                        return keyStore;
+                    } catch (IOException e) {
+                        String errorMessage = String.format("Unable to read key store file %s.", certStore);
+                        throw new IllegalStateException(errorMessage, e);
+                    } catch (CertificateException e) {
+                        String errorMessage = String.format("Unable to read certificates in key store file %s.", certStore);
+                        throw new IllegalStateException(errorMessage, e);
+                    } catch (NoSuchAlgorithmException e) {
+                        String errorMessage = String.format("No support for algorithm [%s] in key store %s.",
+                                KeyStore.getDefaultType(), certStore);
+                        throw new IllegalStateException(errorMessage, e);
+                    } finally {
+                        Consumer<IOException> emptyExceptionHandler = ex -> {
+                        };
+                        IOUtils.closeQuietly(inputStream, emptyExceptionHandler);
+                    }
+                });
+    }
+
+    private static KeyStore getKeyStoreInstance() {
+        KeyStore keyStore;
+        try {
+            keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+        } catch (KeyStoreException e) {
+            String errorMessage = String.format("Error creating a key store object of algorithm [%s].",
+                    KeyStore.getDefaultType());
+            throw new IllegalStateException(errorMessage, e);
         }
 
-        FileInputStream inputStream = null;
-        try {
-            inputStream = new FileInputStream(keyStorePath);
-            KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
-            keyStore.load(inputStream, password.toCharArray());
-            return keyStore;
-        } catch (IOException e) {
-            String errorMessage = "Unable to read key store file " + keyStorePath + ".";
-            log.error(errorMessage, e);
-            throw new SSLException(errorMessage, e);
-        } catch (CertificateException e) {
-            String errorMessage = "Unable to read certificates in key store file " + keyStorePath + ".";
-            log.error(errorMessage, e);
-            throw new SSLException(errorMessage, e);
-        } catch (NoSuchAlgorithmException e) {
-            String errorMessage = "No support for algorithm [" + KeyStore.getDefaultType() +
-                    "] in key store " + keyStorePath + ".";
-            log.error(errorMessage, e);
-            throw new SSLException(errorMessage, e);
-        } catch (KeyStoreException e) {
-            String errorMessage = "Error creating a key store object of algorithm ["
-                    + KeyStore.getDefaultType() + "].";
-            log.error(errorMessage, e);
-            throw new SSLException(errorMessage, e);
-        } finally {
-            IOUtils.closeQuietly(inputStream);
-        }
+        return keyStore;
+    }
+
+    public static CompletableFuture<String> getCertStorePassword(Path passwordFilePath) {
+        return CompletableFuture.supplyAsync(() -> {
+            if (!Files.exists(passwordFilePath)) {
+                throw new IllegalStateException(PASSWORD_FILE_NOT_FOUND_ERROR);
+            }
+
+            String password;
+            try {
+                password = new String(Files.readAllBytes(passwordFilePath)).trim();
+            } catch (IOException e) {
+                String errorMessage = "Unable to read password file " + passwordFilePath + ".";
+                throw new IllegalStateException(errorMessage, e);
+            }
+
+            if (password.isEmpty()) {
+                throw new IllegalStateException("Empty password");
+            }
+
+            return password;
+        });
+    }
+
+    public static CompletableFuture<KeyManagerFactory> createKeyManagerFactory(KeyStoreConfig cfg) {
+
+        CompletableFuture<String> passwordAsync = getCertStorePassword(cfg.getPasswordFile());
+        CompletableFuture<KeyStore> keyStoreAsync = TlsUtils.openCertStore(cfg);
+
+        return passwordAsync.thenCombine(keyStoreAsync, (password, keyStore) -> {
+                    KeyManagerFactory kmf;
+                    try {
+                        kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+                        kmf.init(keyStore, password.toCharArray());
+                        return kmf;
+                    } catch (UnrecoverableKeyException e) {
+                        String errorMessage = "Unrecoverable key in key store " + cfg.getKeyStoreFile() + ".";
+                        throw new IllegalStateException(errorMessage, e);
+                    } catch (NoSuchAlgorithmException e) {
+                        String errorMessage = "Can not create key manager factory with default algorithm "
+                                + KeyManagerFactory.getDefaultAlgorithm() + ".";
+                        throw new IllegalStateException(errorMessage, e);
+                    } catch (KeyStoreException e) {
+                        String errorMessage = "Can not initialize key manager factory from " + cfg.getKeyStoreFile() + ".";
+                        throw new IllegalStateException(errorMessage, e);
+                    }
+                });
     }
 
     /**
-     * Get the password from file. Wrap any exception with SSLException.
-     *
-     * @param passwordFilePath
-     *      Path to password file.
-     * @return If file path is provided, returns the content, otherwise
-     *      an empty string.
-     * @throws SSLException
-     *      Wraps the IOException.
+     * Java key store configuration class
+     * https://www.baeldung.com/java-keystore-truststore-difference
      */
-    public static String getKeyStorePassword(String passwordFilePath) throws SSLException {
-        if (passwordFilePath == null || passwordFilePath.isEmpty()) {
-            return "";
+    public interface CertStoreConfig {
+
+        Path getCertStore();
+
+        default void checkCertStoreExists() {
+            if (Files.notExists(getCertStore())) {
+                String errorMessage = String.format("Key store file {%s} doesn't exist.", getCertStore());
+                throw new IllegalStateException(errorMessage);
+            }
         }
-        try {
-            return (new String(Files.readAllBytes(Paths.get(passwordFilePath)))).trim();
-        } catch (IOException e) {
-            String errorMessage = "Unable to read password file " + passwordFilePath + ".";
-            log.error(errorMessage, e);
-            throw new SSLException(errorMessage, e);
+
+        Path getPasswordFile();
+
+        @AllArgsConstructor
+        @Getter
+        @ToString
+        class KeyStoreConfig implements CertStoreConfig {
+            private final Path keyStoreFile;
+            private final Path passwordFile;
+
+            public static KeyStoreConfig from(String keyStorePath, String passwordFile) {
+                return new KeyStoreConfig(Paths.get(keyStorePath), Paths.get(passwordFile));
+            }
+
+            @Override
+            public Path getCertStore() {
+                return keyStoreFile;
+            }
+        }
+
+        @AllArgsConstructor
+        @Getter
+        @ToString
+        class TrustStoreConfig implements CertStoreConfig {
+            /**
+             * TrustStore path
+             */
+            private final Path trustStoreFile;
+            private final Path passwordFile;
+
+            public static TrustStoreConfig from(String trustStorePath, String passwordFile) {
+                return new TrustStoreConfig(Paths.get(trustStorePath), Paths.get(passwordFile));
+            }
+
+            @Override
+            public Path getCertStore() {
+                return trustStoreFile;
+            }
         }
     }
 }

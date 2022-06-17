@@ -17,6 +17,7 @@ import org.corfudb.infrastructure.logreplication.replication.send.LogReplication
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.DefaultReadProcessor;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClient;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 
@@ -38,30 +39,16 @@ import java.util.concurrent.Executors;
 public class LogReplicationSourceManager {
 
     private CorfuRuntime runtime;
-    /*
-     * Default number of Log Replication State Machine Worker Threads
-     */
+
     private static final int DEFAULT_FSM_WORKER_THREADS = 1;
 
-    /*
-     *  Log Replication State Machine
-     */
     @VisibleForTesting
     private final LogReplicationFSM logReplicationFSM;
 
-    /*
-     * Log Replication Runtime Parameters
-     */
     private final LogReplicationRuntimeParameters parameters;
 
-    /*
-     * Log Replication Configuration
-     */
     private final LogReplicationConfig config;
 
-    /*
-     * Log Replication MetadataManager.
-     */
     private final LogReplicationMetadataManager metadataManager;
 
     private final LogReplicationAckReader ackReader;
@@ -73,35 +60,40 @@ public class LogReplicationSourceManager {
     private ObservableAckMsg ackMessages = new ObservableAckMsg();
 
     /**
+     * Constructor
+     *
      * @param params Log Replication parameters
      * @param client LogReplication client, which is a data sender, both snapshot and log entry, this represents
      *              the application callback for data transmission
      * @param metadataManager Replication Metadata Manager
      */
     public LogReplicationSourceManager(LogReplicationRuntimeParameters params, LogReplicationClient client,
-                                       LogReplicationMetadataManager metadataManager) {
-        this(params, metadataManager, new CorfuDataSender(client));
+                                       LogReplicationMetadataManager metadataManager, LogReplicationConfigManager tableManagerPlugin) {
+        this(params, metadataManager, new CorfuDataSender(client), tableManagerPlugin);
     }
 
     @VisibleForTesting
     public LogReplicationSourceManager(LogReplicationRuntimeParameters params,
                                        LogReplicationMetadataManager metadataManager,
-                                       DataSender dataSender) {
+                                       DataSender dataSender,
+                                       LogReplicationConfigManager tableManagerPlugin) {
 
+        // This runtime is used exclusively for the snapshot and log entry reader which do not require a cache
+        // as these are one time operations.
         this.runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
                 .trustStore(params.getTrustStore())
                 .tsPasswordFile(params.getTsPasswordFile())
                 .keyStore(params.getKeyStore())
                 .ksPasswordFile(params.getKsPasswordFile())
                 .systemDownHandler(params.getSystemDownHandler())
-                .tlsEnabled(params.isTlsEnabled()).build());
+                .tlsEnabled(params.isTlsEnabled())
+                .cacheDisabled(true)
+                .build());
         runtime.parseConfigurationString(params.getLocalCorfuEndpoint()).connect();
 
         this.parameters = params;
 
         this.config = parameters.getReplicationConfig();
-
-        log.debug("{}", config);
 
         if (config.getStreamsToReplicate() == null || config.getStreamsToReplicate().isEmpty()) {
             // Avoid FSM being initialized if there are no streams to replicate
@@ -117,10 +109,11 @@ public class LogReplicationSourceManager {
                 params.getRemoteClusterDescriptor().getClusterId());
 
         this.logReplicationFSM = new LogReplicationFSM(this.runtime, config, params.getRemoteClusterDescriptor(),
-                dataSender, readProcessor, logReplicationFSMWorkers, ackReader);
+                dataSender, readProcessor, logReplicationFSMWorkers, ackReader, tableManagerPlugin);
 
         this.logReplicationFSM.setTopologyConfigId(params.getTopologyConfigId());
-        this.ackReader.startAckReader(this.logReplicationFSM.getLogEntryReader());
+        this.ackReader.setLogEntryReader(this.logReplicationFSM.getLogEntryReader());
+        this.ackReader.setLogEntrySender(this.logReplicationFSM.getLogEntrySender());
     }
 
     /**
@@ -134,6 +127,13 @@ public class LogReplicationSourceManager {
         return startSnapshotSync(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST), false);
     }
 
+    private UUID startSnapshotSync(LogReplicationEvent snapshotSyncRequest, boolean forced) {
+        log.info("Start Snapshot Sync, requestId={}, forced={}", snapshotSyncRequest.getEventId(), forced);
+        // Enqueue snapshot sync request into Log Replication FSM
+        logReplicationFSM.input(snapshotSyncRequest);
+        return snapshotSyncRequest.getEventId();
+    }
+
     /**
      * Signal start of a forced snapshot sync
      *
@@ -143,12 +143,6 @@ public class LogReplicationSourceManager {
         startSnapshotSync(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, snapshotSyncRequestId), true);
     }
 
-    private UUID startSnapshotSync(LogReplicationEvent snapshotSyncRequest, boolean forced) {
-        log.info("Start Snapshot Sync, requestId={}, forced={}", snapshotSyncRequest.getEventId(), forced);
-        // Enqueue snapshot sync request into Log Replication FSM
-        logReplicationFSM.input(snapshotSyncRequest);
-        return snapshotSyncRequest.getEventId();
-    }
 
     /**
      * Signal start of replication.
@@ -197,12 +191,12 @@ public class LogReplicationSourceManager {
                 logReplicationEvent.wait();
             }
         } catch (InterruptedException e) {
-            log.error("Caught an exception ", e);
+            log.error("Caught an exception during source manager shutdown ", e);
         }
 
         log.info("Shutdown Log Replication.");
-        ackReader.shutdown();
-        this.runtime.shutdown();
+        logReplicationFSM.shutdown();
+        runtime.shutdown();
     }
 
     /**

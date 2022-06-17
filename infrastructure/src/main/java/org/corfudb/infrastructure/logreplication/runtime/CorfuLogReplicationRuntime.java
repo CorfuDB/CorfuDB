@@ -18,6 +18,7 @@ import org.corfudb.infrastructure.logreplication.runtime.fsm.StoppedState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.UnrecoverableState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.VerifyingRemoteLeaderState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.WaitingForConnectionsState;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -38,7 +39,7 @@ import java.util.concurrent.TimeUnit;
  * all states in which the leader node on the active cluster can be.
  *
  *
- *                                                       R-LEADER_LOSS
+ *                                                  R-LEADER_LOSS / NOT_FOUND
  *                                             +-------------------------------+
  *                              ON_CONNECTION  |                               |    ON_CONNECTION_DOWN
  *                                    UP       |       ON_CONNECTION_DOWN      |       (NON_LEADER)
@@ -116,6 +117,11 @@ public class CorfuLogReplicationRuntime {
     public static final int DEFAULT_TIMEOUT = 5000;
 
     /**
+     * Used for checking if LR is in upgrading path
+     */
+    private final LogReplicationConfigManager replicationConfigManager;
+
+    /**
      * Current state of the FSM.
      */
     private volatile LogReplicationRuntimeState state;
@@ -129,12 +135,12 @@ public class CorfuLogReplicationRuntime {
     /**
      * Executor service for FSM state tasks
      */
-    private ThreadPoolExecutor communicationFSMWorkers;
+    private final ThreadPoolExecutor communicationFSMWorkers;
 
     /**
      * Executor service for FSM event queue consume
      */
-    private ExecutorService communicationFSMConsumer;
+    private final ExecutorService communicationFSMConsumer;
 
     /**
      * A queue of events.
@@ -146,7 +152,7 @@ public class CorfuLogReplicationRuntime {
 
     @Getter
     private final LogReplicationSourceManager sourceManager;
-    private volatile Set<String> connectedNodes;
+    private final Set<String> connectedNodes;
     private volatile Optional<String> leaderNodeId = Optional.empty();
 
     @Getter
@@ -155,19 +161,21 @@ public class CorfuLogReplicationRuntime {
     /**
      * Default Constructor
      */
-    public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters, LogReplicationMetadataManager metadataManager) {
+    public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters, LogReplicationMetadataManager metadataManager,
+                                      LogReplicationConfigManager replicationConfigManager) {
         this.remoteClusterId = parameters.getRemoteClusterDescriptor().getClusterId();
         this.metadataManager = metadataManager;
         this.router = new LogReplicationClientRouter(parameters, this);
         this.router.addClient(new LogReplicationHandler());
         this.sourceManager = new LogReplicationSourceManager(parameters, new LogReplicationClient(router, remoteClusterId),
-                metadataManager);
+                metadataManager, replicationConfigManager);
         this.connectedNodes = new HashSet<>();
         ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker").build();
         this.communicationFSMWorkers = new ThreadPoolExecutor(1, 1, 0L,
                 TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), threadFactory);
         this.communicationFSMConsumer = Executors.newSingleThreadExecutor(new
                 ThreadFactoryBuilder().setNameFormat("runtime-fsm-consumer").build());
+        this.replicationConfigManager = replicationConfigManager;
 
         initializeStates();
         this.state = states.get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY);
@@ -195,7 +203,8 @@ public class CorfuLogReplicationRuntime {
          */
         states.put(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY, new WaitingForConnectionsState(this));
         states.put(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER, new VerifyingRemoteLeaderState(this, communicationFSMWorkers, router));
-        states.put(LogReplicationRuntimeStateType.NEGOTIATING, new NegotiatingState(this, communicationFSMWorkers, router, metadataManager));
+        states.put(LogReplicationRuntimeStateType.NEGOTIATING, new NegotiatingState(this, communicationFSMWorkers,
+                router, metadataManager, replicationConfigManager));
         states.put(LogReplicationRuntimeStateType.REPLICATING, new ReplicatingState(this, sourceManager));
         states.put(LogReplicationRuntimeStateType.STOPPED, new StoppedState(sourceManager));
         states.put(LogReplicationRuntimeStateType.UNRECOVERABLE, new UnrecoverableState());
@@ -284,6 +293,7 @@ public class CorfuLogReplicationRuntime {
 
     public synchronized void resetRemoteLeaderNodeId() {
         log.debug("Reset remote leader node id");
+        router.resetRemoteLeader();
         leaderNodeId = Optional.empty();
     }
 

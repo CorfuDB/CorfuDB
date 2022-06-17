@@ -51,24 +51,10 @@ public class CorfuStreamEntry<K extends Message, V extends Message, M extends Me
     @Getter
     private final OperationType operation;
 
-    /**
-     * Version number of the layout at the time of this entry.
-     */
-    @Getter
-    private final long epoch;
-
-    /**
-     * Stream address of this entry
-     */
-    @Getter
-    private final long address;
-
-    public CorfuStreamEntry(K key, V payload, M metadata, long epoch, long address, OperationType operation) {
+    public CorfuStreamEntry(K key, V payload, M metadata, OperationType operation) {
         this.key = key;
         this.payload = payload;
         this.metadata = metadata;
-        this.epoch = epoch;
-        this.address = address;
         this.operation = operation;
     }
 
@@ -76,9 +62,7 @@ public class CorfuStreamEntry<K extends Message, V extends Message, M extends Me
      * Convert a given SMREntry to CorfuStreamEntry.
      */
     public static <K extends Message, V extends Message, M extends Message>
-    CorfuStreamEntry<K, V, M> fromSMREntry(SMREntry entry, final long epoch) {
-        long address = entry.getGlobalAddress();
-
+    CorfuStreamEntry<K, V, M> fromSMREntry(SMREntry entry) {
         OperationType operationType = getOperationType(entry);
         // TODO(sneginhal): Need a way to differentiate between update and create.
         Object[] args = entry.getSMRArguments();
@@ -95,7 +79,7 @@ public class CorfuStreamEntry<K extends Message, V extends Message, M extends Me
             }
         }
 
-        return new CorfuStreamEntry<>(key, payload, metadata, epoch, address, operationType);
+        return new CorfuStreamEntry<>(key, payload, metadata, operationType);
     }
 
     private static OperationType getOperationType(@Nonnull SMREntry entry) {

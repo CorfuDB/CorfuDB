@@ -27,6 +27,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
@@ -52,6 +53,7 @@ public class SnapshotSender {
 
     private CorfuRuntime runtime;
     private SnapshotReader snapshotReader;
+    @Getter
     private SenderBufferManager dataSenderBufferManager;
     private LogReplicationFSM fsm;
 
@@ -71,7 +73,7 @@ public class SnapshotSender {
 
     private final Optional<AtomicLong> messageCounter;
 
-    private volatile boolean stopSnapshotSync = false;
+    private volatile AtomicBoolean stopSnapshotSync = new AtomicBoolean(false);
 
     public SnapshotSender(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
                           ReadProcessor readProcessor, int snapshotSyncBatchSize, LogReplicationFSM fsm) {
@@ -110,7 +112,9 @@ public class SnapshotSender {
             // Read and Send Batch Size messages, unless snapshot is completed before (endRead)
             // or snapshot sync is stopped
             dataSenderBufferManager.resend();
-            while (messagesSent < maxNumSnapshotMsgPerBatch && !dataSenderBufferManager.getPendingMessages().isFull() && !completed && !stopSnapshotSync) {
+
+            while (messagesSent < maxNumSnapshotMsgPerBatch && !dataSenderBufferManager.getPendingMessages().isFull() &&
+                    !completed && !stopSnapshotSync.get()) {
 
                 try {
                     snapshotReadMessage = snapshotReader.read(snapshotSyncEventId);
@@ -131,7 +135,7 @@ public class SnapshotSender {
                 }
 
                 messagesSent += processReads(snapshotReadMessage.getMessages(), snapshotSyncEventId, completed);
-                final long  messagesSentSnapshot = messagesSent;
+                final long messagesSentSnapshot = messagesSent;
                 messageCounter.ifPresent(counter -> counter.addAndGet(messagesSentSnapshot));
                 observedCounter.setValue(messagesSent);
             }
@@ -161,7 +165,7 @@ public class SnapshotSender {
                 } finally {
                     snapshotSyncAck = null;
                 }
-            } else if (!cancel) {
+            } else if (!cancel && !stopSnapshotSync.get()) {
                 // Maximum number of batch messages sent. This snapshot sync needs to continue.
 
                 // Snapshot Sync is not performed in a single run, as for the case of multi-cluster replication
@@ -198,13 +202,11 @@ public class SnapshotSender {
             numMessages++;
         }
 
-
         if (MeterRegistryProvider.getInstance().isPresent()) {
             dataSenderBufferManager.sendWithBuffering(logReplicationEntries,
-                    "logreplication.sender.duration.seconds",
+                    "logreplication.sender.duration.nanoseconds",
                     Tag.of("replication.type", "snapshot"));
-        }
-        else {
+        } else {
             dataSenderBufferManager.sendWithBuffering(logReplicationEntries);
         }
 
@@ -256,7 +258,7 @@ public class SnapshotSender {
      *
      * @param snapshotSyncEventId unique identifier for the completed snapshot sync.
      */
-    public void snapshotSyncTransferComplete(UUID snapshotSyncEventId) {
+    private void snapshotSyncTransferComplete(UUID snapshotSyncEventId) {
         // We need to bind the internal event (COMPLETE) to the snapshotSyncEventId that originated it, this way
         // the state machine can correlate to the corresponding state (in case of delayed events)
         fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE,
@@ -293,7 +295,7 @@ public class SnapshotSender {
         snapshotReader.reset(baseSnapshotTimestamp);
         dataSenderBufferManager.reset(Address.NON_ADDRESS);
 
-        stopSnapshotSync = false;
+        stopSnapshotSync.set(false);
         startSnapshotSync = true;
     }
 
@@ -301,7 +303,7 @@ public class SnapshotSender {
      * Stop Snapshot Sync
      */
     public void stop() {
-        stopSnapshotSync = true;
+        stopSnapshotSync.set(true);
     }
 
     public void updateTopologyConfigId(long topologyConfigId) {

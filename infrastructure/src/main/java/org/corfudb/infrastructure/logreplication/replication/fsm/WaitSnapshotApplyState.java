@@ -1,12 +1,16 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -14,6 +18,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * This class represents the WaitSnapshotApply state of the Log Replication State Machine.
@@ -46,27 +51,37 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     /**
      * Route query metadata messages to the remote cluster
      */
-    private DataSender dataSender;
+    private final DataSender dataSender;
+
+    /**
+     * Used for checking LR is in upgrading path or not
+     */
+    private final LogReplicationConfigManager tableManagerPlugin;
 
     /**
      * Base Snapshot Timestamp for current Snapshot Sync
      */
     private long baseSnapshotTimestamp;
 
-    private ScheduledExecutorService snapshotSyncApplyMonitorExecutor;
+    private final ScheduledExecutorService snapshotSyncApplyMonitorExecutor;
+
+    private final AtomicBoolean stopSnapshotApply = new AtomicBoolean(false);
+
+    private Optional<Timer.Sample> snapshotSyncApplyTimerSample = Optional.empty();
 
     /**
      * Constructor
      *
      * @param logReplicationFSM log replication state machine
      */
-    public WaitSnapshotApplyState(LogReplicationFSM logReplicationFSM, DataSender dataSender) {
+    public WaitSnapshotApplyState(LogReplicationFSM logReplicationFSM, DataSender dataSender, LogReplicationConfigManager tableManagerPlugin) {
         this.fsm = logReplicationFSM;
         this.dataSender = dataSender;
         this.snapshotSyncApplyMonitorExecutor = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
                 .setDaemon(true)
                 .setNameFormat("snapshotSyncApplyVerificationScheduler")
                 .build());
+        this.tableManagerPlugin = tableManagerPlugin;
     }
 
     @Override
@@ -99,6 +114,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                  Snapshot Sync with ID = 1 could be completed in between (1 and 2) but show up in the queue
                  as 4, attempting to process a completion event for the incorrect snapshot sync.
                  */
+
                 if (snapshotSyncApplyId.equals(transitionEventId)) {
                     LogReplicationState logEntrySyncState = fsm.getStates()
                             .get(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
@@ -107,6 +123,13 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                     logEntrySyncState.setTransitionEventId(event.getEventId());
                     fsm.setBaseSnapshot(event.getMetadata().getLastTransferredBaseSnapshot());
                     fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
+                    if (tableManagerPlugin.isUpgraded()) {
+                        // If LR is in upgrading path, it means this cycle of snapshot sync was triggered
+                        // forcibly because LR detected a version mismatch. Flipping the flag back to false
+                        // here to indicate that the upgrade path is completed.
+                        log.info("Forced snapshot sync due to LR upgrade is COMPLETE.");
+                        tableManagerPlugin.resetUpgradeFlag();
+                    }
                     log.info("Snapshot Sync apply completed, syncRequestId={}, baseSnapshot={}. Transition to LOG_ENTRY_SYNC",
                             event.getEventId(), event.getMetadata().getLastTransferredBaseSnapshot());
                     return logEntrySyncState;
@@ -117,10 +140,11 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                 return this;
             case REPLICATION_STOP:
                 log.debug("Stop Log Replication while waiting for snapshot sync apply to complete id={}", transitionEventId);
+                stopSnapshotApply.set(true);
                 return fsm.getStates().get(LogReplicationStateType.INITIALIZED);
             case REPLICATION_SHUTDOWN:
                 log.debug("Shutdown Log Replication while waiting for snapshot sync apply to complete id={}", transitionEventId);
-                return fsm.getStates().get(LogReplicationStateType.STOPPED);
+                return fsm.getStates().get(LogReplicationStateType.ERROR);
             default: {
                 log.warn("Unexpected log replication event {} when in wait snapshot sync apply state.", event.getType());
                 throw new IllegalTransitionException(event.getType(), getType());
@@ -131,7 +155,26 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     @Override
     public void onEntry(LogReplicationState from) {
         log.info("OnEntry :: wait snapshot apply state");
+        if (from.getType().equals(LogReplicationStateType.INITIALIZED)) {
+            stopSnapshotApply.set(false);
+            fsm.getAckReader().markSnapshotSyncInfoOngoing();
+        }
+        if (from != this) {
+            snapshotSyncApplyTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
+        }
         this.fsm.getLogReplicationFSMWorkers().submit(this::verifyStatusOfSnapshotSyncApply);
+    }
+
+    @Override
+    public void onExit(LogReplicationState to) {
+        if (to.getType().equals(LogReplicationStateType.IN_LOG_ENTRY_SYNC)) {
+            snapshotSyncApplyTimerSample
+                    .flatMap(sample -> MeterRegistryProvider.getInstance()
+                            .map(registry -> {
+                                Timer timer = registry.timer("logreplication.snapshot.apply.duration");
+                                return sample.stop(timer);
+                            }));
+        }
     }
 
     private void verifyStatusOfSnapshotSyncApply() {
@@ -140,7 +183,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
 
             // Query metadata on remote cluster to verify the status of the snapshot sync apply
             CompletableFuture<LogReplicationMetadataResponseMsg>
-                    metadataResponseCompletableFuture =dataSender.sendMetadataRequest();
+                    metadataResponseCompletableFuture = dataSender.sendMetadataRequest();
             LogReplicationMetadataResponseMsg metadataResponse = metadataResponseCompletableFuture
                     .get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
 
@@ -155,9 +198,11 @@ public class WaitSnapshotApplyState implements LogReplicationState {
             } else {
                 log.debug("Snapshot sync apply is still in progress, appliedTs={}, baseTs={}, sync_id={}", metadataResponse.getSnapshotApplied(),
                         baseSnapshotTimestamp, transitionEventId);
-                // Schedule a one time action which will verify the snapshot apply status after a given delay
-                this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
-                        TimeUnit.MILLISECONDS);
+                if (!stopSnapshotApply.get()) {
+                    // Schedule a one time action which will verify the snapshot apply status after a given delay
+                    this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
+                            TimeUnit.MILLISECONDS);
+                }
             }
         } catch (TimeoutException te) {
             log.error("Snapshot sync apply verification timed out.", te);

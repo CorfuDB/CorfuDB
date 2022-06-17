@@ -6,6 +6,7 @@ option java_package = "org.corfudb.runtime.proto.service";
 import "rpc_common.proto";
 import "workflows.proto";
 import "node_connectivity.proto";
+import "file_system_stats.proto";
 
 /**
  * Protobuf definitions for the Management server RPCs. These
@@ -20,6 +21,7 @@ message QueryNodeRequestMsg {
 message QueryNodeResponseMsg {
   SequencerMetricsMsg sequencer_metrics = 1;
   NodeConnectivityMsg node_connectivity = 2;
+  FileSystemStatsMsg file_system = 3;
 }
 
 // Trigger sent to the management server with the failures detected.

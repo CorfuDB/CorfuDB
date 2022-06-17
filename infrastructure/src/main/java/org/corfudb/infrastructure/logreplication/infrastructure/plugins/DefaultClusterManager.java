@@ -41,7 +41,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  */
 @Slf4j
 public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAdapter {
-    public static final String CONFIG_FILE_PATH = "src/test/resources/corfu_replication_config.properties";
+    public static final String CONFIG_FILE_PATH = "./test/src/test/resources/corfu_replication_config.properties";
     private static final String DEFAULT_ACTIVE_CLUSTER_NAME = "primary_site";
     private static final String DEFAULT_STANDBY_CLUSTER_NAME = "standby_site";
 
@@ -85,13 +85,15 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
 
     private ConfigStreamListener configStreamListener;
 
+    private String corfuEndpoint = "localhost:9000";
+
     public void start() {
         configId = 0L;
         shutdown = false;
         topologyConfig = constructTopologyConfigMsg();
         clusterManagerCallback = new ClusterManagerCallback(this);
         corfuRuntime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
-                .parseConfigurationString("localhost:9000")
+                .parseConfigurationString(corfuEndpoint)
                 .connect();
         corfuStore = new CorfuStore(corfuRuntime);
         long trimMark = Address.NON_ADDRESS;
@@ -108,10 +110,11 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
             Table<ClusterUuidMsg, ClusterUuidMsg, ClusterUuidMsg> table = corfuStore.openTable(
                     CONFIG_NAMESPACE, CONFIG_TABLE_NAME,
                     ClusterUuidMsg.class, ClusterUuidMsg.class, ClusterUuidMsg.class,
-                    TableOptions.builder().build()
+                    TableOptions.fromProtoSchema(ClusterUuidMsg.class)
             );
             table.clearAll();
         } catch (Exception e) {
+            log.error("Exception caught while opening {} table", CONFIG_TABLE_NAME);
             throw new RuntimeException(e);
         }
         configStreamListener = new ConfigStreamListener(this);
