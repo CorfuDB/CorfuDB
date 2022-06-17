@@ -847,6 +847,7 @@ public class CorfuRuntime {
                 NettyClientRouter newRouter = new NettyClientRouter(node,
                         getNettyEventLoop(),
                         getParameters());
+
                 log.debug("Connecting to new router {}", node);
                 try {
                     newRouter.addClient(new LayoutHandler())

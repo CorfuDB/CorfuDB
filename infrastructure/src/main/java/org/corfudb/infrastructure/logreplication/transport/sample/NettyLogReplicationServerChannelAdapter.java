@@ -27,7 +27,6 @@ import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLException;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
@@ -185,22 +184,18 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
                         enabledTlsProtocols = new String[]{};
                     }
 
-                    try {
-                        KeyStoreConfig keyStoreConfig = KeyStoreConfig.from(
-                                context.getServerConfig(String.class, "--keystore"),
-                                context.getServerConfig(String.class, "--keystore-password-file")
-                        );
+                    KeyStoreConfig keyStoreConfig = KeyStoreConfig.from(
+                            context.getServerConfig(String.class, "--keystore"),
+                            context.getServerConfig(String.class, "--keystore-password-file")
+                    );
 
-                        TrustStoreConfig trustStoreConfig = TrustStoreConfig.from(
-                                context.getServerConfig(String.class, "--truststore"),
-                                context.getServerConfig(String.class, "--truststore-password-file")
-                        );
+                    TrustStoreConfig trustStoreConfig = TrustStoreConfig.from(
+                            context.getServerConfig(String.class, "--truststore"),
+                            context.getServerConfig(String.class, "--truststore-password-file")
+                    );
 
-                        sslContext = SslContextConstructor.constructSslContext(true, keyStoreConfig, trustStoreConfig);
-                    } catch (SSLException e) {
-                        log.error("Could not build the SSL context", e);
-                        throw new RuntimeException("Couldn't build the SSL context", e);
-                    }
+                    sslContext = SslContextConstructor.constructSslContext(true, keyStoreConfig, trustStoreConfig);
+
                 } else {
                     enabledTlsCipherSuites = new String[]{};
                     enabledTlsProtocols = new String[]{};
