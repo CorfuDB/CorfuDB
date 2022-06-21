@@ -117,7 +117,7 @@ public class Segment {
 
         writeChannel.position(0);
 
-        LogFormat.LogHeader header = parseHeader(writeChannel);
+        LogFormat.LogHeader header = parseHeader(writeChannel, segmentFilePath);
         if (header == null) {
             log.warn("Couldn't find log header for {}, creating new header.", segmentFilePath);
             writeBuffer(getSegmentHeader(VERSION));
@@ -132,8 +132,8 @@ public class Segment {
 
         while (writeChannel.size() - writeChannel.position() > 0) {
             long channelOffset = writeChannel.position();
-            LogFormat.Metadata metadata = parseMetadata(writeChannel);
-            LogFormat.LogEntry entry = parseEntry(writeChannel, metadata);
+            LogFormat.Metadata metadata = parseMetadata(writeChannel, segmentFilePath);
+            LogFormat.LogEntry entry = parseEntry(writeChannel, metadata, segmentFilePath);
 
             if (entry == null) {
                 // Metadata or Entry were partially written
@@ -361,10 +361,11 @@ public class Segment {
      * when a metadata field is expected.
      *
      * @param fileChannel the channel to read from
+     * @param segmentFilePath - path to the segment log file for debugging
      * @return metadata field of null if it was partially written.
      * @throws IOException IO exception
      */
-    private LogFormat.Metadata parseMetadata(FileChannel fileChannel) throws IOException {
+    public static LogFormat.Metadata parseMetadata(FileChannel fileChannel, String segmentFilePath) throws IOException {
         long actualMetaDataSize = fileChannel.size() - fileChannel.position();
         if (actualMetaDataSize < METADATA_SIZE) {
             log.warn("Metadata has wrong size. Actual size: {}, expected: {}",
@@ -398,7 +399,7 @@ public class Segment {
         return metadata;
     }
 
-    private String getDataCorruptionErrorMessage(
+    public static String getDataCorruptionErrorMessage(
             String message, FileChannel fileChannel, String segmentFile) throws IOException {
         return message +
                 ". Segment File: " + segmentFile +
@@ -414,7 +415,7 @@ public class Segment {
      * @return ByteBuffer for the payload
      * @throws IOException IO exception
      */
-    private ByteBuffer getPayloadForMetadata(FileChannel fileChannel, LogFormat.Metadata metadata) throws IOException {
+    public static ByteBuffer getPayloadForMetadata(FileChannel fileChannel, LogFormat.Metadata metadata) throws IOException {
         if (fileChannel.size() - fileChannel.position() < metadata.getLength()) {
             return null;
         }
@@ -430,10 +431,12 @@ public class Segment {
      *
      * @param channel  file channel
      * @param metadata meta data
+     * @param segmentFilePath file path for debugging
      * @return an log entry
      * @throws IOException IO exception
      */
-    private LogFormat.LogEntry parseEntry(FileChannel channel, LogFormat.Metadata metadata)
+    public static LogFormat.LogEntry parseEntry(FileChannel channel, LogFormat.Metadata metadata,
+                                                String segmentFilePath)
             throws IOException {
 
         if (metadata == null) {
@@ -476,11 +479,13 @@ public class Segment {
      * partially written.
      *
      * @param channel file channel
+     * @param segmentFilePath file path for debugging
      * @return log header
      * @throws IOException IO exception
      */
-    private LogFormat.LogHeader parseHeader(FileChannel channel) throws IOException {
-        LogFormat.Metadata metadata = parseMetadata(channel);
+    public static LogFormat.LogHeader parseHeader(FileChannel channel,
+                                                  String segmentFilePath) throws IOException {
+        LogFormat.Metadata metadata = parseMetadata(channel, segmentFilePath);
         if (metadata == null) {
             // Partial write on the metadata for the header
             // Rewind the channel position to the beginning of the file

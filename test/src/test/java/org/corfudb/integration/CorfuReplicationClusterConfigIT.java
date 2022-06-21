@@ -641,7 +641,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         checkpointAndTrimCorfuStore(cpRuntime);
     }
 
-    private void checkpointAndTrimCorfuStore(CorfuRuntime cpRuntime) {
+    public static void checkpointAndTrimCorfuStore(CorfuRuntime cpRuntime) {
         // Open Table Registry
         TableRegistry tableRegistry = cpRuntime.getTableRegistry();
         PersistentCorfuTable<CorfuStoreMetadata.TableName, CorfuRecord<CorfuStoreMetadata.TableDescriptors,
