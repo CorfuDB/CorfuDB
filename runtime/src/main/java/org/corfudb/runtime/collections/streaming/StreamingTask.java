@@ -50,7 +50,7 @@ public class StreamingTask<K extends Message, V extends Message, M extends Messa
     private final StreamListener listener;
 
     // The table id to schema map of the interested tables.
-    private final Map<UUID, TableSchema<K, V, M>> tableSchemas;
+    protected final Map<UUID, TableSchema<K, V, M>> tableSchemas = new HashMap<>();
 
     @Getter
     private final String listenerId;
@@ -59,40 +59,46 @@ public class StreamingTask<K extends Message, V extends Message, M extends Messa
 
     private final ExecutorService workerPool;
 
-    private final DeltaStream stream;
+    protected DeltaStream stream;
 
-    private final AtomicReference<StreamStatus> status;
+    protected final AtomicReference<StreamStatus> status = new AtomicReference<>();
 
     private volatile Throwable error;
+
+    protected StreamingTask(CorfuRuntime runtime, ExecutorService workerPool, StreamListener listener,
+                            String listenerId) {
+        this.runtime = runtime;
+        this.workerPool = workerPool;
+        this.listener = listener;
+        this.listenerId = listenerId;
+    }
 
     public StreamingTask(CorfuRuntime runtime, ExecutorService workerPool, String namespace, String streamTag,
                          StreamListener listener,
                          List<String> tablesOfInterest,
                          long address,
                          int bufferSize) {
-
-        this.runtime = runtime;
-        this.workerPool = workerPool;
-        this.listenerId = String.format("listener_%s_%s_%s", listener, namespace, streamTag);
-        this.listener = listener;
+        this(runtime, workerPool, listener, String.format("listener_%s_%s_%s", listener, namespace, streamTag));
+        this.stream = new DeltaStream(runtime.getAddressSpaceView(),
+                TableRegistry.getStreamIdForStreamTag(namespace, streamTag), address, bufferSize);
         TableRegistry registry = runtime.getTableRegistry();
-        final UUID streamId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
-        this.stream = new DeltaStream(runtime.getAddressSpaceView(), streamId, address, bufferSize);
-        this.tableSchemas = tablesOfInterest
-                .stream()
-                .collect(Collectors.toMap(
-                        tName -> CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(namespace, tName)),
-                        tName -> {
-                            // The table should be opened with full schema before subscription.
-                            Table<K, V, M> t = registry.getTable(namespace, tName);
-                            if (!t.getStreamTags().contains(streamId)) {
-                                throw new IllegalArgumentException(String.format("Interested table: %s does not " +
-                                        "have specified stream tag: %s", t.getFullyQualifiedTableName(), streamTag));
-                            }
-                            return new TableSchema<>(tName, t.getKeyClass(), t.getValueClass(), t.getMetadataClass());
-                        }));
-        this.status = new AtomicReference<>(StreamStatus.RUNNABLE);
+
+        UUID streamId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
+
+        for (String tableOfInterest : tablesOfInterest) {
+            UUID tableId = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(namespace,
+                    tableOfInterest));
+            Table<K, V, M> t = registry.getTable(namespace, tableOfInterest);
+            if (!t.getStreamTags().contains(streamId)) {
+                throw new IllegalArgumentException(String.format("Interested table: %s does not " +
+                    "have specified stream tag: %s", t.getFullyQualifiedTableName(), streamTag));
+            }
+            tableSchemas.put(tableId, new TableSchema<>(tableOfInterest, t.getKeyClass(), t.getValueClass(),
+                    t.getMetadataClass()));
+        }
+        status.set(StreamStatus.RUNNABLE);
     }
+
 
     public StreamStatus getStatus() {
         return status.get();

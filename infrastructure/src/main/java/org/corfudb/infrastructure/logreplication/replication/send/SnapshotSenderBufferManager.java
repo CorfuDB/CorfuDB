@@ -5,10 +5,10 @@ import io.micrometer.core.instrument.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.LogReplication.ReplicationStatusVal;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;

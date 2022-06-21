@@ -48,6 +48,10 @@ public class ObjectsView extends AbstractView {
             new StreamTagInfo(LOG_REPLICATOR_STREAM_NAME,
                 CorfuRuntime.getStreamID(LOG_REPLICATOR_STREAM_NAME));
 
+    public static final String LR_STATUS_STREAM_TAG = "lr_status";
+
+    public static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
+
     /**
      * @return the ID of the log replicator stream.
      */

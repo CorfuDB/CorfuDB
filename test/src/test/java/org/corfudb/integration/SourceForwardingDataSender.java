@@ -7,7 +7,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
@@ -19,6 +18,8 @@ import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
+import org.corfudb.runtime.LogReplication.ReplicationStatusKey;
+import org.corfudb.runtime.LogReplication.ReplicationStatusVal;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
@@ -115,10 +116,10 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
         this.standbyCorfuStore = new CorfuStore(runtime);
         standbyCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE,
-                LogReplicationMetadata.ReplicationStatusKey.class,
-                LogReplicationMetadata.ReplicationStatusVal.class,
+                ReplicationStatusKey.class,
+                ReplicationStatusVal.class,
                 null,
-                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+                TableOptions.fromProtoSchema(ReplicationStatusVal.class));
         this.destinationClusterID = testConfig.getRemoteClusterId();
     }
 
@@ -316,11 +317,12 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
         if (destinationClusterID == null) {
             return;
         }
-        LogReplicationMetadata.ReplicationStatusKey standbyClusterId = LogReplicationMetadata.ReplicationStatusKey.newBuilder()
+        ReplicationStatusKey standbyClusterId = ReplicationStatusKey.newBuilder()
                 .setClusterId(destinationClusterID)
                 .build();
         try (TxnContext txn = standbyCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            LogReplicationMetadata.ReplicationStatusVal standbyStatus = (LogReplicationMetadata.ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, standbyClusterId).getPayload();
+            ReplicationStatusVal standbyStatus = (ReplicationStatusVal)txn
+                    .getRecord(REPLICATION_STATUS_TABLE, standbyClusterId).getPayload();
             assertThat(standbyStatus.getDataConsistent()).isEqualTo(expectedDataConsistent);
         }
     }

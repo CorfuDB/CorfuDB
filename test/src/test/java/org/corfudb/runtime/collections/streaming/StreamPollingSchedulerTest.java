@@ -8,8 +8,11 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
+import org.corfudb.runtime.collections.CorfuStreamEntry;
+import org.corfudb.runtime.collections.LRMultiNamespaceListener;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
@@ -25,6 +28,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
@@ -85,6 +89,37 @@ public class StreamPollingSchedulerTest {
             entries.add(results);
         }
 
+        public void onError(Throwable throwable) {
+            this.throwable = throwable;
+        }
+    }
+
+    private class TestMultiStreamMergeStreamListenerImpl extends LRMultiNamespaceListener {
+
+        @Getter
+        private final ArrayList<CorfuStreamEntries> updates = new ArrayList<>();
+
+        @Getter
+        Throwable throwable;
+
+        @Override
+        public void onNext(CorfuStreamEntries results) {
+            updates.add(results);
+        }
+
+        @Override
+        protected void onSnapshotSyncStart() {}
+
+        @Override
+        protected void onSnapshotSyncComplete() {}
+
+        @Override
+        protected void processUpdateInSnapshotSync(Map<TableSchema, List<CorfuStreamEntry>> entries) {}
+
+        @Override
+        protected void processUpdateInLogEntrySync(Map<TableSchema, List<CorfuStreamEntry>> entries) {}
+
+        @Override
         public void onError(Throwable throwable) {
             this.throwable = throwable;
         }

@@ -10,15 +10,15 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Lo
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataVal;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusKey;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication;
+import org.corfudb.runtime.LogReplication.ReplicationStatusKey;
+import org.corfudb.runtime.LogReplication.ReplicationStatusVal;
+import org.corfudb.runtime.LogReplication.ReplicationStatusVal.SyncType;
+import org.corfudb.runtime.LogReplication.SnapshotSyncInfo;
+import org.corfudb.runtime.LogReplication.SyncStatus;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.StreamListener;
@@ -44,6 +44,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
+import static org.corfudb.runtime.view.ObjectsView.REPLICATION_STATUS_TABLE;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -55,8 +56,6 @@ public class LogReplicationMetadataManager {
 
     public static final String NAMESPACE = CORFU_SYSTEM_NAMESPACE;
     public static final String METADATA_TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
-    public static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
-    public static final String LR_STATUS_STREAM_TAG = "lr_status";
     private static final String REPLICATION_EVENT_TABLE_NAME = "LogReplicationEventTable";
     private static final String LR_STREAM_TAG = "log_replication";
 
@@ -401,7 +400,7 @@ public class LogReplicationMetadataManager {
             // the event of crashes
             ReplicationStatusVal statusValue = ReplicationStatusVal.newBuilder()
                     .setDataConsistent(true)
-                    .setStatus(SyncStatus.UNAVAILABLE)
+                    .setStatus(SyncStatus.NOT_AVAILABLE)
                     .build();
             txn.putRecord(replicationStatusTable, ReplicationStatusKey.newBuilder().setClusterId(localClusterId).build(),
                     statusValue, null);
@@ -668,7 +667,7 @@ public class LogReplicationMetadataManager {
         ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(localClusterId).build();
         ReplicationStatusVal val = ReplicationStatusVal.newBuilder()
                 .setDataConsistent(isConsistent)
-                .setStatus(SyncStatus.UNAVAILABLE)
+                .setStatus(SyncStatus.NOT_AVAILABLE)
                 .build();
         try (TxnContext txn = getTxnContext()) {
             txn.putRecord(replicationStatusTable, key, val, null);

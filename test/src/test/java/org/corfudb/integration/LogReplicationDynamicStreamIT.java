@@ -1,8 +1,6 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusKey;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValueTag;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
@@ -16,6 +14,8 @@ import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.LogReplication.ReplicationStatusKey;
+import org.corfudb.runtime.LogReplication.ReplicationStatusVal;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -26,7 +26,7 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_STATUS_TABLE;
+import static org.corfudb.runtime.view.ObjectsView.REPLICATION_STATUS_TABLE;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
