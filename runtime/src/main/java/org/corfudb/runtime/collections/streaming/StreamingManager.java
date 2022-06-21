@@ -14,11 +14,18 @@ import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+
+import static org.corfudb.runtime.LogReplicationUtils.LR_STATUS_STREAM_TAG;
+import static org.corfudb.runtime.LogReplicationUtils.REPLICATION_STATUS_TABLE;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * A streaming subscription manager that allows clients to listen on
@@ -89,6 +96,48 @@ public class StreamingManager {
         this.scheduler.addTask(streamListener, namespace, streamTag, tablesOfInterest, lastAddress, bufferSize);
     }
 
+    /**
+     * This subscription is exclusive to Log Replication(LR).  It is used for subscribing to transaction updates across
+     * LR's metadata table(ReplicationStatus) in the CorfuSystem namespace and application-specific tables containing
+     * 'streamTag' within the application namespace.
+     *
+     * @param streamListener   client listener for callback
+     * @param namespace        namespace of application tables on which updates should be received
+     * @param streamTag        only updates of application tables with the stream tag will be polled
+     * @param tablesOfInterest only updates from these tables will be returned
+     * @param lastAddress      last processed address, new notifications start from lastAddress + 1
+     */
+    public void subscribeAcrossNamespaces(@Nonnull StreamListener streamListener, @Nonnull String namespace,
+                                          @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
+                                          long lastAddress) {
+        subscribeAcrossNamespaces(streamListener, namespace, streamTag, tablesOfInterest, lastAddress,
+            defaultBufferSize);
+    }
+
+    /**
+     * This subscription is exclusive to Log Replication(LR).  It is used for subscribing to transaction updates across
+     * LR's metadata table(ReplicationStatus) in the CorfuSystem namespace and application-specific tables containing
+     * 'streamTag' within the application namespace.
+     *
+     * @param streamListener   client listener for callback
+     * @param namespace       namespace of application tables on which updates should be received
+     * @param streamTag       only updates of application tables with the stream tag will be polled
+     * @param tablesOfInterest only updates from these tables will be returned
+     * @param lastAddress      last processed address, new notifications start from lastAddress + 1
+     */
+    public void subscribeAcrossNamespaces(@Nonnull StreamListener streamListener, @Nonnull String namespace,
+                                          @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
+                                          long lastAddress, int bufferSize) {
+        Map<String, List<String>> nsToTableName = new HashMap<>();
+        nsToTableName.put(namespace, tablesOfInterest);
+        nsToTableName.put(CORFU_SYSTEM_NAMESPACE, Arrays.asList(REPLICATION_STATUS_TABLE));
+
+        Map<String, String> nsToStreamTags = new HashMap<>();
+        nsToStreamTags.put(namespace, streamTag);
+        nsToStreamTags.put(CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
+        this.scheduler.addLRTask(streamListener, nsToStreamTags, nsToTableName, lastAddress, bufferSize);
+    }
+
 
     // TODO(Maithem): this is obsolete, delta stream already detects this case, but can't be
     // removed until some tests that depend on this internal behavior are fixed
@@ -121,7 +170,6 @@ public class StreamingManager {
         // log warn message if it didnt exist?
         this.scheduler.removeTask(streamListener);
     }
-
 
     /**
      * Shutdown the streaming manager and clean up resources.
