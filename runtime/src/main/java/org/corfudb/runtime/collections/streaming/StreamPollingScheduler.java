@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -102,6 +103,7 @@ public class StreamPollingScheduler {
     private final SequencerView sequencerView;
     private final CorfuRuntime runtime;
 
+
     public StreamPollingScheduler(CorfuRuntime runtime, ScheduledExecutorService scheduler, ExecutorService workers,
                                   Duration pollPeriod, int pollBatchSize, int pollThreshold) {
         Preconditions.checkArgument(pollBatchSize > 1, "pollBatchSize=%s has to be > 1",
@@ -139,9 +141,10 @@ public class StreamPollingScheduler {
         scheduler.submit(new Tick());
     }
 
-    public void addTask(@Nonnull StreamListener streamListener, @Nonnull String namespace,
-                        @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
-                        long lastAddress, int bufferSize) {
+    public void addTask(@Nonnull StreamListener streamListener,
+                        @Nonnull Map<String, String> nsToStreamTags,
+                        @Nonnull Map<String, List<String>> nsToTables, long lastAddress,
+                        int bufferSize) {
 
         Preconditions.checkArgument(bufferSize >= pollThreshold);
         synchronized (allTasks) {
@@ -151,10 +154,10 @@ public class StreamPollingScheduler {
                 throw new StreamingException(
                         "StreamingManager::subscribe: listener already registered " + streamListener);
             }
-            StreamingTask task = new StreamingTask(runtime, workers, namespace, streamTag, streamListener,
-                    tablesOfInterest, lastAddress, bufferSize);
+            StreamingTask task = new StreamingTask(runtime, workers, nsToStreamTags, streamListener,
+                    nsToTables, lastAddress, bufferSize);
             allTasks.put(streamListener, task);
-            log.info("addTask: added {} {} {} address {}", streamListener, namespace, streamTag, lastAddress);
+            log.info("addTask: added {} for {} address {}", streamListener, nsToStreamTags, lastAddress);
             allTasks.notifyAll();
         }
     }
@@ -187,11 +190,14 @@ public class StreamPollingScheduler {
         return getTasks(status, t -> true);
     }
 
-    private List<StreamAddressRange> getPollQueries(List<StreamingTask> tasks) {
-        List<StreamAddressRange> pollRequests = new ArrayList<>(tasks.size());
+    private List<List<StreamAddressRange>> getPollQueries(List<StreamingTask> tasks) {
+        List<List<StreamAddressRange>> pollRequests = new ArrayList<>();
         for (StreamingTask task : tasks) {
-            DeltaStream stream = task.getStream();
-            pollRequests.add(new StreamAddressRange(stream.getStreamId(), Address.MAX, stream.getMaxAddressSeen()));
+            List<DeltaStream> taskStreams = task.getStreamsList();
+            List<StreamAddressRange> streamAddressRangeList = new ArrayList<>();
+            taskStreams.stream().forEach(s -> streamAddressRangeList.add(new StreamAddressRange(
+                    s.getStreamId(), Address.MAX, s.getMaxAddressSeen())));
+            pollRequests.add(streamAddressRangeList);
         }
         return pollRequests;
     }
@@ -206,14 +212,17 @@ public class StreamPollingScheduler {
      */
     private void poll(List<StreamingTask> tasks) {
 
-        List<StreamAddressRange> queries = getPollQueries(tasks);
+        List<List<StreamAddressRange>> queries = getPollQueries(tasks);
 
         // In order to increase the efficiency of batching, we need to coalesce all queries before batching, that
         // way each batch will have unique queries. If we coalesce after batching, then its possible to have common
         // stream queries across batches, this means that the same stream is queried multiple times, but it could
         // have only been polled once.
 
-        List<StreamAddressRange> coalesced = coalesce(queries);
+        List<StreamAddressRange> flattenedQueries = queries.stream().flatMap(List::stream)
+                .collect(Collectors.toList());
+
+        List<StreamAddressRange> coalesced = coalesce(flattenedQueries);
         List<List<StreamAddressRange>> batches = Lists.partition(coalesced, pollBatchSize);
 
         Map<UUID, StreamAddressSpace> allQueryResults = new HashMap<>(coalesced.size());
@@ -230,17 +239,21 @@ public class StreamPollingScheduler {
 
         for (int idx = 0; idx < tasks.size(); idx++) {
             StreamingTask task = tasks.get(idx);
-            try {
-                StreamAddressRange taskQuery = queries.get(idx);
-                Preconditions.checkState(task.getStream().getStreamId().equals(taskQuery.getStreamID()));
-                Preconditions.checkState(allQueryResults.containsKey(taskQuery.getStreamID()),
-                        "StreamAddressSpace missing for %s", task.getStream().getStreamId());
-                StreamAddressSpace sas = allQueryResults.get(task.getStream().getStreamId()).getAddressesInRange(taskQuery);
-                task.getStream().refresh(sas);
-            } catch (Throwable throwable) {
-                task.setError(throwable);
-                log.error("StreamingPollingScheduler: encountered exception {} during streaming task scheduling. " +
-                        "Notify stream listener {} with id={} onError.", throwable, task.getListener(), task.getListenerId());
+            List<DeltaStream> taskStreams = task.getStreamsList();
+            for (DeltaStream stream : taskStreams) {
+                try {
+                    Optional<StreamAddressRange> taskQuery = queries.get(idx).stream()
+                            .filter(sar -> sar.getStreamID() == stream.getStreamId()).findFirst();
+                    Preconditions.checkArgument(taskQuery.isPresent());
+                    Preconditions.checkState(allQueryResults.containsKey(taskQuery.get().getStreamID()),
+                            "StreamAddressSpace missing for %s", stream.getStreamId());
+                    StreamAddressSpace sas = allQueryResults.get(stream.getStreamId()).getAddressesInRange(taskQuery.get());
+                    stream.refresh(sas);
+                } catch (Throwable throwable) {
+                    task.setError(throwable);
+                    log.error("StreamingPollingScheduler: encountered exception {} during streaming task scheduling. " +
+                            "Notify stream listener {} with id={} onError.", throwable, task.getListener(), task.getListenerId());
+                }
             }
         }
     }
@@ -289,7 +302,9 @@ public class StreamPollingScheduler {
 
     private void dispatchSyncTasks(List<StreamingTask> tasks) {
         for (StreamingTask task : tasks) {
-            if (task.getStream().hasNext()) {
+            List<DeltaStream> taskStreamsList = task.getStreamsList();
+            List<DeltaStream> streamsWithUpdates = taskStreamsList.stream().filter(s -> s.hasNext()).collect(Collectors.toList());
+            if (streamsWithUpdates != null) {
                 // this will fail for tasks that are already syncing
                 // for tasks to be scheduled to sync, they must be in the scheduling state
                 task.move(StreamStatus.SCHEDULING, StreamStatus.SYNCING);
@@ -331,7 +346,12 @@ public class StreamPollingScheduler {
 
             final List<StreamingTask> runnableTasks = getTasks(StreamStatus.RUNNABLE);
             final List<StreamingTask> syncingTasks = getTasks(StreamStatus.SYNCING,
-                    t -> t.getStream().availableSpace() >= pollThreshold);
+                    t -> {
+                        List<DeltaStream> taskStreamsList = t.getStreamsList();
+                        List<DeltaStream> streamsWithFreeSpace = taskStreamsList.stream()
+                                .filter(s -> s.availableSpace() >= pollThreshold).collect(Collectors.toList());
+                        return taskStreamsList.size() == streamsWithFreeSpace.size();
+                    });
             final List<StreamingTask> failedTasks = getTasks(StreamStatus.ERROR);
 
             runnableTasks.forEach(t -> {

@@ -4,6 +4,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.LrMultiStreamMergeStreamListener;
 import org.corfudb.runtime.collections.StreamListener;
 
 import org.corfudb.runtime.exceptions.StreamingException;
@@ -14,11 +15,16 @@ import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * A streaming subscription manager that allows clients to listen on
@@ -35,6 +41,9 @@ public class StreamingManager {
     private final StreamPollingScheduler scheduler;
 
     private final int defaultBufferSize = 25;
+
+    public static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
+    public static final String LR_STATUS_STREAM_TAG = "lr_status";
 
     public StreamingManager(@Nonnull CorfuRuntime runtime) {
         this.runtime = runtime;
@@ -71,6 +80,46 @@ public class StreamingManager {
         subscribe(streamListener, namespace, streamTag, tablesOfInterest, lastAddress, defaultBufferSize);
     }
 
+
+    /**
+     * Subscribe to transaction updates.
+     *
+     * @param streamListener   client listener for callback
+     * @param namespace       namespace of interested tables
+     * @param streamTag       only updates of tables with the stream tag will be polled
+     * @param tablesOfInterest only updates from these tables will be returned
+     * @param lastAddress      last processed address, new notifications start from lastAddress + 1
+     */
+    public void subscribeAcrossNamespace(@Nonnull LrMultiStreamMergeStreamListener streamListener, @Nonnull String namespace,
+                                         @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
+                                         long lastAddress) {
+        subscribeAcrossNamespace(streamListener, namespace, streamTag, tablesOfInterest, lastAddress,
+                defaultBufferSize);
+    }
+
+    /**
+     * Subscribe to transaction updates.
+     *
+     * @param streamListener   client listener for callback
+     * @param namespace       namespace of interested tables
+     * @param streamTag       only updates of tables with the stream tag will be polled
+     * @param tablesOfInterest only updates from these tables will be returned
+     * @param lastAddress      last processed address, new notifications start from lastAddress + 1
+     */
+    public void subscribeAcrossNamespace(@Nonnull LrMultiStreamMergeStreamListener streamListener, @Nonnull String namespace,
+                                         @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
+                                         long lastAddress, int bufferSize) {
+        Map<String, List<String>> nsToTableName = new HashMap<>();
+        nsToTableName.put(namespace, tablesOfInterest);
+        nsToTableName.put(CORFU_SYSTEM_NAMESPACE, Arrays.asList(REPLICATION_STATUS_TABLE));
+
+        Map<String, String> nsToStreamTags = new HashMap<>();
+        nsToStreamTags.put(namespace, streamTag);
+        nsToStreamTags.put(CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
+        this.scheduler.addTask(streamListener, nsToStreamTags, nsToTableName, lastAddress,
+                bufferSize);
+    }
+
     /**
      * Subscribe to transaction updates.
      *
@@ -86,7 +135,11 @@ public class StreamingManager {
                           long lastAddress, int bufferSize) {
         // TODO(Maithem): LR can fail silently if this subscribe fails
         validateSyncAddress(namespace, streamTag, lastAddress);
-        this.scheduler.addTask(streamListener, namespace, streamTag, tablesOfInterest, lastAddress, bufferSize);
+        Map<String, List<String>> nsToTableName = new HashMap<>();
+        nsToTableName.put(namespace, tablesOfInterest);
+        Map<String, String> nsToStreamTags = new HashMap<>();
+        nsToStreamTags.put(namespace, streamTag);
+        this.scheduler.addTask(streamListener, nsToStreamTags, nsToTableName, lastAddress, bufferSize);
     }
 
 

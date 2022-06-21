@@ -8,6 +8,7 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
+import org.corfudb.runtime.collections.LrMultiStreamMergeStreamListener;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.exceptions.StreamingException;
@@ -90,6 +91,25 @@ public class StreamPollingSchedulerTest {
         }
     }
 
+    private class TestMultiStreamMergeStreamListenerImpl implements LrMultiStreamMergeStreamListener {
+
+        @Getter
+        private final ArrayList<CorfuStreamEntries> updates = new ArrayList<>();
+
+        @Getter
+        Throwable throwable;
+
+        @Override
+        public void onNext(CorfuStreamEntries results) {
+            updates.add(results);
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            this.throwable = throwable;
+        }
+    }
+
     @Data
     @AllArgsConstructor
     class MockedContext {
@@ -152,11 +172,13 @@ public class StreamPollingSchedulerTest {
         verify(scheduler, times(1)).submit(any(StreamPollingScheduler.Tick.class));
 
         StreamListener listener = new TestStreamListener();
-        streamPoller.addTask(listener, namespace, streamTag, Collections.singletonList(tableName), 0, 10);
+        streamPoller.addTask(listener, Collections.singletonMap(namespace,streamTag),
+                Collections.singletonMap(namespace, Collections.singletonList(tableName)),
+                0, 10);
 
         // Verify that the same listener can't be registered more than once
-        assertThatThrownBy(() -> streamPoller.addTask(listener, namespace, streamTag,
-                Collections.singletonList(tableName), 0, 10))
+        assertThatThrownBy(() -> streamPoller.addTask(listener, Collections.singletonMap(namespace,streamTag),
+                Collections.singletonMap(namespace, Collections.singletonList(tableName)), 0, 10))
                 .isInstanceOf(StreamingException.class)
                 .hasMessage("StreamingManager::subscribe: listener already registered " + listener);
 
@@ -176,9 +198,12 @@ public class StreamPollingSchedulerTest {
         verify(scheduler, times(1)).submit(any(StreamPollingScheduler.Tick.class));
 
         StreamingTask task = taskCaptor.getValue();
+
+        List<DeltaStream> taskStreamList = task.getStreamsList();
+
         assertThat(task.getStatus()).isEqualTo(StreamStatus.SYNCING);
         // Verify that the scheduler polled the stream correctly
-        assertThat(task.getStream().getMaxAddressSeen()).isEqualTo(2);
+        assertThat(taskStreamList.get(0).getMaxAddressSeen()).isEqualTo(2);
         LogData hole = new LogData(DataType.HOLE);
         hole.setGlobalAddress(1L);
         when(addressSpaceView.read(1, options)).thenReturn(hole);
@@ -227,7 +252,8 @@ public class StreamPollingSchedulerTest {
         UUID streamTagId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
         when(table.getStreamTags()).thenReturn(Collections.singleton(streamTagId));
 
-        streamPoller.addTask(listener, namespace, streamTag, Collections.singletonList(tableName), 5, 10);
+        streamPoller.addTask(listener, Collections.singletonMap(namespace,streamTag),
+                Collections.singletonMap(namespace, Collections.singletonList(tableName)), 5, 10);
 
         StreamAddressRange rangeQuery = new StreamAddressRange(streamTagId, Address.MAX, 5);
         StreamAddressSpace sas = new StreamAddressSpace();
@@ -281,11 +307,14 @@ public class StreamPollingSchedulerTest {
         when(table.getStreamTags()).thenReturn(Collections.singleton(streamTagId));
         // listener, namespace, "sample_streamer_1", Collections.singletonList(tableName)
 
-        streamPoller.addTask(listener, namespace, streamTag, Collections.singletonList(tableName), 5, 10);
+        streamPoller.addTask(listener, Collections.singletonMap(namespace,streamTag),
+                Collections.singletonMap(namespace, Collections.singletonList(tableName)),
+                5, 10);
 
         // Verify that the same listener can't be registered more than once
-        assertThatThrownBy(() -> streamPoller.addTask(listener, namespace, streamTag,
-                Collections.singletonList(tableName), 0, 10))
+        assertThatThrownBy(() -> streamPoller.addTask(listener, Collections.singletonMap(namespace,streamTag),
+                Collections.singletonMap(namespace, Collections.singletonList(tableName)),
+                0, 10))
                 .isInstanceOf(StreamingException.class)
                 .hasMessage("StreamingManager::subscribe: listener already registered " + listener);
 
@@ -366,7 +395,9 @@ public class StreamPollingSchedulerTest {
         when(registry.getTable(namespace, tableName)).thenReturn(table);
         UUID streamTagId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
         when(table.getStreamTags()).thenReturn(Collections.singleton(streamTagId));
-        streamPoller.addTask(listener, namespace, streamTag, Collections.singletonList(tableName), 0, 6);
+        streamPoller.addTask(listener, Collections.singletonMap(namespace,streamTag),
+                Collections.singletonMap(namespace, Collections.singletonList(tableName)),
+                0, 6);
 
         StreamAddressRange rangeQuery = new StreamAddressRange(streamTagId, Address.MAX, 0);
         StreamAddressSpace sas = new StreamAddressSpace();
@@ -384,9 +415,10 @@ public class StreamPollingSchedulerTest {
         verify(scheduler, times(1)).submit(any(StreamPollingScheduler.Tick.class));
 
         StreamingTask task = taskCaptor.getValue();
+        List<DeltaStream> taskStreamList = task.getStreamsList();
         assertThat(task.getStatus()).isEqualTo(StreamStatus.SYNCING);
 
-        assertThat(task.getStream().availableSpace()).isLessThan(pollThreshold);
+        assertThat(taskStreamList.get(0).availableSpace()).isLessThan(pollThreshold);
 
         // Verify that the scheduler re-scheduled itself
         streamPoller.schedule();
@@ -409,7 +441,7 @@ public class StreamPollingSchedulerTest {
 
         // Verify that the task is still syncing, but now has available space to be refreshed
         assertThat(task.getStatus()).isEqualTo(StreamStatus.SYNCING);
-        assertThat(task.getStream().availableSpace()).isEqualTo(pollThreshold);
+        assertThat(taskStreamList.get(0).availableSpace()).isEqualTo(pollThreshold);
 
         // run the scheduler and verify that it actually polls the task and refreshes it without rescheduling
 
@@ -422,19 +454,29 @@ public class StreamPollingSchedulerTest {
         verify(sequencerView, times(1)).getStreamsAddressSpace(Collections.singletonList(rangeQuery2));
         assertThat(task.getStatus()).isEqualTo(StreamStatus.SYNCING);
         // After refreshing the stream, it goes below the threshold again
-        assertThat(task.getStream().availableSpace()).isLessThan(pollThreshold);
+        assertThat(taskStreamList.get(0).availableSpace()).isLessThan(pollThreshold);
         verify(workers, times(2)).execute(any(StreamingTask.class));
     }
 
     @Test
-    public void testAddRemoveListener() {
+    public void testAddRemoveStreamListener() {
+        TestStreamListener listener = new TestStreamListener();
+        testAddRemoveListener(listener);
+    }
+
+    @Test
+    public void testAddRemoveLrMultiMergeStreamListener() {
+        TestMultiStreamMergeStreamListenerImpl multiStreamlistener = new TestMultiStreamMergeStreamListenerImpl();
+        testAddRemoveListener(multiStreamlistener);
+    }
+
+    private void testAddRemoveListener(StreamListener listener) {
         ScheduledExecutorService scheduler = mock(ScheduledExecutorService.class);
         ExecutorService workers = mock(ExecutorService.class);
         CorfuRuntime runtime = mock(CorfuRuntime.class);
         final StreamPollingScheduler streamingScheduler = new StreamPollingScheduler(runtime, scheduler, workers,
                 Duration.ofMillis(50), 25, 5);
 
-        TestStreamListener listener = new TestStreamListener();
         final String namespace = "test_namespace";
         final String tableName = "table";
         String streamTag = "tag_1";
@@ -446,16 +488,22 @@ public class StreamPollingSchedulerTest {
         UUID streamTagId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
         when(table.getStreamTags()).thenReturn(Collections.singleton(streamTagId));
 
-        streamingScheduler.addTask(listener, namespace, streamTag, Collections.singletonList(tableName), 0, 6);
+        streamingScheduler.addTask(listener, Collections.singletonMap(namespace,streamTag),
+                Collections.singletonMap(namespace, Collections.singletonList(tableName)),
+                0, 6);
 
-        assertThatThrownBy(() -> streamingScheduler.addTask(listener, namespace, streamTag,
-                Collections.singletonList(tableName), 0, 6))
+        assertThatThrownBy(() -> streamingScheduler.addTask(listener,
+                Collections.singletonMap(namespace,streamTag),
+                Collections.singletonMap(namespace, Collections.singletonList(tableName)),
+                0, 6))
                 .isInstanceOf(StreamingException.class)
                 .hasMessage("StreamingManager::subscribe: listener already registered " + listener);
 
         // Remove the listener and re-add, it shouldn't throw an exception
         streamingScheduler.removeTask(listener);
-        streamingScheduler.addTask(listener, namespace, streamTag, Collections.singletonList(tableName), 0, 6);
+        streamingScheduler.addTask(listener, Collections.singletonMap(namespace,streamTag),
+                Collections.singletonMap(namespace, Collections.singletonList(tableName)),
+                0, 6);
     }
 
     @Test
