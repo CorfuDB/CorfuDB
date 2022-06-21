@@ -6,6 +6,7 @@ import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.FileDescriptor;
 import com.google.protobuf.Message;
+import com.google.protobuf.ProtocolStringList;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuOptions;
@@ -234,6 +235,7 @@ public class TableRegistry {
         } else {
             metadataBuilder.setTableOptions(tableOptions.getSchemaOptions());
         }
+        TableMetadata tableMetadata = metadataBuilder.build();
 
         int numRetries = 9; // Since this is an internal transaction, retry a few times before giving up.
         while (numRetries-- > 0) {
@@ -253,12 +255,17 @@ public class TableRegistry {
                 throw new IllegalThreadStateException("openTable: Called on an existing transaction");
             }
             try {
-                this.runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
+                this.runtime.getObjectsView().TXBuild()
+                        .type(TransactionType.WRITE_AFTER_WRITE)
+                        .build()
+                        .begin();
+                CorfuRecord<TableDescriptors, TableMetadata> oldRecord =
+                        this.registryTable.get(tableNameKey);
+                CorfuRecord<TableDescriptors, TableMetadata> newRecord =
+                        new CorfuRecord<>(tableDescriptors, tableMetadata);
                 boolean protoFileChanged = tryUpdateTableSchemas(allDescriptors);
-                CorfuRecord<TableDescriptors, TableMetadata> oldRecord = this.registryTable.get(tableNameKey);
-                if (oldRecord == null || protoFileChanged) {
-                    this.registryTable.put(tableNameKey,
-                        new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
+                if (oldRecord == null || protoFileChanged || tableRecordChanged(oldRecord, newRecord)) {
+                    this.registryTable.put(tableNameKey, newRecord);
                 }
                 this.runtime.getObjectsView().TXEnd();
                 break;
@@ -273,6 +280,62 @@ public class TableRegistry {
                 }
             }
         }
+    }
+
+    /**
+     * A helper method for comparing CorfuRecord. If the new record is different from old record, the entry
+     * of registry table should be updated accordingly.
+     *
+     * @param oldRecord The record already present in registry table.
+     * @param newRecord The new record that is being registered.
+     * @return True if the two records are different. Otherwise, return false.
+     */
+    private boolean tableRecordChanged(@Nonnull CorfuRecord<TableDescriptors, TableMetadata> oldRecord,
+                                       @Nonnull CorfuRecord<TableDescriptors, TableMetadata> newRecord) {
+        // Both record should have the same table name as TableName is the key of registry table.
+        TableName tableName = newRecord.getMetadata().getTableName();
+        TableDescriptors oldDescriptors = oldRecord.getPayload();
+        TableDescriptors newDescriptors = newRecord.getPayload();
+        CorfuOptions.SchemaOptions oldOptions = oldRecord.getMetadata().getTableOptions();
+        CorfuOptions.SchemaOptions newOptions = newRecord.getMetadata().getTableOptions();
+
+        // Compare TableDescriptors including the types of Key, Value and Metadata.
+        if (!oldDescriptors.getKey().getTypeUrl().equals(newDescriptors.getKey().getTypeUrl()) ||
+            !oldDescriptors.getValue().getTypeUrl().equals(newDescriptors.getValue().getTypeUrl()) ||
+            !oldDescriptors.getMetadata().getTypeUrl().equals(newDescriptors.getMetadata().getTypeUrl())) {
+            log.debug("The record of {} will be updated as TableDescriptors was changed", tableName);
+            return true;
+        }
+
+        // Compare the primitive types in SchemaOptions
+        if (oldOptions.getSecondaryKeyDeprecated() != newOptions.getSecondaryKeyDeprecated() ||
+            oldOptions.getVersion() != newOptions.getVersion() ||
+            oldOptions.getRequiresBackupSupport() != newOptions.getRequiresBackupSupport() ||
+            oldOptions.getIsFederated() != newOptions.getIsFederated() ||
+            oldOptions.getStreamTagCount() != newOptions.getStreamTagCount() ||
+            oldOptions.getSecondaryKeyCount() != newOptions.getSecondaryKeyCount()) {
+            log.debug("The record of {} will be updated as SchemaOptions was changed", tableName);
+            return true;
+        }
+
+
+        ProtocolStringList oldStreamTagList = oldOptions.getStreamTagList();
+        ProtocolStringList newStreamTagList = newOptions.getStreamTagList();
+        // Only needs to check in one direction as their sizes have been compared.
+        if (!oldStreamTagList.containsAll(newStreamTagList)) {
+            log.debug("The record of {} will be updated as stream tags were changed", tableName);
+            return true;
+        }
+
+        List<CorfuOptions.SecondaryIndex> oldSecondaryIndices = oldOptions.getSecondaryKeyList();
+        List<CorfuOptions.SecondaryIndex> newSecondaryIndices = newOptions.getSecondaryKeyList();
+        // Only needs to check in one direction as their sizes have been compared.
+        if (!oldSecondaryIndices.containsAll(newSecondaryIndices)) {
+            log.debug("The record of {} will be updated as secondary keys were changed", tableName);
+            return true;
+        }
+
+        return false;
     }
 
     /**
