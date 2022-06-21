@@ -41,14 +41,31 @@ public class ReloadableTrustManager implements X509TrustManager {
 
     @Override
     public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+        if (watcher.isCertExpiryCheckDisabled()) {
+            logCertExpiryCheck();
+            return;
+        }
+
         X509TrustManager trustManager = getTrustManager();
         trustManager.checkClientTrusted(chain, authType);
     }
 
     @Override
     public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+        if (watcher.isCertExpiryCheckDisabled()) {
+            logCertExpiryCheck();
+            return;
+        }
+
         X509TrustManager trustManager = getTrustManager();
         trustManager.checkServerTrusted(chain, authType);
+    }
+
+    private void logCertExpiryCheck() {
+        log.info(
+                "Certificate expiry check has been disabled with: {}",
+                watcher.trustStoreConfig.getCertExpiryCheckFile()
+        );
     }
 
     @Override
@@ -117,6 +134,10 @@ public class ReloadableTrustManager implements X509TrustManager {
             return TlsUtils
                     .openCertStore(trustStoreConfig)
                     .thenComposeAsync(this::loadTrustManager);
+        }
+
+        private boolean isCertExpiryCheckDisabled() {
+            return trustStoreConfig.isCertExpiryCheckDisabled();
         }
 
         private CompletableFuture<TrustManagerContext> loadTrustManager(KeyStore trustStore) {

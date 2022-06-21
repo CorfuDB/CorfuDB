@@ -1,5 +1,6 @@
 package org.corfudb.security.tls;
 
+import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
@@ -12,6 +13,7 @@ import java.util.function.Consumer;
 import static org.corfudb.security.tls.TlsTestContext.CLIENT_TRUST_WITH_SERVER;
 import static org.corfudb.security.tls.TlsTestContext.FAKE_LOCATION_AND_PASS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.fail;
 
 public class TlsUtilsTest {
@@ -54,6 +56,12 @@ public class TlsUtilsTest {
         checkTaskError(async, (IllegalStateException ex) -> {
             assertEquals(expectedErrorMessage, ex.getMessage());
         });
+    }
+
+    @Test
+    public void testCertExpiryCheckDisabled(){
+        TrustStoreConfig trustStore = TlsTestContext.SERVER_TRUST_WITH_CLIENT;
+        assertFalse(trustStore.isCertExpiryCheckDisabled());
     }
 
     private <T> void checkTaskError(CompletableFuture<T> async, Consumer<IllegalStateException> errHandler) {

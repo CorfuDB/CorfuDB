@@ -184,6 +184,17 @@ public class TlsUtils {
             public Path getCertStore() {
                 return trustStoreFile;
             }
+
+            public Path getCertExpiryCheckFile(){
+                return trustStoreFile
+                        .toAbsolutePath()
+                        .getParent()
+                        .resolve("DISABLE_CERT_EXPIRY_CHECK");
+            }
+
+            public boolean isCertExpiryCheckDisabled() {
+                return Files.exists(getCertExpiryCheckFile());
+            }
         }
     }
 }
