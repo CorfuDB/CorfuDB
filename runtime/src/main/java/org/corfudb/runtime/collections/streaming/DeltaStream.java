@@ -97,7 +97,7 @@ public class DeltaStream {
      * greater than the trim mark, if this condition is true, then a trim has created a gap
      * that hasn't been synced and cannot be recovered.
      */
-    private boolean trimGap() {
+    public boolean trimGap() {
         return Address.isAddress(trimMark.get())
                 && trimMark.get() != Address.NON_ADDRESS && lastAddressRead.get() < trimMark.get();
     }
@@ -190,6 +190,14 @@ public class DeltaStream {
             maxAddressSeen.set(newAddresses[idx]);
             log.trace("refresh: transferring {} id {}", newAddresses, streamId);
         }
+    }
+
+    public long getNextAddressToRead() {
+        if(!addressesToRead.isEmpty()) {
+            TimeStampedRead stampedRead = (TimeStampedRead) addressesToRead.get();
+            return stampedRead.getAddress();
+        }
+        return Address.NON_ADDRESS;
     }
 
     /**

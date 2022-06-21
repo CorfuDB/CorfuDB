@@ -330,6 +330,103 @@ public class CorfuStore {
     }
 
     /**
+     * Subscribe to transaction updates on specific tables with the streamTag in the namespace, and
+     * also on a corfu system table, that is internally added, with the streamTag in the corfuSystem
+     * namespace.
+     * Objects returned will honor transactional boundaries and will maintain the order of log data
+     * across the client namespace and corfu system namespace.
+     * <p>
+     * Note: if memory is a consideration consider use the other version of subscribe that is
+     * able to specify the size of buffered transactions entries.
+     *
+     * @param streamListener   callback context
+     * @param namespace        the CorfuStore namespace to subscribe to
+     * @param streamTag        only updates of tables with the stream tag will be polled
+     * @param tablesOfInterest only updates from these tables of interest will be sent to listener
+     */
+    public void subscribeLrMergeListener(@Nonnull LrMultiStreamMergeStreamListener streamListener,
+                                         @Nonnull String namespace, @Nonnull String streamTag,
+                                         @Nonnull List<String> tablesOfInterest) {
+        this.subscribeLrMergeListener(streamListener, namespace, streamTag, tablesOfInterest, null);
+    }
+
+    /**
+     * Subscribe to transaction updates on specific tables with the streamTag in the namespace, and
+     * also on a corfu system table, that is internally added, with the streamTag in the corfuSystem
+     * namespace.
+     * Objects returned will honor transactional boundaries and will maintain the order of log data
+     * across the client namespace and corfu system namespace.
+     * <p>
+     * Note: if memory is a consideration consider use the other version of subscribe that is
+     * able to specify the size of buffered transactions entries.
+     *
+     * @param streamListener   callback context
+     * @param namespace        the CorfuStore namespace to subscribe to
+     * @param streamTag        only updates of tables with the stream tag will be polled
+     * @param tablesOfInterest only updates from these tables of interest will be sent to listener
+     * @param timestamp        if specified, all stream updates from this timestamp will be returned,
+     *                         if null, only future updates will be returned
+     */
+    public void subscribeLrMergeListener(@Nonnull LrMultiStreamMergeStreamListener streamListener, @Nonnull String namespace,
+                                         @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
+                                         @Nullable Timestamp timestamp) {
+        runtime.getTableRegistry().getStreamingManager()
+                .subscribeAcrossNamespace(streamListener, namespace, streamTag, tablesOfInterest,
+                        (timestamp == null) ? getTimestamp().getSequence() : timestamp.getSequence());
+    }
+
+
+    /**
+     * Subscribe to transaction updates on specific tables with the streamTag in the namespace, and
+     * also on a corfu system table, that is internally added, with the streamTag in the corfuSystem
+     * namespace.
+     * Objects returned will honor transactional boundaries and will maintain the order of log data
+     * across the client namespace and corfu system namespace.
+     * <p>
+     *
+     *
+     * @param streamListener   callback context
+     * @param namespace        the CorfuStore namespace to subscribe to
+     * @param streamTag        only updates of tables with the stream tag will be polled
+     * @param tablesOfInterest only updates from these tables of interest will be sent to listener
+     * @param timestamp        if specified, all stream updates from this timestamp will be returned,
+     *                         if null, only future updates will be returned
+     * @param bufferSize       maximum size of buffered transaction entries
+     */
+    public void subscribeLrMergeListener(@Nonnull LrMultiStreamMergeStreamListener streamListener,
+                                         @Nonnull String namespace, @Nonnull String streamTag,
+                                         @Nonnull List<String> tablesOfInterest,
+                                         @Nullable Timestamp timestamp, int bufferSize) {
+        runtime.getTableRegistry().getStreamingManager()
+                .subscribeAcrossNamespace(streamListener, namespace, streamTag, tablesOfInterest,
+                        (timestamp == null) ? getTimestamp().getSequence() : timestamp.getSequence(),
+                        bufferSize);
+    }
+
+    /**
+     * Subscribe to transaction updates on all tables with the specified streamTag and namespace, and
+     * also on a corfu system table, that is internally added, with the streamTag in the corfuSystem
+     * namespace.
+     * Objects returned will honor transactional boundaries and will maintain the order of log data
+     * across the client namespace and corfu system namespace
+     *
+     * Note: all tables belonging to this stream tag must have been previously opened or subscription
+     * will fail.
+     *
+     * @param streamListener   client listener for callback
+     * @param namespace        the CorfuStore namespace to subscribe to
+     * @param streamTag        only updates of tables with the stream tag will be polled
+     * @param timestamp        if specified, all stream updates after this timestamp will be returned,
+     *                         if null, only future updates will be returned
+     * @param bufferSize       maximum size of buffered transaction entries
+     */
+    public void subscribeLrMergeListener(@Nonnull LrMultiStreamMergeStreamListener streamListener, @Nonnull String namespace,
+                                  @Nonnull String streamTag, @Nullable Timestamp timestamp, int bufferSize) {
+        List<String> tablesOfInterest = getTablesOfInterest(namespace, streamTag);
+        subscribeListener(streamListener, namespace, streamTag, tablesOfInterest, timestamp, bufferSize);
+    }
+
+    /**
      * Subscribe to transaction updates on specific tables with the streamTag in the namespace.
      * Objects returned will honor transactional boundaries.
      *

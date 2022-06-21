@@ -25,6 +25,7 @@ import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 
@@ -61,10 +62,13 @@ public class StreamingTaskTest {
         UUID streamTagId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
         when(table.getStreamTags()).thenReturn(Collections.singleton(streamTagId));
 
-        StreamingTask task = new StreamingTask(runtime, workers, namespace, streamTag, listener,
-                Collections.singletonList(tableName), Address.NON_ADDRESS, 10);
+        StreamingTask task = new StreamingTask(runtime, workers,
+                Collections.singletonMap(namespace, streamTag), listener,
+                Collections.singletonMap(namespace, Collections.singletonList(tableName)),
+                Address.NON_ADDRESS, 10);
 
-        assertThat(task.getStream().getStreamId()).isEqualTo(streamTagId);
+        List<DeltaStream> taskStreamList = task.getStreamsList();
+        assertThat(taskStreamList.get(0).getStreamId()).isEqualTo(streamTagId);
         assertThat(task.getStatus()).isEqualTo(StreamStatus.RUNNABLE);
         task.move(StreamStatus.RUNNABLE, StreamStatus.SCHEDULING);
         assertThat(task.getStatus()).isEqualTo(StreamStatus.SCHEDULING);
@@ -105,14 +109,16 @@ public class StreamingTaskTest {
         UUID streamTagId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
         when(table.getStreamTags()).thenReturn(Collections.singleton(streamTagId));
 
-        StreamingTask task = new StreamingTask(runtime, workers, namespace, streamTag, listener,
-                Collections.singletonList(tableName), Address.NON_ADDRESS, 10);
-
+        StreamingTask task = new StreamingTask(runtime, workers,
+                Collections.singletonMap(namespace, streamTag), listener,
+                Collections.singletonMap(namespace, Collections.singletonList(tableName)),
+                Address.NON_ADDRESS, 10);
+        List<DeltaStream> taskStreamList = task.getStreamsList();
 
         StreamAddressSpace sas = new StreamAddressSpace();
         sas.addAddress(1L);
         sas.addAddress(2L);
-        task.getStream().refresh(sas);
+        taskStreamList.get(0).refresh(sas);
 
         final ReadOptions options = ReadOptions
                 .builder()
@@ -180,7 +186,7 @@ public class StreamingTaskTest {
         StreamAddressSpace sas2 = new StreamAddressSpace();
         sas2.addAddress(3L);
 
-        task.getStream().refresh(sas2);
+        taskStreamList.get(0).refresh(sas2);
         when(addressSpaceView.read(3L, options)).thenThrow(new TrimmedException());
 
         // Verify that trimmed exceptions are discovered and propagated correctly

@@ -1,6 +1,7 @@
 package org.corfudb.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.runtime.collections.streaming.StreamingManager.LR_STATUS_STREAM_TAG;
 import static org.junit.Assert.fail;
 
 
@@ -196,7 +197,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
             CountDownLatch statusUpdateLatch = new CountDownLatch(totalStandbyStatusUpdates);
             ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
             corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
-                    LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+                    LR_STATUS_STREAM_TAG);
 
             log.info(">> Open map(s) on active and standby");
             openMaps(totalNumMaps, diskBased);
@@ -292,7 +293,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         CountDownLatch statusUpdateLatch = new CountDownLatch(1);
         ReplicationStatusListener activeListener = new ReplicationStatusListener(statusUpdateLatch, true);
         corfuStoreActive.subscribeListener(activeListener, LogReplicationMetadataManager.NAMESPACE,
-                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+                LR_STATUS_STREAM_TAG);
 
         corfuStoreActive.openTable(LogReplicationMetadataManager.NAMESPACE,
                 LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
