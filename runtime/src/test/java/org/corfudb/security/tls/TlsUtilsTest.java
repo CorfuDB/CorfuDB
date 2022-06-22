@@ -13,7 +13,7 @@ import java.util.function.Consumer;
 import static org.corfudb.security.tls.TlsTestContext.CLIENT_TRUST_WITH_SERVER;
 import static org.corfudb.security.tls.TlsTestContext.FAKE_LOCATION_AND_PASS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 public class TlsUtilsTest {
@@ -61,7 +61,7 @@ public class TlsUtilsTest {
     @Test
     public void testCertExpiryCheckDisabled(){
         TrustStoreConfig trustStore = TlsTestContext.SERVER_TRUST_WITH_CLIENT;
-        assertFalse(trustStore.isCertExpiryCheckDisabled());
+        assertTrue(trustStore.isCertExpiryCheckEnabled());
     }
 
     private <T> void checkTaskError(CompletableFuture<T> async, Consumer<IllegalStateException> errHandler) {
