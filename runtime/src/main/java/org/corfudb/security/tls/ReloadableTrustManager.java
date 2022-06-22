@@ -47,9 +47,10 @@ public class ReloadableTrustManager implements X509TrustManager {
             }
         } else {
             logCertExpiryCheck();
-            X509TrustManager trustManager = getTrustManager();
-            trustManager.checkClientTrusted(chain, authType);
         }
+
+        X509TrustManager trustManager = getTrustManager();
+        trustManager.checkClientTrusted(chain, authType);
     }
 
     @Override
@@ -60,9 +61,10 @@ public class ReloadableTrustManager implements X509TrustManager {
             }
         } else {
             logCertExpiryCheck();
-            X509TrustManager trustManager = getTrustManager();
-            trustManager.checkServerTrusted(chain, authType);
         }
+
+        X509TrustManager trustManager = getTrustManager();
+        trustManager.checkServerTrusted(chain, authType);
     }
 
     private void logCertExpiryCheck() {
