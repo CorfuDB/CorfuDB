@@ -192,8 +192,8 @@ public class TlsUtils {
                         .resolve("DISABLE_CERT_EXPIRY_CHECK");
             }
 
-            public boolean isCertExpiryCheckDisabled() {
-                return Files.exists(getCertExpiryCheckFile());
+            public boolean isCertExpiryCheckEnabled() {
+                return !Files.exists(getCertExpiryCheckFile());
             }
         }
     }

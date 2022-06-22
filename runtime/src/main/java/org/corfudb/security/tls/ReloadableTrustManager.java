@@ -41,24 +41,28 @@ public class ReloadableTrustManager implements X509TrustManager {
 
     @Override
     public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-        if (watcher.isCertExpiryCheckDisabled()) {
+        if (watcher.isCertExpiryCheckEnabled()) {
+            for (X509Certificate cert : chain) {
+                cert.checkValidity();
+            }
+        } else {
             logCertExpiryCheck();
-            return;
+            X509TrustManager trustManager = getTrustManager();
+            trustManager.checkClientTrusted(chain, authType);
         }
-
-        X509TrustManager trustManager = getTrustManager();
-        trustManager.checkClientTrusted(chain, authType);
     }
 
     @Override
     public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-        if (watcher.isCertExpiryCheckDisabled()) {
+        if (watcher.isCertExpiryCheckEnabled()) {
+            for (X509Certificate cert : chain) {
+                cert.checkValidity();
+            }
+        } else {
             logCertExpiryCheck();
-            return;
+            X509TrustManager trustManager = getTrustManager();
+            trustManager.checkServerTrusted(chain, authType);
         }
-
-        X509TrustManager trustManager = getTrustManager();
-        trustManager.checkServerTrusted(chain, authType);
     }
 
     private void logCertExpiryCheck() {
@@ -136,8 +140,8 @@ public class ReloadableTrustManager implements X509TrustManager {
                     .thenComposeAsync(this::loadTrustManager);
         }
 
-        private boolean isCertExpiryCheckDisabled() {
-            return trustStoreConfig.isCertExpiryCheckDisabled();
+        private boolean isCertExpiryCheckEnabled() {
+            return trustStoreConfig.isCertExpiryCheckEnabled();
         }
 
         private CompletableFuture<TrustManagerContext> loadTrustManager(KeyStore trustStore) {
