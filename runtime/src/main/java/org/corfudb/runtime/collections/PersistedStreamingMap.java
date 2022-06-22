@@ -23,6 +23,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
 import java.util.Set;
 import java.util.Spliterator;
 import java.util.Spliterators;
@@ -43,8 +44,9 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
 
     public static final String DISK_BACKED = "diskBacked";
     public static final String TRUE = "true";
-    public static final int SAMPLING_RATE = 1000;
+    public static final int SAMPLE_SPACE = 1000;
 
+    private final Random randomNumberGenerator;
     private final Optional<Counter> getCounter;
     private final Optional<Counter> putCounter;
 
@@ -107,6 +109,7 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
         this.corfuRuntime = corfuRuntime;
         getCounter = MicroMeterUtils.counter("persisted_map.get.counter");
         putCounter = MicroMeterUtils.counter("persisted_map.put.counter");
+        randomNumberGenerator = new Random();
     }
 
     /**
@@ -159,7 +162,7 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
     @Override
     public V get(@NonNull Object key) {
         getCounter.ifPresent(Counter::increment);
-        Optional<Timer.Sample> recordSample = MicroMeterUtils.startTimer(getCounter, SAMPLING_RATE);
+        Optional<Timer.Sample> recordSample = MicroMeterUtils.startTimer(getCounter, randomNumberGenerator.nextInt() % SAMPLE_SPACE);
         final ByteBuf keyPayload = Unpooled.buffer();
         serializer.serialize(key, keyPayload);
 
@@ -184,7 +187,7 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
     @Override
     public V put(@NonNull K key, @NonNull V value) {
         putCounter.ifPresent(Counter::increment);
-        Optional<Timer.Sample> recordSample = MicroMeterUtils.startTimer(putCounter, SAMPLING_RATE);
+        Optional<Timer.Sample> recordSample = MicroMeterUtils.startTimer(putCounter, randomNumberGenerator.nextInt() % SAMPLE_SPACE);
         final ByteBuf keyPayload = Unpooled.buffer();
         final ByteBuf valuePayload = Unpooled.buffer();
         serializer.serialize(key, keyPayload);
