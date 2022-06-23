@@ -70,7 +70,7 @@ public class ReloadableTrustManager implements X509TrustManager {
     private void logCertExpiryCheck() {
         log.info(
                 "Certificate expiry check has been disabled with: {}",
-                watcher.trustStoreConfig.getCertExpiryCheckFile()
+                watcher.trustStoreConfig.getDisableCertExpiryCheckFile()
         );
     }
 

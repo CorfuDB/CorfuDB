@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import com.google.common.collect.ImmutableMap;
 import lombok.Data;
 import lombok.experimental.Accessors;
+import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.test.concurrent.TestThreadGroups;
 
 /**
@@ -79,10 +80,10 @@ public class ServerContextBuilder {
                  .put("--enable-tls-mutual-auth", tlsMutualAuthEnabled)
                  .put("--tls-protocols", tlsProtocols)
                  .put("--tls-ciphers", tlsCiphers)
-                 .put("--keystore", keystore)
-                 .put("--keystore-password-file", keystorePasswordFile)
-                 .put("--truststore", truststore)
-                 .put("--truststore-password-file", truststorePasswordFile)
+                 .put(ConfigParamNames.KEY_STORE, keystore)
+                 .put(ConfigParamNames.KEY_STORE_PASS_FILE, keystorePasswordFile)
+                 .put(ConfigParamNames.TRUST_STORE, truststore)
+                 .put(ConfigParamNames.TRUST_STORE_PASS_FILE, truststorePasswordFile)
                  .put("--enable-sasl-plain-text-auth", saslPlainTextAuth)
                  .put("--cluster-id", clusterId)
                  .put("--implementation", implementation)
