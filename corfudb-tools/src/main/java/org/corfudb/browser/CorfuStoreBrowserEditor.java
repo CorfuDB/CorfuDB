@@ -3,6 +3,9 @@ package org.corfudb.browser;
 import com.google.common.collect.Iterables;
 import com.google.common.reflect.TypeToken;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -15,6 +18,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -171,6 +175,7 @@ public class CorfuStoreBrowserEditor {
                 printMetadata(entry);
             }
         }
+        System.out.println("Table size="+size);
         return size;
     }
 
@@ -517,51 +522,83 @@ public class CorfuStoreBrowserEditor {
     }
 
     /**
+     * Delete all the records from a file record in a table and namespace
+     * @param namespace namespace of the table
+     * @param tableName name of the table
+     * @param pathToKeysFile path to file having each key in a json line
+     * @param batchSize number of keys to delete in a single corfu transaction
+     * @return number of keys deleted.
+     */
+    public int deleteRecordsFromFile(String namespace, String tableName, String pathToKeysFile, int batchSize) {
+        List<String> recordsToDelete = Collections.emptyList();
+        System.out.println("\n======================\n");
+        System.out.println("\nReading all json keys to be deleted from "+pathToKeysFile+"\n");
+        try {
+            recordsToDelete = Files.readAllLines(Paths.get(pathToKeysFile), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            log.error("Unable to read file {}"+pathToKeysFile, e);
+            return 0;
+        }
+        return deleteRecords(namespace, tableName, recordsToDelete, batchSize);
+    }
+
+    /**
      * Delete a record in a table and namespace
      * @param namespace namespace of the table
      * @param tableName name of the table
-     * @param keyToDelete JSON string representing the key protobuf that needs to be deleted.
+     * @param keysToDelete array of JSON strings of key protobuf that needs to be deleted.
+     * @param batchSize number of records to group into a single corfu transaction
      * @return number of keys deleted.
      */
     @SuppressWarnings("checkstyle:magicnumber")
-    public int deleteRecord(String namespace, String tableName, String keyToDelete) {
+    public int deleteRecords(String namespace, String tableName, List<String> keysToDelete, int batchSize) {
         System.out.println("\n======================\n");
         String fullName = TableRegistry.getFullyQualifiedTableName(namespace,
                 tableName);
         UUID streamUUID = CorfuRuntime.getStreamID(fullName);
+        System.out.println("\nDeleting "+keysToDelete.size()+" records"+
+                " in table " + tableName + " and namespace " + namespace +
+                ".  Stream Id " + streamUUID);
 
+        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
+                getTable(namespace, tableName);
         TableName tableNameProto = TableName.newBuilder().setTableName(tableName)
                 .setNamespace(namespace).build();
 
         Any defaultKeyAny =
                 dynamicProtobufSerializer.getCachedRegistryTable().get(tableNameProto)
                         .getPayload().getKey();
-        DynamicMessage keyMsg =
-                dynamicProtobufSerializer.createDynamicMessageFromJson(defaultKeyAny,
-                        keyToDelete);
-
-        CorfuDynamicKey dynamicKey =
-                new CorfuDynamicKey(defaultKeyAny.getTypeUrl(), keyMsg);
-        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
-                getTable(namespace, tableName);
-        int numKeysDeleted = -1;
+        int numKeysDeleted = 0;
         try {
+            int recordsInTxn = 0;
             runtime.getObjectsView().TXBegin();
-            if (!table.containsKey(dynamicKey)) {
-                System.out.println("Key "+keyToDelete+" not found in "+fullName);
-                runtime.getObjectsView().TXEnd();
-                numKeysDeleted = 0;
-                return numKeysDeleted;
+            for (String keyToDelete: keysToDelete) {
+                DynamicMessage keyMsg =
+                        dynamicProtobufSerializer.createDynamicMessageFromJson(defaultKeyAny,
+                                keyToDelete);
+
+                CorfuDynamicKey dynamicKey =
+                        new CorfuDynamicKey(defaultKeyAny.getTypeUrl(), keyMsg);
+                if (!table.containsKey(dynamicKey)) {
+                    System.out.println("WARNING Key " + keyToDelete + " not found in " + fullName);
+                    continue;
+                }
+                System.out.println(numKeysDeleted + ": Deleting record with Key " + keyToDelete);
+                table.delete(dynamicKey);
+                recordsInTxn++;
+                if (recordsInTxn > batchSize) {
+                    System.out.println("\nTransaction batch size "+batchSize+" hit, committing transaction\n");
+                    runtime.getObjectsView().TXEnd();
+                    numKeysDeleted += recordsInTxn;
+                    recordsInTxn = 0;
+                    runtime.getObjectsView().TXBegin();
+                }
             }
-            System.out.println("Deleting record with Key " + keyToDelete +
-                    " in table " + tableName + " and namespace " + namespace +
-                    ".  Stream Id " + streamUUID);
-            table.delete(dynamicKey);
+            numKeysDeleted += recordsInTxn;
             runtime.getObjectsView().TXEnd();
-            System.out.println("\n======================\n");
-            numKeysDeleted = 1;
+            System.out.println("\n "+numKeysDeleted+" records deleted successfully.\n");
         } catch (TransactionAbortedException e) {
-            log.error("Transaction to delete record {} aborted.", keyToDelete, e);
+            log.error("Transaction to delete records aborted.", e);
         } finally {
             if (TransactionalContext.isInTransaction()) {
                 runtime.getObjectsView().TXAbort();
@@ -577,7 +614,7 @@ public class CorfuStoreBrowserEditor {
      * @param numItems - total number of items to load
      * @param batchSize - number of items in each transaction
      * @param itemSize - size of each item - a random string array
-     * @return - number of entries in the table
+     * @return - number of entries loaded in table
      */
     public int loadTable(String namespace, String tableName, int numItems, int batchSize, int itemSize) {
         CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
@@ -614,7 +651,7 @@ public class CorfuStoreBrowserEditor {
      * @param stopAfter number of updates to stop listening at
      * @return number of updates read so far
      */
-    public long listenOnTable(String namespace, String tableName, int stopAfter) {
+    public int listenOnTable(String namespace, String tableName, int stopAfter) {
         CorfuStoreShim store = new CorfuStoreShim(runtime);
         final Table<ExampleTableName, ExampleTableName, ManagedMetadata> table;
         try {
@@ -642,13 +679,13 @@ public class CorfuStoreBrowserEditor {
         class StreamDumper implements StreamListener {
             @Getter
             final
-            AtomicLong txnRead;
+            AtomicInteger txnRead;
 
             @Getter
             volatile boolean isError;
 
             public StreamDumper() {
-                this.txnRead = new AtomicLong(0);
+                this.txnRead = new AtomicInteger(0);
             }
 
             @Override
