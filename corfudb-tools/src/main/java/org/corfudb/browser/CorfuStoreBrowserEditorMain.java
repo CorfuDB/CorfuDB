@@ -1,5 +1,6 @@
 package org.corfudb.browser;
 
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
 
@@ -69,6 +70,7 @@ public class CorfuStoreBrowserEditorMain {
         + "--itemSize=<itemSize> Size of each item's payload for loadTable\n"
         + "--keyToEdit=<keyToEdit> Key of the record to edit\n"
         + "--keyToDelete=<keyToDelete> Key of the record to be deleted\n"
+        + "--keysToDeleteFilePath=<keysToDeleteFilePath> Path to file having all keys in one json array\n"
         + "--newRecord=<newRecord> New Edited record to insert\n"
         + "--tlsEnabled=<tls_enabled>";
 
@@ -123,12 +125,14 @@ public class CorfuStoreBrowserEditorMain {
             } else {
                 browser = new CorfuStoreBrowserEditor(runtime);
             }
-            String namespace = Optional.ofNullable(opts.get("--namespace"))
+            final String namespace = Optional.ofNullable(opts.get("--namespace"))
                     .map(Object::toString)
                     .orElse(null);
-            String tableName = Optional.ofNullable(opts.get("--tablename"))
+            final String tableName = Optional.ofNullable(opts.get("--tablename"))
                     .map(Object::toString)
                     .orElse(null);
+            final String batchSizeStr = "--batchSize";
+            int batchSize = 100000; // this would be the default batch size for corfu transactions
 
             switch (Enum.valueOf(OperationType.class, operation)) {
                 case listTables:
@@ -177,26 +181,38 @@ public class CorfuStoreBrowserEditorMain {
                     browser.editRecord(namespace, tableName, keyToEdit, newRecord);
                     break;
                 case deleteRecord:
-                    String keyToDelete = null;
-                    if (opts.get("--keyToDelete") != null) {
-                        keyToDelete = String.valueOf(opts.get("--keyToDelete"));
-                    }
+                    final String keyToDeleteStr = "--keyToDelete";
+                    final String keysToDeleteFilePathStr = "--keysToDeleteFilePath";
                     Preconditions.checkArgument(isValid(namespace),
                             "Namespace is null or empty.");
                     Preconditions.checkArgument(isValid(tableName),
                             "Table name is null or empty.");
-                    Preconditions.checkNotNull(keyToDelete,
-                            "Key To Delete is Null.");
-                    browser.deleteRecord(namespace, tableName, keyToDelete);
+                    String keyToDelete = null;
+                    if (opts.get(keyToDeleteStr) != null) {
+                        keyToDelete = String.valueOf(opts.get(keyToDeleteStr));
+                        Preconditions.checkNotNull(keyToDelete,
+                                "Key To Delete is Null.");
+                        browser.deleteRecords(namespace, tableName, Arrays.asList(keyToDelete), batchSize);
+                    } else if (opts.get(keysToDeleteFilePathStr) != null) {
+                        String pathToKeyFile = String.valueOf(opts.get(keysToDeleteFilePathStr));
+                        if (opts.get(batchSizeStr) != null) {
+                            batchSize = Integer.parseInt(opts.get(batchSizeStr).toString());
+                        }
+                        browser.deleteRecordsFromFile(namespace, tableName, pathToKeyFile, batchSize);
+                    } else {
+                        Preconditions.checkNotNull(keyToDelete,
+                                "keyToDelete or keysToDeleteFilePath must be specified");
+                    }
                     break;
                 case loadTable:
                     int numItems = 1000;
                     if (opts.get("--numItems") != null) {
                         numItems = Integer.parseInt(opts.get("--numItems").toString());
                     }
-                    int batchSize = 1000;
-                    if (opts.get("--batchSize") != null) {
-                        batchSize = Integer.parseInt(opts.get("--batchSize").toString());
+                    if (opts.get(batchSizeStr) != null) {
+                        batchSize = Integer.parseInt(opts.get(batchSizeStr).toString());
+                    } else {
+                        batchSize = 1000;
                     }
                     int itemSize = 1024;
                     if (opts.get("--itemSize") != null) {
