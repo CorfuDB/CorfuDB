@@ -1,10 +1,8 @@
 package org.corfudb.runtime.collections;
 
-import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Timer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.util.internal.ThreadLocalRandom;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
@@ -27,6 +25,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.Spliterator;
 import java.util.Spliterators;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
@@ -44,11 +43,8 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
 
     public static final String DISK_BACKED = "diskBacked";
     public static final String TRUE = "true";
-    public static final int SAMPLE_SPACE = 1000;
-
-    private final ThreadLocalRandom randomNumberGenerator;
-    private final Optional<Counter> getCounter;
-    private final Optional<Counter> putCounter;
+    public static final int BOUND = 100;
+    public static final int SAMPLING_RATE = 40;
 
     private final WriteOptions writeOptions = new WriteOptions()
             .setDisableWAL(true)
@@ -107,9 +103,6 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
         }
         this.serializer = serializer;
         this.corfuRuntime = corfuRuntime;
-        getCounter = MicroMeterUtils.counter("persisted_map.get.counter");
-        putCounter = MicroMeterUtils.counter("persisted_map.put.counter");
-        randomNumberGenerator = ThreadLocalRandom.current();
     }
 
     /**
@@ -161,8 +154,8 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
      */
     @Override
     public V get(@NonNull Object key) {
-        getCounter.ifPresent(Counter::increment);
-        Optional<Timer.Sample> recordSample = MicroMeterUtils.startTimer(getCounter, randomNumberGenerator.nextInt(SAMPLE_SPACE));
+        Optional<Timer.Sample> recordSample = MicroMeterUtils.startTimer(
+                SAMPLING_RATE > ThreadLocalRandom.current().nextInt(BOUND));
         final ByteBuf keyPayload = Unpooled.buffer();
         serializer.serialize(key, keyPayload);
 
@@ -186,8 +179,8 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
      */
     @Override
     public V put(@NonNull K key, @NonNull V value) {
-        putCounter.ifPresent(Counter::increment);
-        Optional<Timer.Sample> recordSample = MicroMeterUtils.startTimer(putCounter, randomNumberGenerator.nextInt(SAMPLE_SPACE));
+        Optional<Timer.Sample> recordSample = MicroMeterUtils.startTimer(
+                SAMPLING_RATE > ThreadLocalRandom.current().nextInt(BOUND));
         final ByteBuf keyPayload = Unpooled.buffer();
         final ByteBuf valuePayload = Unpooled.buffer();
         serializer.serialize(key, keyPayload);
