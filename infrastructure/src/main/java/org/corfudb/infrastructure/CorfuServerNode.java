@@ -28,6 +28,7 @@ import org.corfudb.util.GitRepositoryState;
 
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLEngine;
+import java.nio.file.Paths;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -296,7 +297,7 @@ public class CorfuServerNode implements AutoCloseable {
                     TrustStoreConfig trustStoreConfig = TrustStoreConfig.from(
                             context.getServerConfig(String.class, ConfigParamNames.TRUST_STORE),
                             context.getServerConfig(String.class, ConfigParamNames.TRUST_STORE_PASS_FILE),
-                            TrustStoreConfig.DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE
+                            Paths.get(context.getServerConfig(String.class, ConfigParamNames.DISABLE_CERT_EXPIRY_CHECK_FILE))
                     );
 
                     sslContext = SslContextConstructor.constructSslContext(

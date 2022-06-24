@@ -34,7 +34,7 @@ public class ServerContextBuilder {
     boolean saslPlainTextAuth = false;
     String truststore = "";
     String truststorePasswordFile = "";
-    Path disableCertExpiryCheckFile = TrustStoreConfig.DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE;
+    String disableCertExpiryCheckFile = TrustStoreConfig.DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE.toString();
 
     String implementation = "local";
 
@@ -89,6 +89,7 @@ public class ServerContextBuilder {
                  .put(ConfigParamNames.KEY_STORE_PASS_FILE, keystorePasswordFile)
                  .put(ConfigParamNames.TRUST_STORE, truststore)
                  .put(ConfigParamNames.TRUST_STORE_PASS_FILE, truststorePasswordFile)
+                 .put(ConfigParamNames.DISABLE_CERT_EXPIRY_CHECK_FILE, disableCertExpiryCheckFile)
                  .put("--enable-sasl-plain-text-auth", saslPlainTextAuth)
                  .put("--cluster-id", clusterId)
                  .put("--implementation", implementation)

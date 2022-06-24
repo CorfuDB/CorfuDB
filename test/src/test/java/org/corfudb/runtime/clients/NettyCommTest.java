@@ -424,7 +424,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                 .setTruststorePasswordFile("src/test/resources/security/reload/password")
                 .setTlsMutualAuthEnabled(true)
                 .setPort(port)
-                .setDisableCertExpiryCheckFile(disableCertExpiryCheckFile.toPath())
+                .setDisableCertExpiryCheckFile(disableCertExpiryCheckFile.toString())
                 .build());
     serverData.bootstrapServer();
 
