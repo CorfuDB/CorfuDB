@@ -445,7 +445,7 @@ public class StreamLogFiles implements StreamLog {
         log.info("trimPrefix: completed, end segment {}", endSegment);
     }
 
-    private LogData getLogData(LogEntry entry) {
+    public static LogData getLogData(LogEntry entry) {
         ByteBuffer entryData = ByteBuffer.wrap(entry.getData().toByteArray());
 
         int ldCodecType = entry.hasCodecType() ? entry.getCodecType() : Codec.Type.NONE.getId();
@@ -724,17 +724,28 @@ public class StreamLogFiles implements StreamLog {
         }
 
         try {
-            ByteBuffer entryBuf = ByteBuffer.allocate(metaData.length);
-            fileChannel.read(entryBuf, metaData.offset);
-            LogData logData = getLogData(LogEntry.parseFrom(entryBuf.array()));
-            MicroMeterUtils.measure(metaData.length, "logunit.read.throughput");
-            return logData;
+            return readLogDataFromFile(fileChannel, metaData);
         } catch (InvalidProtocolBufferException e) {
             String errorMessage = getDataCorruptionErrorMessage("Invalid entry",
                     fileChannel, segment.getFileName()
             );
             throw new DataCorruptionException(errorMessage, e);
         }
+    }
+
+    /**
+     * Given a metadata and file handles return a formed logData
+     * @param fileChannel
+     * @param metaData
+     * @return LogData from the file at the specified LogEntry's metadata
+     * @throws IOException in case of an error in reading the file
+     */
+    public static LogData readLogDataFromFile(FileChannel fileChannel, AddressMetaData metaData) throws IOException {
+        ByteBuffer entryBuf = ByteBuffer.allocate(metaData.length);
+        fileChannel.read(entryBuf, metaData.offset);
+        LogData logData = getLogData(LogEntry.parseFrom(entryBuf.array()));
+        MicroMeterUtils.measure(metaData.length, "logunit.read.throughput");
+        return logData;
     }
 
     @Nullable
@@ -828,7 +839,7 @@ public class StreamLogFiles implements StreamLog {
     }
 
     @SuppressWarnings("checkstyle:abbreviationaswordinname")  // Due to deprecation
-    private Map<UUID, Long> getUUIDLongMap(Map<String, Long> stringLongMap) {
+    public static Map<UUID, Long> getUUIDLongMap(Map<String, Long> stringLongMap) {
         Map<UUID, Long> uuidLongMap = new HashMap<>();
 
         for (Map.Entry<String, Long> entry : stringLongMap.entrySet()) {
