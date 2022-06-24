@@ -715,6 +715,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setKsPasswordFile(ksPasswordFile);
                 corfuRuntimeParameters.setTrustStore(trustStore);
                 corfuRuntimeParameters.setTsPasswordFile(tsPasswordFile);
+                corfuRuntimeParameters.setDisableCertExpiryCheckFile(disableCertExpiryCheckFile);
                 corfuRuntimeParameters.setSaslPlainTextEnabled(saslPlainTextEnabled);
                 corfuRuntimeParameters.setUsernameFile(usernameFile);
                 corfuRuntimeParameters.setPasswordFile(passwordFile);

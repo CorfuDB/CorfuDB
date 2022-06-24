@@ -192,7 +192,8 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
 
                     TrustStoreConfig trustStoreConfig = TrustStoreConfig.from(
                             context.getServerConfig(String.class, ConfigParamNames.TRUST_STORE),
-                            context.getServerConfig(String.class, ConfigParamNames.TRUST_STORE_PASS_FILE)
+                            context.getServerConfig(String.class, ConfigParamNames.TRUST_STORE_PASS_FILE),
+                            TrustStoreConfig.DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE
                     );
 
                     sslContext = SslContextConstructor.constructSslContext(true, keyStoreConfig, trustStoreConfig);

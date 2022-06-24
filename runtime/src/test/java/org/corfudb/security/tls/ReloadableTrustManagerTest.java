@@ -29,6 +29,15 @@ public class ReloadableTrustManagerTest {
 
     @Test
     public void testServerCheckClient() throws Exception {
+        TlsTestContext.disableCertExpiryCheck(() -> {
+            ReloadableTrustManager manager = new ReloadableTrustManager(SERVER_TRUST_WITH_CLIENT);
+            X509Certificate cert = getCertificate(CLIENT_CERT);
+            manager.checkClientTrusted(new X509Certificate[]{cert}, "RSA");
+        });
+    }
+
+    @Test
+    public void testServerCheckClientExpired() throws Exception {
         ReloadableTrustManager manager = new ReloadableTrustManager(SERVER_TRUST_WITH_CLIENT);
         X509Certificate cert = getCertificate(CLIENT_CERT);
         assertThrows(CertificateExpiredException.class, () -> {
@@ -52,6 +61,15 @@ public class ReloadableTrustManagerTest {
 
     @Test
     public void testClientCheckServer() throws Exception {
+        TlsTestContext.disableCertExpiryCheck(() -> {
+            ReloadableTrustManager manager = new ReloadableTrustManager(CLIENT_TRUST_WITH_SERVER);
+            X509Certificate cert = getCertificate(SERVER_CERT);
+            manager.checkServerTrusted(new X509Certificate[]{cert}, "RSA");
+        });
+    }
+
+    @Test
+    public void testClientCheckServerExpired() throws Exception {
         ReloadableTrustManager manager = new ReloadableTrustManager(CLIENT_TRUST_WITH_SERVER);
         X509Certificate cert = getCertificate(SERVER_CERT);
         assertThrows(CertificateExpiredException.class, () -> {

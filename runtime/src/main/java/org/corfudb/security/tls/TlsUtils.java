@@ -181,11 +181,11 @@ public class TlsUtils {
             private final Path passwordFile;
             private final Path disableCertExpiryCheckFile;
 
-            public static TrustStoreConfig from(String trustStorePath, String passwordFile) {
+            public static TrustStoreConfig from(String trustStorePath, String passwordFile, Path disableCertExpiryCheckFile) {
                 return new TrustStoreConfig(
                         Paths.get(trustStorePath),
                         Paths.get(passwordFile),
-                        DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE
+                        disableCertExpiryCheckFile
                 );
             }
 

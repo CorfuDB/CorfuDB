@@ -4,7 +4,11 @@ import com.google.common.collect.ImmutableMap;
 import lombok.Data;
 import lombok.experimental.Accessors;
 import org.corfudb.common.config.ConfigParamNames;
+import org.corfudb.security.tls.TlsUtils;
+import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 import org.corfudb.test.concurrent.TestThreadGroups;
+
+import java.nio.file.Path;
 
 /**
  * Created by mwei on 6/29/16.
@@ -30,6 +34,7 @@ public class ServerContextBuilder {
     boolean saslPlainTextAuth = false;
     String truststore = "";
     String truststorePasswordFile = "";
+    Path disableCertExpiryCheckFile = TrustStoreConfig.DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE;
 
     String implementation = "local";
 

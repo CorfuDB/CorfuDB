@@ -118,7 +118,11 @@ public class SecurityIT extends AbstractIT {
             SslContextConstructor.constructSslContext(
                     false,
                     KeyStoreConfig.from(runtimePathToTrustStore, runtimePathToKeyStorePassword),
-                    TrustStoreConfig.from(runtimePathToTrustStore, runtimePathToTrustStorePassword)
+                    TrustStoreConfig.from(
+                            runtimePathToTrustStore,
+                            runtimePathToTrustStorePassword,
+                            TrustStoreConfig.DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE
+                    )
             );
         });
     }
@@ -127,7 +131,8 @@ public class SecurityIT extends AbstractIT {
     public void testInvalidTrustStore() {
         TrustStoreConfig invalidTrustStore = TrustStoreConfig.from(
                 runtimePathToKeyStore,
-                runtimePathToTrustStorePassword
+                runtimePathToTrustStorePassword,
+                TrustStoreConfig.DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE
         );
 
         assertThrows(IllegalStateException.class, () -> new TrustStoreWatcher(invalidTrustStore));
