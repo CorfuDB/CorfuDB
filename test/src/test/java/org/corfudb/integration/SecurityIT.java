@@ -109,65 +109,6 @@ public class SecurityIT extends AbstractIT {
     }
 
     /**
-     * This test creates Corfu runtime and a single Corfu server according to the configuration
-     * provided in CorfuDB.properties. Corfu runtime configures TLS related parameters using
-     * {@link CorfuRuntime}'s API and then asserts that operations on a CorfuTable is executed
-     * as Expected.
-     *
-     * @throws Exception error
-     */
-    @Test
-    public void testServerRuntimeTlsEnabledMethod() throws Exception {
-        // Run a corfu server
-        Process corfuServer = runSinglePersistentServerTls();
-
-        // Start a Corfu runtime
-        CorfuRuntimeParameters runtimeParameters = CorfuRuntimeParameters
-                .builder()
-                .layoutServers(Collections.singletonList(NodeLocator.parseString(singleNodeEndpoint)))
-                .tlsEnabled(tlsEnabled)
-                .keyStore(runtimePathToKeyStore)
-                .ksPasswordFile(runtimePathToKeyStorePassword)
-                .trustStore(runtimePathToTrustStore)
-                .tsPasswordFile(runtimePathToTrustStorePassword)
-                .cacheDisabled(true)
-                .systemDownHandler(() -> fail("Can't connect to corfu server"))
-                .build();
-
-        // Connecting to runtime
-        runtime = CorfuRuntime
-                .fromParameters(runtimeParameters)
-                .connect();
-
-        // Create CorfuTable
-        CorfuTable<String, Object> testTable = runtime
-                .getObjectsView()
-                .build()
-                .setTypeToken(TYPE_TOKEN)
-                .setStreamName("volbeat")
-                .open();
-
-        // CorfuTable stats before usage
-        final int initialSize = testTable.size();
-
-        // Put key values in CorfuTable
-        final int count = 100;
-        final int entrySize = 1000;
-        for (int i = 0; i < count; i++) {
-            testTable.put(String.valueOf(i), new byte[entrySize]);
-        }
-
-        // Assert that put operation was successful
-        final int sizeAfterPuts = testTable.size();
-        assertThat(sizeAfterPuts).isGreaterThanOrEqualTo(initialSize);
-        log.info("Initial Table Size: {} - FinalTable Size:{}", initialSize, sizeAfterPuts);
-
-        // Assert that table has correct size (i.e. count) and and server is shutdown
-        assertThat(testTable.size()).isEqualTo(count);
-        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
-    }
-
-    /**
      * Testing that configuring incorrect TLS parameters will lead to throwing
      * {@link IllegalStateException} exception.
      */
