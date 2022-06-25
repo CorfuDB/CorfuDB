@@ -44,6 +44,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -465,6 +466,12 @@ public class CorfuRuntime {
 
             public CorfuRuntimeParametersBuilder trustStore(String trustStore) {
                 super.trustStore(trustStore);
+                return this;
+            }
+
+            @Override
+            public CorfuRuntimeParametersBuilder disableCertExpiryCheckFile(Path disableCertExpiryCheckFile) {
+                this.disableCertExpiryCheckFile = disableCertExpiryCheckFile;
                 return this;
             }
 

@@ -2,26 +2,18 @@ package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.security.tls.ReloadableTrustManager.TrustStoreWatcher;
 import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
-import org.corfudb.util.NodeLocator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.Collections;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * This test suit exercises the ability to enable TLS on Corfu servers and runtime
@@ -30,36 +22,10 @@ import static org.junit.jupiter.api.Assertions.fail;
  */
 @Slf4j
 public class SecurityIT extends AbstractIT {
-    private static final TypeToken<CorfuTable<String, Object>> TYPE_TOKEN = new TypeToken<CorfuTable<String, Object>>() {
-    };
-    private String corfuSingleNodeHost;
-    private int corfuStringNodePort;
-    private String singleNodeEndpoint;
-
-    private boolean tlsEnabled = true;
-    private String serverPathToKeyStore;
-    private String serverPathToKeyStorePassword;
-    private String serverPathToTrustStore;
-    private String serverPathToTrustStorePassword;
     private String runtimePathToKeyStore;
     private String runtimePathToKeyStorePassword;
     private String runtimePathToTrustStore;
     private String runtimePathToTrustStorePassword;
-
-    /* A helper method that start a single TLS enabled server and returns a process. */
-    private Process runSinglePersistentServerTls() throws IOException {
-        return new AbstractIT.CorfuServerRunner()
-                .setHost(corfuSingleNodeHost)
-                .setPort(corfuStringNodePort)
-                .setTlsEnabled(tlsEnabled)
-                .setKeyStore(serverPathToKeyStore)
-                .setKeyStorePassword(serverPathToKeyStorePassword)
-                .setTrustStore(serverPathToTrustStore)
-                .setTrustStorePassword(serverPathToTrustStorePassword)
-                .setLogPath(getCorfuServerLogPath(corfuSingleNodeHost, corfuStringNodePort))
-                .setSingle(true)
-                .runServer();
-    }
 
     /**
      * This is a helper method that loads the properties required for creating corfu servers before
@@ -70,19 +36,6 @@ public class SecurityIT extends AbstractIT {
      */
     @BeforeEach
     public void loadProperties() {
-        // Load host and port properties
-        corfuSingleNodeHost = PROPERTIES.getProperty("corfuSingleNodeHost");
-        corfuStringNodePort = Integer.parseInt(PROPERTIES.getProperty("corfuSingleNodePort"));
-
-        singleNodeEndpoint = String.format("%s:%d",
-                corfuSingleNodeHost,
-                corfuStringNodePort);
-
-        // Load TLS configuration, keystore and truststore properties
-        serverPathToKeyStore = getPropertyAbsolutePath("serverPathToKeyStore");
-        serverPathToKeyStorePassword = getPropertyAbsolutePath("serverPathToKeyStorePassword");
-        serverPathToTrustStore = getPropertyAbsolutePath("serverPathToTrustStore");
-        serverPathToTrustStorePassword = getPropertyAbsolutePath("serverPathToTrustStorePassword");
         runtimePathToKeyStore = getPropertyAbsolutePath("runtimePathToKeyStore");
         runtimePathToKeyStorePassword = getPropertyAbsolutePath("runtimePathToKeyStorePassword");
         runtimePathToTrustStore = getPropertyAbsolutePath("runtimePathToTrustStore");
