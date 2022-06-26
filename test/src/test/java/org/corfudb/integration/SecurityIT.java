@@ -110,6 +110,7 @@ public class SecurityIT extends AbstractIT {
     }
 
     /**
+<<<<<<< HEAD
      * This test creates Corfu runtime and a single Corfu server according to the configuration
      * provided in CorfuDB.properties. Corfu runtime configures TLS related parameters using
      * {@link CorfuRuntime}'s API and then asserts that operations on a CorfuTable is executed
@@ -170,6 +171,8 @@ public class SecurityIT extends AbstractIT {
     }
 
     /**
+=======
+>>>>>>> Use a daemon thread factory, so it does not hang a runtime jvm (#3276)
      * Testing that configuring incorrect TLS parameters will lead to throwing
      * {@link IllegalStateException} exception.
      */
