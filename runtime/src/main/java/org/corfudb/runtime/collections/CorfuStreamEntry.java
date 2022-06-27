@@ -1,7 +1,6 @@
 package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
-import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -19,25 +18,31 @@ import javax.annotation.Nonnull;
  * @param <M> - type of the protobuf metadata schema defined by table creation.
  */
 @Slf4j
-@EqualsAndHashCode
-public class CorfuStreamEntry<K extends Message, V extends Message, M extends Message> {
-    /**
-     * Key of the UFO stream entry
-     */
-    @Getter
-    private final K key;
+public class CorfuStreamEntry<K extends Message, V extends Message, M extends Message> extends
+        CorfuStoreEntry<K, V, M> {
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
 
-    /**
-     * Value of the UFO stream entry
-     */
-    @Getter
-    private final V payload;
+        CorfuStreamEntry<K, V, M> that = (CorfuStreamEntry<K, V, M>) o;
 
-    /**
-     * Metadata (ManagedResource) of the UFO stream entry
-     */
-    @Getter
-    private final M metadata;
+        return getOperation() == that.getOperation();
+    }
+
+    @Override
+    public int hashCode() {
+        int result = super.hashCode();
+        result = 31 * result + getOperation().hashCode();
+        return result;
+    }
 
     /**
      * Defines the type of the operation in this stream
@@ -52,9 +57,7 @@ public class CorfuStreamEntry<K extends Message, V extends Message, M extends Me
     private final OperationType operation;
 
     public CorfuStreamEntry(K key, V payload, M metadata, OperationType operation) {
-        this.key = key;
-        this.payload = payload;
-        this.metadata = metadata;
+        super(key, payload, metadata);
         this.operation = operation;
     }
 
