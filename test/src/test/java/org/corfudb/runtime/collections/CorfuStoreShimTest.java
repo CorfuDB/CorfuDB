@@ -33,6 +33,7 @@ import org.corfudb.test.SampleSchema;
 import org.junit.Ignore;
 import org.junit.Test;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -1213,5 +1214,108 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             CorfuStoreMetadata.Timestamp ts = txnContext.commit();
             assertThat(ts.getSequence()).isPositive();
         }
+    }
+
+    /**
+     * This test verifies that registry table will be updated when a table is opened
+     * again with different schema options.
+     */
+    @Test
+    public void testRegistryTableUpdateOnRecordChange() throws Exception {
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getDefaultRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "EventInfo";
+
+        // Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        shimStore.openTable(
+                someNamespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.SampleTableAMsg.class,
+                null,
+                // TableOptions includes option to choose - Memory/Disk based corfu table.
+                TableOptions.builder().build());
+
+        CorfuStoreMetadata.TableName tableNameKey =
+                CorfuStoreMetadata.TableName.newBuilder()
+                        .setNamespace(someNamespace)
+                        .setTableName(tableName)
+                        .build();
+        CorfuRecord<CorfuStoreMetadata.TableDescriptors, CorfuStoreMetadata.TableMetadata> record
+                = corfuRuntime.getTableRegistry().getRegistryTable().get(tableNameKey);
+        CorfuOptions.SchemaOptions options = record.getMetadata().getTableOptions();
+
+        assertThat(options.getIsFederated()).isTrue();
+        assertThat(options.getRequiresBackupSupport()).isTrue();
+        assertThat(options.getStreamTag(0)).isEqualTo("sample_streamer_1");
+        assertThat(options.getStreamTag(1)).isEqualTo("sample_streamer_2");
+
+        // Open the same table again with different schema options, verify that registry table
+        // gets updated
+        shimStore.openTable(
+                someNamespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.SampleTableBMsg.class,
+                null,
+                // TableOptions includes option to choose - Memory/Disk based corfu table.
+                TableOptions.builder().build());
+
+        record = corfuRuntime.getTableRegistry().getRegistryTable().get(tableNameKey);
+        options = record.getMetadata().getTableOptions();
+
+        assertThat(options.getIsFederated()).isTrue();
+        assertThat(options.getRequiresBackupSupport()).isFalse();
+        assertThat(options.getStreamTag(0)).isEqualTo("sample_streamer_2");
+        assertThat(options.getStreamTag(1)).isEqualTo("sample_streamer_3");
+
+        // Open the same table again with different schema options, verify that registry table
+        // gets updated
+        shimStore.openTable(
+                someNamespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.SampleTableBMsg.class,
+                null,
+                // TableOptions includes option to choose - Memory/Disk based corfu table.
+                TableOptions.builder().build());
+
+        record = corfuRuntime.getTableRegistry().getRegistryTable().get(tableNameKey);
+        options = record.getMetadata().getTableOptions();
+
+        assertThat(options.getIsFederated()).isTrue();
+        assertThat(options.getRequiresBackupSupport()).isFalse();
+        assertThat(options.getStreamTagCount()).isEqualTo(2);
+        assertThat(options.getStreamTag(0)).isEqualTo("sample_streamer_2");
+        assertThat(options.getStreamTag(1)).isEqualTo("sample_streamer_3");
+
+        // Open the same table again with different schema options, verify that registry table
+        // gets updated
+        shimStore.openTable(
+                someNamespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.SampleTableEMsg.class,
+                null,
+                // TableOptions includes option to choose - Memory/Disk based corfu table.
+                TableOptions.builder().build());
+
+        record = corfuRuntime.getTableRegistry().getRegistryTable().get(tableNameKey);
+        options = record.getMetadata().getTableOptions();
+
+        assertThat(options.getIsFederated()).isTrue();
+        assertThat(options.getRequiresBackupSupport()).isFalse();
+        assertThat(options.getStreamTagCount()).isEqualTo(1);
+        assertThat(options.getStreamTag(0)).isEqualTo("sample_streamer_4");
+        assertThat(options.getSecondaryKeyCount()).isEqualTo(1);
+        assertThat(options.getSecondaryKey(0).getIndexPath()).isEqualTo("event_time");
     }
 }
