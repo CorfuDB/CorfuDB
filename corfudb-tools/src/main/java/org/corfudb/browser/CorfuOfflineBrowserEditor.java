@@ -20,6 +20,9 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
     public CorfuOfflineBrowserEditor(String offlineDbDir) {
         logDir = Paths.get(offlineDbDir, "log");
         System.out.println("Analyzing database located at :"+logDir);
+
+        // running test
+        System.out.println(listTables("CorfuSystem"));
     }
     @Override
     public EnumMap<IMetadata.LogUnitMetadataType, Object> printMetadataMap(long address) {
@@ -38,7 +41,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
 
     @Override
     public int listTables(String namespace) {
-        return 0;
+        return 100;
     }
 
     @Override
