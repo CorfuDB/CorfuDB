@@ -3,6 +3,7 @@ package org.corfudb.runtime;
 import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.codehaus.plexus.personality.plexus.lifecycle.phase.InitializationException;
 import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
@@ -33,8 +34,8 @@ public class CompactorMetadataTables {
 
     private static int MAX_RETRIES = 5;
 
-    public CompactorMetadataTables(CorfuStore corfuStore) {
-        for (int retry = 0; retry < MAX_RETRIES; retry++) {
+    public CompactorMetadataTables(CorfuStore corfuStore) throws Exception {
+        for (int retry = 0; ; retry++) {
             try {
                 this.compactionManagerTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
                         COMPACTION_MANAGER_TABLE_NAME,
@@ -65,6 +66,9 @@ public class CompactorMetadataTables {
                         TableOptions.fromProtoSchema(RpcCommon.TokenMsg.class));
                 break;
             } catch (Exception e) {
+                if (retry == MAX_RETRIES) {
+                    throw e;
+                }
                 log.error("Caught an exception while opening Compaction metadata tables ", e);
             }
         }

@@ -9,7 +9,7 @@ import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
-import org.corfudb.runtime.DistributedClientCheckpointer;
+import org.corfudb.runtime.DistributedClientCheckpointScheduler;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -459,10 +459,10 @@ public class CompactorServiceTest extends AbstractViewTest {
     public void clientsCheckpointing() {
         testSetup(logSizeLimitPercentageFull);
         runtime2.getParameters().setCheckpointTriggerFreqMillis(COMPACTOR_SERVICE_INTERVAL);
-        DistributedClientCheckpointer distributedClientCheckpointer0 = new DistributedClientCheckpointer(runtime2);
+        DistributedClientCheckpointScheduler distributedClientCheckpointer0 = new DistributedClientCheckpointScheduler(runtime2);
 
         runtime1.getParameters().setCheckpointTriggerFreqMillis(COMPACTOR_SERVICE_INTERVAL);
-        DistributedClientCheckpointer distributedClientCheckpointer1 = new DistributedClientCheckpointer(runtime1);
+        DistributedClientCheckpointScheduler distributedClientCheckpointer1 = new DistributedClientCheckpointScheduler(runtime1);
 
         SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);
         MockCompactionTriggerPolicy mockCompactionTriggerPolicy1 = new MockCompactionTriggerPolicy();
@@ -495,7 +495,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         openStream(STREAM_NAME_PREFIX);
 
         runtime2.getParameters().setCheckpointTriggerFreqMillis(COMPACTOR_SERVICE_INTERVAL);
-        DistributedClientCheckpointer distributedClientCheckpointer = new DistributedClientCheckpointer(runtime2);
+        DistributedClientCheckpointScheduler distributedClientCheckpointer = new DistributedClientCheckpointScheduler(runtime2);
 
         SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);
         MockCompactionTriggerPolicy mockCompactionTriggerPolicy1 = new MockCompactionTriggerPolicy();

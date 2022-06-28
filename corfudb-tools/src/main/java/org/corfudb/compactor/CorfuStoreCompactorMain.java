@@ -3,16 +3,15 @@ package org.corfudb.compactor;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.runtime.CompactorMetadataTables;
+import org.corfudb.runtime.*;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.DistributedCompactor;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.RpcCommon.TokenMsg;
 
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
@@ -26,7 +25,7 @@ public class CorfuStoreCompactorMain {
 
     private final CorfuStoreCompactorConfig config;
     private final CorfuStore corfuStore;
-    private final DistributedCompactor distributedCompactor;
+    private final DistributedCheckpointer distributedCheckpointer;
 
     private Table<StringKey, TokenMsg, Message> checkpointTable;
     private int retryCheckpointing = 1;
@@ -39,7 +38,12 @@ public class CorfuStoreCompactorMain {
         CorfuRuntime corfuRuntime = (CorfuRuntime.fromParameters(
                 config.getParams())).parseConfigurationString(config.getNodeLocator().toEndpointUrl()).connect();
         corfuStore = new CorfuStore(corfuRuntime);
-        distributedCompactor = new DistributedCompactor(corfuRuntime, cpRuntime, config.getPersistedCacheRoot());
+        distributedCheckpointer = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
+                .corfuRuntime(corfuRuntime)
+                .cpRuntime(Optional.of(cpRuntime))
+                .persistedCacheRoot(config.getPersistedCacheRoot())
+                .isClient(false)
+                .build());
         try {
             this.checkpointTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
                     CompactorMetadataTables.CHECKPOINT,
@@ -92,7 +96,11 @@ public class CorfuStoreCompactorMain {
         try {
             for (int i = 0; i < retryCheckpointing; i++) {
                 //startCheckpointing() returns the num of tables checkpointed
-                if (distributedCompactor.startCheckpointing() > 0) {
+//                if (distributedCheckpointer.checkpointOpenedTables() > 0) {
+//                    break;
+//                }
+                if (DistributedCheckpointerHelper.hasCompactionStarted(corfuStore)) {
+                    distributedCheckpointer.checkpointTables();
                     break;
                 }
                 TimeUnit.SECONDS.sleep(1);

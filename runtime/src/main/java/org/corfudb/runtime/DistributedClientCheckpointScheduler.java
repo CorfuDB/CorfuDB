@@ -4,6 +4,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
 
 import javax.annotation.Nonnull;
+import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -13,18 +14,19 @@ import java.util.concurrent.TimeUnit;
  * <p>
  */
 @Slf4j
-public class DistributedClientCheckpointer {
+public class DistributedClientCheckpointScheduler {
 
     private final ScheduledExecutorService compactionScheduler;
-    private final DistributedCompactor distributedCompactor;
+    private final ClientTriggeredCheckpointer distributedCheckpointer;
 
-    public DistributedClientCheckpointer(@Nonnull CorfuRuntime runtime) {
-        if (runtime.getParameters().checkpointTriggerFreqMillis <= 0) {
-            this.compactionScheduler = null;
-            this.distributedCompactor = null;
-            return;
-        }
-        this.distributedCompactor = new DistributedCompactor(runtime);
+    public DistributedClientCheckpointScheduler(@Nonnull CorfuRuntime runtime) {
+        CheckpointerBuilder checkpointerBuilder = CheckpointerBuilder.builder()
+                .corfuRuntime(runtime)
+                .persistedCacheRoot(Optional.empty())
+                .cpRuntime(Optional.empty())
+                .isClient(true)
+                .build();
+        this.distributedCheckpointer = new ClientTriggeredCheckpointer(checkpointerBuilder);
         this.compactionScheduler = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
                         .setDaemon(true)
@@ -41,7 +43,7 @@ public class DistributedClientCheckpointer {
      * Attempt to checkpoint all the tables already materialized in my JVM heap
      */
     private void checkpointAllMyOpenedTables() {
-        this.distributedCompactor.startCheckpointing();
+        this.distributedCheckpointer.checkpointTables();
     }
 
     /**

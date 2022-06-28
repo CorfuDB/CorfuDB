@@ -11,7 +11,7 @@ import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
-import org.corfudb.runtime.DistributedCompactor;
+import org.corfudb.runtime.DistributedCheckpointerHelper;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -22,7 +22,6 @@ import org.corfudb.runtime.view.TableRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.text.html.Option;
 import java.time.Duration;
 import java.util.*;
 
@@ -44,9 +43,9 @@ public class CompactorLeaderServices {
     private final String nodeEndpoint;
     private final LivenessValidatorHelper livenessValidatorHelper;
     private final TrimLog trimLog;
-    private final CompactorMetadataTables compactorServiceHelper;
-
     private final Logger syslog;
+
+    private CompactorMetadataTables compactorMetadataTables;
 
     private static final long LIVENESS_INIT_VALUE = -1;
 
@@ -90,7 +89,11 @@ public class CompactorLeaderServices {
         this.corfuStore = new CorfuStore(corfuRuntime);
         this.nodeEndpoint = nodeEndpoint;
         this.livenessValidatorHelper = new LivenessValidatorHelper();
-        this.compactorServiceHelper = new CompactorMetadataTables(corfuStore);
+        try {
+            this.compactorMetadataTables = new CompactorMetadataTables(corfuStore);
+        } catch (Exception e) {
+            //TODO: Retry?
+        }
         this.trimLog = new TrimLog(corfuRuntime, corfuStore);
         syslog = LoggerFactory.getLogger("syslog");
     }
@@ -106,7 +109,7 @@ public class CompactorLeaderServices {
     public LeaderServicesStatus initDistributedCompaction() {
         syslog.info("=============Initiating Distributed Compaction============");
 
-        if (DistributedCompactor.isCheckpointFrozen(corfuStore)) {
+        if (DistributedCheckpointerHelper.isCheckpointFrozen(corfuStore)) {
             syslog.warn("Will not start compaction since it has been frozen");
             return LeaderServicesStatus.FAIL;
         }
@@ -130,14 +133,14 @@ public class CompactorLeaderServices {
             txn.clear(CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME);
             //Populate CheckpointingStatusTable
             for (TableName table : tableNames) {
-                txn.putRecord(compactorServiceHelper.getCheckpointingStatusTable(), table, idleStatus, null);
+                txn.putRecord(compactorMetadataTables.getCheckpointingStatusTable(), table, idleStatus, null);
             }
 
             // Also record the minToken as the earliest token BEFORE checkpointing is initiated
             // This is the safest point to trim at since all data up to this point will surely
             // be included in the upcoming checkpoint cycle
             long minAddressBeforeCycleStarts = corfuRuntime.getAddressSpaceView().getLogTail();
-            txn.putRecord(compactorServiceHelper.getCheckpointTable(), CompactorMetadataTables.CHECKPOINT_KEY,
+            txn.putRecord(compactorMetadataTables.getCheckpointTable(), CompactorMetadataTables.CHECKPOINT_KEY,
                     RpcCommon.TokenMsg.newBuilder()
                             .setSequence(minAddressBeforeCycleStarts)
                             .build(),
@@ -145,7 +148,7 @@ public class CompactorLeaderServices {
 
             CheckpointingStatus newManagerStatus = buildCheckpointStatus(StatusType.STARTED, tableNames.size(),
                     System.currentTimeMillis()); // put the current time when cycle starts
-            txn.putRecord(compactorServiceHelper.getCompactionManagerTable(), CompactorMetadataTables.COMPACTION_MANAGER_KEY,
+            txn.putRecord(compactorMetadataTables.getCompactionManagerTable(), CompactorMetadataTables.COMPACTION_MANAGER_KEY,
                     newManagerStatus, null);
 
             txn.commit();
@@ -174,7 +177,7 @@ public class CompactorLeaderServices {
     public void validateLiveness(long timeout) {
         List<TableName> activeCheckpointTables;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            activeCheckpointTables = new ArrayList<>(txn.keySet(compactorServiceHelper.getActiveCheckpointsTable()));
+            activeCheckpointTables = new ArrayList<>(txn.keySet(compactorMetadataTables.getActiveCheckpointsTable()));
             txn.commit();
         } catch (Exception e) {
             syslog.warn("Unable to acquire activeCheckpointTables");
@@ -265,7 +268,7 @@ public class CompactorLeaderServices {
                         CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                         CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
 
-                txn.putRecord(compactorServiceHelper.getCompactionManagerTable(),
+                txn.putRecord(compactorMetadataTables.getCompactionManagerTable(),
                         CompactorMetadataTables.COMPACTION_MANAGER_KEY,
                         buildCheckpointStatus(StatusType.STARTED_ALL,
                                 managerStatus.getTableSize(),
@@ -284,13 +287,13 @@ public class CompactorLeaderServices {
             CheckpointingStatus tableStatus = (CheckpointingStatus) txn.getRecord(
                     CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, table).getPayload();
             if (tableStatus.getStatus() != StatusType.COMPLETED && tableStatus.getStatus() != StatusType.FAILED) {
-                txn.putRecord(compactorServiceHelper.getCheckpointingStatusTable(),
+                txn.putRecord(compactorMetadataTables.getCheckpointingStatusTable(),
                         table,
                         buildCheckpointStatus(StatusType.FAILED),
                         null);
                 txn.delete(CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME, table);
                 //Mark cycle failed and return on first failure
-                txn.putRecord(compactorServiceHelper.getCompactionManagerTable(),
+                txn.putRecord(compactorMetadataTables.getCompactionManagerTable(),
                         CompactorMetadataTables.COMPACTION_MANAGER_KEY,
                         buildCheckpointStatus(StatusType.FAILED),
                         null);
@@ -327,7 +330,7 @@ public class CompactorLeaderServices {
                 return;
             }
 
-            List<TableName> tableNames = new ArrayList<>(txn.keySet(compactorServiceHelper.getCheckpointingStatusTable()));
+            List<TableName> tableNames = new ArrayList<>(txn.keySet(compactorMetadataTables.getCheckpointingStatusTable()));
             StatusType finalStatus = StatusType.COMPLETED;
             for (TableName table : tableNames) {
                 StringBuilder str = new StringBuilder();
@@ -345,7 +348,7 @@ public class CompactorLeaderServices {
                     tableNames.size(), finalStatus);
             MicroMeterUtils.time(Duration.ofMillis(totalTimeElapsed), "compaction.total.timer",
                     "nodeEndpoint", nodeEndpoint);
-            txn.putRecord(compactorServiceHelper.getCompactionManagerTable(), CompactorMetadataTables.COMPACTION_MANAGER_KEY,
+            txn.putRecord(compactorMetadataTables.getCompactionManagerTable(), CompactorMetadataTables.COMPACTION_MANAGER_KEY,
                     buildCheckpointStatus(finalStatus, tableNames.size(), totalTimeElapsed),
                     null);
             txn.commit();

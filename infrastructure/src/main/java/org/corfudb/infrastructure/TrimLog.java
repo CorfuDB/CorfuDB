@@ -44,12 +44,13 @@ public class TrimLog {
         }
         return trimAddress;
     }
+
     /**
      * Perform log-trimming on CorfuDB
      */
     public void invokePrefixTrim() {
         Optional<Long> trimAddress = getTrimAddress();
-        if(!trimAddress.isPresent()) {
+        if (!trimAddress.isPresent()) {
             return;
         }
         // Measure time spent on trimming.
