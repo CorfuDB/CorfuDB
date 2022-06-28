@@ -9,15 +9,12 @@ import com.google.protobuf.Message;
 import com.google.protobuf.ProtocolStringList;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.CorfuOptions;
-import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.*;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileName;
 import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileDescriptor;
-import org.corfudb.runtime.DistributedClientCheckpointer;
-import org.corfudb.runtime.DistributedCompactor;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
@@ -119,10 +116,9 @@ public class TableRegistry {
     private final CorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> protobufDescriptorTable;
 
     /**
-     * Spawn the local table checkpointer
+     * Spawn the local client checkpointer
      */
-    @Getter
-    private final DistributedClientCheckpointer clientCheckpointer;
+    private DistributedClientCheckpointScheduler clientCheckpointer;
 
     public TableRegistry(CorfuRuntime runtime) {
         this.runtime = runtime;
@@ -183,7 +179,9 @@ public class TableRegistry {
         }
 
         // Lastly instantiate the DistributedClientCheckpointer
-        this.clientCheckpointer = new DistributedClientCheckpointer(runtime);
+        if (runtime.getParameters().getCheckpointTriggerFreqMillis() > 0) {
+            this.clientCheckpointer = new DistributedClientCheckpointScheduler(runtime);
+        }
     }
 
     /**
@@ -745,25 +743,34 @@ public class TableRegistry {
      *
      * @return ArrayList of all Tables opened here.
      */
-    public List<DistributedCompactor.CorfuTableNamePair> getAllOpenTablesForCheckpointing() {
-        List<DistributedCompactor.CorfuTableNamePair> allTables = new ArrayList<>();
-        allTables.add(new DistributedCompactor.CorfuTableNamePair(
+    public List<DistributedCheckpointer.CorfuTableNamePair> getAllOpenTablesForCheckpointing() {
+        List < DistributedCheckpointer.CorfuTableNamePair > allTables = new ArrayList<>();
+        allTables.add(new DistributedCheckpointer.CorfuTableNamePair(
                 TableName.newBuilder()
                         .setNamespace(CORFU_SYSTEM_NAMESPACE)
-                        .setTableName(REGISTRY_TABLE_NAME)
-                        .build(),
-                registryTable));
-        allTables.add(new DistributedCompactor.CorfuTableNamePair(
-                TableName.newBuilder()
-                        .setNamespace(CORFU_SYSTEM_NAMESPACE)
-                        .setTableName(PROTOBUF_DESCRIPTOR_TABLE_NAME)
-                        .build(),
-                protobufDescriptorTable));
-        this.tableMap.values().forEach(t ->
-            allTables.add(new DistributedCompactor.CorfuTableNamePair(
-                    DistributedCompactor.getTableName(t),
-                    t.getCorfuTableForCheckpointingOnly()))
+                .setTableName(REGISTRY_TABLE_NAME)
+                                        .build(),
+                registryTable)
         );
+        allTables.add(new DistributedCheckpointer.CorfuTableNamePair(
+                TableName.newBuilder()
+                        .setNamespace(CORFU_SYSTEM_NAMESPACE)
+                .setTableName(PROTOBUF_DESCRIPTOR_TABLE_NAME)
+                                        .build(),
+                protobufDescriptorTable)
+        );
+        this.tableMap.values().forEach(t ->
+                allTables.add(new DistributedCheckpointer.CorfuTableNamePair(
+                        DistributedCheckpointerHelper.getTableName(t),
+                        t.getCorfuTableForCheckpointingOnly()))
+        );
+        return allTables;
+    }
+    public List<Table<Message, Message, Message>> getAllOpenTablesForCheckpointingNew() {
+        List<Table<Message, Message, Message>> allTables = new ArrayList<>();
+//        allTables.add(getTable(CORFU_SYSTEM_NAMESPACE, REGISTRY_TABLE_NAME));
+//        allTables.add(getTable(CORFU_SYSTEM_NAMESPACE, PROTOBUF_DESCRIPTOR_TABLE_NAME));
+        allTables.addAll(this.tableMap.values());
         return allTables;
     }
 

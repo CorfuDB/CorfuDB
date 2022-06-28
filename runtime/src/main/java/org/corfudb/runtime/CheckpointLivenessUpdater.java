@@ -2,6 +2,7 @@ package org.corfudb.runtime;
 
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -21,7 +22,7 @@ public class CheckpointLivenessUpdater implements LivenessUpdater {
     private static final Duration UPDATE_INTERVAL = Duration.ofSeconds(15);
 
     private final CorfuStore corfuStore;
-    private Table<TableName, CorfuCompactorManagement.ActiveCPStreamMsg, Message> activeCheckpointsTable = null;
+    private Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointsTable = null;
 
     public CheckpointLivenessUpdater(CorfuStore corfuStore) {
 
@@ -30,9 +31,9 @@ public class CheckpointLivenessUpdater implements LivenessUpdater {
             this.activeCheckpointsTable = this.corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
                     CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME,
                     TableName.class,
-                    CorfuCompactorManagement.ActiveCPStreamMsg.class,
+                    ActiveCPStreamMsg.class,
                     null,
-                    TableOptions.fromProtoSchema(CorfuCompactorManagement.ActiveCPStreamMsg.class));
+                    TableOptions.fromProtoSchema(ActiveCPStreamMsg.class));
         } catch (Exception e) {
             log.error("Caught an exception while opening checkpoint management tables ", e);
         }
@@ -44,11 +45,10 @@ public class CheckpointLivenessUpdater implements LivenessUpdater {
         executorService = Executors.newSingleThreadScheduledExecutor();
         executorService.scheduleWithFixedDelay(() -> {
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                CorfuCompactorManagement.ActiveCPStreamMsg currentStatus =
-                        txn.getRecord(activeCheckpointsTable, tableName).getPayload();
-                CorfuCompactorManagement.ActiveCPStreamMsg newStatus = CorfuCompactorManagement.ActiveCPStreamMsg.newBuilder()
+                ActiveCPStreamMsg currentStatus = (ActiveCPStreamMsg)
+                        txn.getRecord(CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME, tableName).getPayload();
+                ActiveCPStreamMsg newStatus = ActiveCPStreamMsg.newBuilder()
                         .setSyncHeartbeat(currentStatus.getSyncHeartbeat() + 1)
-                        .setIsClientTriggered(currentStatus.getIsClientTriggered())
                         .build();
                 txn.putRecord(activeCheckpointsTable, tableName, newStatus, null);
                 txn.commit();

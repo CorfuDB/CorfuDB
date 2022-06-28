@@ -30,5 +30,4 @@ message StringKey{
 
 message ActiveCPStreamMsg {
   int64 sync_heartbeat = 1;
-  bool is_client_triggered = 2;
 }
