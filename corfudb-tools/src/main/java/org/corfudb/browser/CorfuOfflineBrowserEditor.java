@@ -36,7 +36,16 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         logDir = Paths.get(offlineDbDir, "log");
         System.out.println("Analyzing database located at :"+logDir);
 
-        System.out.println("Printing stream LogEntry information:");
+        printHeader();
+
+        // System.out.println(listTables("CorfuSystem"));
+    }
+
+    /**
+     * Opens all log files one by one, and prints the header information for each Corfu log file.
+     */
+    public void printHeader() {
+        System.out.println("Printing header information:");
 
         String[] extension = {"log"};
         File dir = logDir.toFile();
@@ -49,16 +58,13 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
             try (FileChannel fileChannel = FileChannel.open(file.toPath())) {
                 header = parseHeader(fileChannel, file.getAbsolutePath());
 
-                // System.out.println(header);
+                System.out.println(header);
 
             } catch (IOException e) {
                 throw new IllegalStateException("Invalid header: " + file.getAbsolutePath(), e);
             }
 
         }
-
-        // running test
-        // System.out.println(listTables("CorfuSystem"));
     }
 
     /**
@@ -80,7 +86,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         }
 
         // print metadata info
-        // System.out.println(metadata);
+        //System.out.println(metadata);
 
         ByteBuffer buffer = getPayloadForMetadata(channel, metadata);
         if (buffer == null) {
@@ -90,9 +96,10 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
             return null;
         }
 
-        LogFormat.LogEntry entry;
-        entry = LogFormat.LogEntry.parseFrom(buffer.array());
-        System.out.println(entry);
+        // print Stream LogEntry data
+        //LogFormat.LogEntry entry;
+        //entry = LogFormat.LogEntry.parseFrom(buffer.array());
+        //System.out.println(entry);
 
 
         if (StreamLogFiles.Checksum.getChecksum(buffer.array()) != metadata.getPayloadChecksum()) {
