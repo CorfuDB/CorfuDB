@@ -13,6 +13,7 @@ import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
@@ -27,6 +28,7 @@ import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLEngine;
+import java.nio.file.Paths;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
@@ -145,10 +147,10 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
      * @param context The {@link ServerContext} to use.
      * @return A {@link ChannelInitializer} to initialize the channel.
      */
-    private ChannelInitializer getServerChannelInitializer(@Nonnull ServerContext context) {
+    private ChannelInitializer<Channel> getServerChannelInitializer(@Nonnull ServerContext context) {
 
         // Generate the initializer.
-        return new ChannelInitializer() {
+        return new ChannelInitializer<Channel>() {
             @Override
             protected void initChannel(@Nonnull Channel ch) throws Exception {
 
@@ -185,13 +187,14 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
                     }
 
                     KeyStoreConfig keyStoreConfig = KeyStoreConfig.from(
-                            context.getServerConfig(String.class, "--keystore"),
-                            context.getServerConfig(String.class, "--keystore-password-file")
+                            context.getServerConfig(String.class, ConfigParamNames.KEY_STORE),
+                            context.getServerConfig(String.class, ConfigParamNames.KEY_STORE_PASS_FILE)
                     );
 
                     TrustStoreConfig trustStoreConfig = TrustStoreConfig.from(
-                            context.getServerConfig(String.class, "--truststore"),
-                            context.getServerConfig(String.class, "--truststore-password-file")
+                            context.getServerConfig(String.class, ConfigParamNames.TRUST_STORE),
+                            context.getServerConfig(String.class, ConfigParamNames.TRUST_STORE_PASS_FILE),
+                            Paths.get(context.getServerConfig(String.class, ConfigParamNames.DISABLE_CERT_EXPIRY_CHECK_FILE))
                     );
 
                     sslContext = SslContextConstructor.constructSslContext(true, keyStoreConfig, trustStoreConfig);
