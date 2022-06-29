@@ -36,6 +36,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         logDir = Paths.get(offlineDbDir, "log");
         System.out.println("Analyzing database located at :"+logDir);
 
+        // prints header information for each of the corfu log files
         printHeader();
 
         // System.out.println(listTables("CorfuSystem"));
