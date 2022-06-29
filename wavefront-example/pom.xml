@@ -18,7 +18,7 @@
     <dependencies>
         <dependency>
             <groupId>org.corfudb</groupId>
-            <artifactId>runtime</artifactId>
+            <artifactId>corfudb-common</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
