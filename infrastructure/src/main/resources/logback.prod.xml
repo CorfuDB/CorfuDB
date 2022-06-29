@@ -47,11 +47,13 @@
         <queueSize>1024</queueSize>
         <maxFlushTime>5000</maxFlushTime>
     </appender>
-    <root level="info">
-        <appender-ref ref="async_file"/>
-    </root>
+
     <logger additivity="false" level="debug" name="org.corfudb.metricsdata">
         <appender-ref ref="async_metrics_file"/>
     </logger>
     <logger name="org.corfudb.client.metricsdata" level="off" />
+
+    <root level="info">
+        <appender-ref ref="async_file"/>
+    </root>
 </configuration>
