@@ -40,6 +40,9 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         printHeader();
 
         // System.out.println(listTables("CorfuSystem"));
+
+        // testing printAllProtoDescriptors
+        System.out.println(printAllProtoDescriptors());
     }
 
     /**
@@ -227,7 +230,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
 
     @Override
     public int printAllProtoDescriptors() {
-        return 0;
+        return 200;
     }
 
     @Override
