@@ -1,13 +1,20 @@
 package org.corfudb.browser;
 
+import java.util.Arrays;
+import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import com.google.common.base.Preconditions;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.common.config.ConfigParamNames;
+import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
@@ -50,6 +57,7 @@ public class CorfuStoreBrowserEditorMain {
         "[--itemSize=<sizeOfEachRecordValue>] "
         + "[--keyToEdit=<keyToEdit>] [--newRecord=<newRecord>] [--tag=<tag>]"
         + "[--keyToDelete=<keyToDelete>]"
+        + "[--keysToDeleteFilePath=<keysToDeleteFilePath>]"
         + "[--keyToAdd=<keyToAdd>] [--valueToAdd=<valueToAdd>] [--metadataToAdd=<metadataToAdd>]"
         + "[--tlsEnabled=<tls_enabled>]\n"
         + "Options:\n"
@@ -72,6 +80,7 @@ public class CorfuStoreBrowserEditorMain {
         + "--itemSize=<itemSize> Size of each item's payload for loadTable\n"
         + "--keyToEdit=<keyToEdit> Key of the record to edit\n"
         + "--keyToDelete=<keyToDelete> Key of the record to be deleted\n"
+        + "--keysToDeleteFilePath=<keysToDeleteFilePath> Path to file having all keys in one json array\n"
         + "--newRecord=<newRecord> New Edited record to insert\n"
         + "--keyToAdd=<keyToAdd>"
         + "--valueToAdd=<valueToAdd>"
@@ -80,39 +89,47 @@ public class CorfuStoreBrowserEditorMain {
 
     public static void main(String[] args) {
         try {
+            mainMethod(args);
+        } catch (Throwable t) {
+            log.error("Error in Browser Execution.", t);
+            throw t;
+        }
+    }
+        public static int mainMethod(String[] args) {
             CorfuRuntime runtime;
             log.info("CorfuBrowser starting...");
             // Parse the options given, using docopt.
             Map<String, Object> opts =
-                new Docopt(USAGE)
-                    .withVersion(GitRepositoryState.getRepositoryState().describe)
-                    .parse(args);
+                    new Docopt(USAGE)
+                            .withVersion(GitRepositoryState.getRepositoryState().describe)
+                            .parse(args);
             String host = opts.get("--host").toString();
             Integer port = Integer.parseInt(opts.get("--port").toString());
-            boolean tlsEnabled = Boolean.parseBoolean(opts.get("--tlsEnabled")
-                .toString());
+            boolean tlsEnabled = Optional.ofNullable(opts.get("--tlsEnabled"))
+                    .map(o -> Boolean.parseBoolean(o.toString()))
+                    .orElse(false);
             String operation = opts.get("--operation").toString();
 
             final int SYSTEM_EXIT_ERROR_CODE = 1;
             final int SYSTEM_DOWN_RETRIES = 60;
             CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder
-                builder = CorfuRuntime.CorfuRuntimeParameters.builder()
-                .cacheDisabled(true)
-                .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
-                .systemDownHandlerTriggerLimit(SYSTEM_DOWN_RETRIES)
-                .priorityLevel(CorfuMessage.PriorityLevel.HIGH)
-                .tlsEnabled(tlsEnabled);
+                    builder = CorfuRuntime.CorfuRuntimeParameters.builder()
+                    .cacheDisabled(true)
+                    .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
+                    .systemDownHandlerTriggerLimit(SYSTEM_DOWN_RETRIES)
+                    .priorityLevel(CorfuMessage.PriorityLevel.HIGH)
+                    .tlsEnabled(tlsEnabled);
             if (tlsEnabled) {
                 String keystore = opts.get(ConfigParamNames.KEY_STORE).toString();
                 String ks_password = opts.get("--ks_password").toString();
                 String truststore = opts.get(ConfigParamNames.TRUST_STORE).toString();
                 String truststore_password =
-                    opts.get("--truststore_password").toString();
+                        opts.get("--truststore_password").toString();
                 builder.tlsEnabled(tlsEnabled)
-                    .keyStore(keystore)
-                    .ksPasswordFile(ks_password)
-                    .trustStore(truststore)
-                    .tsPasswordFile(truststore_password);
+                        .keyStore(keystore)
+                        .ksPasswordFile(ks_password)
+                        .trustStore(truststore)
+                        .tsPasswordFile(truststore_password);
             }
 
             runtime = CorfuRuntime.fromParameters(builder.build());
@@ -125,44 +142,42 @@ public class CorfuStoreBrowserEditorMain {
             CorfuStoreBrowserEditor browser;
             if (opts.get("--diskPath") != null) {
                 browser = new CorfuStoreBrowserEditor(runtime, opts.get(
-                    "--diskPath").toString());
+                        "--diskPath").toString());
             } else {
                 browser = new CorfuStoreBrowserEditor(runtime);
             }
-            String namespace = Optional.ofNullable(opts.get("--namespace"))
+            final String namespace = Optional.ofNullable(opts.get("--namespace"))
                     .map(Object::toString)
                     .orElse(null);
-            String tableName = Optional.ofNullable(opts.get("--tablename"))
+            final String tableName = Optional.ofNullable(opts.get("--tablename"))
                     .map(Object::toString)
                     .orElse(null);
+            final String batchSizeStr = "--batchSize";
+            int batchSize = 100000; // this would be the default batch size for corfu transactions
 
             switch (Enum.valueOf(OperationType.class, operation)) {
                 case listTables:
                     Preconditions.checkArgument(isValid(namespace),
-                        "Namespace is null or empty.");
-                    browser.listTables(namespace);
-                    break;
+                            "Namespace is null or empty.");
+                    return browser.listTables(namespace);
                 case infoTable:
                     Preconditions.checkArgument(isValid(namespace),
-                        "Namespace is null or empty.");
+                            "Namespace is null or empty.");
                     Preconditions.checkArgument(isValid(tableName),
-                        "Table name is null or empty.");
-                    browser.printTableInfo(namespace, tableName);
-                    break;
+                            "Table name is null or empty.");
+                    return browser.printTableInfo(namespace, tableName);
                 case clearTable:
                     Preconditions.checkArgument(isValid(namespace),
-                        "Namespace is null or empty.");
+                            "Namespace is null or empty.");
                     Preconditions.checkArgument(isValid(tableName),
-                        "Table name is null or empty.");
-                    browser.clearTable(namespace, tableName);
-                    break;
+                            "Table name is null or empty.");
+                    return browser.clearTable(namespace, tableName);
                 case showTable:
                     Preconditions.checkArgument(isValid(namespace),
-                        "Namespace is null or empty.");
+                            "Namespace is null or empty.");
                     Preconditions.checkArgument(isValid(tableName),
-                        "Table name is null or empty.");
-                    browser.printTable(namespace, tableName);
-                    break;
+                            "Table name is null or empty.");
+                    return browser.printTable(namespace, tableName);
                 case editTable:
                     String keyToEdit = null;
                     String newRecord = null;
@@ -173,27 +188,41 @@ public class CorfuStoreBrowserEditorMain {
                         newRecord = String.valueOf(opts.get("--newRecord"));
                     }
                     Preconditions.checkArgument(isValid(namespace),
-                        "Namespace is null or empty.");
+                            "Namespace is null or empty.");
                     Preconditions.checkArgument(isValid(tableName),
-                        "Table name is null or empty.");
+                            "Table name is null or empty.");
                     Preconditions.checkNotNull(keyToEdit,
-                        "Key To Edit is Null.");
+                            "Key To Edit is Null.");
                     Preconditions.checkNotNull(newRecord,
-                        "New Record is null");
-                    browser.editRecord(namespace, tableName, keyToEdit, newRecord);
+                            "New Record is null");
+                    CorfuDynamicRecord record = browser.editRecord(namespace, tableName, keyToEdit, newRecord);
+                    if (record != null) {
+                        return 1;
+                    }
                     break;
                 case deleteRecord:
-                    String keyToDelete = null;
-                    if (opts.get("--keyToDelete") != null) {
-                        keyToDelete = String.valueOf(opts.get("--keyToDelete"));
-                    }
+                    final String keyToDeleteStr = "--keyToDelete";
+                    final String keysToDeleteFilePathStr = "--keysToDeleteFilePath";
                     Preconditions.checkArgument(isValid(namespace),
                             "Namespace is null or empty.");
                     Preconditions.checkArgument(isValid(tableName),
                             "Table name is null or empty.");
-                    Preconditions.checkNotNull(keyToDelete,
-                            "Key To Delete is Null.");
-                    browser.deleteRecord(namespace, tableName, keyToDelete);
+                    String keyToDelete = null;
+                    if (opts.get(keyToDeleteStr) != null) {
+                        keyToDelete = String.valueOf(opts.get(keyToDeleteStr));
+                        Preconditions.checkNotNull(keyToDelete,
+                                "Key To Delete is Null.");
+                        return browser.deleteRecords(namespace, tableName, Arrays.asList(keyToDelete), batchSize);
+                    } else if (opts.get(keysToDeleteFilePathStr) != null) {
+                        String pathToKeyFile = String.valueOf(opts.get(keysToDeleteFilePathStr));
+                        if (opts.get(batchSizeStr) != null) {
+                            batchSize = Integer.parseInt(opts.get(batchSizeStr).toString());
+                        }
+                        return browser.deleteRecordsFromFile(namespace, tableName, pathToKeyFile, batchSize);
+                    } else {
+                        Preconditions.checkNotNull(keyToDelete,
+                                "keyToDelete or keysToDeleteFilePath must be specified");
+                    }
                     break;
                 case addRecord:
                     String keyToAdd = null;
@@ -214,88 +243,85 @@ public class CorfuStoreBrowserEditorMain {
                         metadataToAdd = String.valueOf(opts.get(metadataArg));
                     }
                     Preconditions.checkArgument(isValid(namespace),
-                        "Namespace is null or empty.");
+                            "Namespace is null or empty.");
                     Preconditions.checkArgument(isValid(tableName),
-                        "Table name is null or empty.");
+                            "Table name is null or empty.");
                     Preconditions.checkNotNull(keyToAdd,
-                        "Key To Add is Null.");
+                            "Key To Add is Null.");
                     Preconditions.checkNotNull(valueToAdd,
-                        "New Value is null");
+                            "New Value is null");
                     Preconditions.checkNotNull(metadataToAdd,
-                        "New Metadata is null");
-                    browser.addRecord(namespace, tableName, keyToAdd,
-                        valueToAdd, metadataToAdd);
-                    break;
+                            "New Metadata is null");
+                    CorfuDynamicRecord addedRecord = browser.addRecord(namespace, tableName, keyToAdd,
+                            valueToAdd, metadataToAdd);
+                    return addedRecord != null ? 1: 0;
                 case loadTable:
                     int numItems = 1000;
                     if (opts.get("--numItems") != null) {
                         numItems = Integer.parseInt(opts.get("--numItems").toString());
                     }
-                    int batchSize = 1000;
-                    if (opts.get("--batchSize") != null) {
-                        batchSize = Integer.parseInt(opts.get("--batchSize").toString());
+                    if (opts.get(batchSizeStr) != null) {
+                        batchSize = Integer.parseInt(opts.get(batchSizeStr).toString());
+                    } else {
+                        batchSize = 1000;
                     }
                     int itemSize = 1024;
                     if (opts.get("--itemSize") != null) {
                         itemSize = Integer.parseInt(opts.get("--itemSize").toString());
                     }
                     Preconditions.checkArgument(isValid(namespace),
-                        "Namespace is null or empty.");
+                            "Namespace is null or empty.");
                     Preconditions.checkArgument(isValid(tableName),
-                        "Table name is null or empty.");
-                    browser.loadTable(namespace, tableName, numItems, batchSize, itemSize);
-                    break;
+                            "Table name is null or empty.");
+                    return browser.loadTable(namespace, tableName, numItems, batchSize, itemSize);
                 case listenOnTable:
                     numItems = Integer.MAX_VALUE;
                     if (opts.get("--numItems") != null) {
                         numItems = Integer.parseInt(opts.get("--numItems").toString());
                     }
                     Preconditions.checkArgument(isValid(namespace),
-                        "Namespace is null or empty.");
+                            "Namespace is null or empty.");
                     Preconditions.checkArgument(isValid(tableName),
-                        "Table name is null or empty.");
-                    browser.listenOnTable(namespace, tableName, numItems);
-                    break;
+                            "Table name is null or empty.");
+                    return browser.listenOnTable(namespace, tableName, numItems);
                 case listTags:
-                    browser.listStreamTags();
-                    break;
+                    Set<String> streamTagSet = browser.listStreamTags();
+                    return streamTagSet.size();
                 case listTablesForTag:
                     if (opts.get("--tag") != null) {
                         String streamTag = opts.get("--tag").toString();
-                        browser.listTablesForTag(streamTag);
+                        List<CorfuStoreMetadata.TableName> tablesForTag = browser.listTablesForTag(streamTag);
+                        return tablesForTag.size();
                     } else {
                         log.warn("The '--tag' flag was not specified. Displaying all streams tags and their tables.");
-                        browser.listTagToTableMap();
+                        Map<String, List<CorfuStoreMetadata.TableName>> tablesForTag = browser.listTagToTableMap();
+                        return tablesForTag.size();
                     }
-                    break;
                 case listTagsForTable:
                     Preconditions.checkArgument(isValid(namespace),
-                        "Namespace is null or empty.");
+                            "Namespace is null or empty.");
                     Preconditions.checkArgument(isValid(tableName),
-                        "Table name is null or empty.");
-                    browser.listTagsForTable(namespace, tableName);
-                    break;
+                            "Table name is null or empty.");
+                    final Set<String> tagsForTable = browser.listTagsForTable(namespace, tableName);
+                    return tagsForTable.size();
                 case listTagsMap:
-                    browser.listTagToTableMap();
-                    break;
+                    final Map<String, List<CorfuStoreMetadata.TableName>> tagToTableMap = browser.listTagToTableMap();
+                    return tagToTableMap.size();
                 case listAllProtos:
-                    browser.printAllProtoDescriptors();
-                    break;
+                    return browser.printAllProtoDescriptors();
                 case printMetadataMap:
                     if (opts.get("--address") != null) {
                         long address = Integer.parseInt(opts.get("--address").toString());
-                        browser.printMetadataMap(address);
+                        EnumMap<IMetadata.LogUnitMetadataType, Object> metaMap = browser.printMetadataMap(address);
+                        return metaMap.size();
                     } else {
                         log.error("Print metadata map for a specific address. Specify using tag --address");
                     }
                 default:
                     break;
             }
-        } catch (Throwable t) {
-            log.error("Error in Browser Execution.", t);
-            throw t;
+            return -1;
         }
-    }
 
     private static boolean isValid(final String str) {
         return str != null && !str.isEmpty();
