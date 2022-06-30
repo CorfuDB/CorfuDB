@@ -133,12 +133,11 @@ public class MicroMeterUtils {
     /**
      * Start sampling conditionally, based on the given rate
      *
-     * @param counter  contains the total count
-     * @param sampleAt rate at which sampling should be done
-     * @return
+     * @param shouldSample start timer if this value is true
+     * @return a sample to be used with the timer
      */
-    public static Optional<Timer.Sample> startTimer(Optional<Counter> counter, int sampleAt) {
-        if (counter.isPresent() && counter.get().count() % sampleAt == 0) {
+    public static Optional<Timer.Sample> startTimer(boolean shouldSample) {
+        if (shouldSample) {
             return MeterRegistryProvider.getInstance().map(Timer::start);
         }
         return Optional.empty();
