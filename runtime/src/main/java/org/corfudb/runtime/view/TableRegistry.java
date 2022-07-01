@@ -118,7 +118,6 @@ public class TableRegistry {
     /**
      * Spawn the local client checkpointer
      */
-    private DistributedClientCheckpointScheduler clientCheckpointer;
 
     public TableRegistry(CorfuRuntime runtime) {
         this.runtime = runtime;
@@ -176,11 +175,6 @@ public class TableRegistry {
                 TableOptions.<ProtobufFileName, ProtobufFileDescriptor>builder().build());
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
-        }
-
-        // Lastly instantiate the DistributedClientCheckpointer
-        if (runtime.getParameters().getCheckpointTriggerFreqMillis() > 0) {
-            this.clientCheckpointer = new DistributedClientCheckpointScheduler(runtime);
         }
     }
 
@@ -790,9 +784,6 @@ public class TableRegistry {
     public void shutdown() {
         if (streamingManager != null) {
             streamingManager.shutdown();
-        }
-        if (clientCheckpointer != null) {
-            clientCheckpointer.shutdown();
         }
     }
 }
