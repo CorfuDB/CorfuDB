@@ -14,7 +14,7 @@ public class ClientTriggeredCheckpointer extends DistributedCheckpointer {
 
     @Override
     public void checkpointTables() {
-        if (!openCompactorMetadataTables(getCorfuStore())) {
+        if (!openCompactorMetadataTables()) {
             return;
         }
         if (DistributedCheckpointerHelper.isUpgrade(getCorfuStore()) ||

@@ -32,7 +32,7 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
 
     @Override
     public void checkpointTables() {
-        if (!openCompactorMetadataTables(getCorfuStore())) {
+        if (!openCompactorMetadataTables()) {
             return;
         }
         //TODO: need to check compaction started?

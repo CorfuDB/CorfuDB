@@ -1,5 +1,6 @@
 package org.corfudb.runtime.checkpoint;
 
+import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
@@ -17,173 +18,198 @@ import org.corfudb.runtime.view.TableRegistry;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.Matchers;
-import org.mockito.Mock;
-import org.mockito.Mockito;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.ArgumentCaptor;
+import org.mockito.MockedConstruction;
 
-import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockConstruction;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.withSettings;
+import static org.mockito.Mockito.verify;
 
-@RunWith(MockitoJUnitRunner.class)
 @Slf4j
 public class DistributedCheckpointerUnitTest {
+    private final CorfuRuntime corfuRuntime = mock(CorfuRuntime.class);
+    private final CorfuStore corfuStore = mock(CorfuStore.class);
+    private final TxnContext txn = mock(TxnContext.class);
+    private final CorfuStoreEntry corfuStoreEntry = mock(CorfuStoreEntry.class);
+    private final CheckpointLivenessUpdater livenessUpdater = mock(CheckpointLivenessUpdater.class);
 
     private final static String NAMESPACE = "TestNamespace";
     private final static String TABLE_NAME = "TestTableName";
-    private final TableName tableName = TableName.newBuilder().setNamespace(NAMESPACE).setTableName(TABLE_NAME).build();
-    private DistributedCheckpointer distributedCheckpointer;
+    private final static TableName tableName = TableName.newBuilder().setNamespace(NAMESPACE).setTableName(TABLE_NAME).build();
+    private final static NetworkException networkException = new NetworkException("message", "clusterId");
 
-    @Mock
-    CorfuRuntime corfuRuntime;
-    @Mock
-    CorfuStore corfuStore;
-    @Mock
-    CheckpointLivenessUpdater livenessUpdater;
-    @Mock
-    TxnContext txn;
-    @Mock
-    CorfuStoreEntry corfuStoreEntry;
-    @Mock
-    CompactorMetadataTables compactorMetadataTables;
+    private DistributedCheckpointer distributedCheckpointerSpy;
 
     @Before
-    public void init() {
-        Mockito.when(corfuRuntime.getParameters()).thenReturn(
+    public void setup() {
+        when(corfuRuntime.getParameters()).thenReturn(
                 CorfuRuntime.CorfuRuntimeParameters.builder().clientName("TestClient").build());
-        distributedCheckpointer = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
+        DistributedCheckpointer distributedCheckpointer = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
                 .isClient(false)
                 .persistedCacheRoot(Optional.empty())
-                .cpRuntime(Optional.empty())
+                .cpRuntime(Optional.of(mock(CorfuRuntime.class)))
                 .corfuRuntime(corfuRuntime)
                 .build());
+        this.distributedCheckpointerSpy = spy(distributedCheckpointer);
+
+        doReturn(corfuStore).when(this.distributedCheckpointerSpy).getCorfuStore();
+        CompactorMetadataTables compactorMetadataTables;
+        try (MockedConstruction<CompactorMetadataTables> mockedMetadataTablesConstruction =
+                     mockConstruction(CompactorMetadataTables.class)) {
+            this.distributedCheckpointerSpy.openCompactorMetadataTables();
+            compactorMetadataTables = mockedMetadataTablesConstruction.constructed().get(0);
+        }
+
+        when(compactorMetadataTables.getCheckpointingStatusTable()).thenReturn(mock(Table.class));
+        when(corfuStore.txn(CORFU_SYSTEM_NAMESPACE)).thenReturn(txn);
+        when(txn.getRecord(anyString(), any(Message.class))).thenReturn(corfuStoreEntry);
+        doNothing().when(txn).putRecord(any(), any(), any(), any());
+        doNothing().when(txn).delete(anyString(), any(TableName.class));
+        when(txn.commit()).thenReturn(Timestamp.getDefaultInstance());
     }
 
     @Test
-    public void tryLockTableToCheckpointTest() {
-        Mockito.when(corfuStore.txn(CORFU_SYSTEM_NAMESPACE)).thenReturn(txn);
-        Mockito.when(txn.getRecord(CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, tableName)).thenReturn(corfuStoreEntry);
-        Mockito.doNothing().when(txn).putRecord(Matchers.anyObject(), Matchers.anyObject(), Matchers.anyObject(), Matchers.anyObject());
-        Mockito.when(txn.commit()).thenReturn(Timestamp.getDefaultInstance());
-
-        Mockito.when(corfuStoreEntry.getPayload())
+    public void unableToLockTableTest() {
+        when(corfuStoreEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
-        assert !distributedCheckpointer.tryLockTableToCheckpoint(corfuStore, compactorMetadataTables, tableName);
+        assert distributedCheckpointerSpy.tryCheckpointTable(tableName, t -> new CorfuTable<>());
 
-        Mockito.when(corfuStoreEntry.getPayload())
-                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build());
-        assert distributedCheckpointer.tryLockTableToCheckpoint(corfuStore, compactorMetadataTables, tableName);
+        when(txn.commit()).thenThrow(new WrongClusterException(null, null)).thenReturn(Timestamp.getDefaultInstance());
+        assert !distributedCheckpointerSpy.tryCheckpointTable(tableName, t -> new CorfuTable<>());
 
-        Mockito.when(txn.commit()).thenThrow(new NetworkException("message", "clusterId")).thenReturn(Timestamp.getDefaultInstance());
-        assert distributedCheckpointer.tryLockTableToCheckpoint(corfuStore, compactorMetadataTables, tableName);
-
-        Mockito.when(txn.commit()).thenThrow(new WrongClusterException(null, null)).thenReturn(Timestamp.getDefaultInstance());
-        assert !distributedCheckpointer.tryLockTableToCheckpoint(corfuStore, compactorMetadataTables, tableName);
-
-        Mockito.when(txn.commit()).thenThrow(new TransactionAbortedException(
+        when(txn.commit()).thenThrow(new TransactionAbortedException(
                 new TxResolutionInfo(UUID.randomUUID(), new Token(0, 0)),
                 AbortCause.CONFLICT, new Throwable(), null));
-        assert !distributedCheckpointer.tryLockTableToCheckpoint(corfuStore, compactorMetadataTables, tableName);
+        assert distributedCheckpointerSpy.tryCheckpointTable(tableName, t -> new CorfuTable<>());
+    }
+
+    @Test
+    public void appendCheckpointTest() {
+        ArgumentCaptor<CheckpointingStatus> captor = ArgumentCaptor.forClass(CheckpointingStatus.class);
+        when(corfuStoreEntry.getPayload())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build());
+        doReturn(livenessUpdater).when(distributedCheckpointerSpy).getLivenessUpdater();
+        doNothing().when(livenessUpdater).updateLiveness(tableName);
+        doNothing().when(livenessUpdater).notifyOnSyncComplete();
+
+        try (MockedConstruction<MultiCheckpointWriter> mockedConstruction = mockConstruction(MultiCheckpointWriter.class,
+                withSettings().useConstructor(), (mcw, context) -> {
+                    doNothing().when(mcw).addMap(any(CorfuTable.class));
+                    when(mcw.appendCheckpoints(eq(corfuRuntime), anyString(),
+                            any(Optional.class)))
+                            .thenReturn(new Token(0, 0));
+                })) {
+            //Happy path
+            assert distributedCheckpointerSpy.tryCheckpointTable(tableName, t -> new CorfuTable<>());
+        }
+
+        try (MockedConstruction<MultiCheckpointWriter> mockedConstruction = mockConstruction(MultiCheckpointWriter.class,
+                withSettings().useConstructor(), (mcw, context) -> {
+                    doNothing().when(mcw).addMap(any(CorfuTable.class));
+                    when(mcw.appendCheckpoints(eq(corfuRuntime), anyString(),
+                            any(Optional.class)))
+                            .thenThrow(new IllegalStateException());
+                })) {
+            //When appendCheckpoint throws an exception
+            assert distributedCheckpointerSpy.tryCheckpointTable(tableName, t -> new CorfuTable<>());
+        }
+
+        try (MockedConstruction<MultiCheckpointWriter> mockedConstruction = mockConstruction(MultiCheckpointWriter.class,
+                withSettings().useConstructor(), (mcw, context) -> {
+                    doNothing().when(mcw).addMap(any(CorfuTable.class));
+                    when(mcw.appendCheckpoints(eq(corfuRuntime), anyString(), any(Optional.class)))
+                            .thenThrow(networkException)
+                            .thenReturn(new Token(0, 0));
+                })) {
+            //When appendCheckpoint throws NetworkException and later succeeds
+            assert distributedCheckpointerSpy.tryCheckpointTable(tableName, t -> new CorfuTable<>());
+        }
+
+        final int numTimesMethodInvoked = 3;
+        final int putInvokedPerMethodCall = 3;
+        int i = 0;
+        verify(txn, times(numTimesMethodInvoked * putInvokedPerMethodCall))
+                .putRecord(any(), any(), captor.capture(), any());
+        Assert.assertEquals(StatusType.COMPLETED, captor.getAllValues().get(++i * putInvokedPerMethodCall - 1).getStatus());
+        Assert.assertEquals(StatusType.FAILED, captor.getAllValues().get(++i * putInvokedPerMethodCall - 1).getStatus());
+        Assert.assertEquals(StatusType.COMPLETED, captor.getAllValues().get(++i * putInvokedPerMethodCall - 1).getStatus());
     }
 
     @Test
     public void unlockTableAfterCheckpointTest() {
-        Mockito.when(corfuStore.txn(CORFU_SYSTEM_NAMESPACE)).thenReturn(txn);
-        Mockito.when(txn.getRecord(CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME,
-                tableName)).thenReturn(corfuStoreEntry);
-        Mockito.when(txn.getRecord(CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
-                CompactorMetadataTables.COMPACTION_MANAGER_KEY)).thenReturn(corfuStoreEntry);
-        Mockito.doNothing().when(txn).putRecord(Matchers.anyObject(), Matchers.anyObject(), Matchers.anyObject(), Matchers.anyObject());
-        Mockito.doNothing().when(txn).delete(CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME, tableName);
-        Mockito.when(txn.commit()).thenReturn(Timestamp.getDefaultInstance());
+        doReturn(livenessUpdater).when(distributedCheckpointerSpy).getLivenessUpdater();
+        doNothing().when(livenessUpdater).updateLiveness(tableName);
+        doNothing().when(livenessUpdater).notifyOnSyncComplete();
 
-        CheckpointingStatus completedStatus = CheckpointingStatus.newBuilder().setStatus(StatusType.COMPLETED).build();
-        CheckpointingStatus failedStatus = CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build();
-        CheckpointingStatus startedStatus = CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build();
-
-        Mockito.when(corfuStoreEntry.getPayload())
-                .thenReturn(startedStatus).thenReturn(startedStatus);
-        assert distributedCheckpointer.unlockTableAfterCheckpoint(corfuStore, compactorMetadataTables, tableName,
-                completedStatus);
-
-        Mockito.when(txn.commit()).thenThrow(new NetworkException("message", "clusterId")).thenReturn(Timestamp.getDefaultInstance());
-        assert distributedCheckpointer.unlockTableAfterCheckpoint(corfuStore, compactorMetadataTables, tableName,
-                completedStatus);
-
-        Mockito.when(corfuStoreEntry.getPayload())
+        MockedConstruction<MultiCheckpointWriter> mockedConstruction = mockConstruction(MultiCheckpointWriter.class,
+                withSettings().useConstructor(), (mcw, context) -> {
+                    doNothing().when(mcw).addMap(any(CorfuTable.class));
+                    when(mcw.appendCheckpoints(eq(corfuRuntime), anyString(), any(Optional.class)))
+                            .thenReturn(new Token(0, 0));
+                }
+        );
+        when(txn.commit()).thenReturn(Timestamp.getDefaultInstance());
+        when(corfuStoreEntry.getPayload())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED_ALL).build())
-                .thenReturn(failedStatus);
-        assert !distributedCheckpointer.unlockTableAfterCheckpoint(corfuStore, compactorMetadataTables, tableName,
-                completedStatus);
-
-        Mockito.when(corfuStoreEntry.getPayload()).thenReturn(failedStatus);
-        assert !distributedCheckpointer.unlockTableAfterCheckpoint(corfuStore, compactorMetadataTables, tableName,
-                completedStatus);
-
-        Mockito.when(txn.commit()).thenThrow(new TransactionAbortedException(
-                new TxResolutionInfo(UUID.randomUUID(), new Token(0, 0)),
-                AbortCause.CONFLICT, new Throwable(), null));
-        Mockito.when(corfuStoreEntry.getPayload())
-                .thenReturn(startedStatus).thenReturn(startedStatus)
-                .thenReturn(failedStatus);
-        assert !distributedCheckpointer.unlockTableAfterCheckpoint(corfuStore, compactorMetadataTables, tableName,
-                completedStatus);
-    }
-
-    @Test
-    public void tryCheckpointTableTest() {
-        DistributedCheckpointer distributedCheckpointerSpy = Mockito.spy(distributedCheckpointer);
-        MultiCheckpointWriter<CorfuTable> mcw = Mockito.mock(MultiCheckpointWriter.class);
-        Mockito.doNothing().when(mcw).addMap(Matchers.isA(CorfuTable.class));
-        Mockito.doReturn(corfuStore).when(distributedCheckpointerSpy).getCorfuStore();
-        Mockito.doReturn(livenessUpdater).when(distributedCheckpointerSpy).getLivenessUpdater();
-        Mockito.doNothing().when(livenessUpdater).updateLiveness(tableName);
-        Mockito.doNothing().when(livenessUpdater).notifyOnSyncComplete();
-
-        Mockito.doReturn(true).when(distributedCheckpointerSpy).tryLockTableToCheckpoint(Matchers.anyObject(),
-                Matchers.anyObject(), Matchers.anyObject());
-        Mockito.when(mcw.appendCheckpoints(Matchers.eq(corfuRuntime), Matchers.anyString(), Matchers.isA(Optional.class)))
-                .thenReturn(new Token(0, 0));
-        Mockito.doReturn(true).when(distributedCheckpointerSpy).unlockTableAfterCheckpoint(Matchers.anyObject(),
-                Matchers.anyObject(), Matchers.anyObject(), Matchers.anyObject());
-        assert distributedCheckpointerSpy.tryCheckpointTable(tableName, t -> new CorfuTable<>());
-
-        Mockito.when(mcw.appendCheckpoints(Matchers.eq(corfuRuntime), Matchers.anyString(), Matchers.isA(Optional.class)))
-                .thenThrow(new IllegalStateException());
-        assert distributedCheckpointerSpy.tryCheckpointTable(tableName, t -> new CorfuTable<>());
-
-        Mockito.doReturn(false).when(distributedCheckpointerSpy).unlockTableAfterCheckpoint(Matchers.anyObject(),
-                Matchers.anyObject(), Matchers.anyObject(), Matchers.anyObject());
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build());
         assert !distributedCheckpointerSpy.tryCheckpointTable(tableName, t -> new CorfuTable<>());
 
-        Mockito.doReturn(false).when(distributedCheckpointerSpy).tryLockTableToCheckpoint(Matchers.anyObject(),
-                Matchers.anyObject(), Matchers.anyObject());
+        when(corfuStoreEntry.getPayload())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build());
+        assert !distributedCheckpointerSpy.tryCheckpointTable(tableName, t -> new CorfuTable<>());
+
+        when(corfuStoreEntry.getPayload())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
+        when(txn.commit()).thenReturn(Timestamp.getDefaultInstance())
+                .thenThrow(networkException)
+                .thenReturn(Timestamp.getDefaultInstance());
         assert distributedCheckpointerSpy.tryCheckpointTable(tableName, t -> new CorfuTable<>());
+
+        when(corfuStoreEntry.getPayload())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
+        when(txn.commit()).thenReturn(Timestamp.getDefaultInstance())
+                .thenThrow(new TransactionAbortedException(
+                        new TxResolutionInfo(UUID.randomUUID(), new Token(0, 0)),
+                        AbortCause.CONFLICT, new Throwable(), null));
+        assert !distributedCheckpointerSpy.tryCheckpointTable(tableName, t -> new CorfuTable<>());
+
+        mockedConstruction.close();
     }
 
     @Test
     public void checkpointOpenedTablesTest() {
-        DistributedCheckpointer distributedCheckpointerSpy = Mockito.spy(distributedCheckpointer);
-        TableRegistry tableRegistry = Mockito.mock(TableRegistry.class);
+        TableRegistry tableRegistry = mock(TableRegistry.class);
         List<DistributedCheckpointer.CorfuTableNamePair> mockList = new ArrayList<>(
-                Arrays.asList(new DistributedCheckpointer.CorfuTableNamePair(tableName, Mockito.mock(CorfuTable.class)))
+                Collections.singletonList(new DistributedCheckpointer.CorfuTableNamePair(tableName, mock(CorfuTable.class)))
         );
-        Mockito.when(corfuRuntime.getTableRegistry()).thenReturn(tableRegistry);
-        Mockito.when(tableRegistry.getAllOpenTablesForCheckpointing()).thenReturn(mockList);
+        when(corfuRuntime.getTableRegistry()).thenReturn(tableRegistry);
+        when(tableRegistry.getAllOpenTablesForCheckpointing()).thenReturn(mockList);
 
-        Mockito.doReturn(true).when(distributedCheckpointerSpy).tryCheckpointTable(Matchers.isA(TableName.class),
-                Matchers.isA(Function.class));
+        doReturn(true).when(distributedCheckpointerSpy).tryCheckpointTable(any(TableName.class), any(Function.class));
         Assert.assertEquals(1, distributedCheckpointerSpy.checkpointOpenedTables());
 
-        Mockito.doReturn(false).when(distributedCheckpointerSpy).tryCheckpointTable(Matchers.isA(TableName.class),
-                Matchers.isA(Function.class));
+        doReturn(false).when(distributedCheckpointerSpy).tryCheckpointTable(any(TableName.class), any(Function.class));
         Assert.assertEquals(0, distributedCheckpointerSpy.checkpointOpenedTables());
     }
 }

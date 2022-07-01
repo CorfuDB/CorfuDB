@@ -35,13 +35,14 @@ public abstract class DistributedCheckpointer {
     private final CorfuRuntime corfuRuntime;
     private final String clientName;
 
-    DistributedCheckpointer(CorfuRuntime corfuRuntime, String clientName) {
+    DistributedCheckpointer(@NonNull CorfuRuntime corfuRuntime, String clientName) {
         this.corfuRuntime = corfuRuntime;
         this.clientName = clientName;
         this.corfuStore = Optional.empty();
         this.livenessUpdater = Optional.empty();
     }
 
+    @VisibleForTesting
     public CorfuStore getCorfuStore() {
         if (!this.corfuStore.isPresent()) {
             this.corfuStore = Optional.of(new CorfuStore(this.corfuRuntime));
@@ -49,6 +50,7 @@ public abstract class DistributedCheckpointer {
         return this.corfuStore.get();
     }
 
+    @VisibleForTesting
     public LivenessUpdater getLivenessUpdater() {
         if (!livenessUpdater.isPresent()) {
             this.livenessUpdater = Optional.of(new CheckpointLivenessUpdater(getCorfuStore()));
@@ -56,10 +58,11 @@ public abstract class DistributedCheckpointer {
         return this.livenessUpdater.get();
     }
 
-    public boolean openCompactorMetadataTables(CorfuStore corfuStore) {
+    @VisibleForTesting
+    public boolean openCompactorMetadataTables() {
         log.debug("Open all checkpoint metadata tables");
         try {
-            compactorMetadataTables = new CompactorMetadataTables(corfuStore);
+            compactorMetadataTables = new CompactorMetadataTables(getCorfuStore());
         } catch (Exception e) {
             log.error("Exception while opening compactorMetadataTables, ", e);
             return false;
@@ -67,12 +70,10 @@ public abstract class DistributedCheckpointer {
         return true;
     }
 
-    @VisibleForTesting
-    public boolean tryLockTableToCheckpoint(@NonNull CorfuStore corfuStore,
-                                            @NonNull CompactorMetadataTables compactorMetadataTables,
-                                            @NonNull TableName tableName) {
+    private boolean tryLockTableToCheckpoint(@NonNull CompactorMetadataTables compactorMetadataTables,
+                                             @NonNull TableName tableName) throws RuntimeException {
         for (int retry = 0; retry < MAX_RETRIES; retry++) {
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            try (TxnContext txn = getCorfuStore().txn(CORFU_SYSTEM_NAMESPACE)) {
                 CorfuStoreEntry<TableName, CheckpointingStatus, Message> tableToChkpt = txn.getRecord(
                         CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, tableName);
                 if (tableToChkpt.getPayload().getStatus() == StatusType.IDLE) {
@@ -91,7 +92,7 @@ public abstract class DistributedCheckpointer {
                     return true; // Lock successfully acquired!
                 }
                 txn.commit();
-                return false;
+                break;
             } catch (TransactionAbortedException e) {
                 if (e.getAbortCause() == AbortCause.CONFLICT) {
                     log.info("My opened table {}${} is being checkpointed by someone else",
@@ -100,38 +101,36 @@ public abstract class DistributedCheckpointer {
                 }
             } catch (RuntimeException re) {
                 if (isCriticalRuntimeException(re, retry, MAX_RETRIES)) {
-                    return false; // stop on non-retryable exceptions
+                    throw re;
                 }
             }
         }
         return false;
     }
 
-    @VisibleForTesting
-    public boolean unlockTableAfterCheckpoint(@NonNull CorfuStore corfuStore,
-                                              @NonNull CompactorMetadataTables compactorMetadataTables,
+    private boolean unlockTableAfterCheckpoint(@NonNull CompactorMetadataTables compactorMetadataTables,
                                               @NonNull TableName tableName,
-                                              @NonNull CheckpointingStatus checkpointStatus) {
+                                              @NonNull CheckpointingStatus checkpointStatus) throws RuntimeException {
         for (int retry = 0; retry < MAX_RETRIES; retry++) {
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            try (TxnContext txn = getCorfuStore().txn(CORFU_SYSTEM_NAMESPACE)) {
                 CorfuStoreEntry<StringKey, CheckpointingStatus, Message> managerStatus = txn.getRecord(
                         CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                         CompactorMetadataTables.COMPACTION_MANAGER_KEY);
-                //TODO: check against which compactor cycle this is part of
+                //TODO: check against which compactor cycle this is part of - will help with if tableStatus is IDLE
+                // separate check not required
                 if (managerStatus.getPayload().getStatus() == StatusType.COMPLETED ||
                         managerStatus.getPayload().getStatus() == StatusType.FAILED) {
                     log.error("Compaction cycle has already ended with status {}", managerStatus.getPayload().getStatus());
                     txn.commit();
-                    return false;
+                    break;
                 }
-
                 CorfuStoreEntry<TableName, CheckpointingStatus, Message> tableStatus = txn.getRecord(
                         CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, tableName);
                 if (tableStatus.getPayload().getStatus() == StatusType.FAILED) {
                     log.error("Table status for {}${} has already been marked as FAILED",
                             tableName.getNamespace(), tableName.getTableName());
                     txn.commit();
-                    return false;
+                    break;
                 }
                 txn.putRecord(compactorMetadataTables.getCheckpointingStatusTable(), tableName, checkpointStatus,
                         null);
@@ -141,9 +140,10 @@ public abstract class DistributedCheckpointer {
             } catch (TransactionAbortedException e) {
                 log.error("TransactionAbortedException exception while trying to unlock table {}${}: {}",
                         tableName.getNamespace(), tableName.getTableName(), e.getMessage());
+                break; //Leader marked me as failed
             } catch (RuntimeException re) {
                 if (isCriticalRuntimeException(re, retry, MAX_RETRIES)) {
-                    return false; //stop on non-retryable exceptions
+                    throw re;
                 }
             }
         }
@@ -151,15 +151,16 @@ public abstract class DistributedCheckpointer {
     }
 
     public boolean tryCheckpointTable(TableName tableName, Function<TableName, CorfuTable> openTableFn) {
-        if (!tryLockTableToCheckpoint(getCorfuStore(), compactorMetadataTables, tableName)) {
-            // Failure to get a lock is treated as success
-            //TODO: even if lock failed due to other reasons?
-            return true;
+        try {
+            if (!tryLockTableToCheckpoint(compactorMetadataTables, tableName)) {
+                // Failure to get a lock is treated as success
+                return true;
+            }
+            CheckpointingStatus checkpointStatus = appendCheckpoint(openTableFn.apply(tableName), tableName, new MultiCheckpointWriter());
+            return unlockTableAfterCheckpoint(compactorMetadataTables, tableName, checkpointStatus);
+        } catch (RuntimeException re) {
+            return false;
         }
-
-        CheckpointingStatus checkpointStatus = appendCheckpoint(openTableFn.apply(tableName), tableName, new MultiCheckpointWriter());
-
-        return unlockTableAfterCheckpoint(getCorfuStore(), compactorMetadataTables, tableName, checkpointStatus);
     }
 
     @AllArgsConstructor
@@ -199,10 +200,10 @@ public abstract class DistributedCheckpointer {
             try {
                 mcw.appendCheckpoints(corfuRuntime, "checkpointer", this.livenessUpdater);
                 returnStatus = StatusType.COMPLETED;
-
+                break;
             } catch (RuntimeException re) {
                 if (isCriticalRuntimeException(re, retry, MAX_RETRIES)) {
-                    break;// stop on non-retryable exceptions
+                    break; // stop on non-retryable exceptions
                 }
             } catch (Exception e) {
                 log.error("Unable to checkpoint table: {}, e: {}", tableName, e);

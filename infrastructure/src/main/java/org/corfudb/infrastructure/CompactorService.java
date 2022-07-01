@@ -2,7 +2,6 @@ package org.corfudb.infrastructure;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.NonNull;
-import lombok.Setter;
 import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
@@ -28,12 +27,8 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  */
 public class CompactorService implements ManagementService {
 
-    @Setter
-    private static Duration livenessTimeout = Duration.ofMinutes(1);
-
     private final ServerContext serverContext;
     private final SingletonResource<CorfuRuntime> runtimeSingletonResource;
-
     private final ScheduledExecutorService orchestratorThread;
     private final InvokeCheckpointing checkpointerJvmManager;
 
@@ -72,8 +67,8 @@ public class CompactorService implements ManagementService {
      */
     @Override
     public void start(Duration interval) {
-        this.compactorLeaderServices = new CompactorLeaderServices(getCorfuRuntime(), serverContext.getLocalEndpoint());
         this.corfuStore = new CorfuStore(getCorfuRuntime());
+        this.compactorLeaderServices = new CompactorLeaderServices(getCorfuRuntime(), serverContext.getLocalEndpoint(), corfuStore);
         this.trimLog = new TrimLog(getCorfuRuntime(), corfuStore);
         this.compactionTriggerPolicy.setCorfuRuntime(getCorfuRuntime());
         if (getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis() <= 0) {
@@ -119,11 +114,11 @@ public class CompactorService implements ManagementService {
             if (isLeader) {
                 if (managerStatus != null && (managerStatus.getStatus() == StatusType.STARTED ||
                         managerStatus.getStatus() == StatusType.STARTED_ALL)) {
-                    compactorLeaderServices.validateLiveness(livenessTimeout.toMillis());
+                    compactorLeaderServices.validateLiveness();
                 } else if (compactionTriggerPolicy.shouldTrigger(getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis())) {
                     compactionTriggerPolicy.markCompactionCycleStart();
                     trimLog.invokePrefixTrim();
-                    compactorLeaderServices.initDistributedCompaction();
+                    compactorLeaderServices.initCompactionCycle();
                 }
             }
         } catch (Exception ex) {
