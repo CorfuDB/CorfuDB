@@ -32,7 +32,7 @@ public class CompactorService implements ManagementService {
     private final ScheduledExecutorService orchestratorThread;
     private final InvokeCheckpointing checkpointerJvmManager;
 
-    private final CompactionTriggerPolicy compactionTriggerPolicy;
+    private CompactionTriggerPolicy compactionTriggerPolicy;
     private CompactorLeaderServices compactorLeaderServices;
     private CorfuStore corfuStore;
     private TrimLog trimLog;
@@ -41,8 +41,7 @@ public class CompactorService implements ManagementService {
 
     CompactorService(@NonNull ServerContext serverContext,
                      @NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
-                     @NonNull InvokeCheckpointing checkpointerJvmManager,
-                     @NonNull CompactionTriggerPolicy compactionTriggerPolicy) {
+                     @NonNull InvokeCheckpointing checkpointerJvmManager) {
         this.serverContext = serverContext;
         this.runtimeSingletonResource = runtimeSingletonResource;
 
@@ -51,8 +50,6 @@ public class CompactorService implements ManagementService {
                         .setNameFormat("Cmpt-" + serverContext.getServerConfig().get("<port>") + "-chkpter")
                         .build());
         this.checkpointerJvmManager = checkpointerJvmManager;
-        this.compactionTriggerPolicy = compactionTriggerPolicy;
-
         syslog = LoggerFactory.getLogger("syslog");
     }
 
@@ -67,13 +64,14 @@ public class CompactorService implements ManagementService {
      */
     @Override
     public void start(Duration interval) {
-        this.corfuStore = new CorfuStore(getCorfuRuntime());
-        this.compactorLeaderServices = new CompactorLeaderServices(getCorfuRuntime(), serverContext.getLocalEndpoint(), corfuStore);
-        this.trimLog = new TrimLog(getCorfuRuntime(), corfuStore);
-        this.compactionTriggerPolicy.setCorfuRuntime(getCorfuRuntime());
         if (getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis() <= 0) {
             return;
         }
+
+        this.corfuStore = new CorfuStore(getCorfuRuntime());
+        this.compactorLeaderServices = new CompactorLeaderServices(getCorfuRuntime(), serverContext.getLocalEndpoint(), corfuStore);
+        this.trimLog = new TrimLog(getCorfuRuntime(), corfuStore);
+        this.compactionTriggerPolicy = new DynamicTriggerPolicy(getCorfuRuntime());
 
         orchestratorThread.scheduleWithFixedDelay(
                 this::runOrchestrator,

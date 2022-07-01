@@ -20,12 +20,13 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
     @Getter
     private long lastCompactionCycleStartTS = 0;
 
-    private CorfuRuntime corfuRuntime;
-    private Logger syslog;
+    private final  CorfuRuntime corfuRuntime;
+    private final Logger syslog;
 
-    public DynamicTriggerPolicy() {
-        lastCompactionCycleStartTS = System.currentTimeMillis();
-        syslog = LoggerFactory.getLogger("syslog");
+    public DynamicTriggerPolicy(CorfuRuntime corfuRuntime) {
+        this.corfuRuntime = corfuRuntime;
+        this.lastCompactionCycleStartTS = System.currentTimeMillis();
+        this.syslog = LoggerFactory.getLogger("syslog");
     }
 
     @Override
@@ -83,10 +84,5 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
         }
 
         return false;
-    }
-
-    @Override
-    public void setCorfuRuntime(CorfuRuntime corfuRuntime) {
-        this.corfuRuntime = corfuRuntime;
     }
 }

@@ -140,7 +140,7 @@ public class ManagementAgent {
         this.autoCommitService = new AutoCommitService(serverContext, runtimeSingletonResource);
 
         this.compactorService = new CompactorService(serverContext, runtimeSingletonResource,
-                new InvokeCheckpointingJvm(serverContext), new DynamicTriggerPolicy());
+                new InvokeCheckpointingJvm(serverContext));
 
         // Creating the initialization task thread.
         // This thread pool is utilized to dispatch one time recovery and sequencer bootstrap tasks.

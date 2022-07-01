@@ -31,7 +31,6 @@ public class CompactorServiceUnitTest {
     private final ServerContext serverContext = mock(ServerContext.class);
     private final CorfuRuntime corfuRuntime = mock(CorfuRuntime.class);
     private final InvokeCheckpointingJvm invokeCheckpointingJvm = mock(InvokeCheckpointingJvm.class);
-    private final CompactionTriggerPolicy compactionTriggerPolicy = mock(CompactionTriggerPolicy.class);
     private final TxnContext txn = mock(TxnContext.class);
     private final CorfuStoreEntry corfuStoreEntry = mock(CorfuStoreEntry.class);
 
@@ -41,11 +40,12 @@ public class CompactorServiceUnitTest {
     private final static int SLEEP_WAIT = 8;
 
     private CompactorLeaderServices leaderServices;
+    private CompactionTriggerPolicy compactionTriggerPolicy;
 
     @Before
     public void setup() {
-        CompactorService compactorService = new CompactorService(serverContext, SingletonResource.withInitial(() -> corfuRuntime),
-                invokeCheckpointingJvm, compactionTriggerPolicy);
+        CompactorService compactorService = new CompactorService(serverContext,
+                SingletonResource.withInitial(() -> corfuRuntime), invokeCheckpointingJvm);
 
         Map<String, Object> map = new HashMap<>();
         map.put("<port>", "port");
@@ -58,8 +58,10 @@ public class CompactorServiceUnitTest {
 
         MockedConstruction<CorfuStore> mockedCorfuStoreConstruction = mockConstruction(CorfuStore.class);
         MockedConstruction<CompactorLeaderServices> mockedLeaderServices = mockConstruction(CompactorLeaderServices.class);
+        MockedConstruction<DynamicTriggerPolicy> mockedTriggerPolicyConstruction = mockConstruction(DynamicTriggerPolicy.class);
         compactorService.start(Duration.ofSeconds(SCHEDULER_INTERVAL));
         CorfuStore corfuStore = mockedCorfuStoreConstruction.constructed().get(0);
+        this.compactionTriggerPolicy = mockedTriggerPolicyConstruction.constructed().get(0);
         this.leaderServices = mockedLeaderServices.constructed().get(0);
 
         when(corfuStore.txn(CORFU_SYSTEM_NAMESPACE)).thenReturn(txn);
@@ -68,6 +70,7 @@ public class CompactorServiceUnitTest {
 
         mockedLeaderServices.close();
         mockedCorfuStoreConstruction.close();
+        mockedTriggerPolicyConstruction.close();
     }
 
     @Test
