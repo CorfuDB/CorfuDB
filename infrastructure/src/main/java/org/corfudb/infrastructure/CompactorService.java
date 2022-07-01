@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
+import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -33,7 +34,7 @@ public class CompactorService implements ManagementService {
     private final InvokeCheckpointing checkpointerJvmManager;
 
     private CompactionTriggerPolicy compactionTriggerPolicy;
-    private CompactorLeaderServices compactorLeaderServices;
+    private Optional<CompactorLeaderServices> compactorLeaderServices = Optional.empty();
     private CorfuStore corfuStore;
     private TrimLog trimLog;
 
@@ -69,9 +70,9 @@ public class CompactorService implements ManagementService {
         }
 
         this.corfuStore = new CorfuStore(getCorfuRuntime());
-        this.compactorLeaderServices = new CompactorLeaderServices(getCorfuRuntime(), serverContext.getLocalEndpoint(), corfuStore);
         this.trimLog = new TrimLog(getCorfuRuntime(), corfuStore);
         this.compactionTriggerPolicy = new DynamicTriggerPolicy(getCorfuRuntime());
+        getCompactorLeaderServices();
 
         orchestratorThread.scheduleWithFixedDelay(
                 this::runOrchestrator,
@@ -79,6 +80,18 @@ public class CompactorService implements ManagementService {
                 interval.toMillis(),
                 TimeUnit.MILLISECONDS
         );
+    }
+
+    private CompactorLeaderServices getCompactorLeaderServices() {
+        if (!compactorLeaderServices.isPresent()) {
+            try {
+                compactorLeaderServices = Optional.of(new CompactorLeaderServices(getCorfuRuntime(),
+                        serverContext.getLocalEndpoint(), corfuStore));
+            } catch (Exception e) {
+                syslog.error("Unable to create CompactorLeaderServices object. Will retry on next attempt. Exception: ", e);
+            }
+        }
+        return compactorLeaderServices.get();
     }
 
     /**
@@ -112,11 +125,11 @@ public class CompactorService implements ManagementService {
             if (isLeader) {
                 if (managerStatus != null && (managerStatus.getStatus() == StatusType.STARTED ||
                         managerStatus.getStatus() == StatusType.STARTED_ALL)) {
-                    compactorLeaderServices.validateLiveness();
+                    getCompactorLeaderServices().validateLiveness();
                 } else if (compactionTriggerPolicy.shouldTrigger(getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis())) {
                     compactionTriggerPolicy.markCompactionCycleStart();
                     trimLog.invokePrefixTrim();
-                    compactorLeaderServices.initCompactionCycle();
+                    getCompactorLeaderServices().initCompactionCycle();
                 }
             }
         } catch (Exception ex) {

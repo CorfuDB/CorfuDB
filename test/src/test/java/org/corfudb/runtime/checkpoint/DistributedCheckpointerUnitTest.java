@@ -147,9 +147,16 @@ public class DistributedCheckpointerUnitTest {
         int i = 0;
         verify(txn, times(numTimesMethodInvoked * putInvokedPerMethodCall))
                 .putRecord(any(), any(), captor.capture(), any());
-        Assert.assertEquals(StatusType.COMPLETED, captor.getAllValues().get(++i * putInvokedPerMethodCall - 1).getStatus());
-        Assert.assertEquals(StatusType.FAILED, captor.getAllValues().get(++i * putInvokedPerMethodCall - 1).getStatus());
-        Assert.assertEquals(StatusType.COMPLETED, captor.getAllValues().get(++i * putInvokedPerMethodCall - 1).getStatus());
+        Assert.assertEquals(StatusType.COMPLETED, captor.getAllValues().get(getIndex(++i, putInvokedPerMethodCall)).getStatus());
+        Assert.assertEquals(0, captor.getAllValues().get(getIndex(i, putInvokedPerMethodCall)).getEpoch());
+        Assert.assertEquals(StatusType.FAILED, captor.getAllValues().get(getIndex(++i, putInvokedPerMethodCall)).getStatus());
+        Assert.assertEquals(0, captor.getAllValues().get(getIndex(i, putInvokedPerMethodCall)).getEpoch());
+        Assert.assertEquals(StatusType.COMPLETED, captor.getAllValues().get(getIndex(++i, putInvokedPerMethodCall)).getStatus());
+        Assert.assertEquals(0, captor.getAllValues().get(getIndex(i, putInvokedPerMethodCall)).getEpoch());
+    }
+
+    private int getIndex(int i, int putInvokedPerMethodCall) {
+        return i * putInvokedPerMethodCall - 1;
     }
 
     @Test
@@ -184,6 +191,13 @@ public class DistributedCheckpointerUnitTest {
                 .thenThrow(networkException)
                 .thenReturn(Timestamp.getDefaultInstance());
         assert distributedCheckpointerSpy.tryCheckpointTable(tableName, t -> new CorfuTable<>());
+
+        when(corfuStoreEntry.getPayload())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).setEpoch(1).build());
+        //Fail on different epoch values
+        assert !distributedCheckpointerSpy.tryCheckpointTable(tableName, t -> new CorfuTable<>());
 
         when(corfuStoreEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build())

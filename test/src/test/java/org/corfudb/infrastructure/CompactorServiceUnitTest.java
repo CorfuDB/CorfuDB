@@ -109,7 +109,7 @@ public class CompactorServiceUnitTest {
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
         when(compactionTriggerPolicy.shouldTrigger(anyLong())).thenReturn(true).thenReturn(false);
         doNothing().when(leaderServices).validateLiveness();
-        doReturn(CompactorLeaderServices.LeaderServicesStatus.SUCCESS).when(leaderServices).initCompactionCycle();
+        doReturn(CompactorLeaderServices.LeaderInitStatus.SUCCESS).when(leaderServices).initCompactionCycle();
 
         try {
             TimeUnit.SECONDS.sleep(SLEEP_WAIT);

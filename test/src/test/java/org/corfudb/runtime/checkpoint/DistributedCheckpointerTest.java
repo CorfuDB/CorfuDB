@@ -3,7 +3,7 @@ package org.corfudb.runtime.checkpoint;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.CompactorLeaderServices;
-import org.corfudb.infrastructure.CompactorLeaderServices.LeaderServicesStatus;
+import org.corfudb.infrastructure.CompactorLeaderServices.LeaderInitStatus;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestLayoutBuilder;
@@ -249,23 +249,23 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
     }
 
     @Test
-    public void initTest() {
+    public void initTest() throws Exception {
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0, corfuStore);
         CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime1, SERVERS.ENDPOINT_1, corfuStore);
 
-        assert compactorLeaderServices1.initCompactionCycle() == LeaderServicesStatus.SUCCESS;
-        assert compactorLeaderServices2.initCompactionCycle() == LeaderServicesStatus.FAIL;
+        assert compactorLeaderServices1.initCompactionCycle() == LeaderInitStatus.SUCCESS;
+        assert compactorLeaderServices2.initCompactionCycle() == LeaderInitStatus.FAIL;
         assert verifyManagerStatus(StatusType.STARTED);
         assert verifyCheckpointStatusTable(StatusType.IDLE, 0);
     }
 
     @Test
-    public void initMultipleLeadersTest1() {
+    public void initMultipleLeadersTest1() throws Exception {
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0, corfuStore);
         CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime1, SERVERS.ENDPOINT_1, corfuStore);
 
-        LeaderServicesStatus init1 = compactorLeaderServices1.initCompactionCycle();
-        LeaderServicesStatus init2 = compactorLeaderServices2.initCompactionCycle();
+        LeaderInitStatus init1 = compactorLeaderServices1.initCompactionCycle();
+        LeaderInitStatus init2 = compactorLeaderServices2.initCompactionCycle();
 
         assert !init1.equals(init2);
         assert verifyManagerStatus(StatusType.STARTED);
@@ -273,20 +273,20 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
     }
 
     @Test
-    public void initMultipleLeadersTest2() {
+    public void initMultipleLeadersTest2() throws Exception {
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0, corfuStore);
         CompactorLeaderServices compactorLeaderServices2 = new CompactorLeaderServices(runtime1, SERVERS.ENDPOINT_1, corfuStore);
 
         ExecutorService scheduler = Executors.newFixedThreadPool(2);
-        Future<LeaderServicesStatus> future1 = scheduler.submit(compactorLeaderServices1::initCompactionCycle);
-        Future<LeaderServicesStatus> future2 = scheduler.submit(compactorLeaderServices2::initCompactionCycle);
+        Future<LeaderInitStatus> future1 = scheduler.submit(compactorLeaderServices1::initCompactionCycle);
+        Future<LeaderInitStatus> future2 = scheduler.submit(compactorLeaderServices2::initCompactionCycle);
 
         try {
             if (!future1.get().equals(future2.get())) {
                 assert verifyManagerStatus(StatusType.STARTED);
                 assert verifyCheckpointStatusTable(StatusType.IDLE, 0);
             } else {
-                assert future1.get() != LeaderServicesStatus.SUCCESS && future2.get() != LeaderServicesStatus.SUCCESS;
+                assert future1.get() != LeaderInitStatus.SUCCESS && future2.get() != LeaderInitStatus.SUCCESS;
             }
         } catch (Exception e) {
             log.warn("Unable to get results");
@@ -294,7 +294,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
     }
 
     @Test
-    public void checkpointTablesTest() {
+    public void checkpointTablesTest() throws Exception {
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0, corfuStore);
         compactorLeaderServices1.initCompactionCycle();
         ServerTriggeredCheckpointer distributedCheckpointer1 =
@@ -334,7 +334,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
     }
 
     @Test
-    public void finishCompactionCycleSuccessTest() {
+    public void finishCompactionCycleSuccessTest() throws Exception {
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0, corfuStore);
         compactorLeaderServices1.initCompactionCycle();
 
@@ -354,7 +354,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
     }
 
     @Test
-    public void finishCompactionCycleFailureTest() {
+    public void finishCompactionCycleFailureTest() throws Exception {
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0, corfuStore);
         compactorLeaderServices1.initCompactionCycle();
 
@@ -381,7 +381,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
     }
 
     @Test
-    public void validateLivenessLeaderTest() {
+    public void validateLivenessLeaderTest() throws Exception {
         //make some client to start cp
         //verifyCheckpointStatusTable
         CompactorLeaderServices.setLivenessTimeout(Duration.ofMillis(LIVENESS_TIMEOUT));
@@ -413,7 +413,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
     }
 
     @Test
-    public void validateLivenessNonLeaderTest() {
+    public void validateLivenessNonLeaderTest() throws Exception {
         CompactorLeaderServices.setLivenessTimeout(Duration.ofMillis(LIVENESS_TIMEOUT));
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0, corfuStore);
         compactorLeaderServices1.initCompactionCycle();
@@ -441,7 +441,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
     }
 
     @Test
-    public void validateLivenessFailureTest() {
+    public void validateLivenessFailureTest() throws Exception {
         CompactorLeaderServices.setLivenessTimeout(Duration.ofMillis(LIVENESS_TIMEOUT));
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, SERVERS.ENDPOINT_0, corfuStore);
         compactorLeaderServices1.initCompactionCycle();
@@ -484,7 +484,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
     }
 
     @Test
-    public void validateLivenessSyncStateTest() {
+    public void validateLivenessSyncStateTest() throws Exception {
         CompactorLeaderServices.setLivenessTimeout(Duration.ofMillis(LIVENESS_TIMEOUT));
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime1, SERVERS.ENDPOINT_0, corfuStore);
         compactorLeaderServices1.initCompactionCycle();

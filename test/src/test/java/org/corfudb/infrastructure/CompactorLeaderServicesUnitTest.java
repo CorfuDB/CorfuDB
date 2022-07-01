@@ -53,7 +53,7 @@ public class CompactorLeaderServicesUnitTest {
     private LivenessValidator livenessValidator = mock(LivenessValidator.class);
 
     @Before
-    public void setup() {
+    public void setup() throws Exception {
         MockedConstruction<CompactorMetadataTables> mockedMetadataTablesConstruction = mockConstruction(CompactorMetadataTables.class);
         MockedConstruction<LivenessValidator> mockedLivenessValidatorConstruction = mockConstruction(LivenessValidator.class);
         this.compactorLeaderServices = new CompactorLeaderServices(corfuRuntime, "NodeEndpoint", corfuStore);
@@ -76,20 +76,20 @@ public class CompactorLeaderServicesUnitTest {
     public void initCompactionCycleTest() {
         mockStatic(DistributedCheckpointerHelper.class);
         when(DistributedCheckpointerHelper.isCheckpointFrozen(corfuStore)).thenReturn(true);
-        Assert.assertEquals(CompactorLeaderServices.LeaderServicesStatus.FAIL, compactorLeaderServices.initCompactionCycle());
+        Assert.assertEquals(CompactorLeaderServices.LeaderInitStatus.FAIL, compactorLeaderServices.initCompactionCycle());
 
         when(DistributedCheckpointerHelper.isCheckpointFrozen(corfuStore)).thenReturn(false);
 
         when(corfuStoreEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED_ALL).build());
-        Assert.assertEquals(CompactorLeaderServices.LeaderServicesStatus.FAIL, compactorLeaderServices.initCompactionCycle());
+        Assert.assertEquals(CompactorLeaderServices.LeaderInitStatus.FAIL, compactorLeaderServices.initCompactionCycle());
 
         when(corfuStoreEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build());
         when(corfuStore.listTables(null)).thenReturn(Collections.singletonList(tableName));
         when(corfuRuntime.getAddressSpaceView()).thenReturn(mock(AddressSpaceView.class));
         doNothing().when(txn).putRecord(ArgumentMatchers.any(), ArgumentMatchers.any(), ArgumentMatchers.any(), ArgumentMatchers.any());
-        Assert.assertEquals(CompactorLeaderServices.LeaderServicesStatus.SUCCESS, compactorLeaderServices.initCompactionCycle());
+        Assert.assertEquals(CompactorLeaderServices.LeaderInitStatus.SUCCESS, compactorLeaderServices.initCompactionCycle());
     }
 
     @Test

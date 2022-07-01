@@ -40,32 +40,27 @@ public class CompactorLeaderServices {
     private final TrimLog trimLog;
     private final Logger syslog;
     private final LivenessValidator livenessValidator;
-
-    private CompactorMetadataTables compactorMetadataTables;
+    private final CompactorMetadataTables compactorMetadataTables;
 
     @Setter
     private static Duration livenessTimeout = Duration.ofMinutes(1);
 
     /**
-     * This enum contains the status of the leader services of the current node
-     * If the status is SUCCESS, the leader services will continue
-     * If the status is FAIL, the leader services will return
+     * This enum contains the leader's start compaction cycle status
+     * If the status is SUCCESS, the compaction cycle has been started
+     * If the status is FAIL, the compaction cycle startup has failed
      */
-    //TODO: Do something else
-    public static enum LeaderServicesStatus {
+    public static enum LeaderInitStatus {
         SUCCESS,
         FAIL
     }
 
-    public CompactorLeaderServices(CorfuRuntime corfuRuntime, String nodeEndpoint, CorfuStore corfuStore) {
+    public CompactorLeaderServices(CorfuRuntime corfuRuntime, String nodeEndpoint, CorfuStore corfuStore)
+            throws Exception {
+        this.compactorMetadataTables = new CompactorMetadataTables(corfuStore);
         this.corfuRuntime = corfuRuntime;
         this.nodeEndpoint = nodeEndpoint;
         this.corfuStore = corfuStore;
-        try {
-            this.compactorMetadataTables = new CompactorMetadataTables(corfuStore);
-        } catch (Exception e) {
-            //TODO: Retry?
-        }
         this.livenessValidator = new LivenessValidator(corfuRuntime, corfuStore, livenessTimeout);
         this.trimLog = new TrimLog(corfuRuntime, corfuStore);
         syslog = LoggerFactory.getLogger("syslog");
@@ -77,14 +72,14 @@ public class CompactorLeaderServices {
      * Mark the start of the compaction cycle and populate CheckpointStatusTable with all the
      * tables in the registry.
      *
-     * @return
+     * @return compaction cycle start status
      */
-    public LeaderServicesStatus initCompactionCycle() {
+    public LeaderInitStatus initCompactionCycle() {
         syslog.info("=============Initiating Distributed Compaction============");
 
         if (DistributedCheckpointerHelper.isCheckpointFrozen(corfuStore)) {
             syslog.warn("Will not start compaction since it has been frozen");
-            return LeaderServicesStatus.FAIL;
+            return LeaderInitStatus.FAIL;
         }
 
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -96,11 +91,12 @@ public class CompactorLeaderServices {
                     managerStatus.getStatus() == StatusType.STARTED_ALL)) {
                 txn.commit();
                 syslog.warn("Compaction cycle already started");
-                return LeaderServicesStatus.FAIL;
+                return LeaderInitStatus.FAIL;
             }
 
+            long newEpoch = managerStatus == null ? 0 : managerStatus.getEpoch() + 1;
             List<TableName> tableNames = new ArrayList<>(corfuStore.listTables(null));
-            CheckpointingStatus idleStatus = buildCheckpointStatus(StatusType.IDLE);
+            CheckpointingStatus idleStatus = buildCheckpointStatus(StatusType.IDLE, newEpoch);
 
             txn.clear(CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME);
             txn.clear(CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME);
@@ -120,16 +116,16 @@ public class CompactorLeaderServices {
                     null);
 
             CheckpointingStatus newManagerStatus = buildCheckpointStatus(StatusType.STARTED,
-                    tableNames.size(), System.currentTimeMillis()); // put the current time when cycle starts
+                    tableNames.size(), System.currentTimeMillis(), newEpoch); // put the current time when cycle starts
             txn.putRecord(compactorMetadataTables.getCompactionManagerTable(), CompactorMetadataTables.COMPACTION_MANAGER_KEY,
                     newManagerStatus, null);
 
             txn.commit();
         } catch (Exception e) {
             syslog.error("Exception while initiating Compaction cycle {}. Stack Trace {}", e, e.getStackTrace());
-            return LeaderServicesStatus.FAIL;
+            return LeaderInitStatus.FAIL;
         }
-        return LeaderServicesStatus.SUCCESS;
+        return LeaderInitStatus.SUCCESS;
     }
 
     /**
@@ -165,7 +161,8 @@ public class CompactorLeaderServices {
                             CompactorMetadataTables.COMPACTION_MANAGER_KEY,
                             buildCheckpointStatus(StatusType.STARTED_ALL,
                                     managerStatus.getTableSize(),
-                                    managerStatus.getTimeTaken()),
+                                    managerStatus.getTimeTaken(),
+                                    managerStatus.getEpoch()),
                             null);
                     txn.commit();
                     livenessValidator.clearLivenessValidator();
@@ -193,14 +190,15 @@ public class CompactorLeaderServices {
             if (tableStatus.getStatus() != StatusType.COMPLETED &&
                     tableStatus.getStatus() != StatusType.FAILED) {
                 txn.putRecord(compactorMetadataTables.getCheckpointingStatusTable(), table,
-                        buildCheckpointStatus(StatusType.FAILED), null);
+                        buildCheckpointStatus(StatusType.FAILED, tableStatus.getEpoch()), null);
                 txn.delete(CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME, table);
 
                 txn.putRecord(compactorMetadataTables.getCompactionManagerTable(), CompactorMetadataTables.COMPACTION_MANAGER_KEY,
                         buildCheckpointStatus(
                                 StatusType.FAILED,
                                 managerStatus.getTableSize(),
-                                System.currentTimeMillis() - managerStatus.getTimeTaken()),
+                                System.currentTimeMillis() - managerStatus.getTimeTaken(),
+                                managerStatus.getEpoch()),
                         null);
                 txn.commit();
                 log.warn("Finished compaction cycle. FAILED due to no checkpoint activity of table: {}${}",
@@ -241,7 +239,8 @@ public class CompactorLeaderServices {
 
             if (managerStatus == null || managerStatus.getStatus() != StatusType.STARTED &&
                     managerStatus.getStatus() != StatusType.STARTED_ALL) {
-                syslog.warn("Cannot perform finishCompactionCycle due to managerStatus {}", managerStatus.getStatus());
+                syslog.warn("Cannot perform finishCompactionCycle due to managerStatus {}", managerStatus == null ?
+                        "null" : managerStatus.getStatus());
                 txn.commit();
                 return;
             }
@@ -261,7 +260,7 @@ public class CompactorLeaderServices {
             }
             long totalTimeElapsed = System.currentTimeMillis() - managerStatus.getTimeTaken();
             txn.putRecord(compactorMetadataTables.getCompactionManagerTable(), CompactorMetadataTables.COMPACTION_MANAGER_KEY,
-                    buildCheckpointStatus(finalStatus, tableNames.size(), totalTimeElapsed),
+                    buildCheckpointStatus(finalStatus, tableNames.size(), totalTimeElapsed, managerStatus.getEpoch()),
                     null);
             txn.commit();
             syslog.info("Total time taken for the compaction cycle: {}ms for {} tables with status {}", totalTimeElapsed,
@@ -291,21 +290,22 @@ public class CompactorLeaderServices {
         }
     }
 
-    private CheckpointingStatus buildCheckpointStatus(CheckpointingStatus.StatusType statusType) {
+    private CheckpointingStatus buildCheckpointStatus(CheckpointingStatus.StatusType statusType, long epoch) {
         return CheckpointingStatus.newBuilder()
                 .setStatus(statusType)
                 .setClientName(nodeEndpoint)
+                .setEpoch(epoch)
                 .build();
     }
 
     private CheckpointingStatus buildCheckpointStatus(CheckpointingStatus.StatusType statusType,
-                                                      long count,
-                                                      long time) {
+                                                      long count, long time, long epoch) {
         return CheckpointingStatus.newBuilder()
                 .setStatus(statusType)
                 .setTableSize(count)
                 .setTimeTaken(time)
                 .setClientName(nodeEndpoint)
+                .setEpoch(epoch)
                 .build();
     }
 

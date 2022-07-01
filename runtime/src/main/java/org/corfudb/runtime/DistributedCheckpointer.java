@@ -35,6 +35,8 @@ public abstract class DistributedCheckpointer {
     private final CorfuRuntime corfuRuntime;
     private final String clientName;
 
+    private long epoch;
+
     DistributedCheckpointer(@NonNull CorfuRuntime corfuRuntime, String clientName) {
         this.corfuRuntime = corfuRuntime;
         this.clientName = clientName;
@@ -77,16 +79,14 @@ public abstract class DistributedCheckpointer {
                 CorfuStoreEntry<TableName, CheckpointingStatus, Message> tableToChkpt = txn.getRecord(
                         CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, tableName);
                 if (tableToChkpt.getPayload().getStatus() == StatusType.IDLE) {
+                    epoch = tableToChkpt.getPayload().getEpoch();
                     txn.putRecord(compactorMetadataTables.getCheckpointingStatusTable(),
                             tableName,
-                            CheckpointingStatus.newBuilder()
-                                    .setStatus(StatusType.STARTED)
-                                    .setClientName(clientName)
-                                    .build(),
+                            CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).setClientName(clientName)
+                                    .setEpoch(epoch).build(),
                             null);
                     txn.putRecord(compactorMetadataTables.getActiveCheckpointsTable(), tableName,
-                            CorfuCompactorManagement.ActiveCPStreamMsg.newBuilder()
-                                    .build(),
+                            CorfuCompactorManagement.ActiveCPStreamMsg.newBuilder().build(),
                             null);
                     txn.commit();
                     return true; // Lock successfully acquired!
@@ -109,20 +109,19 @@ public abstract class DistributedCheckpointer {
     }
 
     private boolean unlockTableAfterCheckpoint(@NonNull CompactorMetadataTables compactorMetadataTables,
-                                              @NonNull TableName tableName,
-                                              @NonNull CheckpointingStatus checkpointStatus) throws RuntimeException {
+                                               @NonNull TableName tableName,
+                                               @NonNull CheckpointingStatus checkpointStatus) throws RuntimeException {
         for (int retry = 0; retry < MAX_RETRIES; retry++) {
             try (TxnContext txn = getCorfuStore().txn(CORFU_SYSTEM_NAMESPACE)) {
                 CorfuStoreEntry<StringKey, CheckpointingStatus, Message> managerStatus = txn.getRecord(
                         CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                         CompactorMetadataTables.COMPACTION_MANAGER_KEY);
-                //TODO: check against which compactor cycle this is part of - will help with if tableStatus is IDLE
-                // separate check not required
-                if (managerStatus.getPayload().getStatus() == StatusType.COMPLETED ||
+                if (epoch != managerStatus.getPayload().getEpoch() ||
+                        managerStatus.getPayload().getStatus() == StatusType.COMPLETED ||
                         managerStatus.getPayload().getStatus() == StatusType.FAILED) {
                     log.error("Compaction cycle has already ended with status {}", managerStatus.getPayload().getStatus());
                     txn.commit();
-                    break;
+                    return false;
                 }
                 CorfuStoreEntry<TableName, CheckpointingStatus, Message> tableStatus = txn.getRecord(
                         CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, tableName);
@@ -130,7 +129,7 @@ public abstract class DistributedCheckpointer {
                     log.error("Table status for {}${} has already been marked as FAILED",
                             tableName.getNamespace(), tableName.getTableName());
                     txn.commit();
-                    break;
+                    return false;
                 }
                 txn.putRecord(compactorMetadataTables.getCheckpointingStatusTable(), tableName, checkpointStatus,
                         null);
@@ -210,18 +209,10 @@ public abstract class DistributedCheckpointer {
             }
         }
         getLivenessUpdater().notifyOnSyncComplete();
-        return buildCheckpointStatus(returnStatus, corfuTable.size(), System.currentTimeMillis() - tableCkptStartTime);
-    }
-
-    private CheckpointingStatus buildCheckpointStatus(StatusType statusType,
-                                                      long count,
-                                                      long time) {
         return CheckpointingStatus.newBuilder()
-                .setStatus(statusType)
-                .setTableSize(count)
-                .setTimeTaken(time)
-                .setClientName(clientName)
-                .build();
+                .setStatus(returnStatus).setClientName(clientName)
+                .setTableSize(corfuTable.size()).setTimeTaken(System.currentTimeMillis() - tableCkptStartTime)
+                .setEpoch(epoch).build();
     }
 
     protected boolean isCriticalRuntimeException(RuntimeException re, int retry, int maxRetries) {
