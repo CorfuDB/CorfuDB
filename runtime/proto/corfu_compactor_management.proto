@@ -14,7 +14,6 @@ message CheckpointingStatus {
   enum StatusType {
     IDLE = 0;
     STARTED = 1;
-    STARTED_ALL = 2;
     COMPLETED = 3;
     FAILED = 4;
   }

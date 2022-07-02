@@ -68,7 +68,6 @@ public class LivenessValidator {
 
     public static enum StatusToChange {
         NONE,
-        STARTED_ALL,
         FINISH
     }
 
@@ -144,11 +143,8 @@ public class LivenessValidator {
         boolean isTimedOut = currentTime.minus(livenessValidatorHelper.getPrevActiveTime()).compareTo(timeout) > 0;
 
         if (idleCount == 0 || isTimedOut &&
-                managerStatus.isPresent() && managerStatus.get().getStatus() == StatusType.STARTED_ALL) {
+                managerStatus.isPresent() && managerStatus.get().getStatus() == StatusType.STARTED) {
             return StatusToChange.FINISH;
-        } else if (isTimedOut && managerStatus.isPresent() && managerStatus.get().getStatus() == StatusType.STARTED) {
-            log.info("No active client checkpointers available...");
-            return StatusToChange.STARTED_ALL;
         }
         return StatusToChange.NONE;
     }

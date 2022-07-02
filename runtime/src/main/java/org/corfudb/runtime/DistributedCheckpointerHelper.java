@@ -50,9 +50,7 @@ public class DistributedCheckpointerHelper {
                     CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
             txn.commit();
-            if (managerStatus == null ||
-                    managerStatus.getStatus() != StatusType.STARTED &&
-                            managerStatus.getStatus() != StatusType.STARTED_ALL) {
+            if (managerStatus == null || managerStatus.getStatus() != StatusType.STARTED) {
                 return false;
             }
         } catch (Exception e) {

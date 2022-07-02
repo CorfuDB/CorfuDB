@@ -115,7 +115,7 @@ public class CompactorService implements ManagementService {
             if (managerStatus != null) {
                 if (managerStatus.getStatus() == StatusType.FAILED || managerStatus.getStatus() == StatusType.COMPLETED) {
                     checkpointerJvmManager.shutdown();
-                } else if (managerStatus.getStatus() == StatusType.STARTED_ALL && !checkpointerJvmManager.isRunning()
+                } else if (managerStatus.getStatus() == StatusType.STARTED && !checkpointerJvmManager.isRunning()
                         && !checkpointerJvmManager.isInvoked()) {
                     checkpointerJvmManager.invokeCheckpointing();
                     checkpointerJvmManager.shutdown();
@@ -123,8 +123,7 @@ public class CompactorService implements ManagementService {
             }
 
             if (isLeader) {
-                if (managerStatus != null && (managerStatus.getStatus() == StatusType.STARTED ||
-                        managerStatus.getStatus() == StatusType.STARTED_ALL)) {
+                if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED) {
                     getCompactorLeaderServices().validateLiveness();
                 } else if (compactionTriggerPolicy.shouldTrigger(getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis())) {
                     compactionTriggerPolicy.markCompactionCycleStart();

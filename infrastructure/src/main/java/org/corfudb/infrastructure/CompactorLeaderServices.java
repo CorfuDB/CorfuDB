@@ -87,8 +87,7 @@ public class CompactorLeaderServices {
                     CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
 
-            if (managerStatus != null && (managerStatus.getStatus() == StatusType.STARTED ||
-                    managerStatus.getStatus() == StatusType.STARTED_ALL)) {
+            if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED) {
                 txn.commit();
                 syslog.warn("Compaction cycle already started");
                 return LeaderInitStatus.FAIL;
@@ -152,23 +151,6 @@ public class CompactorLeaderServices {
                 finishCompactionCycle();
                 livenessValidator.clearLivenessMap();
                 livenessValidator.clearLivenessValidator();
-            } else if (statusToChange == LivenessValidator.StatusToChange.STARTED_ALL) {
-                try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                    CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                            CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
-                            CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
-                    txn.putRecord(compactorMetadataTables.getCompactionManagerTable(),
-                            CompactorMetadataTables.COMPACTION_MANAGER_KEY,
-                            buildCheckpointStatus(StatusType.STARTED_ALL,
-                                    managerStatus.getTableSize(),
-                                    managerStatus.getTimeTaken(),
-                                    managerStatus.getEpoch()),
-                            null);
-                    txn.commit();
-                    livenessValidator.clearLivenessValidator();
-                } catch (Exception e) {
-                    log.warn("Exception while changing CompactionManager status, e: {}. StackTrace: {}", e, e.getStackTrace());
-                }
             }
         }
 
@@ -237,8 +219,7 @@ public class CompactorLeaderServices {
                     CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
 
-            if (managerStatus == null || managerStatus.getStatus() != StatusType.STARTED &&
-                    managerStatus.getStatus() != StatusType.STARTED_ALL) {
+            if (managerStatus == null || managerStatus.getStatus() != StatusType.STARTED) {
                 syslog.warn("Cannot perform finishCompactionCycle due to managerStatus {}", managerStatus == null ?
                         "null" : managerStatus.getStatus());
                 txn.commit();

@@ -81,7 +81,7 @@ public class CompactorLeaderServicesUnitTest {
         when(DistributedCheckpointerHelper.isCheckpointFrozen(corfuStore)).thenReturn(false);
 
         when(corfuStoreEntry.getPayload())
-                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED_ALL).build());
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
         Assert.assertEquals(CompactorLeaderServices.LeaderInitStatus.FAIL, compactorLeaderServices.initCompactionCycle());
 
         when(corfuStoreEntry.getPayload())
@@ -98,16 +98,10 @@ public class CompactorLeaderServicesUnitTest {
         doNothing().when(livenessValidator).clearLivenessValidator();
         doNothing().when(livenessValidator).clearLivenessMap();
 
-        //When there's no client checkpoint activity
-        when(livenessValidator.shouldChangeManagerStatus(any(Duration.class))).thenReturn(LivenessValidator.StatusToChange.STARTED_ALL);
-        when(corfuStoreEntry.getPayload())
-                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
-        compactorLeaderServices.validateLiveness();
-
-        //When there's no checkpoint activity at all
+        //When there's no checkpoint activity
         when(livenessValidator.shouldChangeManagerStatus(any(Duration.class))).thenReturn(LivenessValidator.StatusToChange.FINISH);
         when(corfuStoreEntry.getPayload())
-                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED_ALL).build());
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
         compactorLeaderServices.validateLiveness();
 
         //When there's some checkpoint activity going on
@@ -120,13 +114,12 @@ public class CompactorLeaderServicesUnitTest {
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
         compactorLeaderServices.validateLiveness();
 
-        final int numTimesPutCalled = 4;
+        final int numTimesPutCalled = 3;
         verify(txn, times(numTimesPutCalled)).putRecord(ArgumentMatchers.any(), ArgumentMatchers.any(),
                 captor.capture(), ArgumentMatchers.any());
 
-        Assert.assertEquals(StatusType.STARTED_ALL, captor.getAllValues().get(0).getStatus());
-        Assert.assertEquals(StatusType.COMPLETED, captor.getAllValues().get(1).getStatus());
-        Assert.assertEquals(StatusType.FAILED, captor.getAllValues().get(2).getStatus());
+        Assert.assertEquals(StatusType.COMPLETED, captor.getAllValues().get(0).getStatus());
+        Assert.assertEquals(StatusType.FAILED, captor.getAllValues().get(1).getStatus());
         Assert.assertEquals(StatusType.FAILED, captor.getValue().getStatus());
     }
 
@@ -139,12 +132,12 @@ public class CompactorLeaderServicesUnitTest {
         ArgumentCaptor<CheckpointingStatus> captor = ArgumentCaptor.forClass(CheckpointingStatus.class);
 
         when(corfuStoreEntry.getPayload())
-                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED_ALL).build())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.COMPLETED).build());
         compactorLeaderServices.finishCompactionCycle();
 
         when(corfuStoreEntry.getPayload())
-                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED_ALL).build())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.COMPLETED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build());
         compactorLeaderServices.finishCompactionCycle();

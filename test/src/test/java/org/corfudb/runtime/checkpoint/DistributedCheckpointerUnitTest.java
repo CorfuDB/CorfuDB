@@ -175,7 +175,7 @@ public class DistributedCheckpointerUnitTest {
         when(txn.commit()).thenReturn(Timestamp.getDefaultInstance());
         when(corfuStoreEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build())
-                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED_ALL).build())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build());
         assert !distributedCheckpointerSpy.tryCheckpointTable(tableName, t -> new CorfuTable<>());
 

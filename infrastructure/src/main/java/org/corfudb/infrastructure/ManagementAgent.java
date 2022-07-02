@@ -59,7 +59,7 @@ public class ManagementAgent {
     /**
      * Interval of executing the CompactionService.
      */
-    private static final Duration TRIGGER_INTERVAL = Duration.ofSeconds(5);
+    private static final Duration TRIGGER_INTERVAL = Duration.ofSeconds(10);
 
     /**
      * To dispatch initialization tasks for recovery and sequencer bootstrap.

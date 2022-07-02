@@ -81,8 +81,7 @@ public class CompactorServiceUnitTest {
         when(mockLayout.getPrimarySequencer()).thenReturn(NODE_ENDPOINT + "0");
 
         when(corfuStoreEntry.getPayload()).thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build())
-                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
-                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED_ALL).build());
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
         when(invokeCheckpointingJvm.isRunning()).thenReturn(false).thenReturn(true);
         when(invokeCheckpointingJvm.isInvoked()).thenReturn(false).thenReturn(true);
 
@@ -110,6 +109,8 @@ public class CompactorServiceUnitTest {
         when(compactionTriggerPolicy.shouldTrigger(anyLong())).thenReturn(true).thenReturn(false);
         doNothing().when(leaderServices).validateLiveness();
         doReturn(CompactorLeaderServices.LeaderInitStatus.SUCCESS).when(leaderServices).initCompactionCycle();
+        when(invokeCheckpointingJvm.isRunning()).thenReturn(false).thenReturn(true);
+        when(invokeCheckpointingJvm.isInvoked()).thenReturn(false).thenReturn(true);
 
         try {
             TimeUnit.SECONDS.sleep(SLEEP_WAIT);
@@ -119,6 +120,6 @@ public class CompactorServiceUnitTest {
 
         verify(leaderServices).validateLiveness();
         verify(leaderServices).initCompactionCycle();
-        verify(invokeCheckpointingJvm).shutdown();
+        verify(invokeCheckpointingJvm, times(2)).shutdown();
     }
 }

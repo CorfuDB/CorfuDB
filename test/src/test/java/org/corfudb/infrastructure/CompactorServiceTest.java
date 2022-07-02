@@ -53,7 +53,7 @@ public class CompactorServiceTest extends AbstractViewTest {
 
     private static final Duration LIVENESS_TIMEOUT = Duration.ofMillis(5000);
     private static final int WAIT_TO_KILL = 3000;
-    private static final int COMPACTOR_SERVICE_INTERVAL = 10;
+    private static final int COMPACTOR_SERVICE_INTERVAL = 1000;
 
     private static final String CACHE_SIZE_HEAP_RATIO = "0.0";
     private static final String CLIENT_NAME_PREFIX = "Client";
@@ -70,7 +70,6 @@ public class CompactorServiceTest extends AbstractViewTest {
     private CorfuStore corfuStore = null;
 
     private Set<String> clientIds = new HashSet<>();
-    private boolean startedAll = false;
     private Map<String, Table<StringKey, StringKey, Message>> openedStreams = new HashMap<>();
 
     private static final String STREAM_NAME_PREFIX = "StreamName";
@@ -277,8 +276,6 @@ public class CompactorServiceTest extends AbstractViewTest {
                     || managerStatus.getStatus() == StatusType.FAILED)) {
                 log.info("done pollForFinishCp: {}", managerStatus.getStatus());
                 return true;
-            } else if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED_ALL) {
-                startedAll = true;
             }
         }
         return false;
@@ -327,7 +324,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                     new InvokeCheckpointingMock(runtime0, cpRuntime0));
             compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
             DynamicTriggerPolicy mockTriggerPolicy = mockTriggerPolicyConstruction.constructed().get(0);
-            when(mockTriggerPolicy.shouldTrigger(anyLong())).thenReturn(true);
+            when(mockTriggerPolicy.shouldTrigger(anyLong())).thenReturn(true).thenReturn(false);
         }
 
         try {
@@ -356,7 +353,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                     new InvokeCheckpointingMock(runtime0, cpRuntime0));
             compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
             DynamicTriggerPolicy mockTriggerPolicy = mockTriggerPolicyConstruction.constructed().get(0);
-            when(mockTriggerPolicy.shouldTrigger(anyLong())).thenReturn(true);
+            when(mockTriggerPolicy.shouldTrigger(anyLong())).thenReturn(true).thenReturn(false);
 
             CompactorService compactorService2 = new CompactorService(sc1, runtimeSingletonResource2,
                     new InvokeCheckpointingMock(runtime1, cpRuntime1));
@@ -396,7 +393,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         try (MockedConstruction<DynamicTriggerPolicy> mockTriggerPolicyConstruction = mockConstruction(DynamicTriggerPolicy.class)) {
             compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
             DynamicTriggerPolicy mockTriggerPolicy = mockTriggerPolicyConstruction.constructed().get(0);
-            when(mockTriggerPolicy.shouldTrigger(anyLong())).thenReturn(true);
+            when(mockTriggerPolicy.shouldTrigger(anyLong())).thenReturn(true).thenReturn(false);
 
             compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
             mockTriggerPolicy = mockTriggerPolicyConstruction.constructed().get(1);
@@ -442,7 +439,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         try (MockedConstruction<DynamicTriggerPolicy> mockTriggerPolicyConstruction = mockConstruction(DynamicTriggerPolicy.class)) {
             compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
             DynamicTriggerPolicy mockTriggerPolicy = mockTriggerPolicyConstruction.constructed().get(0);
-            when(mockTriggerPolicy.shouldTrigger(anyLong())).thenReturn(true);
+            when(mockTriggerPolicy.shouldTrigger(anyLong())).thenReturn(true).thenReturn(false);
 
             compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
             mockTriggerPolicy = mockTriggerPolicyConstruction.constructed().get(1);
@@ -481,11 +478,11 @@ public class CompactorServiceTest extends AbstractViewTest {
                     new InvokeCheckpointingMock(runtime0, cpRuntime0));
             compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
             DynamicTriggerPolicy mockTriggerPolicy = mockTriggerPolicyConstruction.constructed().get(0);
-            when(mockTriggerPolicy.shouldTrigger(anyLong())).thenReturn(true);
+            when(mockTriggerPolicy.shouldTrigger(anyLong())).thenReturn(true).thenReturn(false);
         }
 
         try {
-            TimeUnit.MILLISECONDS.sleep(LIVENESS_TIMEOUT.toMillis());
+            TimeUnit.MILLISECONDS.sleep(LIVENESS_TIMEOUT.toMillis() / 2);
             Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointTable = openActiveCheckpointsTable();
             Table<TableName, CheckpointingStatus, Message> checkpointStatusTable = openCheckpointStatusTable();
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -498,6 +495,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                         ActiveCPStreamMsg.getDefaultInstance(),
                         null);
                 txn.commit();
+                log.info("Added stream table*****");
             }
 
             while (!pollForFinishCheckpointing()) {
@@ -508,9 +506,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         }
 
         assert verifyManagerStatus(StatusType.FAILED);
-        assert verifyCheckpointStatusTable(StatusType.IDLE, 1);
-        //asserts that the server invoked checkpointing
-        assert !startedAll;
+        assert verifyCheckpointStatusTable(StatusType.COMPLETED, 1);
     }
 
     @Test
@@ -524,7 +520,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         try (MockedConstruction<DynamicTriggerPolicy> mockTriggerPolicyConstruction = mockConstruction(DynamicTriggerPolicy.class)) {
             compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
             DynamicTriggerPolicy mockTriggerPolicy = mockTriggerPolicyConstruction.constructed().get(0);
-            when(mockTriggerPolicy.shouldTrigger(anyLong())).thenReturn(true);
+            when(mockTriggerPolicy.shouldTrigger(anyLong())).thenReturn(true).thenReturn(false);
         }
 
         openStream(STREAM_NAME_PREFIX);
@@ -583,6 +579,5 @@ public class CompactorServiceTest extends AbstractViewTest {
         assert trimSequence > 0;
         assert verifyCheckpointTable(CompactorMetadataTables.UPGRADE_KEY) == 0;
         assert runtimeSingletonResource0.get().getAddressSpaceView().getTrimMark().getSequence() == trimSequence + 1;
-        assert startedAll;
     }
 }

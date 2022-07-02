@@ -89,12 +89,7 @@ public class LivenessValidatorUnitTest {
         when(corfuStoreEntry.getPayload()).thenReturn(CheckpointingStatus.newBuilder()
                 .setStatus(StatusType.STARTED).build());
         Assert.assertEquals(LivenessValidator.StatusToChange.NONE,
-                livenessValidator.shouldChangeManagerStatus(Duration.ofSeconds(TIMEOUT_SECONDS)));
-        Assert.assertEquals(LivenessValidator.StatusToChange.STARTED_ALL,
-                livenessValidator.shouldChangeManagerStatus(Duration.ofSeconds(TIMEOUT_SECONDS + 1)));
-
-        when(corfuStoreEntry.getPayload()).thenReturn(CheckpointingStatus.newBuilder()
-                .setStatus(StatusType.STARTED_ALL).build());
+                livenessValidator.shouldChangeManagerStatus(Duration.ofSeconds(TIMEOUT_SECONDS))); //TODO
         Assert.assertEquals(LivenessValidator.StatusToChange.FINISH,
                 livenessValidator.shouldChangeManagerStatus(Duration.ofSeconds(TIMEOUT_SECONDS + 1)));
         livenessValidator.clearLivenessValidator();
