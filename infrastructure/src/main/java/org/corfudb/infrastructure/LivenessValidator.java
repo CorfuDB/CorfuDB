@@ -62,7 +62,6 @@ public class LivenessValidator {
         public void clear() {
             prevIdleCount = LIVENESS_INIT_VALUE;
             prevActiveTime = Duration.ofMillis(LIVENESS_INIT_VALUE);
-            ;
         }
     }
 
@@ -73,40 +72,58 @@ public class LivenessValidator {
 
     public boolean isTableCheckpointActive(TableName table, Duration currentTime) {
         livenessValidatorHelper.clear();
+        if (validateLivenessMap.containsKey(table)) {
+            LivenessMetadata previousStatus = validateLivenessMap.get(table);
+            return isTailMovingForward(table, currentTime) || isHeartBeatMovingForward(table, currentTime) ||
+                    currentTime.minus(previousStatus.getTime()).compareTo(timeout) <= 0;
+        } else {
+            validateLivenessMap.put(table, new LivenessMetadata(getHeartbeat(table), getCpStreamTail(table), currentTime));
+        }
+        return true;
+    }
 
-        String streamName = TableRegistry.getFullyQualifiedTableName(table.getNamespace(), table.getTableName());
-        UUID streamId = CorfuRuntime.getCheckpointStreamIdFromName(streamName);
-        long currentStreamTail = corfuRuntime.getSequencerView()
-                .getStreamAddressSpace(new StreamAddressRange(streamId, Address.MAX, Address.NON_ADDRESS)).getTail();
+    private boolean isTailMovingForward(TableName table, Duration currentTime) {
+        long cpStreamTail = getCpStreamTail(table);
+        LivenessMetadata previousStatus = validateLivenessMap.get(table);
+        if (previousStatus.getStreamTail() < cpStreamTail) {
+            validateLivenessMap.put(table, new LivenessMetadata(previousStatus.getHeartbeat(),
+                    cpStreamTail, currentTime));
+            return true;
+        }
+        return false;
+    }
+
+    private boolean isHeartBeatMovingForward(TableName table, Duration currentTime) {
+        long syncHeartBeat = getHeartbeat(table);
+        LivenessMetadata previousStatus = validateLivenessMap.get(table);
+        if (previousStatus.getHeartbeat() < syncHeartBeat) {
+            validateLivenessMap.put(table, new LivenessMetadata(syncHeartBeat,
+                    previousStatus.getStreamTail(), currentTime));
+            return true;
+        }
+        return false;
+    }
+
+    private long getHeartbeat(TableName table) {
         long syncHeartBeat = LIVENESS_INIT_VALUE;
-
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             ActiveCPStreamMsg activeCPStreamMsg = (ActiveCPStreamMsg) txn.getRecord(
                     CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME, table).getPayload();
             txn.commit();
-            if (activeCPStreamMsg == null) {
-                return true;
+            if (activeCPStreamMsg != null) {
+                syncHeartBeat = activeCPStreamMsg.getSyncHeartbeat();
             }
-            syncHeartBeat = activeCPStreamMsg.getSyncHeartbeat(); //TODO: read later
         } catch (Exception e) {
             log.warn("Unable to acquire ActiveCPStreamMsg {}", table, e);
         }
+        return syncHeartBeat;
+    }
 
-        if (validateLivenessMap.containsKey(table)) {
-            LivenessMetadata previousStatus = validateLivenessMap.get(table);
-            if (previousStatus.getStreamTail() < currentStreamTail) {
-                validateLivenessMap.put(table, new LivenessMetadata(previousStatus.getHeartbeat(),
-                        currentStreamTail, currentTime));
-            } else if (previousStatus.getHeartbeat() < syncHeartBeat) {
-                validateLivenessMap.put(table, new LivenessMetadata(syncHeartBeat,
-                        previousStatus.getStreamTail(), currentTime));
-            } else if (currentTime.minus(previousStatus.getTime()).compareTo(timeout) > 0) {
-                return false;
-            }
-        } else {
-            validateLivenessMap.put(table, new LivenessMetadata(syncHeartBeat, currentStreamTail, currentTime));
-        }
-        return true;
+    private long getCpStreamTail(TableName table) {
+        String cpStreamName = TableRegistry.getFullyQualifiedTableName(table.getNamespace(), table.getTableName());
+        UUID cpStreamId = CorfuRuntime.getCheckpointStreamIdFromName(cpStreamName);
+        return corfuRuntime.getSequencerView()
+                .getStreamAddressSpace(new StreamAddressRange(cpStreamId, Address.MAX, Address.NON_ADDRESS)).getTail();
     }
 
     private int getIdleCount() {

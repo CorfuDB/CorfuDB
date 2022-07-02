@@ -3,7 +3,6 @@ package org.corfudb.runtime;
 import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.codehaus.plexus.personality.plexus.lifecycle.phase.InitializationException;
 import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
@@ -32,7 +31,7 @@ public class CompactorMetadataTables {
     public static final StringKey CHECKPOINT_KEY = StringKey.newBuilder().setKey("minCheckpointToken").build();
     public static final StringKey UPGRADE_KEY = StringKey.newBuilder().setKey("UpgradeKey").build();
 
-    private static int MAX_RETRIES = 5;
+    private static final int MAX_RETRIES = 5;
 
     public CompactorMetadataTables(CorfuStore corfuStore) throws Exception {
         for (int retry = 0; ; retry++) {
