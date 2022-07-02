@@ -170,6 +170,7 @@ public abstract class DistributedCheckpointer {
     }
 
     public int checkpointOpenedTables() {
+        log.info("Checkpointing opened tables");
         int count = 0;
         for (CorfuTableNamePair openedTable :
                 corfuRuntime.getTableRegistry().getAllOpenTablesForCheckpointing()) {

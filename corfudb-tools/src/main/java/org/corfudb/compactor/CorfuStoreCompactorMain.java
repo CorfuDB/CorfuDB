@@ -63,13 +63,8 @@ public class CorfuStoreCompactorMain {
      * @param args command line argument strings
      */
     public static void main(String[] args) {
-        try {
-            CorfuStoreCompactorMain corfuCompactorMain = new CorfuStoreCompactorMain(args);
-            corfuCompactorMain.startCompaction();
-        } catch (Throwable t) {
-            log.error("Error in CorfuStoreComactor execution, ", t);
-            throw t;
-        }
+        CorfuStoreCompactorMain corfuCompactorMain = new CorfuStoreCompactorMain(args);
+        corfuCompactorMain.startCompaction();
     }
 
     private void startCompaction() {
@@ -95,18 +90,17 @@ public class CorfuStoreCompactorMain {
     private void checkpoint() {
         try {
             for (int i = 0; i < retryCheckpointing; i++) {
-                //startCheckpointing() returns the num of tables checkpointed
-//                if (distributedCheckpointer.checkpointOpenedTables() > 0) {
-//                    break;
-//                }
                 if (DistributedCheckpointerHelper.hasCompactionStarted(corfuStore)) {
                     distributedCheckpointer.checkpointTables();
                     break;
                 }
                 TimeUnit.SECONDS.sleep(1);
             }
-        } catch (Throwable throwable) {
-            log.error("CorfuStoreCompactorMain crashed with error:", CorfuStoreCompactorConfig.CORFU_LOG_CHECKPOINT_ERROR, throwable);
+        } catch (InterruptedException ie) {
+            log.error("Sleep interrupted with exception: ", ie);
+        } catch (Exception e) {
+            log.error("CorfuStoreCompactorMain crashed with error: {}, Exception: ",
+                    CorfuStoreCompactorConfig.CORFU_LOG_CHECKPOINT_ERROR, e);
         }
     }
 }

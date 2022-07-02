@@ -731,7 +731,7 @@ public class TableRegistry {
 
     /**
      * Returns all the tables that have been opened by this instance
-     * This includes special tables like RegistryTable and ProtobufDescriptTable
+     * This includes special tables like RegistryTable and ProtobufDescriptorTable
      * that are opened outside the Table.java type
      * This is used to run local checkpointing without reading state
      *

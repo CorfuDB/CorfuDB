@@ -16,7 +16,7 @@ public class InvokeCheckpointingJvm implements InvokeCheckpointing {
     private final ServerContext serverContext;
     private volatile Process checkpointerProcess;
     private Logger syslog;
-    private boolean isInvoked;
+    private volatile boolean isInvoked;
 
     public InvokeCheckpointingJvm(ServerContext serverContext) {
         this.serverContext = serverContext;

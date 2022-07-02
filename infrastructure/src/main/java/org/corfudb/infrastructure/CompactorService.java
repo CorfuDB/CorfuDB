@@ -42,7 +42,7 @@ public class CompactorService implements ManagementService {
 
     CompactorService(@NonNull ServerContext serverContext,
                      @NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
-                     @NonNull InvokeCheckpointing checkpointerJvmManager) {
+                     @NonNull InvokeCheckpointingJvm checkpointerJvmManager) {
         this.serverContext = serverContext;
         this.runtimeSingletonResource = runtimeSingletonResource;
 

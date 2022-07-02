@@ -194,13 +194,11 @@ public class ServerContext implements AutoCloseable {
     }
 
     public Optional<String> getCompactorConfig() {
-        String compactorConfigPath = getServerConfig(String.class, "--compactor-config");
-        return Optional.ofNullable(compactorConfigPath);
+        return getServerConfig("--compactor-config");
     }
 
     public Optional<String> getCompactorScriptPath() {
-        String compactorScriptPath = getServerConfig(String.class, "--compactor-script");
-        return Optional.ofNullable(compactorScriptPath);
+        return getServerConfig("--compactor-script");
     }
 
     public String getPluginConfigFilePath() {

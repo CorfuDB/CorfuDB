@@ -87,7 +87,7 @@ public class LivenessValidator {
             if (activeCPStreamMsg == null) {
                 return true;
             }
-            syncHeartBeat = activeCPStreamMsg.getSyncHeartbeat();
+            syncHeartBeat = activeCPStreamMsg.getSyncHeartbeat(); //TODO: read later
         } catch (Exception e) {
             log.warn("Unable to acquire ActiveCPStreamMsg {}", table, e);
         }
