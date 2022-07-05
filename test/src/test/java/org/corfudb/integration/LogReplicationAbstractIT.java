@@ -416,7 +416,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
         @Override
         public void onError(Throwable throwable) {
-            fail("onError for ReplicationStatusListener : " + throwable.toString());
+            fail("onError for ReplicationStatusListener");
         }
     }
 
