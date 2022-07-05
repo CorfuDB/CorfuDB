@@ -34,7 +34,6 @@ public class CompactorServiceUnitTest {
     private final TxnContext txn = mock(TxnContext.class);
     private final CorfuStoreEntry corfuStoreEntry = mock(CorfuStoreEntry.class);
 
-
     private final static int SCHEDULER_INTERVAL = 1;
     private final static String NODE_ENDPOINT = "NodeEndpoint";
     private final static int SLEEP_WAIT = 8;

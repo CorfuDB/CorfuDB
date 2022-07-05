@@ -2,8 +2,6 @@ package org.corfudb.runtime;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Message;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
@@ -138,43 +136,35 @@ public abstract class DistributedCheckpointer {
         return false;
     }
 
-    public boolean tryCheckpointTable(TableName tableName, Function<TableName, CorfuTable> openTableFn) {
+    public boolean tryCheckpointTable(@NonNull TableName tableName, @NonNull Function<TableName,
+            CheckpointWriter<StreamingMap>> checkpointWriterFn) {
         try {
             if (!tryLockTableToCheckpoint(compactorMetadataTables, tableName)) {
                 // Failure to get a lock is treated as success
                 return true;
             }
-            CheckpointingStatus checkpointStatus = appendCheckpoint(openTableFn.apply(tableName), tableName, new MultiCheckpointWriter());
+            CheckpointingStatus checkpointStatus = appendCheckpoint(tableName, checkpointWriterFn);
             return unlockTableAfterCheckpoint(compactorMetadataTables, tableName, checkpointStatus);
         } catch (RuntimeException re) {
+            log.warn("TryCheckpoinTable caught an exception: ", re);
             return false;
         }
     }
 
-    @AllArgsConstructor
-    @Getter
-    public static class CorfuTableNamePair {
-        private TableName tableName;
-        private CorfuTable corfuTable;
-    }
-
     public void checkpointOpenedTables() {
         log.info("Checkpointing opened tables");
-        for (CorfuTableNamePair openedTable :
-                corfuRuntime.getTableRegistry().getAllOpenTablesForCheckpointing()) {
-
-            if (!tryCheckpointTable(openedTable.tableName, t -> openedTable.corfuTable)) {
-                log.warn("Stop checkpointing after failure in {}${}",
-                        openedTable.tableName.getNamespace(), openedTable.tableName.getTableName());
+        for (Table<Message, Message, Message> openedTable : corfuRuntime.getTableRegistry().getAllOpenTablesForCheckpointing()) {
+            boolean isSuccess = tryCheckpointTable(DistributedCheckpointerHelper.getTableName(openedTable),
+                    t -> openedTable.appendCheckpoint(corfuRuntime, "DistributedCheckpointer"));
+            if (!isSuccess) {
+                log.warn("Stop checkpointing after failure in {}", openedTable.getFullyQualifiedTableName());
                 break;
             }
         }
     }
 
-    private <K, V> CheckpointingStatus appendCheckpoint(CorfuTable<K, V> corfuTable,
-                                                        TableName tableName,
-                                                        MultiCheckpointWriter<CorfuTable> mcw) {
-        mcw.addMap(corfuTable);
+    private CheckpointingStatus appendCheckpoint(TableName tableName,
+                                                 Function<TableName, CheckpointWriter<StreamingMap>> checkpointWriterFn) {
         long tableCkptStartTime = System.currentTimeMillis();
         log.info("{} Starting checkpoint: {}${}", clientName,
                 tableName.getNamespace(), tableName.getTableName());
@@ -183,7 +173,8 @@ public abstract class DistributedCheckpointer {
         StatusType returnStatus = StatusType.FAILED;
         for (int retry = 0; retry < MAX_RETRIES; retry++) {
             try {
-                mcw.appendCheckpoints(corfuRuntime, "checkpointer", this.livenessUpdater);
+                CheckpointWriter<StreamingMap> cpw = checkpointWriterFn.apply(tableName);
+                cpw.appendCheckpoint(livenessUpdater);
                 returnStatus = StatusType.COMPLETED;
                 break;
             } catch (RuntimeException re) {
@@ -197,8 +188,8 @@ public abstract class DistributedCheckpointer {
         getLivenessUpdater().notifyOnSyncComplete();
         return CheckpointingStatus.newBuilder()
                 .setStatus(returnStatus).setClientName(clientName)
-                .setTableSize(corfuTable.size()).setTimeTaken(System.currentTimeMillis() - tableCkptStartTime)
-                .setEpoch(epoch).build();
+                .setEpoch(epoch).setTimeTaken(System.currentTimeMillis() - tableCkptStartTime)
+                .build();
     }
 
     public static boolean isCriticalRuntimeException(RuntimeException re, int retry, int maxRetries) {

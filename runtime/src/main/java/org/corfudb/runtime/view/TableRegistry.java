@@ -37,17 +37,7 @@ import org.corfudb.util.serializer.ProtobufSerializer;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Supplier;
@@ -729,44 +719,63 @@ public class TableRegistry {
                 .orElse(null);
     }
 
-    /**
-     * Returns all the tables that have been opened by this instance
-     * This includes special tables like RegistryTable and ProtobufDescriptorTable
-     * that are opened outside the Table.java type
-     * This is used to run local checkpointing without reading state
-     *
-     * @return ArrayList of all Tables opened here.
-     */
-    public List<DistributedCheckpointer.CorfuTableNamePair> getAllOpenTablesForCheckpointing() {
-        List < DistributedCheckpointer.CorfuTableNamePair > allTables = new ArrayList<>();
-        allTables.add(new DistributedCheckpointer.CorfuTableNamePair(
-                TableName.newBuilder()
-                        .setNamespace(CORFU_SYSTEM_NAMESPACE)
-                .setTableName(REGISTRY_TABLE_NAME)
-                                        .build(),
-                registryTable)
-        );
-        allTables.add(new DistributedCheckpointer.CorfuTableNamePair(
-                TableName.newBuilder()
-                        .setNamespace(CORFU_SYSTEM_NAMESPACE)
-                .setTableName(PROTOBUF_DESCRIPTOR_TABLE_NAME)
-                                        .build(),
-                protobufDescriptorTable)
-        );
-        this.tableMap.values().forEach(t ->
-                allTables.add(new DistributedCheckpointer.CorfuTableNamePair(
-                        DistributedCheckpointerHelper.getTableName(t),
-                        t.getCorfuTableForCheckpointingOnly()))
-        );
+    public List<Table<Message, Message, Message>> getAllOpenTablesForCheckpointing() {
+        List<Table<Message, Message, Message>> allTables = new ArrayList<>();
+        allTables.addAll(this.tableMap.values());
+        try {
+            allTables.add(wrapInternalTable(REGISTRY_TABLE_NAME, TableName.class,
+                    TableDescriptors.class, TableMetadata.class, TableOptions.<TableName, TableDescriptors>builder().build()));
+            allTables.add(wrapInternalTable(PROTOBUF_DESCRIPTOR_TABLE_NAME, ProtobufFileName.class, ProtobufFileDescriptor.class,
+                    TableMetadata.class, TableOptions.<TableName, TableDescriptors>builder().build()));
+        } catch (Exception e) {
+            log.warn("Unable to wrap ");
+        }
         return allTables;
     }
 
-    public List<Table<Message, Message, Message>> getAllOpenTablesForCheckpointingNew() {
-        List<Table<Message, Message, Message>> allTables = new ArrayList<>();
-//        allTables.add(getTable(CORFU_SYSTEM_NAMESPACE, REGISTRY_TABLE_NAME));
-//        allTables.add(getTable(CORFU_SYSTEM_NAMESPACE, PROTOBUF_DESCRIPTOR_TABLE_NAME));
-        allTables.addAll(this.tableMap.values());
-        return allTables;
+    private <K extends Message, V extends Message, M extends Message>
+    Table<Message, Message, Message> wrapInternalTable(@Nonnull String tableName,
+                           @Nonnull Class<K> kClass,
+                           @Nonnull Class<V> vClass,
+                           @Nullable Class<M> mClass,
+                           @Nonnull final TableOptions tableOptions)
+            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+        ICorfuVersionPolicy.VersionPolicy versionPolicy = ICorfuVersionPolicy.DEFAULT;
+
+        Supplier<StreamingMap<K, V>> mapSupplier = StreamingMapDecorator::new;
+        if (tableOptions.getPersistentDataPath().isPresent()) {
+            versionPolicy = ICorfuVersionPolicy.MONOTONIC;
+            mapSupplier = () -> new PersistedStreamingMap<>(
+                    tableOptions.getPersistentDataPath().get(),
+                    PersistedStreamingMap.getPersistedStreamingMapOptions(),
+                    protobufSerializer, this.runtime);
+        }
+
+        CorfuOptions.SchemaOptions tableSchemaOptions;
+        if (tableOptions.getSchemaOptions() != null) {
+            tableSchemaOptions = tableOptions.getSchemaOptions();
+        } else {
+            tableSchemaOptions = CorfuOptions.SchemaOptions.getDefaultInstance();
+        }
+        V defaultValueMessage = (V) vClass.getMethod("getDefaultInstance").invoke(null);
+        M defaultMetadataMessage = (M) mClass.getMethod("getDefaultInstance").invoke(null);
+
+        return (Table<Message, Message, Message>) new Table<K, V, M>(
+                TableParameters.<K, V, M>builder()
+                        .namespace(CORFU_SYSTEM_NAMESPACE)
+                        .fullyQualifiedTableName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, tableName))
+                        .kClass(kClass)
+                        .vClass(vClass)
+                        .mClass(mClass)
+                        .valueSchema(defaultValueMessage)
+                        .metadataSchema(defaultMetadataMessage)
+                        .schemaOptions(tableSchemaOptions)
+                        .build(),
+                this.runtime,
+                this.protobufSerializer,
+                mapSupplier,
+                versionPolicy,
+                new HashSet<>(Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId())));
     }
 
     /**

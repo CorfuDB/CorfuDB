@@ -4,9 +4,11 @@ import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.SMRObject;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.KeyDynamicProtobufSerializer;
 
@@ -15,6 +17,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 import java.util.function.Supplier;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
@@ -41,13 +44,26 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
 
         List<TableName> tableNames = getAllTablesToCheckpoint();
         for (TableName tableName : tableNames) {
-            boolean isSuccess = tryCheckpointTable(tableName, t -> openTable(t, keyDynamicProtobufSerializer, cpRuntime));
+            boolean isSuccess = tryCheckpointTable(tableName, t -> getCheckpointWriter(t, keyDynamicProtobufSerializer));
             if (!isSuccess) {
                 log.warn("Stop checkpointing after failure in {}${}", tableName.getNamespace(), tableName.getTableName());
                 break;
             }
         }
         log.info("{}: Finished checkpointing tables", checkpointerBuilder.clientName);
+    }
+
+    private CheckpointWriter<StreamingMap> getCheckpointWriter(TableName tableName,
+                                                               KeyDynamicProtobufSerializer keyDynamicProtobufSerializer) {
+        UUID streamId = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(tableName));
+        CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> corfuTable = openTable(tableName, keyDynamicProtobufSerializer,
+                checkpointerBuilder.cpRuntime.get());
+        CheckpointWriter<StreamingMap> cpw =
+                new CheckpointWriter(checkpointerBuilder.corfuRuntime, streamId, "ServerCheckpointer", corfuTable);
+        ISerializer serializer = ((CorfuCompileProxy) corfuTable.getCorfuSMRProxy())
+                .getSerializer();
+        cpw.setSerializer(serializer);
+        return cpw;
     }
 
     private CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> openTable(TableName tableName,

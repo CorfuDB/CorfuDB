@@ -7,8 +7,10 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.Queue;
+import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.CorfuGuidGenerator;
@@ -98,7 +100,8 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                  @Nonnull final ISerializer serializer,
                  @Nonnull final Supplier<StreamingMap<K, V>> streamingMapSupplier,
                  @NonNull final ICorfuVersionPolicy.VersionPolicy versionPolicy,
-                 @NonNull final Set<UUID> streamTags) {
+                 @NonNull final Set<UUID> streamTags,
+                 @Nullable final CorfuTable<K, CorfuRecord<V, M>> corfuTable) {
 
         this.namespace = tableParameters.getNamespace();
         this.fullyQualifiedTableName = tableParameters.getFullyQualifiedTableName();
@@ -114,15 +117,19 @@ public class Table<K extends Message, V extends Message, M extends Message> {
         this.streamingMapSupplier = streamingMapSupplier;
         this.versionPolicy = versionPolicy;
 
-        this.corfuTable = corfuRuntime.getObjectsView().build()
-                .setTypeToken(CorfuTable.<K, CorfuRecord<V, M>>getTableType())
-                .setStreamName(this.fullyQualifiedTableName)
-                .setSerializer(serializer)
-                .setArguments(new ProtobufIndexer(tableParameters.getValueSchema(),
-                        tableParameters.getSchemaOptions()),
-                        streamingMapSupplier, versionPolicy)
-                .setStreamTags(streamTags)
-                .open();
+        if (corfuTable == null) {
+            this.corfuTable = corfuRuntime.getObjectsView().build()
+                    .setTypeToken(CorfuTable.<K, CorfuRecord<V, M>>getTableType())
+                    .setStreamName(this.fullyQualifiedTableName)
+                    .setSerializer(serializer)
+                    .setArguments(new ProtobufIndexer(tableParameters.getValueSchema(),
+                                    tableParameters.getSchemaOptions()),
+                            streamingMapSupplier, versionPolicy)
+                    .setStreamTags(streamTags)
+                    .open();
+        } else {
+            this.corfuTable = corfuTable;
+        }
         this.keyClass = tableParameters.getKClass();
         this.valueClass = tableParameters.getVClass();
         this.metadataClass = tableParameters.getMClass();
@@ -132,6 +139,15 @@ public class Table<K extends Message, V extends Message, M extends Message> {
         } else {
             this.guidGenerator = null;
         }
+    }
+
+    public Table(@Nonnull final TableParameters<K, V, M> tableParameters,
+                 @Nonnull final CorfuRuntime corfuRuntime,
+                 @Nonnull final ISerializer serializer,
+                 @Nonnull final Supplier<StreamingMap<K, V>> streamingMapSupplier,
+                 @NonNull final ICorfuVersionPolicy.VersionPolicy versionPolicy,
+                 @NonNull final Set<UUID> streamTags) {
+        this(tableParameters, corfuRuntime, serializer, streamingMapSupplier, versionPolicy, streamTags, null);
     }
 
     /**
@@ -438,5 +454,16 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      */
     public CorfuTable getCorfuTableForCheckpointingOnly() {
         return this.corfuTable;
+    }
+
+    public CheckpointWriter<StreamingMap> appendCheckpoint(CorfuRuntime rt, String author) {
+        UUID streamId = this.corfuTable.getCorfuStreamID();
+
+        CheckpointWriter<StreamingMap> cpw = new CheckpointWriter(rt, streamId, author, this.corfuTable);
+        ISerializer serializer = ((CorfuCompileProxy) this.corfuTable.getCorfuSMRProxy())
+                .getSerializer();
+        cpw.setSerializer(serializer);
+
+        return cpw;
     }
 }
