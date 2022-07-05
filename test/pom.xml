@@ -163,37 +163,6 @@
                     </dependency>
                 </dependencies>
             </plugin>
-
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.0.0-M5</version>
-                <configuration>
-                    <forkCount>0</forkCount>
-                    <reuseForks>true</reuseForks>
-                    <trimStackTrace>false</trimStackTrace>
-                    <!-- Option to generate a file test report or just output the test report to the console. -->
-                    <useFile>false</useFile>
-                    <skipAfterFailureCount>2</skipAfterFailureCount>
-                    <systemPropertyVariables>
-                        <propertyName>test.seed</propertyName>
-                    </systemPropertyVariables>
-                    <includes>
-                        <include>**/*Test.java</include>
-                        <include>**/*IT.java</include>
-                    </includes>
-                </configuration>
-                <executions>
-                    <execution>
-                        <!-- Run JUnit tests -->
-                        <id>test-junit</id>
-                        <phase>test</phase>
-                        <goals>
-                            <goal>test</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
         </plugins>
     </build>
 
