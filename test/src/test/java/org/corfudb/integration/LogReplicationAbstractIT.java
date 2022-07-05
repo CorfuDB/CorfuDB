@@ -174,6 +174,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         // For the purpose of this test, standby should only update status 2 times:
         // (1) When starting snapshot sync apply : is_data_consistent = false
         // (2) When completing snapshot sync apply : is_data_consistent = true
+        //test
         final int totalStandbyStatusUpdates = 2;
 
         try {
