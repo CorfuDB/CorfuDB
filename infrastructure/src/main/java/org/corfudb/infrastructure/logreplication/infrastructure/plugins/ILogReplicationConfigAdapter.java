@@ -1,5 +1,8 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
+import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -30,4 +33,7 @@ public interface ILogReplicationConfigAdapter {
      * to the replicated data, therefore, this data must be provided by the plugin externally.
      */
     Map<UUID, List<UUID>> getStreamingConfigOnSink();
+
+    // get the endpoints for which the current node can be the source
+    Map<ClusterDescriptor, LogReplicationMetadata.ReplicationModels> getSinkToReplicationModel(String localClusterId);
 }

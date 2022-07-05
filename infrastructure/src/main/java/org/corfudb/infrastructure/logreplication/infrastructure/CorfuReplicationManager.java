@@ -63,8 +63,8 @@ public class CorfuReplicationManager {
      * Start Log Replication Manager, this will initiate a runtime against
      * each standby cluster, to further start log replication.
      */
-    public void start() {
-        for (ClusterDescriptor remoteCluster : topology.getStandbyClusters().values()) {
+    public void start(Set<ClusterDescriptor> connectionEndPoints) {
+        for (ClusterDescriptor remoteCluster : connectionEndPoints) {
             try {
                 startLogReplicationRuntime(remoteCluster);
             } catch (Exception e) {
@@ -187,8 +187,8 @@ public class CorfuReplicationManager {
                     "topologyConfigId as the current one {}", newConfig, topology);
         }
 
-        Set<String> currentStandbys = new HashSet<>(topology.getStandbyClusters().keySet());
-        Set<String> newStandbys = new HashSet<>(newConfig.getStandbyClusters().keySet());
+        Set<String> currentStandbys = new HashSet<>(topology.getSinkClusters().keySet());
+        Set<String> newStandbys = new HashSet<>(newConfig.getSinkClusters().keySet());
         Set<String> intersection = Sets.intersection(currentStandbys, newStandbys);
 
         Set<String> standbysToRemove = new HashSet<>(currentStandbys);
@@ -203,7 +203,7 @@ public class CorfuReplicationManager {
         // Start the standbys that are in the new config but not in the current config
         for (String clusterId : newStandbys) {
             if (!runtimeToRemoteCluster.containsKey(clusterId)) {
-                ClusterDescriptor clusterInfo = newConfig.getStandbyClusters().get(clusterId);
+                ClusterDescriptor clusterInfo = newConfig.getSinkClusters().get(clusterId);
                 topology.addStandbyCluster(clusterInfo);
                 startLogReplicationRuntime(clusterInfo);
             }
@@ -213,7 +213,7 @@ public class CorfuReplicationManager {
         // existing standby cluster's, updating the routers will re-establish the connection
         // to the correct endpoints/nodes
         for (String clusterId : intersection) {
-            ClusterDescriptor clusterInfo = newConfig.getStandbyClusters().get(clusterId);
+            ClusterDescriptor clusterInfo = newConfig.getSinkClusters().get(clusterId);
             runtimeToRemoteCluster.get(clusterId).updateRouterClusterDescriptor(clusterInfo);
         }
     }

@@ -104,6 +104,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private LogReplicationConfigManager replicationConfigManager;
 
     /**
+     * Used to get a list of endpoints and also replication models between them.
+     */
+    private LogReplicationConfig logReplicationConfig;
+
+    /**
      * Used by the active cluster to initiate Log Replication
      */
     @Getter
@@ -332,7 +337,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         log.info("Bootstrap the Log Replication Service");
         // Through LogReplicationConfigAdapter retrieve system-specific configurations
         // such as streams to replicate and version
-        LogReplicationConfig logReplicationConfig = getLogReplicationConfiguration(getCorfuRuntime());
+        logReplicationConfig = getLogReplicationConfiguration(getCorfuRuntime());
 
         logReplicationMetadataManager = new LogReplicationMetadataManager(getCorfuRuntime(),
             topologyDescriptor.getTopologyConfigId(), localClusterDescriptor.getClusterId());
@@ -422,7 +427,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
         try {
             replicationConfigManager =
-                new LogReplicationConfigManager(runtime, serverContext.getPluginConfigFilePath());
+                new LogReplicationConfigManager(runtime, serverContext.getPluginConfigFilePath(), localNodeId);
 
             Set<String> streamsToReplicate = replicationConfigManager.getStreamsToReplicate();
 
@@ -495,7 +500,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                             getCorfuRuntime(), replicationConfigManager);
                 }
                 replicationManager.setTopology(topologyDescriptor);
-                replicationManager.start();
+                Set<ClusterDescriptor> connectionEndPoints = logReplicationConfig
+                        .getConnectionConfigPlugin().getSinkEndpoints();
+                replicationManager.start(connectionEndPoints);
                 updateReplicationStatus();
                 lockAcquireSample = recordLockAcquire(localClusterDescriptor.getRole());
                 processCountOnLockAcquire(localClusterDescriptor.getRole());

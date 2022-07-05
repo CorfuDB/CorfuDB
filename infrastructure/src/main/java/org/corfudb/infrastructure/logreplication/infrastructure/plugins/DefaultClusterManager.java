@@ -252,9 +252,9 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
 
         List<ClusterDescriptor> newActiveClusters = new ArrayList<>();
         List<ClusterDescriptor> newStandbyClusters = new ArrayList<>();
-        currentConfig.getActiveClusters().values().forEach(activeCluster ->
+        currentConfig.getSourceClusters().values().forEach(activeCluster ->
                 newStandbyClusters.add(new ClusterDescriptor(activeCluster, ClusterRole.STANDBY)));
-        for (ClusterDescriptor standbyCluster : currentConfig.getStandbyClusters().values()) {
+        for (ClusterDescriptor standbyCluster : currentConfig.getSinkClusters().values()) {
             if (newActiveClusters.isEmpty()) {
                 newActiveClusters.add(new ClusterDescriptor(standbyCluster, ClusterRole.ACTIVE));
             } else {
@@ -271,10 +271,10 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
      **/
     public TopologyDescriptor generateConfigWithAllActive() {
         TopologyDescriptor currentConfig = new TopologyDescriptor(topologyConfig);
-        ClusterDescriptor currentActive = currentConfig.getActiveClusters().values().iterator().next();
+        ClusterDescriptor currentActive = currentConfig.getSourceClusters().values().iterator().next();
 
         List<ClusterDescriptor> newActiveClusters = new ArrayList<>();
-        currentConfig.getStandbyClusters().values().forEach(standbyCluster ->
+        currentConfig.getSinkClusters().values().forEach(standbyCluster ->
                 newActiveClusters.add(new ClusterDescriptor(standbyCluster, ClusterRole.ACTIVE)));
         newActiveClusters.add(currentActive);
 
@@ -287,9 +287,9 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
      **/
     public TopologyDescriptor generateConfigWithAllStandby() {
         TopologyDescriptor currentConfig = new TopologyDescriptor(topologyConfig);
-        ClusterDescriptor currentActive = currentConfig.getActiveClusters().values().iterator().next();
+        ClusterDescriptor currentActive = currentConfig.getSourceClusters().values().iterator().next();
 
-        List<ClusterDescriptor> newStandbyClusters = new ArrayList<>(currentConfig.getStandbyClusters().values());
+        List<ClusterDescriptor> newStandbyClusters = new ArrayList<>(currentConfig.getSinkClusters().values());
         ClusterDescriptor newStandby = new ClusterDescriptor(currentActive, ClusterRole.STANDBY);
         newStandbyClusters.add(newStandby);
 
@@ -303,9 +303,9 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
     public TopologyDescriptor generateConfigWithInvalid() {
         TopologyDescriptor currentConfig = new TopologyDescriptor(topologyConfig);
 
-        List<ClusterDescriptor> newActiveClusters = new ArrayList<>(currentConfig.getActiveClusters().values());
+        List<ClusterDescriptor> newActiveClusters = new ArrayList<>(currentConfig.getSourceClusters().values());
         List<ClusterDescriptor> newInvalidClusters = new ArrayList<>();
-        currentConfig.getStandbyClusters().values().forEach(standbyCluster ->
+        currentConfig.getSinkClusters().values().forEach(standbyCluster ->
                 newInvalidClusters.add(new ClusterDescriptor(standbyCluster, ClusterRole.INVALID)));
 
         return new TopologyDescriptor(++configId, newActiveClusters, new ArrayList<>(), newInvalidClusters);
@@ -316,8 +316,8 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
      **/
     public TopologyDescriptor generateDefaultValidConfig() {
         TopologyDescriptor defaultTopology = new TopologyDescriptor(constructTopologyConfigMsg());
-        List<ClusterDescriptor> activeClusters = new ArrayList<>(defaultTopology.getActiveClusters().values());
-        List<ClusterDescriptor> standbyClusters = new ArrayList<>(defaultTopology.getStandbyClusters().values());
+        List<ClusterDescriptor> activeClusters = new ArrayList<>(defaultTopology.getSourceClusters().values());
+        List<ClusterDescriptor> standbyClusters = new ArrayList<>(defaultTopology.getSinkClusters().values());
 
         return new TopologyDescriptor(++configId, activeClusters, standbyClusters);
     }
@@ -327,7 +327,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
      **/
     public TopologyDescriptor generateConfigWithBackup() {
         TopologyDescriptor currentConfig = new TopologyDescriptor(topologyConfig);
-        ClusterDescriptor currentActive = currentConfig.getActiveClusters().values().iterator().next();
+        ClusterDescriptor currentActive = currentConfig.getSourceClusters().values().iterator().next();
 
         List<ClusterDescriptor> newActiveClusters = new ArrayList<>();
         newActiveClusters.add(new ClusterDescriptor(
@@ -341,7 +341,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
                 DefaultClusterConfig.getBackupNodesUuid().get(0)
                 );
         newActiveClusters.get(0).getNodesDescriptors().add(backupNode);
-        List<ClusterDescriptor> standbyClusters = new ArrayList<>(currentConfig.getStandbyClusters().values());
+        List<ClusterDescriptor> standbyClusters = new ArrayList<>(currentConfig.getSinkClusters().values());
 
         return new TopologyDescriptor(++configId, newActiveClusters, standbyClusters);
     }

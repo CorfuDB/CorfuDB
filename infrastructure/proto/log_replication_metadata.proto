@@ -106,3 +106,17 @@ message ReplicationEvent {
   string eventId = 2;
   ReplicationEventType type = 3;
 }
+
+
+enum ReplicationModels {
+  //federated GM -> GM
+  REPLICATE_FULL_TABLES = 0;
+  // IDFW LM -> GM
+  MULTI_SOURCE_MERGE_AT_SINK = 1;
+  // IDFW GM -> LM
+  MERGE_TABLES_AT_SINK = 2;
+  //policy GM -> LM
+  RECORD_LEVEL_REPLICATION = 3;
+  // LM -> GM; Destination is not corfu
+  MOVE_DATA = 4;
+}

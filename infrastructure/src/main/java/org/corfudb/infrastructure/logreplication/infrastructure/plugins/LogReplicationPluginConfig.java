@@ -67,6 +67,13 @@ public class LogReplicationPluginConfig {
     @Getter
     private String snapshotSyncPluginCanonicalName;
 
+    //Shama -> need to revisit while integrating the plugin. This is a hack so LRCOnfigManager can proceed.
+    @Getter
+    private String connectionConfigManagerCanonicalName;
+
+    @Getter
+    private String connectionConfigManagerJARPath;
+
     // nodeId file format:
     // node_id=99F30C42-F96D-A0A7-5531-468E52926A01
     @Getter
@@ -90,6 +97,9 @@ public class LogReplicationPluginConfig {
             this.topologyManagerAdapterName = prop.getProperty("topology_manager_adapter_class_name");
 
             this.nodeIdFilePath = prop.getProperty("local_node_id_path");
+
+            this.connectionConfigManagerCanonicalName = prop.getProperty("connection_config_manager_class_name");
+            this.connectionConfigManagerJARPath = prop.getProperty("connection_config_manager_JAR_path");
         } catch (IOException e) {
             log.warn("Plugin configuration not found {}. Default configuration will be used.", filepath);
 

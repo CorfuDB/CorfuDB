@@ -32,14 +32,15 @@ public class TopologyDescriptor {
     private final long topologyConfigId;
 
     @Getter
-    private final Map<String, ClusterDescriptor> activeClusters;
+    private final Map<String, ClusterDescriptor> sourceClusters;
 
     @Getter
-    private final Map<String, ClusterDescriptor> standbyClusters;
+    private final Map<String, ClusterDescriptor> sinkClusters;
 
     @Getter
     private final Map<String, ClusterDescriptor> invalidClusters;
 
+    // Shama: change this, the source/sink clusters should not be formed by fetch, but can be moved to bootstrap in discoverService
     /**
      * Constructor
      *
@@ -47,14 +48,14 @@ public class TopologyDescriptor {
      */
     public TopologyDescriptor(TopologyConfigurationMsg topologyMessage) {
         this.topologyConfigId = topologyMessage.getTopologyConfigID();
-        this.standbyClusters = new HashMap<>();
-        this.activeClusters = new HashMap<>();
+        this.sinkClusters = new HashMap<>();
+        this.sourceClusters = new HashMap<>();
         this.invalidClusters = new HashMap<>();
 
         for (ClusterConfigurationMsg clusterConfig : topologyMessage.getClustersList()) {
             ClusterDescriptor cluster = new ClusterDescriptor(clusterConfig);
             if (clusterConfig.getRole() == ClusterRole.ACTIVE) {
-                activeClusters.put(cluster.getClusterId(), cluster);
+                sourceClusters.put(cluster.getClusterId(), cluster);
             } else if (clusterConfig.getRole() == ClusterRole.STANDBY) {
                 addStandbyCluster(cluster);
             } else {
@@ -68,42 +69,43 @@ public class TopologyDescriptor {
      *
      * @param topologyConfigId topology configuration identifier (epoch)
      * @param activeCluster active cluster
-     * @param standbyClusters standby cluster's
+     * @param sinkClusters standby cluster's
      */
     public TopologyDescriptor(long topologyConfigId, @NonNull ClusterDescriptor activeCluster,
-                              @NonNull List<ClusterDescriptor> standbyClusters) {
-        this(topologyConfigId, Collections.singletonList(activeCluster), standbyClusters);
+                              @NonNull List<ClusterDescriptor> sinkClusters) {
+        this(topologyConfigId, Collections.singletonList(activeCluster), sinkClusters);
     }
 
+    // Shama: this has to be removed.
     /**
      * Constructor
      *
      * @param topologyConfigId topology configuration identifier (epoch)
-     * @param activeClusters active cluster's
-     * @param standbyClusters standby cluster's
+     * @param sourceClusters active cluster's
+     * @param sinkClusters standby cluster's
      */
-    public TopologyDescriptor(long topologyConfigId, @NonNull List<ClusterDescriptor> activeClusters,
-                              @NonNull List<ClusterDescriptor> standbyClusters) {
+    public TopologyDescriptor(long topologyConfigId, @NonNull List<ClusterDescriptor> sourceClusters,
+                              @NonNull List<ClusterDescriptor> sinkClusters) {
         this.topologyConfigId = topologyConfigId;
-        this.activeClusters = new HashMap<>();
-        this.standbyClusters = new HashMap<>();
+        this.sourceClusters = new HashMap<>();
+        this.sinkClusters = new HashMap<>();
         this.invalidClusters = new HashMap<>();
 
-        activeClusters.forEach(activeCluster -> this.activeClusters.put(activeCluster.getClusterId(), activeCluster));
-        standbyClusters.forEach(standbyCluster -> this.standbyClusters.put(standbyCluster.getClusterId(), standbyCluster));
+        sourceClusters.forEach(activeCluster -> this.sourceClusters.put(activeCluster.getClusterId(), activeCluster));
+        sinkClusters.forEach(standbyCluster -> this.sinkClusters.put(standbyCluster.getClusterId(), standbyCluster));
     }
 
     /**
      * Constructor
      *
      * @param topologyConfigId topology configuration identifier (epoch)
-     * @param activeClusters active cluster's
-     * @param standbyClusters standby cluster's
+     * @param sourceClusters active cluster's
+     * @param sinkClusters standby cluster's
      * @param invalidClusters invalid cluster's
      */
-    public TopologyDescriptor(long topologyConfigId, @NonNull List<ClusterDescriptor> activeClusters,
-                              @NonNull List<ClusterDescriptor> standbyClusters, @NonNull List<ClusterDescriptor> invalidClusters) {
-        this(topologyConfigId, activeClusters, standbyClusters);
+    public TopologyDescriptor(long topologyConfigId, @NonNull List<ClusterDescriptor> sourceClusters,
+                              @NonNull List<ClusterDescriptor> sinkClusters, @NonNull List<ClusterDescriptor> invalidClusters) {
+        this(topologyConfigId, sourceClusters, sinkClusters);
         invalidClusters.forEach(invalidCluster -> this.invalidClusters.put(invalidCluster.getClusterId(), invalidCluster));
     }
 
@@ -114,8 +116,8 @@ public class TopologyDescriptor {
      */
     public TopologyConfigurationMsg convertToMessage() {
 
-        List<ClusterConfigurationMsg> clusterConfigurationMsgs = Stream.of(activeClusters.values(),
-                standbyClusters.values(), invalidClusters.values())
+        List<ClusterConfigurationMsg> clusterConfigurationMsgs = Stream.of(sourceClusters.values(),
+                sinkClusters.values(), invalidClusters.values())
                 .flatMap(Collection::stream)
                 .map(ClusterDescriptor::convertToMessage)
                 .collect(Collectors.toList());
@@ -131,7 +133,7 @@ public class TopologyDescriptor {
      * @param cluster standby cluster to add
      */
     public void addStandbyCluster(ClusterDescriptor cluster) {
-        standbyClusters.put(cluster.getClusterId(), cluster);
+        sinkClusters.put(cluster.getClusterId(), cluster);
     }
 
     /**
@@ -140,7 +142,7 @@ public class TopologyDescriptor {
      * @param clusterId unique identifier of the standby cluster to be removed from topology
      */
     public void removeStandbyCluster(String clusterId) {
-        ClusterDescriptor removedCluster = standbyClusters.remove(clusterId);
+        ClusterDescriptor removedCluster = sinkClusters.remove(clusterId);
 
         if (removedCluster == null) {
             log.warn("Cluster {} never present as a STANDBY cluster.", clusterId);
@@ -154,7 +156,7 @@ public class TopologyDescriptor {
      * @return cluster descriptor to which endpoint belongs to.
      */
     public ClusterDescriptor getClusterDescriptor(String nodeId) {
-        List<ClusterDescriptor> clusters = Stream.of(activeClusters.values(), standbyClusters.values(),
+        List<ClusterDescriptor> clusters = Stream.of(sourceClusters.values(), sinkClusters.values(),
                 invalidClusters.values())
                 .flatMap(Collection::stream)
                 .collect(Collectors.toList());
@@ -174,6 +176,6 @@ public class TopologyDescriptor {
     @Override
     public String toString() {
         return String.format("Topology[id=%s] \n Active Cluster=%s \n Standby Clusters=%s \n Invalid Clusters=%s",
-                topologyConfigId, activeClusters.values(), standbyClusters.values(), invalidClusters.values());
+                topologyConfigId, sourceClusters.values(), sinkClusters.values(), invalidClusters.values());
     }
 }
