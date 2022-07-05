@@ -31,7 +31,6 @@ import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.object.MVOCache;
 import org.corfudb.runtime.view.ObjectOpenOption;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ProtobufSerializer.MessageType;
 
 import java.io.IOException;
@@ -96,12 +95,12 @@ public class DynamicProtobufSerializer implements ISerializer {
 
     @Getter
     private ConcurrentMap<TableName, CorfuRecord<TableDescriptors,
-        TableMetadata>> cachedRegistryTable = new ConcurrentHashMap<>();
+            TableMetadata>> cachedRegistryTable = new ConcurrentHashMap<>();
 
     @Getter
     private ConcurrentMap<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor,
-        TableMetadata>> cachedProtobufDescriptorTable =
-        new ConcurrentHashMap<>();
+            TableMetadata>> cachedProtobufDescriptorTable =
+            new ConcurrentHashMap<>();
 
     public DynamicProtobufSerializer(CorfuRuntime corfuRuntime) {
         this.type = ProtobufSerializer.PROTOBUF_SERIALIZER_CODE;
@@ -119,17 +118,17 @@ public class DynamicProtobufSerializer implements ISerializer {
 
         // Open the Registry Table and cache its contents
         PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable =
-            corfuRuntime.getObjectsView()
-                .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<TableName,
-                    CorfuRecord<TableDescriptors, TableMetadata>>>() {
-                })
-                .setStreamName(
-                   getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
-                       REGISTRY_TABLE_NAME))
-                .setSerializer(protobufSerializer)
-                .addOpenOption(ObjectOpenOption.NO_CACHE)
-                .open();
+                corfuRuntime.getObjectsView()
+                        .build()
+                        .setTypeToken(new TypeToken<PersistentCorfuTable<TableName,
+                                CorfuRecord<TableDescriptors, TableMetadata>>>() {
+                        })
+                        .setStreamName(
+                                getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+                                        REGISTRY_TABLE_NAME))
+                        .setSerializer(protobufSerializer)
+                        .addOpenOption(ObjectOpenOption.NO_CACHE)
+                        .open();
 
         Iterator<Map.Entry<TableName, CorfuRecord<TableDescriptors, TableMetadata>>> registryIt = registryTable.entryStream().iterator();
         while (registryIt.hasNext()) {
@@ -186,13 +185,13 @@ public class DynamicProtobufSerializer implements ISerializer {
         // to be able to understand registry table.
         classMap.put(getTypeUrl(TableName.getDescriptor()), TableName.class);
         classMap.put(getTypeUrl(TableDescriptors.getDescriptor()),
-            TableDescriptors.class);
+                TableDescriptors.class);
         classMap.put(getTypeUrl(TableMetadata.getDescriptor()),
-            TableMetadata.class);
+                TableMetadata.class);
         classMap.put(getTypeUrl(ProtobufFileName.getDescriptor()),
-            ProtobufFileName.class);
+                ProtobufFileName.class);
         classMap.put(getTypeUrl(ProtobufFileDescriptor.getDescriptor()),
-            ProtobufFileDescriptor.class);
+                ProtobufFileDescriptor.class);
         return new ProtobufSerializer(classMap);
     }
 
@@ -280,22 +279,22 @@ public class DynamicProtobufSerializer implements ISerializer {
     }
 
     public DynamicMessage createDynamicMessageFromJson(Any anyMsg,
-        String jsonString) {
+                                                       String jsonString) {
         FileDescriptor fileDescriptor;
         try {
             String fullMessageName = getFullMessageName(anyMsg);
             fileDescriptor = getDescriptor(
-                messagesFdProtoNameMap.get(fullMessageName));
+                    messagesFdProtoNameMap.get(fullMessageName));
         } catch (Descriptors.DescriptorValidationException e) {
             log.warn("DescriptorValidationException thrown", e);
             return null;
         }
         Descriptors.Descriptor descriptor =
-            fileDescriptor.findMessageTypeByName(getMessageName(anyMsg));
+                fileDescriptor.findMessageTypeByName(getMessageName(anyMsg));
         DynamicMessage.Builder builder;
         try {
             builder = DynamicMessage.parseFrom(descriptor,
-                anyMsg.getValue()).toBuilder();
+                    anyMsg.getValue()).toBuilder();
         } catch (InvalidProtocolBufferException e) {
             log.warn("Unable to Parse Key {}", anyMsg.getValue());
             return null;
