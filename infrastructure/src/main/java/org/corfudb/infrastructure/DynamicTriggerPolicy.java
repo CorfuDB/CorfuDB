@@ -1,8 +1,6 @@
 package org.corfudb.infrastructure;
 
-import lombok.Getter;
 import org.corfudb.runtime.CompactorMetadataTables;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.RpcCommon;
@@ -17,14 +15,12 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
     /**
      * What time did the previous cycle start
      */
-    @Getter
     private long lastCompactionCycleStartTS = 0;
-
-    private final  CorfuRuntime corfuRuntime;
+    private final CorfuStore corfuStore;
     private final Logger syslog;
 
-    public DynamicTriggerPolicy(CorfuRuntime corfuRuntime) {
-        this.corfuRuntime = corfuRuntime;
+    public DynamicTriggerPolicy(CorfuStore corfuStore) {
+        this.corfuStore = corfuStore;
         this.lastCompactionCycleStartTS = System.currentTimeMillis();
         this.syslog = LoggerFactory.getLogger("syslog");
     }
@@ -35,12 +31,13 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
     }
 
     private boolean shouldForceTrigger() {
-        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             RpcCommon.TokenMsg upgradeToken = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT,
                     CompactorMetadataTables.UPGRADE_KEY).getPayload();
+            RpcCommon.TokenMsg instantTrigger = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT,
+                    CompactorMetadataTables.INSTANT_TIGGER_KEY).getPayload();
             txn.commit();
-            if (upgradeToken != null) {
+            if (upgradeToken != null || instantTrigger != null) {
                 return true;
             }
         }
@@ -68,13 +65,6 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
 
         final long currentTime = System.currentTimeMillis();
         final long timeSinceLastCycleMillis = currentTime - lastCompactionCycleStartTS;
-
-        if (timeSinceLastCycleMillis > interval * 2) {
-            syslog.info("DynamicTriggerPolicy: Trigger as elapsedTime {} > maxTimeToChkpt {}",
-                    TimeUnit.MILLISECONDS.toMinutes(timeSinceLastCycleMillis),
-                    TimeUnit.MILLISECONDS.toMinutes(interval * 2));
-            return true;
-        }
 
         if (timeSinceLastCycleMillis > interval) {
             syslog.info("DynamicTriggerPolicy: Trigger as elapsedTime {} > safeTrimPeriod {}",

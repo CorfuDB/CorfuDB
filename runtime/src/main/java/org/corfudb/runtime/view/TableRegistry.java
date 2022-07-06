@@ -760,6 +760,7 @@ public class TableRegistry {
         );
         return allTables;
     }
+
     public List<Table<Message, Message, Message>> getAllOpenTablesForCheckpointingNew() {
         List<Table<Message, Message, Message>> allTables = new ArrayList<>();
 //        allTables.add(getTable(CORFU_SYSTEM_NAMESPACE, REGISTRY_TABLE_NAME));

@@ -195,6 +195,8 @@ public class CompactorLeaderServices {
             if (ex.getAbortCause() == AbortCause.CONFLICT) {
                 log.warn("Another node tried to commit");
             }
+        } catch (RuntimeException re) {
+            log.warn("Unable to complete required operation due to {}. StackTrace: {}", re, re.getStackTrace());
         }
         return false;
     }
@@ -229,9 +231,9 @@ public class CompactorLeaderServices {
             List<TableName> tableNames = new ArrayList<>(txn.keySet(compactorMetadataTables.getCheckpointingStatusTable()));
             StatusType finalStatus = StatusType.COMPLETED;
             for (TableName table : tableNames) {
-                StringBuilder str = new StringBuilder();
                 CheckpointingStatus tableStatus = (CheckpointingStatus) txn.getRecord(
                         CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, table).getPayload();
+                StringBuilder str = new StringBuilder();
                 str.append(printCheckpointStatus(table, tableStatus));
                 syslog.info("{}", str);
                 if (tableStatus.getStatus() != StatusType.COMPLETED) {
@@ -248,8 +250,9 @@ public class CompactorLeaderServices {
                     tableNames.size(), finalStatus);
             MicroMeterUtils.time(Duration.ofMillis(totalTimeElapsed), "compaction.total.timer",
                     "nodeEndpoint", nodeEndpoint);
-        } catch (Exception e) {
-            syslog.warn("Exception in finishCompactionCycle: {}. StackTrace={}", e, e.getStackTrace());
+        } catch (RuntimeException re) {
+            //Do not retry here, the compactor service will trigger this method again
+            syslog.warn("Exception in finishCompactionCycle: {}. StackTrace={}", re, re.getStackTrace());
         }
         trimLogIfRequired();
     }

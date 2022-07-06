@@ -7,7 +7,6 @@ import org.corfudb.runtime.*;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
-import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.RpcCommon.TokenMsg;
 
@@ -30,7 +29,7 @@ public class CorfuStoreCompactorMain {
     private Table<StringKey, TokenMsg, Message> checkpointTable;
     private int retryCheckpointing = 1;
 
-    public CorfuStoreCompactorMain(String[] args) {
+    public CorfuStoreCompactorMain(String[] args) throws Exception {
         this.config = new CorfuStoreCompactorConfig(args);
 
         CorfuRuntime cpRuntime = (CorfuRuntime.fromParameters(
@@ -38,36 +37,33 @@ public class CorfuStoreCompactorMain {
         CorfuRuntime corfuRuntime = (CorfuRuntime.fromParameters(
                 config.getParams())).parseConfigurationString(config.getNodeLocator().toEndpointUrl()).connect();
         corfuStore = new CorfuStore(corfuRuntime);
-        distributedCheckpointer = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
-                .corfuRuntime(corfuRuntime)
-                .cpRuntime(Optional.of(cpRuntime))
-                .persistedCacheRoot(config.getPersistedCacheRoot())
-                .isClient(false)
-                .build());
-        try {
-            this.checkpointTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    CompactorMetadataTables.CHECKPOINT,
-                    StringKey.class,
-                    TokenMsg.class,
-                    null,
-                    TableOptions.fromProtoSchema(TokenMsg.class));
 
-        } catch (Exception e) {
-            log.error("Caught an exception while opening Compaction management tables ", e);
-        }
+        CompactorMetadataTables compactorMetadataTables = new CompactorMetadataTables(corfuStore);
+        this.checkpointTable = compactorMetadataTables.getCheckpointTable();
+
+        this.distributedCheckpointer = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
+            .corfuRuntime(corfuRuntime)
+            .cpRuntime(Optional.of(cpRuntime))
+            .persistedCacheRoot(config.getPersistedCacheRoot())
+            .isClient(false)
+            .build(), corfuStore, compactorMetadataTables);
     }
 
     /**
-     * Entry point to invoke Client checkpointing by the CorfuServer
+     * Entry point to invoke checkpointing
      *
      * @param args command line argument strings
      */
     public static void main(String[] args) {
-        CorfuStoreCompactorMain corfuCompactorMain = new CorfuStoreCompactorMain(args);
-        corfuCompactorMain.startCompaction();
+        try {
+            CorfuStoreCompactorMain corfuCompactorMain = new CorfuStoreCompactorMain(args);
+            corfuCompactorMain.startCheckpointing();
+        } catch (Exception e) {
+            log.error("Exception during checkpointing: {}, StackTrace: {}", e.getMessage(), e.getStackTrace());
+        }
     }
 
-    private void startCompaction() {
+    private void startCheckpointing() {
         Thread.currentThread().setName("CorfuStore-" + config.getNodeLocator().getPort() + "-chkpter");
         if (config.isUpgrade()) {
             upgrade();
@@ -79,8 +75,7 @@ public class CorfuStoreCompactorMain {
         retryCheckpointing = CorfuStoreCompactorConfig.CHECKPOINT_RETRY_UPGRADE;
 
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            txn.putRecord(checkpointTable, CompactorMetadataTables.UPGRADE_KEY, TokenMsg.getDefaultInstance(),
-                    null);
+            txn.putRecord(checkpointTable, CompactorMetadataTables.UPGRADE_KEY, TokenMsg.getDefaultInstance(), null);
             txn.commit();
         } catch (Exception e) {
             log.warn("Unable to write UpgradeKey to checkpoint table, ", e);

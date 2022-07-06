@@ -178,15 +178,21 @@ public class CompactorServiceTest extends AbstractViewTest {
     }
 
     private void setupMocks() {
+        CompactorMetadataTables compactorMetadataTables = null;
+        try {
+            compactorMetadataTables = new CompactorMetadataTables(corfuStore);
+        } catch (Exception e) {
+            log.warn("Caught exception while opening MetadataTables: ", e);
+        }
         distributedCheckpointer0 = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
                 .corfuRuntime(runtime0).cpRuntime(Optional.of(cpRuntime0)).persistedCacheRoot(Optional.empty())
-                .isClient(false).build());
+                .isClient(false).build(), corfuStore, compactorMetadataTables);
         distributedCheckpointer1 = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
                 .corfuRuntime(runtime1).cpRuntime(Optional.of(cpRuntime1)).persistedCacheRoot(Optional.empty())
-                .isClient(false).build());
+                .isClient(false).build(), corfuStore, compactorMetadataTables);
         distributedCheckpointer2 = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
                 .corfuRuntime(runtime2).cpRuntime(Optional.of(cpRuntime2)).persistedCacheRoot(Optional.empty())
-                .isClient(false).build());
+                .isClient(false).build(), corfuStore, compactorMetadataTables);
 
         doAnswer(invocation -> {
             distributedCheckpointer0.checkpointTables();

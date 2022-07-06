@@ -37,15 +37,16 @@ public abstract class DistributedCheckpointer {
 
     private long epoch;
 
-    DistributedCheckpointer(@NonNull CorfuRuntime corfuRuntime, String clientName) {
+    DistributedCheckpointer(@NonNull CorfuRuntime corfuRuntime, String clientName,
+                            CorfuStore corfuStore, CompactorMetadataTables compactorMetadataTables) {
         this.corfuRuntime = corfuRuntime;
         this.clientName = clientName;
-        this.corfuStore = Optional.empty();
-        this.livenessUpdater = Optional.empty();
+        this.corfuStore = Optional.of(corfuStore);
+        this.compactorMetadataTables = compactorMetadataTables;
+        this.livenessUpdater = Optional.of(new CheckpointLivenessUpdater(getCorfuStore()));
     }
 
-    @VisibleForTesting
-    public CorfuStore getCorfuStore() {
+    protected CorfuStore getCorfuStore() {
         if (!this.corfuStore.isPresent()) {
             this.corfuStore = Optional.of(new CorfuStore(this.corfuRuntime));
         }
@@ -58,18 +59,6 @@ public abstract class DistributedCheckpointer {
             this.livenessUpdater = Optional.of(new CheckpointLivenessUpdater(getCorfuStore()));
         }
         return this.livenessUpdater.get();
-    }
-
-    @VisibleForTesting
-    public boolean openCompactorMetadataTables() {
-        log.debug("Open all checkpoint metadata tables");
-        try {
-            compactorMetadataTables = new CompactorMetadataTables(getCorfuStore());
-        } catch (Exception e) {
-            log.error("Exception while opening compactorMetadataTables, ", e);
-            return false;
-        }
-        return true;
     }
 
     private boolean tryLockTableToCheckpoint(@NonNull CompactorMetadataTables compactorMetadataTables,
@@ -169,21 +158,17 @@ public abstract class DistributedCheckpointer {
         private CorfuTable corfuTable;
     }
 
-    public int checkpointOpenedTables() {
+    public void checkpointOpenedTables() {
         log.info("Checkpointing opened tables");
-        int count = 0;
         for (CorfuTableNamePair openedTable :
                 corfuRuntime.getTableRegistry().getAllOpenTablesForCheckpointing()) {
 
-            boolean isSuccess = tryCheckpointTable(openedTable.tableName, t -> openedTable.corfuTable);
-            if (!isSuccess) {
+            if (!tryCheckpointTable(openedTable.tableName, t -> openedTable.corfuTable)) {
                 log.warn("Stop checkpointing after failure in {}${}",
                         openedTable.tableName.getNamespace(), openedTable.tableName.getTableName());
                 break;
             }
-            count++;
         }
-        return count;
     }
 
     private <K, V> CheckpointingStatus appendCheckpoint(CorfuTable<K, V> corfuTable,
@@ -216,12 +201,12 @@ public abstract class DistributedCheckpointer {
                 .setEpoch(epoch).build();
     }
 
-    protected boolean isCriticalRuntimeException(RuntimeException re, int retry, int maxRetries) {
-        log.trace("checkpointer: encountered an exception on attempt {}/{}.",
+    public static boolean isCriticalRuntimeException(RuntimeException re, int retry, int maxRetries) {
+        log.trace("Encountered an exception on attempt {}/{}.",
                 retry, maxRetries, re);
 
         if (retry == maxRetries - 1) {
-            log.error("checkpointer: retry exhausted.", re);
+            log.error("Retry exhausted.", re);
             return true;
         }
 

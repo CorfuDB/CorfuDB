@@ -1,6 +1,7 @@
 package org.corfudb.compactor;
 
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
@@ -15,9 +16,9 @@ import java.util.Optional;
 public class CorfuStoreCompactorConfig {
 
     // Reduce checkpoint batch size due to disk-based nature and smaller compactor JVM size
-    private static final int NON_CONFIG_DEFAULT_CP_MAX_WRITE_SIZE = 1 << 20;
-    private static final int DEFAULT_CP_MAX_WRITE_SIZE = 25 << 20;
-    private static final int SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 100;  // Corfu default is 20
+    public static final int NON_CONFIG_DEFAULT_CP_MAX_WRITE_SIZE = 1 << 20;
+    public static final int DEFAULT_CP_MAX_WRITE_SIZE = 25 << 20;
+    public static final int SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 100;  // Corfu default is 20
     public static final int CORFU_LOG_CHECKPOINT_ERROR = 3;
     public static final int CHECKPOINT_RETRY_UPGRADE = 10;
 
@@ -42,7 +43,7 @@ public class CorfuStoreCompactorConfig {
 
         persistedCacheRoot = getOpt("--persistedCacheRoot");
 
-        isUpgrade = opts.containsKey("--isUpgrade");
+        isUpgrade = getOpt("--isUpgrade").isPresent();
 
         CorfuRuntimeParametersBuilder builder = CorfuRuntimeParameters.builder();
 
@@ -90,7 +91,7 @@ public class CorfuStoreCompactorConfig {
     }
 
     private Optional<String> getOpt(String param) {
-        if (opts.containsKey(param)) {
+        if (opts.get(param) != null) {
             return Optional.of(opts.get(param).toString());
         } else {
             return Optional.empty();

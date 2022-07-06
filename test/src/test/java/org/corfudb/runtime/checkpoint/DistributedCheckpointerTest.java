@@ -21,6 +21,7 @@ import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.RpcCommon.TokenMsg;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Layout;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -60,6 +61,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
     private static final String SLEEP_INTERRUPTED_EXCEPTION_MSG = "Sleep interrupted";
 
     private MockLivenessUpdater mockLivenessUpdater;
+    private CompactorMetadataTables compactorMetadataTables = null;
 
     /**
      * Generates and bootstraps a 3 node cluster in disk mode.
@@ -144,6 +146,12 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
 
         corfuStore = new CorfuStore(runtime0);
         mockLivenessUpdater = new MockLivenessUpdater(corfuStore);
+
+        try {
+            compactorMetadataTables = new CompactorMetadataTables(corfuStore);
+        } catch (Exception e) {
+            log.warn("Caught exception while opening MetadataTables: ", e);
+        }
     }
 
     private Table<StringKey, CheckpointingStatus, Message> openCompactionManagerTable() {
@@ -287,6 +295,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
                 assert verifyCheckpointStatusTable(StatusType.IDLE, 0);
             } else {
                 assert future1.get() != LeaderInitStatus.SUCCESS && future2.get() != LeaderInitStatus.SUCCESS;
+                Assert.fail();
             }
         } catch (Exception e) {
             log.warn("Unable to get results");
@@ -303,32 +312,26 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
                         .cpRuntime(Optional.of(cpRuntime0))
                         .isClient(false)
                         .persistedCacheRoot(Optional.empty())
-                        .build());
+                        .build(), corfuStore, compactorMetadataTables);
         ServerTriggeredCheckpointer distributedCheckpointer2 =
                 new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
                         .corfuRuntime(runtime1)
                         .cpRuntime(Optional.of(cpRuntime1))
                         .isClient(false)
                         .persistedCacheRoot(Optional.empty())
-                        .build());
+                        .build(), corfuStore, compactorMetadataTables);
         ServerTriggeredCheckpointer distributedCheckpointer3 =
                 new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
                         .corfuRuntime(runtime2)
                         .cpRuntime(Optional.of(cpRuntime2))
                         .isClient(false)
                         .persistedCacheRoot(Optional.empty())
-                        .build());
+                        .build(), corfuStore, compactorMetadataTables);
 
         distributedCheckpointer1.checkpointTables();
         distributedCheckpointer2.checkpointTables();
         distributedCheckpointer3.checkpointTables();
-//        int total = count1 + count2 + count3;
 
-//        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-//            //This assert ensures each table is checkpointed by only one of the clients
-//            Assert.assertEquals(txn.count(CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME), total);
-//            txn.commit();
-//        }
         assert verifyManagerStatus(StatusType.STARTED);
         assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
     }
@@ -343,12 +346,12 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
                 .cpRuntime(Optional.of(cpRuntime0))
                 .isClient(false)
                 .persistedCacheRoot(Optional.empty())
-                .build());
+                .build(), corfuStore, compactorMetadataTables);
         distributedCheckpointer.checkpointTables();
 
         compactorLeaderServices1.finishCompactionCycle();
 
-//        assert verifyManagerStatus(StatusType.COMPLETED);
+        assert verifyManagerStatus(StatusType.COMPLETED);
         assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
         assert verifyCheckpointTable();
     }
@@ -393,7 +396,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
                 .cpRuntime(Optional.of(cpRuntime0))
                 .isClient(false)
                 .persistedCacheRoot(Optional.empty())
-                .build());
+                .build(), corfuStore, compactorMetadataTables);
         distributedCheckpointer.checkpointTables();
 
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
@@ -423,7 +426,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
                 .cpRuntime(Optional.of(cpRuntime0))
                 .isClient(false)
                 .persistedCacheRoot(Optional.empty())
-                .build());
+                .build(), corfuStore, compactorMetadataTables);
         distributedCheckpointer.checkpointTables();
 
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
@@ -469,7 +472,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
                 .cpRuntime(Optional.of(cpRuntime0))
                 .isClient(false)
                 .persistedCacheRoot(Optional.empty())
-                .build());
+                .build(), corfuStore, compactorMetadataTables);
         distributedCheckpointer.checkpointTables();
 
         try {
@@ -512,7 +515,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
                 .cpRuntime(Optional.of(cpRuntime0))
                 .isClient(false)
                 .persistedCacheRoot(Optional.empty())
-                .build());
+                .build(), corfuStore, compactorMetadataTables);
 
         try {
             TimeUnit.MILLISECONDS.sleep(WAIT_IN_SYNC_STATE);

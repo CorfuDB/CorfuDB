@@ -14,19 +14,14 @@ import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
-import org.corfudb.runtime.view.TableRegistry;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.MockedConstruction;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.function.Function;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.mockito.Mockito.any;
@@ -61,23 +56,20 @@ public class DistributedCheckpointerUnitTest {
     public void setup() {
         when(corfuRuntime.getParameters()).thenReturn(
                 CorfuRuntime.CorfuRuntimeParameters.builder().clientName("TestClient").build());
+        CompactorMetadataTables compactorMetadataTables = null;
+        try {
+            compactorMetadataTables = new CompactorMetadataTables(corfuStore);
+        } catch (Exception e) {
+            log.warn("Caught exception while opening MetadataTables: ", e);
+        }
         DistributedCheckpointer distributedCheckpointer = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
                 .isClient(false)
                 .persistedCacheRoot(Optional.empty())
                 .cpRuntime(Optional.of(mock(CorfuRuntime.class)))
                 .corfuRuntime(corfuRuntime)
-                .build());
+                .build(), corfuStore, compactorMetadataTables);
         this.distributedCheckpointerSpy = spy(distributedCheckpointer);
 
-        doReturn(corfuStore).when(this.distributedCheckpointerSpy).getCorfuStore();
-        CompactorMetadataTables compactorMetadataTables;
-        try (MockedConstruction<CompactorMetadataTables> mockedMetadataTablesConstruction =
-                     mockConstruction(CompactorMetadataTables.class)) {
-            this.distributedCheckpointerSpy.openCompactorMetadataTables();
-            compactorMetadataTables = mockedMetadataTablesConstruction.constructed().get(0);
-        }
-
-        when(compactorMetadataTables.getCheckpointingStatusTable()).thenReturn(mock(Table.class));
         when(corfuStore.txn(CORFU_SYSTEM_NAMESPACE)).thenReturn(txn);
         when(txn.getRecord(anyString(), any(Message.class))).thenReturn(corfuStoreEntry);
         doNothing().when(txn).putRecord(any(), any(), any(), any());
@@ -209,21 +201,5 @@ public class DistributedCheckpointerUnitTest {
         assert !distributedCheckpointerSpy.tryCheckpointTable(tableName, t -> new CorfuTable<>());
 
         mockedConstruction.close();
-    }
-
-    @Test
-    public void checkpointOpenedTablesTest() {
-        TableRegistry tableRegistry = mock(TableRegistry.class);
-        List<DistributedCheckpointer.CorfuTableNamePair> mockList = new ArrayList<>(
-                Collections.singletonList(new DistributedCheckpointer.CorfuTableNamePair(tableName, mock(CorfuTable.class)))
-        );
-        when(corfuRuntime.getTableRegistry()).thenReturn(tableRegistry);
-        when(tableRegistry.getAllOpenTablesForCheckpointing()).thenReturn(mockList);
-
-        doReturn(true).when(distributedCheckpointerSpy).tryCheckpointTable(any(TableName.class), any(Function.class));
-        Assert.assertEquals(1, distributedCheckpointerSpy.checkpointOpenedTables());
-
-        doReturn(false).when(distributedCheckpointerSpy).tryCheckpointTable(any(TableName.class), any(Function.class));
-        Assert.assertEquals(0, distributedCheckpointerSpy.checkpointOpenedTables());
     }
 }

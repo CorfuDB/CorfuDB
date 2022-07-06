@@ -71,7 +71,7 @@ public class CompactorService implements ManagementService {
 
         this.corfuStore = new CorfuStore(getCorfuRuntime());
         this.trimLog = new TrimLog(getCorfuRuntime(), corfuStore);
-        this.compactionTriggerPolicy = new DynamicTriggerPolicy(getCorfuRuntime());
+        this.compactionTriggerPolicy = new DynamicTriggerPolicy(corfuStore);
         getCompactorLeaderServices();
 
         orchestratorThread.scheduleWithFixedDelay(
@@ -118,7 +118,6 @@ public class CompactorService implements ManagementService {
                 } else if (managerStatus.getStatus() == StatusType.STARTED && !checkpointerJvmManager.isRunning()
                         && !checkpointerJvmManager.isInvoked()) {
                     checkpointerJvmManager.invokeCheckpointing();
-                    checkpointerJvmManager.shutdown();
                 }
             }
 

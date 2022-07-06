@@ -47,7 +47,7 @@ public class InvokeCheckpointingJvm implements InvokeCheckpointing {
                 pb.inheritIO();
                 this.checkpointerProcess = pb.start();
                 this.isInvoked = true;
-                syslog.info("Triggered the compaction jvm");
+                syslog.info("Triggered compactor jvm");
                 break;
             } catch (RuntimeException re) {
                 syslog.trace("Encountered an exception on attempt {}/{}.",

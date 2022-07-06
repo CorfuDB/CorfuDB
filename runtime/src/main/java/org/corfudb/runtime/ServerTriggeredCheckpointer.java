@@ -24,36 +24,30 @@ import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
     private final CheckpointerBuilder checkpointerBuilder;
 
-    public ServerTriggeredCheckpointer(CheckpointerBuilder checkpointerBuilder) {
-        super(checkpointerBuilder.corfuRuntime, checkpointerBuilder.clientName);
+    public ServerTriggeredCheckpointer(CheckpointerBuilder checkpointerBuilder,
+                                       CorfuStore corfuStore, CompactorMetadataTables compactorMetadataTables) {
+        super(checkpointerBuilder.corfuRuntime, checkpointerBuilder.clientName, corfuStore, compactorMetadataTables);
         this.checkpointerBuilder = checkpointerBuilder;
     }
 
-
     @Override
     public void checkpointTables() {
-        if (!openCompactorMetadataTables()) {
-            return;
-        }
         //TODO: need to check compaction started?
-        int countOpened = checkpointOpenedTables();
+        checkpointOpenedTables();
 
         CorfuRuntime cpRuntime = checkpointerBuilder.cpRuntime.get();
         KeyDynamicProtobufSerializer keyDynamicProtobufSerializer = new KeyDynamicProtobufSerializer(cpRuntime);
         cpRuntime.getSerializers().registerSerializer(keyDynamicProtobufSerializer);
 
         List<TableName> tableNames = getAllTablesToCheckpoint();
-        int countUnopened = 0;
         for (TableName tableName : tableNames) {
             boolean isSuccess = tryCheckpointTable(tableName, t -> openTable(t, keyDynamicProtobufSerializer, cpRuntime));
             if (!isSuccess) {
                 log.warn("Stop checkpointing after failure in {}${}", tableName.getNamespace(), tableName.getTableName());
                 break;
             }
-            countUnopened++;
         }
-        log.info("{}: Finished checkpointing {} opened and {} unopened tables", checkpointerBuilder.clientName,
-                countOpened, countUnopened);
+        log.info("{}: Finished checkpointing tables", checkpointerBuilder.clientName);
     }
 
     private CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> openTable(TableName tableName,

@@ -91,7 +91,7 @@ public class CompactorServiceUnitTest {
             log.warn("Sleep interrupted: ", e);
         }
 
-        verify(invokeCheckpointingJvm, times(2)).shutdown();
+        verify(invokeCheckpointingJvm, times(1)).shutdown();
         verify(invokeCheckpointingJvm).invokeCheckpointing();
     }
 
@@ -120,6 +120,6 @@ public class CompactorServiceUnitTest {
 
         verify(leaderServices).validateLiveness();
         verify(leaderServices).initCompactionCycle();
-        verify(invokeCheckpointingJvm, times(2)).shutdown();
+        verify(invokeCheckpointingJvm, times(1)).shutdown();
     }
 }
