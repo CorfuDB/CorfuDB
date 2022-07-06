@@ -13,7 +13,7 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.concurrent.SingletonResource;
 import org.junit.Before;
 import org.junit.Test;
-import org.mockito.MockedConstruction;
+import org.mockito.Matchers;
 
 import java.time.Duration;
 import java.util.HashMap;
@@ -22,29 +22,37 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @Slf4j
 public class CompactorServiceUnitTest {
     private final ServerContext serverContext = mock(ServerContext.class);
     private final CorfuRuntime corfuRuntime = mock(CorfuRuntime.class);
     private final InvokeCheckpointingJvm invokeCheckpointingJvm = mock(InvokeCheckpointingJvm.class);
+    private final CorfuStore corfuStore = mock(CorfuStore.class);
     private final TxnContext txn = mock(TxnContext.class);
     private final CorfuStoreEntry corfuStoreEntry = mock(CorfuStoreEntry.class);
+    private final DynamicTriggerPolicy dynamicTriggerPolicy = mock(DynamicTriggerPolicy.class);
+    private final CompactorLeaderServices leaderServices = mock(CompactorLeaderServices.class);
 
-    private final static int SCHEDULER_INTERVAL = 1;
-    private final static String NODE_ENDPOINT = "NodeEndpoint";
-    private final static int SLEEP_WAIT = 8;
+    private static final int SCHEDULER_INTERVAL = 1;
+    private static final String NODE_ENDPOINT = "NodeEndpoint";
+    private static final int SLEEP_WAIT = 8;
+    private static final String NODE_0 = "0";
+    private static final String SLEEP_INTERRUPTED_EXCEPTION_MSG = "Sleep interrupted";
 
-    private CompactorLeaderServices leaderServices;
-    private CompactionTriggerPolicy compactionTriggerPolicy;
 
     @Before
     public void setup() {
         CompactorService compactorService = new CompactorService(serverContext,
-                SingletonResource.withInitial(() -> corfuRuntime), invokeCheckpointingJvm);
+                SingletonResource.withInitial(() -> corfuRuntime), invokeCheckpointingJvm, dynamicTriggerPolicy);
+        CompactorService compactorServiceSpy = spy(compactorService);
 
         Map<String, Object> map = new HashMap<>();
         map.put("<port>", "port");
@@ -55,21 +63,13 @@ public class CompactorServiceUnitTest {
         when(corfuRuntime.getParameters()).thenReturn(mockParams);
         when(mockParams.getCheckpointTriggerFreqMillis()).thenReturn(1L);
 
-        MockedConstruction<CorfuStore> mockedCorfuStoreConstruction = mockConstruction(CorfuStore.class);
-        MockedConstruction<CompactorLeaderServices> mockedLeaderServices = mockConstruction(CompactorLeaderServices.class);
-        MockedConstruction<DynamicTriggerPolicy> mockedTriggerPolicyConstruction = mockConstruction(DynamicTriggerPolicy.class);
-        compactorService.start(Duration.ofSeconds(SCHEDULER_INTERVAL));
-        CorfuStore corfuStore = mockedCorfuStoreConstruction.constructed().get(0);
-        this.compactionTriggerPolicy = mockedTriggerPolicyConstruction.constructed().get(0);
-        this.leaderServices = mockedLeaderServices.constructed().get(0);
+        doReturn(leaderServices).when(compactorServiceSpy).getCompactorLeaderServices();
+        doReturn(corfuStore).when(compactorServiceSpy).getCorfuStore();
+        compactorServiceSpy.start(Duration.ofSeconds(SCHEDULER_INTERVAL));
 
         when(corfuStore.txn(CORFU_SYSTEM_NAMESPACE)).thenReturn(txn);
-        when(txn.getRecord(anyString(), any(Message.class))).thenReturn(corfuStoreEntry);
+        when(txn.getRecord(Matchers.anyString(), Matchers.any(Message.class))).thenReturn(corfuStoreEntry);
         when(txn.commit()).thenReturn(CorfuStoreMetadata.Timestamp.getDefaultInstance());
-
-        mockedLeaderServices.close();
-        mockedCorfuStoreConstruction.close();
-        mockedTriggerPolicyConstruction.close();
     }
 
     @Test
@@ -77,7 +77,7 @@ public class CompactorServiceUnitTest {
         Layout mockLayout = mock(Layout.class);
         when(corfuRuntime.invalidateLayout()).thenReturn(CompletableFuture.completedFuture(mockLayout));
         //isLeader becomes false
-        when(mockLayout.getPrimarySequencer()).thenReturn(NODE_ENDPOINT + "0");
+        when(mockLayout.getPrimarySequencer()).thenReturn(NODE_ENDPOINT + NODE_0);
 
         when(corfuStoreEntry.getPayload()).thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
@@ -87,7 +87,7 @@ public class CompactorServiceUnitTest {
         try {
             TimeUnit.SECONDS.sleep(SLEEP_WAIT);
         } catch (InterruptedException e) {
-            log.warn("Sleep interrupted: ", e);
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
         }
 
         verify(invokeCheckpointingJvm, times(1)).shutdown();
@@ -101,11 +101,11 @@ public class CompactorServiceUnitTest {
         //isLeader becomes true
         when(mockLayout.getPrimarySequencer()).thenReturn(NODE_ENDPOINT)
                 .thenReturn(NODE_ENDPOINT)
-                .thenReturn(NODE_ENDPOINT + "0");
+                .thenReturn(NODE_ENDPOINT + NODE_0);
 
         when(corfuStoreEntry.getPayload()).thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
-        when(compactionTriggerPolicy.shouldTrigger(anyLong())).thenReturn(true).thenReturn(false);
+        when(dynamicTriggerPolicy.shouldTrigger(Matchers.anyLong(), Matchers.any(CorfuStore.class))).thenReturn(true).thenReturn(false);
         doNothing().when(leaderServices).validateLiveness();
         doReturn(CompactorLeaderServices.LeaderInitStatus.SUCCESS).when(leaderServices).initCompactionCycle();
         when(invokeCheckpointingJvm.isRunning()).thenReturn(false).thenReturn(true);
@@ -114,7 +114,7 @@ public class CompactorServiceUnitTest {
         try {
             TimeUnit.SECONDS.sleep(SLEEP_WAIT);
         } catch (InterruptedException e) {
-            log.warn("Sleep interrupted: ", e);
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
         }
 
         verify(leaderServices).validateLiveness();

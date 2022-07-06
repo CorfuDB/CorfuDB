@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.NonNull;
 import org.corfudb.runtime.CompactorMetadataTables;
@@ -32,17 +33,20 @@ public class CompactorService implements ManagementService {
     private final SingletonResource<CorfuRuntime> runtimeSingletonResource;
     private final ScheduledExecutorService orchestratorThread;
     private final InvokeCheckpointing checkpointerJvmManager;
+    private final CompactionTriggerPolicy compactionTriggerPolicy;
 
-    private CompactionTriggerPolicy compactionTriggerPolicy;
     private Optional<CompactorLeaderServices> compactorLeaderServices = Optional.empty();
-    private CorfuStore corfuStore;
+    private Optional<CorfuStore> corfuStore = Optional.empty();
     private TrimLog trimLog;
 
     private final Logger syslog;
 
+    private static final Duration LIVENESS_TIMEOUT = Duration.ofMinutes(1);
+
     CompactorService(@NonNull ServerContext serverContext,
                      @NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
-                     @NonNull InvokeCheckpointingJvm checkpointerJvmManager) {
+                     @NonNull InvokeCheckpointingJvm checkpointerJvmManager,
+                     @NonNull CompactionTriggerPolicy compactionTriggerPolicy) {
         this.serverContext = serverContext;
         this.runtimeSingletonResource = runtimeSingletonResource;
 
@@ -51,6 +55,7 @@ public class CompactorService implements ManagementService {
                         .setNameFormat("Cmpt-" + serverContext.getServerConfig().get("<port>") + "-chkpter")
                         .build());
         this.checkpointerJvmManager = checkpointerJvmManager;
+        this.compactionTriggerPolicy = compactionTriggerPolicy;
         syslog = LoggerFactory.getLogger("syslog");
     }
 
@@ -69,9 +74,7 @@ public class CompactorService implements ManagementService {
             return;
         }
 
-        this.corfuStore = new CorfuStore(getCorfuRuntime());
-        this.trimLog = new TrimLog(getCorfuRuntime(), corfuStore);
-        this.compactionTriggerPolicy = new DynamicTriggerPolicy(corfuStore);
+        this.trimLog = new TrimLog(getCorfuRuntime(), getCorfuStore());
         getCompactorLeaderServices();
 
         orchestratorThread.scheduleWithFixedDelay(
@@ -82,16 +85,26 @@ public class CompactorService implements ManagementService {
         );
     }
 
-    private CompactorLeaderServices getCompactorLeaderServices() {
+    @VisibleForTesting
+    public CompactorLeaderServices getCompactorLeaderServices() {
         if (!compactorLeaderServices.isPresent()) {
             try {
                 compactorLeaderServices = Optional.of(new CompactorLeaderServices(getCorfuRuntime(),
-                        serverContext.getLocalEndpoint(), corfuStore));
+                        serverContext.getLocalEndpoint(), getCorfuStore(),
+                        new LivenessValidator(getCorfuRuntime(), getCorfuStore(), LIVENESS_TIMEOUT)));
             } catch (Exception e) {
                 syslog.error("Unable to create CompactorLeaderServices object. Will retry on next attempt. Exception: ", e);
             }
         }
         return compactorLeaderServices.get();
+    }
+
+    @VisibleForTesting
+    public CorfuStore getCorfuStore() {
+        if (!this.corfuStore.isPresent()) {
+            this.corfuStore = Optional.of(new CorfuStore(getCorfuRuntime()));
+        }
+        return this.corfuStore.get();
     }
 
     /**
@@ -103,7 +116,7 @@ public class CompactorService implements ManagementService {
     private void runOrchestrator() {
         boolean isLeader = isNodePrimarySequencer(updateLayoutAndGet());
         CheckpointingStatus managerStatus = null;
-        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+        try (TxnContext txn = getCorfuStore().txn(CORFU_SYSTEM_NAMESPACE)) {
             managerStatus = (CheckpointingStatus) txn.getRecord(
                     CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
@@ -124,7 +137,8 @@ public class CompactorService implements ManagementService {
             if (isLeader) {
                 if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED) {
                     getCompactorLeaderServices().validateLiveness();
-                } else if (compactionTriggerPolicy.shouldTrigger(getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis())) {
+                } else if (compactionTriggerPolicy.shouldTrigger(
+                        getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis(), getCorfuStore())) {
                     compactionTriggerPolicy.markCompactionCycleStart();
                     trimLog.invokePrefixTrim();
                     getCompactorLeaderServices().initCompactionCycle();

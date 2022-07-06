@@ -448,22 +448,13 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * WARNING: Never call this method for anything other than checkpointing!
-     * @return the underlying CorfuTable only for checkpointing purposes
-     */
-    public CorfuTable getCorfuTableForCheckpointingOnly() {
-        return this.corfuTable;
-    }
-
-    public CheckpointWriter<StreamingMap> appendCheckpoint(CorfuRuntime rt, String author) {
+    public CheckpointWriter<StreamingMap> getCheckpointWriter(CorfuRuntime rt, String author) {
         UUID streamId = this.corfuTable.getCorfuStreamID();
 
         CheckpointWriter<StreamingMap> cpw = new CheckpointWriter(rt, streamId, author, this.corfuTable);
         ISerializer serializer = ((CorfuCompileProxy) this.corfuTable.getCorfuSMRProxy())
                 .getSerializer();
         cpw.setSerializer(serializer);
-
         return cpw;
     }
 }

@@ -1,6 +1,5 @@
 package org.corfudb.runtime;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Message;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -8,11 +7,16 @@ import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
-import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.StreamingMap;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -26,8 +30,8 @@ public abstract class DistributedCheckpointer {
     public static final long CONN_RETRY_DELAY_MILLISEC = 500;
     public static final int MAX_RETRIES = 5;
 
-    private Optional<CorfuStore> corfuStore;
-    private Optional<LivenessUpdater> livenessUpdater;
+    protected final CorfuStore corfuStore;
+    private final LivenessUpdater livenessUpdater;
     protected CompactorMetadataTables compactorMetadataTables = null;
 
     private final CorfuRuntime corfuRuntime;
@@ -39,34 +43,26 @@ public abstract class DistributedCheckpointer {
                             CorfuStore corfuStore, CompactorMetadataTables compactorMetadataTables) {
         this.corfuRuntime = corfuRuntime;
         this.clientName = clientName;
-        this.corfuStore = Optional.of(corfuStore);
+        this.corfuStore = corfuStore;
         this.compactorMetadataTables = compactorMetadataTables;
-        this.livenessUpdater = Optional.of(new CheckpointLivenessUpdater(getCorfuStore()));
-    }
-
-    protected CorfuStore getCorfuStore() {
-        if (!this.corfuStore.isPresent()) {
-            this.corfuStore = Optional.of(new CorfuStore(this.corfuRuntime));
-        }
-        return this.corfuStore.get();
-    }
-
-    @VisibleForTesting
-    public LivenessUpdater getLivenessUpdater() {
-        if (!livenessUpdater.isPresent()) {
-            this.livenessUpdater = Optional.of(new CheckpointLivenessUpdater(getCorfuStore()));
-        }
-        return this.livenessUpdater.get();
+        this.livenessUpdater = new CheckpointLivenessUpdater(corfuStore);
     }
 
     private boolean tryLockTableToCheckpoint(@NonNull CompactorMetadataTables compactorMetadataTables,
-                                             @NonNull TableName tableName) throws RuntimeException {
+                                             @NonNull TableName tableName) throws IllegalStateException {
         for (int retry = 0; retry < MAX_RETRIES; retry++) {
-            try (TxnContext txn = getCorfuStore().txn(CORFU_SYSTEM_NAMESPACE)) {
-                CorfuStoreEntry<TableName, CheckpointingStatus, Message> tableToChkpt = txn.getRecord(
-                        CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, tableName);
-                if (tableToChkpt.getPayload().getStatus() == StatusType.IDLE) {
-                    epoch = tableToChkpt.getPayload().getEpoch();
+            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
+                        CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                        CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
+                if (managerStatus.getStatus() != StatusType.STARTED) {
+                    txn.commit();
+                    throw new IllegalStateException("Compaction has not started. Stop checkpointing");
+                }
+                CheckpointingStatus tableStatus = (CheckpointingStatus) txn.getRecord(
+                        CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, tableName).getPayload();
+                if (tableStatus.getStatus() == StatusType.IDLE) {
+                    epoch = tableStatus.getEpoch();
                     txn.putRecord(compactorMetadataTables.getCheckpointingStatusTable(),
                             tableName,
                             CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).setClientName(clientName)
@@ -88,7 +84,7 @@ public abstract class DistributedCheckpointer {
                 }
             } catch (RuntimeException re) {
                 if (isCriticalRuntimeException(re, retry, MAX_RETRIES)) {
-                    throw re;
+                    throw new IllegalStateException(re);
                 }
             }
         }
@@ -97,9 +93,9 @@ public abstract class DistributedCheckpointer {
 
     private boolean unlockTableAfterCheckpoint(@NonNull CompactorMetadataTables compactorMetadataTables,
                                                @NonNull TableName tableName,
-                                               @NonNull CheckpointingStatus checkpointStatus) throws RuntimeException {
+                                               @NonNull CheckpointingStatus checkpointStatus) throws IllegalStateException {
         for (int retry = 0; retry < MAX_RETRIES; retry++) {
-            try (TxnContext txn = getCorfuStore().txn(CORFU_SYSTEM_NAMESPACE)) {
+            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                 CorfuStoreEntry<StringKey, CheckpointingStatus, Message> managerStatus = txn.getRecord(
                         CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                         CompactorMetadataTables.COMPACTION_MANAGER_KEY);
@@ -129,7 +125,7 @@ public abstract class DistributedCheckpointer {
                 break; //Leader marked me as failed
             } catch (RuntimeException re) {
                 if (isCriticalRuntimeException(re, retry, MAX_RETRIES)) {
-                    throw re;
+                    throw new IllegalStateException(re);
                 }
             }
         }
@@ -145,17 +141,17 @@ public abstract class DistributedCheckpointer {
             }
             CheckpointingStatus checkpointStatus = appendCheckpoint(tableName, checkpointWriterFn);
             return unlockTableAfterCheckpoint(compactorMetadataTables, tableName, checkpointStatus);
-        } catch (RuntimeException re) {
-            log.warn("TryCheckpoinTable caught an exception: ", re);
+        } catch (IllegalStateException e) {
+            log.warn("TryCheckpointTable caught an exception: ", e);
             return false;
         }
     }
 
     public void checkpointOpenedTables() {
         log.info("Checkpointing opened tables");
-        for (Table<Message, Message, Message> openedTable : corfuRuntime.getTableRegistry().getAllOpenTablesForCheckpointing()) {
+        for (Table<Message, Message, Message> openedTable : corfuRuntime.getTableRegistry().getAllOpenTables()) {
             boolean isSuccess = tryCheckpointTable(DistributedCheckpointerHelper.getTableName(openedTable),
-                    t -> openedTable.appendCheckpoint(corfuRuntime, "DistributedCheckpointer"));
+                    t -> openedTable.getCheckpointWriter(corfuRuntime, "DistributedCheckpointer"));
             if (!isSuccess) {
                 log.warn("Stop checkpointing after failure in {}", openedTable.getFullyQualifiedTableName());
                 break;
@@ -169,23 +165,21 @@ public abstract class DistributedCheckpointer {
         log.info("{} Starting checkpoint: {}${}", clientName,
                 tableName.getNamespace(), tableName.getTableName());
 
-        getLivenessUpdater().updateLiveness(tableName);
+        this.livenessUpdater.updateLiveness(tableName);
         StatusType returnStatus = StatusType.FAILED;
         for (int retry = 0; retry < MAX_RETRIES; retry++) {
             try {
                 CheckpointWriter<StreamingMap> cpw = checkpointWriterFn.apply(tableName);
-                cpw.appendCheckpoint(livenessUpdater);
+                cpw.appendCheckpoint(Optional.of(livenessUpdater));
                 returnStatus = StatusType.COMPLETED;
                 break;
             } catch (RuntimeException re) {
                 if (isCriticalRuntimeException(re, retry, MAX_RETRIES)) {
                     break; // stop on non-retryable exceptions
                 }
-            } catch (Exception e) {
-                log.error("Unable to checkpoint table: {}, e: {}", tableName, e);
             }
         }
-        getLivenessUpdater().notifyOnSyncComplete();
+        this.livenessUpdater.notifyOnSyncComplete();
         return CheckpointingStatus.newBuilder()
                 .setStatus(returnStatus).setClientName(clientName)
                 .setEpoch(epoch).setTimeTaken(System.currentTimeMillis() - tableCkptStartTime)
@@ -208,6 +202,10 @@ public abstract class DistributedCheckpointer {
                 log.error("Interrupted in network retry sleep");
                 return true;
             }
+        }
+        if (re instanceof WrongEpochException) {
+            log.info("Epoch changed to {}. Sequencer failover can lead to potential epoch regression, retry {}/{}",
+                    ((WrongEpochException) re).getCorrectEpoch(), retry, MAX_RETRIES);
         }
 
         if (re instanceof WrongClusterException) {

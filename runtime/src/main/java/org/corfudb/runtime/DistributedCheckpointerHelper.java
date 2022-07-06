@@ -16,10 +16,18 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
 public class DistributedCheckpointerHelper {
-    public static boolean isCheckpointFrozen(CorfuStore corfuStore) { //TODO: needs change?
+
+    private final CorfuStore corfuStore;
+
+    public DistributedCheckpointerHelper(CorfuStore corfuStore) {
+        this.corfuStore = corfuStore;
+    }
+
+    public boolean isCheckpointFrozen() {
         final StringKey freezeCheckpointNS = StringKey.newBuilder().setKey("freezeCheckpointNS").build();
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            RpcCommon.TokenMsg freezeToken = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT, freezeCheckpointNS).getPayload();
+            RpcCommon.TokenMsg freezeToken = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT,
+                    freezeCheckpointNS).getPayload();
 
             final long patience = 2 * 60 * 60 * 1000;
             if (freezeToken != null) {
@@ -41,8 +49,9 @@ public class DistributedCheckpointerHelper {
         return false;
     }
 
-    public static boolean hasCompactionStarted(CorfuStore corfuStore) {
-        if (isCheckpointFrozen(corfuStore)) { //This is necessary here to stop checkpointing after it has started
+    public boolean hasCompactionStarted() {
+        //This is necessary here to stop checkpointing after it has started
+        if (isCheckpointFrozen()) {
             return false;
         }
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -58,19 +67,6 @@ public class DistributedCheckpointerHelper {
             return false;
         }
         return true;
-    }
-
-    public static boolean isUpgrade(CorfuStore corfuStore) {
-        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            RpcCommon.TokenMsg upgradeToken = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT,
-                    CompactorMetadataTables.UPGRADE_KEY).getPayload();
-            txn.commit();
-            if (upgradeToken != null) {
-                log.warn("Client Checkpointer asked to freeze due to upgrade");
-                return true;
-            }
-        }
-        return false;
     }
 
     public static CorfuStoreMetadata.TableName getTableName(Table<Message, Message, Message> table) {

@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -119,7 +120,8 @@ public class LivenessValidator {
         return syncHeartBeat;
     }
 
-    private long getCpStreamTail(TableName table) {
+    @VisibleForTesting
+    public long getCpStreamTail(TableName table) {
         String cpStreamName = TableRegistry.getFullyQualifiedTableName(table.getNamespace(), table.getTableName());
         UUID cpStreamId = CorfuRuntime.getCheckpointStreamIdFromName(cpStreamName);
         return corfuRuntime.getSequencerView()

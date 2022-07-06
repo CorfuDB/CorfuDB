@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.CompactorMetadataTables;
@@ -8,6 +7,7 @@ import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.DistributedCheckpointer;
 import org.corfudb.runtime.DistributedCheckpointerHelper;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
@@ -41,9 +41,9 @@ public class CompactorLeaderServices {
     private final Logger syslog;
     private final LivenessValidator livenessValidator;
     private final CompactorMetadataTables compactorMetadataTables;
+    private final DistributedCheckpointerHelper distributedCheckpointerHelper;
 
-    @Setter
-    private static Duration livenessTimeout = Duration.ofMinutes(1);
+    public static final int MAX_RETRIES = 5;
 
     /**
      * This enum contains the leader's start compaction cycle status
@@ -55,15 +55,17 @@ public class CompactorLeaderServices {
         FAIL
     }
 
-    public CompactorLeaderServices(CorfuRuntime corfuRuntime, String nodeEndpoint, CorfuStore corfuStore)
+    public CompactorLeaderServices(CorfuRuntime corfuRuntime, String nodeEndpoint, CorfuStore corfuStore,
+                                   LivenessValidator livenessValidator)
             throws Exception {
         this.compactorMetadataTables = new CompactorMetadataTables(corfuStore);
         this.corfuRuntime = corfuRuntime;
         this.nodeEndpoint = nodeEndpoint;
         this.corfuStore = corfuStore;
-        this.livenessValidator = new LivenessValidator(corfuRuntime, corfuStore, livenessTimeout);
+        this.livenessValidator = livenessValidator;
         this.trimLog = new TrimLog(corfuRuntime, corfuStore);
-        syslog = LoggerFactory.getLogger("syslog");
+        this.distributedCheckpointerHelper = new DistributedCheckpointerHelper(corfuStore);
+        this.syslog = LoggerFactory.getLogger("syslog");
     }
 
     /**
@@ -77,7 +79,7 @@ public class CompactorLeaderServices {
     public LeaderInitStatus initCompactionCycle() {
         syslog.info("=============Initiating Distributed Compaction============");
 
-        if (DistributedCheckpointerHelper.isCheckpointFrozen(corfuStore)) {
+        if (distributedCheckpointerHelper.isCheckpointFrozen()) {
             syslog.warn("Will not start compaction since it has been frozen");
             return LeaderInitStatus.FAIL;
         }
@@ -255,22 +257,46 @@ public class CompactorLeaderServices {
             syslog.warn("Exception in finishCompactionCycle: {}. StackTrace={}", re, re.getStackTrace());
         }
         trimLogIfRequired();
+        deleteInstantKeyIfRequired();
     }
 
     private void trimLogIfRequired() {
         Optional<RpcCommon.TokenMsg> upgradeToken = Optional.empty();
-        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            upgradeToken = Optional.ofNullable((RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT,
-                    CompactorMetadataTables.UPGRADE_KEY).getPayload());
-            txn.delete(CompactorMetadataTables.CHECKPOINT, CompactorMetadataTables.UPGRADE_KEY);
-            txn.commit();
-        } catch (Exception e) {
-            syslog.error("Exception during transaction in checkpoint table", e);
+        for (int i = 0; i < MAX_RETRIES; i++) {
+            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                upgradeToken = Optional.ofNullable((RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT,
+                        CompactorMetadataTables.UPGRADE_KEY).getPayload());
+                txn.delete(CompactorMetadataTables.CHECKPOINT, CompactorMetadataTables.UPGRADE_KEY);
+                txn.commit();
+                break;
+            } catch (RuntimeException re) {
+                if (DistributedCheckpointer.isCriticalRuntimeException(re, i, MAX_RETRIES)) {
+                    break;
+                }
+            }
         }
 
         if (upgradeToken.isPresent()) {
             syslog.info("Upgrade Key found: Hence invoking trimlog()");
             trimLog.invokePrefixTrim();
+        }
+    }
+
+    private void deleteInstantKeyIfRequired() {
+        for (int i = 0; i < MAX_RETRIES; i++) {
+            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                RpcCommon.TokenMsg instantToken = (RpcCommon.TokenMsg) txn.getRecord(
+                        CompactorMetadataTables.CHECKPOINT, CompactorMetadataTables.INSTANT_TIGGER_KEY).getPayload();
+                if (instantToken != null) {
+                    txn.delete(CompactorMetadataTables.CHECKPOINT, CompactorMetadataTables.INSTANT_TIGGER_KEY);
+                }
+                txn.commit();
+                return;
+            } catch (RuntimeException re) {
+                if (DistributedCheckpointer.isCriticalRuntimeException(re, i, MAX_RETRIES)) {
+                    return;
+                }
+            }
         }
     }
 

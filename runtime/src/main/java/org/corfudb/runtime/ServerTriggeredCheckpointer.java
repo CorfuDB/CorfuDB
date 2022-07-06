@@ -3,7 +3,13 @@ package org.corfudb.runtime;
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
-import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.collections.CorfuDynamicKey;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.OpaqueCorfuDynamicRecord;
+import org.corfudb.runtime.collections.PersistedStreamingMap;
+import org.corfudb.runtime.collections.StreamingMap;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.view.ObjectOpenOption;
@@ -21,7 +27,6 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
-import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 
 @Slf4j
 public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
@@ -74,7 +79,7 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
                 rt.getObjectsView().build()
                         .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>() {
                         })
-                        .setStreamName(getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName()))
+                        .setStreamName(TableRegistry.getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName()))
                         .setSerializer(serializer)
                         .addOpenOption(ObjectOpenOption.NO_CACHE);
         if (this.checkpointerBuilder.persistedCacheRoot.isPresent()) {
@@ -94,7 +99,7 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
         List<TableName> tablesToCheckpoint = Collections.emptyList();
         final int maxRetry = 5;
         for (int retry = 0; retry < maxRetry; retry++) {
-            try (TxnContext txn = getCorfuStore().txn(CORFU_SYSTEM_NAMESPACE)) {
+            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                 tablesToCheckpoint = new ArrayList<>(txn.keySet(CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME));
                 txn.commit();
                 break;

@@ -9,7 +9,8 @@ import com.google.protobuf.Message;
 import com.google.protobuf.ProtocolStringList;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.*;
+import org.corfudb.runtime.CorfuOptions;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
@@ -37,7 +38,19 @@ import org.corfudb.util.serializer.ProtobufSerializer;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.lang.reflect.InvocationTargetException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Supplier;
@@ -719,26 +732,30 @@ public class TableRegistry {
                 .orElse(null);
     }
 
-    public List<Table<Message, Message, Message>> getAllOpenTablesForCheckpointing() {
-        List<Table<Message, Message, Message>> allTables = new ArrayList<>();
-        allTables.addAll(this.tableMap.values());
+    /**
+     * Returns all the tables that are already opened by the runtime
+     *
+     * @return List of opened Tables
+     */
+    public List<Table<Message, Message, Message>> getAllOpenTables() {
+        List<Table<Message, Message, Message>> allTables = new ArrayList<>(this.tableMap.values());
         try {
             allTables.add(wrapInternalTable(REGISTRY_TABLE_NAME, TableName.class,
                     TableDescriptors.class, TableMetadata.class, TableOptions.<TableName, TableDescriptors>builder().build()));
-            allTables.add(wrapInternalTable(PROTOBUF_DESCRIPTOR_TABLE_NAME, ProtobufFileName.class, ProtobufFileDescriptor.class,
-                    TableMetadata.class, TableOptions.<TableName, TableDescriptors>builder().build()));
+            allTables.add(wrapInternalTable(PROTOBUF_DESCRIPTOR_TABLE_NAME, ProtobufFileName.class,
+                    ProtobufFileDescriptor.class, TableMetadata.class, TableOptions.<TableName, TableDescriptors>builder().build()));
         } catch (Exception e) {
-            log.warn("Unable to wrap ");
+            log.warn("Unable to wrap into Table object due to {}. StackTrace: {}", e.getMessage(), e.getStackTrace());
         }
         return allTables;
     }
 
     private <K extends Message, V extends Message, M extends Message>
     Table<Message, Message, Message> wrapInternalTable(@Nonnull String tableName,
-                           @Nonnull Class<K> kClass,
-                           @Nonnull Class<V> vClass,
-                           @Nullable Class<M> mClass,
-                           @Nonnull final TableOptions tableOptions)
+                                                       @Nonnull Class<K> kClass,
+                                                       @Nonnull Class<V> vClass,
+                                                       @Nullable Class<M> mClass,
+                                                       @Nonnull final TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
         ICorfuVersionPolicy.VersionPolicy versionPolicy = ICorfuVersionPolicy.DEFAULT;
 

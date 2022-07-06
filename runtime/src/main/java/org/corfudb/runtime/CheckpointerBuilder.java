@@ -23,3 +23,4 @@ public class CheckpointerBuilder {
         this.clientName = corfuRuntime.getParameters().getClientName();
     }
 }
+

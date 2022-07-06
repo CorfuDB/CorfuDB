@@ -1,10 +1,10 @@
 package org.corfudb.compactor;
 
 import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
+import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.NodeLocator;
 import org.docopt.Docopt;
@@ -81,7 +81,7 @@ public class CorfuStoreCompactorConfig {
         builder.systemDownHandlerTriggerLimit(SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT)
                 .systemDownHandler(defaultSystemDownHandler);
 
-        params = builder.build();
+        params = builder.priorityLevel(PriorityLevel.HIGH).build();
     }
 
     private Map<String, Object> parseOpts(String[] args) {

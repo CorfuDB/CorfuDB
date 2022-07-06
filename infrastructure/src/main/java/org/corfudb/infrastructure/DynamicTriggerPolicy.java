@@ -16,11 +16,9 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
      * What time did the previous cycle start
      */
     private long lastCompactionCycleStartTS = 0;
-    private final CorfuStore corfuStore;
     private final Logger syslog;
 
-    public DynamicTriggerPolicy(CorfuStore corfuStore) {
-        this.corfuStore = corfuStore;
+    public DynamicTriggerPolicy() {
         this.lastCompactionCycleStartTS = System.currentTimeMillis();
         this.syslog = LoggerFactory.getLogger("syslog");
     }
@@ -30,7 +28,7 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
         this.lastCompactionCycleStartTS = System.currentTimeMillis();
     }
 
-    private boolean shouldForceTrigger() {
+    private boolean shouldForceTrigger(CorfuStore corfuStore) {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             RpcCommon.TokenMsg upgradeToken = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT,
                     CompactorMetadataTables.UPGRADE_KEY).getPayload();
@@ -56,9 +54,9 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
      * @return true if compaction cycle should run, false otherwise
      */
     @Override
-    public boolean shouldTrigger(long interval) {
+    public boolean shouldTrigger(long interval, CorfuStore corfuStore) {
 
-        if (shouldForceTrigger()) {
+        if (shouldForceTrigger(corfuStore)) {
             syslog.info("Force triggering compaction");
             return true;
         }

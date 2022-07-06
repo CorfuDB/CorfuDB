@@ -3,8 +3,13 @@ package org.corfudb.compactor;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.runtime.*;
+import org.corfudb.runtime.CheckpointerBuilder;
+import org.corfudb.runtime.CompactorMetadataTables;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
+import org.corfudb.runtime.DistributedCheckpointer;
+import org.corfudb.runtime.DistributedCheckpointerHelper;
+import org.corfudb.runtime.ServerTriggeredCheckpointer;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TxnContext;
@@ -25,8 +30,9 @@ public class CorfuStoreCompactorMain {
     private final CorfuStoreCompactorConfig config;
     private final CorfuStore corfuStore;
     private final DistributedCheckpointer distributedCheckpointer;
+    private final DistributedCheckpointerHelper distributedCheckpointerHelper;
 
-    private Table<StringKey, TokenMsg, Message> checkpointTable;
+    private final Table<StringKey, TokenMsg, Message> checkpointTable;
     private int retryCheckpointing = 1;
 
     public CorfuStoreCompactorMain(String[] args) throws Exception {
@@ -42,11 +48,12 @@ public class CorfuStoreCompactorMain {
         this.checkpointTable = compactorMetadataTables.getCheckpointTable();
 
         this.distributedCheckpointer = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
-            .corfuRuntime(corfuRuntime)
-            .cpRuntime(Optional.of(cpRuntime))
-            .persistedCacheRoot(config.getPersistedCacheRoot())
-            .isClient(false)
-            .build(), corfuStore, compactorMetadataTables);
+                .corfuRuntime(corfuRuntime)
+                .cpRuntime(Optional.of(cpRuntime))
+                .persistedCacheRoot(config.getPersistedCacheRoot())
+                .isClient(false)
+                .build(), corfuStore, compactorMetadataTables);
+        this.distributedCheckpointerHelper = new DistributedCheckpointerHelper(corfuStore);
     }
 
     /**
@@ -85,7 +92,7 @@ public class CorfuStoreCompactorMain {
     private void checkpoint() {
         try {
             for (int i = 0; i < retryCheckpointing; i++) {
-                if (DistributedCheckpointerHelper.hasCompactionStarted(corfuStore)) {
+                if (distributedCheckpointerHelper.hasCompactionStarted()) {
                     distributedCheckpointer.checkpointTables();
                     break;
                 }
