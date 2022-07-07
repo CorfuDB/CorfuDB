@@ -176,7 +176,7 @@ public class CheckpointWriter<T extends StreamingMap> {
             // as the latter discards holes for resolution, hence if last address is a hole it would diverge
             // from the stream address space maintained by the sequencer.
 
-            livenessUpdater.ifPresent(updater -> updater.notifyOnSyncComplete());
+            livenessUpdater.ifPresent(LivenessUpdater::notifyOnSyncComplete);
 
             startCheckpoint(snapshotTimestamp);
             int entryCount = appendObjectState(entries);

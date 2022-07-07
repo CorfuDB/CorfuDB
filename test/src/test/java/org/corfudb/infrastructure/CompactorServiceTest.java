@@ -2,14 +2,16 @@ package org.corfudb.infrastructure;
 
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.CorfuCompactorManagement;
+import org.corfudb.runtime.CheckpointerBuilder;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CompactorMetadataTables;
+import org.corfudb.runtime.DistributedCheckpointer;
+import org.corfudb.runtime.ServerTriggeredCheckpointer;
+import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
-import org.corfudb.runtime.DistributedClientCheckpointer;
-import org.corfudb.runtime.DistributedCompactor;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -21,22 +23,24 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.concurrent.SingletonResource;
 import org.junit.Test;
+import org.mockito.Matchers;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 @Slf4j
 public class CompactorServiceTest extends AbstractViewTest {
@@ -47,7 +51,7 @@ public class CompactorServiceTest extends AbstractViewTest {
 
     private static final Duration LIVENESS_TIMEOUT = Duration.ofMillis(5000);
     private static final int WAIT_TO_KILL = 3000;
-    private static final int COMPACTOR_SERVICE_INTERVAL = 10;
+    private static final int COMPACTOR_SERVICE_INTERVAL = 1000;
 
     private static final String CACHE_SIZE_HEAP_RATIO = "0.0";
     private static final String CLIENT_NAME_PREFIX = "Client";
@@ -61,11 +65,13 @@ public class CompactorServiceTest extends AbstractViewTest {
     private CorfuRuntime cpRuntime1 = null;
     private CorfuRuntime cpRuntime2 = null;
 
+    private DistributedCheckpointer distributedCheckpointer0;
+    private DistributedCheckpointer distributedCheckpointer1;
+    private DistributedCheckpointer distributedCheckpointer2;
+
     private CorfuStore corfuStore = null;
 
-    private Set<String> clientIds = new HashSet<>();
-    private boolean startedAll = false;
-    private Map<String, Table<StringKey, StringKey, Message>> openedStreams = new HashMap<>();
+    private final Map<String, Table<StringKey, StringKey, Message>> openedStreams = new HashMap<>();
 
     private static final String STREAM_NAME_PREFIX = "StreamName";
     private static final String STREAM_KEY_PREFIX = "StreamKey";
@@ -75,6 +81,12 @@ public class CompactorServiceTest extends AbstractViewTest {
 
     private static final Double logSizeLimitPercentageFull = 100.0;
     private static final Double logSizeLimitPercentageLow = 0.0002;
+
+    private final InvokeCheckpointingJvm mockInvokeJvm0 = mock(InvokeCheckpointingJvm.class);
+    private final InvokeCheckpointingJvm mockInvokeJvm1 = mock(InvokeCheckpointingJvm.class);
+    private final InvokeCheckpointingJvm mockInvokeJvm2 = mock(InvokeCheckpointingJvm.class);
+
+    private final DynamicTriggerPolicy dynamicTriggerPolicy0 = mock(DynamicTriggerPolicy.class);
 
     /**
      * Generates and bootstraps a 3 node cluster in disk mode.
@@ -133,7 +145,6 @@ public class CompactorServiceTest extends AbstractViewTest {
                 .build();
 
         bootstrapAllServers(l);
-
         return l;
     }
 
@@ -158,12 +169,50 @@ public class CompactorServiceTest extends AbstractViewTest {
         cpRuntime2.getParameters().setClientName(CLIENT_NAME_PREFIX + "_cp2");
 
         corfuStore = new CorfuStore(runtime0);
+
+        setupMocks();
+    }
+
+    private void setupMocks() {
+        CompactorMetadataTables compactorMetadataTables = null;
+        try {
+            compactorMetadataTables = new CompactorMetadataTables(corfuStore);
+        } catch (Exception e) {
+            log.warn("Caught exception while opening MetadataTables: ", e);
+        }
+        distributedCheckpointer0 = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
+                .corfuRuntime(runtime0).cpRuntime(Optional.of(cpRuntime0)).persistedCacheRoot(Optional.empty())
+                .isClient(false).build(), corfuStore, compactorMetadataTables);
+        distributedCheckpointer1 = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
+                .corfuRuntime(runtime1).cpRuntime(Optional.of(cpRuntime1)).persistedCacheRoot(Optional.empty())
+                .isClient(false).build(), corfuStore, compactorMetadataTables);
+        distributedCheckpointer2 = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
+                .corfuRuntime(runtime2).cpRuntime(Optional.of(cpRuntime2)).persistedCacheRoot(Optional.empty())
+                .isClient(false).build(), corfuStore, compactorMetadataTables);
+
+        doAnswer(invocation -> {
+            distributedCheckpointer0.checkpointTables();
+            return null;
+        }).when(mockInvokeJvm0).invokeCheckpointing();
+        when(mockInvokeJvm0.isInvoked()).thenReturn(false).thenReturn(true);
+
+        doAnswer(invocation -> {
+            distributedCheckpointer1.checkpointTables();
+            return null;
+        }).when(mockInvokeJvm1).invokeCheckpointing();
+        when(mockInvokeJvm1.isInvoked()).thenReturn(false).thenReturn(true);
+
+        doAnswer(invocation -> {
+            distributedCheckpointer2.checkpointTables();
+            return null;
+        }).when(mockInvokeJvm2).invokeCheckpointing();
+        when(mockInvokeJvm2.isInvoked()).thenReturn(false).thenReturn(true);
     }
 
     private Table<StringKey, CheckpointingStatus, Message> openCompactionManagerTable(CorfuStore corfuStore) {
         try {
             return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
+                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                     StringKey.class,
                     CheckpointingStatus.class,
                     null,
@@ -177,7 +226,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     private Table<TableName, CheckpointingStatus, Message> openCheckpointStatusTable() {
         try {
             return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.CHECKPOINT_STATUS_TABLE_NAME,
+                    CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME,
                     TableName.class,
                     CheckpointingStatus.class,
                     null,
@@ -188,14 +237,14 @@ public class CompactorServiceTest extends AbstractViewTest {
         }
     }
 
-    private Table<TableName, CorfuCompactorManagement.ActiveCPStreamMsg, Message> openActiveCheckpointsTable() {
+    private Table<TableName, ActiveCPStreamMsg, Message> openActiveCheckpointsTable() {
         try {
             return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.ACTIVE_CHECKPOINTS_TABLE_NAME,
+                    CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME,
                     TableName.class,
-                    CorfuCompactorManagement.ActiveCPStreamMsg.class,
+                    ActiveCPStreamMsg.class,
                     null,
-                    TableOptions.fromProtoSchema(CorfuCompactorManagement.ActiveCPStreamMsg.class));
+                    TableOptions.fromProtoSchema(ActiveCPStreamMsg.class));
         } catch (Exception e) {
             log.error(OPEN_TABLES_EXCEPTION_MSG, e);
             return null;
@@ -205,7 +254,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     private Table<StringKey, RpcCommon.TokenMsg, Message> openCheckpointTable() {
         try {
             return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.CHECKPOINT,
+                    CompactorMetadataTables.CHECKPOINT,
                     StringKey.class,
                     RpcCommon.TokenMsg.class,
                     null,
@@ -220,11 +269,10 @@ public class CompactorServiceTest extends AbstractViewTest {
         openCompactionManagerTable(corfuStore);
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                    DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
-                    DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
+                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                    CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
             log.info("ManagerStatus: " + managerStatus);
             if (managerStatus.getStatus() == targetStatus) {
-                System.out.println("verifyManagerStatus: returning true");
                 return true;
             }
         }
@@ -235,13 +283,11 @@ public class CompactorServiceTest extends AbstractViewTest {
         Table<TableName, CheckpointingStatus, Message> cpStatusTable = openCheckpointStatusTable();
         int failed = 0;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            List<TableName> tableNames = new ArrayList<>(txn.keySet(cpStatusTable)
-                    .stream().collect(Collectors.toList()));
+            List<TableName> tableNames = new ArrayList<>(txn.keySet(cpStatusTable));
             for (TableName table : tableNames) {
                 CheckpointingStatus cpStatus = (CheckpointingStatus) txn.getRecord(
-                        DistributedCompactor.CHECKPOINT_STATUS_TABLE_NAME, table).getPayload();
+                        CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, table).getPayload();
                 log.info("{} : {} clientId: {}", table.getTableName(), cpStatus.getStatus(), cpStatus.getClientName());
-                clientIds.add(cpStatus.getClientName());
                 if (cpStatus.getStatus() != targetStatus) {
                     failed++;
                 }
@@ -254,7 +300,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         openCheckpointTable();
         RpcCommon.TokenMsg token;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            token = (RpcCommon.TokenMsg) txn.getRecord(DistributedCompactor.CHECKPOINT, targetRecord).getPayload();
+            token = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT, targetRecord).getPayload();
             txn.commit();
         }
         log.info("VerifyCheckpointTable Token: {}", token == null ? "null" : token.toString());
@@ -265,15 +311,13 @@ public class CompactorServiceTest extends AbstractViewTest {
     private boolean pollForFinishCheckpointing() {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                    DistributedCompactor.COMPACTION_MANAGER_TABLE_NAME,
-                    DistributedCompactor.COMPACTION_MANAGER_KEY).getPayload();
+                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                    CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
             txn.commit();
             if (managerStatus != null && (managerStatus.getStatus() == StatusType.COMPLETED
                     || managerStatus.getStatus() == StatusType.FAILED)) {
                 log.info("done pollForFinishCp: {}", managerStatus.getStatus());
                 return true;
-            } else if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED_ALL) {
-                startedAll = true;
             }
         }
         return false;
@@ -314,13 +358,10 @@ public class CompactorServiceTest extends AbstractViewTest {
     public void singleServerTest() {
         testSetup(logSizeLimitPercentageFull);
         SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);
-        MockCompactionTriggerPolicy mockCompactionTriggerPolicy1 = new MockCompactionTriggerPolicy();
 
-        CompactorService compactorService1 = new CompactorService(sc0, runtimeSingletonResource1,
-                new InvokeCheckpointingMock(runtime0, cpRuntime0), mockCompactionTriggerPolicy1);
+        CompactorService compactorService1 = new CompactorService(sc0, runtimeSingletonResource1, mockInvokeJvm0, dynamicTriggerPolicy0);
+        when(dynamicTriggerPolicy0.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(true).thenReturn(false);
         compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
-        compactorService1.setLivenessTimeout(LIVENESS_TIMEOUT);
-        mockCompactionTriggerPolicy1.setShouldTrigger(true);
 
         try {
             while (!pollForFinishCheckpointing()) {
@@ -332,28 +373,24 @@ public class CompactorServiceTest extends AbstractViewTest {
 
         assert verifyManagerStatus(StatusType.COMPLETED);
         assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
-        assert verifyCheckpointTable(DistributedCompactor.CHECKPOINT_KEY) > 0;
+        assert verifyCheckpointTable(CompactorMetadataTables.CHECKPOINT_KEY) > 0;
     }
 
     @Test
     public void multipleServerTest() {
         testSetup(logSizeLimitPercentageFull);
+
         SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);
-        MockCompactionTriggerPolicy mockCompactionTriggerPolicy1 = new MockCompactionTriggerPolicy();
         SingletonResource<CorfuRuntime> runtimeSingletonResource2 = SingletonResource.withInitial(() -> runtime1);
-        MockCompactionTriggerPolicy mockCompactionTriggerPolicy2 = new MockCompactionTriggerPolicy();
 
-        CompactorService compactorService1 = new CompactorService(sc0, runtimeSingletonResource1,
-                new InvokeCheckpointingMock(runtime0, cpRuntime0), mockCompactionTriggerPolicy1);
+        CompactorService compactorService1 = new CompactorService(sc0, runtimeSingletonResource1, mockInvokeJvm0, dynamicTriggerPolicy0);
+        when(dynamicTriggerPolicy0.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(true).thenReturn(false);
         compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
-        compactorService1.setLivenessTimeout(LIVENESS_TIMEOUT);
-        mockCompactionTriggerPolicy1.setShouldTrigger(true);
 
-        CompactorService compactorService2 = new CompactorService(sc1, runtimeSingletonResource2,
-                new InvokeCheckpointingMock(runtime1, cpRuntime1), mockCompactionTriggerPolicy2);
+        DynamicTriggerPolicy dynamicTriggerPolicy1 = mock(DynamicTriggerPolicy.class);
+        CompactorService compactorService2 = new CompactorService(sc1, runtimeSingletonResource2, mockInvokeJvm1, dynamicTriggerPolicy1);
+        when(dynamicTriggerPolicy1.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(false);
         compactorService2.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
-        compactorService2.setLivenessTimeout(LIVENESS_TIMEOUT);
-        mockCompactionTriggerPolicy2.setShouldTrigger(false);
 
         try {
             while (!pollForFinishCheckpointing()) {
@@ -365,35 +402,32 @@ public class CompactorServiceTest extends AbstractViewTest {
 
         assert verifyManagerStatus(StatusType.COMPLETED);
         assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
-        assert verifyCheckpointTable(DistributedCompactor.CHECKPOINT_KEY) > 0;
+        assert verifyCheckpointTable(CompactorMetadataTables.CHECKPOINT_KEY) > 0;
     }
 
     @Test
     public void leaderFailureTest() {
         testSetup(logSizeLimitPercentageFull);
+
         SingletonResource<CorfuRuntime> runtimeSingletonResource0 = SingletonResource.withInitial(() -> runtime0);
-        MockCompactionTriggerPolicy mockCompactionTriggerPolicy0 = new MockCompactionTriggerPolicy();
-        CompactorService compactorService0 = new CompactorService(sc0, runtimeSingletonResource0,
-                new InvokeCheckpointingMock(runtime0, cpRuntime0), mockCompactionTriggerPolicy0);
-        compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
-        compactorService0.setLivenessTimeout(LIVENESS_TIMEOUT);
-        mockCompactionTriggerPolicy0.setShouldTrigger(true);
+        CompactorService compactorService0 = new CompactorService(sc0, runtimeSingletonResource0, mockInvokeJvm0, dynamicTriggerPolicy0);
 
+        DynamicTriggerPolicy dynamicTriggerPolicy1 = mock(DynamicTriggerPolicy.class);
         SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime1);
-        MockCompactionTriggerPolicy mockCompactionTriggerPolicy1 = new MockCompactionTriggerPolicy();
-        CompactorService compactorService1 = new CompactorService(sc1, runtimeSingletonResource1,
-                new InvokeCheckpointingMock(runtime1, cpRuntime1), mockCompactionTriggerPolicy1);
-        compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
-        compactorService1.setLivenessTimeout(LIVENESS_TIMEOUT);
-        mockCompactionTriggerPolicy1.setShouldTrigger(false);
+        CompactorService compactorService1 = new CompactorService(sc1, runtimeSingletonResource1, mockInvokeJvm1, dynamicTriggerPolicy1);
 
+        DynamicTriggerPolicy dynamicTriggerPolicy2 = mock(DynamicTriggerPolicy.class);
         SingletonResource<CorfuRuntime> runtimeSingletonResource2 = SingletonResource.withInitial(() -> runtime2);
-        MockCompactionTriggerPolicy mockCompactionTriggerPolicy2 = new MockCompactionTriggerPolicy();
-        CompactorService compactorService2 = new CompactorService(sc2, runtimeSingletonResource2,
-                new InvokeCheckpointingMock(runtime2, cpRuntime2), mockCompactionTriggerPolicy2);
+        CompactorService compactorService2 = new CompactorService(sc2, runtimeSingletonResource2, mockInvokeJvm2, dynamicTriggerPolicy2);
+
+        when(dynamicTriggerPolicy0.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(true).thenReturn(false);
+        compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
+
+        when(dynamicTriggerPolicy1.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(false);
+        compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
+
+        when(dynamicTriggerPolicy2.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(false);
         compactorService2.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
-        compactorService2.setLivenessTimeout(LIVENESS_TIMEOUT);
-        mockCompactionTriggerPolicy2.setShouldTrigger(false);
 
         try {
             TimeUnit.MILLISECONDS.sleep(WAIT_TO_KILL);
@@ -409,35 +443,32 @@ public class CompactorServiceTest extends AbstractViewTest {
 
         assert verifyManagerStatus(StatusType.COMPLETED);
         assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
-        assert verifyCheckpointTable(DistributedCompactor.CHECKPOINT_KEY) > 0;
+        assert verifyCheckpointTable(CompactorMetadataTables.CHECKPOINT_KEY) > 0;
     }
 
     @Test
     public void nonLeaderFailureTest() {
         testSetup(logSizeLimitPercentageFull);
+
         SingletonResource<CorfuRuntime> runtimeSingletonResource0 = SingletonResource.withInitial(() -> runtime0);
-        MockCompactionTriggerPolicy mockCompactionTriggerPolicy0 = new MockCompactionTriggerPolicy();
-        CompactorService compactorService0 = new CompactorService(sc0, runtimeSingletonResource0,
-                new InvokeCheckpointingMock(runtime0, cpRuntime0), mockCompactionTriggerPolicy0);
-        compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
-        compactorService0.setLivenessTimeout(LIVENESS_TIMEOUT);
-        mockCompactionTriggerPolicy0.setShouldTrigger(true);
+        CompactorService compactorService0 = new CompactorService(sc0, runtimeSingletonResource0, mockInvokeJvm0, dynamicTriggerPolicy0);
 
+        DynamicTriggerPolicy dynamicTriggerPolicy1 = mock(DynamicTriggerPolicy.class);
         SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime1);
-        MockCompactionTriggerPolicy mockCompactionTriggerPolicy1 = new MockCompactionTriggerPolicy();
-        CompactorService compactorService1 = new CompactorService(sc1, runtimeSingletonResource1,
-                new InvokeCheckpointingMock(runtime1, cpRuntime1), mockCompactionTriggerPolicy1);
-        compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
-        compactorService1.setLivenessTimeout(LIVENESS_TIMEOUT);
-        mockCompactionTriggerPolicy1.setShouldTrigger(false);
+        CompactorService compactorService1 = new CompactorService(sc1, runtimeSingletonResource1, mockInvokeJvm1, dynamicTriggerPolicy1);
 
+        DynamicTriggerPolicy dynamicTriggerPolicy2 = mock(DynamicTriggerPolicy.class);
         SingletonResource<CorfuRuntime> runtimeSingletonResource2 = SingletonResource.withInitial(() -> runtime2);
-        MockCompactionTriggerPolicy mockCompactionTriggerPolicy2 = new MockCompactionTriggerPolicy();
-        CompactorService compactorService2 = new CompactorService(sc2, runtimeSingletonResource2,
-                new InvokeCheckpointingMock(runtime2, cpRuntime2), mockCompactionTriggerPolicy2);
+        CompactorService compactorService2 = new CompactorService(sc2, runtimeSingletonResource2, mockInvokeJvm2, dynamicTriggerPolicy2);
+
+        when(dynamicTriggerPolicy0.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(true).thenReturn(false);
+        compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
+
+        when(dynamicTriggerPolicy1.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(false);
+        compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
+
+        when(dynamicTriggerPolicy2.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(false);
         compactorService2.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
-        compactorService2.setLivenessTimeout(LIVENESS_TIMEOUT);
-        mockCompactionTriggerPolicy2.setShouldTrigger(false);
 
         try {
             TimeUnit.MILLISECONDS.sleep(WAIT_TO_KILL);
@@ -453,91 +484,21 @@ public class CompactorServiceTest extends AbstractViewTest {
 
         assert verifyManagerStatus(StatusType.COMPLETED);
         assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
-        assert verifyCheckpointTable(DistributedCompactor.CHECKPOINT_KEY) > 0;
-    }
-
-    @Test
-    public void clientsCheckpointing() {
-        testSetup(logSizeLimitPercentageFull);
-        runtime2.getParameters().setCheckpointTriggerFreqMillis(COMPACTOR_SERVICE_INTERVAL);
-        DistributedClientCheckpointer distributedClientCheckpointer0 = new DistributedClientCheckpointer(runtime2);
-
-        runtime1.getParameters().setCheckpointTriggerFreqMillis(COMPACTOR_SERVICE_INTERVAL);
-        DistributedClientCheckpointer distributedClientCheckpointer1 = new DistributedClientCheckpointer(runtime1);
-
-        SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);
-        MockCompactionTriggerPolicy mockCompactionTriggerPolicy1 = new MockCompactionTriggerPolicy();
-
-        CompactorService compactorService1 = new CompactorService(sc0, runtimeSingletonResource1,
-                new InvokeCheckpointingMock(runtime0, cpRuntime0), mockCompactionTriggerPolicy1);
-        compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
-        compactorService1.setLivenessTimeout(LIVENESS_TIMEOUT);
-        mockCompactionTriggerPolicy1.setShouldTrigger(true);
-
-        try {
-            while (!pollForFinishCheckpointing()) {
-                TimeUnit.MILLISECONDS.sleep(COMPACTOR_SERVICE_INTERVAL);
-                distributedClientCheckpointer0.shutdown();
-                distributedClientCheckpointer1.shutdown();
-            }
-        } catch (InterruptedException e) {
-            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
-        }
-
-        assert verifyManagerStatus(StatusType.COMPLETED);
-        assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
-        assert verifyCheckpointTable(DistributedCompactor.CHECKPOINT_KEY) > 0;
-        assert !startedAll;
-    }
-
-    @Test
-    public void serverCheckpointsUnopenedTables() {
-        testSetup(logSizeLimitPercentageFull);
-        openStream(STREAM_NAME_PREFIX);
-
-        runtime2.getParameters().setCheckpointTriggerFreqMillis(COMPACTOR_SERVICE_INTERVAL);
-        DistributedClientCheckpointer distributedClientCheckpointer = new DistributedClientCheckpointer(runtime2);
-
-        SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);
-        MockCompactionTriggerPolicy mockCompactionTriggerPolicy1 = new MockCompactionTriggerPolicy();
-
-        CompactorService compactorService1 = new CompactorService(sc0, runtimeSingletonResource1,
-                new InvokeCheckpointingMock(runtime0, cpRuntime0), mockCompactionTriggerPolicy1);
-        compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
-        compactorService1.setLivenessTimeout(LIVENESS_TIMEOUT);
-        mockCompactionTriggerPolicy1.setShouldTrigger(true);
-
-        try {
-            while (!pollForFinishCheckpointing()) {
-                TimeUnit.MILLISECONDS.sleep(COMPACTOR_SERVICE_INTERVAL);
-                distributedClientCheckpointer.shutdown();
-            }
-        } catch (InterruptedException e) {
-            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
-        }
-
-        assert verifyManagerStatus(StatusType.COMPLETED);
-        assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
-        assert verifyCheckpointTable(DistributedCompactor.CHECKPOINT_KEY) > 0;
-        //asserts that the server invoked default checkpointing
-        assert startedAll;
+        assert verifyCheckpointTable(CompactorMetadataTables.CHECKPOINT_KEY) > 0;
     }
 
     @Test
     public void checkpointFailureTest() {
         testSetup(logSizeLimitPercentageFull);
         SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);
-        MockCompactionTriggerPolicy mockCompactionTriggerPolicy1 = new MockCompactionTriggerPolicy();
 
-        CompactorService compactorService1 = new CompactorService(sc0, runtimeSingletonResource1,
-                new InvokeCheckpointingMock(runtime0, cpRuntime0), mockCompactionTriggerPolicy1);
+        CompactorService compactorService1 = new CompactorService(sc0, runtimeSingletonResource1, mockInvokeJvm0, dynamicTriggerPolicy0);
+        when(dynamicTriggerPolicy0.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(true).thenReturn(false);
         compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
-        compactorService1.setLivenessTimeout(LIVENESS_TIMEOUT);
-        mockCompactionTriggerPolicy1.setShouldTrigger(true);
 
         try {
-            TimeUnit.MILLISECONDS.sleep(LIVENESS_TIMEOUT.toMillis());
-            Table<TableName, CorfuCompactorManagement.ActiveCPStreamMsg, Message> activeCheckpointTable = openActiveCheckpointsTable();
+            TimeUnit.MILLISECONDS.sleep(LIVENESS_TIMEOUT.toMillis() / 2);
+            Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointTable = openActiveCheckpointsTable();
             Table<TableName, CheckpointingStatus, Message> checkpointStatusTable = openCheckpointStatusTable();
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                 TableName table = TableName.newBuilder().setNamespace(CORFU_SYSTEM_NAMESPACE).setTableName(STREAM_NAME_PREFIX).build();
@@ -546,9 +507,10 @@ public class CompactorServiceTest extends AbstractViewTest {
                         CheckpointingStatus.newBuilder().setStatusValue(StatusType.STARTED_VALUE).build(), null);
                 txn.putRecord(activeCheckpointTable,
                         table,
-                        CorfuCompactorManagement.ActiveCPStreamMsg.getDefaultInstance(),
+                        ActiveCPStreamMsg.getDefaultInstance(),
                         null);
                 txn.commit();
+                log.info("Added stream table*****");
             }
 
             while (!pollForFinishCheckpointing()) {
@@ -559,23 +521,16 @@ public class CompactorServiceTest extends AbstractViewTest {
         }
 
         assert verifyManagerStatus(StatusType.FAILED);
-        assert verifyCheckpointStatusTable(StatusType.IDLE, 1);
-        //asserts that the server invoked checkpointing
-        assert !startedAll;
+        assert verifyCheckpointStatusTable(StatusType.COMPLETED, 1);
     }
 
     @Test
     public void quotaExceededTest() {
         testSetup(logSizeLimitPercentageLow);
         SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);
-        MockCompactionTriggerPolicy mockCompactionTriggerPolicy1 = new MockCompactionTriggerPolicy();
-
-        CompactorService compactorService1 = new CompactorService(sc0, runtimeSingletonResource1,
-                new InvokeCheckpointingMock(runtime0, cpRuntime0), mockCompactionTriggerPolicy1);
-
-        compactorService1.setLivenessTimeout(LIVENESS_TIMEOUT);
-        mockCompactionTriggerPolicy1.setShouldTrigger(true);
-        compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
+        CompactorService compactorService0 = new CompactorService(sc0, runtimeSingletonResource1, mockInvokeJvm0, dynamicTriggerPolicy0);
+        when(dynamicTriggerPolicy0.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(true).thenReturn(false);
+        compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
         openStream(STREAM_NAME_PREFIX);
         Exception ex = assertThrows(RuntimeException.class,
@@ -592,30 +547,24 @@ public class CompactorServiceTest extends AbstractViewTest {
 
         assert verifyManagerStatus(StatusType.COMPLETED);
         assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
-        assert verifyCheckpointTable(DistributedCompactor.CHECKPOINT_KEY) > 0;
+        assert verifyCheckpointTable(CompactorMetadataTables.CHECKPOINT_KEY) > 0;
     }
 
     @Test
     public void upgradeTest() {
         testSetup(logSizeLimitPercentageFull);
         SingletonResource<CorfuRuntime> runtimeSingletonResource0 = SingletonResource.withInitial(() -> runtime0);
-        DynamicTriggerPolicy dynamicTriggerPolicy0 = new DynamicTriggerPolicy();
-        CompactorService compactorService0 = new CompactorService(sc0, runtimeSingletonResource0,
-                new InvokeCheckpointingMock(runtime0, cpRuntime0), dynamicTriggerPolicy0);
+        CompactorService compactorService0 = new CompactorService(sc0, runtimeSingletonResource0, mockInvokeJvm0, new DynamicTriggerPolicy());
         compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
-        compactorService0.setLivenessTimeout(LIVENESS_TIMEOUT);
 
         SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime1);
-        DynamicTriggerPolicy dynamicTriggerPolicy1 = new DynamicTriggerPolicy();
-        CompactorService compactorService1 = new CompactorService(sc1, runtimeSingletonResource1,
-                new InvokeCheckpointingMock(runtime1, cpRuntime1), dynamicTriggerPolicy1);
+        CompactorService compactorService1 = new CompactorService(sc1, runtimeSingletonResource1, mockInvokeJvm1, new DynamicTriggerPolicy());
         compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
-        compactorService1.setLivenessTimeout(LIVENESS_TIMEOUT);
 
         Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable = openCheckpointTable();
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             txn.putRecord(checkpointTable,
-                    DistributedCompactor.UPGRADE_KEY,
+                    CompactorMetadataTables.UPGRADE_KEY,
                     RpcCommon.TokenMsg.getDefaultInstance(),
                     null);
             txn.commit();
@@ -629,13 +578,12 @@ public class CompactorServiceTest extends AbstractViewTest {
             log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
         }
 
-        long trimSequence = verifyCheckpointTable(DistributedCompactor.CHECKPOINT_KEY);
+        long trimSequence = verifyCheckpointTable(CompactorMetadataTables.CHECKPOINT_KEY);
 
         assert verifyManagerStatus(StatusType.COMPLETED);
         assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
         assert trimSequence > 0;
-        assert verifyCheckpointTable(DistributedCompactor.UPGRADE_KEY) == 0;
+        assert verifyCheckpointTable(CompactorMetadataTables.UPGRADE_KEY) == 0;
         assert runtimeSingletonResource0.get().getAddressSpaceView().getTrimMark().getSequence() == trimSequence + 1;
-        assert startedAll;
     }
 }
