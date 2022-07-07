@@ -1,6 +1,5 @@
 package org.corfudb.security.tls;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -93,10 +92,7 @@ public class ReloadableTrustManager implements X509TrustManager {
         @NonNull
         private final TrustStoreConfig trustStoreConfig;
 
-        private final ExecutorService executor = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
-                .setDaemon(true)
-                .setNameFormat("TrustStore-watcher-%d")
-                .build());
+        private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
         private CompletableFuture<TrustManagerContext> trustManagerAsync;
 
