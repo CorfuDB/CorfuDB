@@ -1,8 +1,6 @@
 package org.corfudb.infrastructure;
 
-import lombok.Getter;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.DistributedCompactor;
+import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.RpcCommon;
@@ -17,15 +15,12 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
     /**
      * What time did the previous cycle start
      */
-    @Getter
-    private long lastCompactionCycleStartTS = 0;
-
-    private CorfuRuntime corfuRuntime;
-    private Logger syslog;
+    private long lastCompactionCycleStartTS;
+    private final Logger syslog;
 
     public DynamicTriggerPolicy() {
-        lastCompactionCycleStartTS = System.currentTimeMillis();
-        syslog = LoggerFactory.getLogger("syslog");
+        this.lastCompactionCycleStartTS = System.currentTimeMillis();
+        this.syslog = LoggerFactory.getLogger("syslog");
     }
 
     @Override
@@ -33,13 +28,14 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
         this.lastCompactionCycleStartTS = System.currentTimeMillis();
     }
 
-    private boolean shouldForceTrigger() {
-        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
+    private boolean shouldForceTrigger(CorfuStore corfuStore) {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            RpcCommon.TokenMsg upgradeToken = (RpcCommon.TokenMsg) txn.getRecord(DistributedCompactor.CHECKPOINT,
-                    DistributedCompactor.UPGRADE_KEY).getPayload();
+            RpcCommon.TokenMsg upgradeToken = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT,
+                    CompactorMetadataTables.UPGRADE_KEY).getPayload();
+            RpcCommon.TokenMsg instantTrigger = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT,
+                    CompactorMetadataTables.INSTANT_TIGGER_KEY).getPayload();
             txn.commit();
-            if (upgradeToken != null) {
+            if (upgradeToken != null || instantTrigger != null) {
                 return true;
             }
         }
@@ -47,33 +43,23 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
     }
 
     /**
-     * 1. if ((currentTime - lastCompactionCycleStart) > minTimeBetweenCompactionStarts)
-     * if (lastAddressSpaceSizeOnTrim == 0)
-     * return true // no record of previous trim & safe trim period elapsed
-     * ... once trim happens, we record the lastAddressSpaceSizeOnTrim
-     * ... once checkpoint starts we record the lastCompactionCycleStartTS
-     * 2. if ((currentTime - lastCompactionCycleStart) > maxTimeBetweenCompactionStarts)
+     * Returns true if it has been interval time since the previous trigger or
+     * if force trigger condition is met
      *
-     * @param interval - trigger interval in ms
+     * @param interval   - trigger interval in ms
+     * @param corfuStore - CorfuStore of the current runtime
      * @return true if compaction cycle should run, false otherwise
      */
     @Override
-    public boolean shouldTrigger(long interval) {
+    public boolean shouldTrigger(long interval, CorfuStore corfuStore) {
 
-        if (shouldForceTrigger()) {
+        if (shouldForceTrigger(corfuStore)) {
             syslog.info("Force triggering compaction");
             return true;
         }
 
         final long currentTime = System.currentTimeMillis();
         final long timeSinceLastCycleMillis = currentTime - lastCompactionCycleStartTS;
-
-        if (timeSinceLastCycleMillis > interval * 2) {
-            syslog.info("DynamicTriggerPolicy: Trigger as elapsedTime {} > maxTimeToChkpt {}",
-                    TimeUnit.MILLISECONDS.toMinutes(timeSinceLastCycleMillis),
-                    TimeUnit.MILLISECONDS.toMinutes(interval * 2));
-            return true;
-        }
 
         if (timeSinceLastCycleMillis > interval) {
             syslog.info("DynamicTriggerPolicy: Trigger as elapsedTime {} > safeTrimPeriod {}",
@@ -83,10 +69,5 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
         }
 
         return false;
-    }
-
-    @Override
-    public void setCorfuRuntime(CorfuRuntime corfuRuntime) {
-        this.corfuRuntime = corfuRuntime;
     }
 }

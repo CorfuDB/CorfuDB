@@ -1,22 +1,20 @@
 package org.corfudb.infrastructure;
 
-import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.DistributedCheckpointer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 public class InvokeCheckpointingJvm implements InvokeCheckpointing {
 
-    private static final long CONN_RETRY_DELAY_MILLISEC = 500;
     private static final int MAX_COMPACTION_RETRIES = 8;
     private final ServerContext serverContext;
     private volatile Process checkpointerProcess;
-    private Logger syslog;
-    private boolean isInvoked;
+    private final Logger syslog;
+    private volatile boolean isInvoked;
 
     public InvokeCheckpointingJvm(ServerContext serverContext) {
         this.serverContext = serverContext;
@@ -47,28 +45,14 @@ public class InvokeCheckpointingJvm implements InvokeCheckpointing {
                 pb.inheritIO();
                 this.checkpointerProcess = pb.start();
                 this.isInvoked = true;
-                syslog.info("Triggered the compaction jvm");
-                break;
+                syslog.info("Triggered compactor jvm");
+                return;
             } catch (RuntimeException re) {
-                syslog.trace("Encountered an exception on attempt {}/{}.",
-                        i, MAX_COMPACTION_RETRIES, re);
-
-                if (i >= MAX_COMPACTION_RETRIES) {
-                    syslog.error("Retry exhausted.", re);
+                if (DistributedCheckpointer.isCriticalRuntimeException(re, i, MAX_COMPACTION_RETRIES)) {
                     break;
                 }
-
-                if (re instanceof NetworkException || re.getCause() instanceof TimeoutException) {
-                    try {
-                        TimeUnit.MILLISECONDS.sleep(CONN_RETRY_DELAY_MILLISEC);
-                    } catch (InterruptedException e) {
-                        syslog.error("Interrupted in network retry delay sleep");
-                        break;
-                    }
-                }
-            } catch (Throwable t) {
-                syslog.error("Encountered unexpected exception", t);
-                syslog.error("StackTrace: {}", t.getStackTrace());
+            } catch (IOException io) {
+                syslog.error("Encountered IOException due to : {}. StackTrace: {}", io.getMessage(), io.getStackTrace());
             }
         }
     }

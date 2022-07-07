@@ -3,21 +3,25 @@ package org.corfudb.compactor;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
+import org.corfudb.runtime.CheckpointerBuilder;
+import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.DistributedCompactor;
+import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
+import org.corfudb.runtime.DistributedCheckpointer;
+import org.corfudb.runtime.DistributedCheckpointerHelper;
+import org.corfudb.runtime.ServerTriggeredCheckpointer;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
-import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.RpcCommon.TokenMsg;
 
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
- * Invokes the startCheckpointing() method of DistributedCompactor to checkpoint remaining tables that weren't
+ * Invokes the startCheckpointing() method of DistributedCompactor to checkpoint tables that weren't
  * checkpointed by any of the clients
  */
 @Slf4j
@@ -25,12 +29,13 @@ public class CorfuStoreCompactorMain {
 
     private final CorfuStoreCompactorConfig config;
     private final CorfuStore corfuStore;
-    private final DistributedCompactor distributedCompactor;
+    private final DistributedCheckpointer distributedCheckpointer;
+    private final DistributedCheckpointerHelper distributedCheckpointerHelper;
 
-    private Table<StringKey, TokenMsg, Message> checkpointTable;
+    private final Table<StringKey, TokenMsg, Message> checkpointTable;
     private int retryCheckpointing = 1;
 
-    public CorfuStoreCompactorMain(String[] args) {
+    public CorfuStoreCompactorMain(String[] args) throws Exception {
         this.config = new CorfuStoreCompactorConfig(args);
 
         CorfuRuntime cpRuntime = (CorfuRuntime.fromParameters(
@@ -38,36 +43,35 @@ public class CorfuStoreCompactorMain {
         CorfuRuntime corfuRuntime = (CorfuRuntime.fromParameters(
                 config.getParams())).parseConfigurationString(config.getNodeLocator().toEndpointUrl()).connect();
         corfuStore = new CorfuStore(corfuRuntime);
-        distributedCompactor = new DistributedCompactor(corfuRuntime, cpRuntime, config.getPersistedCacheRoot());
-        try {
-            this.checkpointTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    DistributedCompactor.CHECKPOINT,
-                    StringKey.class,
-                    TokenMsg.class,
-                    null,
-                    TableOptions.fromProtoSchema(TokenMsg.class));
 
-        } catch (Exception e) {
-            log.error("Caught an exception while opening Compaction management tables ", e);
-        }
+        CompactorMetadataTables compactorMetadataTables = new CompactorMetadataTables(corfuStore);
+        this.checkpointTable = compactorMetadataTables.getCheckpointTable();
+
+        this.distributedCheckpointer = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
+                .corfuRuntime(corfuRuntime)
+                .cpRuntime(Optional.of(cpRuntime))
+                .persistedCacheRoot(config.getPersistedCacheRoot())
+                .isClient(false)
+                .build(), corfuStore, compactorMetadataTables);
+        this.distributedCheckpointerHelper = new DistributedCheckpointerHelper(corfuStore);
     }
 
     /**
-     * Entry point to invoke Client checkpointing by the CorfuServer
+     * Entry point to invoke checkpointing
      *
      * @param args command line argument strings
      */
     public static void main(String[] args) {
         try {
             CorfuStoreCompactorMain corfuCompactorMain = new CorfuStoreCompactorMain(args);
-            corfuCompactorMain.startCompaction();
-        } catch (Throwable t) {
-            log.error("Error in CorfuStoreComactor execution, ", t);
-            throw t;
+            corfuCompactorMain.startCheckpointing();
+        } catch (Exception e) {
+            log.error("CorfuStoreCompactorMain crashed with error: {}, Exception: ",
+                    CorfuStoreCompactorConfig.CORFU_LOG_CHECKPOINT_ERROR, e);
         }
     }
 
-    private void startCompaction() {
+    private void startCheckpointing() {
         Thread.currentThread().setName("CorfuStore-" + config.getNodeLocator().getPort() + "-chkpter");
         if (config.isUpgrade()) {
             upgrade();
@@ -77,10 +81,8 @@ public class CorfuStoreCompactorMain {
 
     private void upgrade() {
         retryCheckpointing = CorfuStoreCompactorConfig.CHECKPOINT_RETRY_UPGRADE;
-
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            txn.putRecord(checkpointTable, DistributedCompactor.UPGRADE_KEY, TokenMsg.getDefaultInstance(),
-                    null);
+            txn.putRecord(checkpointTable, CompactorMetadataTables.UPGRADE_KEY, TokenMsg.getDefaultInstance(), null);
             txn.commit();
         } catch (Exception e) {
             log.warn("Unable to write UpgradeKey to checkpoint table, ", e);
@@ -90,14 +92,16 @@ public class CorfuStoreCompactorMain {
     private void checkpoint() {
         try {
             for (int i = 0; i < retryCheckpointing; i++) {
-                //startCheckpointing() returns the num of tables checkpointed
-                if (distributedCompactor.startCheckpointing() > 0) {
+                if (distributedCheckpointerHelper.hasCompactionStarted()) {
+                    distributedCheckpointer.checkpointTables();
                     break;
                 }
                 TimeUnit.SECONDS.sleep(1);
             }
-        } catch (Throwable throwable) {
-            log.error("CorfuStoreCompactorMain crashed with error:", CorfuStoreCompactorConfig.CORFU_LOG_CHECKPOINT_ERROR, throwable);
+        } catch (InterruptedException ie) {
+            log.error("Sleep interrupted with exception: ", ie);
+        } catch (Exception e) {
+            log.error("Exception during checkpointing: {}, StackTrace: {}", e.getMessage(), e.getStackTrace());
         }
     }
 }
