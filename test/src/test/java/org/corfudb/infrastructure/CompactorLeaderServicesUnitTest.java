@@ -2,6 +2,8 @@ package org.corfudb.infrastructure;
 
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CompactorMetadataTables;
+import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuRuntime;
@@ -19,6 +21,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Matchers;
 
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
@@ -48,7 +51,7 @@ public class CompactorLeaderServicesUnitTest {
             .setNamespace(NAMESPACE).setTableName(TABLE_NAME + "1").build();
 
     private CompactorLeaderServices compactorLeaderServices;
-    private LivenessValidator livenessValidator = mock(LivenessValidator.class);
+    private final LivenessValidator livenessValidator = mock(LivenessValidator.class);
 
     @Before
     public void setup() throws Exception {
@@ -115,11 +118,8 @@ public class CompactorLeaderServicesUnitTest {
 
     @Test
     public void finishCompactionCycleTest() {
-        Set<CorfuStoreMetadata.TableName> set = new HashSet<>();
-        set.add(tableName);
-        set.add(tableName2);
+        Set<CorfuStoreMetadata.TableName> set = new HashSet<>(Arrays.asList(tableName, tableName2));
         when(txn.keySet(any(Table.class))).thenReturn(set);
-        ArgumentCaptor<CheckpointingStatus> captor = ArgumentCaptor.forClass(CheckpointingStatus.class);
 
         when(corfuStoreEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
@@ -132,9 +132,25 @@ public class CompactorLeaderServicesUnitTest {
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build());
         compactorLeaderServices.finishCompactionCycle();
 
-        verify(txn, times(2)).putRecord(Matchers.any(), Matchers.any(),
-                captor.capture(), Matchers.any());
-        Assert.assertEquals(StatusType.COMPLETED, captor.getAllValues().get(0).getStatus());
-        Assert.assertEquals(StatusType.FAILED, captor.getValue().getStatus());
+        when(corfuStoreEntry.getPayload())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.COMPLETED).build())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.COMPLETED).build())
+                .thenReturn(RpcCommon.TokenMsg.getDefaultInstance())
+                .thenReturn(null);
+        compactorLeaderServices.finishCompactionCycle();
+
+        final int numTimePutInvoked = 3;
+        ArgumentCaptor<CheckpointingStatus> putCaptor = ArgumentCaptor.forClass(CheckpointingStatus.class);
+        verify(txn, times(numTimePutInvoked)).putRecord(Matchers.any(), Matchers.any(),
+                putCaptor.capture(), Matchers.any());
+
+        ArgumentCaptor<StringKey> deleteCaptor = ArgumentCaptor.forClass(StringKey.class);
+        verify(txn, times(2)).delete(Matchers.anyString(), deleteCaptor.capture());
+
+        Assert.assertEquals(StatusType.COMPLETED, putCaptor.getAllValues().get(0).getStatus());
+        Assert.assertEquals(StatusType.FAILED, putCaptor.getAllValues().get(1).getStatus());
+        Assert.assertEquals(CompactorMetadataTables.INSTANT_TIGGER_KEY, deleteCaptor.getAllValues().get(0));
+        Assert.assertEquals(CompactorMetadataTables.UPGRADE_KEY, deleteCaptor.getValue());
     }
 }

@@ -66,7 +66,8 @@ public class CorfuStoreCompactorMain {
             CorfuStoreCompactorMain corfuCompactorMain = new CorfuStoreCompactorMain(args);
             corfuCompactorMain.startCheckpointing();
         } catch (Exception e) {
-            log.error("Exception during checkpointing: {}, StackTrace: {}", e.getMessage(), e.getStackTrace());
+            log.error("CorfuStoreCompactorMain crashed with error: {}, Exception: ",
+                    CorfuStoreCompactorConfig.CORFU_LOG_CHECKPOINT_ERROR, e);
         }
     }
 
@@ -80,7 +81,6 @@ public class CorfuStoreCompactorMain {
 
     private void upgrade() {
         retryCheckpointing = CorfuStoreCompactorConfig.CHECKPOINT_RETRY_UPGRADE;
-
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             txn.putRecord(checkpointTable, CompactorMetadataTables.UPGRADE_KEY, TokenMsg.getDefaultInstance(), null);
             txn.commit();
@@ -101,8 +101,7 @@ public class CorfuStoreCompactorMain {
         } catch (InterruptedException ie) {
             log.error("Sleep interrupted with exception: ", ie);
         } catch (Exception e) {
-            log.error("CorfuStoreCompactorMain crashed with error: {}, Exception: ",
-                    CorfuStoreCompactorConfig.CORFU_LOG_CHECKPOINT_ERROR, e);
+            log.error("Exception during checkpointing: {}, StackTrace: {}", e.getMessage(), e.getStackTrace());
         }
     }
 }

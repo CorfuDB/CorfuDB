@@ -28,7 +28,7 @@ public class CompactorMetadataTables {
     public static final String CHECKPOINT = "checkpoint";
 
     public static final StringKey COMPACTION_MANAGER_KEY = StringKey.newBuilder().setKey("CompactionManagerKey").build();
-    public static final StringKey CHECKPOINT_KEY = StringKey.newBuilder().setKey("minCheckpointToken").build();
+    public static final StringKey CHECKPOINT_KEY = StringKey.newBuilder().setKey("MinCheckpointToken").build();
     public static final StringKey UPGRADE_KEY = StringKey.newBuilder().setKey("UpgradeKey").build();
     public static final StringKey INSTANT_TIGGER_KEY = StringKey.newBuilder().setKey("InstantTrigger").build();
 

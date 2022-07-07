@@ -44,7 +44,8 @@ public class DistributedCheckpointerUnitTest {
     private final CorfuRuntime corfuRuntime = mock(CorfuRuntime.class);
     private final CorfuStore corfuStore = mock(CorfuStore.class);
     private final TxnContext txn = mock(TxnContext.class);
-    private final CorfuStoreEntry corfuStoreEntry = mock(CorfuStoreEntry.class);
+    private final CorfuStoreEntry<? extends Message, ? extends Message, ? extends Message> corfuStoreEntry =
+            (CorfuStoreEntry<? extends Message, ? extends Message, ? extends Message>) mock(CorfuStoreEntry.class);
     private final CheckpointWriter<StreamingMap> cpw = (CheckpointWriter<StreamingMap>) mock(CheckpointWriter.class);
 
     private static final String NAMESPACE = "TestNamespace";
@@ -80,11 +81,11 @@ public class DistributedCheckpointerUnitTest {
 
     @Test
     public void unableToLockTableTest() {
-        when(corfuStoreEntry.getPayload())
+        when((CheckpointingStatus) corfuStoreEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.COMPLETED).build());
         assert !distributedCheckpointer.tryCheckpointTable(tableName, t -> cpw);
 
-        when(corfuStoreEntry.getPayload())
+        when((CheckpointingStatus) corfuStoreEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build());
         assert distributedCheckpointer.tryCheckpointTable(tableName, t -> cpw);
@@ -101,7 +102,7 @@ public class DistributedCheckpointerUnitTest {
 
     @Test
     public void appendCheckpointTest() {
-        when(corfuStoreEntry.getPayload())
+        when((CheckpointingStatus) corfuStoreEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build());
 
@@ -109,7 +110,7 @@ public class DistributedCheckpointerUnitTest {
         when(cpw.appendCheckpoint(any(Optional.class))).thenReturn(new Token(0, 0));
         assert distributedCheckpointer.tryCheckpointTable(tableName, t -> cpw);
 
-        when(corfuStoreEntry.getPayload())
+        when((CheckpointingStatus) corfuStoreEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build());
         //When appendCheckpoint throws an exception
@@ -117,7 +118,7 @@ public class DistributedCheckpointerUnitTest {
         when(cpwThrowException.appendCheckpoint(any(Optional.class))).thenThrow(new IllegalStateException());
         assert distributedCheckpointer.tryCheckpointTable(tableName, t -> cpwThrowException);
 
-        when(corfuStoreEntry.getPayload())
+        when((CheckpointingStatus) corfuStoreEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build());
         //When appendCheckpoint throws NetworkException and later succeeds
@@ -148,20 +149,20 @@ public class DistributedCheckpointerUnitTest {
     public void unlockTableAfterCheckpointTest() {
         when(cpw.appendCheckpoint(any(Optional.class))).thenReturn(new Token(0, 0));
         when(txn.commit()).thenReturn(Timestamp.getDefaultInstance());
-        when(corfuStoreEntry.getPayload())
+        when((CheckpointingStatus) corfuStoreEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build());
         assert !distributedCheckpointer.tryCheckpointTable(tableName, t -> cpw);
 
-        when(corfuStoreEntry.getPayload())
+        when((CheckpointingStatus) corfuStoreEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build());
         assert !distributedCheckpointer.tryCheckpointTable(tableName, t -> cpw);
 
-        when(corfuStoreEntry.getPayload())
+        when((CheckpointingStatus) corfuStoreEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
@@ -170,14 +171,14 @@ public class DistributedCheckpointerUnitTest {
                 .thenReturn(Timestamp.getDefaultInstance());
         assert distributedCheckpointer.tryCheckpointTable(tableName, t -> cpw);
 
-        when(corfuStoreEntry.getPayload())
+        when((CheckpointingStatus) corfuStoreEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).setEpoch(1).build());
         //Fail on different epoch values
         assert !distributedCheckpointer.tryCheckpointTable(tableName, t -> cpw);
 
-        when(corfuStoreEntry.getPayload())
+        when((CheckpointingStatus) corfuStoreEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());

@@ -38,7 +38,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -234,8 +233,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
 
         int failed = 0;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            List<TableName> tableNames = new ArrayList<>(txn.keySet(cpStatusTable)
-                    .stream().collect(Collectors.toList()));
+            List<TableName> tableNames = new ArrayList<>(txn.keySet(cpStatusTable));
             for (TableName table : tableNames) {
                 CheckpointingStatus cpStatus = (CheckpointingStatus) txn.getRecord(
                         CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, table).getPayload();
@@ -394,8 +392,6 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
 
     @Test
     public void validateLivenessLeaderTest() throws Exception {
-        //make some client to start cp
-        //verifyCheckpointStatusTable
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0,
                 corfuStore, livenessValidator);
         compactorLeaderServices1.initCompactionCycle();

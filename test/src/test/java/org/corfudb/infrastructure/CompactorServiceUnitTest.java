@@ -37,7 +37,8 @@ public class CompactorServiceUnitTest {
     private final InvokeCheckpointingJvm invokeCheckpointingJvm = mock(InvokeCheckpointingJvm.class);
     private final CorfuStore corfuStore = mock(CorfuStore.class);
     private final TxnContext txn = mock(TxnContext.class);
-    private final CorfuStoreEntry corfuStoreEntry = mock(CorfuStoreEntry.class);
+    private final CorfuStoreEntry<? extends Message, ? extends Message, ? extends Message> corfuStoreEntry =
+            (CorfuStoreEntry<? extends Message, ? extends Message, ? extends Message>) mock(CorfuStoreEntry.class);
     private final DynamicTriggerPolicy dynamicTriggerPolicy = mock(DynamicTriggerPolicy.class);
     private final CompactorLeaderServices leaderServices = mock(CompactorLeaderServices.class);
 
@@ -79,7 +80,8 @@ public class CompactorServiceUnitTest {
         //isLeader becomes false
         when(mockLayout.getPrimarySequencer()).thenReturn(NODE_ENDPOINT + NODE_0);
 
-        when(corfuStoreEntry.getPayload()).thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build())
+        when((CheckpointingStatus) corfuStoreEntry.getPayload())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
         when(invokeCheckpointingJvm.isRunning()).thenReturn(false).thenReturn(true);
         when(invokeCheckpointingJvm.isInvoked()).thenReturn(false).thenReturn(true);
@@ -103,7 +105,8 @@ public class CompactorServiceUnitTest {
                 .thenReturn(NODE_ENDPOINT)
                 .thenReturn(NODE_ENDPOINT + NODE_0);
 
-        when(corfuStoreEntry.getPayload()).thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build())
+        when((CheckpointingStatus) corfuStoreEntry.getPayload())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
         when(dynamicTriggerPolicy.shouldTrigger(Matchers.anyLong(), Matchers.any(CorfuStore.class))).thenReturn(true).thenReturn(false);
         doNothing().when(leaderServices).validateLiveness();

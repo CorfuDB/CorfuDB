@@ -29,14 +29,11 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
@@ -74,7 +71,6 @@ public class CompactorServiceTest extends AbstractViewTest {
 
     private CorfuStore corfuStore = null;
 
-    private final Set<String> clientIds = new HashSet<>();
     private final Map<String, Table<StringKey, StringKey, Message>> openedStreams = new HashMap<>();
 
     private static final String STREAM_NAME_PREFIX = "StreamName";
@@ -287,13 +283,11 @@ public class CompactorServiceTest extends AbstractViewTest {
         Table<TableName, CheckpointingStatus, Message> cpStatusTable = openCheckpointStatusTable();
         int failed = 0;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            List<TableName> tableNames = new ArrayList<>(txn.keySet(cpStatusTable)
-                    .stream().collect(Collectors.toList()));
+            List<TableName> tableNames = new ArrayList<>(txn.keySet(cpStatusTable));
             for (TableName table : tableNames) {
                 CheckpointingStatus cpStatus = (CheckpointingStatus) txn.getRecord(
                         CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, table).getPayload();
                 log.info("{} : {} clientId: {}", table.getTableName(), cpStatus.getStatus(), cpStatus.getClientName());
-                clientIds.add(cpStatus.getClientName());
                 if (cpStatus.getStatus() != targetStatus) {
                     failed++;
                 }

@@ -45,7 +45,7 @@ public class CompactorService implements ManagementService {
 
     CompactorService(@NonNull ServerContext serverContext,
                      @NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
-                     @NonNull InvokeCheckpointingJvm checkpointerJvmManager,
+                     @NonNull InvokeCheckpointing checkpointerJvmManager,
                      @NonNull CompactionTriggerPolicy compactionTriggerPolicy) {
         this.serverContext = serverContext;
         this.runtimeSingletonResource = runtimeSingletonResource;
@@ -59,7 +59,7 @@ public class CompactorService implements ManagementService {
         syslog = LoggerFactory.getLogger("syslog");
     }
 
-    CorfuRuntime getCorfuRuntime() {
+    private CorfuRuntime getCorfuRuntime() {
         return runtimeSingletonResource.get();
     }
 
@@ -74,8 +74,8 @@ public class CompactorService implements ManagementService {
             return;
         }
 
-        this.trimLog = new TrimLog(getCorfuRuntime(), getCorfuStore());
         getCompactorLeaderServices();
+        this.trimLog = new TrimLog(getCorfuRuntime(), getCorfuStore());
 
         orchestratorThread.scheduleWithFixedDelay(
                 this::runOrchestrator,
@@ -108,7 +108,7 @@ public class CompactorService implements ManagementService {
     }
 
     /**
-     * Invokes and cleans up the CorfuStoreCompactor jvm based on the status of CompactionManager
+     * Invokes the CorfuStoreCompactor jvm based on the status of CompactionManager
      * Additionally, If the current node is the leader,
      * a. Invokes ValidateLiveness() to keep track of checkpointing progress by each client
      * b. Triggers the distributed compaction cycle based on the TriggerPolicy
@@ -122,7 +122,7 @@ public class CompactorService implements ManagementService {
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
             txn.commit();
         } catch (Exception e) {
-            syslog.warn("Unable to acquire manager status: {}", e.getStackTrace());
+            syslog.warn("Unable to acquire manager status: ", e);
         }
         try {
             if (managerStatus != null) {
@@ -139,13 +139,13 @@ public class CompactorService implements ManagementService {
                     getCompactorLeaderServices().validateLiveness();
                 } else if (compactionTriggerPolicy.shouldTrigger(
                         getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis(), getCorfuStore())) {
-                    compactionTriggerPolicy.markCompactionCycleStart();
                     trimLog.invokePrefixTrim();
+                    compactionTriggerPolicy.markCompactionCycleStart();
                     getCompactorLeaderServices().initCompactionCycle();
                 }
             }
         } catch (Exception ex) {
-            syslog.warn("Exception in runOrcestrator(): {}", ex.getStackTrace());
+            syslog.warn("Exception in runOrcestrator(): ", ex);
         }
     }
 

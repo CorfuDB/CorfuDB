@@ -80,7 +80,7 @@ public class LivenessValidatorUnitTest {
 
     @Test
     public void shouldChangeManagerStatusTest() {
-        List<CorfuStoreEntry> mockList = mock(List.class);
+        List<CorfuStoreEntry<? extends Message, ? extends Message, ? extends Message>> mockList = mock(List.class);
         when(txn.executeQuery(Matchers.anyString(), Matchers.any(Predicate.class))).thenReturn(mockList);
 
         when(mockList.size()).thenReturn(1);

@@ -40,7 +40,6 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
 
     @Override
     public void checkpointTables() {
-        //TODO: need to check compaction started?
         checkpointOpenedTables();
 
         CorfuRuntime cpRuntime = checkpointerBuilder.cpRuntime.get();

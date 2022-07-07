@@ -20,11 +20,12 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
 public class CheckpointLivenessUpdater implements LivenessUpdater {
-    private final ScheduledExecutorService executorService;
-    private static final Duration UPDATE_INTERVAL = Duration.ofSeconds(15);
-
     private final CorfuStore corfuStore;
+    private final ScheduledExecutorService executorService;
+
     private Optional<TableName> currentTable = Optional.empty();
+
+    private static final Duration UPDATE_INTERVAL = Duration.ofSeconds(15);
 
     public CheckpointLivenessUpdater(CorfuStore corfuStore) {
         this.corfuStore = corfuStore;

@@ -26,11 +26,10 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * This class does all services that the coordinator has to perform. The actions performed by the coordinator are -
- * 1. Call trimLog() to trim everything till the token saved in the Checkpoint table
- * 2. Set CompactionManager's status as STARTED, marking the start of a compaction cycle.
- * 3. Validate liveness of tables in the ActiveCheckpoints table in order to detect slow or dead clients.
- * 4. Set CompactoinManager's status as COMPLETED or FAILED based on the checkpointing status of all the tables. This
- * marks the end of the compaction cycle.
+ * 1. Set CompactionManager's status as STARTED, marking the start of a compaction cycle
+ * 2. Validate liveness of checkpointing tables in order to detect slow or dead clients
+ * 3. Set CompactoinManager's status as COMPLETED or FAILED based on the checkpointing status of all the tables. This
+ * marks the end of the compaction cycle
  */
 @Slf4j
 public class CompactorLeaderServices {
@@ -46,7 +45,7 @@ public class CompactorLeaderServices {
     public static final int MAX_RETRIES = 5;
 
     /**
-     * This enum contains the leader's start compaction cycle status
+     * This enum contains the leader's initCompactionCycle status
      * If the status is SUCCESS, the compaction cycle has been started
      * If the status is FAIL, the compaction cycle startup has failed
      */
@@ -69,10 +68,8 @@ public class CompactorLeaderServices {
     }
 
     /**
-     * The leader initiates the Distributed checkpointer
-     * Trims the log till 'trimtoken' saved in the checkpoint table
-     * Mark the start of the compaction cycle and populate CheckpointStatusTable with all the
-     * tables in the registry.
+     * Trim and mark the start of the compaction cycle and populate CheckpointStatusTable
+     * with all the tables in the registry.
      *
      * @return compaction cycle start status
      */
@@ -107,7 +104,7 @@ public class CompactorLeaderServices {
             }
 
             // Also record the minToken as the earliest token BEFORE checkpointing is initiated
-            // This is the safest point to trim at since all data up to this point will surely
+            // This is the safest point to trim from, since all data up to this point will surely
             // be included in the upcoming checkpoint cycle
             long minAddressBeforeCycleStarts = corfuRuntime.getAddressSpaceView().getLogTail();
             txn.putRecord(compactorMetadataTables.getCheckpointTable(), CompactorMetadataTables.CHECKPOINT_KEY,
@@ -135,12 +132,12 @@ public class CompactorLeaderServices {
      * to execute continuously by the leader, which monitors the checkpoint activity of the tables present in
      * ActiveCheckpointTable.
      * if there are no tables present,
-     * ... check for idle tables in CheckpointStatusTable (To track progress when tables are checkpointed quickly)
+     * ... check for idle tables in CheckpointStatusTable (To track progress when tables are checkpointed rapidly)
      * ... if there's no progress for timeout ms, call finishCompactionCycle() to mark the end of the cycle
      * if there are any slow checkpointers,
      * ... monitor checkpointing of the table by observing if the checkpointStream's tail moves forward
      * ... if it does not move forward for timeout ms, then mark it as failed
-     * Also, when checkpoint of a table is found to be failed, the cycle is immediately marks as failed.
+     * Also, when checkpoint of a table is found to be failed, the cycle is immediately marked as failed.
      */
     public void validateLiveness() {
         List<TableName> activeCheckpointTables = getAllActiveCheckpointsTables();
@@ -157,7 +154,8 @@ public class CompactorLeaderServices {
         }
 
         for (TableName table : activeCheckpointTables) {
-            if (!livenessValidator.isTableCheckpointActive(table, Duration.ofMillis(currentTime)) && hasTableCheckpointFailed(table)) {
+            if (!livenessValidator.isTableCheckpointActive(table, Duration.ofMillis(currentTime)) &&
+                    hasTableCheckpointFailed(table)) {
                 break;
             }
         }
@@ -165,18 +163,17 @@ public class CompactorLeaderServices {
 
     private boolean hasTableCheckpointFailed(TableName table) {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
-                    CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
             CheckpointingStatus tableStatus = (CheckpointingStatus) txn.getRecord(
                     CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, table).getPayload();
 
-            if (tableStatus.getStatus() != StatusType.COMPLETED &&
-                    tableStatus.getStatus() != StatusType.FAILED) {
+            if (tableStatus.getStatus() != StatusType.COMPLETED && tableStatus.getStatus() != StatusType.FAILED) {
                 txn.putRecord(compactorMetadataTables.getCheckpointingStatusTable(), table,
                         buildCheckpointStatus(StatusType.FAILED, tableStatus.getEpoch()), null);
                 txn.delete(CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME, table);
 
+                CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
+                        CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                        CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
                 txn.putRecord(compactorMetadataTables.getCompactionManagerTable(), CompactorMetadataTables.COMPACTION_MANAGER_KEY,
                         buildCheckpointStatus(
                                 StatusType.FAILED,
@@ -256,8 +253,8 @@ public class CompactorLeaderServices {
             //Do not retry here, the compactor service will trigger this method again
             syslog.warn("Exception in finishCompactionCycle: {}. StackTrace={}", re, re.getStackTrace());
         }
-        trimLogIfRequired();
         deleteInstantKeyIfRequired();
+        trimLogIfRequired();
     }
 
     private void trimLogIfRequired() {
@@ -275,7 +272,6 @@ public class CompactorLeaderServices {
                 }
             }
         }
-
         if (upgradeToken.isPresent()) {
             syslog.info("Upgrade Key found: Hence invoking trimlog()");
             trimLog.invokePrefixTrim();

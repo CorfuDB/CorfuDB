@@ -5,10 +5,8 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
-import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TxnContext;
@@ -27,20 +25,19 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
 public abstract class DistributedCheckpointer {
-    public static final long CONN_RETRY_DELAY_MILLISEC = 500;
-    public static final int MAX_RETRIES = 5;
-
     protected final CorfuStore corfuStore;
     private final LivenessUpdater livenessUpdater;
-    protected CompactorMetadataTables compactorMetadataTables = null;
-
+    private final CompactorMetadataTables compactorMetadataTables;
     private final CorfuRuntime corfuRuntime;
     private final String clientName;
 
     private long epoch;
 
+    public static final long CONN_RETRY_DELAY_MILLISEC = 500;
+    public static final int MAX_RETRIES = 5;
+
     DistributedCheckpointer(@NonNull CorfuRuntime corfuRuntime, String clientName,
-                            CorfuStore corfuStore, CompactorMetadataTables compactorMetadataTables) {
+                            @NonNull CorfuStore corfuStore, CompactorMetadataTables compactorMetadataTables) {
         this.corfuRuntime = corfuRuntime;
         this.clientName = clientName;
         this.corfuStore = corfuStore;
@@ -96,19 +93,19 @@ public abstract class DistributedCheckpointer {
                                                @NonNull CheckpointingStatus checkpointStatus) throws IllegalStateException {
         for (int retry = 0; retry < MAX_RETRIES; retry++) {
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                CorfuStoreEntry<StringKey, CheckpointingStatus, Message> managerStatus = txn.getRecord(
+                CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
                         CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
-                        CompactorMetadataTables.COMPACTION_MANAGER_KEY);
-                if (epoch != managerStatus.getPayload().getEpoch() ||
-                        managerStatus.getPayload().getStatus() == StatusType.COMPLETED ||
-                        managerStatus.getPayload().getStatus() == StatusType.FAILED) {
-                    log.error("Compaction cycle has already ended with status {}", managerStatus.getPayload().getStatus());
+                        CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
+                if (epoch != managerStatus.getEpoch() ||
+                        managerStatus.getStatus() == StatusType.COMPLETED ||
+                        managerStatus.getStatus() == StatusType.FAILED) {
+                    log.error("Compaction cycle has already ended with status {}", managerStatus.getStatus());
                     txn.commit();
                     return false;
                 }
-                CorfuStoreEntry<TableName, CheckpointingStatus, Message> tableStatus = txn.getRecord(
-                        CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, tableName);
-                if (tableStatus.getPayload().getStatus() == StatusType.FAILED) {
+                CheckpointingStatus tableStatus = (CheckpointingStatus) txn.getRecord(
+                        CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, tableName).getPayload();
+                if (tableStatus.getStatus() == StatusType.FAILED) {
                     log.error("Table status for {}${} has already been marked as FAILED",
                             tableName.getNamespace(), tableName.getTableName());
                     txn.commit();
@@ -147,11 +144,14 @@ public abstract class DistributedCheckpointer {
         }
     }
 
+    /**
+     * Calls tryCheckpointTable for all tables opened by the current runtime
+     */
     public void checkpointOpenedTables() {
         log.info("Checkpointing opened tables");
         for (Table<Message, Message, Message> openedTable : corfuRuntime.getTableRegistry().getAllOpenTables()) {
             boolean isSuccess = tryCheckpointTable(DistributedCheckpointerHelper.getTableName(openedTable),
-                    t -> openedTable.getCheckpointWriter(corfuRuntime, "DistributedCheckpointer"));
+                    t -> openedTable.getCheckpointWriter(corfuRuntime, "OpenedTableCheckpointer"));
             if (!isSuccess) {
                 log.warn("Stop checkpointing after failure in {}", openedTable.getFullyQualifiedTableName());
                 break;

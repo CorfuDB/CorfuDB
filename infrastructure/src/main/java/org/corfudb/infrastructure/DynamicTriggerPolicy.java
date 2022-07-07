@@ -15,7 +15,7 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
     /**
      * What time did the previous cycle start
      */
-    private long lastCompactionCycleStartTS = 0;
+    private long lastCompactionCycleStartTS;
     private final Logger syslog;
 
     public DynamicTriggerPolicy() {
@@ -43,14 +43,11 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
     }
 
     /**
-     * 1. if ((currentTime - lastCompactionCycleStart) > minTimeBetweenCompactionStarts)
-     * if (lastAddressSpaceSizeOnTrim == 0)
-     * return true // no record of previous trim & safe trim period elapsed
-     * ... once trim happens, we record the lastAddressSpaceSizeOnTrim
-     * ... once checkpoint starts we record the lastCompactionCycleStartTS
-     * 2. if ((currentTime - lastCompactionCycleStart) > maxTimeBetweenCompactionStarts)
+     * Returns true if it has been interval time since the previous trigger or
+     * if force trigger condition is met
      *
-     * @param interval - trigger interval in ms
+     * @param interval   - trigger interval in ms
+     * @param corfuStore - CorfuStore of the current runtime
      * @return true if compaction cycle should run, false otherwise
      */
     @Override

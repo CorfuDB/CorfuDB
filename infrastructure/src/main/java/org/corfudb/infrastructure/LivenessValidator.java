@@ -34,7 +34,6 @@ public class LivenessValidator {
 
     private static final long LIVENESS_INIT_VALUE = -1;
 
-
     public LivenessValidator(CorfuRuntime corfuRuntime, CorfuStore corfuStore, Duration timeout) {
         this.corfuRuntime = corfuRuntime;
         this.corfuStore = corfuStore;
@@ -44,14 +43,14 @@ public class LivenessValidator {
 
     @AllArgsConstructor
     @Getter
-    private class LivenessMetadata {
+    private static class LivenessMetadata {
         private long heartbeat;
         private long streamTail;
         private Duration time;
     }
 
     @Getter
-    private class LivenessValidatorHelper {
+    private static class LivenessValidatorHelper {
         private long prevIdleCount = LIVENESS_INIT_VALUE;
         private Duration prevActiveTime = Duration.ofMillis(LIVENESS_INIT_VALUE);
 

@@ -23,7 +23,8 @@ public class DynamicTriggerPolicyUnitTest {
     private static final long INTERVAL = 1000;
 
     private DynamicTriggerPolicy dynamicTriggerPolicy;
-    private final CorfuStoreEntry corfuStoreEntry = mock(CorfuStoreEntry.class);
+    private final CorfuStoreEntry<? extends Message, ? extends Message, ? extends Message> corfuStoreEntry =
+            (CorfuStoreEntry<? extends Message, ? extends Message, ? extends Message>) mock(CorfuStoreEntry.class);
     private final TxnContext txn = mock(TxnContext.class);
 
     @Before
@@ -37,6 +38,7 @@ public class DynamicTriggerPolicyUnitTest {
 
     @Test
     public void testShouldTrigger() {
+        //this makes shouldForceTrigger to return false
         when(corfuStoreEntry.getPayload()).thenReturn(null);
 
         dynamicTriggerPolicy.markCompactionCycleStart();
@@ -52,7 +54,7 @@ public class DynamicTriggerPolicyUnitTest {
 
     @Test
     public void testShouldForceTrigger() {
-        when(corfuStoreEntry.getPayload()).thenReturn(RpcCommon.TokenMsg.getDefaultInstance());
+        when((RpcCommon.TokenMsg) corfuStoreEntry.getPayload()).thenReturn(RpcCommon.TokenMsg.getDefaultInstance());
         assert dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore);
     }
 }
