@@ -111,6 +111,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
     public CorfuStore corfuStoreActive;
     public CorfuStore corfuStoreStandby;
 
+    //test
     public void testEndToEndSnapshotAndLogEntrySync() throws Exception {
         try {
             log.debug("Setup active and standby Corfu's");
