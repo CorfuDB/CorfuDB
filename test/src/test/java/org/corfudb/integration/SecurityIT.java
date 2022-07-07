@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.security.tls.ReloadableTrustManager.TrustStoreWatcher;
 import org.corfudb.security.tls.SslContextConstructor;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
@@ -72,52 +74,52 @@ public class SecurityIT extends AbstractIT {
     @Test
     public void testServerRuntimeTlsEnabledMethod() throws Exception {
         // Run a corfu server
-        Process corfuServer = runSinglePersistentServerTls();
-
-        // Start a Corfu runtime
-        CorfuRuntimeParameters runtimeParameters = CorfuRuntimeParameters
-                .builder()
-                .layoutServers(Collections.singletonList(NodeLocator.parseString(singleNodeEndpoint)))
-                .tlsEnabled(tlsEnabled)
-                .keyStore(runtimePathToKeyStore)
-                .ksPasswordFile(runtimePathToKeyStorePassword)
-                .trustStore(runtimePathToTrustStore)
-                .tsPasswordFile(runtimePathToTrustStorePassword)
-                .cacheDisabled(true)
-                .systemDownHandler(() -> fail("Can't connect to corfu server"))
-                .build();
-
-        // Connecting to runtime
-        runtime = CorfuRuntime
-                .fromParameters(runtimeParameters)
-                .connect();
-
-        // Create CorfuTable
-        CorfuTable<String, Object> testTable = runtime
-                .getObjectsView()
-                .build()
-                .setTypeToken(TYPE_TOKEN)
-                .setStreamName("volbeat")
-                .open();
-
-        // CorfuTable stats before usage
-        final int initialSize = testTable.size();
-
-        // Put key values in CorfuTable
-        final int count = 100;
-        final int entrySize = 1000;
-        for (int i = 0; i < count; i++) {
-            testTable.put(String.valueOf(i), new byte[entrySize]);
-        }
-
-        // Assert that put operation was successful
-        final int sizeAfterPuts = testTable.size();
-        assertThat(sizeAfterPuts).isGreaterThanOrEqualTo(initialSize);
-        log.info("Initial Table Size: {} - FinalTable Size:{}", initialSize, sizeAfterPuts);
-
-        // Assert that table has correct size (i.e. count) and and server is shutdown
-        assertThat(testTable.size()).isEqualTo(count);
-        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+//        Process corfuServer = runSinglePersistentServerTls();
+//
+//        // Start a Corfu runtime
+//        CorfuRuntimeParameters runtimeParameters = CorfuRuntimeParameters
+//                .builder()
+//                .layoutServers(Collections.singletonList(NodeLocator.parseString(singleNodeEndpoint)))
+//                .tlsEnabled(tlsEnabled)
+//                .keyStore(runtimePathToKeyStore)
+//                .ksPasswordFile(runtimePathToKeyStorePassword)
+//                .trustStore(runtimePathToTrustStore)
+//                .tsPasswordFile(runtimePathToTrustStorePassword)
+//                .cacheDisabled(true)
+//                .systemDownHandler(() -> fail("Can't connect to corfu server"))
+//                .build();
+//
+//        // Connecting to runtime
+//        runtime = CorfuRuntime
+//                .fromParameters(runtimeParameters)
+//                .connect();
+//
+//        // Create CorfuTable
+//        CorfuTable<String, Object> testTable = runtime
+//                .getObjectsView()
+//                .build()
+//                .setTypeToken(TYPE_TOKEN)
+//                .setStreamName("volbeat")
+//                .open();
+//
+//        // CorfuTable stats before usage
+//        final int initialSize = testTable.size();
+//
+//        // Put key values in CorfuTable
+//        final int count = 100;
+//        final int entrySize = 1000;
+//        for (int i = 0; i < count; i++) {
+//            testTable.put(String.valueOf(i), new byte[entrySize]);
+//        }
+//
+//        // Assert that put operation was successful
+//        final int sizeAfterPuts = testTable.size();
+//        assertThat(sizeAfterPuts).isGreaterThanOrEqualTo(initialSize);
+//        log.info("Initial Table Size: {} - FinalTable Size:{}", initialSize, sizeAfterPuts);
+//
+//        // Assert that table has correct size (i.e. count) and and server is shutdown
+//        assertThat(testTable.size()).isEqualTo(count);
+//        assertThat(shutdownCorfuServer(corfuServer)).isTrue();isTrue
     }
 
     /**
