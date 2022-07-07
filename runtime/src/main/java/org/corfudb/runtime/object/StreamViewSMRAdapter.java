@@ -54,9 +54,11 @@ public class StreamViewSMRAdapter implements ISMRStream {
             CheckpointEntry cp = (CheckpointEntry) logData.getPayload(runtime);
             if (cp.getSmrEntries() != null
                     && cp.getSmrEntries().getUpdates().size() > 0) {
+                Long logStartAddress = Long.decode(cp.getDict()
+                        .get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS));
                 cp.getSmrEntries().getUpdates().forEach(e -> {
                     e.setRuntime(runtime);
-                    e.setGlobalAddress(logData.getGlobalAddress());
+                    e.setGlobalAddress(logStartAddress);
                 });
                 return cp.getSmrEntries().getUpdates();
             } else {

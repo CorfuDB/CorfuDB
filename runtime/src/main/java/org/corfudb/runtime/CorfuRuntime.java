@@ -316,7 +316,7 @@ public class CorfuRuntime {
         /*
          * The period at which the runtime will auto sync all mvo objects present in mvoCache
          */
-        Duration mvoAutoSyncPeriod = Duration.ofMillis(5);
+        Duration mvoAutoSyncPeriod = Duration.ofMinutes(5);
 
         /*
          * The {@link UUID} for the cluster this client is connecting to, or
