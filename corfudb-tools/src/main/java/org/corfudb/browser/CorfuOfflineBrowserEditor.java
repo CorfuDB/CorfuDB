@@ -6,6 +6,7 @@ import org.corfudb.infrastructure.log.LogFormat;
 import org.corfudb.infrastructure.log.LogMetadata;
 import org.corfudb.infrastructure.log.StreamLogDataStore;
 import org.corfudb.infrastructure.log.StreamLogFiles;
+import org.corfudb.infrastructure.log.*;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
@@ -28,6 +29,7 @@ import java.util.*;
 // i'm guessing that bc StreamLogFiles has this code in the same package, it can access it directly
 import static org.corfudb.infrastructure.IServerRouter.log;
 import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
+import static org.corfudb.infrastructure.log.StreamLogFiles.parseHeader;
 
 @SuppressWarnings("checkstyle:printLine")
 public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
@@ -60,7 +62,9 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
             LogFormat.LogHeader header;
 
             try (FileChannel fileChannel = FileChannel.open(file.toPath())) {
-                header = parseHeader(fileChannel, file.getAbsolutePath());
+                //StreamLogFiles a = StreamLogFiles(null, true);
+                //header = StreamLogFiles.parseHeader(a, fileChannel, file.getAbsolutePath())
+                header = parseHeader(null, fileChannel, file.getAbsolutePath());
 
                 System.out.println(header);
 
@@ -69,138 +73,6 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
             }
 
         }
-    }
-
-    /**
-     * Parse the logfile header, or create it, or recreate it if it was
-     * partially written.
-     *
-     * @param channel file channel
-     * @return log header
-     * @throws IOException IO exception
-     */
-    public LogHeader parseHeader(FileChannel channel, String segmentFile) throws IOException {
-        LogFormat.Metadata metadata = parseMetadata(channel, segmentFile);
-
-        if (metadata == null) {
-            // Partial write on the metadata for the header
-            // Rewind the channel position to the beginning of the file
-            channel.position(0);
-            return null;
-        }
-
-        // print metadata info
-        //System.out.println(metadata);
-
-        ByteBuffer buffer = getPayloadForMetadata(channel, metadata);
-        if (buffer == null) {
-            // partial write on the header payload
-            // Rewind the channel position to the beginning of the file
-            channel.position(0);
-            return null;
-        }
-
-        // print Stream LogEntry data
-        //LogFormat.LogEntry entry;
-        //entry = LogFormat.LogEntry.parseFrom(buffer.array());
-        //System.out.println(entry);
-
-
-        if (StreamLogFiles.Checksum.getChecksum(buffer.array()) != metadata.getPayloadChecksum()) {
-            String errorMessage = getDataCorruptionErrorMessage("Invalid metadata checksum",
-                    channel, segmentFile
-            );
-            throw new DataCorruptionException(errorMessage);
-        }
-
-        LogHeader header;
-
-        try {
-            header = LogHeader.parseFrom(buffer.array());
-        } catch (InvalidProtocolBufferException e) {
-            String errorMessage = getDataCorruptionErrorMessage("Invalid header",
-                    channel, segmentFile
-            );
-            throw new DataCorruptionException(errorMessage, e);
-        }
-
-        return header;
-    }
-
-    /**
-     * Read a payload given metadata.
-     *
-     * @param fileChannel channel to read the payload from
-     * @param metadata    the metadata that is written before the payload
-     * @return ByteBuffer for the payload
-     * @throws IOException IO exception
-     */
-    public ByteBuffer getPayloadForMetadata(FileChannel fileChannel, LogFormat.Metadata metadata) throws IOException {
-        if (fileChannel.size() - fileChannel.position() < metadata.getLength()) {
-            return null;
-        }
-
-        ByteBuffer buf = ByteBuffer.allocate(metadata.getLength());
-        fileChannel.read(buf);
-        buf.flip();
-        return buf;
-    }
-
-    /**
-     * Parse the metadata field. This method should only be called
-     * when a metadata field is expected.
-     *
-     * @param fileChannel the channel to read from
-     * @return metadata field of null if it was partially written.
-     * @throws IOException IO exception
-     */
-    public LogFormat.Metadata parseMetadata(FileChannel fileChannel, String segmentFile) throws IOException {
-        long actualMetaDataSize = fileChannel.size() - fileChannel.position();
-        if (actualMetaDataSize < METADATA_SIZE) {
-            log.warn("Metadata has wrong size. Actual size: {}, expected: {}",
-                    actualMetaDataSize, METADATA_SIZE
-            );
-            return null;
-        }
-
-        ByteBuffer buf = ByteBuffer.allocate(METADATA_SIZE);
-        fileChannel.read(buf);
-        buf.flip();
-
-        LogFormat.Metadata metadata;
-
-        try {
-            metadata = LogFormat.Metadata.parseFrom(buf.array());
-        } catch (InvalidProtocolBufferException e) {
-            String errorMessage = getDataCorruptionErrorMessage("Can't parse metadata",
-                    fileChannel, segmentFile
-            );
-            throw new DataCorruptionException(errorMessage, e);
-        }
-
-        if (metadata.getLengthChecksum() != StreamLogFiles.Checksum.getChecksum(metadata.getLength())) {
-            String errorMessage = getDataCorruptionErrorMessage("Metadata: invalid length checksum",
-                    fileChannel, segmentFile
-            );
-            throw new DataCorruptionException(errorMessage);
-        }
-
-        return metadata;
-    }
-    private LogMetadata logMetadata;
-
-    public String getDataCorruptionErrorMessage(
-            String message, FileChannel fileChannel, String segmentFile) throws IOException {
-        return message +
-                ". Segment File: " + segmentFile +
-                ". File size: " + fileChannel.size() +
-                ". File position: " + fileChannel.position() +
-                ". Global tail: " + logMetadata.getGlobalTail() +
-
-                // left this out, what is the importance of a tail segment?
-                // ". Tail segment: " + dataStore.getTailSegment() +
-
-                ". Stream tails size: " + logMetadata.getStreamTails().size();
     }
 
     @Override
