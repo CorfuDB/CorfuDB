@@ -179,6 +179,9 @@ public class TableRegistry {
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
+
+        // Lastly instantiate the DistributedClientCheckpointer
+        this.clientCheckpointer = new DistributedClientCheckpointer(runtime);
     }
 
     /**
@@ -811,6 +814,9 @@ public class TableRegistry {
     public void shutdown() {
         if (streamingManager != null) {
             streamingManager.shutdown();
+        }
+        if (clientCheckpointer != null) {
+            clientCheckpointer.shutdown();
         }
     }
 }
