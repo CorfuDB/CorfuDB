@@ -507,7 +507,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         for (int i = 0; i < numKeys; i++) {
             // each entry is 1 MB
             String payload = getRandomStringOfSize(1 << 20);
-            m.insert(keyPrefix + i, payload);
+            m.insert(keyPrefix + i, payload + mutationSuffix);
             mockedMap.put(keyPrefix + i, payload + mutationSuffix);
         }
 
@@ -536,7 +536,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             // Instantiate new runtime & table.
             setRuntime();
             PersistentCorfuTable<String, String> m2 = instantiateStringTable(streamName);
-            // TODO(Zach): Verify this works as expected
             assertThat(m2.entryStream()).containsExactlyInAnyOrderElementsOf(mockedMap.entrySet());
         } finally {
             r.getObjectsView().TXEnd();
