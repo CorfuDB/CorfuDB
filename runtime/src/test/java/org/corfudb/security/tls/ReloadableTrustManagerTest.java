@@ -10,7 +10,6 @@ import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.cert.CertificateException;
-import java.security.cert.CertificateExpiredException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.time.LocalDateTime;
@@ -21,7 +20,6 @@ import static org.corfudb.security.tls.TlsTestContext.CLIENT_TRUST_WITH_SERVER;
 import static org.corfudb.security.tls.TlsTestContext.SERVER_CERT;
 import static org.corfudb.security.tls.TlsTestContext.SERVER_TRUST_NO_CLIENT;
 import static org.corfudb.security.tls.TlsTestContext.SERVER_TRUST_WITH_CLIENT;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
@@ -29,20 +27,9 @@ public class ReloadableTrustManagerTest {
 
     @Test
     public void testServerCheckClient() throws Exception {
-        TlsTestContext.disableCertExpiryCheck(() -> {
-            ReloadableTrustManager manager = new ReloadableTrustManager(SERVER_TRUST_WITH_CLIENT);
-            X509Certificate cert = getCertificate(CLIENT_CERT);
-            manager.checkClientTrusted(new X509Certificate[]{cert}, "RSA");
-        });
-    }
-
-    @Test
-    public void testServerCheckClientExpired() throws Exception {
         ReloadableTrustManager manager = new ReloadableTrustManager(SERVER_TRUST_WITH_CLIENT);
         X509Certificate cert = getCertificate(CLIENT_CERT);
-        assertThrows(CertificateExpiredException.class, () -> {
-            manager.checkClientTrusted(new X509Certificate[]{cert}, "RSA");
-        });
+        manager.checkClientTrusted(new X509Certificate[]{cert}, "RSA");
     }
 
     @Test
@@ -61,20 +48,9 @@ public class ReloadableTrustManagerTest {
 
     @Test
     public void testClientCheckServer() throws Exception {
-        TlsTestContext.disableCertExpiryCheck(() -> {
-            ReloadableTrustManager manager = new ReloadableTrustManager(CLIENT_TRUST_WITH_SERVER);
-            X509Certificate cert = getCertificate(SERVER_CERT);
-            manager.checkServerTrusted(new X509Certificate[]{cert}, "RSA");
-        });
-    }
-
-    @Test
-    public void testClientCheckServerExpired() throws Exception {
         ReloadableTrustManager manager = new ReloadableTrustManager(CLIENT_TRUST_WITH_SERVER);
         X509Certificate cert = getCertificate(SERVER_CERT);
-        assertThrows(CertificateExpiredException.class, () -> {
-            manager.checkServerTrusted(new X509Certificate[]{cert}, "RSA");
-        });
+        manager.checkServerTrusted(new X509Certificate[]{cert}, "RSA");
     }
 
     @Test

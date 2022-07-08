@@ -28,7 +28,6 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
-import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
@@ -340,10 +339,10 @@ public class ServerContext implements AutoCloseable {
                 .nettyEventLoop(clientGroup)
                 .shutdownNettyEventLoop(false)
                 .tlsEnabled((Boolean) serverConfig.get("--enable-tls"))
-                .keyStore((String) serverConfig.get(ConfigParamNames.KEY_STORE))
-                .ksPasswordFile((String) serverConfig.get(ConfigParamNames.KEY_STORE_PASS_FILE))
-                .trustStore((String) serverConfig.get(ConfigParamNames.TRUST_STORE))
-                .tsPasswordFile((String) serverConfig.get(ConfigParamNames.TRUST_STORE_PASS_FILE))
+                .keyStore((String) serverConfig.get("--keystore"))
+                .ksPasswordFile((String) serverConfig.get("--keystore-password-file"))
+                .trustStore((String) serverConfig.get("--truststore"))
+                .tsPasswordFile((String) serverConfig.get("--truststore-password-file"))
                 .saslPlainTextEnabled((Boolean) serverConfig.get("--enable-sasl-plain-text-auth"))
                 .usernameFile((String) serverConfig.get("--sasl-plain-text-username-file"))
                 .passwordFile((String) serverConfig.get("--sasl-plain-text-password-file"))
