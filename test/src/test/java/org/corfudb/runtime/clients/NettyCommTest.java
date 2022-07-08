@@ -7,6 +7,7 @@ import io.netty.channel.ChannelFuture;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.common.config.ConfigParams;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.CorfuServerNode;
 import org.corfudb.infrastructure.NettyServerRouter;
@@ -77,7 +78,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                         new ServerContextBuilder()
                                 .setTlsEnabled(true)
                                 .setImplementation("auto")
-                                .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
+                                .setTlsCiphers(ConfigParams.TLS_CIPHERS)
                                 .setTlsProtocols("TLSv1.2")
                                 .setKeystore("src/test/resources/security/s1.jks")
                                 .setKeystorePasswordFile("src/test/resources/security/storepass")
@@ -106,7 +107,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                         new ServerContextBuilder()
                                 .setImplementation("auto")
                                 .setTlsEnabled(true)
-                                .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
+                                .setTlsCiphers(ConfigParams.TLS_CIPHERS)
                                 .setTlsProtocols("TLSv1.2")
                                 .setKeystore("src/test/resources/security/s1.jks")
                                 .setKeystorePasswordFile("src/test/resources/security/storepass")
@@ -149,7 +150,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                         new ServerContextBuilder()
                                 .setImplementation("auto")
                                 .setTlsEnabled(true)
-                                .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
+                                .setTlsCiphers(ConfigParams.TLS_CIPHERS)
                                 .setTlsProtocols("TLSv1.2")
                                 .setKeystore("src/test/resources/security/s3.jks")
                                 .setKeystorePasswordFile("src/test/resources/security/storepass")
@@ -179,7 +180,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                         new ServerContextBuilder()
                                 .setImplementation("auto")
                                 .setTlsEnabled(true)
-                                .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
+                                .setTlsCiphers(ConfigParams.TLS_CIPHERS)
                                 .setTlsProtocols("TLSv1.2")
                                 .setKeystore("src/test/resources/security/s1.jks")
                                 .setKeystorePasswordFile("src/test/resources/security/storepass")
@@ -209,7 +210,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                         new ServerContextBuilder()
                                 .setImplementation("auto")
                                 .setTlsEnabled(true)
-                                .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
+                                .setTlsCiphers(ConfigParams.TLS_CIPHERS)
                                 .setTlsProtocols("TLSv1.2")
                                 .setKeystore("src/test/resources/security/s1.jks")
                                 .setKeystorePasswordFile("src/test/resources/security/storepass")
@@ -241,7 +242,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                           new ServerContextBuilder()
                                   .setImplementation("auto")
                                   .setTlsEnabled(true)
-                                  .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
+                                  .setTlsCiphers(ConfigParams.TLS_CIPHERS)
                                   .setTlsProtocols("TLSv1.2")
                                   .setKeystore("src/test/resources/security/s1.jks")
                                   .setKeystorePasswordFile("src/test/resources/security/storepass")
@@ -329,7 +330,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                           new ServerContextBuilder()
                                   .setImplementation("auto")
                                   .setTlsEnabled(true)
-                                  .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
+                                  .setTlsCiphers(ConfigParams.TLS_CIPHERS)
                                   .setTlsProtocols("TLSv1.2")
                                   .setKeystore("src/test/resources/security/s1.jks")
                                   .setKeystorePasswordFile("src/test/resources/security/storepass")
@@ -414,7 +415,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     new ServerContextBuilder()
                             .setImplementation("auto")
                             .setTlsEnabled(true)
-                            .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
+                            .setTlsCiphers(ConfigParams.TLS_CIPHERS)
                             .setTlsProtocols("TLSv1.2")
                             .setKeystore("src/test/resources/security/reload/server_key.jks")
                             .setKeystorePasswordFile("src/test/resources/security/reload/password")
