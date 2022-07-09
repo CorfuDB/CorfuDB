@@ -1,47 +1,44 @@
 package org.corfudb.browser;
 
-import com.google.protobuf.InvalidProtocolBufferException;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.infrastructure.log.LogFormat;
-import org.corfudb.infrastructure.log.LogMetadata;
-import org.corfudb.infrastructure.log.StreamLogDataStore;
-import org.corfudb.infrastructure.log.StreamLogFiles;
-import org.corfudb.infrastructure.log.*;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.exceptions.DataCorruptionException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.infrastructure.log.LogFormat.LogHeader;
-import org.corfudb.infrastructure.log.LogFormat.LogEntry;
+import org.corfudb.util.serializer.DynamicProtobufSerializer;
 
 import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 
-// i'm guessing that bc StreamLogFiles has this code in the same package, it can access it directly
-import static org.corfudb.infrastructure.IServerRouter.log;
-import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
 import static org.corfudb.infrastructure.log.StreamLogFiles.parseHeader;
 
 @SuppressWarnings("checkstyle:printLine")
 public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
     private final Path logDir;
+    private final DynamicProtobufSerializer dynamicProtobufSerializer;
+    private final String QUOTE = "\"";
+
     public CorfuOfflineBrowserEditor(String offlineDbDir) {
         logDir = Paths.get(offlineDbDir, "log");
         System.out.println("Analyzing database located at :"+logDir);
 
         // prints header information for each of the corfu log files
         printHeader();
+        /***
+         * write methods that populate the cachedRegistryTable, cacheProtobufDescriptorTable,
+         * the fdProtoMap and the messageFdProtoMap to replace the nulls below for the
+         * new DynamicProtobufSerializer constructor
+         */
 
         // System.out.println(listTables("CorfuSystem"));
+        dynamicProtobufSerializer = new DynamicProtobufSerializer(null, null, null, null);
 
         // testing printAllProtoDescriptors
         System.out.println(printAllProtoDescriptors());
