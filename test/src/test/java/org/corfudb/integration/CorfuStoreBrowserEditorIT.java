@@ -19,7 +19,6 @@ import java.util.Map;
 import java.util.Set;
 
 import org.corfudb.browser.CorfuStoreBrowserEditor;
-import org.corfudb.browser.CorfuStoreBrowserEditorMain;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -703,17 +702,12 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         writer.close();
 
         runtime.shutdown();
-        final String []args = {
-                "--host=" + corfuSingleNodeHost,
-                "--port=" + corfuStringNodePort,
-                "--operation=deleteRecord",
-                "--tablename=" + tableName,
-                "--namespace=" + namespace,
-                "--keysToDeleteFilePath=" + pathToRecordsToDelete,
-                "--batchSize=" + (numRecords / 10)
-        };
 
-        int deletedRecordCount = CorfuStoreBrowserEditorMain.mainMethod(args);
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+
+        int deletedRecordCount = browser.deleteRecordsFromFile(namespace, tableName,
+                pathToRecordsToDelete, numRecords / 10);
         assertThat(deletedRecordCount).isEqualTo(numRecords);
         runtime.shutdown();
     }
