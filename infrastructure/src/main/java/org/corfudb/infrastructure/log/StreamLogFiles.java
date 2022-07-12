@@ -639,6 +639,11 @@ public class StreamLogFiles implements StreamLog {
     private LogEntry parseEntry(FileChannel channel, Metadata metadata, String fileName)
             throws IOException {
 
+        return parseEntry(this, channel, metadata, fileName);
+    }
+    public static LogEntry parseEntry(StreamLogFiles streamLogFiles, FileChannel channel, Metadata metadata, String fileName)
+            throws IOException {
+
         if (metadata == null) {
             // The metadata for this entry was partial written
             return null;
@@ -653,20 +658,21 @@ public class StreamLogFiles implements StreamLog {
             return null;
         }
 
-        if (verify && metadata.getPayloadChecksum() != Checksum.getChecksum(buffer.array())) {
-            String errorMessage = getDataCorruptionErrorMessage(
-                    "Checksum mismatch detected while trying to read file",
-                    channel, fileName
-            );
-            throw new DataCorruptionException(errorMessage);
+        if (streamLogFiles != null) {
+            if (streamLogFiles.verify && metadata.getPayloadChecksum() != Checksum.getChecksum(buffer.array())) {
+                String errorMessage = getDataCorruptionErrorMessage(streamLogFiles,
+                        "Checksum mismatch detected while trying to read file",
+                        channel, fileName
+                );
+                throw new DataCorruptionException(errorMessage);
+            }
         }
-
 
         LogEntry entry;
         try {
             entry = LogEntry.parseFrom(buffer.array());
         } catch (InvalidProtocolBufferException e) {
-            String errorMessage = getDataCorruptionErrorMessage("Invalid entry",
+            String errorMessage = getDataCorruptionErrorMessage(streamLogFiles, "Invalid entry",
                     channel, fileName
             );
             throw new DataCorruptionException(errorMessage, e);

@@ -1,7 +1,9 @@
 package org.corfudb.browser;
 
 import org.apache.commons.io.FileUtils;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.log.LogFormat;
+import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
@@ -18,6 +20,10 @@ import java.nio.file.Paths;
 import java.util.*;
 
 import static org.corfudb.infrastructure.log.StreamLogFiles.parseHeader;
+import static org.corfudb.infrastructure.log.StreamLogFiles.parseMetadata;
+import static org.corfudb.infrastructure.log.StreamLogFiles.parseEntry;
+import org.corfudb.infrastructure.log.LogFormat.LogEntry;
+import org.corfudb.infrastructure.ServerContext;
 
 @SuppressWarnings("checkstyle:printLine")
 public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
@@ -30,7 +36,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         System.out.println("Analyzing database located at :"+logDir);
 
         // prints header information for each of the corfu log files
-        printHeader();
+        printLogEntryData();
         /***
          * write methods that populate the cachedRegistryTable, cacheProtobufDescriptorTable,
          * the fdProtoMap and the messageFdProtoMap to replace the nulls below for the
@@ -45,25 +51,30 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
     }
 
     /**
-     * Opens all log files one by one, and prints the header information for each Corfu log file.
+     * Opens all log files one by one, accesses and prints log entry data for each Corfu log file.
      */
-    public void printHeader() {
-        System.out.println("Printing header information:");
+    public void printLogEntryData() {
+        System.out.println("Printing log entry data information:");
 
         String[] extension = {"log"};
         File dir = logDir.toFile();
-
         Collection<File> files = FileUtils.listFiles(dir, extension, true);
 
         for (File file : files) {
-            LogFormat.LogHeader header;
-
             try (FileChannel fileChannel = FileChannel.open(file.toPath())) {
-                //StreamLogFiles a = StreamLogFiles(null, true);
-                //header = StreamLogFiles.parseHeader(a, fileChannel, file.getAbsolutePath())
-                header = parseHeader(null, fileChannel, file.getAbsolutePath());
+                while (fileChannel.size() - fileChannel.position() > 0) {
+                    //long channelOffset = fileChannel.position();
 
-                System.out.println(header);
+                    // parse, print header
+                    LogFormat.LogHeader header = parseHeader(null, fileChannel, file.getAbsolutePath());
+                    System.out.println(header);
+
+                    // parse metadata, then pass it in parse entry, and print entry
+                    LogFormat.Metadata metadata = StreamLogFiles.parseMetadata(null, fileChannel, file.getAbsolutePath());
+                    LogEntry entry = StreamLogFiles.parseEntry(null, fileChannel, metadata, file.getAbsolutePath());
+                    System.out.println(entry);
+                }
+
 
             } catch (IOException e) {
                 throw new IllegalStateException("Invalid header: " + file.getAbsolutePath(), e);
