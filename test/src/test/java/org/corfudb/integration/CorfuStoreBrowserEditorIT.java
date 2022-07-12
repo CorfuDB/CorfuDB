@@ -4,8 +4,6 @@ import com.google.protobuf.Any;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.UnknownFieldSet;
 
-import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Paths;
@@ -19,7 +17,6 @@ import java.util.Map;
 import java.util.Set;
 
 import org.corfudb.browser.CorfuStoreBrowserEditor;
-import org.corfudb.browser.CorfuStoreBrowserEditorMain;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -638,83 +635,13 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
         Assert.assertEquals(expectedRecord, editedRecord);
 
-        final int batchSize = 10000;
         // Now test deleteRecord capability
-        assertThat(browser.deleteRecords(namespace, tableName, Arrays.asList(keyString), batchSize)).isEqualTo(1);
+        assertThat(browser.deleteRecord(namespace, tableName, keyString)).isEqualTo(1);
         // Try to edit the deleted key and verify it is a no-op
         Assert.assertNull(browser.editRecord(namespace, tableName, keyString,
             newValString));
         // Try to delete a deleted key and verify it is a no-op
-        assertThat(browser.deleteRecords(namespace, tableName, Arrays.asList(keyString), batchSize)).isZero();
-        runtime.shutdown();
-    }
-
-    /**
-     * Put all the records to be deleted in a file and test the batched deletion capability
-     *
-     * @throws IOException
-     * @throws NoSuchMethodException
-     * @throws IllegalAccessException
-     * @throws InvocationTargetException
-     */
-    @Test
-    public void batchedDeletionTest() throws IOException, NoSuchMethodException,
-            IllegalAccessException, InvocationTargetException {
-        final String namespace = "namespace";
-        final String tableName = "table";
-        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
-
-        // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
-
-        CorfuStore store = new CorfuStore(runtime);
-
-        final Table<SampleSchema.Uuid, SampleSchema.Uuid, SampleSchema.Uuid> table1 = store.openTable(
-                namespace,
-                tableName,
-                SampleSchema.Uuid.class,
-                SampleSchema.Uuid.class,
-                SampleSchema.Uuid.class,
-                TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
-
-        final int numRecords = PARAMETERS.NUM_ITERATIONS_MODERATE;
-        List<String> recordsAsJson = new ArrayList<>(numRecords);
-        try (TxnContext tx = store.txn(namespace)) {
-            for (int i = 0; i < numRecords; i++) {
-                SampleSchema.Uuid simpleRecord = SampleSchema.Uuid.newBuilder()
-                        .setMsb(i)
-                        .setLsb(0)
-                        .build();
-                tx.putRecord(table1, simpleRecord, simpleRecord, simpleRecord);
-                StringBuilder keyBuilder = new StringBuilder();
-                keyBuilder.append("{\"msb\": \"")
-                        .append(i)
-                        .append("\", \"lsb\": \"0\"}");
-                recordsAsJson.add(keyBuilder.toString());
-            }
-            tx.commit();
-        }
-        // Now also write all the records out to a file
-        final String pathToRecordsToDelete = CORFU_LOG_PATH + File.separator + "recordsToDelete";
-        FileWriter writer = new FileWriter(pathToRecordsToDelete);
-        for (String jsonRecord: recordsAsJson) {
-            writer.write(jsonRecord + System.lineSeparator());
-        }
-        writer.close();
-
-        runtime.shutdown();
-        final String []args = {
-                "--host=" + corfuSingleNodeHost,
-                "--port=" + corfuStringNodePort,
-                "--operation=deleteRecord",
-                "--tablename=" + tableName,
-                "--namespace=" + namespace,
-                "--keysToDeleteFilePath=" + pathToRecordsToDelete,
-                "--batchSize=" + (numRecords / 10)
-        };
-
-        int deletedRecordCount = CorfuStoreBrowserEditorMain.mainMethod(args);
-        assertThat(deletedRecordCount).isEqualTo(numRecords);
+        assertThat(browser.deleteRecord(namespace, tableName, keyString)).isZero();
         runtime.shutdown();
     }
 
