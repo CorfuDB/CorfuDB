@@ -119,6 +119,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                 .ksPasswordFile((String) context.getServerConfig().get(ConfigParamNames.KEY_STORE_PASS_FILE))
                 .tlsEnabled((Boolean) context.getServerConfig().get("--enable-tls"))
                 .maxCacheEntries(config.getMaxCacheSize())
+                .maxWriteSize(context.getMaxWriteSize())
                 .build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.pluginConfigFilePath = context.getPluginConfigFilePath();
@@ -470,11 +471,10 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     private synchronized void startSnapshotApply(LogReplication.LogReplicationEntryMsg entry) {
         log.debug("Entry Start Snapshot Sync Apply, id={}", entry.getMetadata().getSyncRequestId());
-        //set data_consistent as false and clear streams which have evidenced data from active and the streams
-        // which have been locally written (aimed for replication) but yet were not replicated from active to standby (empty on active)
-        // Note: the locally updated streams must be cleared or we could pollute the state of the DB
+        // set data_consistent as false
         setDataConsistentWithRetry(false);
-        snapshotWriter.clearStreams();
+
+        snapshotWriter.clearLocalStreams();
         snapshotWriter.startSnapshotSyncApply();
         completeSnapshotApply(entry);
         ongoingApply.set(false);

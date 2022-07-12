@@ -88,6 +88,7 @@ public class LogReplicationSourceManager {
                 .systemDownHandler(params.getSystemDownHandler())
                 .tlsEnabled(params.isTlsEnabled())
                 .cacheDisabled(true)
+                .maxWriteSize(params.getMaxWriteSize())
                 .build());
         runtime.parseConfigurationString(params.getLocalCorfuEndpoint()).connect();
 
