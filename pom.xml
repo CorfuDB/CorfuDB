@@ -235,15 +235,26 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-failsafe-plugin</artifactId>
-                        <version>3.0.0-M5</version>
+                        <version>3.0.0-M1</version>
                         <configuration>
+                            <argLine>-Xmx1024m -XX:MaxPermSize=256m ${failsafe.jacoco.args}</argLine>
                             <forkCount>1</forkCount>
+<!--                            <shutdown>exit</shutdown>-->
+                            <reuseForks>false</reuseForks>
                             <trimStackTrace>false</trimStackTrace>
                             <!-- Option to generate a file test report or just output the test report to the console. -->
                             <useFile>false</useFile>
                             <includes>
                                 <include>**/*IT.java</include>
                             </includes>
+                            <excludes>
+                                <exclude>CorfuReplicationTrimIT.java</exclude>
+                                <exclude>CorfuReplicationUpgradeIT.java</exclude>
+                                <exclude>CorfuReplicationClusterConfigIT.java</exclude>
+                                <exclude>CorfuReplicationReconfigurationIT.java</exclude>
+                                <exclude>WorkflowIT.java</exclude>
+                                <exclude>ClusterReconfigIT.java</exclude>
+                            </excludes>
                             <systemPropertyVariables>
                                 <propertyName>test.seed</propertyName>
                             </systemPropertyVariables>
@@ -430,11 +441,44 @@
                 </configuration>
             </plugin>
             <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.version}</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                        <configuration>
+                            <destFile>${project.build.directory}/jacoco-unit-tests.exec</destFile>
+                            <propertyName>surefire.jacoco.args</propertyName>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>prepare-integration-agent</id>
+                        <goals>
+                            <goal>prepare-agent-integration</goal>
+                        </goals>
+                        <configuration>
+                            <destFile>${project.build.directory}/jacoco-it-tests.exec</destFile>
+                            <propertyName>failsafe.jacoco.args</propertyName>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.0.0-M5</version>
+                <version>3.0.0-M1</version>
                 <configuration>
-                    <argLine>${argLine}</argLine>
+                    <argLine>${surefire.jacoco.args}</argLine>
                     <forkCount>1C</forkCount>
                     <reuseForks>true</reuseForks>
                     <trimStackTrace>false</trimStackTrace>
@@ -455,19 +499,6 @@
                         <phase>test</phase>
                         <goals>
                             <goal>test</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.jacoco</groupId>
-                <artifactId>jacoco-maven-plugin</artifactId>
-                <version>${jacoco.version}</version>
-                <executions>
-                    <execution>
-                        <id>prepare-agent</id>
-                        <goals>
-                            <goal>prepare-agent</goal>
                         </goals>
                     </execution>
                 </executions>

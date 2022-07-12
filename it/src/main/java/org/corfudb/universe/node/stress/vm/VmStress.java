@@ -73,7 +73,7 @@ public class VmStress implements Stress {
     public void releaseStress() {
         log.info("Release the stress load on corfu server: {}", params.getName());
 
-        executeOnVm("ps -ef | grep -v grep | grep \"stress\" | awk '{print $2}' | xargs kill -9");
+        executeOnVm("ps -ef | grep -v grep | grep \"stress\" | awk '{print $2}' | xargs kill -SIGINT");
     }
 
     /**
