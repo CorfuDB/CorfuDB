@@ -265,6 +265,15 @@ public class ServerContext implements AutoCloseable {
     }
 
     /**
+     * Get the max write size of a transaction for LR's runtime.
+     * @return max write size of a transaction
+     */
+    public int getMaxWriteSize() {
+        String val = getServerConfig(String.class, "--max-write-size");
+        return val == null ? Integer.MAX_VALUE : Integer.parseInt(val);
+    }
+
+    /**
      * Cleanup the DataStore files with names that are prefixes of the specified
      * fileName when so that the number of these files don't exceed the user-defined
      * retention limit. Cleanup is always done on files with lower epochs.

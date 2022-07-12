@@ -136,6 +136,7 @@ public class CorfuReplicationManager {
                             .ksPasswordFile(corfuRuntime.getParameters().getKsPasswordFile())
                             .trustStore(corfuRuntime.getParameters().getTrustStore())
                             .tsPasswordFile(corfuRuntime.getParameters().getTsPasswordFile())
+                            .maxWriteSize(corfuRuntime.getParameters().getMaxWriteSize())
                             .build();
                     CorfuLogReplicationRuntime replicationRuntime = new CorfuLogReplicationRuntime(parameters,
                             metadataManager, replicationConfigManager);

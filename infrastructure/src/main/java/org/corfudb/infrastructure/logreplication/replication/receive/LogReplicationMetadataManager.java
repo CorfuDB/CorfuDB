@@ -64,7 +64,9 @@ public class LogReplicationMetadataManager {
 
     private final String metadataTableName;
 
+    @Getter
     private final CorfuRuntime runtime;
+
     private final String localClusterId;
 
     private final Table<ReplicationStatusKey, ReplicationStatusVal, Message> replicationStatusTable;
