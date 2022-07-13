@@ -765,4 +765,54 @@ public class BackupRestoreIT extends AbstractIT {
 
         assertThat(dir1).doesNotExist();
         assertThat(dir2).doesNotExist();
-    }}
+    }
+
+    /**
+     * Back up all tables and test restoring tagged tables from it
+     */
+    @Test
+    public void restoreTaggedTablesFromFullBackupTest() throws IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+
+        // Set up the test environment
+        setupEnv();
+
+        // Create Corfu Store to add entries into server
+        CorfuStore srcDataCorfuStore = new CorfuStore(srcDataRuntime);
+        CorfuStore destDataCorfuStore = new CorfuStore(destDataRuntime);
+
+        List<String> tableNames = getTableNames(numTables);
+
+        // Generate random entries and save into sourceServer
+        // Set half of the tables with backup tag, and the other half without backup tag
+        int i = 0;
+        for (String tableName : tableNames) {
+            // set requires_backup_support if 'i' is even
+            generateData(srcDataCorfuStore, tableName, i++ % 2 == 0);
+        }
+
+        // Backup all tables
+        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, false);
+        backup.start();
+
+        // Restore using backup files
+        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.PARTIAL_TAGGED);
+        restore.start();
+
+        // Compare data entries in CorfuStore before and after the Backup/Restore
+        i = 0;
+        for (String tableName : tableNames) {
+            if (i++ % 2 == 0) {
+                // tables that have requires_backup_support tag
+                openTableWithBackupTag(destDataCorfuStore, tableName);
+                compareCorfuStoreTables(srcDataCorfuStore, tableName, destDataCorfuStore, tableName);
+            } else {
+                // tables that don't have requires_backup_support tag are not restored and should remain empty
+                openTableWithoutBackupTag(destDataCorfuStore, tableName);
+                assertThat(destDataCorfuStore.getTable(NAMESPACE, tableName).count()).isZero();
+            }
+        }
+
+        // Close servers and runtime before exiting
+        cleanEnv();
+    }
+}
