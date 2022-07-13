@@ -101,4 +101,9 @@ public class MockLivenessUpdater implements LivenessUpdater {
         executorService.shutdownNow();
         changeStatus();
     }
+
+    @Override
+    public void shutdown() {
+        //No action done
+    }
 }

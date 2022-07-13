@@ -38,6 +38,7 @@ public class CorfuStoreCompactorMain {
     public CorfuStoreCompactorMain(String[] args) throws Exception {
         this.config = new CorfuStoreCompactorConfig(args);
 
+        Thread.currentThread().setName("CorfuStore-" + config.getNodeLocator().getPort() + "-chkpter");
         CorfuRuntime cpRuntime = (CorfuRuntime.fromParameters(
                 config.getParams())).parseConfigurationString(config.getNodeLocator().toEndpointUrl()).connect();
         CorfuRuntime corfuRuntime = (CorfuRuntime.fromParameters(
@@ -69,10 +70,10 @@ public class CorfuStoreCompactorMain {
             log.error("CorfuStoreCompactorMain crashed with error: {}, Exception: ",
                     CorfuStoreCompactorConfig.CORFU_LOG_CHECKPOINT_ERROR, e);
         }
+        log.info("Exiting CorfuStoreCompactor");
     }
 
     private void startCheckpointing() {
-        Thread.currentThread().setName("CorfuStore-" + config.getNodeLocator().getPort() + "-chkpter");
         if (config.isUpgrade()) {
             upgrade();
         }
@@ -81,6 +82,7 @@ public class CorfuStoreCompactorMain {
 
     private void upgrade() {
         retryCheckpointing = CorfuStoreCompactorConfig.CHECKPOINT_RETRY_UPGRADE;
+        log.info("Updating the upgrade key");
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             txn.putRecord(checkpointTable, CompactorMetadataTables.UPGRADE_KEY, TokenMsg.getDefaultInstance(), null);
             txn.commit();
@@ -97,11 +99,13 @@ public class CorfuStoreCompactorMain {
                     break;
                 }
                 TimeUnit.SECONDS.sleep(1);
+                log.info("Compaction cycle hasn't started yet...");
             }
         } catch (InterruptedException ie) {
             log.error("Sleep interrupted with exception: ", ie);
         } catch (Exception e) {
             log.error("Exception during checkpointing: {}, StackTrace: {}", e.getMessage(), e.getStackTrace());
         }
+        distributedCheckpointer.shutdown();
     }
 }

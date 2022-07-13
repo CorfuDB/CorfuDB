@@ -75,6 +75,7 @@ public class CheckpointLivenessUpdater implements LivenessUpdater {
         currentTable = Optional.empty();
     }
 
+    @Override
     public void shutdown() {
         executorService.shutdownNow();
     }

@@ -216,5 +216,9 @@ public abstract class DistributedCheckpointer {
     }
 
     public abstract void checkpointTables();
+
+    public void shutdown() {
+        livenessUpdater.shutdown();
+    }
 }
 

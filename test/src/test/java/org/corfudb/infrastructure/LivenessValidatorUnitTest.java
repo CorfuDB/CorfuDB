@@ -101,5 +101,11 @@ public class LivenessValidatorUnitTest {
                 livenessValidatorSpy.shouldChangeManagerStatus(Duration.ofSeconds(0)));
         Assert.assertEquals(LivenessValidator.StatusToChange.FINISH,
                 livenessValidatorSpy.shouldChangeManagerStatus(Duration.ofSeconds(TIMEOUT_SECONDS + 1)));
+
+        final int currentTime = 4;
+        when(corfuStoreEntry.getPayload()).thenThrow(new RuntimeException());
+        when(mockList.size()).thenReturn(1);
+        Assert.assertEquals(LivenessValidator.StatusToChange.NONE,
+                livenessValidatorSpy.shouldChangeManagerStatus(Duration.ofSeconds(currentTime)));
     }
 }
