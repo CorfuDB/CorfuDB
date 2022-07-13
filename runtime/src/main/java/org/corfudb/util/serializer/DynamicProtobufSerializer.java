@@ -160,21 +160,24 @@ public class DynamicProtobufSerializer implements ISerializer {
      *
      * @param cachedRegistryTable - pre-constructed cache of the entire RegistryTable
      * @param cachedProtobufDescriptorTable- pre-constructed cache of the ProtobufDescriptorTable
-     * @param cachedMessageToProtoFilenameMap - pre-constrcuted map of table name -> protobuf file name
-     * @param cachedProtoMap - pre-constructed map of filename -> FileDescriptors
      */
     public DynamicProtobufSerializer(
             ConcurrentMap<TableName,
                     CorfuRecord<TableDescriptors, TableMetadata>> cachedRegistryTable,
             ConcurrentMap<ProtobufFileName,
-                    CorfuRecord<ProtobufFileDescriptor, TableMetadata>> cachedProtobufDescriptorTable,
-            ConcurrentMap<String, FileDescriptorProto> cachedProtoMap,
-            ConcurrentMap<String, String> cachedMessageToProtoFilenameMap) {
+                    CorfuRecord<ProtobufFileDescriptor, TableMetadata>> cachedProtobufDescriptorTable) {
         this.type = ProtobufSerializer.PROTOBUF_SERIALIZER_CODE;
         this.cachedRegistryTable = cachedRegistryTable;
         this.cachedProtobufDescriptorTable = cachedProtobufDescriptorTable;
-        this.fdProtoMap = cachedProtoMap;
-        this.messagesFdProtoNameMap = cachedMessageToProtoFilenameMap;
+        this.fdProtoMap = new ConcurrentHashMap<>();
+        ;
+        this.messagesFdProtoNameMap = new ConcurrentHashMap<>();
+        cachedProtobufDescriptorTable.forEach((fdName, fileDescriptorProto) -> {
+            populateFileDescriptorProtosInMessage(fileDescriptorProto, fdProtoMap);
+            populateMessageTypesInFileDescriptorProto(fileDescriptorProto.getPayload().getFileDescriptor(),
+                    messagesFdProtoNameMap);
+
+        });
     }
 
     /**
