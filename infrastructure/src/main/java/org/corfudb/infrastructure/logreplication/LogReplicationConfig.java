@@ -4,7 +4,6 @@ import com.google.common.annotations.VisibleForTesting;
 import lombok.Data;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.IConnectionConfigPlugin;
 
 import java.util.HashMap;
 import java.util.HashSet;

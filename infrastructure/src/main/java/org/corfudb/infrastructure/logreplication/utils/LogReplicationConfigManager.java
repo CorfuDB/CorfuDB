@@ -4,9 +4,11 @@ import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.IConnectionConfigPlugin;
+import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.IConnectionModelPlugin;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ILogReplicationConfigAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuStore;
@@ -60,9 +62,11 @@ public class LogReplicationConfigManager {
 
     private ILogReplicationConfigAdapter logReplicationConfigAdapter;
 
-    private IConnectionConfigPlugin connectionConfigPlugin;
+    private IConnectionModelPlugin connectionConfigPlugin;
 
     private final String pluginConfigFilePath;
+
+    private TopologyDescriptor topologyDescriptor;
 
     private final VersionString versionString = VersionString.newBuilder().setName(VERSION_PLUGIN_KEY).build();
 
@@ -90,7 +94,7 @@ public class LogReplicationConfigManager {
 
     private Table<VersionString, Version, CommonTypes.Uuid> pluginVersionTable;
 
-    private String nodeId;
+    private String localClusterId;
 
     /**
      * Used for testing purpose only.
@@ -101,10 +105,11 @@ public class LogReplicationConfigManager {
         this.pluginConfigFilePath = EMPTY_STR;
     }
 
-    public LogReplicationConfigManager(CorfuRuntime runtime, String pluginConfigFilePath, String nodeId) {
+    public LogReplicationConfigManager(CorfuRuntime runtime, String pluginConfigFilePath,
+                                       String localClusterId) {
         this.pluginConfigFilePath = pluginConfigFilePath;
         this.corfuStore = new CorfuStore(runtime);
-        this.nodeId = nodeId;
+        this.localClusterId = localClusterId;
 
         log.info("Plugin :: {}", pluginConfigFilePath);
         LogReplicationPluginConfig config = new LogReplicationPluginConfig(pluginConfigFilePath);
@@ -162,11 +167,11 @@ public class LogReplicationConfigManager {
 
     // this will be needed in the config to start the replication
     public Map<ClusterDescriptor, LogReplicationMetadata.ReplicationModels> fetchDestinationEndpoints() {
-        return logReplicationConfigAdapter.getSinkToReplicationModel(nodeId);
+        return logReplicationConfigAdapter.getSinkToReplicationModel(localClusterId);
     }
 
     // this will be needed for discovery Service to trigger connection
-    public Set<ClusterDescriptor> fetchConnectionEndpoints() {
+    public Set<LogReplicationClusterInfo.ClusterConfigurationMsg> fetchConnectionEndpoints() {
         return connectionConfigPlugin.getConnectionEndpoints();
     }
 
@@ -174,7 +179,7 @@ public class LogReplicationConfigManager {
         File jar = new File(config.getConnectionConfigManagerJARPath());
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
             Class plugin = Class.forName(config.getConnectionConfigManagerCanonicalName(), true, child);
-            connectionConfigPlugin = (IConnectionConfigPlugin) plugin.getDeclaredConstructor()
+            connectionConfigPlugin = (IConnectionModelPlugin) plugin.getDeclaredConstructor()
                     .newInstance();
         } catch (Exception e) {
             log.error("Fatal error: Failed to get Stream Fetcher Plugin", e);

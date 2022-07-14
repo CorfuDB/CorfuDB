@@ -8,7 +8,7 @@ import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
  * This class represents the Log Replication Context.
  *
  * It contains all abstractions required to initiate log replication either as
- * an active cluster (source) or as standby cluster (standby).
+ * an source cluster and/or as sink cluster.
  *
  * @author amartinezman
  */

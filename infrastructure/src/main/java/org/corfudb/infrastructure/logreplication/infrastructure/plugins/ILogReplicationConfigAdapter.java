@@ -26,7 +26,7 @@ public interface ILogReplicationConfigAdapter {
     String getVersion();
 
     /**
-     * Returns configuration for streaming on sink (standby)
+     * Returns configuration for streaming on sink
      *
      * This configuration consists of a map containing data stream IDs to stream tags
      * Note that: since data is not deserialized we have no access to stream tags corresponding

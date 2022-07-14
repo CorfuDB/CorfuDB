@@ -6,22 +6,21 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
  * This class represents a view of a Multi-Cluster Topology,
  *
- * Ideally, in a given topology, one cluster represents the active cluster (source of data)
- * while n others are standby clusters (backup's). However, because the topology info is provided by an
- * external adapter which can be specific to the use cases of the user, a topology might be initialized
- * with multiple active clusters and multiple standby clusters.
+ * A topology may have multiple source clusters and multiple sink clusters.
  *
  */
 @Slf4j
@@ -54,35 +53,19 @@ public class TopologyDescriptor {
 
         for (ClusterConfigurationMsg clusterConfig : topologyMessage.getClustersList()) {
             ClusterDescriptor cluster = new ClusterDescriptor(clusterConfig);
-            if (clusterConfig.getRole() == ClusterRole.ACTIVE) {
-                sourceClusters.put(cluster.getClusterId(), cluster);
-            } else if (clusterConfig.getRole() == ClusterRole.STANDBY) {
-                addStandbyCluster(cluster);
-            } else {
+            if (clusterConfig.getRole() == ClusterRole.INVALID) {
                 invalidClusters.put(cluster.getClusterId(), cluster);
             }
         }
     }
 
-    /**
-     * Constructor
-     *
-     * @param topologyConfigId topology configuration identifier (epoch)
-     * @param activeCluster active cluster
-     * @param sinkClusters standby cluster's
-     */
-    public TopologyDescriptor(long topologyConfigId, @NonNull ClusterDescriptor activeCluster,
-                              @NonNull List<ClusterDescriptor> sinkClusters) {
-        this(topologyConfigId, Collections.singletonList(activeCluster), sinkClusters);
-    }
 
-    // Shama: this has to be removed.
     /**
-     * Constructor
+     * for test, Constructor
      *
      * @param topologyConfigId topology configuration identifier (epoch)
-     * @param sourceClusters active cluster's
-     * @param sinkClusters standby cluster's
+     * @param sourceClusters active clusters
+     * @param sinkClusters sink clusters
      */
     public TopologyDescriptor(long topologyConfigId, @NonNull List<ClusterDescriptor> sourceClusters,
                               @NonNull List<ClusterDescriptor> sinkClusters) {
@@ -91,16 +74,24 @@ public class TopologyDescriptor {
         this.sinkClusters = new HashMap<>();
         this.invalidClusters = new HashMap<>();
 
-        sourceClusters.forEach(activeCluster -> this.sourceClusters.put(activeCluster.getClusterId(), activeCluster));
-        sinkClusters.forEach(standbyCluster -> this.sinkClusters.put(standbyCluster.getClusterId(), standbyCluster));
+        sourceClusters.forEach(sourceCluster -> this.sourceClusters.put(sourceCluster.getClusterId(), sourceCluster));
+        sinkClusters.forEach(sinkCluster -> this.sinkClusters.put(sinkCluster.getClusterId(), sinkCluster));
+    }
+
+    public void setSinkClusters(Set<ClusterDescriptor> sinkClustersSet) {
+        sinkClustersSet.stream().forEach(sinkCluster -> sinkClusters.put(sinkCluster.getClusterId(), sinkCluster));
+    }
+
+    public void setSourceClusters(ClusterDescriptor localCluster) {
+        sourceClusters.put(localCluster.getClusterId(), localCluster);
     }
 
     /**
      * Constructor
      *
      * @param topologyConfigId topology configuration identifier (epoch)
-     * @param sourceClusters active cluster's
-     * @param sinkClusters standby cluster's
+     * @param sourceClusters source cluster's
+     * @param sinkClusters sink cluster's
      * @param invalidClusters invalid cluster's
      */
     public TopologyDescriptor(long topologyConfigId, @NonNull List<ClusterDescriptor> sourceClusters,
@@ -128,9 +119,9 @@ public class TopologyDescriptor {
     }
 
     /**
-     * Add a standby cluster to the current topology
+     * Add a sink cluster to the current topology
      *
-     * @param cluster standby cluster to add
+     * @param cluster sink cluster to add
      */
     public void addStandbyCluster(ClusterDescriptor cluster) {
         sinkClusters.put(cluster.getClusterId(), cluster);

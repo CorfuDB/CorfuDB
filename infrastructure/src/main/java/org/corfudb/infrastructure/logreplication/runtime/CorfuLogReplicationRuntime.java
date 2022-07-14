@@ -189,8 +189,11 @@ public class CorfuLogReplicationRuntime {
     public void start() {
         log.info("Start Log Replication Runtime to remote {}", remoteClusterId);
         // Start Consumer Thread for this state machine (dedicated thread for event consumption)
-        communicationFSMConsumer.submit(this::consume);
         router.connect();
+    }
+
+    public void startReplication() {
+        communicationFSMConsumer.submit(this::consume);
     }
 
     /**

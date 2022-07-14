@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
+import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.TableRegistry;
 
@@ -59,5 +61,15 @@ public class DefaultLogReplicationConfigAdapter implements ILogReplicationConfig
         streamsToTagsMaps.put(CorfuRuntime.getStreamID(NAMESPACE + "$" + TABLE_PREFIX + indexTwo),
                 Collections.singletonList(streamTagOneDefaultId));
         return streamsToTagsMaps;
+    }
+
+    public Map<ClusterDescriptor, LogReplicationMetadata.ReplicationModels> getSinkToReplicationModel(String localClusterId) {
+        // Shama implement this
+        return new HashMap<>();
+    }
+
+    public Set<ClusterDescriptor> getSinksForCluster(String localClusterId) {
+        // Shama implement this
+        return new HashSet<>();
     }
 }

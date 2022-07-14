@@ -421,6 +421,7 @@ public class LogReplicationClientRouter implements IClientRouter {
         });
     }
 
+    // Shama: this has to change now...will use gRPC now
     /**
      * Connect to remote cluster through the specified channel adapter
      */

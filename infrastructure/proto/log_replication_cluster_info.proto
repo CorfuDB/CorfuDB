@@ -32,5 +32,7 @@ enum ClusterRole {
   ACTIVE = 1;
   STANDBY = 2;
   NONE = 3;
+  SINK = 4;
+  SOURCE = 5;
 }
 

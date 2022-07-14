@@ -7,8 +7,10 @@ import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescripto
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationDiscoveryServiceException;
 import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.ExampleSchemas.ClusterUuidMsg;
@@ -27,6 +29,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -344,6 +347,12 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         List<ClusterDescriptor> standbyClusters = new ArrayList<>(currentConfig.getSinkClusters().values());
 
         return new TopologyDescriptor(++configId, newActiveClusters, standbyClusters);
+    }
+
+    public Map<LogReplicationClusterInfo.ClusterConfigurationMsg, List<LogReplicationMetadata.ReplicationModels>> getSinkToReplicationModel() {
+        //Shama Implement this
+
+        return new HashMap<>();
     }
 
     /**

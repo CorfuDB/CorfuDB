@@ -2,10 +2,13 @@ package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryServiceAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationDiscoveryServiceException;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -53,10 +56,13 @@ public interface CorfuReplicationClusterManagerAdapter {
     Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus();
 
     /**
-     * This API enforce a full snapshot sync on the standby cluster with the clusterId at best effort.
+     * This API enforce a full snapshot sync on the sink cluster with the clusterId at best effort.
      * The command can only be executed on the active cluster's node.
      *
      * @param clusterId
      */
     UUID forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException;
+
+    // get all the remote cluster which acts as a Sink for the current cluster
+    Map<LogReplicationClusterInfo.ClusterConfigurationMsg, List<LogReplicationMetadata.ReplicationModels>> getSinkToReplicationModel();
 }

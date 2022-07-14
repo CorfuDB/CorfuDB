@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
+import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TableOptions;
@@ -95,5 +97,10 @@ public abstract class DefaultAdapterForUpgrade implements ILogReplicationConfigA
         streamsToTagsMaps.put(CorfuRuntime.getStreamID(NAMESPACE + SEPARATOR + TABLE_PREFIX + indexTwo),
                 Collections.singletonList(streamTagOneDefaultId));
         return streamsToTagsMaps;
+    }
+
+    public Map<ClusterDescriptor, LogReplicationMetadata.ReplicationModels> getSinkToReplicationModel(String nodeId) {
+        // Shama implement this
+        return new HashMap<>();
     }
 }
