@@ -5,20 +5,18 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CheckpointerBuilder;
 import org.corfudb.runtime.CompactorMetadataTables;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.DistributedCheckpointer;
 import org.corfudb.runtime.DistributedCheckpointerHelper;
+import org.corfudb.runtime.DistributedCheckpointerHelper.UpdateAction;
 import org.corfudb.runtime.ServerTriggeredCheckpointer;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
-import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.proto.RpcCommon.TokenMsg;
+import org.corfudb.runtime.proto.RpcCommon;
 
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
-
-import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * Invokes the startCheckpointing() method of DistributedCompactor to checkpoint tables that weren't
@@ -27,33 +25,28 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @Slf4j
 public class CorfuStoreCompactorMain {
 
-    private final CorfuStoreCompactorConfig config;
+    private final CompactorMetadataTables compactorMetadataTables;
+    private final CorfuRuntime corfuRuntime;
+    private final CorfuRuntime cpRuntime;
     private final CorfuStore corfuStore;
-    private final DistributedCheckpointer distributedCheckpointer;
+    private final CorfuStoreCompactorConfig config;
     private final DistributedCheckpointerHelper distributedCheckpointerHelper;
-
-    private final Table<StringKey, TokenMsg, Message> checkpointTable;
-    private int retryCheckpointing = 1;
+    private final UpgradeDescriptorTable upgradeDescriptorTable;
+    private final Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable;
 
     public CorfuStoreCompactorMain(String[] args) throws Exception {
         this.config = new CorfuStoreCompactorConfig(args);
 
         Thread.currentThread().setName("CorfuStore-" + config.getNodeLocator().getPort() + "-chkpter");
-        CorfuRuntime cpRuntime = (CorfuRuntime.fromParameters(
+        this.cpRuntime = (CorfuRuntime.fromParameters(
                 config.getParams())).parseConfigurationString(config.getNodeLocator().toEndpointUrl()).connect();
-        CorfuRuntime corfuRuntime = (CorfuRuntime.fromParameters(
+        this.corfuRuntime = (CorfuRuntime.fromParameters(
                 config.getParams())).parseConfigurationString(config.getNodeLocator().toEndpointUrl()).connect();
-        corfuStore = new CorfuStore(corfuRuntime);
+        this.corfuStore = new CorfuStore(corfuRuntime);
+        this.upgradeDescriptorTable = new UpgradeDescriptorTable(corfuRuntime);
 
-        CompactorMetadataTables compactorMetadataTables = new CompactorMetadataTables(corfuStore);
+        this.compactorMetadataTables = new CompactorMetadataTables(corfuStore);
         this.checkpointTable = compactorMetadataTables.getCheckpointTable();
-
-        this.distributedCheckpointer = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
-                .corfuRuntime(corfuRuntime)
-                .cpRuntime(Optional.of(cpRuntime))
-                .persistedCacheRoot(config.getPersistedCacheRoot())
-                .isClient(false)
-                .build(), corfuStore, compactorMetadataTables);
         this.distributedCheckpointerHelper = new DistributedCheckpointerHelper(corfuStore);
     }
 
@@ -65,7 +58,7 @@ public class CorfuStoreCompactorMain {
     public static void main(String[] args) {
         try {
             CorfuStoreCompactorMain corfuCompactorMain = new CorfuStoreCompactorMain(args);
-            corfuCompactorMain.startCheckpointing();
+            corfuCompactorMain.doCompactorAction();
         } catch (Exception e) {
             log.error("CorfuStoreCompactorMain crashed with error: {}, Exception: ",
                     CorfuStoreCompactorConfig.CORFU_LOG_CHECKPOINT_ERROR, e);
@@ -73,39 +66,57 @@ public class CorfuStoreCompactorMain {
         log.info("Exiting CorfuStoreCompactor");
     }
 
-    private void startCheckpointing() {
-        if (config.isUpgrade()) {
-            upgrade();
+    private void doCompactorAction() {
+        if (config.isFreezeCompaction()) {
+            log.info("Freezing compaction...");
+            distributedCheckpointerHelper.updateCheckpointTable(checkpointTable, CompactorMetadataTables.FREEZE_TOKEN, UpdateAction.PUT);
+        } else if (config.isUnfreezeCompaction()) {
+            log.info("Unfreezing compaction...");
+            distributedCheckpointerHelper.updateCheckpointTable(checkpointTable, CompactorMetadataTables.FREEZE_TOKEN, UpdateAction.DELETE);
         }
-        checkpoint();
-    }
-
-    private void upgrade() {
-        retryCheckpointing = CorfuStoreCompactorConfig.CHECKPOINT_RETRY_UPGRADE;
-        log.info("Updating the upgrade key");
-        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            txn.putRecord(checkpointTable, CompactorMetadataTables.UPGRADE_KEY, TokenMsg.getDefaultInstance(), null);
-            txn.commit();
-        } catch (Exception e) {
-            log.warn("Unable to write UpgradeKey to checkpoint table, ", e);
+        if (config.isUpgradeDescriptorTable()) {
+            log.info("Upgrading descriptor table...");
+            upgradeDescriptorTable.syncProtobufDescriptorTable();
+        }
+        if (config.isInstantTriggerCompaction()) {
+            if (config.isTrim()) {
+                log.info("Enabling instant compaction trigger with trim...");
+                distributedCheckpointerHelper.updateCheckpointTable(checkpointTable,
+                        CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM, UpdateAction.PUT);
+            } else {
+                log.info("Enabling instant compactor trigger...");
+                distributedCheckpointerHelper.updateCheckpointTable(checkpointTable,
+                        CompactorMetadataTables.INSTANT_TIGGER, UpdateAction.PUT);
+            }
+        }
+        if (config.isStartCheckpointing()) {
+            checkpoint();
         }
     }
 
     private void checkpoint() {
+        DistributedCheckpointer distributedCheckpointer = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
+                .corfuRuntime(corfuRuntime)
+                .cpRuntime(Optional.of(cpRuntime))
+                .persistedCacheRoot(config.getPersistedCacheRoot())
+                .isClient(false)
+                .build(), corfuStore, compactorMetadataTables);
         try {
+            int retryCheckpointing = 5;
             for (int i = 0; i < retryCheckpointing; i++) {
                 if (distributedCheckpointerHelper.hasCompactionStarted()) {
                     distributedCheckpointer.checkpointTables();
                     break;
                 }
-                TimeUnit.SECONDS.sleep(1);
                 log.info("Compaction cycle hasn't started yet...");
+                TimeUnit.SECONDS.sleep(1);
             }
         } catch (InterruptedException ie) {
             log.error("Sleep interrupted with exception: ", ie);
         } catch (Exception e) {
             log.error("Exception during checkpointing: {}, StackTrace: {}", e.getMessage(), e.getStackTrace());
+        } finally {
+            distributedCheckpointer.shutdown();
         }
-        distributedCheckpointer.shutdown();
     }
 }

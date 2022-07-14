@@ -65,7 +65,7 @@ public class LivenessValidator {
         }
     }
 
-    public static enum StatusToChange {
+    public static enum Status {
         NONE,
         FINISH
     }
@@ -138,14 +138,14 @@ public class LivenessValidator {
         return idleCount;
     }
 
-    public StatusToChange shouldChangeManagerStatus(Duration currentTime) {
+    public Status shouldChangeManagerStatus(Duration currentTime) {
         //Find the number of tables with IDLE status
         long idleCount = getIdleCount();
         if (livenessValidatorHelper.getPrevActiveTime().equals(Duration.ofMillis(LIVENESS_INIT_VALUE)) ||
                 idleCount < livenessValidatorHelper.getPrevIdleCount()) {
             log.trace("Checkpointing in progress...");
             livenessValidatorHelper.updateValues(idleCount, currentTime);
-            return StatusToChange.NONE;
+            return Status.NONE;
         }
 
         Optional<CheckpointingStatus> managerStatus = Optional.empty();
@@ -162,9 +162,9 @@ public class LivenessValidator {
 
         if (idleCount == 0 || isTimedOut &&
                 managerStatus.isPresent() && managerStatus.get().getStatus() == StatusType.STARTED) {
-            return StatusToChange.FINISH;
+            return Status.FINISH;
         }
-        return StatusToChange.NONE;
+        return Status.NONE;
     }
 
     public void clearLivenessMap() {

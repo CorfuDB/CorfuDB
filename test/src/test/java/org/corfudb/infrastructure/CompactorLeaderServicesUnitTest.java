@@ -92,7 +92,7 @@ public class CompactorLeaderServicesUnitTest {
         doNothing().when(livenessValidator).clearLivenessMap();
 
         //When there's no checkpoint activity
-        when(livenessValidator.shouldChangeManagerStatus(any(Duration.class))).thenReturn(LivenessValidator.StatusToChange.FINISH);
+        when(livenessValidator.shouldChangeManagerStatus(any(Duration.class))).thenReturn(LivenessValidator.Status.FINISH);
         when(corfuStoreEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
         compactorLeaderServices.validateLiveness();
@@ -136,11 +136,18 @@ public class CompactorLeaderServicesUnitTest {
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.COMPLETED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.COMPLETED).build())
-                .thenReturn(RpcCommon.TokenMsg.getDefaultInstance())
-                .thenReturn(null);
+                .thenReturn(RpcCommon.TokenMsg.getDefaultInstance());
         compactorLeaderServices.finishCompactionCycle();
 
-        final int numTimePutInvoked = 3;
+        when(corfuStoreEntry.getPayload())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.COMPLETED).build())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.COMPLETED).build())
+                .thenReturn(null)
+                .thenReturn(RpcCommon.TokenMsg.getDefaultInstance());
+        compactorLeaderServices.finishCompactionCycle();
+
+        final int numTimePutInvoked = 4;
         ArgumentCaptor<CheckpointingStatus> putCaptor = ArgumentCaptor.forClass(CheckpointingStatus.class);
         verify(txn, times(numTimePutInvoked)).putRecord(Matchers.any(), Matchers.any(),
                 putCaptor.capture(), Matchers.any());
@@ -150,7 +157,7 @@ public class CompactorLeaderServicesUnitTest {
 
         Assert.assertEquals(StatusType.COMPLETED, putCaptor.getAllValues().get(0).getStatus());
         Assert.assertEquals(StatusType.FAILED, putCaptor.getAllValues().get(1).getStatus());
-        Assert.assertEquals(CompactorMetadataTables.INSTANT_TIGGER_KEY, deleteCaptor.getAllValues().get(0));
-        Assert.assertEquals(CompactorMetadataTables.UPGRADE_KEY, deleteCaptor.getValue());
+        Assert.assertEquals(CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM, deleteCaptor.getAllValues().get(0));
+        Assert.assertEquals(CompactorMetadataTables.INSTANT_TIGGER, deleteCaptor.getAllValues().get(1));
     }
 }

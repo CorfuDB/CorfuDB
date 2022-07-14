@@ -38,7 +38,7 @@ public class DynamicTriggerPolicyUnitTest {
 
     @Test
     public void testShouldTrigger() {
-        //this makes shouldForceTrigger to return false
+        //this makes shouldForceTrigger and isCheckpointFrozen to return false
         when(corfuStoreEntry.getPayload()).thenReturn(null);
 
         dynamicTriggerPolicy.markCompactionCycleStart();
@@ -54,7 +54,15 @@ public class DynamicTriggerPolicyUnitTest {
 
     @Test
     public void testShouldForceTrigger() {
-        when((RpcCommon.TokenMsg) corfuStoreEntry.getPayload()).thenReturn(RpcCommon.TokenMsg.getDefaultInstance());
+        when((RpcCommon.TokenMsg) corfuStoreEntry.getPayload()).thenReturn(null)
+                .thenReturn(RpcCommon.TokenMsg.getDefaultInstance());
         assert dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore);
+    }
+
+    @Test
+    public void testCheckpointFrozen() {
+        when((RpcCommon.TokenMsg) corfuStoreEntry.getPayload()).thenReturn(RpcCommon.TokenMsg.newBuilder()
+                .setSequence(System.currentTimeMillis()).build());
+        assert !dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore);
     }
 }

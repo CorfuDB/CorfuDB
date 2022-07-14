@@ -2,9 +2,9 @@ package org.corfudb.runtime;
 
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
+import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TxnContext;
@@ -23,19 +23,38 @@ public class DistributedCheckpointerHelper {
         this.corfuStore = corfuStore;
     }
 
-    public boolean isCheckpointFrozen() {
-        final StringKey freezeCheckpointNS = StringKey.newBuilder().setKey("freezeCheckpointNS").build();
-        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            RpcCommon.TokenMsg freezeToken = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT,
-                    freezeCheckpointNS).getPayload();
+    public static enum UpdateAction {
+        PUT,
+        DELETE
+    }
 
+    public void updateCheckpointTable(Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable,
+                                      StringKey stringKey,
+                                      UpdateAction action) {
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            if (action == UpdateAction.PUT) {
+                txn.putRecord(checkpointTable, stringKey,
+                        RpcCommon.TokenMsg.newBuilder().setSequence(System.currentTimeMillis()).build(), null);
+            } else if (action == UpdateAction.DELETE) {
+                txn.delete(checkpointTable, stringKey);
+            }
+            txn.commit();
+        } catch (Exception e) {
+            log.warn("Unable to write UpgradeKey to checkpoint table, ", e);
+        }
+    }
+
+    public boolean isCheckpointFrozen() {
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            RpcCommon.TokenMsg freezeToken = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT_TABLE_NAME,
+                    CompactorMetadataTables.FREEZE_TOKEN).getPayload();
             final long patience = 2 * 60 * 60 * 1000;
             if (freezeToken != null) {
                 long now = System.currentTimeMillis();
                 long frozeAt = freezeToken.getSequence();
                 Date frozeAtDate = new Date(frozeAt);
                 if (now - frozeAt > patience) {
-                    txn.delete(CompactorMetadataTables.CHECKPOINT, freezeCheckpointNS);
+                    txn.delete(CompactorMetadataTables.CHECKPOINT_TABLE_NAME, CompactorMetadataTables.FREEZE_TOKEN);
                     log.warn("Checkpointer asked to freeze at {} but run out of patience",
                             frozeAtDate);
                 } else {

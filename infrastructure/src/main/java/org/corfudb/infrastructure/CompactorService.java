@@ -70,6 +70,7 @@ public class CompactorService implements ManagementService {
      */
     @Override
     public void start(Duration interval) {
+        syslog.info("Staring Compaction service...");
         if (getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis() <= 0) {
             return;
         }

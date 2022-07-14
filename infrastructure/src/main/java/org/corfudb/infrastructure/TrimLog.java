@@ -33,8 +33,8 @@ public class TrimLog {
                     CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
             if (managerStatus.getStatus() == CheckpointingStatus.StatusType.COMPLETED) {
-                RpcCommon.TokenMsg trimToken = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT,
-                        CompactorMetadataTables.CHECKPOINT_KEY).getPayload();
+                RpcCommon.TokenMsg trimToken = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT_TABLE_NAME,
+                        CompactorMetadataTables.MIN_CHECKPOINT).getPayload();
                 trimAddress = Optional.of(trimToken.getSequence());
             } else {
                 syslog.warn("Skip trimming since last checkpointing cycle did not complete successfully");

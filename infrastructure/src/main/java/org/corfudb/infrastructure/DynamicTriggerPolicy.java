@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure;
 
 import org.corfudb.runtime.CompactorMetadataTables;
+import org.corfudb.runtime.DistributedCheckpointerHelper;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.RpcCommon;
@@ -30,12 +31,12 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
 
     private boolean shouldForceTrigger(CorfuStore corfuStore) {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            RpcCommon.TokenMsg upgradeToken = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT,
-                    CompactorMetadataTables.UPGRADE_KEY).getPayload();
-            RpcCommon.TokenMsg instantTrigger = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT,
-                    CompactorMetadataTables.INSTANT_TIGGER_KEY).getPayload();
+            RpcCommon.TokenMsg instantTrigger = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT_TABLE_NAME,
+                    CompactorMetadataTables.INSTANT_TIGGER).getPayload();
+            RpcCommon.TokenMsg instantTrimTrigger = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT_TABLE_NAME,
+                    CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM).getPayload();
             txn.commit();
-            if (upgradeToken != null || instantTrigger != null) {
+            if (instantTrigger != null || instantTrimTrigger != null) {
                 return true;
             }
         }
@@ -52,6 +53,11 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
      */
     @Override
     public boolean shouldTrigger(long interval, CorfuStore corfuStore) {
+        DistributedCheckpointerHelper distributedCheckpointerHelper = new DistributedCheckpointerHelper(corfuStore);
+        if (distributedCheckpointerHelper.isCheckpointFrozen()) {
+            syslog.warn("Compaction has been frozen");
+            return false;
+        }
 
         if (shouldForceTrigger(corfuStore)) {
             syslog.info("Force triggering compaction");

@@ -22,15 +22,16 @@ public class CompactorMetadataTables {
     private Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointsTable;
     private Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable;
 
-    public static final String COMPACTION_MANAGER_TABLE_NAME = "CompactionManager";
+    public static final String COMPACTION_MANAGER_TABLE_NAME = "CompactionManagerTable";
     public static final String CHECKPOINT_STATUS_TABLE_NAME = "CheckpointStatusTable";
-    public static final String ACTIVE_CHECKPOINTS_TABLE_NAME = "ActiveCheckpoints";
-    public static final String CHECKPOINT = "checkpoint";
+    public static final String ACTIVE_CHECKPOINTS_TABLE_NAME = "ActiveCheckpointsTable";
+    public static final String CHECKPOINT_TABLE_NAME = "checkpoint";
 
     public static final StringKey COMPACTION_MANAGER_KEY = StringKey.newBuilder().setKey("CompactionManagerKey").build();
-    public static final StringKey CHECKPOINT_KEY = StringKey.newBuilder().setKey("MinCheckpointToken").build();
-    public static final StringKey UPGRADE_KEY = StringKey.newBuilder().setKey("UpgradeKey").build();
-    public static final StringKey INSTANT_TIGGER_KEY = StringKey.newBuilder().setKey("InstantTrigger").build();
+    public static final StringKey MIN_CHECKPOINT = StringKey.newBuilder().setKey("MinCheckpointToken").build();
+    public static final StringKey FREEZE_TOKEN = StringKey.newBuilder().setKey("FreezeTokenNS").build();
+    public static final StringKey INSTANT_TIGGER = StringKey.newBuilder().setKey("InstantTrigger").build();
+    public static final StringKey INSTANT_TIGGER_WITH_TRIM = StringKey.newBuilder().setKey("InstantTriggerTrim").build();
 
     private static final int MAX_RETRIES = 5;
 
@@ -59,7 +60,7 @@ public class CompactorMetadataTables {
                         TableOptions.fromProtoSchema(ActiveCPStreamMsg.class));
 
                 this.checkpointTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                        CHECKPOINT,
+                        CHECKPOINT_TABLE_NAME,
                         StringKey.class,
                         RpcCommon.TokenMsg.class,
                         null,

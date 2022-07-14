@@ -189,7 +189,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
     private Table<StringKey, TokenMsg, Message> openCheckpointTable() {
         try {
             return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    CompactorMetadataTables.CHECKPOINT,
+                    CompactorMetadataTables.CHECKPOINT_TABLE_NAME,
                     StringKey.class,
                     TokenMsg.class,
                     null,
@@ -252,7 +252,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
 
         TokenMsg token;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            token = (TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT, CompactorMetadataTables.CHECKPOINT_KEY).getPayload();
+            token = (TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT_TABLE_NAME, CompactorMetadataTables.MIN_CHECKPOINT).getPayload();
             txn.commit();
         }
 

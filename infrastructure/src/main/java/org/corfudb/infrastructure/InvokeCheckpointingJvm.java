@@ -41,7 +41,7 @@ public class InvokeCheckpointingJvm implements InvokeCheckpointing {
                 }
 
                 ProcessBuilder pb = new ProcessBuilder(compactorScriptPath, "--hostname", hostName, "--port",
-                        port, "--compactorConfig", compactorConfigPath);
+                        port, "--compactorConfig", compactorConfigPath, "--startCheckpointing=true");
                 pb.inheritIO();
                 this.checkpointerProcess = pb.start();
                 this.isInvoked = true;

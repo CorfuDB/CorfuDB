@@ -84,28 +84,28 @@ public class LivenessValidatorUnitTest {
         when(txn.executeQuery(Matchers.anyString(), Matchers.any(Predicate.class))).thenReturn(mockList);
 
         when(mockList.size()).thenReturn(1);
-        Assert.assertEquals(LivenessValidator.StatusToChange.NONE,
+        Assert.assertEquals(LivenessValidator.Status.NONE,
                 livenessValidatorSpy.shouldChangeManagerStatus(Duration.ofSeconds(0)));
 
         when(corfuStoreEntry.getPayload()).thenReturn(CheckpointingStatus.newBuilder()
                 .setStatus(StatusType.STARTED).build());
-        Assert.assertEquals(LivenessValidator.StatusToChange.NONE,
+        Assert.assertEquals(LivenessValidator.Status.NONE,
                 livenessValidatorSpy.shouldChangeManagerStatus(Duration.ofSeconds(TIMEOUT_SECONDS)));
-        Assert.assertEquals(LivenessValidator.StatusToChange.FINISH,
+        Assert.assertEquals(LivenessValidator.Status.FINISH,
                 livenessValidatorSpy.shouldChangeManagerStatus(Duration.ofSeconds(TIMEOUT_SECONDS + 1)));
         livenessValidatorSpy.clearLivenessValidator();
         livenessValidatorSpy.clearLivenessMap();
 
         when(mockList.size()).thenReturn(0);
-        Assert.assertEquals(LivenessValidator.StatusToChange.NONE,
+        Assert.assertEquals(LivenessValidator.Status.NONE,
                 livenessValidatorSpy.shouldChangeManagerStatus(Duration.ofSeconds(0)));
-        Assert.assertEquals(LivenessValidator.StatusToChange.FINISH,
+        Assert.assertEquals(LivenessValidator.Status.FINISH,
                 livenessValidatorSpy.shouldChangeManagerStatus(Duration.ofSeconds(TIMEOUT_SECONDS + 1)));
 
         final int currentTime = 4;
         when(corfuStoreEntry.getPayload()).thenThrow(new RuntimeException());
         when(mockList.size()).thenReturn(1);
-        Assert.assertEquals(LivenessValidator.StatusToChange.NONE,
+        Assert.assertEquals(LivenessValidator.Status.NONE,
                 livenessValidatorSpy.shouldChangeManagerStatus(Duration.ofSeconds(currentTime)));
     }
 }

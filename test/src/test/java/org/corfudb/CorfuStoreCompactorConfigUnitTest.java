@@ -20,8 +20,10 @@ public class CorfuStoreCompactorConfigUnitTest {
     private static final String truststore_password = "truststore_password";
     private static final int bulkReadSize = 50;
     private static final String CMD = "--hostname=" + hostname + " --port=" + port + " --trim=true" +
-            " --isUpgrade --tlsEnabled=true --bulkReadSize=" + bulkReadSize + " --keystore=" + keystore +
-            " --ks_password=" + ks_password + " --truststore=" + truststore + " --truststore_password=" + truststore_password;
+            " --upgradeDescriptorTable=true --startCheckpointing=true --instantTriggerCompaction=true " +
+            "--freezeCompaction=true --unfreezeCompaction=true --tlsEnabled=true --bulkReadSize=" + bulkReadSize +
+            " --keystore=" + keystore + " --ks_password=" + ks_password + " --truststore=" + truststore +
+            " --truststore_password=" + truststore_password;
 
     @Test
     public void testCorfuStoreCompactorConfig() {
@@ -33,11 +35,17 @@ public class CorfuStoreCompactorConfigUnitTest {
                 .priorityLevel(PriorityLevel.HIGH)
                 .systemDownHandlerTriggerLimit(CorfuStoreCompactorConfig.SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT)
                 .systemDownHandler(corfuStoreCompactorConfig.getDefaultSystemDownHandler())
+                .clientName(hostname)
                 .build();
 
         Assert.assertEquals(Optional.empty(), corfuStoreCompactorConfig.getPersistedCacheRoot());
         Assert.assertEquals(NodeLocator.builder().host(hostname).port(port).build(), corfuStoreCompactorConfig.getNodeLocator());
-        Assert.assertTrue(corfuStoreCompactorConfig.isUpgrade());
+        Assert.assertTrue(corfuStoreCompactorConfig.isUpgradeDescriptorTable());
+        Assert.assertTrue(corfuStoreCompactorConfig.isInstantTriggerCompaction());
+        Assert.assertTrue(corfuStoreCompactorConfig.isTrim());
+        Assert.assertTrue(corfuStoreCompactorConfig.isFreezeCompaction());
+        Assert.assertTrue(corfuStoreCompactorConfig.isUnfreezeCompaction());
+        Assert.assertTrue(corfuStoreCompactorConfig.isStartCheckpointing());
         Assert.assertEquals(PriorityLevel.HIGH, corfuStoreCompactorConfig.getParams().getPriorityLevel());
         Assert.assertEquals(params, corfuStoreCompactorConfig.getParams());
     }

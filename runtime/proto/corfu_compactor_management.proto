@@ -24,7 +24,7 @@ message CheckpointingStatus {
   int64 epoch = 5;
 }
 
-message StringKey{
+message StringKey {
   string key = 1;
 }
 

@@ -8,7 +8,6 @@ import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusTy
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.DistributedCheckpointer;
-import org.corfudb.runtime.DistributedCheckpointerHelper;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -20,7 +19,6 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -40,7 +38,6 @@ public class CompactorLeaderServices {
     private final Logger syslog;
     private final LivenessValidator livenessValidator;
     private final CompactorMetadataTables compactorMetadataTables;
-    private final DistributedCheckpointerHelper distributedCheckpointerHelper;
 
     public static final int MAX_RETRIES = 5;
 
@@ -63,7 +60,6 @@ public class CompactorLeaderServices {
         this.corfuStore = corfuStore;
         this.livenessValidator = livenessValidator;
         this.trimLog = new TrimLog(corfuRuntime, corfuStore);
-        this.distributedCheckpointerHelper = new DistributedCheckpointerHelper(corfuStore);
         this.syslog = LoggerFactory.getLogger("syslog");
     }
 
@@ -75,11 +71,6 @@ public class CompactorLeaderServices {
      */
     public LeaderInitStatus initCompactionCycle() {
         syslog.info("=============Initiating Distributed Compaction============");
-
-        if (distributedCheckpointerHelper.isCheckpointFrozen()) {
-            syslog.warn("Will not start compaction since it has been frozen");
-            return LeaderInitStatus.FAIL;
-        }
 
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
@@ -107,7 +98,7 @@ public class CompactorLeaderServices {
             // This is the safest point to trim from, since all data up to this point will surely
             // be included in the upcoming checkpoint cycle
             long minAddressBeforeCycleStarts = corfuRuntime.getAddressSpaceView().getLogTail();
-            txn.putRecord(compactorMetadataTables.getCheckpointTable(), CompactorMetadataTables.CHECKPOINT_KEY,
+            txn.putRecord(compactorMetadataTables.getCheckpointTable(), CompactorMetadataTables.MIN_CHECKPOINT,
                     RpcCommon.TokenMsg.newBuilder()
                             .setSequence(minAddressBeforeCycleStarts)
                             .build(),
@@ -144,9 +135,9 @@ public class CompactorLeaderServices {
         long currentTime = System.currentTimeMillis();
 
         if (activeCheckpointTables.isEmpty()) {
-            LivenessValidator.StatusToChange statusToChange = livenessValidator.shouldChangeManagerStatus(
+            LivenessValidator.Status statusToChange = livenessValidator.shouldChangeManagerStatus(
                     Duration.ofMillis(currentTime));
-            if (statusToChange == LivenessValidator.StatusToChange.FINISH) {
+            if (statusToChange == LivenessValidator.Status.FINISH) {
                 finishCompactionCycle();
                 livenessValidator.clearLivenessMap();
                 livenessValidator.clearLivenessValidator();
@@ -253,38 +244,26 @@ public class CompactorLeaderServices {
             //Do not retry here, the compactor service will trigger this method again
             syslog.warn("Exception in finishCompactionCycle: {}. StackTrace={}", re, re.getStackTrace());
         }
-        deleteInstantKeyIfRequired();
-        trimLogIfRequired();
+        deleteInstantKeyIfPresent();
     }
 
-    private void trimLogIfRequired() {
-        Optional<RpcCommon.TokenMsg> upgradeToken = Optional.empty();
+    private void deleteInstantKeyIfPresent() {
         for (int i = 0; i < MAX_RETRIES; i++) {
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                upgradeToken = Optional.ofNullable((RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT,
-                        CompactorMetadataTables.UPGRADE_KEY).getPayload());
-                txn.delete(CompactorMetadataTables.CHECKPOINT, CompactorMetadataTables.UPGRADE_KEY);
-                txn.commit();
-                break;
-            } catch (RuntimeException re) {
-                if (DistributedCheckpointer.isCriticalRuntimeException(re, i, MAX_RETRIES)) {
-                    break;
+                RpcCommon.TokenMsg instantTrimToken = (RpcCommon.TokenMsg) txn.getRecord(
+                        CompactorMetadataTables.CHECKPOINT_TABLE_NAME, CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM).getPayload();
+                if (instantTrimToken != null) {
+                    txn.delete(CompactorMetadataTables.CHECKPOINT_TABLE_NAME, CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM);
+                    txn.commit();
+                    syslog.info("Invoking trimlog() due to InstantTrigger with trim found");
+                    trimLog.invokePrefixTrim();
+                    return;
                 }
-            }
-        }
-        if (upgradeToken.isPresent()) {
-            syslog.info("Upgrade Key found: Hence invoking trimlog()");
-            trimLog.invokePrefixTrim();
-        }
-    }
 
-    private void deleteInstantKeyIfRequired() {
-        for (int i = 0; i < MAX_RETRIES; i++) {
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                 RpcCommon.TokenMsg instantToken = (RpcCommon.TokenMsg) txn.getRecord(
-                        CompactorMetadataTables.CHECKPOINT, CompactorMetadataTables.INSTANT_TIGGER_KEY).getPayload();
+                        CompactorMetadataTables.CHECKPOINT_TABLE_NAME, CompactorMetadataTables.INSTANT_TIGGER).getPayload();
                 if (instantToken != null) {
-                    txn.delete(CompactorMetadataTables.CHECKPOINT, CompactorMetadataTables.INSTANT_TIGGER_KEY);
+                    txn.delete(CompactorMetadataTables.CHECKPOINT_TABLE_NAME, CompactorMetadataTables.INSTANT_TIGGER);
                 }
                 txn.commit();
                 return;

@@ -30,7 +30,12 @@ public class CorfuStoreCompactorConfig {
     private final CorfuRuntimeParameters params;
     private final NodeLocator nodeLocator;
     private final Optional<String> persistedCacheRoot;
-    private final boolean isUpgrade;
+    private final boolean startCheckpointing;
+    private final boolean upgradeDescriptorTable;
+    private final boolean instantTriggerCompaction;
+    private final boolean trim;
+    private final boolean freezeCompaction;
+    private final boolean unfreezeCompaction;
 
     public CorfuStoreCompactorConfig(String[] args) {
         this.opts = parseOpts(args);
@@ -42,8 +47,12 @@ public class CorfuStoreCompactorConfig {
         this.nodeLocator = NodeLocator.builder().host(host).port(port).build();
 
         persistedCacheRoot = getOpt("--persistedCacheRoot");
-
-        isUpgrade = getOpt("--isUpgrade").isPresent();
+        startCheckpointing = getOpt("--startCheckpointing").isPresent();
+        upgradeDescriptorTable = getOpt("--upgradeDescriptorTable").isPresent();
+        instantTriggerCompaction = getOpt("--instantTriggerCompaction").isPresent();
+        trim = getOpt("--trim").isPresent();
+        freezeCompaction = getOpt("--freezeCompaction").isPresent();
+        unfreezeCompaction = getOpt("--unfreezeCompaction").isPresent();
 
         CorfuRuntimeParametersBuilder builder = CorfuRuntimeParameters.builder();
 
@@ -78,6 +87,7 @@ public class CorfuStoreCompactorConfig {
             builder.bulkReadSize(Integer.parseInt(bulkReadSizeStr));
         });
 
+        builder.clientName(host);
         builder.systemDownHandlerTriggerLimit(SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT)
                 .systemDownHandler(defaultSystemDownHandler);
 
@@ -107,8 +117,11 @@ public class CorfuStoreCompactorConfig {
                 "[--maxWriteSize=<maxWriteSizeLimit>] " +
                 "[--bulkReadSize=<bulkReadSize>] " +
                 "[--trim=<trim>] " +
-                "[--isUpgrade=<isUpgrade>] " +
+                "[--startCheckpointing=<startCheckpointing>] " +
                 "[--upgradeDescriptorTable=<upgradeDescriptorTable>] " +
+                "[--instantTriggerCompaction=<instantTriggerCompaction>] " +
+                "[--freezeCompaction=<freezeCompaction>] " +
+                "[--unfreezeCompaction=<unfreezeCompaction>] " +
                 "[--tlsEnabled=<tls_enabled>]\n"
                 + "Options:\n"
                 + "--hostname=<hostname>   Hostname\n"
@@ -120,10 +133,12 @@ public class CorfuStoreCompactorConfig {
                 + "--persistedCacheRoot=<pathToTempDirForLargeTables> Path to Temp Dir\n"
                 + "--maxWriteSize=<maxWriteSize> Max write size smaller than 2GB\n"
                 + "--bulkReadSize=<bulkReadSize> Read size for chain replication\n"
-                + "--trim=<trim> Should trim be performed in this run\n"
-                + "--isUpgrade=<isUpgrade> Is this called during upgrade\n"
-                + "--trimTokenFile=<trimTokenFilePath> file to store the trim tokens during upgrade"
+                + "--trim=<trim> Should trim be performed along with instantTrigger\n"
+                + "--startCheckpointing=<startCheckpointing> Start checkpointing if compaction cycle has started\n"
                 + "--upgradeDescriptorTable=<upgradeDescriptorTable> Repopulate descriptor table?\n"
+                + "--instantTriggerCompaction=<instantTriggerCompaction> If compactor cycle needs to be triggered instantly\n"
+                + "--freezeCompaction=<freezeCompaction> If compaction needs to be frozen\n"
+                + "--unfreezeCompaction=<unfreezeCompaction> If compaction needs to be resumed\n"
                 + "--tlsEnabled=<tls_enabled>";
     }
 }
