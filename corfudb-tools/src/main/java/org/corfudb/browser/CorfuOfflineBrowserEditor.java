@@ -68,6 +68,16 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         File dir = logDir.toFile();
         Collection<File> files = FileUtils.listFiles(dir, extension, true);
 
+        // get the UUIDs of the streams of interest
+        String registryTableName = TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME);
+        UUID registryTableStreamId = CorfuRuntime.getStreamID(registryTableName);
+
+        String protobufDescriptorTableName = TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME);
+        UUID protobufDescriptorStreamId = CorfuRuntime.getStreamID(protobufDescriptorTableName);
+
+        UUID registryTableCheckpointStream = CorfuRuntime.getCheckpointStreamIdFromId(registryTableStreamId);
+        UUID protobufDescriptorCheckpointStream = CorfuRuntime.getCheckpointStreamIdFromId(protobufDescriptorStreamId);
+
         for (File file : files) {
             try (FileChannel fileChannel = FileChannel.open(file.toPath())) {
                 while (fileChannel.size() - fileChannel.position() > 0) {
@@ -82,16 +92,6 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                     LogEntry entry = StreamLogFiles.parseEntry(null, fileChannel, metadata, file.getAbsolutePath());
                     System.out.println(entry);
 
-                    // get the UUIDs of the streams of interest
-                    String registryTableName = TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME);
-                    UUID registryTableStreamId = CorfuRuntime.getStreamID(registryTableName);
-
-                    String protobufDescriptorTableName = TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME);
-                    UUID protobufDescriptorStreamId = CorfuRuntime.getStreamID(protobufDescriptorTableName);
-
-                    UUID registryTableCheckpointStream = CorfuRuntime.getCheckpointStreamIdFromId(registryTableStreamId);
-                    UUID protobufDescriptorCheckpointStream = CorfuRuntime.getCheckpointStreamIdFromId(protobufDescriptorStreamId);
-
                     // make sure that the entry isn't null to avoid a null pointer exception
                     if(entry != null) {
                         // iterate over each stream in an entry and filter them
@@ -104,8 +104,8 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                                 LogData data = StreamLogFiles.getLogData(entry);
 
                                 // decompress and deserialize the data
-                                Object modifiedData = data.getPayload(null);
-                                System.out.println(modifiedData);
+                                //Object modifiedData = data.getPayload(null);
+                                System.out.println(data);
                             }
                         }
                     }
