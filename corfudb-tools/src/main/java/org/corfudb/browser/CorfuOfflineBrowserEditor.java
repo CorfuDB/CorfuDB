@@ -1,10 +1,15 @@
 package org.corfudb.browser;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import org.apache.commons.io.FileUtils;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.log.LogFormat;
 import org.corfudb.infrastructure.log.StreamLogFiles;
+import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
@@ -21,13 +26,12 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.function.Supplier;
 
-import static com.github.luben.zstd.Zstd.decompress;
 import static org.corfudb.infrastructure.log.StreamLogFiles.parseHeader;
 import static org.corfudb.infrastructure.log.StreamLogFiles.parseMetadata;
 import static org.corfudb.infrastructure.log.StreamLogFiles.parseEntry;
 import org.corfudb.infrastructure.log.LogFormat.LogEntry;
-
 
 @SuppressWarnings("checkstyle:printLine")
 public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
@@ -78,9 +82,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                     LogEntry entry = StreamLogFiles.parseEntry(null, fileChannel, metadata, file.getAbsolutePath());
                     System.out.println(entry);
 
-                    // iterate over each stream in an entry and filter them
-                    // if it belongs to the RegistryTable or ProtobufDescriptorTable
-                    // filter them by printing
+                    // get the UUIDs of the streams of interest
                     String registryTableName = TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME);
                     UUID registryTableStreamId = CorfuRuntime.getStreamID(registryTableName);
 
@@ -90,19 +92,23 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                     UUID registryTableCheckpointStream = CorfuRuntime.getCheckpointStreamIdFromId(registryTableStreamId);
                     UUID protobufDescriptorCheckpointStream = CorfuRuntime.getCheckpointStreamIdFromId(protobufDescriptorStreamId);
 
+                    // make sure that the entry isn't null to avoid a null pointer exception
                     if(entry != null) {
+                        // iterate over each stream in an entry and filter them
+                        // if it belongs to the RegistryTable or ProtobufDescriptorTable or its checkpoint streams
+                        // filter them by printing
                         for(int i = 0; i < entry.getStreamsCount(); i ++) {
                             if(entry.getStreams(i).equals(registryTableStreamId) || entry.getStreams(i).equals(protobufDescriptorStreamId)
                             || entry.getStreams(i).equals(registryTableCheckpointStream) || entry.getStreams(i).equals(protobufDescriptorCheckpointStream)) {
-                                // decompress the entry
+                                // convert the LogEntry to LogData to access getPayload
+                                LogData data = StreamLogFiles.getLogData(entry);
 
-                                // deserialize the entry
-                                System.out.println(entry);
+                                // decompress and deserialize the data
+                                Object modifiedData = data.getPayload(null);
+                                System.out.println(modifiedData);
                             }
                         }
                     }
-
-
 
                 }
 
