@@ -1,6 +1,7 @@
 package org.corfudb.runtime.object;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
@@ -45,12 +46,15 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
     private volatile long trimMark;
 
+    private volatile long currentSyncVersion = -10;
 
-    public MultiVersionObject(CorfuRuntime corfuRuntime,
-                              Supplier<T> newObjectFn,
-                              StreamViewSMRAdapter smrStream,
-                              ICorfuSMR<T> wrapperObject,
-                              UUID streamID) {
+    private volatile long highestResolvedAddress = -10;
+
+    MultiVersionObject(CorfuRuntime corfuRuntime,
+                       Supplier<T> newObjectFn,
+                       StreamViewSMRAdapter smrStream,
+                       ICorfuSMR<T> wrapperObject,
+                       UUID streamID) {
         this.runtime = corfuRuntime;
         this.mvoCache = runtime.getObjectsView().getMvoCache();
         this.newObjectFn = newObjectFn;
@@ -71,73 +75,70 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
     }
 
     /**
-     * Access the MVO object at a certain timestamp (version) using the given
-     * access function.
+     * Get snapshot proxy for a given timestamp.
+     * 1. If called from non-transactional access, timestamp is stream tail and
+     *    there should be an exact match in MVOCache if not yet evicted.
+     * 2. If called from transactional access, timestamp is transaction snapshot
+     *    address
+     *    a. if timestamp > highestResolvedAddress, query sequencer for latest updates.
+     *    b. if timestamp <= highestResolvedAddress, run MVOCache::floorEntry()
      *
-     * @param timestamp the version of the object to access
-     * @param accessFunction the access function
-     * @param <R>
-     * @return
-     * @throws NullPointerException
+     * @param timestamp the timestamp to query
+     * @return the snapshot proxy against which the snapshot access is run
      */
-    public <R> R access(long timestamp, ICorfuSMRAccess<R, T> accessFunction) throws NullPointerException{
-        Optional<ICorfuSMRSnapshotProxy<T>> snapshotProxyOptional = mvoCache.get(
-                new VersionedObjectIdentifier(streamID, timestamp),
-                snapshotReferenceProxyGenerator
-        );
-
-        if (snapshotProxyOptional.isPresent()) {
-            log.trace("Access [{}] Direct (optimistic-read) access at {}", this, timestamp);
-            final R ret = snapshotProxyOptional.get().access(accessFunction, version -> {});
-            correctnessLogger.trace("Version, {}", timestamp);
-            return ret;
-        }
-
-        AtomicLong vloAccessedVersion = new AtomicLong();
-        snapshotProxyOptional = getVersionedObjectUnderLock(timestamp, vloAccessedVersion::set);
-
-        if (snapshotProxyOptional.isPresent()) {
-            correctnessLogger.trace("Version, {}", vloAccessedVersion.get());
-            log.trace("Access [{}] Updated (writelock) access at {}", this, vloAccessedVersion.get());
-            return snapshotProxyOptional.get().access(accessFunction, version -> {});
-        }
-
-        throw new StaleObjectVersionException(streamID, timestamp);
-    }
-
     public ICorfuSMRSnapshotProxy<T> getSnapshotProxy(long timestamp) {
+
+        // 1. Exact match
         Optional<ICorfuSMRSnapshotProxy<T>> snapshotProxyOptional = mvoCache.get(
                 new VersionedObjectIdentifier(streamID, timestamp),
                 this::getSMRSnapshotProxy
         );
-
         if (snapshotProxyOptional.isPresent()) {
             return snapshotProxyOptional.get();
         }
 
-        // Sleep
+        // 2. Transaction accesses
+        if (timestamp > highestResolvedAddress || timestamp == Address.NON_EXIST) {
+            // 2.a need to query sequencer for latest updates
+            AtomicLong vloAccessedVersion = new AtomicLong();
+            snapshotProxyOptional = getVersionedObjectUnderLock(timestamp, vloAccessedVersion::set);
 
-        AtomicLong vloAccessedVersion = new AtomicLong();
-        snapshotProxyOptional = getVersionedObjectUnderLock(timestamp, vloAccessedVersion::set);
-
-        if (snapshotProxyOptional.isPresent()) {
-            correctnessLogger.trace("Version, {}", vloAccessedVersion.get());
-            log.trace("Access [{}] Updated (writelock) access at {}", this, vloAccessedVersion.get());
-            return snapshotProxyOptional.get();
+            if (snapshotProxyOptional.isPresent()) {
+                correctnessLogger.trace("Version, {}", vloAccessedVersion.get());
+                log.trace("Access [{}] Updated (writelock) access at {}", this, vloAccessedVersion.get());
+                return snapshotProxyOptional.get();
+            }
+        } else {
+            // 2.b address has already been resolved
+            snapshotProxyOptional = mvoCache.floorEntry(
+                    new VersionedObjectIdentifier(streamID, timestamp),
+                    this::getSMRSnapshotProxy
+            );
+            if (snapshotProxyOptional.isPresent()) {
+                return snapshotProxyOptional.get();
+            }
         }
 
         throw new StaleObjectVersionException(streamID, timestamp);
     }
 
     protected Optional<ICorfuSMRSnapshotProxy<T>> getVersionedObjectUnderLock(long timestamp, Consumer<Long> versionAccessed) {
+        // polling is expensive
+        while (timestamp <= currentSyncVersion && lock.tryWriteLock() == 0) {
+            Optional<ICorfuSMRSnapshotProxy<T>> snapshotProxyOptional = mvoCache.get(
+                    new VersionedObjectIdentifier(streamID, timestamp), snapshotReferenceProxyGenerator);
+            if (snapshotProxyOptional.isPresent()) {
+                return snapshotProxyOptional;
+            }
+        }
 
         long ts = 0;
         try {
             ts = lock.writeLock();
+            currentSyncVersion = timestamp;
 
             Optional<ICorfuSMRSnapshotProxy<T>> snapshotProxyOptional = mvoCache.get(
                     new VersionedObjectIdentifier(streamID, timestamp), snapshotReferenceProxyGenerator);
-
             if (snapshotProxyOptional.isPresent()) {
                 return snapshotProxyOptional;
             }
@@ -147,7 +148,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                     ICorfuSMRSnapshotProxy<T> snapshotProxy = syncObjectUnsafe(timestamp);
                     versionAccessed.accept(getVersionUnsafe());
 
-                    if (snapshotProxy.getVersion() == Address.NON_ADDRESS) {
+                    if (snapshotProxy.getVersion() == Address.NON_EXIST) {
                         // Since there were no previous versions in the cache
                         // we keep the same proxy (not backed by SoftReference)
                         return Optional.of(snapshotProxy);
@@ -173,6 +174,9 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
             return Optional.empty();
         } finally {
+            currentSyncVersion = -10;
+            if (timestamp > highestResolvedAddress)
+                highestResolvedAddress = timestamp;
             lock.unlock(ts);
         }
     }
@@ -191,7 +195,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
             // Return a snapshot proxy that isn't backed by a SoftReference since
             // this snapshot is not yet tied to an MVO cache entry
             return getSMRSnapshotProxy(
-                    new VersionedObjectIdentifier(streamID, Address.NON_ADDRESS),
+                    new VersionedObjectIdentifier(streamID, Address.NON_EXIST),
                     newObjectFn.get(),
                     snapshotProxyGenerator
             );

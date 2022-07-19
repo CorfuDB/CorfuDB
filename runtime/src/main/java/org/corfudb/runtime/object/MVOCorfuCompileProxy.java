@@ -89,7 +89,8 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
         // Perform underlying access
         R result = null;
         try {
-            result = underlyingMVO.access(timestamp, accessMethod);
+            ICorfuSMRSnapshotProxy<T> snapshotProxy = underlyingMVO.getSnapshotProxy(timestamp);
+            result = accessMethod.access(snapshotProxy.get());
         } catch (NullPointerException npe) {
             // TODO: wrap and throw ObjectEvictedException
             log.error("Object has been evicted!", npe);

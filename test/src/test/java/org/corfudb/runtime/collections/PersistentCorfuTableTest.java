@@ -39,6 +39,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
@@ -153,6 +154,55 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                 ));
 
         return table;
+    }
+
+    //TODO(George): current test needs human observation to verify the optimization
+    @Test
+    public void testMVOGetVersionedObjectOptimization() throws InterruptedException {
+        addSingleServer(SERVERS.PORT_0);
+        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(LARGE_CACHE_SIZE)
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+        setupSerializer();
+        openTable();
+
+        for (int i = 0; i < 100; i++) {
+            TestSchema.Uuid uuidMsg = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            CorfuRecord value1 = new CorfuRecord(uuidMsg, uuidMsg);
+            corfuTable.insert(uuidMsg, value1);
+        }
+
+        AtomicInteger size1 = new AtomicInteger();
+        AtomicInteger size2 = new AtomicInteger();
+        Thread thread1 = new Thread(() -> {
+            rt.getObjectsView().TXBuild()
+                    .type(TransactionType.SNAPSHOT)
+                    .snapshot(new Token(0, 9))
+                    .build()
+                    .begin();
+            size1.set(corfuTable.keySet().size());
+            rt.getObjectsView().TXEnd();
+        });
+
+        Thread thread2 = new Thread(() -> {
+            rt.getObjectsView().TXBuild()
+                    .type(TransactionType.SNAPSHOT)
+                    .snapshot(new Token(0, 99))
+                    .build()
+                    .begin();
+            size2.set(corfuTable.keySet().size());
+            rt.getObjectsView().TXEnd();
+        });
+
+        thread1.start();
+        thread2.start();
+        thread1.join();
+        thread2.join();
+
+        assertThat(size1.get()).isEqualTo(10);
+        assertThat(size2.get()).isEqualTo(100);
     }
 
     @Test

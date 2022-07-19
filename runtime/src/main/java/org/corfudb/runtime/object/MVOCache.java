@@ -41,15 +41,13 @@ public class MVOCache<T extends ICorfuSMR<T>> {
     @Getter
     private final ConcurrentHashMap<UUID, MultiVersionObject<T>> allMVOs = new ConcurrentHashMap<>();
 
-    // The objectCache holds the strong references to all versioned objects
-    // key is basically a pair of (objectId, version)
-    // value is the versioned object such as PersistentCorfuTable
+    // The objectCache holds the strong references to all versioned objects, and snapshotProxies
     private final Cache<VersionedObjectIdentifier, MVOCacheEntry> objectCache;
 
     // This objectVersions is updated at two places
     // 1) put() which adds a new version to the objectVersions
     // 2) as a side effect of put(), some old versions are evicted from the cache
-    // TODO: access/mutation to objectMap should be synchronized
+    // => access/mutation to objectMap should be synchronized
     // Q: Can we use objectCache.asMap() instead of maintaining an external view?
     // A: No. Although asMap() returns a thread-safe weakly-consistent map, it is
     //    not a tree structure so it's very inefficient to implement headMap() and
@@ -123,14 +121,10 @@ public class MVOCache<T extends ICorfuSMR<T>> {
         int count;
 
         synchronized (allVersionsOfThisObject) {
-            // Get the headset up to the given version. Exclude the given version
-            // if it is the highest version in the set. This is to guarantee that
-            // at least one version exist in the objectMap for any object
-
+            // set 'inclusive' to make objectCache and objectVersions consistent
             Set<Long> headSet = allVersionsOfThisObject.headSet(voId.getVersion(), true);
             headSet.forEach(version -> {
                 voId.setVersion(version);
-                // this could cause excessive handleEviction calls
                 objectCache.invalidate(voId);
             });
             count = headSet.size();
@@ -196,29 +190,10 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      * version && version <= voId.getVersion.
      *
      * @param voId the object and version to check
-     * @return a pair of (voId, versionedObject) in which the voId contains the
-     *         floor version.
+     * @param snapshotProxyFn snapshotProxy generator
+     * @return an optional of an ICorfuSMRSnapshotProxy instance which is generated
+     *         by the given snapshotProxy generator function. Empty if there is no floorEntry.
      */
-    /*
-    public SoftReference<Map.Entry<VersionedObjectIdentifier, T>> floorEntry(VersionedObjectIdentifier voId) {
-        final TreeSet<Long> allVersionsOfThisObject = objectVersions.get(voId.getObjectId());
-
-        if (allVersionsOfThisObject == null) {
-            // The object has not been created
-            return new SoftReference<>(null);
-        } else {
-            synchronized (allVersionsOfThisObject) {
-                Long floorVersion = allVersionsOfThisObject.floor(voId.getVersion());
-                if (floorVersion == null)
-                    return new SoftReference<>(null);
-
-                VersionedObjectIdentifier id = new VersionedObjectIdentifier(voId.getObjectId(), floorVersion);
-                return new SoftReference<>(Pair.of(id, objectCache.getIfPresent(id)));
-            }
-        }
-    }
-     */
-
     public Optional<ICorfuSMRSnapshotProxy<T>> floorEntry(@NonNull VersionedObjectIdentifier voId,
                                                           @NonNull ISnapshotProxyGenerator<T> snapshotProxyFn) {
         final TreeSet<Long> allVersionsOfThisObject = objectVersions.get(voId.getObjectId());
