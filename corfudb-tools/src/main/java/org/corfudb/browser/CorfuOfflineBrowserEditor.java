@@ -111,7 +111,10 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                                     //Set<UUID> streamUUIDs = data.getStreams();
 
                                     // call get payload to decompress and deserialize data
-                                    System.out.println(data.getPayload(null));
+                                    Object modifiedData = data.getPayload(null);
+                                    if(modifiedData != null) {
+                                        System.out.println(modifiedData);
+                                    }
                                 }
                             }
 
