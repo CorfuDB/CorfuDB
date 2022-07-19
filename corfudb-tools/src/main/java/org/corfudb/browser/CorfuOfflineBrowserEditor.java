@@ -1,10 +1,13 @@
 package org.corfudb.browser;
 
+import com.google.protobuf.ByteString;
+import com.google.protobuf.ProtocolStringList;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.log.AddressMetaData;
 import org.corfudb.infrastructure.log.LogFormat;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.CorfuProtocolCommon;
@@ -28,15 +31,19 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.function.Supplier;
 
-import static org.corfudb.infrastructure.log.StreamLogFiles.parseHeader;
-import static org.corfudb.infrastructure.log.StreamLogFiles.parseMetadata;
-import static org.corfudb.infrastructure.log.StreamLogFiles.parseEntry;
 import org.corfudb.infrastructure.log.LogFormat.LogEntry;
+import org.corfudb.util.serializer.ProtobufSerializer;
+import org.corfudb.util.serializer.Serializers;
+
+import static org.corfudb.infrastructure.log.StreamLogFiles.*;
+
+
 
 @SuppressWarnings("checkstyle:printLine")
 public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
     private final Path logDir;
-    private final DynamicProtobufSerializer dynamicProtobufSerializer;
+    // make dynamic protobuf serializer final later
+    private DynamicProtobufSerializer dynamicProtobufSerializer;
     private final String QUOTE = "\"";
 
     public CorfuOfflineBrowserEditor(String offlineDbDir) {
@@ -52,17 +59,17 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
          */
 
         // System.out.println(listTables("CorfuSystem"));
-        dynamicProtobufSerializer = new DynamicProtobufSerializer(null, null);
+        //dynamicProtobufSerializer = new DynamicProtobufSerializer(null, null);
 
         // testing printAllProtoDescriptors
-        System.out.println(printAllProtoDescriptors());
+        //System.out.println(printAllProtoDescriptors());
     }
 
     /**
      * Opens all log files one by one, accesses and prints log entry data for each Corfu log file.
      */
     public void printLogEntryData() {
-        System.out.println("Printing log entry data information:");
+        System.out.println("Analyzing log information:");
 
         String[] extension = {"log"};
         File dir = logDir.toFile();
@@ -83,35 +90,36 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                 while (fileChannel.size() - fileChannel.position() > 0) {
                     //long channelOffset = fileChannel.position();
 
-                    // parse, print header
+                    // parse header
                     LogFormat.LogHeader header = parseHeader(null, fileChannel, file.getAbsolutePath());
-                    System.out.println(header);
-
-                    // parse metadata, then pass it in parse entry, and print entry
+                    //System.out.println(header);
+                    // parse metadata
                     LogFormat.Metadata metadata = StreamLogFiles.parseMetadata(null, fileChannel, file.getAbsolutePath());
+                    // parse entry
                     LogEntry entry = StreamLogFiles.parseEntry(null, fileChannel, metadata, file.getAbsolutePath());
-                    System.out.println(entry);
 
-                    // make sure that the entry isn't null to avoid a null pointer exception
-                    if(entry != null) {
-                        // iterate over each stream in an entry and filter them
-                        // if it belongs to the RegistryTable or ProtobufDescriptorTable or its checkpoint streams
-                        // filter them by printing
-                        for(int i = 0; i < entry.getStreamsCount(); i ++) {
-                            if(entry.getStreams(i).equals(registryTableStreamId) || entry.getStreams(i).equals(protobufDescriptorStreamId)
-                            || entry.getStreams(i).equals(registryTableCheckpointStream) || entry.getStreams(i).equals(protobufDescriptorCheckpointStream)) {
-                                // convert the LogEntry to LogData to access getPayload
-                                LogData data = StreamLogFiles.getLogData(entry);
+                    try {
+                        if(metadata != null && entry != null && header != null) {
+                            for(int i = 0; i < entry.getStreamsCount(); i ++) {
+                                if(entry.getStreams(i).equals(registryTableStreamId.toString()) ||
+                                        entry.getStreams(i).equals(protobufDescriptorStreamId.toString()) ||
+                                        entry.getStreams(i).equals(registryTableCheckpointStream.toString()) ||
+                                        entry.getStreams(i).equals(protobufDescriptorCheckpointStream.toString())) {
+                                    // convert the LogEntry to LogData to access getPayload
+                                    LogData data = StreamLogFiles.getLogData(entry);
 
-                                // decompress and deserialize the data
-                                //Object modifiedData = data.getPayload(null);
-                                System.out.println(data);
+                                    //Set<UUID> streamUUIDs = data.getStreams();
+
+                                    // call get payload to decompress and deserialize data
+                                    System.out.println(data.getPayload(null));
+                                }
                             }
+
                         }
+                    } catch(Exception e) {
                     }
 
                 }
-
 
             } catch (IOException e) {
                 throw new IllegalStateException("Invalid header: " + file.getAbsolutePath(), e);
@@ -120,7 +128,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         }
     }
 
-    /*
+    /**
     public void processEntryData(LogEntry entry) {
         // if the LogEntry object is inside of the CorfuSystem$RegistryTable
         // or CorfuSystem$ProtobufDescriptorTable
