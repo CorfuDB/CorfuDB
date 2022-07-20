@@ -53,9 +53,9 @@ public class AbstractIT extends AbstractCorfuTest {
     static final String CORFU_PROJECT_DIR = new File("..").getAbsolutePath() + File.separator;
     static final String CORFU_LOG_PATH = PARAMETERS.TEST_TEMP_DIR;
 
-    private static final String KILL_COMMAND = "pkill -9 -P ";
+    private static final String KILL_COMMAND = "pkill -SIGINT -P ";
     // FIXME: if jps doesn't exist tear down will fail silently
-    private static final String FORCE_KILL_ALL_CORFU_COMMAND = "jps | grep -e CorfuServer -e CorfuInterClusterReplicationServer|awk '{print $1}'| xargs kill -9";
+    private static final String FORCE_KILL_ALL_CORFU_COMMAND = "jps | grep -e CorfuServer -e CorfuInterClusterReplicationServer|awk '{print $1}'| xargs kill -SIGINT";
 
     private static final int SHUTDOWN_RETRIES = 10;
     private static final long SHUTDOWN_RETRY_WAIT = 500;
@@ -499,10 +499,10 @@ public class AbstractIT extends AbstractCorfuTest {
             ProcessBuilder builder = new ProcessBuilder();
 
             if (!metricsConfigFile.isEmpty()) {
-                addMetricsToProcessBuilder(builder, "corfu_server");
+                addMetricsToProcessBuilder(builder, "corfu_test_server");
             }
             else {
-                builder.command("sh", "-c", "bin/corfu_server " + getOptionsString());
+                builder.command("sh", "-c", "bin/corfu_test_server " + getOptionsString());
             }
             builder.directory(new File(CORFU_PROJECT_DIR));
             Process corfuServerProcess = builder.start();
@@ -617,10 +617,10 @@ public class AbstractIT extends AbstractCorfuTest {
             ProcessBuilder builder = new ProcessBuilder();
 
             if (!metricsConfigFile.isEmpty()) {
-                addMetricsToProcessBuilder(builder, "corfu_replication_server");
+                addMetricsToProcessBuilder(builder, "corfu_replication_test_server");
             }
             else {
-                builder.command("sh", "-c", "bin/corfu_replication_server " + getOptionsString());
+                builder.command("sh", "-c", "bin/corfu_replication_test_server " + getOptionsString());
             }
 
             builder.directory(new File(CORFU_PROJECT_DIR));

@@ -59,6 +59,7 @@ import org.corfudb.util.retry.RetryNeededException;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
+import org.junit.After;
 
 @Slf4j
 public class LogReplicationAbstractIT extends AbstractIT {
@@ -115,6 +116,27 @@ public class LogReplicationAbstractIT extends AbstractIT {
     public CorfuStore corfuStoreStandby;
 
     private final long longInterval = 20L;
+
+    @After
+    public void cleanUp(){
+        executorService.shutdownNow();
+
+        if (activeCorfu != null) {
+            activeCorfu.destroy();
+        }
+
+        if (standbyCorfu != null) {
+            standbyCorfu.destroy();
+        }
+
+        if (activeReplicationServer != null) {
+            activeReplicationServer.destroy();
+        }
+
+        if (standbyReplicationServer != null) {
+            standbyReplicationServer.destroy();
+        }
+    }
 
     public void testEndToEndSnapshotAndLogEntrySync() throws Exception {
         try {
