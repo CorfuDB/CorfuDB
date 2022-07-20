@@ -26,9 +26,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Properties;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -56,6 +54,8 @@ public class AbstractIT extends AbstractCorfuTest {
     private static final String KILL_COMMAND = "pkill -SIGINT -P ";
     // FIXME: if jps doesn't exist tear down will fail silently
     private static final String FORCE_KILL_ALL_CORFU_COMMAND = "jps | grep -e CorfuServer -e CorfuInterClusterReplicationServer|awk '{print $1}'| xargs kill -SIGINT";
+
+    private static final String SHOW_ALL_CORFU_COMMAND = "jps | grep -e CorfuServer -e CorfuInterClusterReplicationServer| awk '{print $1}'";
 
     private static final int SHUTDOWN_RETRIES = 10;
     private static final long SHUTDOWN_RETRY_WAIT = 500;
@@ -93,6 +93,7 @@ public class AbstractIT extends AbstractCorfuTest {
     public void setUp() throws Exception {
         runtime = null;
         forceShutdownAllCorfuServers();
+        showAllCorfuCommand();
         FileUtils.cleanDirectory(new File(CORFU_LOG_PATH));
     }
 
@@ -124,6 +125,34 @@ public class AbstractIT extends AbstractCorfuTest {
         builder.command("sh", "-c", FORCE_KILL_ALL_CORFU_COMMAND);
         Process p = builder.start();
         p.waitFor();
+    }
+
+    public static void showAllCorfuCommand(){
+        List<String> paramsPs = Arrays.asList("/bin/sh", "-c", SHOW_ALL_CORFU_COMMAND);
+        String result = runCommandForOutput(paramsPs);
+
+        System.out.println("test integration test - show all corfu process");
+        System.out.println(result);
+    }
+
+    public static String runCommandForOutput(List<String> params) {
+        ProcessBuilder pb = new ProcessBuilder(params);
+        Process p;
+        String result = "";
+        try {
+            p = pb.start();
+            final BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()));
+
+            StringJoiner sj = new StringJoiner(System.getProperty("line.separator"));
+            reader.lines().iterator().forEachRemaining(sj::add);
+            result = sj.toString();
+
+            p.waitFor();
+            p.destroy();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return result;
     }
 
     /**

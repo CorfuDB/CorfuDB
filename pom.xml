@@ -243,15 +243,17 @@
                             <!-- Option to generate a file test report or just output the test report to the console. -->
                             <useFile>false</useFile>
                             <includes>
-                                <include>**/*IT.java</include>
+<!--                                <include>**/*IT.java</include>-->
+                                <include>**/ClusterReconfigIT.java</include>
+                                <include>**/WorkflowIT.java</include>
                             </includes>
                             <excludes>
                                 <exclude>CorfuReplicationTrimIT.java</exclude>
                                 <exclude>CorfuReplicationUpgradeIT.java</exclude>
                                 <exclude>CorfuReplicationClusterConfigIT.java</exclude>
                                 <exclude>CorfuReplicationReconfigurationIT.java</exclude>
-                                <exclude>WorkflowIT.java</exclude>
-                                <exclude>ClusterReconfigIT.java</exclude>
+<!--                                <exclude>WorkflowIT.java</exclude>-->
+<!--                                <exclude>ClusterReconfigIT.java</exclude>-->
                             </excludes>
                             <systemPropertyVariables>
                                 <propertyName>test.seed</propertyName>
