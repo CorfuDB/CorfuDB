@@ -57,8 +57,8 @@ public class AbstractIT extends AbstractCorfuTest {
 
     private static final String SHOW_ALL_CORFU_COMMAND = "jps | grep -e CorfuServer -e CorfuInterClusterReplicationServer| awk '{print $1}'";
 
-    private static final int SHUTDOWN_RETRIES = 10;
-    private static final long SHUTDOWN_RETRY_WAIT = 500;
+    private static final int SHUTDOWN_RETRIES = 100;
+    private static final long SHUTDOWN_RETRY_WAIT = 5000;
 
     // Config the msg size for log replication data
     // sent from active cluster to the standby cluster.
