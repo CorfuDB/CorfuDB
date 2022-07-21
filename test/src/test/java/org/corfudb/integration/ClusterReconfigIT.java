@@ -969,6 +969,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         assertThat(latch.tryAcquire(PARAMETERS.TIMEOUT_LONG.toMillis(), TimeUnit.MILLISECONDS))
                 .isTrue();
+        showAllCorfuCommand();
         // Restart both the servers.
         corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
         corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
