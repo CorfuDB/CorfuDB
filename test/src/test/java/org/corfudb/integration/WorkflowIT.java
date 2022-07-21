@@ -293,6 +293,7 @@ public class WorkflowIT extends AbstractIT {
                 .open();
         final int entriesCount = 1_000;
 
+        System.out.println("start to put data in table");
         // Write 1_000 entries.
         for (int i = 0; i < entriesCount; i++) {
             table.put(Integer.toString(i), i);
@@ -324,17 +325,17 @@ public class WorkflowIT extends AbstractIT {
         final int retries = 3;
         final Duration timeout = PARAMETERS.TIMEOUT_LONG;
         final Duration pollPeriod = PARAMETERS.TIMEOUT_VERY_SHORT;
+        System.out.println("start to add node");
         runtime.getManagementView().addNode("localhost:9001", retries, timeout, pollPeriod);
         runtime.getManagementView().addNode("localhost:9002", retries, timeout, pollPeriod);
+        System.out.println("end adding node");
 
         runtime.invalidateLayout();
         Layout layoutAfterAdds = runtime.getLayoutView().getLayout();
         assertThat(layoutAfterAdds.getSegments().stream()
                 .allMatch(s -> s.getAllLogServers().size() == numNodes)).isTrue();
 
-        System.out.println("start to shutdown");
         run(n0.shutdown);
-        System.out.println("shutdown ends");
 
         // +1 because of extra NO_OP entry added by checkpointer
         assertThat(runtime.getAddressSpaceView().getTrimMark().getSequence()).isEqualTo(entriesCount+1);
