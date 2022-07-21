@@ -62,7 +62,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
     private static String corfuSingleNodeHost;
     private final int basePort = 9000;
-    private final int retries = 10;
+    private final int retries = 100;
     private final String testStream = "test";
 
     @Before
@@ -623,7 +623,7 @@ public class ClusterReconfigIT extends AbstractIT {
         Process corfuServer_2 = runPersistentServer(corfuSingleNodeHost, PORT_1, false);
         Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
         final Layout layout = getLayout(3);
-        BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
+        BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_NORMAL);
 
         // Create map and set up daemon writer thread.
         runtime = createDefaultRuntime();

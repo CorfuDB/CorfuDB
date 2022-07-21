@@ -332,7 +332,9 @@ public class WorkflowIT extends AbstractIT {
         assertThat(layoutAfterAdds.getSegments().stream()
                 .allMatch(s -> s.getAllLogServers().size() == numNodes)).isTrue();
 
+        System.out.println("start to shutdown");
         run(n0.shutdown);
+        System.out.println("shutdown ends");
 
         // +1 because of extra NO_OP entry added by checkpointer
         assertThat(runtime.getAddressSpaceView().getTrimMark().getSequence()).isEqualTo(entriesCount+1);
