@@ -96,7 +96,7 @@ public class CorfuProcessManager {
                 " | " +
                 "awk '{print $2}'" +
                 " | " +
-                "xargs kill -SIGINT";
+                "xargs kill -9";
     }
 
     public String removeServerDirCommand() {
