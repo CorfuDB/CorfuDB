@@ -1132,7 +1132,9 @@ public class ClusterReconfigIT extends AbstractIT {
 
         // Add two other servers that triggers state transfer.
         Process server1 = runPersistentServer(corfuSingleNodeHost, PORT_1, false);
+        System.out.println("start to add node in ClusterReconfigIT");
         runtime.getManagementView().addNode(getServerEndpoint(PORT_1), numRetry, timeout, pollPeriod);
+        System.out.println("end adding node in ClusterReconfigIT");
 
         Process server2 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
         runtime.getManagementView().addNode(getServerEndpoint(PORT_2), numRetry, timeout, pollPeriod);
