@@ -65,4 +65,7 @@ public interface CorfuReplicationClusterManagerAdapter {
 
     // get all the remote cluster which acts as a Sink for the current cluster
     Map<LogReplicationClusterInfo.ClusterConfigurationMsg, List<LogReplicationMetadata.ReplicationModels>> getSinkToReplicationModel();
+
+    // get all the remote cluster which acts as a Sink for the current cluster
+    Map<LogReplicationClusterInfo.ClusterConfigurationMsg, List<LogReplicationMetadata.ReplicationModels>> getSourceForCurrentCluster();
 }

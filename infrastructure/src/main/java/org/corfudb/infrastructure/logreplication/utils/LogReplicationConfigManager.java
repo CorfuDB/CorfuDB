@@ -172,7 +172,7 @@ public class LogReplicationConfigManager {
 
     // this will be needed for discovery Service to trigger connection
     public Set<LogReplicationClusterInfo.ClusterConfigurationMsg> fetchConnectionEndpoints() {
-        return connectionConfigPlugin.getConnectionEndpoints();
+        return connectionConfigPlugin.getRemoteEndpointsToConnect();
     }
 
     private void initConnectionConfigPlugin(LogReplicationPluginConfig config) {

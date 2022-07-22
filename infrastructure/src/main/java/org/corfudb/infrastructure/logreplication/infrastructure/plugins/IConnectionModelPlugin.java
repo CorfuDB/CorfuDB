@@ -10,7 +10,7 @@ import java.util.Set;
 public interface IConnectionModelPlugin {
 
     //On startup and on topology change (add/remove endpoints)
-    Set<LogReplicationClusterInfo.ClusterConfigurationMsg> getConnectionEndpoints();
+    Set<LogReplicationClusterInfo.ClusterConfigurationMsg> getRemoteEndpointsToConnect();
 
     // to use nsxRpc or grpc
     Map<LogReplicationClusterInfo.ClusterConfigurationMsg, String> getRpcPlugin();
