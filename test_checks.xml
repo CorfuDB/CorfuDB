@@ -49,17 +49,17 @@
 
     <property name="fileExtensions" value="java, properties, xml"/>
 
-<!--    <module name="TreeWalker">-->
-<!--        <module name="MagicNumber"/>-->
+    <module name="TreeWalker">
+        <module name="MagicNumber"/>
 
-<!--        <module name="SuppressWarningsHolder" />-->
-<!--    </module>-->
+        <module name="SuppressWarningsHolder" />
+    </module>
 
-<!--    <module name="SuppressionFilter">-->
-<!--        <property name="file" value="${checkstyle.suppressions.file}" />-->
-<!--    </module>-->
+    <module name="SuppressionFilter">
+        <property name="file" value="${checkstyle.suppressions.file}" />
+    </module>
 
 
-<!--    <module name="SuppressWarningsFilter" />-->
+    <module name="SuppressWarningsFilter" />
 
 </module>

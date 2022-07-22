@@ -127,7 +127,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
      *
      * The expectation is that replication should resume.
      */
-//    @Test
+    @Test
     public void testActiveClusterReset() throws Exception {
 
         final int delta = 5;
