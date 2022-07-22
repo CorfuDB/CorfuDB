@@ -26,10 +26,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
-
-import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * Provides Corfu native restore support. Works together with Backup.
@@ -50,15 +50,14 @@ public class Restore {
     private String restoreTempDirPath;
 
     // The filename of each table's backup file, format: uuid.namespace$tableName.
-    private final List<String> tableBackups;
+    private List<String> tableBackups;
 
     private CorfuRuntime rt;
 
     // The Corfu Store associated with the runtime
     private CorfuStore corfuStore;
 
-    // If FULL, will clean up all tables before restore;
-    // If PARTIAL, will only clean up tables that are to be restored
+    // Restore mode. Refer to class definition for details
     private RestoreMode restoreMode;
 
     /**
@@ -108,6 +107,11 @@ public class Restore {
 
         long startTime = System.currentTimeMillis();
         for (String tableBackup : tableBackups) {
+            if (restoreMode == RestoreMode.PARTIAL_TAGGED && !isTableTagged(tableBackup)) {
+                log.info("Skip restoring table {} since it doesn't have requires_back_support tag", tableBackup);
+                continue;
+            }
+
             UUID streamId = UUID.fromString(tableBackup.substring(0, tableBackup.indexOf(".")));
             try {
                 Path tableBackupPath = Paths.get(restoreTempDirPath).resolve(tableBackup);
@@ -135,7 +139,7 @@ public class Restore {
         try (FileInputStream fileInput = new FileInputStream(filePath.toString())) {
 
             // Clear table before restore
-            if (restoreMode == RestoreMode.PARTIAL) {
+            if (restoreMode == RestoreMode.PARTIAL || restoreMode == RestoreMode.PARTIAL_TAGGED) {
                 SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
                 nonCachedAppendSMREntries(streamId, entry);
             }
@@ -161,6 +165,27 @@ public class Restore {
             log.error("restoreTable can not find file {}", filePath);
             throw e;
         }
+    }
+
+    /**
+     * Check if the table has requires_backup_tag. Return true if it's RegistryTable.
+     */
+    private boolean isTableTagged(String tableBackup) {
+        // tableBackup name format: uuid.namespace$tableName
+        String[] strings = tableBackup.substring(tableBackup.indexOf(".")+1).split("\\$");
+        if (Objects.equals(strings[0], TableRegistry.CORFU_SYSTEM_NAMESPACE) &&
+                Objects.equals(strings[1], TableRegistry.REGISTRY_TABLE_NAME)) {
+            return true;
+        }
+
+        CorfuStoreMetadata.TableName tableName = CorfuStoreMetadata.TableName.newBuilder()
+                .setNamespace(strings[0]).setTableName(strings[1]).build();
+        return rt.getTableRegistry()
+                .getRegistryTable()
+                .get(tableName)
+                .getMetadata()
+                .getTableOptions()
+                .getRequiresBackupSupport();
     }
 
     /**
@@ -190,6 +215,17 @@ public class Restore {
                     fos.write(buf, 0, count);
                 }
             }
+        }
+
+        // Move the RegistryTable to the beginning of the list
+        String registryTableName = TableRegistry.getFullyQualifiedTableName(
+                TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME);
+        UUID registryTableUUID = CorfuRuntime.getStreamID(registryTableName);
+        // format: uuid.namespace$tableName
+        String backupEntry = registryTableUUID + "." + registryTableName;
+        int index = tableBackups.indexOf(backupEntry);
+        if (index != -1) {
+            Collections.swap(tableBackups, 0, index);
         }
     }
 
@@ -221,7 +257,7 @@ public class Restore {
     }
 
     private void clearAllTables() {
-        TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE);
+        TxnContext txn = corfuStore.txn(TableRegistry.CORFU_SYSTEM_NAMESPACE);
 
         corfuStore.getRuntime().getTableRegistry().listTables().forEach(tableName -> {
             String name = TableRegistry.getFullyQualifiedTableName(tableName);
@@ -240,8 +276,21 @@ public class Restore {
     }
 
     public enum RestoreMode {
-        FULL,   // Clean up ALL tables before restore
-        PARTIAL // Clean up ONLY tables that are to be restored
+        /*
+         Restore all tables in the given backup file. Clean up ALL tables before restore.
+         */
+        FULL,
+
+        /*
+         Restore all tables in given backup file. Clean up ONLY tables that are to be restored.
+         */
+        PARTIAL,
+
+        /*
+         Restore tables which have requires_backup_support tag. Clean up ONLY tables that are to be restored.
+         This mode supports restoring a subset of (tagged) tables from a full backup file.
+         */
+        PARTIAL_TAGGED
     }
 
     class StreamBatchWriter {
