@@ -102,6 +102,12 @@ public class ReloadableTrustManagerTest {
         assertTrue(ctx.isExpired());
     }
 
+    @Test
+    public void testCertExpiryCheckDisabled(){
+        TlsUtils.CertStoreConfig.TrustStoreConfig trustStore = SERVER_TRUST_WITH_CLIENT;
+        assertTrue(trustStore.isCertExpiryCheckEnabled());
+    }
+
     private X509Certificate getCertificate(Path certFile) throws Exception {
         String clientCert = new String(Files.readAllBytes(certFile));
         clientCert = clientCert.trim();

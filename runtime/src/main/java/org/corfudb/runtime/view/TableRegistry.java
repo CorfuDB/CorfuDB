@@ -161,14 +161,14 @@ public class TableRegistry {
                 TableName.class,
                 TableDescriptors.class,
                 TableMetadata.class,
-                TableOptions.<TableName, TableDescriptors>builder().build());
+                TableOptions.fromProtoSchema(TableDescriptors.class));
 
             registerTable(CORFU_SYSTEM_NAMESPACE,
                 PROTOBUF_DESCRIPTOR_TABLE_NAME,
                 ProtobufFileName.class,
                 ProtobufFileDescriptor.class,
                 TableMetadata.class,
-                TableOptions.<ProtobufFileName, ProtobufFileDescriptor>builder().build());
+                TableOptions.fromProtoSchema(ProtobufFileDescriptor.class));
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
