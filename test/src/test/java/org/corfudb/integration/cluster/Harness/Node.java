@@ -36,6 +36,6 @@ public class Node {
 
     public String getProcessKillCommand() {
         String port = address.split(":")[1];
-        return "ps aux | grep CorfuServer | grep "+ port +" |awk '{print $2}'| xargs kill -SIGINT";
+        return "ps aux | grep CorfuServer | grep "+ port +" |awk '{print $2}'| xargs kill -9";
     }
 }
