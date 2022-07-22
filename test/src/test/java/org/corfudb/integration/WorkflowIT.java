@@ -272,7 +272,7 @@ public class WorkflowIT extends AbstractIT {
      * Finally we should see that the trimMark should be updated on the new nodes and the
      * FastObjectLoader trying to recreate the state from these 2 nodes should be able to do so.
      */
-    @Test
+//    @Test
     public void addNodeWithTrim() throws Exception {
         Harness harness = Harness.getDefaultHarness();
 
