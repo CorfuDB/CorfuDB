@@ -107,7 +107,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     public static final String NAMESPACE = "LR-Test";
 
     @Before
+    @Override
     public void setUp() throws Exception {
+        super.setUp();
         activeCorfuServer = runServer(activeClusterCorfuPort, true);
         standbyCorfuServer = runServer(standbyClusterCorfuPort, true);
 

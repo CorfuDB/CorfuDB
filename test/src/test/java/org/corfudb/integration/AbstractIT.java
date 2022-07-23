@@ -55,7 +55,10 @@ public class AbstractIT extends AbstractCorfuTest {
 
     private static final String KILL_COMMAND = "pkill -9 -P ";
     // FIXME: if jps doesn't exist tear down will fail silently
-    private static final String FORCE_KILL_ALL_CORFU_COMMAND = "jps | grep -e CorfuServer -e CorfuInterClusterReplicationServer|awk '{print $1}'| xargs kill -SIGINT";
+    private static final String FORCE_KILL_ALL_CORFU_COMMAND = "jps | grep -e CorfuServer -e CorfuInterClusterReplicationServer|awk '{print $1}'| xargs kill -9";
+    private static final String GRACEFULLY_KILL_ALL_CORFU_COMMAND = "jps | grep -e CorfuServer -e CorfuInterClusterReplicationServer|awk '{print $1}'| xargs kill -SIGINT";
+    public boolean shouldForceKill = false;
+
 
     private static final int SHUTDOWN_RETRIES = 10;
     private static final long SHUTDOWN_RETRY_WAIT = 500;
@@ -91,8 +94,25 @@ public class AbstractIT extends AbstractCorfuTest {
      */
     @Before
     public void setUp() throws Exception {
+        if (this.getClass().getSimpleName().equals("CorfuReplicationTrimIT")
+                || this.getClass().getSimpleName().equals("CorfuReplicationUpgradeIT")
+                || this.getClass().getSimpleName().equals("CorfuReplicationReconfigurationIT")
+                || this.getClass().getSimpleName().equals("CorfuReplicationClusterConfigIT")
+                || this.getClass().getSimpleName().equals("WorkflowIT")
+                || this.getClass().getSimpleName().equals("ClusterReconfigIT")
+        ){
+            System.out.println(this.getClass().getSimpleName());
+            shouldForceKill = true;
+        }
+
         runtime = null;
-        forceShutdownAllCorfuServers();
+        if (shouldForceKill){
+            forceShutdownAllCorfuServers();
+            System.out.println("force kill");
+        }
+        else {
+            gracefullyShutdownAllCorfuServers();
+        }
         FileUtils.cleanDirectory(new File(CORFU_LOG_PATH));
     }
 
@@ -103,7 +123,13 @@ public class AbstractIT extends AbstractCorfuTest {
      */
     @After
     public void cleanUp() throws Exception {
-        forceShutdownAllCorfuServers();
+        if (shouldForceKill){
+            forceShutdownAllCorfuServers();
+        }
+        else {
+            gracefullyShutdownAllCorfuServers();
+        }
+
         if (runtime != null) {
             runtime.shutdown();
         }
@@ -122,6 +148,13 @@ public class AbstractIT extends AbstractCorfuTest {
     public static void forceShutdownAllCorfuServers() throws IOException, InterruptedException {
         ProcessBuilder builder = new ProcessBuilder();
         builder.command("sh", "-c", FORCE_KILL_ALL_CORFU_COMMAND);
+        Process p = builder.start();
+        p.waitFor();
+    }
+
+    public static void gracefullyShutdownAllCorfuServers() throws IOException, InterruptedException {
+        ProcessBuilder builder = new ProcessBuilder();
+        builder.command("sh", "-c", GRACEFULLY_KILL_ALL_CORFU_COMMAND);
         Process p = builder.start();
         p.waitFor();
     }
