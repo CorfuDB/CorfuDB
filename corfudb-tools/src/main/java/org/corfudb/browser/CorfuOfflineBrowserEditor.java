@@ -52,6 +52,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
 
         // prints header information for each of the corfu log files
         printLogEntryData();
+
         /**
          * write methods that populate the cachedRegistryTable, cacheProtobufDescriptorTable,
          * the fdProtoMap and the messageFdProtoMap to replace the nulls below for the
@@ -87,46 +88,55 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
 
         for (File file : files) {
             try (FileChannel fileChannel = FileChannel.open(file.toPath())) {
-                while (fileChannel.size() - fileChannel.position() > 0) {
-                    //long channelOffset = fileChannel.position();
+                fileChannel.position(0);
+                // parse header
+                LogFormat.LogHeader header = parseHeader(null, fileChannel, file.getAbsolutePath());
+                //System.out.println(header);
 
-                    // parse header
-                    LogFormat.LogHeader header = parseHeader(null, fileChannel, file.getAbsolutePath());
-                    //System.out.println(header);
-                    // parse metadata
+                //long pos = fileChannel.size();
+                while (fileChannel.size() - fileChannel.position() > 0) {
+                    long channelOffset = fileChannel.position();
                     LogFormat.Metadata metadata = StreamLogFiles.parseMetadata(null, fileChannel, file.getAbsolutePath());
-                    // parse entry
                     LogEntry entry = StreamLogFiles.parseEntry(null, fileChannel, metadata, file.getAbsolutePath());
 
+
+                    //System.out.println(entry);
+
                     try {
-                        if(metadata != null && entry != null && header != null) {
-                            for(int i = 0; i < entry.getStreamsCount(); i ++) {
-                                if(entry.getStreams(i).equals(registryTableStreamId.toString()) ||
-                                        entry.getStreams(i).equals(protobufDescriptorStreamId.toString()) ||
-                                        entry.getStreams(i).equals(registryTableCheckpointStream.toString()) ||
-                                        entry.getStreams(i).equals(protobufDescriptorCheckpointStream.toString())) {
-                                    // convert the LogEntry to LogData to access getPayload
-                                    LogData data = StreamLogFiles.getLogData(entry);
+                        //System.out.println(channelOffset);
+                        if(metadata != null && entry != null) {
+                            // convert the LogEntry to LogData to access getPayload
+                            LogData data = StreamLogFiles.getLogData(entry);
+                            //System.out.println(data.getData());
 
-                                    //Set<UUID> streamUUIDs = data.getStreams();
-
-                                    // call get payload to decompress and deserialize data
-                                    Object modifiedData = data.getPayload(null);
-                                    if(modifiedData != null) {
-                                        System.out.println(modifiedData);
-                                    }
-                                }
+                            Object modifiedData = data.getPayload(null);
+                            if(modifiedData != null) {
+                                //System.out.println(modifiedData);
                             }
 
+
+/**
+                            if(data.containsStream(registryTableStreamId) || data.containsStream(protobufDescriptorStreamId)
+                                    || data.containsStream(registryTableCheckpointStream) || data.containsStream(protobufDescriptorCheckpointStream)) {
+                                // call get payload to decompress and deserialize data
+                                //Object modifiedData = data.getPayload(null);
+                                //if(modifiedData != null) {
+                                  //  System.out.println(modifiedData);
+                                //}
+                                System.out.println(data.getData());
+                            }
+*/
                         }
                     } catch(Exception e) {
                     }
 
-                }
 
+                }
+                System.out.println("Finished processing file: " + file.getAbsolutePath().toString());
             } catch (IOException e) {
                 throw new IllegalStateException("Invalid header: " + file.getAbsolutePath(), e);
             }
+
 
         }
     }

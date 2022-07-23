@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.corfudb.browser.CorfuOfflineBrowserEditor;
 import org.corfudb.browser.CorfuStoreBrowserEditor;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuRuntime;
@@ -208,6 +209,11 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         Assert.assertEquals(browser.clearTable(namespace, tableName), one);
         // Invoke tableInfo and verify size
         Assert.assertEquals(browser.printTableInfo(namespace, tableName), 0);
+    }
+
+    @Test
+    public void offlineTest() throws IOException, InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+        CorfuOfflineBrowserEditor a = new CorfuOfflineBrowserEditor("/Users/michaelc1/downloads/config/corfu");
     }
 
     /**
