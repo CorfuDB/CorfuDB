@@ -426,13 +426,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
             Map<UUID, List<UUID>> streamingConfigSink = replicationConfigManager.getStreamingConfigOnSink();
 
-            Set<UUID> mergeOnlyStreams = LogReplicationConfigManager.getMergeOnlyStreamIdList();
-
-            log.info("Merge-only stream IDs :: {}", mergeOnlyStreams);
-
             return new LogReplicationConfig(streamsToReplicate,
                     streamingConfigSink,
-                    mergeOnlyStreams,
                     serverContext.getLogReplicationMaxNumMsgPerBatch(),
                     serverContext.getLogReplicationMaxDataMessageSize(),
                     serverContext.getLogReplicationCacheMaxSize());

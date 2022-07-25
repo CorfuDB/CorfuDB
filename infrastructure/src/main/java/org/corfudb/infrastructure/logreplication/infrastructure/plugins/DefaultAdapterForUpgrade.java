@@ -81,6 +81,8 @@ public abstract class DefaultAdapterForUpgrade implements ILogReplicationConfigA
                         ((LogReplicationStreams.Version)txn.getRecord(VERSION_TEST_TABLE,
                                 versionStringKey).getPayload()).getVersion();
                 txn.commit();
+            } catch (Exception e) {
+                // Just for wrap this up
             }
         }
         return versionString;

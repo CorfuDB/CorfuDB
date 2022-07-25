@@ -26,7 +26,6 @@ import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -35,6 +34,7 @@ import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MERGE_ONLY_STREAMS;
 import static org.corfudb.runtime.view.ObjectsView.LOG_REPLICATOR_STREAM_INFO;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
@@ -61,13 +61,6 @@ public class LogReplicationConfigManager {
 
     private static final Uuid defaultMetadata =
         Uuid.newBuilder().setLsb(0).setMsb(0).build();
-
-    private static final Set<UUID> MERGE_ONLY_STREAM_ID_LIST = new HashSet<>(Arrays.asList(
-            CorfuRuntime.getStreamID(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
-                    TableRegistry.REGISTRY_TABLE_NAME)),
-            CorfuRuntime.getStreamID(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
-                    TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME))
-    ));
 
     @Getter
     private static String currentVersion;
@@ -242,15 +235,11 @@ public class LogReplicationConfigManager {
      */
     public Map<UUID, List<UUID>> getStreamingConfigOnSink() {
         Map<UUID, List<UUID>> streamingConfig = logReplicationConfigAdapter.getStreamingConfigOnSink();
-        for (UUID id : MERGE_ONLY_STREAM_ID_LIST) {
+        for (UUID id : MERGE_ONLY_STREAMS) {
             streamingConfig.put(id,
                     Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId()));
         }
         return streamingConfig;
-    }
-
-    public static Set<UUID> getMergeOnlyStreamIdList() {
-        return MERGE_ONLY_STREAM_ID_LIST;
     }
 
     private enum VersionResult {

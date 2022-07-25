@@ -4,13 +4,19 @@ import com.google.common.annotations.VisibleForTesting;
 import lombok.Data;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.TableRegistry;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 
 /**
  * This class represents any Log Replication Configuration,
@@ -39,16 +45,25 @@ public class LogReplicationConfig {
     // Percentage of log data per log replication message
     public static final int DATA_FRACTION_PER_MSG = 90;
 
-    // Unique identifiers for all streams to be replicated across sites
-    private Set<String> streamsToReplicate;
+    public static final UUID REGISTRY_TABLE_ID = CorfuRuntime.getStreamID(
+            getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME));
 
-    // Streaming tags on Sink/Standby (map data stream id to list of tags associated to it)
-    private Map<UUID, List<UUID>> dataStreamToTagsMap = new HashMap<>();
+    public static final UUID PROTOBUF_TABLE_ID = CorfuRuntime.getStreamID(
+            getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME));
 
     // Set of streams that shouldn't be cleared on snapshot apply phase, as these
     // streams should be the result of "merging" the replicated data (from active) + local data (on standby).
     // For instance, RegistryTable (to avoid losing local opened tables on standby)
-    private Set<UUID> mergeOnlyStreams = new HashSet<>();
+    public static final Set<UUID> MERGE_ONLY_STREAMS = new HashSet<>(Arrays.asList(
+            REGISTRY_TABLE_ID,
+            PROTOBUF_TABLE_ID
+    ));
+
+    // Unique identifiers for all streams to be replicated across sites
+    private Set<String> streamsToReplicate;
+
+    // Streaming tags on Sink (map data stream id to list of tags associated to it)
+    private Map<UUID, List<UUID>> dataStreamToTagsMap = new HashMap<>();
 
     // Snapshot Sync Batch Size(number of messages)
     private int maxNumMsgPerBatch;
@@ -99,9 +114,8 @@ public class LogReplicationConfig {
     }
 
     public LogReplicationConfig(Set<String> streamsToReplicate, Map<UUID, List<UUID>> streamingTagsMap,
-                                Set<UUID> mergeOnlyStreams, int maxNumMsgPerBatch, int maxMsgSize, int cacheSize) {
+                                int maxNumMsgPerBatch, int maxMsgSize, int cacheSize) {
         this(streamsToReplicate, maxNumMsgPerBatch, maxMsgSize, cacheSize);
         this.dataStreamToTagsMap = streamingTagsMap;
-        this.mergeOnlyStreams = mergeOnlyStreams;
     }
 }

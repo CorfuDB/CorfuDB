@@ -6,8 +6,10 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType;
+import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.service.CorfuProtocolLogReplication;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
@@ -40,8 +42,8 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
-import static org.corfudb.protocols.service.CorfuProtocolLogReplication.extractOpaqueEntries;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MERGE_ONLY_STREAMS;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.REGISTRY_TABLE_ID;
 
 /**
  * This class represents the entity responsible of writing streams' snapshots into the standby cluster DB.
@@ -53,11 +55,10 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.extractO
 
 @Slf4j
 @NotThreadSafe
-public class StreamsSnapshotWriter implements SnapshotWriter {
+public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter {
 
     private static final String CLEAR_SMR_METHOD = "clear";
     private static final String SHADOW_STREAM_SUFFIX = "_SHADOW";
-
     private static final SMREntry CLEAR_ENTRY = new SMREntry(CLEAR_SMR_METHOD, new Array[0], Serializers.PRIMITIVE);
 
     // Mapping from regular stream Id to stream Name
@@ -66,34 +67,30 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     // Mapping from regular stream Id to shadow stream Id
     private final HashMap<UUID, UUID> regularToShadowStreamId;
 
-    private final CorfuRuntime rt;
-
     private long topologyConfigId;
     private long srcGlobalSnapshot; // The source snapshot timestamp
     private long recvSeq;
     private Optional<SnapshotSyncStartMarker> snapshotSyncStartMarker;
     private final Map<UUID, List<UUID>> dataStreamToTagsMap;
-    private final Set<UUID> mergeOnlyStreams;
 
     @Getter
     private final LogReplicationMetadataManager logReplicationMetadataManager;
 
     // Represents the actual replicated streams from active. This is a subset of all regular streams in
     // regularToShadowStreamId map
-    private Set<UUID> replicatedStreamIds = new HashSet<>();
+    private final Set<UUID> replicatedStreamIds = new HashSet<>();
 
     @Getter
     private Phase phase;
 
     public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager) {
-        this.rt = rt;
+        super(rt);
         this.logReplicationMetadataManager = logReplicationMetadataManager;
         this.streamViewMap = new HashMap<>();
         this.regularToShadowStreamId = new HashMap<>();
         this.phase = Phase.TRANSFER_PHASE;
         this.snapshotSyncStartMarker = Optional.empty();
         this.dataStreamToTagsMap = config.getDataStreamToTagsMap();
-        this.mergeOnlyStreams = config.getMergeOnlyStreams();
 
         initializeShadowStreams(config);
 
@@ -248,7 +245,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             throw new ReplicationWriterException("Message is out of order or wrong type");
         }
 
-        List<OpaqueEntry> opaqueEntryList = extractOpaqueEntries(message);
+        List<OpaqueEntry> opaqueEntryList = CorfuProtocolLogReplication.extractOpaqueEntries(message);
 
         // For snapshot message, it has only one opaque entry.
         if (opaqueEntryList.size() > 1) {
@@ -267,7 +264,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         // set has streams not present in the Sink's set, they will be
         // dropped for version compatibility consideration
         if (!regularToShadowStreamId.containsKey(regularStreamId)) {
-            log.warn("Stream {} sent from Active is not expected in Standby. LR could be undergoing a rolling upgrade", regularStreamId);
+            log.warn("Stream {} sent from Source is not expected in Sink. LR could be" +
+                    " undergoing a rolling upgrade", regularStreamId);
             recvSeq++;
             return;
         }
@@ -278,7 +276,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         processUpdatesShadowStream(opaqueEntry.getEntries().get(regularStreamId),
             message.getMetadata().getSnapshotSyncSeqNum(),
             regularToShadowStreamId.get(regularStreamId),
-            getUUID(message.getMetadata().getSyncRequestId()));
+            CorfuProtocolCommon.getUUID(message.getMetadata().getSyncRequestId()));
         recvSeq++;
     }
 
@@ -336,7 +334,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         // 1. Merge-only streams
         // 2. Streams which did not evidence data on either source or sink
         // as these streams will get trimmed and 'clear' will be a 'data loss'.
-        if (mergeOnlyStreams.contains(streamId)) {
+        if (MERGE_ONLY_STREAMS.contains(streamId)) {
             log.debug("Do not clear stream={} (merge stream)", streamId);
         } else if (!replicatedStreamIds.contains(streamId)) {
             log.trace("No data was written to stream {} on source or sink." +
@@ -351,6 +349,11 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             smrEntries.addAll(opaqueEntry.getEntries().get(shadowStreamId));
         }
 
+        if (streamId.equals(REGISTRY_TABLE_ID)) {
+            // Only keep entries that currently not exist in registry table
+            smrEntries = fetchNewEntries(new ArrayList<>(smrEntries));
+        }
+
         List<SMREntry> buffer = new ArrayList<>();
         long bufferSize = 0;
         int numBatches = 1;
@@ -359,8 +362,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             if (bufferSize + smrEntry.getSerializedSize() >
                 logReplicationMetadataManager.getRuntime().getParameters()
                     .getMaxWriteSize()) {
-                try (TxnContext txnContext =
-                    logReplicationMetadataManager.getTxnContext()) {
+                try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
                     updateLog(txnContext, buffer, streamId);
                     CorfuStoreMetadata.Timestamp ts = txnContext.commit();
                     log.debug("Applied shadow stream partially for stream {} " +
@@ -377,8 +379,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             }
         }
         if (!buffer.isEmpty()) {
-            try (TxnContext txnContext =
-                logReplicationMetadataManager.getTxnContext()) {
+            try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
                 updateLog(txnContext, buffer, streamId);
                 txnContext.commit();
             }
@@ -392,12 +393,15 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * Read from shadowStream and append/apply to the actual stream
      */
     public void applyShadowStreams() {
-        long snapshot = rt.getAddressSpaceView().getLogTail();
         log.debug("Apply Shadow Streams, total={}", streamViewMap.size());
+
+        long snapshot = rt.getAddressSpaceView().getLogTail();
         for (UUID regularStreamId : streamViewMap.keySet()) {
             applyShadowStream(regularStreamId, snapshot);
         }
-        // Invalidate client cache after snapshot sync is completed, as shadow streams are no longer useful in the cache
+
+        // Invalidate client cache after snapshot sync is completed, as shadow streams are
+        // no longer useful in the cache
         rt.getAddressSpaceView().invalidateClientCache();
         replicatedStreamIds.clear();
     }
@@ -436,8 +440,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         // without opening the stream, hence, leading to "apparent" data loss as
         // checkpoint won't run on these streams
         Set<UUID> streamsToQuery = streamViewMap.keySet().stream()
-                .filter(id -> !replicatedStreamIds.contains(id) &&
-                    !mergeOnlyStreams.contains(id))
+                .filter(id -> !replicatedStreamIds.contains(id) && !MERGE_ONLY_STREAMS.contains(id))
                 .collect(Collectors.toCollection(HashSet::new));
 
         log.debug("Total of {} streams were replicated from Source out of {}," +
