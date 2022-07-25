@@ -88,18 +88,24 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
 
         for (File file : files) {
             try (FileChannel fileChannel = FileChannel.open(file.toPath())) {
+                // set the file channel's position back to 0
                 fileChannel.position(0);
+                //long pos = fileChannel.size();
+
                 // parse header
                 LogFormat.LogHeader header = parseHeader(null, fileChannel, file.getAbsolutePath());
                 //System.out.println(header);
 
-                //long pos = fileChannel.size();
-                while (fileChannel.size() - fileChannel.position() > 0) {
-                    long channelOffset = fileChannel.position();
+                // iterate through the file
+                // make sure that fileChannel.size() - fileChannel.position() > 14 to prevent
+                // actualMetaDataSize < METADATA_SIZE, which would create an exception
+                while (fileChannel.size() - fileChannel.position() > 14) {
+                    //long channelOffset = fileChannel.position();
+
+                    // parse metadata and entry
                     LogFormat.Metadata metadata = StreamLogFiles.parseMetadata(null, fileChannel, file.getAbsolutePath());
+                    //System.out.println(entry);
                     LogEntry entry = StreamLogFiles.parseEntry(null, fileChannel, metadata, file.getAbsolutePath());
-
-
                     //System.out.println(entry);
 
                     try {
@@ -109,23 +115,15 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                             LogData data = StreamLogFiles.getLogData(entry);
                             //System.out.println(data.getData());
 
-                            Object modifiedData = data.getPayload(null);
-                            if(modifiedData != null) {
-                                //System.out.println(modifiedData);
-                            }
-
-
-/**
+                            // filter the data
+                            // if it belongs to the CorfuSystem$RegistryTable or CorfuSystem$ProtobufDescriptorTable or its checkpoint streams process it
                             if(data.containsStream(registryTableStreamId) || data.containsStream(protobufDescriptorStreamId)
                                     || data.containsStream(registryTableCheckpointStream) || data.containsStream(protobufDescriptorCheckpointStream)) {
                                 // call get payload to decompress and deserialize data
-                                //Object modifiedData = data.getPayload(null);
-                                //if(modifiedData != null) {
-                                  //  System.out.println(modifiedData);
-                                //}
-                                System.out.println(data.getData());
+                                Object modifiedData = data.getPayload(null);
+                                System.out.println(modifiedData);
                             }
-*/
+
                         }
                     } catch(Exception e) {
                     }
