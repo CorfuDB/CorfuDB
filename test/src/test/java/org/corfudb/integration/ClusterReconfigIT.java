@@ -66,12 +66,14 @@ public class ClusterReconfigIT extends AbstractIT {
     private final String testStream = "test";
 
     @Before
-    public void loadProperties() {
+    public void loadProperties() throws Exception {
+        super.setUp();
         corfuSingleNodeHost = (String) PROPERTIES.get("corfuSingleNodeHost");
     }
 
     @After
-    public void tearDown() {
+    public void tearDown() throws Exception {
+        super.cleanUp();
         if (runtime != null) {
             runtime.shutdown();
         }

@@ -32,3 +32,8 @@ jobs:
 
       - name: run integration tests
         run: ./mvnw -pl :test clean verify -Pit -DskipTests
+
+      - name: Upload Codecov report
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage/target/site/jacoco-aggregate/jacoco.xml

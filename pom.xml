@@ -256,7 +256,7 @@
                             <excludes>
 <!--                                <exclude>CorfuReplicationTrimIT.java</exclude>-->
 <!--                                <exclude>CorfuReplicationUpgradeIT.java</exclude>-->
-<!--                                <exclude>CorfuReplicationClusterConfigIT.java</exclude>-->
+                                <exclude>CorfuReplicationClusterConfigIT.java</exclude>
 <!--                                <exclude>CorfuReplicationReconfigurationIT.java</exclude>-->
 <!--                                <exclude>WorkflowIT.java</exclude>-->
 <!--                                <exclude>ClusterReconfigIT.java</exclude>-->

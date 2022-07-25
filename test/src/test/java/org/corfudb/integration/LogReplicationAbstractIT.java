@@ -118,7 +118,8 @@ public class LogReplicationAbstractIT extends AbstractIT {
     private final long longInterval = 20L;
 
     @After
-    public void cleanUp(){
+    public void cleanUp() throws Exception {
+        super.cleanUp();
         executorService.shutdownNow();
 
         if (activeCorfu != null) {

@@ -78,7 +78,8 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
      * @throws Exception
      */
     @Before
-    public void setupPluginPath() {
+    public void setupPluginPath() throws Exception {
+        super.setUp();
         if(runProcess) {
             File f = new File(nettyConfig);
             this.pluginConfigFilePath = f.getAbsolutePath();

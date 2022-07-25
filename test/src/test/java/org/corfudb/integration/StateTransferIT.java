@@ -61,12 +61,14 @@ public class StateTransferIT extends AbstractIT {
     }
 
     @Before
-    public void loadProperties() {
+    public void loadProperties() throws Exception {
+        super.setUp();
         corfuSingleNodeHost = (String) PROPERTIES.get("corfuSingleNodeHost");
     }
 
     @After
-    public void tearDown() {
+    public void tearDown() throws Exception {
+        super.cleanUp();
         if (firstRuntime != null) {
             firstRuntime.shutdown();
         }
