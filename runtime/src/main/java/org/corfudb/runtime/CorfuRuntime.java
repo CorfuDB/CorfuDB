@@ -25,7 +25,6 @@ import org.corfudb.runtime.clients.SequencerHandler;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.runtime.object.MVOCache;
 import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.Layout;

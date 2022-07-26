@@ -369,7 +369,6 @@ public class TableRegistry {
             if (log.isTraceEnabled() && currentSchema != null &&
                     !protoName.getFileName().startsWith("google/protobuf") &&
                     !currentSchema.getPayload().getFileDescriptor()
->>>>>>> TableRegistry: Use GitRepo version to detect Protobuf file changes (#3225)
                     .equals(newProtoFd.getPayload().getFileDescriptor())) {
                 log.trace("registerTable: Schema update detected for table {}! " +
                                 "Old schema is {}, new schema is {}", protoName,
@@ -598,6 +597,7 @@ public class TableRegistry {
                 this.protobufSerializer,
                 mapSupplier,
                 streamTagIdsForTable);
+
         tableMap.put(fullyQualifiedTableName, (Table<Message, Message, Message>) table);
 
         registerTable(namespace, tableName, kClass, vClass, mClass, tableOptions);

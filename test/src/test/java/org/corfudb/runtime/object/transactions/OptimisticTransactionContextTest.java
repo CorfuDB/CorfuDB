@@ -195,6 +195,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
             map.insert(c2, "v2");
             map.get(c2); // get c2 since insert does not have an upcall, so no entry is added into the readSet
         });
+
         t(1, this::TXEnd);
         t(2, this::TXEnd)
                 .assertThrows()
@@ -948,6 +949,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         t1(() -> rt.getObjectsView().TXBegin());
         t2(() -> rt.getObjectsView().TXBegin());
+
         t1(() -> {
             m1.insert("azusavnj", "1");
             m1.get("azusavnj"); // get azusavnj since insert does not have an upcall, so no entry is added into the readSet
@@ -956,6 +958,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
             m2.insert("ajkenmbb", "2");
             m2.get("ajkenmbb"); // get ajkenmbb since insert does not have an upcall, so no entry is added into the readSet
         });
+
         t1(() -> rt.getObjectsView().TXEnd());
         t2(() -> rt.getObjectsView().TXEnd())
                 .assertDoesNotThrow(TransactionAbortedException.class);

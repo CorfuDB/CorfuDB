@@ -5,7 +5,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.SMRObject;
-import org.corfudb.util.serializer.ISerializer;
 
 /**
  * Created by dalia on 4/11/17.
@@ -45,6 +44,7 @@ public class AbstractObjectTest extends AbstractViewTest {
                             .open();                // instantiate the object!
         }
     }
+
     protected <T extends ICorfuSMR> T instantiateCorfuObject(Class<T> tClass, String name) {
         return instantiateCorfuObject(getRuntime(), tClass, name);
     }
@@ -84,5 +84,4 @@ public class AbstractObjectTest extends AbstractViewTest {
     protected <T extends ICorfuSMR> Object instantiateCorfuObject(TypeToken<T> tType, String name) {
         return instantiateCorfuObject(getRuntime(), tType, name);
     }
-
 }

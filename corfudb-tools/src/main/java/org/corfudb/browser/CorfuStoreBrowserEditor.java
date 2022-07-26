@@ -169,6 +169,7 @@ public class CorfuStoreBrowserEditor {
             // So to work around this bug, avoid dumping the TableDescriptor table directly.
             return printTableRegistry();
         }
+
         ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table = getTable(namespace, tablename);
         int size = table.size();
         final int batchSize = 50;
@@ -488,8 +489,7 @@ public class CorfuStoreBrowserEditor {
             new CorfuDynamicKey(defaultKeyAny.getTypeUrl(), keyMsg);
 
         try {
-            ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
-                    getTable(namespace, tableName);
+            ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table = getTable(namespace, tableName);
             runtime.getObjectsView().TXBegin();
             CorfuDynamicRecord editedRecord = null;
 
@@ -568,7 +568,6 @@ public class CorfuStoreBrowserEditor {
                 " in table " + tableName + " and namespace " + namespace +
                 ".  Stream Id " + streamUUID);
 
-        ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table = getTable(namespace, tableName);
         TableName tableNameProto = TableName.newBuilder().setTableName(tableName)
                 .setNamespace(namespace).build();
 
@@ -578,13 +577,13 @@ public class CorfuStoreBrowserEditor {
 
         int numKeysDeleted = 0;
 
+        ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table = getTable(namespace, tableName);
         try {
             int recordsInTxn = 0;
             runtime.getObjectsView().TXBegin();
             for (String keyToDelete: keysToDelete) {
                 DynamicMessage keyMsg =
-                        dynamicProtobufSerializer.createDynamicMessageFromJson(defaultKeyAny,
-                                keyToDelete);
+                        dynamicProtobufSerializer.createDynamicMessageFromJson(defaultKeyAny, keyToDelete);
 
                 CorfuDynamicKey dynamicKey =
                         new CorfuDynamicKey(defaultKeyAny.getTypeUrl(), keyMsg);

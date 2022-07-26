@@ -53,7 +53,6 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     // can acquire the VLO lock and cause the other 3 threads to wait, but after acquiring the VLO lock, the thread
     // gets block on parallel stream, because the pool is exhausted with threads that are trying to acquire the VLO
     // look, which creates a circular dependency. In other words, a deadlock.
-
     protected static final ForkJoinPool pool = new ForkJoinPool(Math.max(Runtime.getRuntime().availableProcessors() - 1, 1),
             pool -> {
                 final ForkJoinWorkerThread worker = ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(pool);

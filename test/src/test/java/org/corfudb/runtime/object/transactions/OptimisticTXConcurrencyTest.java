@@ -5,7 +5,6 @@ import com.google.common.reflect.TypeToken;
 
 import java.util.ArrayList;
 import java.util.UUID;
-
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;

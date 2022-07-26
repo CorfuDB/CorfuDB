@@ -150,6 +150,8 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         PersistentCorfuTable<String, Long> m = instantiateTable(streamName);
         m.insert(key1, key1Val);
         m.insert(key2, key2Val);
+        // Run get so that these two puts are resolved in read queue
+        m.get(key2);
 
         // Run get so that these two puts are resolved in read queue
         m.get(key2);
@@ -772,9 +774,9 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     }
 
     private Token checkpointUfoSystemTables(CorfuRuntime runtime, ISerializer serializer) {
-        PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord> tableRegistry = runtime.getObjectsView()
+        PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> tableRegistry = runtime.getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>() {})
                 .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
                         TableRegistry.REGISTRY_TABLE_NAME))
                 .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
@@ -782,9 +784,9 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
 
-        PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord> descriptorTable = runtime.getObjectsView()
+        PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> descriptorTable = runtime.getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>() {})
                 .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
                         TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME))
                 .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
@@ -792,7 +794,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
 
-        MultiCheckpointWriter<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> mcw = new MultiCheckpointWriter<>();
+        MultiCheckpointWriter<PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>> mcw = new MultiCheckpointWriter<>();
         mcw.addMap(tableRegistry);
         mcw.addMap(descriptorTable);
         return mcw.appendCheckpoints(runtime, "checkpointer");
