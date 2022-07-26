@@ -1099,7 +1099,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         final String streamName = "stream1";
 
-        final int numRetry = 3;
+        final int numRetry = 30;
         final Duration timeout = Duration.ofMinutes(5);
         final Duration pollPeriod = Duration.ofSeconds(5);
 
