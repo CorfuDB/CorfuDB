@@ -26,7 +26,9 @@ import org.corfudb.runtime.collections.CorfuQueue;
 import org.corfudb.runtime.collections.CorfuQueue.CorfuRecordId;
 import org.corfudb.runtime.collections.CorfuStoreShim;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.ManagedTxnContext;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -89,7 +91,7 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
         if (numThreads < PARAMETERS.NUM_ITERATIONS_LARGE) {
             return;
         }
-        Map<Long, Long> conflictMap = instantiateCorfuObject(CorfuTable.class, "conflictMap");
+        ICorfuTable<Long, Long> conflictMap = instantiateCorfuObject(PersistentCorfuTable.class, "conflictMap");
         CorfuQueue
                 corfuQueue = new CorfuQueue(getRuntime(), "testQueue");
         class Record {
@@ -113,7 +115,7 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
                 try {
                     TXBegin(txnType);
                     Long coinToss = new Random().nextLong() % numConflictKeys;
-                    conflictMap.put(coinToss, coinToss);
+                    conflictMap.insert(coinToss, coinToss);
                     corfuQueue.enqueue(getByteString(queueData));
                     // Each transaction may or may not sleep to simulate out of order between enQ & commit
                     TimeUnit.MILLISECONDS.sleep(coinToss);
@@ -262,10 +264,10 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
         }
 
         final int numThreads = PARAMETERS.CONCURRENCY_TWO;
-        Map<Integer, Map<Long, Long>> tables = new HashMap<>();
+        Map<Integer, ICorfuTable<Long, Long>> tables = new HashMap<>();
 
         for (int i = 0; i < numThreads; i++) {
-            tables.put(i, instantiateCorfuObject(CorfuTable.class, "testTable" +i));
+            tables.put(i, instantiateCorfuObject(PersistentCorfuTable.class, "testTable" +i));
         }
 
         CorfuQueue
@@ -282,14 +284,14 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
 
             log.info("\nmy tableID :" + tableID + " numIterations: " + numIterations);
 
-            Map<Long, Long> testTable = tables.get(tableID);
+            ICorfuTable<Long, Long> testTable = tables.get(tableID);
 
             for (Long i = 0L; i < numIterations; i++) {
                 String queueData = t.toString() + ":" + i.toString();
                 try {
                     TXBegin(txnType);
                     Long coinToss = new Random().nextLong() % numConflictKeys;
-                    testTable.put(coinToss, coinToss);
+                    testTable.insert(coinToss, coinToss);
 
                     //enforce the second thread enqueue later
                     if (tableID != semIdOwner) {

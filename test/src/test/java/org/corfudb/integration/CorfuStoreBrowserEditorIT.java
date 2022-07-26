@@ -15,11 +15,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.corfudb.browser.CorfuStoreBrowserEditor;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.collections.CorfuDynamicKey;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.view.TableRegistry;
 import org.junit.Assert;
@@ -189,9 +192,9 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         Assert.assertEquals(browser.listTables(namespace), one);
 
         // Invoke the browser and go through each item
-        CorfuTable table = browser.getTable(namespace, tableName);
+        ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table = browser.getTable(namespace, tableName);
         Assert.assertEquals(browser.printTable(namespace, tableName), one);
-        for(Object obj : table.values()) {
+        for(Object obj : table.entryStream().map(Map.Entry::getValue).collect(Collectors.toList())) {
             CorfuDynamicRecord record = (CorfuDynamicRecord)obj;
             Assert.assertEquals(
                 UnknownFieldSet.newBuilder().build(),
@@ -397,11 +400,11 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
         runtime = createRuntime(singleNodeEndpoint);
         CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
-        CorfuTable table2 = browser.getTable(namespace, tableName);
+        ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table2 = browser.getTable(namespace, tableName);
         browser.printTable(namespace, tableName);
         Assert.assertEquals(1, table2.size());
 
-        for(Object obj : table2.values()) {
+        for(Object obj : table2.entryStream().map(Map.Entry::getValue).collect(Collectors.toList())) {
             CorfuDynamicRecord record = (CorfuDynamicRecord)obj;
             Assert.assertEquals(
                 UnknownFieldSet.newBuilder().build(),

@@ -149,6 +149,8 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         PersistentCorfuTable<String, Long> m = instantiateTable(streamName);
         m.insert(key1, key1Val);
         m.insert(key2, key2Val);
+        // Run get so that these two puts are resolved in read queue
+        m.get(key2);
 
         // Write our successful checkpoint, 3 records total.
         writeCheckpointRecords(streamId, checkpointAuthor, checkpointId,
@@ -299,16 +301,16 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             cpw.startCheckpoint(snapshot);
             cpw.appendObjectState(m.entryStream());
             cpw.finishCheckpoint();
-
-            // Instantiate new runtime & map.  All map entries (except 'just one more')
-            // should have fudgeFactor added.
-            setRuntime();
-            PersistentCorfuTable<String, Long> m2 = instantiateTable(streamName);
-            for (int i = 0; i < numKeys; i++) {
-                assertThat(m2.get(keyPrefix + i)).describedAs("get " + i).isEqualTo(i + fudgeFactor);
-            }
         } finally {
             r.getObjectsView().TXEnd();
+        }
+
+        // Instantiate new runtime & map.  All map entries (except 'just one more')
+        // should have fudgeFactor added.
+        setRuntime();
+        PersistentCorfuTable<String, Long> m2 = instantiateTable(streamName);
+        for (int i = 0; i < numKeys; i++) {
+            assertThat(m2.get(keyPrefix + i)).describedAs("get " + i).isEqualTo(i + fudgeFactor);
         }
     }
 
@@ -794,9 +796,9 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     }
 
     private Token checkpointUfoSystemTables(CorfuRuntime runtime, ISerializer serializer) {
-        PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord> tableRegistry = runtime.getObjectsView()
+        PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> tableRegistry = runtime.getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>() {})
                 .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
                         TableRegistry.REGISTRY_TABLE_NAME))
                 .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
@@ -804,9 +806,9 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
 
-        PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord> descriptorTable = runtime.getObjectsView()
+        PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> descriptorTable = runtime.getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>() {})
                 .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
                         TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME))
                 .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
@@ -814,7 +816,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
 
-        MultiCheckpointWriter<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> mcw = new MultiCheckpointWriter<>();
+        MultiCheckpointWriter<PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>> mcw = new MultiCheckpointWriter<>();
         mcw.addMap(tableRegistry);
         mcw.addMap(descriptorTable);
         return mcw.appendCheckpoints(runtime, "checkpointer");
@@ -1003,6 +1005,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         if (write1) {
             long addr1 = r.getSequencerView().query(streamId);
             mdKV.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS, Long.toString(addr1 + 1));
+            mdKV.put(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS, Long.toString(addr1 + 1));
             CheckpointEntry cp1 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
                     checkpointAuthor, checkpointId, streamId, mdKV, null);
             startAddress = sv.append(cp1, null, null);

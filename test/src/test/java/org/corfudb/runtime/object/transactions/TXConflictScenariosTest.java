@@ -9,6 +9,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuSharedCounter;
 import org.junit.Test;
@@ -248,21 +250,17 @@ public abstract class TXConflictScenariosTest extends AbstractTransactionContext
             throws Exception {
         AtomicBoolean commitStatus = new AtomicBoolean(true);
 
-        Map<String, String> testMap = getMap();
+        ICorfuTable<String, String> testMap = getMap();
 
-        Map<String, String> testMap2 = (Map<String, String>)
+        ICorfuTable<String, String> testMap2 = (ICorfuTable<String, String>)
                 instantiateCorfuObject(
-                        new TypeToken<CorfuTable<String, String>>() {}, "test stream");
+                        new TypeToken<PersistentCorfuTable<String, String>>() {}, "test stream");
 
         t(1, () -> TXBegin() );
-        t(1, () -> testMap.put("a", "a") );
-        t(1, () -> assertThat(testMap.put("a", "b"))
-                .isEqualTo("a") );
+        t(1, () -> testMap.insert("a", "a") );
 
         t(2, () -> TXBegin() );
-        t(2, () -> testMap2.put("b", "f") );
-        t(2, () -> assertThat(testMap2.put("b", "g"))
-                .isEqualTo("f") );
+        t(2, () -> testMap2.insert("b", "f") );
         t(2, () -> TXEnd() );
 
         t(1, () -> {
@@ -281,7 +279,7 @@ public abstract class TXConflictScenariosTest extends AbstractTransactionContext
     void getAbortTestSM() {
         Random rand = new Random(PARAMETERS.SEED);
 
-        Map<String, String> testMap = getMap();
+        ICorfuTable<String, String> testMap = getMap();
         testMap.clear();
 
         // state 0: start a transaction
@@ -291,7 +289,7 @@ public abstract class TXConflictScenariosTest extends AbstractTransactionContext
         addTestStep( (task_num) -> {
 
             // put to a task-exclusive entry
-            testMap.put(Integer.toString(task_num),
+            testMap.insert(Integer.toString(task_num),
                     Integer.toString(task_num));
 
             // do some gets arbitrarily at random

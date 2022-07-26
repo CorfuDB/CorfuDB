@@ -68,11 +68,6 @@ public class CorfuCompileWrapperBuilder {
         wrapperObject.setCorfuSMRProxy(new CorfuCompileProxy<>(rt, streamID,
                 type, args, serializer, streamTags, wrapperObject));
 
-        if (wrapperObject instanceof ICorfuSMRProxyWrapper) {
-            ((ICorfuSMRProxyWrapper) wrapperObject)
-                    .setProxy$CORFUSMR(wrapperObject.getCorfuSMRProxy());
-        }
-
         return (T) wrapperObject;
     }
 

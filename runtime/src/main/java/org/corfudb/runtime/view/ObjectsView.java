@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -58,6 +59,7 @@ public class ObjectsView extends AbstractView {
     Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();
 
     @Getter
+    @Setter
     MVOCache mvoCache = new MVOCache(runtime);
 
     public ObjectsView(@Nonnull final CorfuRuntime runtime) {

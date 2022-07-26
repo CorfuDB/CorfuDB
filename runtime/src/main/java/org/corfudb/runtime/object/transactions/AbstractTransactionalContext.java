@@ -133,7 +133,7 @@ public abstract class AbstractTransactionalContext implements
     private final ConflictSetInfo readSetInfo = new ConflictSetInfo();
 
     // TODO: Make into a class?
-    protected final Map<UUID, ICorfuSMRSnapshotProxy<?>> snapshotProxyMap = new HashMap<>();
+    protected final Map<ICorfuSMRProxyInternal<?>, ICorfuSMRSnapshotProxy<?>> snapshotProxyMap = new HashMap<>();
 
     /**
      * Cache of last known position of streams accessed in this transaction.
@@ -150,11 +150,11 @@ public abstract class AbstractTransactionalContext implements
 
     protected <T extends ICorfuSMR<T>> ICorfuSMRSnapshotProxy<T> getAndCacheSnapshotProxy(ICorfuSMRProxyInternal<T> proxy, long ts) {
         // TODO: Refactor me to avoid casting on ICorfuSMRProxyInternal type.
-        ICorfuSMRSnapshotProxy<T> snapshotProxy = (ICorfuSMRSnapshotProxy<T>) snapshotProxyMap.get(proxy.getStreamID());
+        ICorfuSMRSnapshotProxy<T> snapshotProxy = (ICorfuSMRSnapshotProxy<T>) snapshotProxyMap.get(proxy);
         final MVOCorfuCompileProxy<T> persistentProxy = (MVOCorfuCompileProxy<T>) proxy;
         if (snapshotProxy == null) {
             snapshotProxy = persistentProxy.getUnderlyingMVO().getSnapshotProxy(ts);
-            snapshotProxyMap.put(proxy.getStreamID(), snapshotProxy);
+            snapshotProxyMap.put(proxy, snapshotProxy);
         }
 
         return snapshotProxy;

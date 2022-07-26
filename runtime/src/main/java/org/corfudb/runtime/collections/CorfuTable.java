@@ -1,7 +1,5 @@
 package org.corfudb.runtime.collections;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
@@ -12,31 +10,18 @@ import org.corfudb.annotations.DontInstrument;
 import org.corfudb.annotations.Mutator;
 import org.corfudb.annotations.MutatorAccessor;
 import org.corfudb.annotations.PassThrough;
-import org.corfudb.annotations.TransactionalMethod;
 import org.corfudb.runtime.object.ICorfuExecutionContext;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
-import org.corfudb.util.ImmutableListSetWrapper;
 
 import javax.annotation.Nonnull;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.ConcurrentModificationException;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.ForkJoinWorkerThread;
-import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /** The CorfuTable implements a simple key-value store.
@@ -59,21 +44,6 @@ import java.util.stream.Stream;
 @Slf4j
 @CorfuObject
 public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable<K, V>> {
-
-    // Accessor/Mutator threads can interleave in a way that create a deadlock because they can create a
-    // circular dependency between the VersionLockedObject(VLO) lock and the common forkjoin thread pool. In order
-    // to break the dependency, parallel stream operations have to execute on a separate pool that applications
-    // cant use. For example, if there are 4 accessor threads all using the common forkjoin pool, one of the threads
-    // can acquire the VLO lock and cause the other 3 threads to wait, but after acquiring the VLO lock, the thread
-    // gets block on parallel stream, because the pool is exhausted with threads that are trying to acquire the VLO
-    // look, which creates a circular dependency. In other words, a deadlock.
-
-    protected final static ForkJoinPool pool = new ForkJoinPool(Math.max(Runtime.getRuntime().availableProcessors() - 1, 1),
-            pool -> {
-                final ForkJoinWorkerThread worker = ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(pool);
-                worker.setName("CorfuTable-Forkjoin-pool-" + worker.getPoolIndex());
-                return worker;
-            }, null, true);
 
     // The "main" map which contains the primary key-value mappings.
     private final ContextAwareMap<K, V> mainMap;
@@ -211,13 +181,6 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     /** {@inheritDoc} */
     @Override
     @Accessor
-    public boolean containsValue(Object value) {
-        return mainMap.containsValue(value);
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    @Accessor
     public V get(@ConflictParameter Object key) {
         return mainMap.get(key);
     }
@@ -233,7 +196,7 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     @Accessor
     public @Nonnull
     <I>
-    Collection<Entry<K, V>> getByIndex(@Nonnull Index.Name indexName, I indexKey) {
+    Collection<Map.Entry<K, V>> getByIndex(@Nonnull Index.Name indexName, I indexKey) {
         String secondaryIndex = indexName.get();
         Map<Object, Map<K, V>> secondaryMap;
         if ((secondaryIndexes.containsKey(secondaryIndex) &&
@@ -252,44 +215,7 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
         throw new IllegalArgumentException("Secondary Index " + secondaryIndex + " is not defined.");
     }
 
-    /**
-     * Scan and filter using the specified index function and projection.
-     *
-     * @param indexName      Name of the the secondary index to query.
-     * @param entryPredicate The predicate to scan and filter with.
-     * @param indexKey       A collection of Map.Entry<K, V>
-     * @return
-     */
-    @Accessor
-    public @Nonnull
-    <I>
-    Collection<Map.Entry<K, V>> getByIndexAndFilter(@Nonnull Index.Name indexName,
-                                                    @Nonnull Predicate<? super Entry<K, V>>
-                                                            entryPredicate,
-                                                    I indexKey) {
-        Stream<Entry<K, V>> entryStream;
-        String secondaryIndex = indexName.get();
-        Map<Object, Map<K, V>> secondaryMap;
-
-        if (secondaryIndexes.containsKey(secondaryIndex) &&
-                ((secondaryMap = secondaryIndexes.get(secondaryIndex)) != null) || secondaryIndexesAliasToPath.containsKey(secondaryIndex)
-                && ((secondaryMap = secondaryIndexes.get(secondaryIndexesAliasToPath.get(secondaryIndex))) != null)) {
-            if (secondaryMap.get(indexKey) == null) {
-                entryStream = Stream.empty();
-            } else {
-                entryStream = secondaryMap.get(indexKey).entrySet().stream();
-            }
-
-            return entryStream.filter(entryPredicate).collect(Collectors.toCollection(ArrayList::new));
-        }
-
-        // If there are is no index function available, fail
-        log.error("CorfuTable: secondary index " + secondaryIndex + " does not exist for this table, cannot complete the get by index and filter.");
-        throw new IllegalArgumentException("Secondary Index " + secondaryIndex + " is not defined.");
-    }
-
     /** {@inheritDoc} */
-    @Override
     @MutatorAccessor(name = "put", undoFunction = "undoPut", undoRecordFunction = "undoPutRecord")
     public V put(@ConflictParameter K key, V value) {
         V previous = mainMap.put(key, value);
@@ -312,54 +238,8 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
         undoRemove(table, undoRecord, key);
     }
 
-    @DontInstrument
-    Object[] putAllConflictFunction(Map<? extends K, ? extends V> m) {
-        return m.keySet().stream()
-                .map(Object::hashCode)
-                .toArray(Object[]::new);
-    }
-
     enum UndoNullable {
         NULL;
-    }
-
-    /** Generate an undo record for putAll, given the previous state of the map
-     * and the parameters to the putAll call.
-     *
-     * @param previousState     The previous state of the map
-     * @param m                 The map from the putAll call
-     * @return                  An undo record, which for a putAll is all the
-     *                          previous entries in the map.
-     */
-    @DontInstrument
-    @SuppressWarnings("unchecked")
-    Map<K, V> undoPutAllRecord(CorfuTable<K, V> previousState,
-                              Map<? extends K, ? extends V> m) {
-        ImmutableMap.Builder<K, V> builder = ImmutableMap.builder();
-        m.keySet().forEach(k -> builder.put(k,
-                (previousState.get(k) == null
-                        ? (V) CorfuTable.UndoNullable.NULL
-                        : previousState.get(k))));
-        return builder.build();
-    }
-
-    /** Undo a remove, given the current state of the map, an undo record
-     * and the arguments to the remove command to undo.
-     *
-     * @param table           The state of the map after the put to undo
-     * @param undoRecord    The undo record generated by undoRemoveRecord
-     */
-    @DontInstrument
-    void undoPutAll(CorfuTable<K, V> table, Map<K, V> undoRecord,
-                    Map<? extends K, ? extends V> m) {
-        undoRecord.entrySet().forEach(e -> {
-                    if (e.getValue() == CorfuTable.UndoNullable.NULL) {
-                        undoRemove(table, null, e.getKey());
-                    } else {
-                        undoRemove(table, e.getValue(), e.getKey());
-                    }
-                }
-        );
     }
 
     /** {@inheritDoc} */
@@ -372,30 +252,6 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     }
 
     /** {@inheritDoc} */
-    @Override
-    @Accessor
-    public List<V> scanAndFilter(Predicate<? super V> valuePredicate) {
-        try (Stream<Entry<K, V>> entries = mainMap.unsafeEntryStream()) {
-            return pool.submit(() -> entries
-                    .map(Entry::getValue).filter(valuePredicate)
-                    .collect(Collectors.toCollection(ArrayList::new))).join();
-        }
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    @Accessor
-    public Collection<Map.Entry<K, V>> scanAndFilterByEntry(
-            Predicate<? super Map.Entry<K, V>> entryPredicate) {
-        try (Stream<Map.Entry<K, V>> entries = mainMap.unsafeEntryStream()) {
-            return pool.submit(() -> entries
-                    .filter(entryPredicate)
-                    .collect(Collectors.toCollection(ArrayList::new))).join();
-        }
-    }
-
-    /** {@inheritDoc} */
-    @Override
     @MutatorAccessor(name = "remove", undoFunction = "undoRemove",
             undoRecordFunction = "undoRemoveRecord")
     @SuppressWarnings("unchecked")
@@ -435,28 +291,6 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
 
     /** {@inheritDoc} */
     @Override
-    @Mutator(name = "putAll",
-            undoFunction = "undoPutAll",
-            undoRecordFunction = "undoPutAllRecord",
-            conflictParameterFunction = "putAllConflictFunction")
-    public void putAll(@Nonnull Map<? extends K, ? extends V> m) {
-        // If we have no index functions, then just directly put all
-        if (secondaryIndexes.isEmpty()) {
-            mainMap.putAll(m);
-        } else {
-            // Otherwise we must update all secondary indexes
-            // TODO: Do this in parallel (need to acquire update locks, potentially)
-            m.entrySet().stream()
-                    .forEach(e -> {
-                        V previous = mainMap.put(e.getKey(), e.getValue());
-                        unmapSecondaryIndexes(e.getKey(), previous);
-                        mapSecondaryIndexes(e.getKey(), e.getValue());
-                    });
-        }
-    }
-
-    /** {@inheritDoc} */
-    @Override
     @Mutator(name = "clear", reset = true)
     public void clear() {
         mainMap.clear();
@@ -470,23 +304,6 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
         return ImmutableSet.copyOf(mainMap.keySet());
     }
 
-    /** {@inheritDoc} */
-    @Override
-    @Accessor
-    public @Nonnull Collection<V> values() {
-        return ImmutableList.copyOf(mainMap.values());
-    }
-
-    /**
-     * Makes a shallow copy of the map (i.e. all map entries), but not the
-     * key/values (i.e only the mappings are copied).
-     **/
-    @Override
-    @Accessor
-    public @Nonnull Set<Entry<K, V>> entrySet() {
-        return ImmutableListSetWrapper.fromMap(mainMap);
-    }
-
     /**
      * Present the content of a {@link CorfuTable} via the {@link Stream} interface.
      * Because the stream can point to other resources managed off-heap, its necessary
@@ -495,144 +312,8 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
      * @return stream of entries
      */
     @Accessor
-    public @Nonnull Stream<Entry<K, V>> entryStream() {
+    public @Nonnull Stream<Map.Entry<K, V>> entryStream() {
         return mainMap.entryStream();
-    }
-
-
-    /** {@inheritDoc} */
-    @Override
-    @Accessor
-    public V getOrDefault(Object key, V defaultValue) {
-        return mainMap.getOrDefault(key, defaultValue);
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    @Accessor
-    public void forEach(BiConsumer<? super K, ? super V> action) {
-        mainMap.forEach(action);
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    @TransactionalMethod
-    public void replaceAll(BiFunction<? super K, ? super V, ? extends V> function) {
-        Objects.requireNonNull(function);
-        for (Map.Entry<K, V> entry : entrySet()) {
-            K k;
-            V v;
-            try {
-                k = entry.getKey();
-                v = entry.getValue();
-            } catch (IllegalStateException ise) {
-                // this usually means the entry is no longer in the map.
-                throw new ConcurrentModificationException(ise);
-            }
-
-            // ise thrown from function is not a cme.
-            v = function.apply(k, v);
-
-            try {
-                insert(k, v);
-            } catch (IllegalStateException ise) {
-                // this usually means the entry is no longer in the map.
-                throw new ConcurrentModificationException(ise);
-            }
-        }
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    @TransactionalMethod
-    public V putIfAbsent(K key, V value) {
-        V v = get(key);
-        if (v == null) {
-            v = put(key, value);
-        }
-
-        return v;
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    @TransactionalMethod
-    public boolean remove(Object key, Object value) {
-        Object curValue = get(key);
-        if (!Objects.equals(curValue, value)
-                || (curValue == null && !containsKey(key))) {
-            return false;
-        }
-        remove(key);
-        return true;
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    @TransactionalMethod
-    public V replace(K key, V value) {
-        V curValue;
-        if (((curValue = get(key)) != null) || containsKey(key)) {
-            curValue = put(key, value);
-        }
-        return curValue;
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    @TransactionalMethod
-    public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
-
-        Objects.requireNonNull(mappingFunction);
-        V v;
-        if ((v = get(key)) == null) {
-            V newValue;
-            if ((newValue = mappingFunction.apply(key)) != null) {
-                put(key, newValue);
-                return newValue;
-            }
-        }
-
-        return v;
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    @TransactionalMethod
-    public V computeIfPresent(K key, BiFunction<? super K, ? super V, ? extends V>
-            remappingFunction) {
-        Objects.requireNonNull(remappingFunction);
-        V oldValue;
-        if ((oldValue = get(key)) != null) {
-            V newValue = remappingFunction.apply(key, oldValue);
-            if (newValue != null) {
-                put(key, newValue);
-                return newValue;
-            } else {
-                remove(key);
-                return null;
-            }
-        } else {
-            return null;
-        }
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    @TransactionalMethod
-    public V merge(K key, V value, BiFunction<? super V, ? super V, ? extends V>
-            remappingFunction) {
-        Objects.requireNonNull(remappingFunction);
-        Objects.requireNonNull(value);
-        V oldValue = get(key);
-        V newValue = (oldValue == null) ? value :
-                remappingFunction.apply(oldValue, value);
-        if (newValue == null) {
-            remove(key);
-        } else {
-            put(key, newValue);
-        }
-        return newValue;
     }
 
     /**

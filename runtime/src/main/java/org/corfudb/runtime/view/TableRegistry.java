@@ -455,10 +455,8 @@ public class TableRegistry {
 
         String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
 
-        ICorfuVersionPolicy.VersionPolicy versionPolicy = ICorfuVersionPolicy.DEFAULT;
-        Supplier<StreamingMap<K, V>> mapSupplier = () -> new StreamingMapDecorator();
+        Supplier<StreamingMap<K, V>> mapSupplier = null;
         if (tableOptions.getPersistentDataPath().isPresent()) {
-            versionPolicy = ICorfuVersionPolicy.MONOTONIC;
             mapSupplier = () -> new PersistedStreamingMap<>(
                     tableOptions.getPersistentDataPath().get(),
                     PersistedStreamingMap.getPersistedStreamingMapOptions(),
@@ -504,9 +502,8 @@ public class TableRegistry {
                         .build(),
                 this.runtime,
                 this.protobufSerializer,
-                mapSupplier,
-                versionPolicy,
-                streamTagIdsForTable);
+                streamTagIdsForTable,
+                mapSupplier);
         tableMap.put(fullyQualifiedTableName, (Table<Message, Message, Message>) table);
 
         registerTable(namespace, tableName, kClass, vClass, mClass, tableOptions);

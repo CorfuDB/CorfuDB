@@ -56,13 +56,10 @@ public class CorfuQueue {
 
     @VisibleForTesting
     CorfuQueue(CorfuRuntime runtime, String streamName, ISerializer serializer) {
-        final Supplier<StreamingMap<CorfuRecordId, ByteString>> mapSupplier =
-                () -> new StreamingMapDecorator<>(new LinkedHashMap<CorfuRecordId, ByteString>());
         corfuTable = runtime.getObjectsView().build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuRecordId, ByteString>>() {})
                 .setStreamName(streamName)
                 .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
-                .setArguments(Index.Registry.empty(), mapSupplier)
                 .setSerializer(serializer)
                 .open();
 

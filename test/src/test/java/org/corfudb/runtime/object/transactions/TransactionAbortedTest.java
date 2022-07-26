@@ -9,6 +9,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.junit.Test;
@@ -38,9 +40,9 @@ public class TransactionAbortedTest extends AbstractTransactionContextTest {
     public void abortTransactionTest() throws Exception {
         CorfuRuntime runtime = getDefaultRuntime();
 
-        Map<String, String> map = runtime.getObjectsView()
+        ICorfuTable<String, String> map = runtime.getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .setStreamName(this.getClass().getSimpleName())
                 .open();
         final String key = "key";
@@ -51,13 +53,13 @@ public class TransactionAbortedTest extends AbstractTransactionContextTest {
 
         AtomicLong offendingAddress = new AtomicLong(-1);
         t1(() -> {
-            map.put(key, value);
+            map.insert(key, value);
             offendingAddress.set(runtime.getObjectsView().TXEnd());
         }).assertDoesNotThrow(TransactionAbortedException.class);
 
         t2(() -> {
             try {
-                map.put(key, value);
+                map.insert(key, value);
                 runtime.getObjectsView().TXEnd();
                 return false;
             } catch (TransactionAbortedException tae) {

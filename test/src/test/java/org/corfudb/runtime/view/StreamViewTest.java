@@ -8,8 +8,8 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
-import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Before;
@@ -654,8 +654,8 @@ public class StreamViewTest extends AbstractViewTest {
         }
     }
 
-    private StreamingMap<String, String> createStreamAndInsertUpdates(String streamName, int numUpdates) {
-        StreamingMap<String, String> map = r.getObjectsView()
+    private ICorfuTable<String, String> createStreamAndInsertUpdates(String streamName, int numUpdates) {
+        ICorfuTable<String, String> map = r.getObjectsView()
                 .build()
                 .setStreamName(streamName)
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
@@ -664,7 +664,7 @@ public class StreamViewTest extends AbstractViewTest {
 
         // Insert NUM_UPDATES to stream
         for (int i = 0; i < numUpdates; i++) {
-            map.put("k" + i, "v" + i);
+            map.insert("k" + i, "v" + i);
         }
 
         return map;

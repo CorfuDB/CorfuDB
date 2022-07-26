@@ -94,50 +94,6 @@ public class SMRMapTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    @Ignore // TODO(Zach): PersistentCorfuTable has no scanAndFilter
-    public void canWriteScanAndFilterToSingle() throws Exception {
-        Map<String, String> corfuInstancesMap = getRuntime()
-                .getObjectsView()
-                .build()
-                .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .open();
-
-        corfuInstancesMap.clear();
-        assertThat(corfuInstancesMap.put("a", "CorfuServer"))
-                .isNull();
-        assertThat(corfuInstancesMap.put("b", "CorfuClient"))
-                .isNull();
-        assertThat(corfuInstancesMap.put("c", "CorfuClient"))
-                .isNull();
-        assertThat(corfuInstancesMap.put("d", "CorfuServer"))
-                .isNull();
-
-        // ScanAndFilterByEntry
-        Predicate<Map.Entry<String, String>> valuePredicate =
-                p -> p.getValue().equals("CorfuServer");
-        Collection<Map.Entry<String, String>> filteredMap = ((CorfuTable)corfuInstancesMap)
-                .scanAndFilterByEntry(valuePredicate);
-
-        assertThat(filteredMap.size()).isEqualTo(2);
-
-        for(Map.Entry<String, String> corfuInstance : filteredMap) {
-            assertThat(corfuInstance.getValue()).isEqualTo("CorfuServer");
-        }
-
-        // ScanAndFilter (Deprecated Method)
-        List<String> corfuServerList = ((CorfuTable)corfuInstancesMap)
-                .scanAndFilter(p -> p.equals("CorfuServer"));
-
-        assertThat(corfuServerList.size()).isEqualTo(2);
-
-        for(String corfuInstance : corfuServerList) {
-            assertThat(corfuInstance).isEqualTo("CorfuServer");
-        }
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
     public void canGetID() throws Exception {
         UUID id = UUID.randomUUID();
         ICorfuSMR testTable = getRuntime().getObjectsView()
@@ -203,31 +159,6 @@ public class SMRMapTest extends AbstractViewTest {
                 .open();
 
         assertThat(testTable3.get("y")).isEqualTo("f");
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    @Ignore // TODO(Zach): PersistentCorfuTable does not support nulls
-    public void canContainNullObjects() throws Exception {
-        Map<String, String> testMap = getRuntime().getObjectsView()
-                .build()
-                .setStreamName("a")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .open();
-
-        testMap.clear();
-        testMap.put("z", null);
-        assertThat(testMap.get("z"))
-                .isEqualTo(null);
-        Map<String, String> testMap2 = getRuntime()
-                .getObjectsView()
-                .build()
-                .setStreamName("a")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .open();
-
-        assertThat(testMap2.get("z"))
-                .isEqualTo(null);
     }
 
     @Test
@@ -312,29 +243,6 @@ public class SMRMapTest extends AbstractViewTest {
         startTime = System.currentTimeMillis();
         executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
         calculateRequestsPerSecond("RPS", num_records * num_threads, startTime);
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    @Ignore // TODO(Zach):
-    public void collectionsStreamInterface()
-            throws Exception {
-        Map<String, String> testMap = getRuntime().getObjectsView()
-                .build()
-                .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .open();
-
-        testMap.put("a", "b");
-        getRuntime().getObjectsView().TXBegin();
-        if (testMap.values().stream().anyMatch(x -> x.equals("c"))) {
-            throw new Exception("test");
-        }
-        testMap.compute("b",
-                (k, v) -> "c");
-        getRuntime().getObjectsView().TXEnd();
-        assertThat(testMap)
-                .containsEntry("b", "c");
     }
 
     @Test
@@ -622,19 +530,6 @@ public class SMRMapTest extends AbstractViewTest {
 
         assertThat(testTable.get("3").getTestString()).isEqualTo("3");
         assertThat(testTable.get("3").getTestInt()).isEqualTo(Integer.parseInt("3"));
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    @Ignore // TODO(Zach):
-    public void unusedMutatorAccessor() throws Exception {
-        Map<String, String> testMap = getRuntime().getObjectsView()
-                .build()
-                .setStreamName("A")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .open();
-
-        testMap.put("a", "z");
     }
 
     AtomicInteger aborts;

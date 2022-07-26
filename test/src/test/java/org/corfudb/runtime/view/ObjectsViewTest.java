@@ -15,6 +15,8 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.Serializers;
@@ -90,8 +92,7 @@ public class ObjectsViewTest extends AbstractViewTest {
         executeScheduled(2, PARAMETERS.TIMEOUT_LONG);
 
         // The result should contain T2s modification.
-        assertThat(map)
-                .containsEntry("k", "v2");
+        assertThat(map.get("k")).isEqualTo("v2");
 
         IStreamView taggedStream =
             r.getStreamsView().get(CorfuRuntime.getStreamID(streamA));
@@ -141,25 +142,25 @@ public class ObjectsViewTest extends AbstractViewTest {
         //begin tests
         CorfuRuntime r = getDefaultRuntime();
 
-        Map<String, String> smrMap = r.getObjectsView().build()
+        ICorfuTable<String, String> smrMap = r.getObjectsView().build()
                 .setStreamName("map a")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         IStreamView streamB = r.getStreamsView().get(CorfuRuntime.getStreamID("b"));
-        smrMap.put("a", "b");
+        smrMap.insert("a", "b");
         streamB.append(new SMREntry("hi", new Object[]{"hello"}, Serializers.PRIMITIVE));
 
         //this TX should not conflict
-        assertThat(smrMap)
-                .doesNotContainKey("b");
+        assertThat(smrMap.containsKey("b")).isFalse();
+
         r.getObjectsView().TXBegin();
         String b = smrMap.get("a");
-        smrMap.put("b", b);
+        smrMap.insert("b", b);
         r.getObjectsView().TXEnd();
 
-        assertThat(smrMap)
-                .containsEntry("b", "b");
+        assertThat(smrMap.get("b")).isEqualTo("b");
     }
 
     @Test
@@ -169,33 +170,33 @@ public class ObjectsViewTest extends AbstractViewTest {
         //begin tests
         CorfuRuntime r = getDefaultRuntime();
 
-        Map<String, String> smrMap = r.getObjectsView().build()
+        ICorfuTable<String, String> smrMap = r.getObjectsView().build()
                 .setStreamName("map a")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
-        Map<String, String> smrMapB = r.getObjectsView().build()
+        ICorfuTable<String, String> smrMapB = r.getObjectsView().build()
                 .setStreamName("map b")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
-        smrMap.put("a", "b");
+        smrMap.insert("a", "b");
 
         r.getObjectsView().TXBegin();
         String b = smrMap.get("a");
-        smrMapB.put("b", b);
+        smrMapB.insert("b", b);
         r.getObjectsView().TXEnd();
 
         //this TX should not conflict
-        assertThat(smrMap)
-                .doesNotContainKey("b");
+        assertThat(smrMap.containsKey("b")).isFalse();
         r.getObjectsView().TXBegin();
         b = smrMap.get("a");
-        smrMap.put("b", b);
+        smrMap.insert("b", b);
         r.getObjectsView().TXEnd();
 
-        assertThat(smrMap)
-                .containsEntry("b", "b");
+        assertThat(smrMap.get("b")).isEqualTo("b");
     }
 
 }

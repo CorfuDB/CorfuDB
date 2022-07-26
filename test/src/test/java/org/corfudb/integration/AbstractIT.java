@@ -380,16 +380,6 @@ public class AbstractIT extends AbstractCorfuTest {
                 .connect();
     }
 
-    // TODO(Zach): Remove me
-    public static StreamingMap<String, Integer> createMap(CorfuRuntime rt, String streamName) {
-        StreamingMap<String, Integer> map = rt.getObjectsView()
-                .build()
-                .setStreamName(streamName)
-                .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {})
-                .open();
-        return map;
-    }
-
     public static <K, V> PersistentCorfuTable<K, V> createCorfuTable(@NonNull CorfuRuntime rt,
                                                                      @NonNull String streamName) {
         return rt.getObjectsView()

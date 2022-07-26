@@ -582,7 +582,7 @@ public class ManagementViewTest extends AbstractViewTest {
         // setup 3-Corfu node cluster
         getManagementTestLayout();
 
-        Map<Integer, String> map = getMap();
+        ICorfuTable<Integer, String> map = getMap();
 
         // start a transaction and force it to obtain snapshot timestamp
         // preceding the sequencer failover
@@ -597,7 +597,7 @@ public class ManagementViewTest extends AbstractViewTest {
         // in another thread, fill the log with a few entries
         t(1, () -> {
             for (int i = 0; i < nUpdates; i++)
-                map.put(i, payload);
+                map.insert(i, payload);
         });
 
         // now, the tail of the log is at nUpdates;
@@ -608,7 +608,7 @@ public class ManagementViewTest extends AbstractViewTest {
         induceSequencerFailureAndWait();
         t(0, () -> {
             boolean commit = true;
-            map.put(nUpdates + 1, payload); // should not conflict
+            map.insert(nUpdates + 1, payload); // should not conflict
             try {
                 TXEnd();
             } catch (TransactionAbortedException ta) {
@@ -628,12 +628,12 @@ public class ManagementViewTest extends AbstractViewTest {
         // in another thread, fill the log with a few entries
         t(1, () -> {
             for (int i = 0; i < nUpdates; i++)
-                map.put(i, payload + 1);
+                map.insert(i, payload + 1);
         });
 
         t(0, () -> {
             boolean commit = true;
-            map.put(nUpdates + 1, payload); // should not conflict
+            map.insert(nUpdates + 1, payload); // should not conflict
             try {
                 TXEnd();
             } catch (TransactionAbortedException ta) {
@@ -652,12 +652,12 @@ public class ManagementViewTest extends AbstractViewTest {
     public void ckSequencerFailoverTXResolution1() throws Exception {
         getManagementTestLayout();
 
-        Map<Integer, String> map = getMap();
+        ICorfuTable<Integer, String> map = getMap();
         final String payload = "hello";
         final int nUpdates = 5;
 
         for (int i = 0; i < nUpdates; i++)
-            map.put(i, payload);
+            map.insert(i, payload);
 
         // start a transaction and force it to obtain snapshot timestamp
         // preceding the sequencer failover
@@ -669,7 +669,7 @@ public class ManagementViewTest extends AbstractViewTest {
         // in another thread, fill the log with a few entries
         t(1, () -> {
             for (int i = 0; i < nUpdates; i++)
-                map.put(i, payload + 1);
+                map.insert(i, payload + 1);
         });
 
         // now, the tail of the log is at nUpdates;
@@ -681,7 +681,7 @@ public class ManagementViewTest extends AbstractViewTest {
 
         t(0, () -> {
             boolean commit = true;
-            map.put(nUpdates + 1, payload); // should not conflict
+            map.insert(nUpdates + 1, payload); // should not conflict
             try {
                 TXEnd();
             } catch (TransactionAbortedException ta) {
@@ -701,12 +701,12 @@ public class ManagementViewTest extends AbstractViewTest {
         // in another thread, fill the log with a few entries
         t(1, () -> {
             for (int i = 0; i < nUpdates; i++)
-                map.put(i, payload + 2);
+                map.insert(i, payload + 2);
         });
 
         t(0, () -> {
             boolean commit = true;
-            map.put(nUpdates + 1, payload); // should not conflict
+            map.insert(nUpdates + 1, payload); // should not conflict
             try {
                 TXEnd();
             } catch (TransactionAbortedException ta) {

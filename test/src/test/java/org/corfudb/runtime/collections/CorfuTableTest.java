@@ -132,59 +132,6 @@ public class CorfuTableTest extends AbstractViewTest {
     }
 
     /**
-     * Verify that a  lookup by index and filter throws an exception,
-     * when the index has never been specified for this CorfuTable.
-     */
-    @Test (expected = IllegalArgumentException.class)
-    @SuppressWarnings("unchecked")
-    @Ignore // TODO: PersistentCorfuTable has no getByIndexAndFilter
-    public void cannotLookupByIndexAndFilterWhenIndexNotSpecified() {
-        CorfuTable<String, String>
-                corfuTable = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setStreamName("test")
-                .open();
-
-        corfuTable.put("a", "abcdef");
-        corfuTable.getByIndexAndFilter(StringIndexer.BY_FIRST_LETTER, p -> p.getValue().contains("cd"), "a");
-    }
-
-    /**
-     * Verify that a lookup by indexAndFiler works when index is a
-     * non primitive type.
-     */
-    @Test
-    @SuppressWarnings("checkstyle:magicnumber")
-    @Ignore // TODO: PersistentCorfuTable has no getByIndexAndFilter
-    public void canLookupByIndexAndFilterWhenIndexIsNonPrimitive() {
-        CorfuTable<TestSchema.Uuid, TestSchema.Uuid>
-                corfuTable = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<TestSchema.Uuid, TestSchema.Uuid>>() {})
-                .setArguments(new UuidIndexer())
-                .setStreamName("test")
-                .open();
-
-        TestSchema.Uuid uuid0 = TestSchema.Uuid.newBuilder()
-                .setMsb(0L).setLsb(0L).build();
-        TestSchema.Uuid uuid1 = TestSchema.Uuid.newBuilder()
-                .setMsb(1L).setLsb(1L).build();
-        TestSchema.Uuid uuid2 = TestSchema.Uuid.newBuilder()
-                .setMsb(2L).setLsb(2L).build();
-
-        corfuTable.put(uuid0, uuid0);
-        corfuTable.put(uuid1, uuid0);
-        corfuTable.put(uuid2, uuid0);
-
-        assertThat(corfuTable.getByIndexAndFilter(UuidIndexer.BY_VALUE, p -> true, uuid0)).hasSize(3);
-        assertThat(corfuTable.getByIndexAndFilter(UuidIndexer.BY_VALUE, p -> p.getKey().equals(uuid2), uuid0)).hasSize(1);
-        List<TestSchema.Uuid> keyList = corfuTable.getByIndexAndFilter(UuidIndexer.BY_VALUE, p -> true, uuid0)
-                .stream()
-                .map(Map.Entry::getKey)
-                .collect(Collectors.toList());
-        assertThat(keyList).containsExactlyInAnyOrder(uuid0, uuid1, uuid2);
-    }
-
-    /**
      * Can create create multiple index for the same value
      */
     @Test

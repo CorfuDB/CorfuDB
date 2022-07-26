@@ -11,18 +11,9 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.ForkJoinWorkerThread;
 import java.util.stream.Stream;
 
-public class PersistentCorfuTable<K, V> implements IPersistentCorfuTable<K, V>, ICorfuSMR<PersistentCorfuTable<K, V>> {
-
-    protected static final ForkJoinPool pool = new ForkJoinPool(Math.max(Runtime.getRuntime().availableProcessors() - 1, 1),
-            pool -> {
-                final ForkJoinWorkerThread worker = ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(pool);
-                worker.setName("PersistentCorfuTable-Forkjoin-pool-" + worker.getPoolIndex());
-                return worker;
-            }, null, true);
+public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<PersistentCorfuTable<K, V>> {
 
     private ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy;
 
@@ -62,9 +53,9 @@ public class PersistentCorfuTable<K, V> implements IPersistentCorfuTable<K, V>, 
     }
 
     @Override
-    public V get(@Nonnull K key) {
+    public V get(@Nonnull Object key) {
         Object[] conflictField = new Object[]{key};
-        return proxy.access(corfuSmr -> corfuSmr.get(key), conflictField);
+        return proxy.access(corfuSmr -> corfuSmr.get((K)key), conflictField);
     }
 
     @Override
@@ -78,9 +69,9 @@ public class PersistentCorfuTable<K, V> implements IPersistentCorfuTable<K, V>, 
     }
 
     @Override
-    public boolean containsKey(@Nonnull K key) {
+    public boolean containsKey(@Nonnull Object key) {
         Object[] conflictField = new Object[]{key};
-        return proxy.access(corfuSmr -> corfuSmr.containsKey(key), conflictField);
+        return proxy.access(corfuSmr -> corfuSmr.containsKey((K)key), conflictField);
     }
 
     @Override
@@ -113,98 +104,3 @@ public class PersistentCorfuTable<K, V> implements IPersistentCorfuTable<K, V>, 
         return proxy.getStreamID();
     }
 }
-
-/**
-public class PersistentCorfuTable<K, V> implements ICorfuSMR<PersistentCorfuTable<K, V>> {
-
-    private PersistentHashMapWrapper<K, V> tableState;
-
-    public PersistentCorfuTable() {
-        tableState = new PersistentHashMapWrapper<>();
-    }
-
-    public PersistentCorfuTable(@Nonnull final Index.Registry<K, V> indices) {
-        tableState = new PersistentHashMapWrapper<>(indices);
-    }
-
-    @Override
-    public void setImmutableState(Object obj) {
-        tableState = (PersistentHashMapWrapper<K, V>) obj;
-    }
-
-    @Override
-    public Object getImmutableState() {
-        return tableState;
-    }
-
-    public void insert(@Nonnull K key, @Nonnull V value) {
-        // See PersistentCorfuTable$CORFUSMR
-        // tableState = tableState.put(key, value);
-    }
-
-    public void delete(@Nonnull K key) {
-        // See PersistentCorfuTable$CORFUSMR
-        // tableState = tableState.remove(key);
-    }
-
-    public Stream<Map.Entry<K, V>> entryStream() {
-        return tableState.entryStream();
-    }
-
-    public int size() {
-        return tableState.size();
-    }
-
-    public boolean isEmpty() {
-        return tableState.size() == 0;
-    }
-
-    public boolean containsKey(@Nonnull K key) {
-        return tableState.containsKey(key);
-    }
-
-    public V get(@Nonnull K key) {
-        return tableState.get(key);
-    }
-
-    @Deprecated
-    public V put(@Nonnull K key, @Nonnull V value) {
-        final V prev = tableState.get(key);
-        tableState = tableState.put(key, value);
-        return prev;
-    }
-
-    @Deprecated
-    public V remove(@Nonnull K key) {
-        final V value = tableState.get(key);
-        tableState = tableState.remove(key);
-        return value;
-    }
-
-    public void clear() {
-        tableState = tableState.clear();
-    }
-
-    public Set<K> keySet() {
-        return tableState.keySet();
-    }
-
-    public <I> Collection<Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey) {
-        return tableState.getByIndex(indexName, indexKey);
-    }
-
-    @Override
-    public PersistentCorfuTable<K, V> getContext(Context context) {
-        return this;
-    }
-
-    @Override
-    public void reset() {
-        tableState = tableState.clear();
-    }
-
-    public static <K, V> TypeToken<PersistentCorfuTable<K, V>> getTableType() {
-        return new TypeToken<PersistentCorfuTable<K, V>>() {};
-    }
-}
-**/

@@ -3,6 +3,7 @@ package org.corfudb.runtime.object;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -105,13 +106,13 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
         getDefaultRuntime().getSerializers().registerSerializer(customSerializer);
         CorfuRuntime r = getDefaultRuntime();
 
-        Map<String, String> test = r.getObjectsView().build()
+        ICorfuTable<String, String> test = r.getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .setSerializer(customSerializer)
                 .open();
 
-        test.put("a", "b");
+        test.insert("a", "b");
         test.get("a");
         assertThat(test.get("a")).isEqualTo("b");
     }
@@ -129,13 +130,13 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
         getDefaultRuntime().getSerializers().registerSerializer(customSerializer);
         CorfuRuntime r = getDefaultRuntime();
 
-        Map<String, String> test = r.getObjectsView().build()
+        ICorfuTable<String, String> test = r.getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .setSerializer(customSerializer)
                 .open();
 
-        Map<String, String> test2 = r.getObjectsView().build()
+        ICorfuTable<String, String> test2 = r.getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .setSerializer(Serializers.getDefaultSerializer())

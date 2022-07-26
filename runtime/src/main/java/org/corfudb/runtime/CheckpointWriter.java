@@ -14,7 +14,8 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.runtime.collections.IPersistentCorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.CacheOption;
 import org.corfudb.runtime.view.StreamsView;
@@ -43,7 +44,7 @@ import java.util.stream.Stream;
  *  TODO: Generalize to all SMR objects.
  */
 @Slf4j
-public class CheckpointWriter<T extends IPersistentCorfuTable<?, ?>> {
+public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
     /** Metadata to be stored in the CP's 'dict' map.
      */
     private final UUID streamId;

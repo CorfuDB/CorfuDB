@@ -4,8 +4,11 @@ import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.SMRObject;
 import org.junit.Test;
 
 import java.util.Map;
@@ -25,21 +28,20 @@ public class CompileProxyTest extends AbstractViewTest {
     @Test
     public void testObjectMapSimple() throws Exception {
 
-        Map<String, String> map = getDefaultRuntime()
+        ICorfuTable<String, String> map = getDefaultRuntime()
                                     .getObjectsView().build()
                                     .setStreamName("my stream")
-                                    .setTypeToken(new TypeToken<CorfuTable<String,String>>() {})
+                                    .setTypeToken(new TypeToken<PersistentCorfuTable<String,String>>() {})
+                                    .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                                     .open();
 
         getDefaultRuntime().getObjectsView().TXBegin();
-        map.put("hello", "world");
-        map.put("hell", "world");
+        map.insert("hello", "world");
+        map.insert("hell", "world");
         getDefaultRuntime().getObjectsView().TXEnd();
 
-        assertThat(map)
-                .containsEntry("hello", "world");
-        assertThat(map)
-                .containsEntry("hell", "world");
+        assertThat(map.get("hello")).isEqualTo("world");
+        assertThat(map.get("hell")).isEqualTo("world");
     }
 
     @Test
@@ -58,9 +60,10 @@ public class CompileProxyTest extends AbstractViewTest {
         rt.getAddressSpaceView().gc();
         rt.getAddressSpaceView().invalidateServerCaches();
 
-        Map<String, String> map = rt.getObjectsView().build()
+        ICorfuTable<String, String> map = rt.getObjectsView().build()
                 .setStreamName(streamName)
-                .setTypeToken(new TypeToken<CorfuTable<String,String>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String,String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
         // Note: because we trimmed and no CP covers these changes we throw a trimmedException, is this right? we would never recover from this...
         assertThatThrownBy(() -> {
@@ -295,11 +298,12 @@ public class CompileProxyTest extends AbstractViewTest {
     @Test
     public void testCorfuMapConcurrency() throws Exception {
 
-        Map<String, String> map = getDefaultRuntime()
+        ICorfuTable<String, String> map = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
                 })
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
         int concurrency = PARAMETERS.CONCURRENCY_LOTS;
 
@@ -310,7 +314,7 @@ public class CompileProxyTest extends AbstractViewTest {
         // each one put()'s a key with its thread index
 
         scheduleConcurrently(concurrency, t -> {
-            map.put(Integer.toString(t), "world");
+            map.insert(Integer.toString(t), "world");
         });
         executeScheduled(concurrency, PARAMETERS.TIMEOUT_SHORT);
 

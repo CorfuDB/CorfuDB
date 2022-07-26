@@ -29,6 +29,7 @@ import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.SerializerException;
+import org.corfudb.runtime.object.MVOCache;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ProtobufSerializer.MessageType;
@@ -171,6 +172,7 @@ public class DynamicProtobufSerializer implements ISerializer {
 
         // Remove the protobuf serializer
         corfuRuntime.getSerializers().clearCustomSerializers();
+        corfuRuntime.getObjectsView().setMvoCache(new MVOCache(corfuRuntime));
     }
 
     /**

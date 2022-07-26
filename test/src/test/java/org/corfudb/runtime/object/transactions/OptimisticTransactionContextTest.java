@@ -11,11 +11,14 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ConflictParameterClass;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ICorfuHashable;
 import org.corfudb.util.serializer.Serializers;
@@ -47,28 +50,29 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         UUID stream1Id = CorfuRuntime.getStreamID("stream1");
         IStreamView sv = getDefaultRuntime().getStreamsView().get(stream1Id);
 
-        Map<String, String> map = getDefaultRuntime().getObjectsView()
+        ICorfuTable<String, String> map = getDefaultRuntime().getObjectsView()
                 .build()
                 .setStreamName("stream2")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         assertThat(sv.remaining()).isEmpty();
-        assertThat(map).isEmpty();
+        assertThat(map.isEmpty()).isTrue();
 
         SMREntry smrEntry1 = new SMREntry("method", new Object[]{"arg1"}, Serializers.PRIMITIVE);
         SMREntry smrEntry2 = new SMREntry("method2", new Object[]{"arg1"}, Serializers.PRIMITIVE);
 
         getDefaultRuntime().getObjectsView().TXBegin();
-        map.put("k1", "v1");
+        map.insert("k1", "v1");
         TransactionalContext.getCurrentContext().logUpdate(stream1Id, smrEntry1);
         getDefaultRuntime().getObjectsView().TXAbort();
 
         assertThat(sv.remaining()).isEmpty();
-        assertThat(map).isEmpty();
+        assertThat(map.isEmpty()).isTrue();
 
         getDefaultRuntime().getObjectsView().TXBegin();
-        map.put("k1", "v1");
+        map.insert("k1", "v1");
         TransactionalContext.getCurrentContext().logUpdate(stream1Id, smrEntry1);
         getDefaultRuntime().getObjectsView().TXEnd();
 
@@ -78,21 +82,21 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         committedMultiSMR.getSMRUpdates(stream1Id);
 
         assertThat(committedMultiSMR.getSMRUpdates(stream1Id)).containsExactly(smrEntry1);
-        assertThat(map).hasSize(1);
+        assertThat(map.size()).isEqualTo(1);
 
         t(1, this::OptimisticTXBegin);
         t(2, this::OptimisticTXBegin);
-        t(1, () -> map.put("k2", "v2"));
-        t(2, () -> map.put("k2", "v3"));
+        t(1, () -> map.insert("k2", "v2"));
+        t(2, () -> map.insert("k2", "v3"));
         t(2, () -> TransactionalContext.getCurrentContext().logUpdate(stream1Id, smrEntry2));
         t(1, this::TXEnd);
         t(2, this::TXEnd)
                 .assertThrows()
                 .isInstanceOf(TransactionAbortedException.class);
 
-        assertThat(map).hasSize(2);
-        assertThat(map).containsOnlyKeys("k1", "k2");
-        assertThat(map).containsValues("v1", "v2");
+        assertThat(map.size()).isEqualTo(2);
+        assertThat(map.keySet()).containsOnly("k1", "k2");
+        assertThat(map.entryStream().map(Map.Entry::getValue).collect(Collectors.toSet())).contains("v1", "v2");
         assertThat(sv.remaining()).isEmpty();
     }
 
@@ -162,17 +166,18 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         CustomConflictObject c1 = new CustomConflictObject("a", "a");
         CustomConflictObject c2 = new CustomConflictObject("a", "a");
 
-        Map<CustomConflictObject, String> map = getDefaultRuntime().getObjectsView()
+        ICorfuTable<CustomConflictObject, String> map = getDefaultRuntime().getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<CorfuTable<CustomConflictObject, String>>() {
+                .setTypeToken(new TypeToken<PersistentCorfuTable<CustomConflictObject, String>>() {
                 })
                 .setStreamName("test")
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         t(1, this::OptimisticTXBegin);
         t(2, this::OptimisticTXBegin);
-        t(1, () -> map.put(c1, "v1"));
-        t(2, () -> map.put(c2, "v2"));
+        t(1, () -> map.insert(c1, "v1"));
+        t(2, () -> map.insert(c2, "v2"));
         t(1, this::TXEnd);
         t(2, this::TXEnd)
                 .assertThrows()
@@ -202,10 +207,11 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .parseConfigurationString(getDefaultConfigurationString())
                 .connect();
 
-        Map<String, String> map = rtWriter
+        ICorfuTable<String, String> map = rtWriter
                 .getObjectsView().build()
                 .setStreamID(streamID)
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
         // Add rule to force a read on the assigned token before actually writing to that position
         TestRule testRule = new TestRule()
@@ -221,14 +227,14 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         try {
             OptimisticTXBegin();
-            map.put("k1", "v1");
+            map.insert("k1", "v1");
             TXEnd();
             Assert.fail();
         } catch (TransactionAbortedException tae) {
             assertThat(tae.getAbortCause()).isEqualTo(AbortCause.OVERWRITE);
         }
 
-        assertThat(map).doesNotContainKey("k1");
+        assertThat(map.containsKey("k1")).isFalse();
     }
 
     /**
@@ -242,10 +248,11 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         CorfuRuntime rtSlowWriter = getDefaultRuntime();
         CorfuRuntime rtIntersect = new CorfuRuntime(getDefaultConfigurationString()).connect();
 
-        Map<String, String> map = rtSlowWriter
+        ICorfuTable<String, String> map = rtSlowWriter
                 .getObjectsView().build()
                 .setStreamID(streamID)
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {}).
+                setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         int[] retry = new int[1];
@@ -266,14 +273,14 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         try {
             OptimisticTXBegin();
-            map.put("k2", "v2");
+            map.insert("k2", "v2");
             TXEnd();
             Assert.fail();
         } catch (TransactionAbortedException tae) {
             assertThat(tae.getAbortCause()).isEqualTo(AbortCause.OVERWRITE);
         }
 
-        assertThat(map).doesNotContainKey("k1");
+        assertThat(map.containsKey("k1")).isFalse();
     }
 
     /**
@@ -323,17 +330,18 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         CustomConflictObject c1 = new CustomConflictObject("a", "a");
         CustomConflictObject c2 = new CustomConflictObject("a", "b");
 
-        Map<CustomConflictObject, String> map = getDefaultRuntime().getObjectsView()
+        ICorfuTable<CustomConflictObject, String> map = getDefaultRuntime().getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<CorfuTable<CustomConflictObject, String>>() {
+                .setTypeToken(new TypeToken<PersistentCorfuTable<CustomConflictObject, String>>() {
                 })
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
         t(1, this::OptimisticTXBegin);
         t(2, this::OptimisticTXBegin);
-        t(1, () -> map.put(c1, "v1"));
-        t(2, () -> map.put(c2, "v2"));
+        t(1, () -> map.insert(c1, "v1"));
+        t(2, () -> map.insert(c2, "v2"));
         t(1, this::TXEnd);
         t(2, this::TXEnd)
                 .assertDoesNotThrow(TransactionAbortedException.class);
@@ -361,17 +369,18 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         CustomSameHashConflictObject c1 = new CustomSameHashConflictObject("a", "a");
         CustomSameHashConflictObject c2 = new CustomSameHashConflictObject("a", "b");
 
-        Map<CustomSameHashConflictObject, String> map = getDefaultRuntime().getObjectsView()
+        ICorfuTable<CustomSameHashConflictObject, String> map = getDefaultRuntime().getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<CorfuTable<CustomSameHashConflictObject, String>>() {
+                .setTypeToken(new TypeToken<PersistentCorfuTable<CustomSameHashConflictObject, String>>() {
                 })
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
         t(1, this::OptimisticTXBegin);
         t(2, this::OptimisticTXBegin);
-        t(1, () -> map.put(c1, "v1"));
-        t(2, () -> map.put(c2, "v2"));
+        t(1, () -> map.insert(c1, "v1"));
+        t(2, () -> map.insert(c2, "v2"));
         t(1, this::TXEnd);
         t(2, this::TXEnd)
                 .assertThrows()
@@ -406,17 +415,18 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         CustomHashConflictObject c1 = new CustomHashConflictObject("a", "a");
         CustomHashConflictObject c2 = new CustomHashConflictObject("a", "b");
 
-        Map<CustomHashConflictObject, String> map = getDefaultRuntime().getObjectsView()
+        ICorfuTable<CustomHashConflictObject, String> map = getDefaultRuntime().getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<CorfuTable<CustomHashConflictObject, String>>() {
+                .setTypeToken(new TypeToken<PersistentCorfuTable<CustomHashConflictObject, String>>() {
                 })
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
         t(1, this::OptimisticTXBegin);
         t(2, this::OptimisticTXBegin);
-        t(1, () -> map.put(c1, "v1"));
-        t(2, () -> map.put(c2, "v2"));
+        t(1, () -> map.insert(c1, "v1"));
+        t(2, () -> map.insert(c2, "v2"));
         t(1, this::TXEnd);
         t(2, this::TXEnd)
                 .assertDoesNotThrow(TransactionAbortedException.class);
@@ -443,17 +453,18 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         IHashAlwaysConflictObject c1 = new IHashAlwaysConflictObject("a", "a");
         IHashAlwaysConflictObject c2 = new IHashAlwaysConflictObject("a", "b");
 
-        Map<IHashAlwaysConflictObject, String> map = getDefaultRuntime().getObjectsView()
+        ICorfuTable<IHashAlwaysConflictObject, String> map = getDefaultRuntime().getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<CorfuTable<IHashAlwaysConflictObject, String>>() {
+                .setTypeToken(new TypeToken<PersistentCorfuTable<IHashAlwaysConflictObject, String>>() {
                 })
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
         t(1, this::OptimisticTXBegin);
         t(2, this::OptimisticTXBegin);
-        t(1, () -> map.put(c1, "v1"));
-        t(2, () -> map.put(c2, "v2"));
+        t(1, () -> map.insert(c1, "v1"));
+        t(2, () -> map.insert(c2, "v2"));
         t(1, this::TXEnd);
         t(2, this::TXEnd)
                 .assertThrows()
@@ -485,17 +496,18 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         IHashConflictObject c1 = new IHashConflictObject("a", "a");
         IHashConflictObject c2 = new IHashConflictObject("a", "b");
 
-        Map<IHashConflictObject, String> map = getDefaultRuntime().getObjectsView()
+        ICorfuTable<IHashConflictObject, String> map = getDefaultRuntime().getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<CorfuTable<IHashConflictObject, String>>() {
+                .setTypeToken(new TypeToken<PersistentCorfuTable<IHashConflictObject, String>>() {
                 })
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
         t(1, this::OptimisticTXBegin);
         t(2, this::OptimisticTXBegin);
-        t(1, () -> map.put(c1, "v1"));
-        t(2, () -> map.put(c2, "v2"));
+        t(1, () -> map.insert(c1, "v1"));
+        t(2, () -> map.insert(c2, "v2"));
         t(1, this::TXEnd);
         t(2, this::TXEnd)
                 .assertDoesNotThrow(TransactionAbortedException.class);
@@ -525,17 +537,18 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         ExtendedIHashObject c1 = new ExtendedIHashObject("a", "a");
         ExtendedIHashObject c2 = new ExtendedIHashObject("a", "b");
 
-        Map<ExtendedIHashObject, String> map = getDefaultRuntime().getObjectsView()
+        ICorfuTable<ExtendedIHashObject, String> map = getDefaultRuntime().getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<CorfuTable<ExtendedIHashObject, String>>() {
+                .setTypeToken(new TypeToken<PersistentCorfuTable<ExtendedIHashObject, String>>() {
                 })
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
         t(1, this::OptimisticTXBegin);
         t(2, this::OptimisticTXBegin);
-        t(1, () -> map.put(c1, "v1"));
-        t(2, () -> map.put(c2, "v2"));
+        t(1, () -> map.insert(c1, "v1"));
+        t(2, () -> map.insert(c2, "v2"));
         t(1, this::TXEnd);
         t(2, this::TXEnd)
                 .assertDoesNotThrow(TransactionAbortedException.class);
@@ -632,8 +645,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .assertResult()
                 .isEqualTo("v2");
         t(1, this::TXEnd);
-        assertThat(getMap())
-                .containsEntry("k", "v2");
+        assertThat(getMap().get("k")).isEqualTo("v2");
 
     }
 
@@ -668,8 +680,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .isInstanceOf(TransactionAbortedException.class);
         // At the end of the transaction, the map should only
         // contain T1's modification.
-        assertThat(getMap())
-                .containsEntry("k", "v1");
+        assertThat(getMap().get("k")).isEqualTo("v1");
     }
 
     /**
@@ -721,8 +732,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         t(1, this::TXEnd);
 
         // And now k,v3 should be in the map.
-        assertThat(getMap())
-                .containsEntry("k", "v3");
+        assertThat(getMap().get("k")).isEqualTo("v3");
     }
 
     /**
@@ -777,9 +787,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .isInstanceOf(TransactionAbortedException.class);
 
         // And the map should contain k,v3 - T1's update.
-        assertThat(getMap())
-                .containsEntry("k", "v3")
-                .doesNotContainEntry("k", "v4");
+        assertThat(getMap().get("k")).isEqualTo("v3");
     }
 
     /**
@@ -804,8 +812,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .assertResult()
                 .isEqualTo("v1");
         t(1, this::TXEnd);
-        assertThat(getMap())
-                .containsEntry("k", "v1");
+        assertThat(getMap().get("k")).isEqualTo("v1");
     }
 
     /**
@@ -823,8 +830,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         // Make sure the object correctly reflects the value
         // of the most recent write.
-        assertThat(getMap())
-                .containsEntry("k", "v2");
+        assertThat(getMap().get("k")).isEqualTo("v2");
     }
 
 
@@ -844,24 +850,26 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
     @Test
     public void collide16Bit() throws Exception {
         CorfuRuntime rt = getDefaultRuntime().connect();
-        Map<String, String> m1 = rt.getObjectsView()
+        ICorfuTable<String, String> m1 = rt.getObjectsView()
                 .build()
                 .setStreamName("test-1")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
                 })
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
-        Map<String, String> m2 = rt.getObjectsView()
+        ICorfuTable<String, String> m2 = rt.getObjectsView()
                 .build()
                 .setStreamName("test-2")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
                 })
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         t1(() -> rt.getObjectsView().TXBegin());
         t2(() -> rt.getObjectsView().TXBegin());
-        t1(() -> m1.put("azusavnj", "1"));
-        t2(() -> m2.put("ajkenmbb", "2"));
+        t1(() -> m1.insert("azusavnj", "1"));
+        t2(() -> m2.insert("ajkenmbb", "2"));
         t1(() -> rt.getObjectsView().TXEnd());
         t2(() -> rt.getObjectsView().TXEnd())
                 .assertDoesNotThrow(TransactionAbortedException.class);
@@ -972,36 +980,39 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         final UUID streamTag3 = CorfuRuntime.getStreamID("test-tag-3");
 
         // Create a table with 2 stream tags.
-        Map<String, String> testMap1 = rt.getObjectsView()
+        ICorfuTable<String, String> testMap1 = rt.getObjectsView()
             .build()
             .setStreamID(streamId1)
-            .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+            .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
             .setStreamTags(streamTag1, streamTag2)
             .open();
 
         // Create another table with 2 stream tags.
-        Map<String, String> testMap2 = rt.getObjectsView()
+        ICorfuTable<String, String> testMap2 = rt.getObjectsView()
             .build()
             .setStreamID(streamId2)
-            .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+            .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
             .setStreamTags(streamTag2, streamTag3)
             .open();
 
         // Create third table with no stream tag.
-        Map<String, String> testMap3 = rt.getObjectsView()
+        ICorfuTable<String, String> testMap3 = rt.getObjectsView()
             .build()
             .setStreamID(streamId3)
-            .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+            .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
             .open();
 
         t1(() -> rt.getObjectsView().TXBegin());
         t2(() -> rt.getObjectsView().TXBegin());
         t1(() -> {
-            testMap1.put("key1", "value1");
-            testMap3.put("key3", "value3");
+            testMap1.insert("key1", "value1");
+            testMap3.insert("key3", "value3");
         });
         t2(() -> {
-            testMap2.put("key2", "value2");
+            testMap2.insert("key2", "value2");
         });
 
         t1(() -> {

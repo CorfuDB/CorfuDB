@@ -3,6 +3,7 @@ package org.corfudb.runtime.object;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ISerializer;
 
 /**
@@ -30,6 +31,7 @@ public class AbstractObjectTest extends AbstractViewTest {
                         .build()
                         .setStreamName(name)     // stream name
                         .setType(tClass)        // object class backed by this stream
+                        .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                         .open();                // instantiate the object!
     }
     protected <T extends ICorfuSMR> T instantiateCorfuObject(Class<T> tClass, String name) {
@@ -69,6 +71,7 @@ public class AbstractObjectTest extends AbstractViewTest {
                         .setStreamName(name)     // stream name
                         .setTypeToken(tType)    // a TypeToken of the specified class
                         .setSerializer(serializer)
+                        .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                         .open();                // instantiate the object!
     }
 

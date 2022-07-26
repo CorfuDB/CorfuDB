@@ -55,9 +55,7 @@ public class WriteAfterWriteTransactionContextTest extends AbstractTransactionCo
               .assertThrows()
               .isInstanceOf(TransactionAbortedException.class);
 
-        assertThat(getMap())
-                .containsEntry("k", "v2")
-                .doesNotContainEntry("k", "v3");
+        assertThat(getMap().get("k")).isEqualTo("v2");
 
         IStreamView txStream = getRuntime().getStreamsView()
                 .get(CorfuRuntime.getStreamID(txnStreamName));

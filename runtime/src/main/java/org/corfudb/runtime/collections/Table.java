@@ -26,6 +26,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ForkJoinWorkerThread;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -40,7 +42,22 @@ import java.util.stream.Stream;
 @Slf4j
 public class Table<K extends Message, V extends Message, M extends Message> {
 
-    private final PersistentCorfuTable<K, CorfuRecord<V, M>> corfuTable;
+    // Accessor/Mutator threads can interleave in a way that create a deadlock because they can create a
+    // circular dependency between the VersionLockedObject(VLO) lock and the common forkjoin thread pool. In order
+    // to break the dependency, parallel stream operations have to execute on a separate pool that applications
+    // cant use. For example, if there are 4 accessor threads all using the common forkjoin pool, one of the threads
+    // can acquire the VLO lock and cause the other 3 threads to wait, but after acquiring the VLO lock, the thread
+    // gets block on parallel stream, because the pool is exhausted with threads that are trying to acquire the VLO
+    // look, which creates a circular dependency. In other words, a deadlock.
+
+    protected static final ForkJoinPool pool = new ForkJoinPool(Math.max(Runtime.getRuntime().availableProcessors() - 1, 1),
+            pool -> {
+                final ForkJoinWorkerThread worker = ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(pool);
+                worker.setName("Table-Forkjoin-pool-" + worker.getPoolIndex());
+                return worker;
+            }, null, true);
+
+    private final ICorfuTable<K, CorfuRecord<V, M>> corfuTable;
 
     /**
      * Namespace this table belongs in.
@@ -86,16 +103,15 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      *                             value and metadata schemas
      * @param corfuRuntime         connected instance of the Corfu Runtime
      * @param serializer           protobuf serializer
-     * @param streamingMapSupplier supplier of underlying map data structure
-     * @param versionPolicy        versioning policy
      * @param streamTags           set of UUIDs representing the streamTags
+     * @param streamingMapSupplier supplier of underlying map data structure.
+     *                             Only required for disk-backed CorfuTable
      */
     public Table(@Nonnull final TableParameters<K, V, M> tableParameters,
                  @Nonnull final CorfuRuntime corfuRuntime,
                  @Nonnull final ISerializer serializer,
-                 @Nonnull final Supplier<StreamingMap<K, V>> streamingMapSupplier,
-                 @NonNull final ICorfuVersionPolicy.VersionPolicy versionPolicy,
-                 @NonNull final Set<UUID> streamTags) {
+                 @NonNull final Set<UUID> streamTags,
+                 final Supplier<StreamingMap<K, V>> streamingMapSupplier) {
 
         this.namespace = tableParameters.getNamespace();
         this.fullyQualifiedTableName = tableParameters.getFullyQualifiedTableName();
@@ -108,19 +124,6 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                         .build())
                 .orElse(MetadataOptions.builder().build());
 
-        // TODO(Zach): What if table is disk-backed?
-        // TODO(Zach): This is likely broken. Arguments won't match constructor. Fix me!
-        // TODO(Zach): Polish this up with TableRegistry
-        this.corfuTable = corfuRuntime.getObjectsView().build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<K, CorfuRecord<V, M>>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
-                .setStreamName(this.fullyQualifiedTableName)
-                .setSerializer(serializer)
-                .setArguments(new ProtobufIndexer(tableParameters.getValueSchema(),
-                        tableParameters.getSchemaOptions()),
-                        streamingMapSupplier, versionPolicy)
-                .setStreamTags(streamTags)
-                .open();
         this.keyClass = tableParameters.getKClass();
         this.valueClass = tableParameters.getVClass();
         this.metadataClass = tableParameters.getMClass();
@@ -130,6 +133,31 @@ public class Table<K extends Message, V extends Message, M extends Message> {
         } else {
             this.guidGenerator = null;
         }
+
+        // TODO(Zach): What if table is disk-backed?
+        // TODO(Zach): This is likely broken. Arguments won't match constructor. Fix me!
+        // TODO(Zach): Polish this up with TableRegistry
+        SMRObject.Builder<? extends ICorfuTable<K, CorfuRecord<V, M>>> builder;
+
+        if (streamingMapSupplier == null) {
+            // PersistentCorfuTable
+            builder = corfuRuntime.getObjectsView().build()
+                    .setTypeToken(new TypeToken<PersistentCorfuTable<K, CorfuRecord<V, M>>>() {})
+                    .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT);
+        } else {
+            // Disk-backed CorfuTable
+            builder = corfuRuntime.getObjectsView().build()
+                    .setTypeToken(new TypeToken<CorfuTable<K, CorfuRecord<V, M>>>() {})
+                    .setArguments(
+                    new ProtobufIndexer(tableParameters.getValueSchema(), tableParameters.getSchemaOptions()),
+                    streamingMapSupplier,
+                    ICorfuVersionPolicy.MONOTONIC);
+        }
+
+        this.corfuTable = builder.setStreamName(this.fullyQualifiedTableName)
+                .setStreamTags(streamTags)
+                .setSerializer(serializer)
+                .open();
     }
 
     /**
@@ -353,7 +381,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
             @Nonnull final Predicate<CorfuStoreEntry<K, V, M>> entryPredicate) {
         long startTime = System.nanoTime();
         try(Stream<Map.Entry<K, CorfuRecord<V, M>>> stream = corfuTable.entryStream()) {
-            List<CorfuStoreEntry<K, V, M>> res = PersistentCorfuTable.pool.submit(() -> stream
+            List<CorfuStoreEntry<K, V, M>> res = pool.submit(() -> stream
                     .filter(recordEntry ->
                             entryPredicate.test(new CorfuStoreEntry<>(
                                     recordEntry.getKey(),

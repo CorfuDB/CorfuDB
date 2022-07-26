@@ -3,7 +3,8 @@ package org.corfudb.runtime;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.collections.IPersistentCorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
@@ -18,7 +19,7 @@ import java.util.UUID;
  * Checkpoint multiple CorfuTables serially as a prerequisite for a later log trim.
  */
 @Slf4j
-public class MultiCheckpointWriter<T extends IPersistentCorfuTable<?, ?>> {
+public class MultiCheckpointWriter<T extends ICorfuTable<?, ?>> {
     @Getter
     private List<ICorfuSMR<T>> tables = new ArrayList<>();
 
