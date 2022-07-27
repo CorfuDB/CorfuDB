@@ -1,31 +1,26 @@
 package org.corfudb.runtime.object.transactions;
 
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
-import javax.annotation.Nullable;
 
-import com.google.common.base.Preconditions;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
-import org.corfudb.runtime.object.VersionLockedObject;
+import org.corfudb.runtime.object.ISnapshotProxy;
 import org.corfudb.runtime.object.transactions.TransactionalContext.PreCommitListener;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
@@ -130,10 +125,9 @@ public abstract class AbstractTransactionalContext implements
     @Getter
     private final ConflictSetInfo readSetInfo = new ConflictSetInfo();
 
-    /**
-     * Cache of last known position of streams accessed in this transaction.
-     */
-    protected final Map<UUID, Long> knownStreamsPosition = new HashMap<>();
+    // Note: using the streamId as a key does not suffice since the transaction
+    // can operate on multiple object proxies for the same underlying object.
+    protected final Map<ICorfuSMRProxyInternal<?>, ISnapshotProxy<?>> snapshotProxyMap = new HashMap<>();
 
     AbstractTransactionalContext(Transaction transaction) {
         transactionID = Utils.genPseudorandomUUID();
@@ -143,15 +137,17 @@ public abstract class AbstractTransactionalContext implements
         AbstractTransactionalContext.log.trace("TXBegin[{}]", this);
     }
 
-    protected void updateKnownStreamPosition(UUID streamId, long position) {
-        Long val = knownStreamsPosition.get(streamId);
-        if (val != null) {
-            Preconditions.checkState(val == position, "inconsistent stream positions %s and %s",
-                    val, position);
-            return;
-        }
-
-        knownStreamsPosition.put(streamId, position);
+    /**
+     * Obtain a snapshot proxy from the version manager backing the provided object proxy.
+     * This method caches the result locally for future invocations.
+     * @param proxy             The object proxy to obtain a snapshot from.
+     * @param snapshotTimestamp The version of the object that operations will be performed on.
+     * @param <T>               The type of the underlying SMR object.
+     * @return                  The corresponding snapshot proxy.
+     */
+    protected <T extends ICorfuSMR<T>> ISnapshotProxy<T> getSnapshotProxy(ICorfuSMRProxyInternal<T> proxy, Token snapshotTimestamp) {
+        return (ISnapshotProxy<T>) snapshotProxyMap.computeIfAbsent(proxy,
+                id -> proxy.getUnderlyingObject().getSnapshotProxy(this, snapshotTimestamp));
     }
 
     /**
@@ -181,44 +177,6 @@ public abstract class AbstractTransactionalContext implements
     public abstract <T extends ICorfuSMR<T>> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy,
                                                                      long timestamp,
                                                                      Object[] conflictObject);
-
-    public void syncWithRetryUnsafe(VersionLockedObject vlo,
-                                    Token snapshotTimestamp,
-                                    ICorfuSMRProxyInternal proxy,
-                                    @Nullable Runnable optimisticStreamSetter) {
-        for (int x = 0; x < this.transaction.getRuntime().getParameters().getTrimRetry(); x++) {
-            try {
-                if (optimisticStreamSetter != null) {
-                    // Swap ourselves to be the active optimistic stream.
-                    // Inside setAsOptimisticStream, if there are
-                    // currently optimistic updates on the object, we
-                    // roll them back.  Then, we set this context as  the
-                    // object's new optimistic context.
-                    optimisticStreamSetter.run();
-                }
-                vlo.syncObjectUnsafe(snapshotTimestamp.getSequence());
-                break;
-            } catch (TrimmedException te) {
-                log.info("syncWithRetryUnsafe: Encountered trimmed address space " +
-                                "for snapshot {} of stream {} with pointer={} on attempt {}",
-                        snapshotTimestamp.getSequence(), vlo.getID(), vlo.getVersionUnsafe(), x);
-
-                // If a trim is encountered, we must reset the object
-                vlo.resetUnsafe();
-                if (!te.isRetriable()
-                        || x == this.transaction.getRuntime().getParameters().getTrimRetry() - 1) {
-                    // abort the transaction
-                    TransactionAbortedException tae =
-                            new TransactionAbortedException(
-                                    new TxResolutionInfo(getTransactionID(), snapshotTimestamp),
-                                    TokenResponse.NO_CONFLICT_KEY, proxy.getStreamID(),
-                                    Address.NON_ADDRESS, AbortCause.TRIM, te, this);
-                    abortTransaction(tae);
-                    throw tae;
-                }
-            }
-        }
-    }
 
     /**
      * Log an SMR update to the Corfu log.
@@ -269,6 +227,11 @@ public abstract class AbstractTransactionalContext implements
     public abstract long commitTransaction() throws TransactionAbortedException;
 
     /**
+     * Returns true if and only if this transactional context is for a read-only transaction.
+     */
+    public abstract boolean readOnly();
+
+    /**
      * Forcefully abort the transaction.
      */
     public void abortTransaction(TransactionAbortedException ae) {
@@ -281,10 +244,12 @@ public abstract class AbstractTransactionalContext implements
      * @return highest sequence number observed while reading
      */
     protected long getMaxAddressRead() {
-        if (knownStreamsPosition.isEmpty()) {
-            return Address.NON_ADDRESS;
-        }
-        return Collections.max(knownStreamsPosition.values());
+        return snapshotProxyMap.values()
+                .stream()
+                .map(ISnapshotProxy::getLastKnownStreamPosition)
+                .filter(Objects::nonNull)
+                .max(Comparator.naturalOrder())
+                .orElse(Address.NON_ADDRESS);
     }
 
     /**

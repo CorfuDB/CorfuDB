@@ -11,8 +11,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.exceptions.TrimmedException;
-import org.corfudb.runtime.exceptions.TrimmedUpcallException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
@@ -61,11 +59,11 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     /**
      * The underlying object. This object stores the actual
      * state as well as the version of the object. It also
-     * provides locks to access the object safely from a
-     * multi-threaded context.
+     * provides the necessary synchronization mechanisms to access
+     * the object safely from a multi-threaded context.
      */
     @Getter
-    VersionLockedObject<T> underlyingObject;
+    IVersionManager<T> underlyingObject;
 
     /**
      * The CorfuRuntime. This allows us to interact with the
@@ -131,7 +129,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
 
         // Since the VLO is thread safe we don't need to use a thread safe stream implementation
         // because the VLO will control access to the stream
-        underlyingObject = new VersionLockedObject<T>(this::getNewInstance,
+        underlyingObject = new VersionLockedObject<>(this::getNewInstance,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
                 wrapperObject);
     }
@@ -172,30 +170,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
         log.debug("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
 
         // Perform underlying access
-        return underlyingObject.access(o -> o.getVersionUnsafe() >= timestamp.get()
-                        && !o.isOptimisticallyModifiedUnsafe(),
-                o -> {
-                    for (int x = 0; x < rt.getParameters().getTrimRetry(); x++) {
-                        try {
-                            o.syncObjectUnsafe(timestamp.get());
-                            break;
-                        } catch (TrimmedException te) {
-                            log.info("accessInner: Encountered trimmed address space " +
-                                            "while accessing version {} of stream {} on attempt {}",
-                                    timestamp.get(), getStreamID(), x);
-
-                            o.resetUnsafe();
-
-                            if (x == (rt.getParameters().getTrimRetry() - 1)) {
-                                throw te;
-                            }
-
-                            timestamp.set(rt.getSequencerView().query(getStreamID()));
-                        }
-                    }
-                },
-                o -> accessMethod.access(o),
-                a -> {});
+        return underlyingObject.access(rt, accessMethod, timestamp);
     }
 
     /**
@@ -256,45 +231,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
             }
         }
 
-        // Check first if we have the upcall, if we do
-        // we can service the request right away.
-        if (underlyingObject.getUpcallResults().containsKey(timestamp)) {
-            log.trace("Upcall[{}] {} Direct", this, timestamp);
-            R ret = (R) underlyingObject.getUpcallResults().get(timestamp);
-            underlyingObject.getUpcallResults().remove(timestamp);
-            return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;
-        }
-
-        return underlyingObject.update(o -> {
-            for (int x = 0; x < rt.getParameters().getTrimRetry(); x++) {
-                try {
-                    o.syncObjectUnsafe(timestamp);
-                    if (o.getUpcallResults().containsKey(timestamp)) {
-                        log.trace("Upcall[{}] {} Sync'd", this, timestamp);
-                        R ret = (R) o.getUpcallResults().get(timestamp);
-                        o.getUpcallResults().remove(timestamp);
-                        return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;
-                    }
-
-                    // The version is already ahead, but we don't have the result.
-                    // The only way to get the correct result
-                    // of the upcall would be to rollback. For now, we throw an exception
-                    // since this is generally not expected. --- and probably a bug if it happens.
-                    throw new RuntimeException("Attempted to get the result "
-                            + "of an upcall@" + timestamp + " but we are @"
-                            + underlyingObject.getVersionUnsafe()
-                            + " and we don't have a copy");
-                } catch (TrimmedException ex) {
-                    log.info("getUpcallResultInner: Encountered trimmed address space " +
-                                    "while accessing version {} of stream {} on attempt {}",
-                            timestamp, getStreamID(), x);
-                    // We encountered a TRIM during sync, reset the object
-                    o.resetUnsafe();
-                }
-            }
-
-            throw new TrimmedUpcallException(timestamp);
-        });
+        return underlyingObject.getUpcallResult(rt, timestamp);
     }
 
     /**
@@ -370,17 +307,6 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     @Override
     public Class<T> getObjectType() {
         return type;
-    }
-
-    /**
-     * Get the latest version read by the proxy.
-     *
-     * @return The latest version read by the proxy.
-     */
-    @Override
-    public long getVersion() {
-        return access(o -> underlyingObject.getVersionUnsafe(),
-                null);
     }
 
     /**

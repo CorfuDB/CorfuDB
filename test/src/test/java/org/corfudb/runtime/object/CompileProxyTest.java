@@ -120,25 +120,26 @@ public class CompileProxyTest extends AbstractViewTest {
         int beforeSync, afterSync;
 
         // before sync'ing the in-memory object, the in-memory copy does not get updated
-        assertThat(beforeSync = proxy_CORFUSMR.getUnderlyingObject().getObject().getValue())
-                .isEqualTo(INITIAL);
+        assertThat(beforeSync = ((VersionLockedObject<CorfuSharedCounter>)proxy_CORFUSMR.getUnderlyingObject())
+                .getObject().getValue()).isEqualTo(INITIAL);
 
         // sync with the stream entry by entry
         for (int timestamp = 1; timestamp <= concurrency; timestamp++) {
-            proxy_CORFUSMR.getUnderlyingObject()
-                    .syncObjectUnsafe(timestamp);
-            assertThat((afterSync = proxy_CORFUSMR.getUnderlyingObject().getObject().getValue()))
-                    .isBetween(0, concurrency);
-            assertThat(beforeSync)
-                    .isNotEqualTo(afterSync);
+            ((VersionLockedObject<CorfuSharedCounter>)proxy_CORFUSMR.getUnderlyingObject()).syncObjectUnsafe(timestamp);
+
+            afterSync = ((VersionLockedObject<CorfuSharedCounter>)proxy_CORFUSMR
+                    .getUnderlyingObject()).getObject().getValue();
+
+            assertThat(afterSync).isBetween(0, concurrency);
+
+            assertThat(beforeSync).isNotEqualTo(afterSync);
             beforeSync = afterSync;
         }
 
         // now we get the LATEST value through the Corfu object API
-        assertThat((afterSync = sharedCounter.getValue()))
-                .isBetween(0, concurrency);
-        assertThat(beforeSync)
-                .isEqualTo(afterSync);
+        afterSync = sharedCounter.getValue();
+        assertThat(afterSync).isBetween(0, concurrency);
+        assertThat(beforeSync).isEqualTo(afterSync);
     }
 
     /**
@@ -266,8 +267,8 @@ public class CompileProxyTest extends AbstractViewTest {
             } else {
                 // before sync'ing the in-memory object, the in-memory copy does not get updated
                 // check that the in-memory copy is only as up-to-date as the latest 'get()'
-                assertThat(proxy_CORFUSMR.getUnderlyingObject().getObject().getValue())
-                        .isEqualTo(lastRead.get());
+                assertThat(((VersionLockedObject<CorfuSharedCounter>)proxy_CORFUSMR.getUnderlyingObject())
+                        .getObject().getValue()).isEqualTo(lastRead.get());
 
                 // now read, expect to get the latest written
                 assertThat(sharedCounter.getValue()).isEqualTo(lastUpdate.get());
@@ -275,10 +276,7 @@ public class CompileProxyTest extends AbstractViewTest {
                 // remember the last read
                 lastRead.set(lastUpdate.get());
             }
-
-
-        } );
-
+        });
 
         // invoke the interleaving engine
         scheduleInterleaved(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.CONCURRENCY_SOME*numTasks);
@@ -436,10 +434,11 @@ public class CompileProxyTest extends AbstractViewTest {
         // step 2: check the unsync'ed in-memory object state
         addTestStep((ignored_task_num) -> {
             // before sync'ing the in-memory object, the in-memory copy does not get updated
-            assertThat(proxy_CORFUSMR.getUnderlyingObject().getObject().getUser().getFirstName())
-                    .startsWith("E");
-            assertThat(proxy_CORFUSMR.getUnderlyingObject().getObject().getUser().getLastName())
-                    .startsWith("F");
+            assertThat(((VersionLockedObject<CorfuCompoundObj>)proxy_CORFUSMR.getUnderlyingObject())
+                    .getObject().getUser().getFirstName()).startsWith("E");
+
+            assertThat(((VersionLockedObject<CorfuCompoundObj>)proxy_CORFUSMR.getUnderlyingObject())
+                    .getObject().getUser().getLastName()).startsWith("F");
         });
 
         // invoke the interleaving engine
@@ -449,7 +448,5 @@ public class CompileProxyTest extends AbstractViewTest {
                 .startsWith("C");
         assertThat(sharedCorfuCompound.getUser().getLastName())
                 .startsWith("D");
-
     }
-
 }

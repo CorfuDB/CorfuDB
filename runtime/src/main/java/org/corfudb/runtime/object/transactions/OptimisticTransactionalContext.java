@@ -7,7 +7,6 @@ import java.util.UUID;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AppendException;
@@ -47,6 +46,14 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     }
 
     /**
+     * {@inheritDoc}
+     */
+    @Override
+    public boolean readOnly() {
+        return false;
+    }
+
+    /**
      * Access within optimistic transactional context is implemented
      * in via proxy.access() as follows:
      *
@@ -69,41 +76,12 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                                                 ICorfuSMRAccess<R, T> accessFunction,
                                                 Object[] conflictObject) {
         log.trace("Access[{},{}] conflictObj={}", this, proxy, conflictObject);
-        // First, we add this access to the read set
+
+        // First, we add this access to the read set.
         addToReadSet(proxy, conflictObject);
 
-        // Next, we sync the object, which will bring the object
-        // to the correct version, reflecting any optimistic
-        // updates.
-        // Get snapshot timestamp in advance so it is not performed under the VLO lock
-        long ts = getSnapshotTimestamp().getSequence();
-        return proxy
-                .getUnderlyingObject()
-                .access(o -> {
-                            WriteSetSMRStream stream = o.getOptimisticStreamUnsafe();
-
-                            // Obtain the stream position as when transaction context last
-                            // remembered it.
-                            long streamReadPosition = knownStreamsPosition.getOrDefault(proxy.getStreamID(), ts);
-
-                            return (
-                                    (stream == null || stream.isStreamCurrentContextThreadCurrentContext())
-                                    && (stream != null && getWriteSetEntrySize(proxy.getStreamID()) == stream.pos() + 1
-                                       || (getWriteSetEntrySize(proxy.getStreamID()) == 0 /* No updates. */
-                                          && o.getVersionUnsafe() == streamReadPosition) /* Match timestamp. */
-                                    )
-                            );
-                        },
-                        o -> {
-                            // inside syncObjectUnsafe, depending on the object
-                            // version, we may need to undo or redo
-                            // committed changes, or apply forward committed changes.
-                            syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy,
-                                    o::setUncommittedChanges);
-                        },
-                        accessFunction::access,
-                        version -> updateKnownStreamPosition(proxy.getStreamID(), version)
-        );
+        // Get snapshot timestamp in advance so it is not performed under lock.
+        return getSnapshotProxy(proxy, getSnapshotTimestamp()).access(accessFunction);
     }
 
     /**
@@ -127,26 +105,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // Getting an upcall result adds the object to the conflict set.
         addToReadSet(proxy, conflictObject);
 
-        // if we have a result, return it.
-        SMREntry wrapper = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
-        if (wrapper != null && wrapper.isHaveUpcallResult()) {
-            return wrapper.getUpcallResult();
-        }
-        // Otherwise, we need to sync the object
-        // Get snapshot timestamp in advance so it is not performed under the VLO lock
-        Token ts = getSnapshotTimestamp();
-        return proxy.getUnderlyingObject().update(o -> {
-            log.trace("Upcall[{}] {} Sync'd", this,  timestamp);
-            syncWithRetryUnsafe(o, ts, proxy, o::setUncommittedChanges);
-            SMREntry wrapper2 = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
-            if (wrapper2 != null && wrapper2.isHaveUpcallResult()) {
-                return wrapper2.getUpcallResult();
-            }
-            // If we still don't have the upcall, this must be a bug.
-            throw new RuntimeException("Tried to get upcall during a transaction but"
-                    + " we don't have it even after an optimistic sync (asked for " + timestamp
-                    + " we have 0-" + (getWriteSetEntryList(proxy.getStreamID()).size() - 1) + ")");
-        });
+        // Get snapshot timestamp in advance so it is not performed under lock.
+        return getSnapshotProxy(proxy, getSnapshotTimestamp()).getUpcallResult(timestamp);
     }
 
     /** Logs an update. In the case of an optimistic transaction, this update
@@ -167,6 +127,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         log.trace("LogUpdate[{},{}] {} ({}) conflictObj={}",
                 this, proxy, updateEntry.getSMRMethod(),
                 updateEntry.getSMRArguments(), conflictObjects);
+
+        getSnapshotProxy(proxy, getSnapshotTimestamp()).logUpdate(updateEntry);
 
         return addToWriteSet(proxy, updateEntry, conflictObjects);
     }

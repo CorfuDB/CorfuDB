@@ -74,11 +74,4 @@ public interface ICorfuSMRProxy<T> {
      */
     Class<T> getObjectType();
 
-    /** Get the latest version read by the proxy.
-     *
-     * @return              The latest version read by the proxy.
-     */
-    long getVersion();
-
-
 }

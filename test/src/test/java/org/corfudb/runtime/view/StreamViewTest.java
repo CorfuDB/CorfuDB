@@ -10,9 +10,6 @@ import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.TrimmedException;
-import org.corfudb.runtime.object.CorfuCompileProxy;
-import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Before;
 import org.junit.Test;
@@ -438,8 +435,6 @@ public class StreamViewTest extends AbstractViewTest {
                 .open();
 
         mapCopy.size();
-        VersionLockedObject vlo = ((CorfuCompileProxy) ((ICorfuSMR) mapCopy).
-                getCorfuSMRProxy()).getUnderlyingObject();
 
         Token finalVersion = r.getSequencerView().query().getToken();
 

@@ -23,7 +23,7 @@ public interface ICorfuSMRProxyInternal<T extends ICorfuSMR<T>> extends ICorfuSM
      *
      * @return the underlying object
      */
-    VersionLockedObject<T> getUnderlyingObject();
+    IVersionManager<T> getUnderlyingObject();
 
     /**
      * Get the serializer used for serializing arguments in the
@@ -37,4 +37,5 @@ public interface ICorfuSMRProxyInternal<T extends ICorfuSMR<T>> extends ICorfuSM
      * @return
      */
     Set<UUID> getStreamTags();
+
 }

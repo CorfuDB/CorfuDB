@@ -24,6 +24,7 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.test.TestSchema;
@@ -358,8 +359,8 @@ public class CorfuTableTest extends AbstractViewTest {
             getDefaultRuntime().getObjectsView().TXEnd();
         }
 
-        assertThat(((CorfuCompileProxy) ((ICorfuSMR) corfuTable).
-                getCorfuSMRProxy()).getUnderlyingObject().getSmrStream().pos()).isEqualTo(3);
+        assertThat(((VersionLockedObject)((CorfuCompileProxy) ((ICorfuSMR) corfuTable).
+                getCorfuSMRProxy()).getUnderlyingObject()).getSmrStream().pos()).isEqualTo(3);
     }
 
     /**

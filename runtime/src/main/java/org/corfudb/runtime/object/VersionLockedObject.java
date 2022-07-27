@@ -6,8 +6,13 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NoRollbackException;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.TrimmedUpcallException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.object.transactions.WriteSetSMRStream;
 import org.corfudb.runtime.view.Address;
@@ -15,6 +20,7 @@ import org.corfudb.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nonnull;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
@@ -26,6 +32,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.LongConsumer;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 //TODO Discard TransactionStream for building maps but not for constructing tails
@@ -47,7 +55,7 @@ import java.util.function.Supplier;
  * <p>Created by mwei on 11/13/16.
  */
 @Slf4j
-public class VersionLockedObject<T extends ICorfuSMR<T>> {
+public class VersionLockedObject<T extends ICorfuSMR<T>> implements IVersionManager<T> {
     /**
      * The actual underlying object.
      */
@@ -58,7 +66,6 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      * A list of upcalls pending in the system. The proxy keeps this set so it can remember to
      * save the upcalls for pending requests.
      */
-    @Getter
     private final Set<Long> pendingUpcalls;
 
     // This enum is necessary because null cannot be inserted
@@ -70,9 +77,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
     /**
      * A list of upcall results, keyed by the address they were requested.
      */
-    @Getter
     private final Map<Long, Object> upcallResults;
-
 
     /**
      * A lock, which controls access to modifications to the object. Any access to unsafe
@@ -149,9 +154,11 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
     }
 
     /**
-     * Run gc on this object. Since the stream that backs this object is not thread-safe:
+     * {@inheritDoc}
+     * <p> Since the stream that backs this object is not thread-safe:
      * synchronization between gc and external object access is needed.
      */
+    @Override
     public void gc(long trimMark) {
         long ts = 0;
 
@@ -166,10 +173,45 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
     }
 
     /**
-     * Execute a method on the version locked object without synchronization
+     * {@inheritDoc}
      */
-    public <R> R passThrough(Function<T, R> method) {
+    @Override
+    public <R> R passThrough(@Nonnull Function<T, R> method) {
         return method.apply(object);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public <R> R access(@Nonnull CorfuRuntime rt,
+                        @Nonnull ICorfuSMRAccess<R, T> accessMethod,
+                        @Nonnull AtomicLong timestamp) {
+        // Perform underlying access.
+        return access(o -> o.getVersionUnsafe() >= timestamp.get()
+                        && !o.isOptimisticallyModifiedUnsafe(),
+                o -> {
+                    for (int x = 0; x < rt.getParameters().getTrimRetry(); x++) {
+                        try {
+                            o.syncObjectUnsafe(timestamp.get());
+                            break;
+                        } catch (TrimmedException te) {
+                            log.info("accessInner: Encountered trimmed address space " +
+                                            "while accessing version {} of stream {} on attempt {}",
+                                    timestamp.get(), getID(), x);
+
+                            o.resetUnsafe();
+
+                            if (x == (rt.getParameters().getTrimRetry() - 1)) {
+                                throw te;
+                            }
+
+                            timestamp.set(rt.getSequencerView().query(getID()));
+                        }
+                    }
+                },
+                accessMethod::access,
+                a -> {});
     }
 
     /**
@@ -199,21 +241,20 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      * @param versionAccessed           A function which allows for learning the version of
      *                                  the object during access
      * @param <R>                       The type of the access function return.
-     * @return Returns the access function.
+     * @return Returns the result of the access function.
      */
-    public <R> R access(Function<VersionLockedObject<T>, Boolean> directAccessCheckFunction,
+    public <R> R access(Predicate<VersionLockedObject<T>> directAccessCheckFunction,
                         Consumer<VersionLockedObject<T>> updateFunction,
                         Function<T, R> accessFunction,
-                        Consumer<Long> versionAccessed) {
+                        LongConsumer versionAccessed) {
         // First, we try to do an optimistic read on the object, in case it
         // meets the conditions for direct access.
         long ts = lock.tryOptimisticRead();
         if (ts != 0) {
             try {
-                if (directAccessCheckFunction.apply(this)) {
+                if (directAccessCheckFunction.test(this)) {
                     long vloAccessedVersion = getVersionUnsafe();
-                    log.trace("Access [{}] Direct (optimistic-read) access at {}",
-                            this, vloAccessedVersion);
+                    log.trace("Access [{}] Direct (optimistic-read) access at {}", this, vloAccessedVersion);
                     R ret = accessFunction.apply(object.getContext(ICorfuExecutionContext.DEFAULT));
 
                     if (lock.validate(ts)) {
@@ -246,7 +287,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                 ts = lock.writeLock();
             }
             // Check if direct access is possible (unlikely).
-            if (directAccessCheckFunction.apply(this)) {
+            if (directAccessCheckFunction.test(this)) {
                 long vloAccessedVersion = getVersionUnsafe();
                 log.trace("Access [{}] Direct (writelock) access at {}", this, vloAccessedVersion);
                 R ret = accessFunction.apply(object.getContext(ICorfuExecutionContext.DEFAULT));
@@ -265,6 +306,105 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
         } finally {
             lock.unlock(ts);
         }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public <R> R getUpcallResult(@Nonnull CorfuRuntime rt, long timestamp) {
+        // Check first if we have the upcall, if we do
+        // we can service the request right away.
+        if (upcallResults.containsKey(timestamp)) {
+            log.trace("Upcall[{}] {} Direct", this, timestamp);
+            R ret = (R) upcallResults.get(timestamp);
+            upcallResults.remove(timestamp);
+            return ret == NullValue.NULL_VALUE ? null : ret;
+        }
+
+        long ts = 0;
+
+        try {
+            ts = lock.writeLock();
+            log.trace("Upcall[{}] (writelock)", this);
+
+            for (int x = 0; x < rt.getParameters().getTrimRetry(); x++) {
+                try {
+                    syncObjectUnsafe(timestamp);
+                    if (upcallResults.containsKey(timestamp)) {
+                        log.trace("Upcall[{}] {} Sync'd", this, timestamp);
+                        R ret = (R) upcallResults.get(timestamp);
+                        upcallResults.remove(timestamp);
+                        return ret == NullValue.NULL_VALUE ? null : ret;
+                    }
+
+                    // The version is already ahead, but we don't have the result.
+                    // The only way to get the correct result of the upcall would be to rollback.
+                    // For now, we throw an exception since this is generally not expected,
+                    // and probably a bug if it happens.
+                    throw new IllegalStateException("Attempted to get the result "
+                            + "of an upcall@" + timestamp + " but we are @"
+                            + getVersionUnsafe() + " and we don't have a copy");
+                } catch (TrimmedException ex) {
+                    log.info("getUpcallResultInner: Encountered trimmed address space while " +
+                                    "accessing version {} of stream {} on attempt {}",
+                            timestamp, getID(), x);
+                    // We encountered a TRIM during sync, reset the object
+                    resetUnsafe();
+                }
+            }
+
+            throw new TrimmedUpcallException(timestamp);
+        } finally {
+            lock.unlock(ts);
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public long logUpdate(@Nonnull SMREntry entry, boolean saveUpcall) {
+        return smrStream.append(entry,
+                t -> {
+                    if (saveUpcall) {
+                        pendingUpcalls.add(t.getToken().getSequence());
+                    }
+                    return true;
+                },
+                t -> {
+                    if (saveUpcall) {
+                        pendingUpcalls.remove(t.getToken().getSequence());
+                    }
+                    return true;
+                });
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public ISnapshotProxy<T> getSnapshotProxy(@Nonnull AbstractTransactionalContext transactionalContext,
+                                              @Nonnull Token snapshotTimestamp) {
+        return new VersionLockedSnapshotProxy<>(this, snapshotTimestamp, transactionalContext);
+    }
+
+    /**
+     * Generate the summary string for this version locked object.
+     *
+     * <p>The format of this string is [type]@[version][+]
+     * (where + is the optimistic flag)
+     *
+     * @return The summary string for this version locked object
+     */
+    @Override
+    public String toString() {
+        WriteSetSMRStream optimisticStream = this.optimisticStream;
+
+        return object.getClass().getSimpleName()
+                + "[" + Utils.toReadableId(smrStream.getID()) + "]@"
+                + (getVersionUnsafe() == Address.NEVER_READ ? "NR" : getVersionUnsafe())
+                + (optimisticStream == null ? "" : "+" + optimisticStream.pos());
     }
 
     /**
@@ -297,7 +437,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      * @throws NoRollbackException If the object cannot be rolled back to
      *                             the supplied version.
      */
-    public void rollbackObjectUnsafe(long timestamp) {
+    private void rollbackObjectUnsafe(long timestamp) {
         if (object.getVersionPolicy() == ICorfuVersionPolicy.MONOTONIC) {
             return; // We are not allowed to go back in time.
         }
@@ -315,17 +455,6 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
             noRollBackExceptionCounter.ifPresent(Counter::increment);
             resetUnsafe();
         }
-    }
-
-    /**
-     * Move the pointer for this object (effectively, forcefuly
-     * change the version of this object without playing
-     * any updates).
-     *
-     * @param globalAddress The global address to set the pointer to
-     */
-    public void seek(long globalAddress) {
-        smrStream.seek(globalAddress);
     }
 
     /**
@@ -396,28 +525,16 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
     }
 
     /**
-     * Log an update to this object, noting a request to save the
-     * upcall result if necessary.
+     * Set the optimistic stream for this thread, rolling back
+     * any previous threads if they were present.
      *
-     * @param entry      The entry to log.
-     * @param saveUpcall True, if the upcall result should be
-     *                   saved, false otherwise.
-     * @return The address the update was logged at.
+     * @param optimisticStream The new optimistic stream to install.
      */
-    public long logUpdate(SMREntry entry, boolean saveUpcall) {
-        return smrStream.append(entry,
-                t -> {
-                    if (saveUpcall) {
-                        pendingUpcalls.add(t.getToken().getSequence());
-                    }
-                    return true;
-                },
-                t -> {
-                    if (saveUpcall) {
-                        pendingUpcalls.remove(t.getToken().getSequence());
-                    }
-                    return true;
-                });
+    private void setUncommittedChanges(WriteSetSMRStream optimisticStream) {
+        if (this.optimisticStream != null) {
+            rollbackUncommittedChangesUnsafe();
+        }
+        this.optimisticStream = optimisticStream;
     }
 
     /**
@@ -432,21 +549,8 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      *
      * @return True, if the object was modified by this thread. False otherwise.
      */
-    public boolean optimisticallyOwnedByThreadUnsafe() {
+    private boolean optimisticallyOwnedByThreadUnsafe() {
         return optimisticStream != null && optimisticStream.isStreamForThisThread();
-    }
-
-    /**
-     * Set the optimistic stream for this thread, rolling back
-     * any previous threads if they were present.
-     *
-     * @param optimisticStream The new optimistic stream to install.
-     */
-    public void setUncommittedChanges(WriteSetSMRStream optimisticStream) {
-        if (this.optimisticStream != null) {
-            rollbackUncommittedChangesUnsafe();
-        }
-        this.optimisticStream = optimisticStream;
     }
 
     /**
@@ -462,7 +566,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
     /**
      * Check whether this object is currently under optimistic modifications.
      */
-    public boolean isOptimisticallyModifiedUnsafe() {
+    private boolean isOptimisticallyModifiedUnsafe() {
         return optimisticStream != null && optimisticStream.pos() != Address.NEVER_READ;
     }
 
@@ -486,25 +590,6 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
     public UUID getID() {
         return smrStream.getID();
     }
-
-    /**
-     * Generate the summary string for this version locked object.
-     *
-     * <p>The format of this string is [type]@[version][+]
-     * (where + is the optimistic flag)
-     *
-     * @return The summary string for this version locked object
-     */
-    @Override
-    public String toString() {
-        WriteSetSMRStream optimisticStream = this.optimisticStream;
-
-        return object.getClass().getSimpleName()
-                + "[" + Utils.toReadableId(smrStream.getID()) + "]@"
-                + (getVersionUnsafe() == Address.NEVER_READ ? "NR" : getVersionUnsafe())
-                + (optimisticStream == null ? "" : "+" + optimisticStream.pos());
-    }
-
 
     /**
      * Given a stream, return the context under which the underlying
