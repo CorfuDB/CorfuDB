@@ -97,7 +97,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     public void testStandbyClusterReset() throws Exception {
         // (1) Snapshot and Log Entry Sync
         log.debug(">>> (1) Start Snapshot and Log Entry Sync");
-        testEndToEndSnapshotAndLogEntrySyncUFO(false, false);
+        test(1, false, false);
 
         ExecutorService writerService = Executors.newSingleThreadExecutor();
 
@@ -135,7 +135,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
         // (1) Snapshot and Log Entry Sync
         log.debug(">>> (1) Start Snapshot and Log Entry Sync");
-        testEndToEndSnapshotAndLogEntrySyncUFO(false, false);
+        test(1, false, false);
 
         ExecutorService writerService = Executors.newSingleThreadExecutor();
 
