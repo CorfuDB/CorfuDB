@@ -245,11 +245,11 @@
                             <!-- Option to generate a file test report or just output the test report to the console. -->
                             <useFile>false</useFile>
                             <includes>
-                                <include>**/*IT.java</include>
-<!--                                <include>**/CorfuReplicationTrimIT.java</include>-->
+<!--                                <include>**/*IT.java</include>-->
+                                <include>**/CorfuReplicationTrimIT.java</include>
 <!--                                <include>**/CorfuReplicationUpgradeIT.java</include>-->
 <!--                                <include>**/CorfuReplicationClusterConfigIT.java</include>-->
-<!--                                <include>**/CorfuReplicationReconfigurationIT.java</include>-->
+                                <include>**/CorfuReplicationReconfigurationIT.java</include>
 <!--                                <include>**/WorkflowIT.java</include>-->
 <!--                                <include>**/ClusterReconfigIT.java</include>-->
                             </includes>

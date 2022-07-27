@@ -121,7 +121,7 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
      * In this test we stop the active log replicator before trimming so we
      * can enforce re-negotiation after the trim.
      */
-//    @Test
+    @Test
     public void testTrimmedExceptionsBetweenLogEntrySync() throws Exception {
         testLogTrimBetweenLogEntrySync(true);
     }
@@ -130,7 +130,7 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
      * Test the case where the log is trimmed in between two cycles of log entry sync.
      * In this test we don't stop the active log replicator, so log entry sync is resumed.
      */
-//    @Test
+    @Test
     public void testTrimmedExceptionsBetweenLogEntrySyncContinuous() throws Exception {
         testLogTrimBetweenLogEntrySync(false);
     }
@@ -196,7 +196,7 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
         }
     }
 
-//    @Test
+    @Test
     public void testSnapshotSyncEndToEndWithCheckpointedStreams() throws Exception {
         try {
             log.debug("\nSetup active and standby Corfu's");

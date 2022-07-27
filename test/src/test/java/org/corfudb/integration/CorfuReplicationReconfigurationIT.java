@@ -147,6 +147,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         // (3) Stop Active Log Replicator Server
         log.debug(">>> (3) Stop Active Node");
         stopActiveLogReplicator();
+        showAllCorfuCommand();
 
         // (4) Sleep Interval so writes keep going through, while active is down
         log.debug(">>> (4) Wait for some time");
