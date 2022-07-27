@@ -35,8 +35,3 @@ jobs:
         with:
           project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
           coverage-reports: ./coverage/target/site/jacoco-aggregate/jacoco.xml
-
-      - name: Upload Codecov report
-        uses: codecov/codecov-action@v3
-        with:
-          files: ./coverage/target/site/jacoco-aggregate/jacoco.xml
