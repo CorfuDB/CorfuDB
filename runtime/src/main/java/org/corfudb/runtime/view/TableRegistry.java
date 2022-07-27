@@ -336,6 +336,7 @@ public class TableRegistry {
 
         List<CorfuOptions.SecondaryIndex> oldSecondaryIndices = oldOptions.getSecondaryKeyList();
         List<CorfuOptions.SecondaryIndex> newSecondaryIndices = newOptions.getSecondaryKeyList();
+
         // Only needs to check in one direction as their sizes have been compared.
         if (!oldSecondaryIndices.containsAll(newSecondaryIndices)) {
             log.debug("The record of {} will be updated as secondary keys were changed", tableName);

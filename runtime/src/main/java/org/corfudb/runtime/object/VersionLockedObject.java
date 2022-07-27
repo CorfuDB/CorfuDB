@@ -232,7 +232,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                 // Otherwise, it is not on a correct view of the object (the object was
                 // modified) and we should try again by upgrading the lock.
                 log.warn("Access [{}] Direct (optimistic-read) exception, upgrading lock. Exception ",
-                        this, e);
+                        this);
             }
         }
         // Next, we just upgrade to a full write lock if the optimistic

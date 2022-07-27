@@ -168,7 +168,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      * @param value    Value.
      * @param metadata Metadata.
      */
-    protected void put(@Nonnull final K key,
+    public void put(@Nonnull final K key,
                           @Nonnull final V value,
                           @Nullable final M metadata) {
         corfuTable.insert(key, new CorfuRecord<>(value, metadata));

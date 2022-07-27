@@ -53,6 +53,8 @@ public interface Fixtures {
      */
     class TestFixtureConst {
 
+        public static final String DEFAULT_STREAM_NAMESPACE = "namespace";
+
         // Default name of the CorfuTable created by CorfuClient
         public static final String DEFAULT_STREAM_NAME = "stream";
 

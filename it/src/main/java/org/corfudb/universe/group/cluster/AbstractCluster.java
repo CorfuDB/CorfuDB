@@ -87,6 +87,8 @@ public abstract class AbstractCluster<
                 log.warn("Can't destroy node: {} in group: {}", node.getParams().getName(), getParams().getName(), e);
             }
         });
+
+        executor.shutdownNow();
     }
 
     @Override

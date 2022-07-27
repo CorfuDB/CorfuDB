@@ -102,7 +102,7 @@ public class CorfuServerParams implements NodeParams {
     }
 
     public String getDockerImageNameFullName() {
-        return dockerImage + ":" + serverVersion;
+        return (dockerImage + ":" + serverVersion).trim();
     }
 
     public Path getInfrastructureJar() {
@@ -123,6 +123,6 @@ public class CorfuServerParams implements NodeParams {
          */
         @Getter
         @Default
-        private final long memory = 1048 * 1024 * 1024;
+        private final long memory = 4L * 1024 * 1024 * 1024 * 8;
     }
 }

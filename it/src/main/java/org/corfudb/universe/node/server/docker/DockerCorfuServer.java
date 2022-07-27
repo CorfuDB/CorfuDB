@@ -293,7 +293,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
     private String deployContainer() {
         ContainerConfig containerConfig = buildContainerConfig();
 
-        String id;
+        String id = "<NONE>";
         try {
             ListImagesParam corfuImageQuery = ListImagesParam
                     .byName(params.getDockerImageNameFullName());
@@ -306,7 +306,8 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
             ContainerCreation container = docker.createContainer(containerConfig, params.getName());
             id = container.id();
 
-            dockerManager.addShutdownHook(params.getName());
+            //dockerManager.addShutdownHook(params.getName());
+	    Runtime.getRuntime().addShutdownHook(new Thread(this::destroy));
 
             docker.disconnectFromNetwork(id, "bridge");
             docker.connectToNetwork(id, docker.inspectNetwork(universeParams.getNetworkName()).id());
@@ -327,7 +328,10 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
 
             ipAddress.set(IpAddress.builder().ip(ipAddr).build());
         } catch (InterruptedException | DockerException e) {
+            log.info(e.toString());
             throw new NodeException("Can't start a container", e);
+        } catch (Exception e) {
+            log.info(e.toString());
         }
 
         return id;
@@ -356,7 +360,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
         // Compose command line for starting Corfu
         String cmdLine = String.format("mkdir -p %s", params.getStreamLogDir()) +
                 " && " +
-                "java -cp *.jar " +
+                "java -Xmx16G -Xms16G -cp *.jar " +
                 org.corfudb.infrastructure.CorfuServer.class.getCanonicalName() +
                 " " +
                 getCommandLineParams();
