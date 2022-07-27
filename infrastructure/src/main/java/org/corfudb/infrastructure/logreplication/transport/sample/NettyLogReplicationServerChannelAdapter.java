@@ -28,6 +28,7 @@ import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLEngine;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -191,10 +192,15 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
                             context.getServerConfig(String.class, ConfigParamNames.KEY_STORE_PASS_FILE)
                     );
 
+                    Path certExpiryFile = context
+                            .<String>getServerConfig(ConfigParamNames.DISABLE_CERT_EXPIRY_CHECK_FILE)
+                            .map(Paths::get)
+                            .orElse(TrustStoreConfig.DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE);
+
                     TrustStoreConfig trustStoreConfig = TrustStoreConfig.from(
                             context.getServerConfig(String.class, ConfigParamNames.TRUST_STORE),
                             context.getServerConfig(String.class, ConfigParamNames.TRUST_STORE_PASS_FILE),
-                            Paths.get(context.getServerConfig(String.class, ConfigParamNames.DISABLE_CERT_EXPIRY_CHECK_FILE))
+                            certExpiryFile
                     );
 
                     sslContext = SslContextConstructor.constructSslContext(true, keyStoreConfig, trustStoreConfig);
