@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package org.corfudb.benchmark;
+
+import "corfu_options.proto";
+import "google/protobuf/descriptor.proto";
+
+message Uuid {
+  fixed64 msb = 1;
+  fixed64 lsb = 2;
+}
+
+message StringValue {
+  string value = 1;
+  string secondary = 2;
+}
+
+message StringValueIndex {
+  string value = 1;
+  string secondary = 2;
+  option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "secondary"};
+}
+
+message StringStreamingValue {
+  option (org.corfudb.runtime.table_schema).stream_tag = "streaming_tag";
+  string value = 1;
+  string secondary = 2;
+}
+
+message IndexedStringValue {
+  string value = 1;
+  string secondary = 2;
+  option (org.corfudb.runtime.table_schema).secondary_key = { index_path: "secondary"};
+}
