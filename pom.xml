@@ -19,6 +19,7 @@
         <module>debian</module>
         <module>test</module>
         <module>it</module>
+        <module>benchmark</module>
         <module>utils</module>
     </modules>
 
@@ -90,6 +91,11 @@
             <id>clojars.org</id>
             <url>https://clojars.org/repo</url>
         </repository>
+
+		<repository>
+		    <id>jitpack.io</id>
+		    <url>https://jitpack.io</url>
+		</repository>
 
         <repository>
             <snapshots/>

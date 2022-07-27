@@ -64,7 +64,7 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
                 return worker;
             }, null, true);
 
-    private ICorfuTable<K, CorfuRecord<V, M>> corfuTable;
+    public ICorfuTable<K, CorfuRecord<V, M>> corfuTable;
 
     /**
      * Namespace this table belongs in.

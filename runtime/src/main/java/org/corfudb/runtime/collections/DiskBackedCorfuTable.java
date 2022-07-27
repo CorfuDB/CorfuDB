@@ -196,6 +196,7 @@ public class DiskBackedCorfuTable<K, V> implements
         final Options options = new Options();
 
         options.setCreateIfMissing(true);
+        //options.setUseDirectReads(true);
         options.setCompressionType(CompressionType.LZ4_COMPRESSION);
 
         BlockBasedTableConfig blockBasedTableConfig = new BlockBasedTableConfig();
