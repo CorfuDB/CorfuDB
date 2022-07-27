@@ -225,7 +225,7 @@ public class CorfuRuntime {
          */
         Duration holeFillTimeout = Duration.ofSeconds(10);
 
-        Duration mvoCacheExpiry = Duration.ofMinutes(10);
+        Duration mvoCacheExpiry = Duration.ofSeconds(5);
 
         /*
         * cache metrics are to be enabled only for the tuning exercise.

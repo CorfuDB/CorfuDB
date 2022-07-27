@@ -1,0 +1,113 @@
+0ms:
+
+5 Recent getByIndex 1648
+2 Recent getByIndex 1679
+4 Recent getByIndex 1789
+6 Recent getByIndex 1828
+3 Recent getByIndex 1740
+8 Recent getByIndex 1825
+5 Old getByIndex 1639
+7 Recent getByIndex 1578
+2 Old getByIndex 1602
+1 Recent getByIndex 1490
+4 Old getByIndex 1367
+6 Old getByIndex 1401
+3 Old getByIndex 1476
+8 Old getByIndex 1420
+7 Old getByIndex 1374
+1 Old getByIndex 1333
+
+DIRECT_IO
+
+5 Recent getByIndex 2122
+7 Recent getByIndex 2235
+4 Recent getByIndex 2285
+8 Recent getByIndex 2304
+1 Recent getByIndex 2018
+6 Recent getByIndex 2240
+2 Recent getByIndex 2086
+3 Recent getByIndex 2158
+5 Old getByIndex 2251
+7 Old getByIndex 2039
+4 Old getByIndex 2130
+8 Old getByIndex 2023
+1 Old getByIndex 1937
+6 Old getByIndex 1833
+2 Old getByIndex 1861
+3 Old getByIndex 1783
+
+1ms:
+
+3 Recent getByIndex 1688
+5 Recent getByIndex 1632
+8 Recent getByIndex 1631
+2 Recent getByIndex 1547
+6 Recent getByIndex 1598
+4 Recent getByIndex 1744
+1 Recent getByIndex 1753
+7 Recent getByIndex 1582
+3 Old getByIndex 1566
+5 Old getByIndex 1439
+8 Old getByIndex 1372
+2 Old getByIndex 1430
+6 Old getByIndex 1401
+1 Old getByIndex 1322
+4 Old getByIndex 1363
+7 Old getByIndex 1376
+
+DIRECT_IO
+
+3 Recent getByIndex 58644
+8 Recent getByIndex 64052
+2 Recent getByIndex 59601
+4 Recent getByIndex 61607
+6 Recent getByIndex 58439
+1 Recent getByIndex 60605
+5 Recent getByIndex 61374
+7 Recent getByIndex 65207
+3 Old getByIndex 80506
+2 Old getByIndex 80505
+8 Old getByIndex 80515
+5 Old getByIndex 78938
+4 Old getByIndex 78961
+6 Old getByIndex 78959
+1 Old getByIndex 78959
+7 Old getByIndex 81182
+
+10 ms:
+
+4 Recent getByIndex 1943
+3 Recent getByIndex 2024
+7 Recent getByIndex 1882
+1 Recent getByIndex 1895
+4 Old getByIndex 1765
+3 Old getByIndex 1557
+6 Recent getByIndex 1450
+5 Recent getByIndex 1742
+7 Old getByIndex 1606
+8 Recent getByIndex 1665
+2 Recent getByIndex 1583
+1 Old getByIndex 1534
+6 Old getByIndex 1520
+5 Old getByIndex 1335
+2 Old getByIndex 1288
+8 Old getByIndex 1336
+
+DIRECT_IO:
+
+8 Recent getByIndex 125291
+4 Recent getByIndex 117374
+5 Recent getByIndex 113250
+2 Recent getByIndex 113755
+1 Recent getByIndex 117925
+3 Recent getByIndex 115313
+6 Recent getByIndex 114545
+7 Recent getByIndex 130025
+4 Old getByIndex 156731
+1 Old getByIndex 156728
+8 Old getByIndex 156736
+3 Old getByIndex 156714
+2 Old getByIndex 156738
+5 Old getByIndex 156742
+6 Old getByIndex 154006
+7 Old getByIndex 156632

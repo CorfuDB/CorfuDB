@@ -28,13 +28,7 @@ import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.object.ViewGenerator;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.util.serializer.ISerializer;
-import org.rocksdb.CompressionType;
-import org.rocksdb.Options;
-import org.rocksdb.RocksDB;
-import org.rocksdb.RocksDBException;
-import org.rocksdb.Statistics;
-import org.rocksdb.StatsLevel;
-import org.rocksdb.WriteOptions;
+import org.rocksdb.*;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -99,6 +93,7 @@ public class DiskBackedCorfuTable<K, V> implements
 
         options.setCreateIfMissing(true);
         options.setCompressionType(CompressionType.LZ4_COMPRESSION);
+        options.setUseDirectReads(true);
 
         return options;
     }
@@ -120,7 +115,6 @@ public class DiskBackedCorfuTable<K, V> implements
                                 @NonNull Options rocksDbOptions,
                                 @NonNull ISerializer serializer,
                                 @Nonnull Index.Registry<K, V> indices) {
-
         this.persistenceOptions = persistenceOptions;
         this.secondaryIndexesAliasToPath = new HashMap<>();
         this.indexToId = new HashMap<>();
