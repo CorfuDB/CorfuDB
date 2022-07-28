@@ -171,7 +171,8 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
                 TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         // Wait the polling period time before verifying sync status (to make sure it was updated)
-        Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + 10));
+        final int time = 10;
+        Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + time));
 
         long remainingEntriesToSend = verifyReplicationStatus(ReplicationStatusVal.SyncType.LOG_ENTRY,
                 LogReplicationMetadata.SyncStatus.ONGOING, LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
