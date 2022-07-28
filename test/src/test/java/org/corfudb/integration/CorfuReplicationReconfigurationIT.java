@@ -130,12 +130,13 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
      */
     @Test
     public void testActiveClusterReset() throws Exception {
-
+        showAllCorfuCommand();
         final int delta = 5;
 
         // (1) Snapshot and Log Entry Sync
         log.debug(">>> (1) Start Snapshot and Log Entry Sync");
         test(1, false, false);
+        showAllCorfuCommand();
 
         ExecutorService writerService = Executors.newSingleThreadExecutor();
 
@@ -170,7 +171,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
                 TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         // Wait the polling period time before verifying sync status (to make sure it was updated)
-        Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + 1));
+        Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + 10));
 
         long remainingEntriesToSend = verifyReplicationStatus(ReplicationStatusVal.SyncType.LOG_ENTRY,
                 LogReplicationMetadata.SyncStatus.ONGOING, LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
