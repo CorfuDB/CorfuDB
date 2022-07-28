@@ -5,15 +5,22 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
+import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
 
+import java.io.File;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -29,6 +36,8 @@ public class CorfuReplicationManager {
     // Keep map of remote cluster ID and the associated log replication runtime (an abstract
     // client to that cluster)
     private final Map<String, CorfuLogReplicationRuntime> remoteClusterToRuntime = new HashMap<>();
+
+    private final Map<String, IClientChannelAdapter> remoteClusterToChannelAdapters = new HashMap<>();
 
     @Setter
     @Getter
@@ -67,6 +76,7 @@ public class CorfuReplicationManager {
     public void startConnection(Set<ClusterDescriptor> connectionEndPoints) {
         for (ClusterDescriptor remoteCluster : connectionEndPoints) {
             try {
+                createConnectionAdapterPerRemoteCluster(remoteCluster);
                 startLogReplicationRuntime(remoteCluster);
             } catch (Exception e) {
                 log.error("Failed to start log replication runtime for remote cluster {}", remoteCluster.getClusterId());
@@ -132,6 +142,8 @@ public class CorfuReplicationManager {
      *
      * @throws InterruptedException
      */
+
+    //Shama: remove the params that is used in createConnectionConfig
     private void connect(ClusterDescriptor remoteCluster) throws InterruptedException {
         try {
             IRetry.build(IntervalRetry.class, () -> {
@@ -141,8 +153,6 @@ public class CorfuReplicationManager {
                             .remoteClusterDescriptor(remoteCluster)
                             .localClusterId(localNodeDescriptor.getClusterId())
                             .replicationConfig(context.getConfig())
-                            .pluginFilePath(pluginFilePath)
-                            .channelContext(context.getChannelContext())
                             .topologyConfigId(topology.getTopologyConfigId())
                             .keyStore(corfuRuntime.getParameters().getKeyStore())
                             .tlsEnabled(corfuRuntime.getParameters().isTlsEnabled())
@@ -151,7 +161,7 @@ public class CorfuReplicationManager {
                             .tsPasswordFile(corfuRuntime.getParameters().getTsPasswordFile())
                             .build();
                     CorfuLogReplicationRuntime replicationRuntime = new CorfuLogReplicationRuntime(parameters,
-                            metadataManager, replicationConfigManager);
+                            metadataManager, replicationConfigManager, remoteClusterToChannelAdapters.get(remoteCluster.getClusterId()));
                     replicationRuntime.start();
                     remoteClusterToRuntime.put(remoteCluster.getClusterId(), replicationRuntime);
                 } catch (Exception e) {
@@ -165,6 +175,27 @@ public class CorfuReplicationManager {
             log.error("Unrecoverable exception when attempting to connect to remote cluster.", e);
             throw e;
         }
+    }
+
+    public void createConnectionAdapterPerRemoteCluster(ClusterDescriptor remoteCluster) {
+        log.info("Plugin :: {}", pluginFilePath);
+        LogReplicationPluginConfig config = new LogReplicationPluginConfig(pluginFilePath);
+        File jar = new File(config.getTransportAdapterJARPath());
+
+        IClientChannelAdapter channelAdapter;
+
+        try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
+            // Instantiate Channel Adapter (external implementation of the channel / transport)
+            Class adapterType = Class.forName(config.getTransportClientClassCanonicalName(), true, child);
+            channelAdapter = (IClientChannelAdapter) adapterType.getDeclaredConstructor(String.class, ClusterDescriptor.class, LogReplicationClientRouter.class)
+                    .newInstance(localNodeDescriptor.getClusterId(), remoteCluster, this);
+            channelAdapter.setChannelContext(context.getChannelContext());
+        } catch(Exception e) {
+            log.error("Fatal error: Failed to initialize transport adapter {}", config.getTransportClientClassCanonicalName(), e);
+            throw new UnrecoverableCorfuError(e);
+        }
+
+        remoteClusterToChannelAdapters.put(remoteCluster.getClusterId(), channelAdapter);
     }
 
     public void startReplication() {

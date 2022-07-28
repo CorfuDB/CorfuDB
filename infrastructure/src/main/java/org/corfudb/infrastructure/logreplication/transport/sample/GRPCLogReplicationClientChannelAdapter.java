@@ -40,13 +40,18 @@ import java.util.stream.Collectors;
 @Slf4j
 public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapter {
 
-    private final Map<String, ManagedChannel> channelMap;
-    private final Map<String, LogReplicationChannelBlockingStub> blockingStubMap;
-    private final Map<String, LogReplicationChannelStub> asyncStubMap;
+    private static final Map<String, ManagedChannel> fsmIdTochannelMap = new ConcurrentHashMap<>();
+    private static final Map<ManagedChannel, Integer> channelToNumClients = new ConcurrentHashMap<>();
+
+    // fsmId to stub
+    private final Map<String, LogReplicationChannelBlockingStub> fsmIdToblockingStub;
+    private final Map<String, LogReplicationChannelStub> fsmIdToAsyncStubMap;
     private final ExecutorService executorService;
 
     private final ConcurrentMap<Long, StreamObserver<RequestMsg>> requestObserverMap;
     private final ConcurrentMap<Long, StreamObserver<ResponseMsg>> responseObserverMap;
+
+    private int MAX_CLIENTS_THRESHOLD = 4;
 
     /** A {@link CompletableFuture} which is completed when a connection to a remote leader is set,
      * and  messages can be sent to the remote node.
@@ -60,18 +65,18 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
             ClusterDescriptor remoteClusterDescriptor,
             LogReplicationClientRouter adapter) {
         super(localClusterId, remoteClusterDescriptor, adapter);
-
-        this.channelMap = new HashMap<>();
-        this.blockingStubMap = new HashMap<>();
-        this.asyncStubMap = new HashMap<>();
+        this.fsmIdToblockingStub = new HashMap<>();
+        this.fsmIdToAsyncStubMap = new HashMap<>();
         this.executorService = Executors.newSingleThreadExecutor();
         this.connectionFuture = new CompletableFuture<>();
         this.requestObserverMap = new ConcurrentHashMap<>();
         this.responseObserverMap = new ConcurrentHashMap<>();
     }
 
+    // Shama: every FSM uses this. We need to figure out if we need a new channel or if we can use the existing channel.
     @Override
     public void connectAsync() {
+        // find if there exists a channel which can be multiplexed.
         this.executorService.submit(() ->
         getRemoteClusterDescriptor().getNodesDescriptors().forEach(node -> {
             try {
@@ -80,14 +85,55 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 ManagedChannel channel = ManagedChannelBuilder.forAddress(nodeLocator.getHost(), nodeLocator.getPort())
                         .usePlaintext()
                         .build();
-                channelMap.put(node.getNodeId(), channel);
-                blockingStubMap.put(node.getNodeId(), LogReplicationChannelGrpc.newBlockingStub(channel));
-                asyncStubMap.put(node.getNodeId(), LogReplicationChannelGrpc.newStub(channel));
+                fsmIdTochannelMap.put(node.getNodeId(), channel);
+                fsmIdToblockingStub.put(node.getNodeId(), LogReplicationChannelGrpc.newBlockingStub(channel));
+                fsmIdToAsyncStubMap.put(node.getNodeId(), LogReplicationChannelGrpc.newStub(channel));
                 onConnectionUp(node.getNodeId());
             } catch (Exception e) {
                 onConnectionDown(node.getNodeId());
             }
         }));
+    }
+
+//    Shama : the 2nd param is just the place holder
+    private void connectAsync(String fsmId, boolean removeThis) {
+
+
+        Optional<Map.Entry<ManagedChannel, Integer>> channelToIntegerEntry = channelToNumClients.entrySet().stream()
+                .filter(e -> e.getValue() < MAX_CLIENTS_THRESHOLD).findFirst();
+
+        ManagedChannel channel;
+        if (channelToIntegerEntry.isPresent()) {
+            channel = channelToIntegerEntry.get().getKey();
+            //multiplexing
+            fsmIdToblockingStub.put(fsmId, LogReplicationChannelGrpc.newBlockingStub(channel));
+            fsmIdToAsyncStubMap.put(fsmId, LogReplicationChannelGrpc.newStub(channel));
+
+            channelToNumClients.put(channel, channelToNumClients.get(channel) + 1);
+            fsmIdTochannelMap.put(fsmId, channel);
+        } else {
+            createChannel(fsmId);
+        }
+
+    }
+
+    private void createChannel(String fsmId) {
+        getRemoteClusterDescriptor().getNodesDescriptors().forEach(node -> {
+            try {
+                NodeLocator nodeLocator = NodeLocator.parseString(node.getEndpoint());
+                log.info("GRPC create connection to node{}@{}:{}", node.getNodeId(), nodeLocator.getHost(), nodeLocator.getPort());
+                ManagedChannel channel = ManagedChannelBuilder.forAddress(nodeLocator.getHost(), nodeLocator.getPort())
+                        .useTransportSecurity()  //This is TLS
+                        .build();
+                channelToNumClients.put(channel, channelToNumClients.get(channel) + 1);
+                fsmIdTochannelMap.put(fsmId, channel);
+                fsmIdToblockingStub.put(fsmId, LogReplicationChannelGrpc.newBlockingStub(channel));
+                fsmIdToAsyncStubMap.put(fsmId, LogReplicationChannelGrpc.newStub(channel));
+                onConnectionUp(node.getNodeId());
+            } catch (Exception e) {
+                onConnectionDown(node.getNodeId());
+            }
+        });
     }
 
     @Override
@@ -109,9 +155,9 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
             try {
                 log.info("GRPC create connection to node {}@{}:{}", nodeId, nodeLocator.getHost(), nodeLocator.getPort());
                 ManagedChannel channel = ManagedChannelBuilder.forAddress(nodeLocator.getHost(), nodeLocator.getPort()).usePlaintext().build();
-                channelMap.put(nodeId, channel);
-                blockingStubMap.put(nodeId, LogReplicationChannelGrpc.newBlockingStub(channel));
-                asyncStubMap.put(nodeId, LogReplicationChannelGrpc.newStub(channel));
+                fsmIdTochannelMap.put(nodeId, channel);
+                fsmIdToblockingStub.put(nodeId, LogReplicationChannelGrpc.newBlockingStub(channel));
+                fsmIdToAsyncStubMap.put(nodeId, LogReplicationChannelGrpc.newStub(channel));
                 onConnectionUp(nodeId);
             } catch (Exception e) {
                 onConnectionDown(nodeId);
@@ -140,8 +186,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
     private void queryLeadership(String nodeId, RequestMsg request) {
         try {
-            if (blockingStubMap.containsKey(nodeId)) {
-                ResponseMsg response = blockingStubMap.get(nodeId).withWaitForReady().queryLeadership(request);
+            if (fsmIdToblockingStub.containsKey(nodeId)) {
+                ResponseMsg response = fsmIdToblockingStub.get(nodeId).withWaitForReady().queryLeadership(request);
                 receive(response);
             } else {
                 log.warn("Stub not found for remote endpoint {}. Dropping message of type {}",
@@ -156,8 +202,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
     private void requestMetadata(String nodeId, RequestMsg request) {
         try {
-            if (blockingStubMap.containsKey(nodeId)) {
-                ResponseMsg response = blockingStubMap.get(nodeId).withWaitForReady().negotiate(request);
+            if (fsmIdToblockingStub.containsKey(nodeId)) {
+                ResponseMsg response = fsmIdToblockingStub.get(nodeId).withWaitForReady().negotiate(request);
                 receive(response);
             } else {
                 log.warn("Stub not found for remote endpoint {}. Dropping message of type {}",
@@ -204,8 +250,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
             log.info("Initiate stub for replication");
 
-            if(asyncStubMap.containsKey(nodeId)) {
-                StreamObserver<RequestMsg> requestObserver = asyncStubMap.get(nodeId).replicate(responseObserver);
+            if(fsmIdToAsyncStubMap.containsKey(nodeId)) {
+                StreamObserver<RequestMsg> requestObserver = fsmIdToAsyncStubMap.get(nodeId).replicate(responseObserver);
                 requestObserverMap.put(requestId, requestObserver);
             } else {
                 log.error("No stub found for remote node {}@{}. Message dropped type={}",
@@ -224,7 +270,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
     @Override
     public void stop() {
-        channelMap.values().forEach(channel -> {
+        fsmIdTochannelMap.values().forEach(channel -> {
             try {
                 channel.shutdownNow();
                 channel.awaitTermination(10, TimeUnit.MILLISECONDS);

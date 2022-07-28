@@ -129,7 +129,7 @@ public class LogReplicationClientRouter implements IClientRouter {
      * @param runtimeFSM runtime state machine, insert connection related events
      */
     public LogReplicationClientRouter(LogReplicationRuntimeParameters parameters,
-                                      CorfuLogReplicationRuntime runtimeFSM) {
+                                      CorfuLogReplicationRuntime runtimeFSM, IClientChannelAdapter channelAdapter) {
         this.remoteClusterDescriptor = parameters.getRemoteClusterDescriptor();
         this.remoteClusterId = remoteClusterDescriptor.getClusterId();
         this.parameters = parameters;
@@ -141,6 +141,7 @@ public class LogReplicationClientRouter implements IClientRouter {
         this.requestID = new AtomicLong();
         this.outstandingRequests = new ConcurrentHashMap<>();
         this.remoteLeaderConnectionFuture = new CompletableFuture<>();
+        this.channelAdapter = channelAdapter;
     }
 
     // ------------------- IClientRouter Interface ----------------------
@@ -426,20 +427,13 @@ public class LogReplicationClientRouter implements IClientRouter {
      * Connect to remote cluster through the specified channel adapter
      */
     public void connect() {
-        LogReplicationPluginConfig config = new LogReplicationPluginConfig(parameters.getPluginFilePath());
-        File jar = new File(config.getTransportAdapterJARPath());
-
-        try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
-            // Instantiate Channel Adapter (external implementation of the channel / transport)
-            Class adapterType = Class.forName(config.getTransportClientClassCanonicalName(), true, child);
-            channelAdapter = (IClientChannelAdapter) adapterType.getDeclaredConstructor(String.class, ClusterDescriptor.class, LogReplicationClientRouter.class)
-                    .newInstance(parameters.getLocalClusterId(), remoteClusterDescriptor, this);
-            channelAdapter.setChannelContext(parameters.getChannelContext());
+        try {
+            String name = runtimeFSM.name;
             log.info("Connect asynchronously to remote cluster... ");
             // When connection is established to the remote leader node, the remoteLeaderConnectionFuture will be completed.
             channelAdapter.connectAsync();
         } catch (Exception e) {
-            log.error("Fatal error: Failed to initialize transport adapter {}", config.getTransportClientClassCanonicalName(), e);
+            log.error("connectAsync error {}", e);
             throw new UnrecoverableCorfuError(e);
         }
     }

@@ -3,7 +3,6 @@ syntax = "proto3";
 package org.corfudb.infrastructure.logreplication;
 option java_package = "org.corfudb.infrastructure.logreplication";
 
-import "google/protobuf/any.proto";
 import "service/corfu_message.proto";
 
 

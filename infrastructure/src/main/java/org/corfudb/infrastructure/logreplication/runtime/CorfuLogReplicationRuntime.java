@@ -18,6 +18,7 @@ import org.corfudb.infrastructure.logreplication.runtime.fsm.StoppedState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.UnrecoverableState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.VerifyingRemoteLeaderState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.WaitingForConnectionsState;
+import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 
 import java.util.HashMap;
@@ -158,14 +159,16 @@ public class CorfuLogReplicationRuntime {
     @Getter
     public final String remoteClusterId;
 
+    public final String name;
+
     /**
      * Default Constructor
      */
     public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters, LogReplicationMetadataManager metadataManager,
-                                      LogReplicationConfigManager replicationConfigManager) {
+                                      LogReplicationConfigManager replicationConfigManager, IClientChannelAdapter channelAdapter) {
         this.remoteClusterId = parameters.getRemoteClusterDescriptor().getClusterId();
         this.metadataManager = metadataManager;
-        this.router = new LogReplicationClientRouter(parameters, this);
+        this.router = new LogReplicationClientRouter(parameters, this, channelAdapter);
         this.router.addClient(new LogReplicationHandler());
         this.sourceManager = new LogReplicationSourceManager(parameters, new LogReplicationClient(router, remoteClusterId),
                 metadataManager, replicationConfigManager);
@@ -179,6 +182,8 @@ public class CorfuLogReplicationRuntime {
 
         initializeStates();
         this.state = states.get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY);
+
+        this.name = "runtimeFsm-" + remoteClusterId + "-replicationModel-clientId";
 
         log.info("Log Replication Runtime State Machine initialized");
     }
