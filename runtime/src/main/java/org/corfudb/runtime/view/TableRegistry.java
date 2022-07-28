@@ -38,9 +38,12 @@ import org.corfudb.util.serializer.ProtobufSerializer;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -114,6 +117,10 @@ public class TableRegistry {
      */
     @Getter
     private final CorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> protobufDescriptorTable;
+
+    /**
+     * Spawn the local client checkpointer
+     */
 
     public TableRegistry(CorfuRuntime runtime) {
         this.runtime = runtime;
@@ -723,6 +730,69 @@ public class TableRegistry {
         return Optional.ofNullable(this.registryTable.get(tableName))
                 .map(CorfuRecord::getPayload)
                 .orElse(null);
+    }
+
+    /**
+     * Returns all the tables that are already opened by the runtime
+     *
+     * @return List of opened Tables
+     */
+    public List<Table<Message, Message, Message>> getAllOpenTables() {
+        List<Table<Message, Message, Message>> allTables = new ArrayList<>(this.tableMap.values());
+        try {
+            allTables.add(wrapInternalTable(REGISTRY_TABLE_NAME, TableName.class,
+                    TableDescriptors.class, TableMetadata.class, TableOptions.<TableName, TableDescriptors>builder().build()));
+            allTables.add(wrapInternalTable(PROTOBUF_DESCRIPTOR_TABLE_NAME, ProtobufFileName.class,
+                    ProtobufFileDescriptor.class, TableMetadata.class, TableOptions.<TableName, TableDescriptors>builder().build()));
+        } catch (Exception e) {
+            log.warn("Unable to wrap into Table object due to {}. StackTrace: {}", e.getMessage(), e.getStackTrace());
+        }
+        return allTables;
+    }
+
+    private <K extends Message, V extends Message, M extends Message>
+    Table<Message, Message, Message> wrapInternalTable(@Nonnull String tableName,
+                                                       @Nonnull Class<K> kClass,
+                                                       @Nonnull Class<V> vClass,
+                                                       @Nullable Class<M> mClass,
+                                                       @Nonnull final TableOptions tableOptions)
+            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+        ICorfuVersionPolicy.VersionPolicy versionPolicy = ICorfuVersionPolicy.DEFAULT;
+
+        Supplier<StreamingMap<K, V>> mapSupplier = StreamingMapDecorator::new;
+        if (tableOptions.getPersistentDataPath().isPresent()) {
+            versionPolicy = ICorfuVersionPolicy.MONOTONIC;
+            mapSupplier = () -> new PersistedStreamingMap<>(
+                    tableOptions.getPersistentDataPath().get(),
+                    PersistedStreamingMap.getPersistedStreamingMapOptions(),
+                    protobufSerializer, this.runtime);
+        }
+
+        CorfuOptions.SchemaOptions tableSchemaOptions;
+        if (tableOptions.getSchemaOptions() != null) {
+            tableSchemaOptions = tableOptions.getSchemaOptions();
+        } else {
+            tableSchemaOptions = CorfuOptions.SchemaOptions.getDefaultInstance();
+        }
+        V defaultValueMessage = (V) vClass.getMethod("getDefaultInstance").invoke(null);
+        M defaultMetadataMessage = (M) mClass.getMethod("getDefaultInstance").invoke(null);
+
+        return (Table<Message, Message, Message>) new Table<K, V, M>(
+                TableParameters.<K, V, M>builder()
+                        .namespace(CORFU_SYSTEM_NAMESPACE)
+                        .fullyQualifiedTableName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, tableName))
+                        .kClass(kClass)
+                        .vClass(vClass)
+                        .mClass(mClass)
+                        .valueSchema(defaultValueMessage)
+                        .metadataSchema(defaultMetadataMessage)
+                        .schemaOptions(tableSchemaOptions)
+                        .build(),
+                this.runtime,
+                this.protobufSerializer,
+                mapSupplier,
+                versionPolicy,
+                new HashSet<>(Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId())));
     }
 
     /**

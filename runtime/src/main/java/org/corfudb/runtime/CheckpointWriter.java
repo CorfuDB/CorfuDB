@@ -22,7 +22,6 @@ import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
-import org.corfudb.util.serializer.ProtobufSerializer;
 import org.corfudb.util.serializer.Serializers;
 
 import java.nio.ByteBuffer;
@@ -32,6 +31,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiConsumer;
@@ -136,13 +136,17 @@ public class CheckpointWriter<T extends StreamingMap> {
      *
      * @return Token at which the snapshot for this checkpoint was taken.
      */
-    public Token appendCheckpoint() {
+    public Token appendCheckpoint(Optional<LivenessUpdater> livenessUpdater) {
         // We enforce a NO_OP entry for every checkpoint, i.e., a hole with backpointer map info,
         // to materialize the stream up to this point (no future sequencer regression) and in addition ensure
         // log unit address maps reflect the latest update to the stream preventing tail regression in the
         // event of sequencer failover (if for instance the last update to the stream was a hole).
         Token snapshot = forceNoOpEntry();
-        return appendCheckpoint(snapshot);
+        return appendCheckpoint(snapshot, livenessUpdater);
+    }
+
+    public Token appendCheckpoint() {
+        return appendCheckpoint(Optional.empty());
     }
 
     /**
@@ -153,7 +157,7 @@ public class CheckpointWriter<T extends StreamingMap> {
      *  @param snapshotTimestamp snapshot at which the checkpoint is taken.
      *  */
     @VisibleForTesting
-    public Token appendCheckpoint(Token snapshotTimestamp) {
+    public Token appendCheckpoint(Token snapshotTimestamp, Optional<LivenessUpdater> livenessUpdater) {
         long start = System.currentTimeMillis();
 
         rt.getObjectsView().TXBuild()
@@ -163,7 +167,7 @@ public class CheckpointWriter<T extends StreamingMap> {
                 .begin();
 
         log.info("appendCheckpoint: Started checkpoint for {} at snapshot {}", streamId, snapshotTimestamp);
-        
+
         try (Stream<Map.Entry> entries = this.map.entryStream()) {
             // A checkpoint writer will do two accesses one to obtain the object
             // vlo version and to get a shallow copy of the entry set
@@ -171,6 +175,9 @@ public class CheckpointWriter<T extends StreamingMap> {
             // stream by the time of checkpointing) is defined by the stream's tail instead of the stream's version,
             // as the latter discards holes for resolution, hence if last address is a hole it would diverge
             // from the stream address space maintained by the sequencer.
+
+            livenessUpdater.ifPresent(LivenessUpdater::notifyOnSyncComplete);
+
             startCheckpoint(snapshotTimestamp);
             int entryCount = appendObjectState(entries);
             finishCheckpoint();

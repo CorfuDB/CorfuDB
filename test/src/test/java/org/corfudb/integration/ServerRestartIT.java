@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -702,12 +703,12 @@ public class ServerRestartIT extends AbstractIT {
             // Checkpoint Writer 2
             CheckpointWriter cpw2 = new CheckpointWriter(r, CorfuRuntime.getStreamID("test"),
                     "checkpointer-2", corfuTable1);
-            Token cp2Token = cpw2.appendCheckpoint(new Token(0, snapshotAddress2 - 1));
+            Token cp2Token = cpw2.appendCheckpoint(new Token(0, snapshotAddress2 - 1), Optional.empty());
 
             // Checkpoint Writer 1
             CheckpointWriter cpw1 = new CheckpointWriter(r, CorfuRuntime.getStreamID("test"),
                     "checkpointer-1", corfuTable1);
-            cpw1.appendCheckpoint(new Token(0, snapshotAddress1 - 1));
+            cpw1.appendCheckpoint(new Token(0, snapshotAddress1 - 1), Optional.empty());
 
             // Trim @snapshotAddress=15 (Checkpoint Writer 2)
             r.getAddressSpaceView().prefixTrim(cp2Token);

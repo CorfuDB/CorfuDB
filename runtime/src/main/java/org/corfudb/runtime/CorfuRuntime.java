@@ -313,6 +313,16 @@ public class CorfuRuntime {
 
         // endregion
 
+        /**
+         * Default client name in case the client chooses to remain anonymous.
+         */
+        String clientName = "";
+
+        /**
+         * How often should the local client checkpointer run? 0 disables it completely.
+         */
+        long checkpointTriggerFreqMillis = 0;
+
         /*
          * The period at which the runtime will run garbage collection
          */
@@ -428,6 +438,8 @@ public class CorfuRuntime {
             private int streamingSchedulerPollBatchSize = 25;
             private int streamingSchedulerPollThreshold = 5;
             private boolean cacheWrites = true;
+            private String clientName = "CorfuClient";
+            private long checkpointTriggerFreqMillis = 0;
 
             public CorfuRuntimeParametersBuilder streamingWorkersThreadPoolSize(int streamingWorkersThreadPoolSize) {
                 this.streamingWorkersThreadPoolSize = streamingWorkersThreadPoolSize;
@@ -675,6 +687,17 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder clientName(String clientName) {
+                this.clientName = clientName;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder checkpointTriggerFreqMillis(
+                    long checkpointTriggerFreqMillis) {
+                this.checkpointTriggerFreqMillis = checkpointTriggerFreqMillis;
+                return this;
+            }
+
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder runtimeGCPeriod(Duration runtimeGCPeriod) {
                 this.runtimeGCPeriod = runtimeGCPeriod;
                 return this;
@@ -774,6 +797,8 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setStreamingSchedulerPollBatchSize(streamingSchedulerPollBatchSize);
                 corfuRuntimeParameters.setStreamingSchedulerPollThreshold(streamingSchedulerPollThreshold);
                 corfuRuntimeParameters.setCacheWrites(cacheWrites);
+                corfuRuntimeParameters.setClientName(clientName);
+                corfuRuntimeParameters.setCheckpointTriggerFreqMillis(checkpointTriggerFreqMillis);
                 return corfuRuntimeParameters;
             }
         }

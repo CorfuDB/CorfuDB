@@ -87,7 +87,6 @@ public class ServerContext implements AutoCloseable {
     // Corfu Replication Server
     public static final String PLUGIN_CONFIG_FILE_PATH = "../resources/corfu_plugin_config.properties";
 
-
     /** The node Id, stored as a base64 string. */
     private static final String NODE_ID = "NODE_ID";
 
@@ -192,6 +191,14 @@ public class ServerContext implements AutoCloseable {
     public int getManagementServerThreadCount() {
         Optional<String> threadCount = getServerConfig("--management-server-threads");
         return threadCount.map(Integer::parseInt).orElse(4);
+    }
+
+    public Optional<String> getCompactorConfig() {
+        return getServerConfig("--compactor-config");
+    }
+
+    public Optional<String> getCompactorScriptPath() {
+        return getServerConfig("--compactor-script");
     }
 
     public String getPluginConfigFilePath() {
@@ -333,6 +340,10 @@ public class ServerContext implements AutoCloseable {
      * @return an instance of {@link CorfuRuntimeParameters}
      */
     public CorfuRuntimeParameters getManagementRuntimeParameters() {
+        int checkpointTriggerFreqMs = 0;
+        if (serverConfig.get("--compaction-trigger-freq-ms") != null) {
+            checkpointTriggerFreqMs = Integer.parseInt((String)serverConfig.get("--compaction-trigger-freq-ms"));
+        }
         return CorfuRuntime.CorfuRuntimeParameters.builder()
                 .priorityLevel(PriorityLevel.HIGH)
                 .nettyEventLoop(clientGroup)
@@ -346,6 +357,8 @@ public class ServerContext implements AutoCloseable {
                 .usernameFile((String) serverConfig.get("--sasl-plain-text-username-file"))
                 .passwordFile((String) serverConfig.get("--sasl-plain-text-password-file"))
                 .bulkReadSize(Integer.parseInt((String) serverConfig.get("--batch-size")))
+                .clientName("CorfuServer")
+                .checkpointTriggerFreqMillis(checkpointTriggerFreqMs)
                 .build();
     }
 

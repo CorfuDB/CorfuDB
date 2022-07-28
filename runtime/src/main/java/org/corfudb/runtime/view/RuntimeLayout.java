@@ -101,12 +101,11 @@ public class RuntimeLayout {
      */
     private IClient getClient(final Class<? extends IClient> clientClass,
                               final String endpoint) {
-        return senderClientMap.compute(clientClass, (senderClass, stringEntryMap) -> {
+        IClient returnClient = senderClientMap.compute(clientClass, (senderClass, stringEntryMap) -> {
             Map<String, IClient> endpointClientMap = stringEntryMap;
             if (endpointClientMap == null) {
                 endpointClientMap = new HashMap<>();
             }
-
             endpointClientMap.computeIfAbsent(endpoint, s -> {
                 try {
                     Constructor<? extends IClient> ctor =
@@ -122,6 +121,8 @@ public class RuntimeLayout {
             });
             return endpointClientMap;
         }).get(endpoint);
+
+        return returnClient;
     }
 
     public BaseClient getBaseClient(String endpoint) {

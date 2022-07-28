@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.BiConsumer;
@@ -1245,11 +1246,11 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
         // Checkpoint Writer 2 @15
         CheckpointWriter cpw2 = new CheckpointWriter(r, CorfuRuntime.getStreamID(streamA), "checkpointer-2", mA);
-        Token cp2Token = cpw2.appendCheckpoint(new Token(0, snapshotAddress2 - 1));
+        Token cp2Token = cpw2.appendCheckpoint(new Token(0, snapshotAddress2 - 1), Optional.empty());
 
         // Checkpoint Writer 1 @10
         CheckpointWriter cpw1 = new CheckpointWriter(r, CorfuRuntime.getStreamID(streamA), "checkpointer-1", mA);
-        cpw1.appendCheckpoint(new Token(0, snapshotAddress1 - 1));
+        cpw1.appendCheckpoint(new Token(0, snapshotAddress1 - 1), Optional.empty());
 
         // Trim @snapshotAddress=15
         r.getAddressSpaceView().prefixTrim(cp2Token);
