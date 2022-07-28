@@ -214,6 +214,14 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         runtime.shutdown();
     }
 
+    public void shutdownServer(int port) {
+        getServer(port).getLogUnitServer().shutdown();
+        getServer(port).getManagementServer().shutdown();
+        getServer(port).getLayoutServer().shutdown();
+        getServer(port).getSequencerServer().shutdown();
+        getServer(port).getBaseServer().shutdown();
+    }
+
     /**
      * Add a server to a specific port, using the given ServerContext.
      * @param port

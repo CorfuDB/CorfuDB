@@ -145,7 +145,7 @@ public abstract class AbstractTransactionalContext implements
         this.transaction = transaction;
         this.startTime = System.currentTimeMillis();
         this.parentContext = TransactionalContext.getCurrentContext();
-        AbstractTransactionalContext.log.debug("TXBegin[{}]", this);
+        AbstractTransactionalContext.log.trace("TXBegin[{}]", this);
     }
 
     protected <T extends ICorfuSMR<T>> ICorfuSMRSnapshotProxy<T> getAndCacheSnapshotProxy(ICorfuSMRProxyInternal<T> proxy, long ts) {

@@ -8,8 +8,11 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.Queue;
+import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.CorfuGuidGenerator;
@@ -149,6 +152,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
             this.guidGenerator = null;
         }
     }
+
 
     public Table(@Nonnull final TableParameters<K, V, M> tableParameters,
                  @Nonnull final CorfuRuntime corfuRuntime,
@@ -481,5 +485,15 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                         entry.getValue().getPayload(),
                         entry.getValue().getMetadata()))
                 .collect(Collectors.toList());
+    }
+
+    public CheckpointWriter<ICorfuTable<?, ?>> getCheckpointWriter(CorfuRuntime rt, String author) {
+        ICorfuSMRProxyInternal<?> tableProxy = ((ICorfuSMRProxyInternal<?>) ((ICorfuSMR<?>)this.corfuTable).getCorfuSMRProxy());
+        ISerializer serializer = tableProxy.getSerializer();
+        UUID streamId = tableProxy.getStreamID();
+
+        CheckpointWriter<ICorfuTable<?, ?>> cpw = new CheckpointWriter<>(rt, streamId, author, this.corfuTable);
+        cpw.setSerializer(serializer);
+        return cpw;
     }
 }
