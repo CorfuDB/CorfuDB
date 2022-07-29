@@ -153,10 +153,12 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         // (4) Sleep Interval so writes keep going through, while active is down
         log.debug(">>> (4) Wait for some time");
         Sleep.sleepUninterruptibly(Duration.ofSeconds(SLEEP_DURATION));
+        showAllCorfuCommand();
 
         // (5) Restart Active Log Replicator
         log.debug(">>> (5) Restart Active Node");
         startActiveLogReplicator();
+        showAllCorfuCommand();
 
         // (6) Verify Data on Standby after Restart
         log.debug(">>> (6) Verify Data on Standby");
@@ -204,7 +206,12 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
         // (9) Stop active LR again, so server restarts from Log Entry Sync, with no actual deltas (as there is no new data)
         // and verify remainingEntriesToSend is still '0'
+        showAllCorfuCommand();
+
         stopActiveLogReplicator();
+        Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + delta));
+        showAllCorfuCommand();
+
         startActiveLogReplicator();
 
         // Wait the polling period time and verify sync status again (to make sure it was not erroneously updated)
