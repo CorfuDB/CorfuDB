@@ -70,6 +70,12 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
      * Opens all log files one by one, accesses and prints log entry data for each Corfu log file.
      */
     public void printLogEntryData() {
+        // Add the following lines when the printLogEntryData() method begins...
+        CorfuRuntime runtimeWithOnlyProtoSerializer = CorfuRuntime
+                .fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build());
+        runtimeWithOnlyProtoSerializer.getSerializers()
+                .registerSerializer(DynamicProtobufSerializer.createProtobufSerializer());
+
         System.out.println("Analyzing log information:");
 
         String[] extension = {"log"};
@@ -108,25 +114,31 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                     LogEntry entry = StreamLogFiles.parseEntry(null, fileChannel, metadata, file.getAbsolutePath());
                     //System.out.println(entry);
 
-                    try {
-                        //System.out.println(channelOffset);
-                        if(metadata != null && entry != null) {
-                            // convert the LogEntry to LogData to access getPayload
-                            LogData data = StreamLogFiles.getLogData(entry);
-                            //System.out.println(data.getData());
+                    //System.out.println(channelOffset);
+                    if(metadata != null && entry != null) {
+                        // convert the LogEntry to LogData to access getPayload
+                        LogData data = StreamLogFiles.getLogData(entry);
+                        //System.out.println(data.getData());
+                        //Object modifiedData = data.getPayload(null);
 
-                            // filter the data
-                            // if it belongs to the CorfuSystem$RegistryTable or CorfuSystem$ProtobufDescriptorTable or its checkpoint streams process it
-                            if(data.containsStream(registryTableStreamId) || data.containsStream(protobufDescriptorStreamId)
-                                    || data.containsStream(registryTableCheckpointStream) || data.containsStream(protobufDescriptorCheckpointStream)) {
-                                // call get payload to decompress and deserialize data
-                                Object modifiedData = data.getPayload(null);
+                        // filter the data
+                        // if it belongs to the CorfuSystem$RegistryTable or CorfuSystem$ProtobufDescriptorTable or its checkpoint streams process it
+                        if(data.containsStream(registryTableStreamId) || data.containsStream(protobufDescriptorStreamId)
+                                || data.containsStream(registryTableCheckpointStream) || data.containsStream(protobufDescriptorCheckpointStream)) {
+                            // call get payload to decompress and deserialize data
+
+                            try {
+                                Object modifiedData = data.getPayload(runtimeWithOnlyProtoSerializer);
                                 System.out.println(modifiedData);
+                            } catch (IndexOutOfBoundsException e) {
+                                System.out.println("Index out of bounds");
                             }
 
+
                         }
-                    } catch(Exception e) {
+
                     }
+
 
 
                 }
