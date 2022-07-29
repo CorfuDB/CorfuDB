@@ -11,6 +11,7 @@ import org.corfudb.infrastructure.log.AddressMetaData;
 import org.corfudb.infrastructure.log.LogFormat;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.CorfuProtocolCommon;
+import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
@@ -91,7 +92,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
 
         UUID registryTableCheckpointStream = CorfuRuntime.getCheckpointStreamIdFromId(registryTableStreamId);
         UUID protobufDescriptorCheckpointStream = CorfuRuntime.getCheckpointStreamIdFromId(protobufDescriptorStreamId);
-
+        int count = 0;
         for (File file : files) {
             try (FileChannel fileChannel = FileChannel.open(file.toPath())) {
                 // set the file channel's position back to 0
@@ -126,19 +127,14 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                         if(data.containsStream(registryTableStreamId) || data.containsStream(protobufDescriptorStreamId)
                                 || data.containsStream(registryTableCheckpointStream) || data.containsStream(protobufDescriptorCheckpointStream)) {
                             // call get payload to decompress and deserialize data
-
-                            try {
+                            if(data.getType() == DataType.DATA) {
                                 Object modifiedData = data.getPayload(runtimeWithOnlyProtoSerializer);
                                 System.out.println(modifiedData);
-                            } catch (IndexOutOfBoundsException e) {
-                                System.out.println("Index out of bounds");
                             }
-
 
                         }
 
                     }
-
 
 
                 }
@@ -146,9 +142,8 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
             } catch (IOException e) {
                 throw new IllegalStateException("Invalid header: " + file.getAbsolutePath(), e);
             }
-
-
         }
+        System.out.println("Finished analyzing log information.");
     }
 
     /**
