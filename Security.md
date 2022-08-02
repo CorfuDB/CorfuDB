@@ -112,6 +112,40 @@ You can use the ```keytool -importcert``` / ```keytool -exportcert``` commands t
 When using self-signed certificates, the trust store should have the certificates of all other endpoints.
 When using certificates signed by a certificate authority, only the certificate of the certificate authority is sufficient.
 
+### Creating certificates for different Ciphers
+
+We currently support these two ciphers -
+```
+TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, 
+TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+```
+
+The following commands can be used to work with keystore and certificates.
+
+```bash
+# Creating RSA Keystore.
+keytool -genkeypair -keystore server_rsa.jks -keyalg RSA -keysize 2048 -alias server_rsa -storepass test123 -keypass test123 -dname "cn=Corfu, ou=NSBU, o=VMware, l=Palo Alto, s=CA c=US" -validity 2000000 
+keytool -genkeypair -keystore runtime_rsa.jks -keyalg RSA -keysize 2048 -alias runtime_rsa -storepass test123 -keypass test123 -dname "cn=Corfu, ou=NSBU, o=VMware, l=Palo Alto, s=CA c=US" -validity 2000000 
+
+# Creating EC Keystore.
+keytool -genkeypair -groupname secp384r1 -sigalg SHA384withECDSA -keyalg EC -dname "cn=Corfu, ou=NSBU, o=VMware, l=Palo Alto, s=CA c=US" -alias server_ecdsa -keypass test123 -keystore server_ecdsa.jks -storetype jks -storepass test123 -validity 2000000 
+keytool -genkeypair -groupname secp384r1 -sigalg SHA384withECDSA -keyalg EC -dname "cn=Corfu, ou=NSBU, o=VMware, l=Palo Alto, s=CA c=US" -alias runtime_ecdsa -keypass test123 -keystore runtime_ecdsa.jks -storetype jks  -storepass test123 -validity 2000000
+
+# Saving Certs (OPTIONAL: We only need keystore/truststore, not the certs).
+keytool -exportcert -alias server_ecdsa -file server_ecdsa.cert -keystore server_ecdsa.jks -storepass test123 -storetype jks -rfc
+keytool -exportcert -alias runtime_ecdsa -file runtime_ecdsa.cert -keystore runtime_ecdsa.jks -storepass test123 -storetype jks -rfc
+keytool -exportcert -alias server_rsa -file server_rsa.cert -keystore server_rsa.jks -storepass test123 -storetype jks -rfc
+keytool -exportcert -alias runtime_rsa -file runtime_rsa.cert -keystore runtime_rsa.jks -storepass test123 -storetype jks -rfc
+
+# Importing certs from pre-generated keystore into new combined keystore.
+# Server RSA and ECDSA
+keytool -importkeystore -destkeystore server_rsa_ecdsa.jks -srcstoretype jks -deststoretype jks -srcstorepass test123 -deststorepass test123 -srckeystore server_rsa.jks
+keytool -importkeystore -destkeystore server_rsa_ecdsa.jks -srcstoretype jks -deststoretype jks -srcstorepass test123 -deststorepass test123 -srckeystore server_ecdsa.jks
+# Runtime RSA and ECDSA
+keytool -importkeystore -destkeystore runtime_rsa_ecdsa.jks -srcstoretype jks -deststoretype jks -srcstorepass test123 -deststorepass test123 -srckeystore runtime_rsa.jks
+keytool -importkeystore -destkeystore runtime_rsa_ecdsa.jks -srcstoretype jks -deststoretype jks -srcstorepass test123 -deststorepass test123 -srckeystore runtime_ecdsa.jks
+```
+
 ### TLS Mutual Authentication
 
 TLS mutual authentication can be enabled on ```corfu_server``` using the ```-b``` option. By default, mutual authentication is disabled, i.e: the clients/runtimes are not authenticated by corfu_server via TLS.
