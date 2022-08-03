@@ -3,12 +3,10 @@ package org.corfudb.runtime.object.transactions;
 import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
 
-import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;

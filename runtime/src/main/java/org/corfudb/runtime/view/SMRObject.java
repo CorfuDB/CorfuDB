@@ -170,6 +170,7 @@ public class SMRObject<T extends ICorfuSMR<T>> {
                                                 oid,
                                                 objectSerializer.getClass().getSimpleName());
                                     }
+                                    log.info("Added SMRObject {} to objectCache", oid);
                                     return result;
                                 } catch (Exception ex) {
                                     throw new UnrecoverableCorfuError(ex);

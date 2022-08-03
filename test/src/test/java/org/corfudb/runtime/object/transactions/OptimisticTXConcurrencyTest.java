@@ -4,10 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
 
 import java.util.ArrayList;
-import java.util.Map;
 import java.util.UUID;
 
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -109,7 +107,7 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
 
         final int nmaps = 2;
         for (int i = 0; i < nmaps; i++)
-            maps.add( (CorfuTable<Integer, String>) instantiateCorfuObject(
+            maps.add( (ICorfuTable<Integer, String>) instantiateCorfuObject(
                     new TypeToken<PersistentCorfuTable<Integer, String>>() {}, "test stream" + i)
             );
         final int key1 = 1, key2 = 2, key3 = 3;

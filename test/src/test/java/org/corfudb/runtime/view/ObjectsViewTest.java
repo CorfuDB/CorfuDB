@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.google.common.reflect.TypeToken;
 
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.Semaphore;
 
 import org.corfudb.protocols.logprotocol.LogEntry;
@@ -14,7 +13,6 @@ import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -44,23 +42,25 @@ public class ObjectsViewTest extends AbstractViewTest {
         final String streamA = "streamA";
         CorfuRuntime r = getDefaultRuntime();
 
-        CorfuTable<String, String> map = getDefaultRuntime().getObjectsView()
+        ICorfuTable<String, String> map = getDefaultRuntime().getObjectsView()
                 .build()
                 .setStreamName(mapA)
                 .setStreamTags(CorfuRuntime.getStreamID(streamA))
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         // TODO: fix so this does not require mapCopy.
-        CorfuTable<String, String> mapCopy = getDefaultRuntime().getObjectsView()
+        ICorfuTable<String, String> mapCopy = getDefaultRuntime().getObjectsView()
                 .build()
                 .setStreamName(mapA)
                 .setStreamTags(CorfuRuntime.getStreamID(streamA))
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .option(ObjectOpenOption.NO_CACHE)
                 .open();
 
-        map.put("initial", "value");
+        map.insert("initial", "value");
 
         Semaphore s1 = new Semaphore(0);
         Semaphore s2 = new Semaphore(0);
@@ -76,7 +76,7 @@ public class ObjectsViewTest extends AbstractViewTest {
                 map.get("k");
                 s1.release();   // Let thread 2 start.
                 s2.acquire();   // Wait for thread 2 to commit.
-                map.put("k", "v1");
+                map.insert("k", "v1");
                 getRuntime().getObjectsView().TXEnd();
             }).isInstanceOf(TransactionAbortedException.class);
         });
@@ -84,7 +84,7 @@ public class ObjectsViewTest extends AbstractViewTest {
         scheduleConcurrently(1, t -> {
             s1.acquire();   // Wait for thread 1 to read
             getRuntime().getObjectsView().TXBegin();
-            mapCopy.put("k", "v2");
+            mapCopy.insert("k", "v2");
             getRuntime().getObjectsView().TXEnd();
             s2.release();
         });
@@ -122,10 +122,11 @@ public class ObjectsViewTest extends AbstractViewTest {
         CorfuRuntime r2 = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
                 .nettyEventLoop(NETTY_EVENT_LOOP)
                 .build());
-        CorfuTable<String, String> map = getDefaultRuntime().getObjectsView()
+        ICorfuTable<String, String> map = getDefaultRuntime().getObjectsView()
                 .build()
                 .setStreamName("mapa")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         r1.getObjectsView().TXBegin();

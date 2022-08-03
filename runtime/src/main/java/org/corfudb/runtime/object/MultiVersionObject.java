@@ -45,6 +45,8 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
     private volatile long trimMark;
 
+    private volatile long highestResolvedAddress = -10;
+
     MultiVersionObject(CorfuRuntime corfuRuntime,
                        Supplier<T> newObjectFn,
                        StreamViewSMRAdapter smrStream,
@@ -92,6 +94,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
     }
 
     protected Optional<ICorfuSMRSnapshotProxy<T>> getVersionedObjectUnderLock(long timestamp, Consumer<Long> versionAccessed) {
+
         long ts = 0;
         try {
             ts = lock.writeLock();
@@ -135,6 +138,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
             return Optional.empty();
         } finally {
+            highestResolvedAddress = timestamp;
             lock.unlock(ts);
         }
     }

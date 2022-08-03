@@ -232,7 +232,7 @@ public class CorfuRuntime {
         /*
          * The maximum number of entries in the cache.
          */
-        long maxCacheEntries = 1000;
+        long maxCacheEntries = 5000;
 
         /*
          * The max in-memory size of the cache in bytes
@@ -403,7 +403,7 @@ public class CorfuRuntime {
             private Duration holeFillTimeout = Duration.ofSeconds(10);
             private boolean cacheEntryMetricsDisabled = true;
             private boolean cacheDisabled = false;
-            private long maxCacheEntries=1000;
+            private long maxCacheEntries=5000;
             private long maxCacheWeight;
             private int cacheConcurrencyLevel = 0;
             private long cacheExpiryTime = Long.MAX_VALUE;

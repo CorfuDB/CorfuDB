@@ -7,7 +7,6 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -658,8 +657,8 @@ public class StreamViewTest extends AbstractViewTest {
         ICorfuTable<String, String> map = r.getObjectsView()
                 .build()
                 .setStreamName(streamName)
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                })
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         // Insert NUM_UPDATES to stream

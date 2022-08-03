@@ -143,6 +143,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
             // PersistentCorfuTable
             builder = corfuRuntime.getObjectsView().build()
                     .setTypeToken(new TypeToken<PersistentCorfuTable<K, CorfuRecord<V, M>>>() {})
+                    .setArguments(new ProtobufIndexer(tableParameters.getValueSchema(), tableParameters.getSchemaOptions()))
                     .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT);
         } else {
             // Disk-backed CorfuTable

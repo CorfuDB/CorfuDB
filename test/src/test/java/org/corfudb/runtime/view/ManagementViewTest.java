@@ -14,8 +14,8 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -547,11 +547,20 @@ public class ManagementViewTest extends AbstractViewTest {
     }
 
     protected <T extends ICorfuSMR> Object instantiateCorfuObject(TypeToken<T> tType, String name) {
-        return getCorfuRuntime().getObjectsView()
-                .build()
-                .setStreamName(name)     // stream name
-                .setTypeToken(tType)    // a TypeToken of the specified class
-                .open();                // instantiate the object!
+        if (tType.getRawType() == PersistentCorfuTable.class) {
+            return getCorfuRuntime().getObjectsView()
+                    .build()
+                    .setStreamName(name)     // stream name
+                    .setTypeToken(tType)    // a TypeToken of the specified class
+                    .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                    .open();                // instantiate the object!
+        } else {
+            return getCorfuRuntime().getObjectsView()
+                    .build()
+                    .setStreamName(name)     // stream name
+                    .setTypeToken(tType)    // a TypeToken of the specified class
+                    .open();                // instantiate the object!
+        }
     }
 
 
@@ -559,7 +568,7 @@ public class ManagementViewTest extends AbstractViewTest {
         ICorfuTable<Integer, String> testMap;
 
         testMap = (ICorfuTable<Integer, String>) instantiateCorfuObject(
-                new TypeToken<CorfuTable<Integer, String>>() {
+                new TypeToken<PersistentCorfuTable<Integer, String>>() {
                 }, "test stream"
         );
 
@@ -1578,10 +1587,10 @@ public class ManagementViewTest extends AbstractViewTest {
      *
      * @param table CorfuTable to populate.
      */
-    private void writeRandomEntryToTable(CorfuTable table) {
+    private void writeRandomEntryToTable(ICorfuTable table) {
         Random r = new Random();
         corfuRuntime.getObjectsView().TXBegin();
-        table.put(r.nextInt(), r.nextInt());
+        table.insert(r.nextInt(), r.nextInt());
         corfuRuntime.getObjectsView().TXEnd();
     }
 
@@ -1596,10 +1605,11 @@ public class ManagementViewTest extends AbstractViewTest {
     public void testSequencerCacheOverflowOnFailover() throws Exception {
         corfuRuntime = getDefaultRuntime();
 
-        CorfuTable<String, String> table = corfuRuntime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+        ICorfuTable<String, String> table = corfuRuntime.getObjectsView().build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
                 })
                 .setStreamName("test")
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         writeRandomEntryToTable(table);

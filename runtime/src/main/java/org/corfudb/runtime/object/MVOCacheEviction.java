@@ -43,7 +43,6 @@ public class MVOCacheEviction {
                 DEFAULT_EVICTION_INTERVAL_IN_MILLISECONDS,
                 DEFAULT_EVICTION_INTERVAL_IN_MILLISECONDS,
                 TimeUnit.MILLISECONDS);
-        log.info("{} MVO Cache eviction thread started.", threadName);
     }
 
     public void evict() {

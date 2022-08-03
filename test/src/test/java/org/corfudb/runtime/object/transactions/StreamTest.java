@@ -11,9 +11,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.ICorfuTable;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StringIndexer;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -140,6 +138,7 @@ public class StreamTest extends AbstractTransactionsTest {
         try {
             TXBegin();
             map.insert("0", "0");
+            map.get("0"); // populate the txn conflict set
 
             t1(() -> {
                 for (int x = 0; x < numEntries; x++) {

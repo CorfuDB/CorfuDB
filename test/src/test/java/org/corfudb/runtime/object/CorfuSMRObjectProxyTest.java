@@ -4,12 +4,12 @@ import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
-
-import java.util.Map;
 
 import org.corfudb.CustomSerializer;
 
@@ -25,18 +25,17 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
             throws Exception {
         getDefaultRuntime();
 
-        Map<String, String> testMap = (Map<String, String>)
+        ICorfuTable<String, String> testMap = (ICorfuTable<String, String>)
                 instantiateCorfuObject(new TypeToken<CorfuTable<String,String>>() {}, "test");
 
         testMap.clear();
-        assertThat(testMap.put("a", "a"))
-                .isNull();
-        assertThat(testMap.put("a", "b"))
-                .isEqualTo("a");
-        assertThat(testMap.get("a"))
-                .isEqualTo("b");
+        assertThat(testMap.get("a")).isNull();
+        testMap.insert("a", "a");
+        assertThat(testMap.get("a")).isEqualTo("a");
+        testMap.insert("a", "b");
+        assertThat(testMap.get("a")).isEqualTo("b");
 
-        Map<String, String> testMap2 = (Map<String, String>)
+        ICorfuTable<String, String> testMap2 = (ICorfuTable<String, String>)
                 instantiateCorfuObject(new TypeToken<CorfuTable<String,String>>() {}, "test");
 
         assertThat(testMap2.get("a"))
@@ -107,9 +106,10 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
         CorfuRuntime r = getDefaultRuntime();
 
         ICorfuTable<String, String> test = r.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .setSerializer(customSerializer)
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         test.insert("a", "b");
@@ -131,21 +131,23 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
         CorfuRuntime r = getDefaultRuntime();
 
         ICorfuTable<String, String> test = r.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .setSerializer(customSerializer)
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         ICorfuTable<String, String> test2 = r.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .setSerializer(Serializers.getDefaultSerializer())
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         ObjectsView.ObjectID mapId = new ObjectsView.
-                ObjectID(CorfuRuntime.getStreamID("test"), CorfuTable.class);
+                ObjectID(CorfuRuntime.getStreamID("test"), PersistentCorfuTable.class);
 
-        CorfuCompileProxy cp = ((CorfuCompileProxy) ((ICorfuSMR) r.getObjectsView().
+        MVOCorfuCompileProxy cp = ((MVOCorfuCompileProxy) ((ICorfuSMR) r.getObjectsView().
                 getObjectCache().
                 get(mapId)).
                 getCorfuSMRProxy());

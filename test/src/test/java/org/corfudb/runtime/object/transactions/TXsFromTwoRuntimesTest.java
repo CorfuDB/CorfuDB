@@ -7,7 +7,6 @@ import java.util.concurrent.Semaphore;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.ICorfuTable;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -190,7 +189,8 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
                     myruntime.getObjectsView()
                             .build()
                             .setStreamName("nonidepmpotentmaptest")    // stream name
-                            .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {}) // object TokenType class
+                            .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {}) // object TokenType class
+                            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                             .open();
 
                     // start a transaction and then hand over to thread 1
