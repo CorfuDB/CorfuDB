@@ -492,7 +492,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
      */
     @Test
     @SuppressWarnings("checkstyle:magicnumber")
-    @Ignore // TODO(Zach): This is broken.
     public void checkpointWriterSizeLimitTest() throws Exception {
         final String streamName = "mystream5";
         final UUID streamId = CorfuRuntime.getStreamID(streamName);
@@ -509,7 +508,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         for (int i = 0; i < numKeys; i++) {
             // each entry is 1 MB
             String payload = getRandomStringOfSize(1 << 20);
-            m.insert(keyPrefix + i, payload + mutationSuffix);
+            m.insert(keyPrefix + i, payload);
             mockedMap.put(keyPrefix + i, payload + mutationSuffix);
         }
 

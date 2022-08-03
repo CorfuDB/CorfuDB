@@ -1,7 +1,6 @@
 package org.corfudb.runtime.object;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
@@ -18,8 +17,6 @@ import java.lang.ref.SoftReference;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.Consumer;
@@ -48,12 +45,6 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
     private volatile long trimMark;
 
-    private volatile long currentSyncVersion = -10;
-
-    private volatile long highestResolvedAddress = -10;
-
-    private final Map<Long, CompletableFuture<ICorfuSMRSnapshotProxy<T>>> freeRides;
-
     MultiVersionObject(CorfuRuntime corfuRuntime,
                        Supplier<T> newObjectFn,
                        StreamViewSMRAdapter smrStream,
@@ -65,7 +56,6 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         this.smrStream = smrStream;
         this.upcallTargetMap = wrapperObject.getSMRUpcallMap();
         this.streamID = streamID;
-        this.freeRides = new ConcurrentHashMap<>();
 
         this.snapshotReferenceProxyGenerator = (voId, object) ->
                 new SnapshotReferenceProxy<>(voId.getObjectId(), voId.getVersion(), object, upcallTargetMap, SoftReference::new);
@@ -79,89 +69,32 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         this.mvoCache.registerMVO(this.streamID,this);
     }
 
-    /**
-     * Get snapshot proxy for a given timestamp.
-     * 1. If called from non-transactional access, timestamp is stream tail and
-     *    there should be an exact match in MVOCache if not yet evicted.
-     * 2. If called from transactional access, timestamp is transaction snapshot
-     *    address
-     *    a. if timestamp > highestResolvedAddress, query sequencer for latest updates.
-     *    b. if timestamp <= highestResolvedAddress, run MVOCache::floorEntry()
-     *
-     * @param timestamp the timestamp to query
-     * @return the snapshot proxy against which the snapshot access is run
-     */
     public ICorfuSMRSnapshotProxy<T> getSnapshotProxy(long timestamp) {
-
-        // 1. Non-transactional access
         Optional<ICorfuSMRSnapshotProxy<T>> snapshotProxyOptional = mvoCache.get(
                 new VersionedObjectIdentifier(streamID, timestamp),
                 this::getSMRSnapshotProxy
         );
+
         if (snapshotProxyOptional.isPresent()) {
             return snapshotProxyOptional.get();
         }
 
-        // 2. Transaction access
-        if (timestamp > highestResolvedAddress || timestamp == Address.NON_EXIST) {
-            // 2.a need to query sequencer for latest updates
-            AtomicLong vloAccessedVersion = new AtomicLong();
-            snapshotProxyOptional = getVersionedObjectUnderLock(timestamp, vloAccessedVersion::set);
+        AtomicLong vloAccessedVersion = new AtomicLong();
+        snapshotProxyOptional = getVersionedObjectUnderLock(timestamp, vloAccessedVersion::set);
 
-            if (snapshotProxyOptional.isPresent()) {
-                correctnessLogger.trace("Version, {}", vloAccessedVersion.get());
-                log.trace("Access [{}] Updated (writelock) access at {}", this, vloAccessedVersion.get());
-                return snapshotProxyOptional.get();
-            }
-        } else {
-            // 2.b address has already been resolved
-            snapshotProxyOptional = mvoCache.floorEntry(
-                    new VersionedObjectIdentifier(streamID, timestamp),
-                    this::getSMRSnapshotProxy
-            );
-            if (snapshotProxyOptional.isPresent()) {
-                return snapshotProxyOptional.get();
-            }
+        if (snapshotProxyOptional.isPresent()) {
+            correctnessLogger.trace("Version, {}", vloAccessedVersion.get());
+            log.trace("Access [{}] Updated (writelock) access at {}", this, vloAccessedVersion.get());
+            return snapshotProxyOptional.get();
         }
 
         throw new StaleObjectVersionException(streamID, timestamp);
     }
 
     protected Optional<ICorfuSMRSnapshotProxy<T>> getVersionedObjectUnderLock(long timestamp, Consumer<Long> versionAccessed) {
-
-        Preconditions.checkState(timestamp >= highestResolvedAddress);
-
-        if (currentSyncVersion >= timestamp || highestResolvedAddress >= timestamp) {
-
-            /*
-                Both currentSyncVersion and highestResolvedAddress are set within the write-lock.
-                currentSyncVersion is set to the timestamp before sync starts, and unset to -10 after sync completes.
-                highestResolvedAddress is set to the timestamp after the sync completes, and it's monotonically increasing.
-
-                a. If highestResolvedAddress >= timestamp, it means the address has been resolved and the
-                   future of this timestamp has been completed in freeRides unless it has been GC-ed.
-                   In the case of GC, all futures below trim mark will be completed with null.
-
-                b. If currentSyncVersion >= timestamp, it means another thread is holding the lock and is
-                   performing the syncing to a version that is >= my desired version.
-
-                TODO: current thread cannot get a free ride if another thread has
-                  just acquired the write-lock and has not updated currentSyncVersion
-             */
-            CompletableFuture<ICorfuSMRSnapshotProxy<T>> future =
-                    freeRides.computeIfAbsent(timestamp, k -> new CompletableFuture<>());
-            try {
-                ICorfuSMRSnapshotProxy<T> ret = future.get();
-                return Optional.ofNullable(ret);
-            } catch (Exception e) {
-                log.warn("failed to get a free ride for stream {} at versions {}", getID(), timestamp);
-            }
-        }
-
         long ts = 0;
         try {
             ts = lock.writeLock();
-            currentSyncVersion = timestamp;
 
             Optional<ICorfuSMRSnapshotProxy<T>> snapshotProxyOptional = mvoCache.get(
                     new VersionedObjectIdentifier(streamID, timestamp), snapshotReferenceProxyGenerator);
@@ -199,8 +132,6 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
             return Optional.empty();
         } finally {
-            currentSyncVersion = -10;
-            highestResolvedAddress = timestamp;
             lock.unlock(ts);
         }
     }
@@ -258,15 +189,6 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                             VersionedObjectIdentifier voId = new VersionedObjectIdentifier(streamID, globalAddress);
                             mvoCache.put(voId, snapshotProxy.get());
 
-                            freeRides.compute(globalAddress, (version, future) -> {
-                                CompletableFuture<ICorfuSMRSnapshotProxy<T>> completableFuture = freeRides.get(version);
-                                if (completableFuture == null) {
-                                    completableFuture = new CompletableFuture<>();
-                                }
-                                completableFuture.complete(getSMRSnapshotProxy(voId, snapshotProxy.get()));
-                                return completableFuture;
-                            });
-
                             // TODO: handle StaleObjectVersionException
                         } else {
                             // TODO(Zach): Remove me
@@ -323,17 +245,6 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
             return;
         }
         this.trimMark = trimMark;
-
-        // Remove all entries in freeRides whose version is below trim mark
-        long finalTrimMark = trimMark;
-        this.freeRides.forEach((key, value) -> {
-            if (key < finalTrimMark) {
-                value.complete(null);
-                // Removal is performed by a single thread. The key is guaranteed
-                // to be present from the time the CHM iterator is created.
-                freeRides.remove(key);
-            }
-        });
 
         // Sequencer trim mark is exclusive. -=1 to convert it to inclusive
         trimMark -= 1;
