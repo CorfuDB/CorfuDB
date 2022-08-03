@@ -22,7 +22,6 @@ import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.nio.file.Paths;
@@ -686,9 +685,8 @@ public class CheckpointTest extends AbstractObjectTest {
     /**
      * This test creates a CorfuTable backed by a RocksDb can be checkpointed.
      */
-    /*
+
     @Test
-    @Ignore //TODO(Zach): PersistentCorfuTable is not integrated with RocksDB
     public void PersistedCorfuTableTests() {
         String path = PARAMETERS.TEST_TEMP_DIR;
 
@@ -737,5 +735,4 @@ public class CheckpointTest extends AbstractObjectTest {
         assertThat(Iterators.elementsEqual(newDiskBackedMap.entryStream().iterator(),
                 diskBackedMap.entryStream().iterator())).isTrue();
     }
-    */
 }

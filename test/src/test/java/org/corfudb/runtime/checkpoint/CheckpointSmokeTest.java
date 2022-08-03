@@ -29,7 +29,6 @@ import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
-import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
@@ -55,7 +54,6 @@ import org.corfudb.util.NodeLocator;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.KeyDynamicProtobufSerializer;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -475,7 +473,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                         .build()
                         .begin();
 
-                // TODO(Zach): Verify this works as expected
                 assertThat(m2.entryStream())
                         .describedAs("Snapshot at global log address " + globalAddr + 1)
                         .containsExactlyInAnyOrderElementsOf(expectedHistory.entrySet());

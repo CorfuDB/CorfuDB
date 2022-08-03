@@ -102,6 +102,9 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                 return snapshotProxyOptional;
             }
 
+            // This retry is also performed within a transaction. Previously, the number of retries was
+            // determined by the runtime parameters.
+            // TODO(Zach): This should be adjusted to take into account the above.
             for (int x = 0; x < TRIM_RETRY; x++) {
                 try {
                     ICorfuSMRSnapshotProxy<T> snapshotProxy = syncObjectUnsafe(timestamp);
@@ -124,7 +127,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
                     resetUnsafe();
 
-                    if (x == (TRIM_RETRY - 1)) {
+                    if (!te.isRetriable() || x == (TRIM_RETRY - 1)) {
                         throw te;
                     }
                 }

@@ -11,6 +11,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
@@ -202,6 +203,12 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
         } else if (e instanceof UnsupportedOperationException) {
             snapshotTimestamp = context.getSnapshotTimestamp();
             abortCause = AbortCause.UNSUPPORTED;
+        } else if (e instanceof TrimmedException) {
+            // Previously, this was handled in AbstractTransactionalContext, but with the addition of the MVO,
+            // the retries now occur in the MVO sync. If we reach this point, then the retries hae already occured.
+            // Hence, we abort the transaction and mark the cause as TRIM.
+            snapshotTimestamp = context.getSnapshotTimestamp();
+            abortCause = AbortCause.TRIM;
         } else {
             log.error("abortTransaction[{}] Abort Transaction with Exception {}", this, e);
             snapshotTimestamp = context.getSnapshotTimestamp();
