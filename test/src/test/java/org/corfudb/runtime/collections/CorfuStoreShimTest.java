@@ -370,7 +370,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                 // This is required to initialize the table for the current corfu client.
                 shimStore.openTable(nsxManager, tableName, SampleSchema.Uuid.class, SampleSchema.EventInfo.class, null,
                         TableOptions.builder().build());
-                log.info(Thread.currentThread().getName() + " table is opened!");
             }
 
         });

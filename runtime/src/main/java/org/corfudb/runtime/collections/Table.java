@@ -152,7 +152,6 @@ public class Table<K extends Message, V extends Message, M extends Message> {
         }
     }
 
-
     public Table(@Nonnull final TableParameters<K, V, M> tableParameters,
                  @Nonnull final CorfuRuntime corfuRuntime,
                  @Nonnull final ISerializer serializer,

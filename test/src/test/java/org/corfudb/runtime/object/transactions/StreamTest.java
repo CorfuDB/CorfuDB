@@ -140,7 +140,6 @@ public class StreamTest extends AbstractTransactionsTest {
             map.insert("0", "0");
             map.get("0"); // populate the txn conflict set
 
-
             t1(() -> {
                 for (int x = 0; x < numEntries; x++) {
                     TXBegin();

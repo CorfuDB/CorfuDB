@@ -27,6 +27,7 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
         ICorfuTable<String, String> testMap = (ICorfuTable<String, String>)
                 instantiateCorfuObject(new TypeToken<PersistentCorfuTable<String,String>>() {}, "test");
 
+
         testMap.clear();
         assertThat(testMap.get("a")).isNull();
         testMap.insert("a", "a");
