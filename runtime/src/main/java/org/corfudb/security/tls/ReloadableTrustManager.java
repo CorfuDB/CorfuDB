@@ -1,11 +1,9 @@
 package org.corfudb.security.tls;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import lombok.AllArgsConstructor;
-import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 
+import javax.net.ssl.SSLException;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
@@ -14,13 +12,6 @@ import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.time.Duration;
-import java.time.LocalDateTime;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.function.Supplier;
 
 /**
  * This trust manager reloads the trust store whenever a checkClientTrusted
@@ -28,50 +19,30 @@ import java.util.function.Supplier;
  */
 @Slf4j
 public class ReloadableTrustManager implements X509TrustManager {
-    private final TrustStoreWatcher watcher;
+    private final TrustStoreConfig trustStoreConfig;
+    private X509TrustManager trustManager;
 
     /**
      * Constructor.
      *
-     * @param trustStoreConfig Location of trust store.
+     * @param TrustStoreConfig Location of trust store.
+     * @throws SSLException Thrown when there's an issue with loading the trust store.
      */
-    public ReloadableTrustManager(TrustStoreConfig trustStoreConfig) {
-        watcher = new TrustStoreWatcher(trustStoreConfig);
+    public ReloadableTrustManager(TrustStoreConfig trustStoreConfig) throws SSLException {
+        this.trustStoreConfig = trustStoreConfig;
+        reloadTrustStore();
     }
 
     @Override
     public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-        if (watcher.isCertExpiryCheckEnabled()) {
-            for (X509Certificate cert : chain) {
-                cert.checkValidity();
-            }
-        } else {
-            logCertExpiryCheck();
-        }
-
-        X509TrustManager trustManager = getTrustManager();
+        reloadTrustStoreWrapper();
         trustManager.checkClientTrusted(chain, authType);
     }
 
     @Override
     public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-        if (watcher.isCertExpiryCheckEnabled()) {
-            for (X509Certificate cert : chain) {
-                cert.checkValidity();
-            }
-        } else {
-            logCertExpiryCheck();
-        }
-
-        X509TrustManager trustManager = getTrustManager();
+        reloadTrustStoreWrapper();
         trustManager.checkServerTrusted(chain, authType);
-    }
-
-    private void logCertExpiryCheck() {
-        log.info(
-                "Certificate expiry check has been disabled with: {}",
-                watcher.trustStoreConfig.getDisableCertExpiryCheckFile()
-        );
     }
 
     @Override
@@ -79,116 +50,48 @@ public class ReloadableTrustManager implements X509TrustManager {
         return new X509Certificate[0];
     }
 
-    private X509TrustManager getTrustManager() throws CertificateException {
-        X509TrustManager trustManager;
+    /**
+     * Just a wrapper due to IDE pointing out duplicate code.
+     *
+     * @throws CertificateException Wrapper for any exception from reloading the trust store.
+     */
+    private void reloadTrustStoreWrapper() throws CertificateException {
         try {
-            trustManager = watcher.getTrustManager();
-        } catch (Exception e) {
-            throw new CertificateException(e);
+            reloadTrustStore();
+        } catch (SSLException e) {
+            String message = "Unable to reload trust store " + trustStoreConfig.getTrustStoreFile() + ".";
+            throw new CertificateException(message, e);
         }
-        return trustManager;
     }
 
-    public static class TrustStoreWatcher {
-        @NonNull
-        private final TrustStoreConfig trustStoreConfig;
+    /**
+     * Reload the trust manager.
+     *
+     * @throws SSLException Thrown when there's an issue with loading the trust store.
+     */
+    private void reloadTrustStore() throws SSLException {
+        KeyStore trustStore = TlsUtils.openCertStore(trustStoreConfig);
 
-        private final ExecutorService executor = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
-                .setDaemon(true)
-                .setNameFormat("TrustStore-watcher-%d")
-                .build());
-
-        private CompletableFuture<TrustManagerContext> trustManagerAsync;
-
-        public TrustStoreWatcher(@NonNull TrustStoreConfig trustStoreConfig) {
-            this.trustStoreConfig = trustStoreConfig;
-            trustManagerAsync = loadTrustStore();
-            //init trust manager synchronously
-            getTrustManager();
+        TrustManagerFactory tmf;
+        try {
+            tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            tmf.init(trustStore);
+        } catch (NoSuchAlgorithmException e) {
+            String errorMessage = "No support for TrustManagerFactory default algorithm "
+                    + TrustManagerFactory.getDefaultAlgorithm() + ".";
+            throw new SSLException(errorMessage, e);
+        } catch (KeyStoreException e) {
+            String errorMessage = "Unable to load trust store " + trustStoreConfig.getTrustStoreFile() + ".";
+            throw new SSLException(errorMessage, e);
         }
 
-        public CompletableFuture<TrustManagerContext> reloadTrustManagerAsync() {
-            trustManagerAsync = reloadTrustStore();
-            return trustManagerAsync;
-        }
-
-        private X509TrustManager getTrustManager() {
-            X509TrustManager tm;
-            try {
-                tm = reloadTrustManagerAsync().join().trustManager;
-            } catch (CompletionException e) {
-                throw new IllegalStateException(e.getCause());
-            }
-            return tm;
-        }
-
-        /**
-         * Reload the trust manager.
-         */
-        private CompletableFuture<TrustManagerContext> reloadTrustStore() {
-            //Reload trust store in case of it get expired
-            return trustManagerAsync.thenCompose(ctx -> {
-                if (ctx.isNotExpired()) {
-                    return CompletableFuture.completedFuture(ctx);
-                }
-
-                return loadTrustStore();
-            });
-        }
-
-        private CompletableFuture<TrustManagerContext> loadTrustStore() {
-            return TlsUtils
-                    .openCertStore(trustStoreConfig)
-                    .thenComposeAsync(this::loadTrustManager);
-        }
-
-        private boolean isCertExpiryCheckEnabled() {
-            return trustStoreConfig.isCertExpiryCheckEnabled();
-        }
-
-        private CompletableFuture<TrustManagerContext> loadTrustManager(KeyStore trustStore) {
-            Supplier<TrustManagerContext> asyncLoader = () -> {
-                TrustManagerFactory tmf;
-                try {
-                    tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-                    tmf.init(trustStore);
-                } catch (NoSuchAlgorithmException e) {
-                    String errorMessage = "No support for TrustManagerFactory default algorithm "
-                            + TrustManagerFactory.getDefaultAlgorithm() + ".";
-                    throw new CompletionException(new CertificateException(errorMessage, e));
-                } catch (KeyStoreException e) {
-                    String errorMessage = "Unable to load trust store " + trustStoreConfig.getTrustStoreFile() + ".";
-                    throw new CompletionException(new CertificateException(errorMessage, e));
-                }
-
-                for (TrustManager tm : tmf.getTrustManagers()) {
-                    if (tm instanceof X509TrustManager) {
-                        return new TrustManagerContext((X509TrustManager) tm, LocalDateTime.now());
-                    }
-                }
-
-                throw new CompletionException(new CertificateException("No X509TrustManager in TrustManagerFactory."));
-            };
-
-            return CompletableFuture.supplyAsync(asyncLoader, executor);
-        }
-
-        @AllArgsConstructor
-        static class TrustManagerContext {
-            private static final Duration TIMEOUT = Duration.ofSeconds(3);
-
-            @NonNull
-            private final X509TrustManager trustManager;
-            private final LocalDateTime finishTime;
-
-            public boolean isNotExpired() {
-                return !isExpired();
-            }
-
-            public boolean isExpired() {
-                LocalDateTime now = LocalDateTime.now();
-                return finishTime.plus(TIMEOUT).isBefore(now);
+        for (TrustManager tm : tmf.getTrustManagers()) {
+            if (tm instanceof X509TrustManager) {
+                trustManager = (X509TrustManager) tm;
+                return;
             }
         }
+
+        throw new SSLException("No X509TrustManager in TrustManagerFactory.");
     }
 }
