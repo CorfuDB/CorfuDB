@@ -3,12 +3,7 @@ package org.corfudb.infrastructure;
 import com.google.common.collect.ImmutableMap;
 import lombok.Data;
 import lombok.experimental.Accessors;
-import org.corfudb.common.config.ConfigParamNames;
-import org.corfudb.security.tls.TlsUtils;
-import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 import org.corfudb.test.concurrent.TestThreadGroups;
-
-import java.nio.file.Path;
 
 /**
  * Created by mwei on 6/29/16.
@@ -34,7 +29,6 @@ public class ServerContextBuilder {
     boolean saslPlainTextAuth = false;
     String truststore = "";
     String truststorePasswordFile = "";
-    String disableCertExpiryCheckFile = TrustStoreConfig.DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE.toString();
 
     String implementation = "local";
 
@@ -85,11 +79,10 @@ public class ServerContextBuilder {
                  .put("--enable-tls-mutual-auth", tlsMutualAuthEnabled)
                  .put("--tls-protocols", tlsProtocols)
                  .put("--tls-ciphers", tlsCiphers)
-                 .put(ConfigParamNames.KEY_STORE, keystore)
-                 .put(ConfigParamNames.KEY_STORE_PASS_FILE, keystorePasswordFile)
-                 .put(ConfigParamNames.TRUST_STORE, truststore)
-                 .put(ConfigParamNames.TRUST_STORE_PASS_FILE, truststorePasswordFile)
-                 .put(ConfigParamNames.DISABLE_CERT_EXPIRY_CHECK_FILE, disableCertExpiryCheckFile)
+                 .put("--keystore", keystore)
+                 .put("--keystore-password-file", keystorePasswordFile)
+                 .put("--truststore", truststore)
+                 .put("--truststore-password-file", truststorePasswordFile)
                  .put("--enable-sasl-plain-text-auth", saslPlainTextAuth)
                  .put("--cluster-id", clusterId)
                  .put("--implementation", implementation)

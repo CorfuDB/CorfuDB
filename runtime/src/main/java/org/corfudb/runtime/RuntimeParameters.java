@@ -11,7 +11,6 @@ import org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 
 import java.lang.Thread.UncaughtExceptionHandler;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
@@ -48,8 +47,6 @@ public class RuntimeParameters {
          * A path containing the password for the trust store.
          */
         public String tsPasswordFile;
-
-        public Path disableCertExpiryCheckFile = TrustStoreConfig.DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE;
 
         /**
          * True, if SASL plain text authentication is enabled.
@@ -212,6 +209,6 @@ public class RuntimeParameters {
         }
 
         public TrustStoreConfig getTrustStoreConfig(){
-                return TrustStoreConfig.from(trustStore, tsPasswordFile, disableCertExpiryCheckFile);
+                return TrustStoreConfig.from(trustStore, tsPasswordFile);
         }
 }
