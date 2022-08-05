@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.logreplication.transport.client;
 import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
-import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 
@@ -29,9 +28,6 @@ public abstract class IClientChannelAdapter {
 
     @Getter
     private final LogReplicationClientRouter router;
-
-    @Getter
-    private IChannelContext channelContext;
 
     /**
      * Default Constructor
@@ -62,13 +58,6 @@ public abstract class IClientChannelAdapter {
      * Stop communication across Clusters.
      */
     public void stop() {}
-
-    /**
-     * Set shared context
-     */
-    public void setChannelContext(IChannelContext channelContext) {
-        this.channelContext = channelContext;
-    }
 
     /**
      * Send a message across the channel to a specific endpoint.
