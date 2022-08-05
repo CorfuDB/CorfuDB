@@ -8,7 +8,6 @@ import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.SequencerServerCache;
 import org.corfudb.infrastructure.SequencerServerCache.ConflictTxStream;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.object.AbstractObjectTest;

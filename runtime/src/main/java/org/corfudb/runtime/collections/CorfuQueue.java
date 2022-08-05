@@ -362,13 +362,6 @@ public class CorfuQueue {
      *
      * @return The entry that was successfully removed or null if there was no mapping.
      */
-    /*
-    public ByteString removeEntry(CorfuRecordId entryId) {
-        return corfuTable.remove(entryId);
-    }
-    */
-
-    // TODO(Zach): Is this acceptable?
     public void removeEntry(CorfuRecordId entryId) {
         corfuTable.delete(entryId);
     }

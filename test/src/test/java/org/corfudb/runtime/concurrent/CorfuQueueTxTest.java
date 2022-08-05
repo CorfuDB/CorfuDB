@@ -25,7 +25,6 @@ import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.collections.CorfuQueue;
 import org.corfudb.runtime.collections.CorfuQueue.CorfuRecordId;
 import org.corfudb.runtime.collections.CorfuStoreShim;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.ManagedTxnContext;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
