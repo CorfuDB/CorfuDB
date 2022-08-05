@@ -44,7 +44,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -481,12 +480,6 @@ public class CorfuRuntime {
                 return this;
             }
 
-            @Override
-            public CorfuRuntimeParametersBuilder disableCertExpiryCheckFile(Path disableCertExpiryCheckFile) {
-                this.disableCertExpiryCheckFile = disableCertExpiryCheckFile;
-                return this;
-            }
-
             public CorfuRuntimeParametersBuilder tsPasswordFile(String tsPasswordFile) {
                 super.tsPasswordFile(tsPasswordFile);
                 return this;
@@ -745,7 +738,6 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setKsPasswordFile(ksPasswordFile);
                 corfuRuntimeParameters.setTrustStore(trustStore);
                 corfuRuntimeParameters.setTsPasswordFile(tsPasswordFile);
-                corfuRuntimeParameters.setDisableCertExpiryCheckFile(disableCertExpiryCheckFile);
                 corfuRuntimeParameters.setSaslPlainTextEnabled(saslPlainTextEnabled);
                 corfuRuntimeParameters.setUsernameFile(usernameFile);
                 corfuRuntimeParameters.setPasswordFile(passwordFile);
@@ -867,7 +859,6 @@ public class CorfuRuntime {
                 NettyClientRouter newRouter = new NettyClientRouter(node,
                         getNettyEventLoop(),
                         getParameters());
-
                 log.debug("Connecting to new router {}", node);
                 try {
                     newRouter.addClient(new LayoutHandler())
