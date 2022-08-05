@@ -185,6 +185,22 @@ public class CheckpointEntry extends LogEntry {
         return smrEntries;
     }
 
+    // refactored version
+    public synchronized MultiSMREntry getSmrEntries(boolean opaque, CorfuRuntime rt) {
+        if (streamUpdates != null) {
+            ByteBuf b = Unpooled.wrappedBuffer(streamUpdates);
+            b.readByte(); // remove magic
+            if (opaque) {
+                smrEntries = (MultiSMREntry) MultiSMREntry.deserialize(b, rt, true);
+            } else {
+                smrEntries = (MultiSMREntry) MultiSMREntry.deserialize(b, rt, false);
+            }
+            streamUpdates = null;
+        }
+
+        return smrEntries;
+    }
+
     /**
      * Serialize the given LogEntry into a given byte buffer.
      *
