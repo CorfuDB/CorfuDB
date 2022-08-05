@@ -41,6 +41,7 @@ public class MVOCache<T extends ICorfuSMR<T>> {
     @Getter
     private final ConcurrentHashMap<UUID, MultiVersionObject<T>> allMVOs = new ConcurrentHashMap<>();
 
+    @Getter
     // A collection of strong references to all versioned objects and their snapshotProxies.
     private final Cache<VersionedObjectIdentifier, MVOCacheEntry> objectCache;
 
@@ -226,7 +227,7 @@ public class MVOCache<T extends ICorfuSMR<T>> {
     public Boolean containsObject(UUID objectId) {
         // TODO: what if an object existing in objectCache but its version is not in objectVersions?
         // This can happen when MVOCache::put is interrupted
-        return objectVersions.containsKey(objectId);
+        return objectVersions.containsKey(objectId) && objectVersions.get(objectId).isEmpty();
     }
 
     public void registerMVO(UUID objectId, MultiVersionObject<T> mvo) {

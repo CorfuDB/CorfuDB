@@ -18,6 +18,9 @@ public class MVOCacheEviction {
     @Getter
     private static final long DEFAULT_EVICTION_INTERVAL_IN_MILLISECONDS = 100;
 
+    // CorfuRuntime - ObjectsView - MVOCache - MVOCacheEviction are all 1:1 mapping
+    // In the case of multiple CorfuRuntime instances, use a static counter
+    // to keep track of the total number of threads.
     public static final AtomicInteger threadCount = new AtomicInteger(0);
 
     private final String threadName;
@@ -26,6 +29,8 @@ public class MVOCacheEviction {
     private final ConcurrentLinkedQueue<VersionedObjectIdentifier> versionsToEvict = new ConcurrentLinkedQueue<>();
 
     private final EvictFunction evictFunc;
+
+    private boolean threadStarted = false;
 
     public MVOCacheEviction(EvictFunction evictFunc) {
         this.evictFunc = evictFunc;
@@ -38,11 +43,16 @@ public class MVOCacheEviction {
                         .build());
     }
 
-    public void start() {
+    public synchronized void start() {
+        if (threadStarted) {
+            return;
+        }
         evictionThread.scheduleAtFixedRate(this::evict,
                 DEFAULT_EVICTION_INTERVAL_IN_MILLISECONDS,
                 DEFAULT_EVICTION_INTERVAL_IN_MILLISECONDS,
                 TimeUnit.MILLISECONDS);
+        threadStarted = true;
+        log.info("{} MVO Cache eviction thread started", threadName);
     }
 
     public void evict() {
@@ -68,8 +78,12 @@ public class MVOCacheEviction {
         versionsToEvict.add(voId);
     }
 
-    public void shutdown() {
+    public synchronized void shutdown() {
+        if (!threadStarted) {
+            return;
+        }
         evictionThread.shutdownNow();
+        threadStarted = false;
         log.info("{} MVO Cache eviction thread shut down", threadName);
     }
 }

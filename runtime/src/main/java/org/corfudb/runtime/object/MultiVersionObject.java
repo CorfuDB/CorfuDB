@@ -245,6 +245,21 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
     /**
      * Prefix evict any versions smaller than the trimMark
+     *
+     * Note that when checkpoint and trim is involved, the latest checkpoint
+     * will be removed from the cache. This is because checkpointing writes a
+     * NO_OP entry followed by the real checkpoint entries (START, CONTINUATION,
+     * and END) which sets the checkpoint snapshot address to the NO_NP address.
+     * For example, the CP entries will have snapshot address set to 100. Then
+     * prefix trim at 100 will delete all entries up to 100 (inclusive), and
+     * MVOCache will evict the versioned object built by CP entries because the
+     * version of the versioned object is also 100. However, this is not a bug
+     * because the next sync on this object with still be able to apply the CP
+     * entries and put the versioned object back to the cache.
+     *
+     * |     100 inserts    |NO_OP|   CP entries    |
+     * | 0 | 1 | 2 |...| 99 | 100 | 101 | 102 | 103 |
+     *
      * @param trimMark trim up to this address, exclusive
      */
     public void gc(long trimMark) {

@@ -9,6 +9,7 @@ import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.junit.Test;
 
 import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -19,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class ViewsGarbageCollectorTest extends AbstractViewTest {
 
     @Test
-    public void testRuntimeGC() {
+    public void testRuntimeGC() throws InterruptedException {
 
         CorfuRuntime rt = getDefaultRuntime();
         rt.getParameters().setMaxCacheEntries(MVO_CACHE_SIZE);
@@ -48,7 +49,10 @@ public class ViewsGarbageCollectorTest extends AbstractViewTest {
         rt.getParameters().setRuntimeGCPeriod(Duration.ofMinutes(0));
         rt.getGarbageCollector().runRuntimeGC();
         assertThat(rt.getAddressSpaceView().getReadCache().asMap()).isEmpty();
-        // TODO(Zach): assert MVOCache
+
+        TimeUnit.SECONDS.sleep(1); // MVOCache eviction is async
+        assertThat(rt.getObjectsView().getMvoCache().getObjectCache().size()).isZero();
+
         rt.shutdown();
         assertThat(rt.getGarbageCollector().isStarted()).isFalse();
     }
