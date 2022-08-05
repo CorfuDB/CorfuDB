@@ -221,7 +221,6 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
             runtimeParameters.setKsPasswordFile(ksPasswordFile);
             runtimeParameters.setTrustStore(trustStore);
             runtimeParameters.setTsPasswordFile(tsPasswordFile);
-            runtimeParameters.setDisableCertExpiryCheckFile(disableCertExpiryCheckFile);
             runtimeParameters.setSaslPlainTextEnabled(saslPlainTextEnabled);
             runtimeParameters.setUsernameFile(usernameFile);
             runtimeParameters.setPasswordFile(passwordFile);
