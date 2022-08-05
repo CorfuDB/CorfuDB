@@ -2,7 +2,6 @@ package org.corfudb.runtime.object;
 
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
@@ -26,7 +25,7 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
         getDefaultRuntime();
 
         ICorfuTable<String, String> testMap = (ICorfuTable<String, String>)
-                instantiateCorfuObject(new TypeToken<CorfuTable<String,String>>() {}, "test");
+                instantiateCorfuObject(new TypeToken<PersistentCorfuTable<String,String>>() {}, "test");
 
         testMap.clear();
         assertThat(testMap.get("a")).isNull();
@@ -36,7 +35,7 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
         assertThat(testMap.get("a")).isEqualTo("b");
 
         ICorfuTable<String, String> testMap2 = (ICorfuTable<String, String>)
-                instantiateCorfuObject(new TypeToken<CorfuTable<String,String>>() {}, "test");
+                instantiateCorfuObject(new TypeToken<PersistentCorfuTable<String,String>>() {}, "test");
 
         assertThat(testMap2.get("a"))
                 .isEqualTo("b");

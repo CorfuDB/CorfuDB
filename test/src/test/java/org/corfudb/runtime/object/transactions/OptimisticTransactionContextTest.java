@@ -10,7 +10,6 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.clients.TestRule;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -23,6 +22,7 @@ import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ICorfuHashable;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.nio.ByteBuffer;
@@ -86,8 +86,17 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         t(1, this::OptimisticTXBegin);
         t(2, this::OptimisticTXBegin);
-        t(1, () -> map.insert("k2", "v2"));
-        t(2, () -> map.insert("k2", "v3"));
+
+        t(1, () -> {
+            map.insert("k2", "v2");
+            map.get("k2"); // get k2 since insert does not have an upcall, so no entry is added into the readSet
+        });
+
+        t(2, () -> {
+            map.insert("k2", "v3");
+            map.get("k2"); // get k2 since insert does not have an upcall, so no entry is added into the readSet
+        });
+
         t(2, () -> TransactionalContext.getCurrentContext().logUpdate(stream1Id, smrEntry2));
         t(1, this::TXEnd);
         t(2, this::TXEnd)
@@ -176,8 +185,16 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         t(1, this::OptimisticTXBegin);
         t(2, this::OptimisticTXBegin);
-        t(1, () -> map.insert(c1, "v1"));
-        t(2, () -> map.insert(c2, "v2"));
+
+        t(1, () -> {
+            map.insert(c1, "v1");
+            map.get(c1); // get c1 since insert does not have an upcall, so no entry is added into the readSet
+        });
+
+        t(2, () -> {
+            map.insert(c2, "v2");
+            map.get(c2); // get c2 since insert does not have an upcall, so no entry is added into the readSet
+        });
         t(1, this::TXEnd);
         t(2, this::TXEnd)
                 .assertThrows()
@@ -340,8 +357,17 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         t(1, this::OptimisticTXBegin);
         t(2, this::OptimisticTXBegin);
-        t(1, () -> map.insert(c1, "v1"));
-        t(2, () -> map.insert(c2, "v2"));
+
+        t(1, () -> {
+            map.insert(c1, "v1");
+            map.get(c1); // get c1 since insert does not have an upcall, so no entry is added into the readSet
+        });
+
+        t(2, () -> {
+            map.insert(c2, "v2");
+            map.get(c2); // get c2 since insert does not have an upcall, so no entry is added into the readSet
+        });
+
         t(1, this::TXEnd);
         t(2, this::TXEnd)
                 .assertDoesNotThrow(TransactionAbortedException.class);
@@ -379,8 +405,17 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         t(1, this::OptimisticTXBegin);
         t(2, this::OptimisticTXBegin);
-        t(1, () -> map.insert(c1, "v1"));
-        t(2, () -> map.insert(c2, "v2"));
+
+        t(1, () -> {
+            map.insert(c1, "v1");
+            map.get(c1); // get c1 since insert does not have an upcall, so no entry is added into the readSet
+        });
+
+        t(2, () -> {
+            map.insert(c2, "v2");
+            map.get(c2); // get c2 since insert does not have an upcall, so no entry is added into the readSet
+        });
+
         t(1, this::TXEnd);
         t(2, this::TXEnd)
                 .assertThrows()
@@ -425,8 +460,17 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         t(1, this::OptimisticTXBegin);
         t(2, this::OptimisticTXBegin);
-        t(1, () -> map.insert(c1, "v1"));
-        t(2, () -> map.insert(c2, "v2"));
+
+        t(1, () -> {
+            map.insert(c1, "v1");
+            map.get(c1); // get c1 since insert does not have an upcall, so no entry is added into the readSet
+        });
+
+        t(2, () -> {
+            map.insert(c2, "v2");
+            map.get(c2); // get c2 since insert does not have an upcall, so no entry is added into the readSet
+        });
+
         t(1, this::TXEnd);
         t(2, this::TXEnd)
                 .assertDoesNotThrow(TransactionAbortedException.class);
@@ -463,8 +507,17 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         t(1, this::OptimisticTXBegin);
         t(2, this::OptimisticTXBegin);
-        t(1, () -> map.insert(c1, "v1"));
-        t(2, () -> map.insert(c2, "v2"));
+
+        t(1, () -> {
+            map.insert(c1, "v1");
+            map.get(c1); // get c1 since insert does not have an upcall, so no entry is added into the readSet
+        });
+
+        t(2, () -> {
+            map.insert(c2, "v2");
+            map.get(c2); // get c2 since insert does not have an upcall, so no entry is added into the readSet
+        });
+
         t(1, this::TXEnd);
         t(2, this::TXEnd)
                 .assertThrows()
@@ -506,8 +559,17 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         t(1, this::OptimisticTXBegin);
         t(2, this::OptimisticTXBegin);
-        t(1, () -> map.insert(c1, "v1"));
-        t(2, () -> map.insert(c2, "v2"));
+
+        t(1, () -> {
+            map.insert(c1, "v1");
+            map.get(c1); // get c1 since insert does not have an upcall, so no entry is added into the readSet
+        });
+
+        t(2, () -> {
+            map.insert(c2, "v2");
+            map.get(c2); // get c2 since insert does not have an upcall, so no entry is added into the readSet
+        });
+
         t(1, this::TXEnd);
         t(2, this::TXEnd)
                 .assertDoesNotThrow(TransactionAbortedException.class);
@@ -547,8 +609,17 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         t(1, this::OptimisticTXBegin);
         t(2, this::OptimisticTXBegin);
-        t(1, () -> map.insert(c1, "v1"));
-        t(2, () -> map.insert(c2, "v2"));
+
+        t(1, () -> {
+            map.insert(c1, "v1");
+            map.get(c1); // get c1 since insert does not have an upcall, so no entry is added into the readSet
+        });
+
+        t(2, () -> {
+            map.insert(c2, "v2");
+            map.get(c2); // get c2 since insert does not have an upcall, so no entry is added into the readSet
+        });
+
         t(1, this::TXEnd);
         t(2, this::TXEnd)
                 .assertDoesNotThrow(TransactionAbortedException.class);
@@ -600,7 +671,12 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
     public void modifyingMultipleKeysCausesAbort() {
         // T1 modifies k1 and k2.
         t(1, this::OptimisticTXBegin);
-        t(1, () -> put("k1", "v1"));
+
+        t(1, () -> {
+            put("k1", "v1");
+            get("k1"); // get k1 since insert does not have an upcall, so no entry is added into the readSet
+        });
+
         t(1, () -> put("k2", "v2"));
 
         // T2 modifies k1, commits
@@ -619,6 +695,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
      * see optimistic updates from previous ones.
      */
     @Test
+    @Ignore // PersistentCorfuTable / MVO do not support nested TXNs at this time
     public void OptimisticStreamGetUpdatedCorrectlyWithNestedTransaction() {
         t(1, this::OptimisticTXBegin);
         t(1, () -> put("k", "v0"));
@@ -704,6 +781,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
      * parent transaction.
      */
     @Test
+    @Ignore // PersistentCorfuTable / MVO do not support nested TXNs at this time
     public void nestedTransactionsCanBeReadDuringCommit() {
         // We start without a transaction and put k,v1
         t(1, () -> put("k", "v1"));
@@ -740,6 +818,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
      * of two threads are not visible to each other.
      */
     @Test
+    @Ignore // PersistentCorfuTable / MVO do not support nested TXNs at this time
     public void nestedTransactionsAreIsolatedAcrossThreads() {
         // Start a transaction on both threads.
         t(1, this::OptimisticTXBegin);
@@ -796,6 +875,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
      * leaked into the parent transaction.
      */
     @Test
+    @Ignore // PersistentCorfuTable / MVO do not support nested TXNs at this time
     public void nestedTransactionCanBeAborted() {
         t(1, this::OptimisticTXBegin);
         t(1, () -> put("k", "v1"));
@@ -868,8 +948,14 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         t1(() -> rt.getObjectsView().TXBegin());
         t2(() -> rt.getObjectsView().TXBegin());
-        t1(() -> m1.insert("azusavnj", "1"));
-        t2(() -> m2.insert("ajkenmbb", "2"));
+        t1(() -> {
+            m1.insert("azusavnj", "1");
+            m1.get("azusavnj"); // get azusavnj since insert does not have an upcall, so no entry is added into the readSet
+        });
+        t2(() -> {
+            m2.insert("ajkenmbb", "2");
+            m2.get("ajkenmbb"); // get ajkenmbb since insert does not have an upcall, so no entry is added into the readSet
+        });
         t1(() -> rt.getObjectsView().TXEnd());
         t2(() -> rt.getObjectsView().TXEnd())
                 .assertDoesNotThrow(TransactionAbortedException.class);
