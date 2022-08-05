@@ -5,7 +5,6 @@ import io.netty.channel.EventLoopGroup;
 import lombok.Data;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.runtime.RuntimeParameters;
@@ -40,9 +39,6 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
     // Topology Configuration Identifier (configuration epoch)
     private long topologyConfigId;
 
-    // Log Replication Channel Context
-    private IChannelContext channelContext;
-
     // Max write size(in bytes) for LR's runtime
     private int maxWriteSize;
 
@@ -58,7 +54,6 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
         private String pluginFilePath;
         private long topologyConfigId;
         private LogReplicationConfig replicationConfig;
-        private IChannelContext channelContext;
         private int maxWriteSize;
 
         private LogReplicationRuntimeParametersBuilder() {
@@ -91,11 +86,6 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
 
         public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder replicationConfig(LogReplicationConfig replicationConfig) {
             this.replicationConfig = replicationConfig;
-            return this;
-        }
-
-        public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder channelContext(IChannelContext channelContext) {
-            this.channelContext = channelContext;
             return this;
         }
 
@@ -255,7 +245,6 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
             runtimeParameters.setRemoteClusterDescriptor(remoteClusterDescriptor);
             runtimeParameters.setTopologyConfigId(topologyConfigId);
             runtimeParameters.setPluginFilePath(pluginFilePath);
-            runtimeParameters.setChannelContext(channelContext);
             runtimeParameters.setReplicationConfig(replicationConfig);
             runtimeParameters.setMaxWriteSize(maxWriteSize);
             return runtimeParameters;

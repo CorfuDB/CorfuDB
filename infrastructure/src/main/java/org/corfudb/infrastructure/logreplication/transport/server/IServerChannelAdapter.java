@@ -1,10 +1,8 @@
 package org.corfudb.infrastructure.logreplication.transport.server;
 
 import lombok.Getter;
-import lombok.Setter;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
-import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 
 import java.util.concurrent.CompletableFuture;
@@ -24,10 +22,6 @@ public abstract class IServerChannelAdapter {
 
     @Getter
     private final ServerContext serverContext;
-
-    @Getter
-    @Setter
-    private IChannelContext channelContext;
 
     public IServerChannelAdapter(ServerContext serverContext, LogReplicationServerRouter adapter) {
         this.serverContext = serverContext;
