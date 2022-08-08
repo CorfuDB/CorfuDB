@@ -96,7 +96,7 @@ public class LogReplicationSourceManager {
 
         this.parameters = params;
 
-        this.config = parameters.getReplicationConfig();
+        this.config = tableManagerPlugin.getConfig();
 
         Set<String> streamsToReplicate =
             config.getReplicationSubscriberToStreamsMap().get(replicationSession.getSubscriber());
@@ -112,9 +112,9 @@ public class LogReplicationSourceManager {
         ReadProcessor readProcessor = new DefaultReadProcessor(runtime);
         this.metadataManager = metadataManager;
         // Ack Reader for Snapshot and LogEntry Sync
-        this.ackReader = new LogReplicationAckReader(this.metadataManager, config, runtime, replicationSession);
+        this.ackReader = new LogReplicationAckReader(this.metadataManager, tableManagerPlugin, runtime, replicationSession);
 
-        this.logReplicationFSM = new LogReplicationFSM(this.runtime, config, dataSender, readProcessor,
+        this.logReplicationFSM = new LogReplicationFSM(this.runtime, dataSender, readProcessor,
             logReplicationFSMWorkers, ackReader, tableManagerPlugin, replicationSession);
 
         this.logReplicationFSM.setTopologyConfigId(params.getTopologyConfigId());

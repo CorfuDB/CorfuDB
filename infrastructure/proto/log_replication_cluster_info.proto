@@ -33,4 +33,3 @@ enum ClusterRole {
   SINK = 2;
   NONE = 3;
 }
-

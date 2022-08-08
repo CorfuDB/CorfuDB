@@ -8,8 +8,9 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
-import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
@@ -42,11 +43,14 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEnt
 @Slf4j
 @NotThreadSafe
 /**
- * Reading transaction log changes after a snapshot transfer for a specific set of streams.
+ * Reading transaction log changes after a snapshot transfer for a specific set of streams. The set of streams to replicate
+ * will be synced by the config at the start of a log entry sync and when a new stream to replicate is discovered.
  */
 public class StreamsLogEntryReader implements LogEntryReader {
 
     private final LogReplicationEntryType MSG_TYPE = LogReplicationEntryType.LOG_ENTRY_MESSAGE;
+
+    private final LogReplicationConfigManager configManager;
 
     // Set of UUIDs for the corresponding streams
     private Set<UUID> streamUUIDs;
@@ -71,6 +75,9 @@ public class StreamsLogEntryReader implements LogEntryReader {
     private final Optional<Counter> deltaCounter;
     private final Optional<Counter> validDeltaCounter;
     private final Optional<Counter> opaqueEntryCounter;
+
+    private final ReplicationSession session;
+
     @Getter
     @VisibleForTesting
     private OpaqueEntry lastOpaqueEntry = null;
@@ -81,26 +88,35 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     private StreamIteratorMetadata currentProcessedEntryMetadata;
 
-    public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config,
+    public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfigManager configManager,
                                  ReplicationSession replicationSession) {
         runtime.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
-        this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
+        this.configManager = configManager;
+        this.maxDataSizePerMsg = configManager.getConfig().getMaxDataSizePerMsg();
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
         this.deltaCounter = configureDeltaCounter();
         this.validDeltaCounter = configureValidDeltaCounter();
         this.opaqueEntryCounter = configureOpaqueEntryCounter();
-        Set<String> streams = config.getReplicationSubscriberToStreamsMap().get(replicationSession.getSubscriber());
+        this.session = replicationSession;
 
+        // Get UUIDs for streams to replicate
+        refreshStreamUUIDs(replicationSession.getSubscriber());
+
+        //create an opaque stream for transaction stream
+        txOpaqueStream = new TxOpaqueStream(runtime);
+    }
+
+    /**
+     * Get streams to replicate from config and convert them into stream ids. This method will be invoked at
+     * constructor and when LogReplicationConfig is synced with registry table.
+     */
+    private void refreshStreamUUIDs(ReplicationSubscriber subscriber) {
+        Set<String> streams = configManager.getConfig().getReplicationSubscriberToStreamsMap().get(subscriber);
         streamUUIDs = new HashSet<>();
         for (String s : streams) {
             streamUUIDs.add(CorfuRuntime.getStreamID(s));
         }
-
-        log.debug("Streams to replicate total={}, stream_names={}, stream_ids={}", streamUUIDs.size(), streams, streamUUIDs);
-
-        //create an opaque stream for transaction stream
-        txOpaqueStream = new TxOpaqueStream(runtime);
     }
 
     private LogReplicationEntryMsg generateMessageWithOpaqueEntryList(
@@ -148,6 +164,14 @@ public class StreamsLogEntryReader implements LogEntryReader {
             return false;
         }
 
+        // It is possible that tables corresponding to some streams to replicate were not opened when LogReplicationConfig
+        // was initialized. So these streams will be missing from the list of streams to replicate. Check the registry
+        // table and add them to the list in that case.
+        if (!streamUUIDs.containsAll(txEntryStreamIds)) {
+            log.info("Additional streams found in tx stream, lr config needs to be updated.");
+            streamUUIDs =
+                configManager.getLatestConfig().getReplicationSubscriberToStreamsMap().get(session.getSubscriber());
+        }
         // If none of the streams in the transaction entry are specified to be replicated, this is an invalid entry, skip
         if (Collections.disjoint(streamUUIDs, txEntryStreamIds)) {
             log.trace("TX Stream entry[{}] :: contains none of the streams of interest, streams={} [ignored]", entry.getVersion(), txEntryStreamIds);

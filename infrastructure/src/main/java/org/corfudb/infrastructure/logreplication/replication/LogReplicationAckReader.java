@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.logreplication.replication;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
@@ -12,6 +11,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader.StreamIteratorMetadata;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -35,10 +35,10 @@ import java.util.concurrent.locks.ReentrantLock;
 @Slf4j
 public class LogReplicationAckReader {
     private final LogReplicationMetadataManager metadataManager;
-    private final LogReplicationConfig config;
     private final CorfuRuntime runtime;
     private final String remoteClusterId;
     private final ReplicationSubscriber replicationSubscriber;
+    private final LogReplicationConfigManager configManager;
 
     // Log tail when the current snapshot sync started.  We do not need to synchronize access to it because it will not
     // be read(calculateRemainingEntriesToSend) and written(setBaseSnapshot) concurrently.
@@ -64,10 +64,11 @@ public class LogReplicationAckReader {
 
     private final Lock lock = new ReentrantLock();
 
-    public LogReplicationAckReader(LogReplicationMetadataManager metadataManager, LogReplicationConfig config,
-                                   CorfuRuntime runtime, ReplicationSession replicationSession) {
+    public LogReplicationAckReader(LogReplicationMetadataManager metadataManager,
+                                   LogReplicationConfigManager configManager, CorfuRuntime runtime,
+                                   ReplicationSession replicationSession) {
         this.metadataManager = metadataManager;
-        this.config = config;
+        this.configManager = configManager;
         this.runtime = runtime;
         this.remoteClusterId = replicationSession.getRemoteClusterId();
         this.replicationSubscriber = replicationSession.getSubscriber();
@@ -175,7 +176,8 @@ public class LogReplicationAckReader {
      */
     private long getMaxReplicatedStreamsTail(Map<UUID, Long> tailMap) {
         long maxTail = Address.NON_ADDRESS;
-        for (String streamName : config.getReplicationSubscriberToStreamsMap().get(replicationSubscriber)) {
+        // TODO pankti: Should this config be refreshed?
+        for (String streamName : configManager.getConfig().getReplicationSubscriberToStreamsMap().get(replicationSubscriber)) {
             UUID streamUuid = CorfuRuntime.getStreamID(streamName);
             if (tailMap.containsKey(streamUuid)) {
                 long streamTail = tailMap.get(streamUuid);

@@ -12,9 +12,9 @@ import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.RequestHandler;
 import org.corfudb.infrastructure.RequestHandlerMethods;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
@@ -70,11 +70,11 @@ public class LogReplicationServer extends AbstractServer {
         return RequestHandlerMethods.generateHandler(MethodHandles.lookup(), this);
     }
 
-    public LogReplicationServer(@Nonnull ServerContext context, String localNodeId, LogReplicationConfig config,
-        String localEndpoint, long topologyConfigId,
+    public LogReplicationServer(@Nonnull ServerContext context, String localNodeId,
+                                LogReplicationConfigManager configManager, String localEndpoint, long topologyConfigId,
         Map<ReplicationSession, LogReplicationMetadataManager> sourceSessionToMetadataManagerMap) {
         this.localNodeId = localNodeId;
-        createSinkManagers(config, localEndpoint, context, sourceSessionToMetadataManagerMap, topologyConfigId);
+        createSinkManagers(configManager, localEndpoint, context, sourceSessionToMetadataManagerMap, topologyConfigId);
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
 
@@ -86,13 +86,13 @@ public class LogReplicationServer extends AbstractServer {
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
 
-     private void createSinkManagers(LogReplicationConfig logReplicationConfig, String localEndpoint,
+     private void createSinkManagers(LogReplicationConfigManager configManager, String localEndpoint,
                                      ServerContext serverContext,
                                      Map<ReplicationSession, LogReplicationMetadataManager> sourceSessionToMetadataManagerMap,
                                      long topologyConfigId) {
         for (Map.Entry<ReplicationSession, LogReplicationMetadataManager> entry :
             sourceSessionToMetadataManagerMap.entrySet()) {
-            LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(localEndpoint, logReplicationConfig,
+            LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(localEndpoint, configManager,
                 entry.getValue(), serverContext, topologyConfigId, entry.getKey());
             sourceSessionToSinkManagerMap.put(entry.getKey(), sinkManager);
         }

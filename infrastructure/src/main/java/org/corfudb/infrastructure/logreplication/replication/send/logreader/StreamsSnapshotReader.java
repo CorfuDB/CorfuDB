@@ -8,9 +8,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.util.Memory;
 import org.corfudb.common.util.ObservableValue;
-import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.send.IllegalSnapshotEntrySizeException;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
@@ -45,6 +45,8 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEnt
 /**
  *  Default snapshot reader implementation
  *
+ *  The streams to replicate are read from registry table and will be refreshed at the start of a snapshot sync.
+ *
  *  This implementation provides reads at the stream level (no coalesced state).
  *  It generates TxMessages which will be transmitted by the DataSender (provided by the application).
  */
@@ -55,10 +57,11 @@ public class StreamsSnapshotReader implements SnapshotReader {
      */
     private final int maxDataSizePerMsg;
     private final Optional<DistributionSummary> messageSizeDistributionSummary;
+    private final CorfuRuntime rt;
+    private final LogReplicationConfigManager configManager;
     private long snapshotTimestamp;
-    private Set<String> streams;
+    private Set<String> streamsToReplicate;
     private PriorityQueue<String> streamsToSend;
-    private CorfuRuntime rt;
     private long preMsgTs;
     private long currentMsgTs;
     private OpaqueStreamIterator currentStreamInfo;
@@ -71,16 +74,21 @@ public class StreamsSnapshotReader implements SnapshotReader {
     @Setter
     private long topologyConfigId;
 
+    private ReplicationSession replicationSession;
+
     /**
      * Init runtime and streams to read
      */
-    public StreamsSnapshotReader(CorfuRuntime runtime, LogReplicationConfig config,
+    public StreamsSnapshotReader(CorfuRuntime runtime, LogReplicationConfigManager configManager,
                                  ReplicationSession replicationSession) {
         this.rt = runtime;
+        this.configManager = configManager;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
-        this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
-        this.streams = config.getReplicationSubscriberToStreamsMap().get(replicationSession.getSubscriber());
+        this.maxDataSizePerMsg = configManager.getConfig().getMaxDataSizePerMsg();
+        this.streamsToReplicate =
+            configManager.getConfig().getReplicationSubscriberToStreamsMap().get(replicationSession.getSubscriber());
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
+        this.replicationSession = replicationSession;
     }
 
     /**
@@ -199,10 +207,9 @@ public class StreamsSnapshotReader implements SnapshotReader {
         SMREntryList entryList = next(stream);
         LogReplicationEntryMsg txMsg = generateMessage(stream, entryList, syncRequestId);
         log.info("Successfully generate a snapshot message for stream {} with snapshotTimestamp={}, numEntries={}, " +
-                        "entriesBytes={}, streamId={}", stream.name, snapshotTimestamp,
-                entryList.getSmrEntries().size(), entryList.getSizeInBytes(), stream.uuid);
-        messageSizeDistributionSummary
-                .ifPresent(distribution -> distribution.record(entryList.getSizeInBytes()));
+                "entriesBytes={}, streamId={}", stream.name, snapshotTimestamp, entryList.getSmrEntries().size(),
+            entryList.getSizeInBytes(), stream.uuid);
+        messageSizeDistributionSummary.ifPresent(distribution -> distribution.record(entryList.getSizeInBytes()));
         return txMsg;
     }
 
@@ -227,7 +234,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
                 String streamToReplicate = streamsToSend.poll();
                 currentStreamInfo = new OpaqueStreamIterator(streamToReplicate, rt, snapshotTimestamp);
                 log.info("Start Snapshot Sync replication for stream name={}, id={}", streamToReplicate,
-                        CorfuRuntime.getStreamID(streamToReplicate));
+                    CorfuRuntime.getStreamID(streamToReplicate));
 
                 // If the new stream has entries to be processed, go to the next step
                 if (currentStreamInfo.iterator.hasNext()) {
@@ -252,7 +259,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
             currentStreamInfo = null;
 
             if (streamsToSend.isEmpty()) {
-                log.info("Snapshot log reader finished reading ALL streams, total={}", streams.size());
+                log.info("Snapshot log reader finished reading ALL streams, total={}", streamsToReplicate.size());
                 endSnapshotSync = true;
             }
         }
@@ -266,7 +273,9 @@ public class StreamsSnapshotReader implements SnapshotReader {
 
     @Override
     public void reset(long ts) {
-        streamsToSend = new PriorityQueue<>(streams);
+        streamsToReplicate =
+            configManager.getLatestConfig().getReplicationSubscriberToStreamsMap().get(replicationSession.getSubscriber());
+        streamsToSend = new PriorityQueue<>(streamsToReplicate);
         preMsgTs = Address.NON_ADDRESS;
         currentMsgTs = Address.NON_ADDRESS;
         snapshotTimestamp = ts;

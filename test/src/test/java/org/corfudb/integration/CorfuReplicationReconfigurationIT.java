@@ -13,7 +13,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
-import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -31,6 +30,7 @@ import java.io.File;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -464,7 +464,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             setupSourceAndSinkCorfu();
             openMaps();
 
-            Set<UUID> tablesToListen = new DefaultLogReplicationConfigAdapter().getStreamingConfigOnSink().keySet();
+            Set<UUID> tablesToListen = getTablesToListen();
 
             // Start Listener on the 'stream_tag' of interest, on sink site + tables to listen (which accounts
             // for the notification for 'clear' table)
@@ -779,5 +779,15 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         public void onError(Throwable throwable) {
             log.error("ERROR :: unsubscribed listener");
         }
+    }
+
+    private Set<UUID> getTablesToListen() {
+        String SEPARATOR = "$";
+        int indexOne = 1;
+        int indexTwo = 2;
+        Set<UUID> tablesToListen = new HashSet<>();
+        tablesToListen.add(CorfuRuntime.getStreamID(NAMESPACE + SEPARATOR + TABLE_PREFIX + indexOne));
+        tablesToListen.add(CorfuRuntime.getStreamID(NAMESPACE + SEPARATOR + TABLE_PREFIX + indexTwo));
+        return tablesToListen;
     }
 }

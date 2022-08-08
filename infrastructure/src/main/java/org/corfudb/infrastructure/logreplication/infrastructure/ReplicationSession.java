@@ -5,7 +5,7 @@ import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 
 import java.util.Objects;
 
-import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultLogReplicationConfigAdapter.SAMPLE_CLIENT;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.SAMPLE_CLIENT;
 
 /**
  * This class represents a session/connection with a remote cluster.  Each session has a dedicated Replication FSM and

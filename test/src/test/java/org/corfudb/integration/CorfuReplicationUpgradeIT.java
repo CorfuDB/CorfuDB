@@ -10,8 +10,6 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.utils.CommonTypes;
 import org.corfudb.utils.LogReplicationStreams;
-import org.corfudb.utils.LogReplicationStreams.Namespace;
-import org.corfudb.utils.LogReplicationStreams.TableInfo;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -113,12 +111,6 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         corfuStoreSink.subscribeListener(sinkListener, LogReplicationMetadataManager.NAMESPACE,
                 LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
-        Set<String> streamsToReplicate = new HashSet<>();
-        for (int i = 1; i <= FIVE; i++) {
-            streamsToReplicate.add(TABLE_PREFIX + i);
-        }
-        setupStreamsToReplicateTable(streamsToReplicate, true, false);
-        setupStreamsToReplicateTable(streamsToReplicate, false, false);
         setupVersionTable(corfuStoreSource, false);
         setupVersionTable(corfuStoreSink, false);
 
@@ -213,12 +205,6 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         corfuStoreSink.subscribeListener(sinkListener, LogReplicationMetadataManager.NAMESPACE,
                 LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
-        Set<String> streamsToReplicate = new HashSet<>();
-        for (int i = 1; i <= FIVE; i++) {
-            streamsToReplicate.add(TABLE_PREFIX + i);
-        }
-        setupStreamsToReplicateTable(streamsToReplicate, true, false);
-        setupStreamsToReplicateTable(streamsToReplicate, false, false);
         setupVersionTable(corfuStoreSource, false);
         setupVersionTable(corfuStoreSink, false);
 
@@ -332,12 +318,6 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             assertThat(map.count()).isEqualTo(0);
         }
 
-        Set<String> streamsToReplicate = new HashSet<>();
-        for (int i = 1; i <= FIVE; i++) {
-            streamsToReplicate.add(TABLE_PREFIX + i);
-        }
-        setupStreamsToReplicateTable(streamsToReplicate, true, false);
-        setupStreamsToReplicateTable(streamsToReplicate, false, false);
         setupVersionTable(corfuStoreSource, false);
         setupVersionTable(corfuStoreSink, false);
 
@@ -428,8 +408,6 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             streamsToReplicateSource.add(TABLE_PREFIX + i);
         }
 
-        setupStreamsToReplicateTable(streamsToReplicateSource, true, false);
-        setupStreamsToReplicateTable(streamsToReplicateSource, false, false);
         setupVersionTable(corfuStoreSource, false);
         setupVersionTable(corfuStoreSink, false);
 
@@ -491,7 +469,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         for (int i = 2; i <= 3; i++) {
             streamsToReplicateSink.add(TABLE_PREFIX + i);
         }
-        upgradeSiteWithNewConfig(false, streamsToReplicateSink);
+        upgradeSite(false, corfuStoreSink);
         verifyVersion(corfuStoreSink, UPGRADE_VERSION_STRING, true);
         verifyVersion(corfuStoreSource, VERSION_STRING, false);
 
@@ -508,7 +486,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
                 .collect(Collectors.toList());
 
         // Open maps corresponding to the new streams in the upgraded config
-        openMapsAfterUpgrade(sinkOnlyStreams);
+        openMapsAfterUpgrade(sourceOnlyStreams, sinkOnlyStreams);
 
         // Write to sourceOnlyStreams
         writeDataOnSource(sourceOnlyStreams, NUM_WRITES, NUM_WRITES / 2);
@@ -519,8 +497,9 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         // Write to sinkOnlyStreams
         writeDataOnSource(sinkOnlyStreams, 0, NUM_WRITES);
 
+        // Note that Sink side will apply whatever Source side sends, data for sourceOnlyStreams should also be there.
         verifyDataOnSink(commonStreams, NUM_WRITES + NUM_WRITES / 2);
-        verifyDataOnSink(sourceOnlyStreams, NUM_WRITES);
+        verifyDataOnSink(sourceOnlyStreams, NUM_WRITES + NUM_WRITES / 2);
         verifyDataOnSink(sinkOnlyStreams, 0);
 
         corfuStoreSink.unsubscribeListener(snapshotSyncPluginListener);
@@ -537,8 +516,6 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         for (int i = 1; i <= 2; i++) {
             streamsToReplicateSource.add(TABLE_PREFIX + i);
         }
-        setupStreamsToReplicateTable(streamsToReplicateSource, true, false);
-        setupStreamsToReplicateTable(streamsToReplicateSource, false, false);
         setupVersionTable(corfuStoreSource, false);
         setupVersionTable(corfuStoreSink, false);
 
@@ -610,8 +587,8 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         for (int i = 2; i <= 3; i++) {
             streamsToReplicateSink.add(TABLE_PREFIX + i);
         }
-        pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_SINK;
-        upgradeSiteWithNewConfig(false, streamsToReplicateSink);
+        pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_STANDBY;
+        upgradeSite(false, corfuStoreSink);
         verifyVersion(corfuStoreSink, UPGRADE_VERSION_STRING, true);
         verifyVersion(corfuStoreSource, VERSION_STRING, false);
 
@@ -634,7 +611,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
                 .collect(Collectors.toList());
 
         // Open maps corresponding to the new streams in the upgraded config
-        openMapsAfterUpgrade(sinkOnlyStreams);
+        openMapsAfterUpgrade(sourceOnlyStreams, sinkOnlyStreams);
 
         // Write data on sourceOnly streams
         writeDataOnSource(sourceOnlyStreams, NUM_WRITES, NUM_WRITES / 2);
@@ -657,8 +634,8 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         Assert.assertTrue(sinkListener.getAccumulatedStatus().get(4));
         Assert.assertFalse(sinkListener.getAccumulatedStatus().get(3));
 
-        // No new data for source-only streams
-        verifyDataOnSink(sourceOnlyStreams, NUM_WRITES);
+        // Note that Sink side will apply whatever Source side sends, data for sourceOnlyStreams should also be there.
+        verifyDataOnSink(sourceOnlyStreams, NUM_WRITES + NUM_WRITES / 2);
 
         // No new data for sink-only streams
         verifyDataOnSink(sinkOnlyStreams, 0);
@@ -681,8 +658,6 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             streamsToReplicateSource.add(TABLE_PREFIX + i);
         }
 
-        setupStreamsToReplicateTable(streamsToReplicateSource, true, false);
-        setupStreamsToReplicateTable(streamsToReplicateSource, false, false);
         setupVersionTable(corfuStoreSource, false);
         setupVersionTable(corfuStoreSink, false);
 
@@ -744,8 +719,8 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         for (int i = 2; i <= 3; i++) {
             streamsToReplicateSink.add(TABLE_PREFIX + i);
         }
-        pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_SINK;
-        upgradeSiteWithNewConfig(false, streamsToReplicateSink);
+        pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_STANDBY;
+        upgradeSite(false, corfuStoreSink);
         verifyVersion(corfuStoreSink, UPGRADE_VERSION_STRING, true);
         verifyVersion(corfuStoreSource, VERSION_STRING, false);
 
@@ -762,7 +737,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
                 .collect(Collectors.toList());
 
         // Open maps corresponding to the new streams in the upgraded config
-        openMapsAfterUpgrade(sinkOnlyStreams);
+        openMapsAfterUpgrade(sourceOnlyStreams, sinkOnlyStreams);
 
         // Write to sourceOnlyStreams
         writeDataOnSource(sourceOnlyStreams, NUM_WRITES, NUM_WRITES / 2);
@@ -773,8 +748,9 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         // Write to sinkOnlyStreams
         writeDataOnSource(sinkOnlyStreams, 0, NUM_WRITES);
 
+        // Note that Sink side will apply whatever Source side sends, data for sourceOnlyStreams should also be there.
         verifyDataOnSink(commonStreams, NUM_WRITES + NUM_WRITES / 2);
-        verifyDataOnSink(sourceOnlyStreams, NUM_WRITES);
+        verifyDataOnSink(sourceOnlyStreams, NUM_WRITES + NUM_WRITES / 2);
         verifyDataOnSink(sinkOnlyStreams, 0);
 
         corfuStoreSink.unsubscribeListener(sinkListener);
@@ -791,8 +767,9 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
 
         // Now upgrade the source site
-        pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_SOURCE;
-        upgradeSiteWithNewConfig(true, streamsToReplicateSink);
+        pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_ACTIVE;
+        openMapsAfterUpgradeSource(sourceOnlyStreams, sinkOnlyStreams);
+        upgradeSite(true, corfuStoreSource);
         verifyVersion(corfuStoreSink, UPGRADE_VERSION_STRING, true);
         verifyVersion(corfuStoreSource, UPGRADE_VERSION_STRING, true);
 
@@ -811,45 +788,10 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         verifyDataOnSink(commonStreams, NUM_WRITES + NUM_WRITES / 2);
         verifyDataOnSink(sinkOnlyStreams, NUM_WRITES);
 
-        verifyDataOnSink(sourceOnlyStreams, NUM_WRITES);
+        verifyDataOnSink(sourceOnlyStreams, NUM_WRITES + NUM_WRITES / 2);
 
         corfuStoreSink.unsubscribeListener(snapshotSyncPluginListener);
         corfuStoreSink.unsubscribeListener(sinkListener);
-    }
-
-    private void setupStreamsToReplicateTable(Set<String> streamsToReplicate,
-                                              boolean source, boolean clear) throws Exception {
-
-        CorfuStore corfuStore;
-        Table<TableInfo, Namespace, CommonTypes.Uuid> streamsNameTable;
-        if (source) {
-            corfuStore = corfuStoreSource;
-        } else {
-            corfuStore = corfuStoreSink;
-        }
-
-        if (clear) {
-            corfuStore.deleteTable(NAMESPACE, STREAMS_TEST_TABLE);
-        }
-
-        streamsNameTable = corfuStore.openTable(NAMESPACE, STREAMS_TEST_TABLE,
-                TableInfo.class, Namespace.class, CommonTypes.Uuid.class,
-                TableOptions.builder().build());
-
-        try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-            for (String stream : streamsToReplicate) {
-                TableInfo tableInfo = TableInfo.newBuilder().setName(NAMESPACE + SEPARATOR + stream).build();
-                Namespace namespace = Namespace.newBuilder().setName(NAMESPACE).build();
-                txn.putRecord(streamsNameTable, tableInfo, namespace, null);
-            }
-            txn.commit();
-        }
-    }
-
-    private void upgradeSiteWithNewConfig(boolean source,
-                                          Set<String> streamsToReplicate) throws Exception {
-        setupStreamsToReplicateTable(streamsToReplicate, source, true);
-        upgradeSite(source, source ? corfuStoreSource : corfuStoreSink);
     }
 
     private void upgradeSite(boolean source, CorfuStore corfuStore) throws Exception {
@@ -897,12 +839,22 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         }
     }
 
-    private void openMapsAfterUpgrade(List<String> tableNames) throws Exception {
-        for (String tableName : tableNames) {
-            Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapSource = corfuStoreSource.openTable(
+    private void openMapsAfterUpgrade(List<String> sourceOnlyStreams, List<String> sinkOnlyStreams) throws Exception {
+        for (String tableName : sourceOnlyStreams) {
+            Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapSink = corfuStoreSink.openTable(
                     NAMESPACE, tableName, Sample.StringKey.class,
                     Sample.IntValueTag.class, Sample.Metadata.class,
-                    TableOptions.fromProtoSchema(Sample.IntValueTag.class,
+                    TableOptions.fromProtoSchema(Sample.IntValue.class,
+                            TableOptions.builder().persistentDataPath(null).build()));
+
+            mapNameToMapSink.put(tableName, mapSink);
+        }
+        for (String tableName : sinkOnlyStreams) {
+            Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapSource = corfuStoreSource.openTable(
+>>>>>>> 1aec9ab6238 (Dynamic streams discovery based on is_federated flag)
+                    NAMESPACE, tableName, Sample.StringKey.class,
+                    Sample.IntValueTag.class, Sample.Metadata.class,
+                    TableOptions.fromProtoSchema(Sample.IntValue.class,
                             TableOptions.builder().persistentDataPath(null).build()));
 
             Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapSink = corfuStoreSink.openTable(
@@ -916,7 +868,29 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         }
     }
 
+    private void openMapsAfterUpgradeSource(List<String> sourceOnlyStreams, List<String> sinkOnlyStreams) throws Exception {
+        for (String tableName : sourceOnlyStreams) {
+            Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapSource = corfuStoreSource.openTable(
+                    NAMESPACE, tableName, Sample.StringKey.class,
+                    Sample.IntValueTag.class, Sample.Metadata.class,
+                    TableOptions.fromProtoSchema(Sample.IntValue.class,
+                            TableOptions.builder().persistentDataPath(null).build()));
+
+            mapNameToMapSource.put(tableName, mapSource);
+        }
+        for (String tableName : sinkOnlyStreams) {
+            Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapSource = corfuStoreSource.openTable(
+                    NAMESPACE, tableName, Sample.StringKey.class,
+                    Sample.IntValueTag.class, Sample.Metadata.class,
+                    TableOptions.fromProtoSchema(Sample.IntValueTag.class,
+                            TableOptions.builder().persistentDataPath(null).build()));
+
+            mapNameToMapSource.put(tableName, mapSource);
+        }
+    }
+
     private void writeDataOnSource(List<String> tableNames, int start,
+>>>>>>> 1aec9ab6238 (Dynamic streams discovery based on is_federated flag)
                                    int NUM_WRITES) {
         int totalWrites = start + NUM_WRITES;
         for (String tableName : tableNames) {

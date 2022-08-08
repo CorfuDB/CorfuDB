@@ -4,6 +4,8 @@ import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import java.util.Objects;
 
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.SAMPLE_CLIENT;
+
 /**
  * This class represents a client/subscriber of Log Replication.
  *
@@ -37,6 +39,11 @@ public class ReplicationSubscriber {
         }
         ReplicationSubscriber that = (ReplicationSubscriber) o;
         return replicationModel == that.replicationModel && client.equals(that.client);
+    }
+
+    // TODO pankti: Do not create a new instance every time the method is invoked
+    public static ReplicationSubscriber getDefaultReplicationSubscriber() {
+        return new ReplicationSubscriber(LogReplicationConfig.ReplicationModel.SINGLE_SOURCE_SINK, SAMPLE_CLIENT);
     }
 
     @Override

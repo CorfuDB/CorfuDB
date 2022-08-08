@@ -3,8 +3,6 @@ package org.corfudb.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.File;
-import java.util.Arrays;
-import java.util.Collections;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.Before;
 import org.junit.Test;
@@ -60,29 +58,26 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
             stopSourceLogReplicator();
 
             // Checkpoint & Trim on the Sink (so shadow stream get trimmed)
-            checkpointAndTrim(false, Collections.singletonList(mapASink));
+            checkpointAndTrim(false);
 
             // Write Entry's to Source Cluster (while replicator is down)
             log.debug("Write additional entries to source CorfuDB ...");
             writeToSourceNonUFO((numWrites + (numWrites/2)), numWrites/2);
 
             // Confirm data does exist on Source Cluster
-            assertThat(mapA.size()).isEqualTo(numWrites*2);
+            assertThat(mapA.count()).isEqualTo(numWrites*2);
 
             // Confirm new data does not exist on Sink Cluster
-            assertThat(mapASink.size()).isEqualTo((numWrites + (numWrites/2)));
+            assertThat(mapASink.count()).isEqualTo(numWrites + (numWrites / 2));
 
             // Checkpoint & Trim on the Source so we force a snapshot sync on restart
-            checkpointAndTrim(true, Collections.singletonList(mapA));
+            checkpointAndTrim(true);
 
             log.debug("Start source Log Replicator again ...");
             startSourceLogReplicator();
 
             log.debug("Verify Data on Sink ...");
             verifyDataOnSinkNonUFO((numWrites*2));
-
-            log.debug("Entries :: " + mapASink.keySet());
-
         } finally {
 
             executorService.shutdownNow();
@@ -141,18 +136,18 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
             }
 
             // Checkpoint & Trim on the Sink, so we trim the shadow stream
-            checkpointAndTrim(false, Collections.singletonList(mapASink));
+            checkpointAndTrim(false);
 
             // Write Entry's to Source Cluster (while replicator is down)
             log.debug("Write additional entries to source CorfuDB ...");
             writeToSourceNonUFO((numWrites + (numWrites/2)), numWrites/2);
 
             // Confirm data does exist on Source Cluster
-            assertThat(mapA.size()).isEqualTo(numWrites*2);
+            assertThat(mapA.count()).isEqualTo(numWrites*2);
 
             if (stop) {
                 // Confirm new data does not exist on Sink Cluster
-                assertThat(mapASink.size()).isEqualTo((numWrites + (numWrites / 2)));
+                assertThat(mapASink.count()).isEqualTo(numWrites + (numWrites / 2));
 
                 log.debug("Start source Log Replicator again ...");
                 startSourceLogReplicator();
@@ -161,8 +156,6 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
             // Since we did not checkpoint data should be transferred in delta's
             log.debug("Verify Data on Sink ...");
             verifyDataOnSinkNonUFO((numWrites*2));
-
-            log.debug("Entries :: " + mapASink.keySet());
         } finally {
 
             executorService.shutdownNow();
@@ -199,13 +192,13 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
             writeToSourceNonUFO(0, numWrites);
 
             // Confirm data does exist on Source Cluster
-            assertThat(mapA.size()).isEqualTo(numWrites);
+            assertThat(mapA.count()).isEqualTo(numWrites);
 
             // Confirm data does not exist on Sink Cluster
-            assertThat(mapASink.size()).isZero();
+            assertThat(mapASink.count()).isZero();
 
             // Checkpoint and Trim Before Starting
-            checkpointAndTrim(true, Arrays.asList(mapA));
+            checkpointAndTrim(true);
 
             startLogReplicatorServers();
 

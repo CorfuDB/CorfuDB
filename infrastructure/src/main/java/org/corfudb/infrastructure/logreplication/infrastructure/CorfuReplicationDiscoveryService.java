@@ -48,7 +48,6 @@ import java.net.URLClassLoader;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -349,9 +348,10 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             return;
         }
 
-        // Through LogReplicationConfigAdapter, retrieve system-specific configurations such as streams to replicate
+        // Through the config manager, retrieve system-specific configurations such as streams to replicate
         // for supported replication models and version
-        logReplicationConfig = getLogReplicationConfiguration(getCorfuRuntime());
+        replicationConfigManager = new LogReplicationConfigManager(runtime, serverContext);
+        logReplicationConfig = replicationConfigManager.getConfig();
 
         Set<String> remoteClusterIds = new HashSet<>();
 
@@ -366,7 +366,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             remoteClusterIds.addAll(topologyDescriptor.getSourceClusters().keySet());
             createMetadataManagers(remoteClusterIds);
 
-            LogReplicationServer server = new LogReplicationServer(serverContext, localNodeId, logReplicationConfig,
+            LogReplicationServer server = new LogReplicationServer(serverContext, localNodeId, replicationConfigManager,
                 localCorfuEndpoint, topologyDescriptor.getTopologyConfigId(), remoteSessionToMetadataManagerMap);
             interClusterServerNode = new CorfuInterClusterReplicationServerNode(serverContext, server);
         }
@@ -436,30 +436,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      */
     private String getCorfuEndpoint(String localEndpoint, int corfuPort) {
         return NodeLocator.parseString(localEndpoint).getHost() + ":" + corfuPort;
-    }
-
-    /**
-     * Retrieve Log Replication Configuration.
-     * <p>
-     * This configuration represents all common parameters for the log replication, regardless of a cluster's role.
-     */
-    private LogReplicationConfig getLogReplicationConfiguration(CorfuRuntime runtime) {
-
-        try {
-            replicationConfigManager = new LogReplicationConfigManager(runtime, serverContext.getPluginConfigFilePath());
-
-            Map<UUID, List<UUID>> streamingConfigSink = replicationConfigManager.getStreamingConfigOnSink();
-
-            Map<ReplicationSubscriber, Set<String>> streamsToReplicateMap =
-                replicationConfigManager.getSubscriberToStreamsMap();
-
-            return new LogReplicationConfig(streamsToReplicateMap, streamingConfigSink,
-                serverContext.getLogReplicationMaxNumMsgPerBatch(), serverContext.getLogReplicationMaxDataMessageSize(),
-                serverContext.getLogReplicationCacheMaxSize());
-        } catch (Throwable t) {
-            log.error("Exception when fetching the Replication Config", t);
-            throw t;
-        }
     }
 
     /**

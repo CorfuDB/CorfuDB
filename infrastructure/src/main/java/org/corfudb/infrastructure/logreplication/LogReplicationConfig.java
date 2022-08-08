@@ -1,10 +1,11 @@
 package org.corfudb.infrastructure.logreplication;
 
-import com.google.common.annotations.VisibleForTesting;
 import lombok.Data;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryService;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.TableRegistry;
 
@@ -64,8 +65,8 @@ public class LogReplicationConfig {
             PROTOBUF_TABLE_ID
     ));
 
-    // Unique identifiers for all streams to be replicated across sites
-    private Set<String> streamsToReplicate;
+    // Mapping from stream ids to their fully qualified names.
+    private Map<UUID, String> streamIdsToNameMap;
 
     // Streaming tags on Sink (map data stream id to list of tags associated to it)
     private Map<UUID, List<UUID>> dataStreamToTagsMap = new HashMap<>();
@@ -84,49 +85,23 @@ public class LogReplicationConfig {
      */
     private int maxDataSizePerMsg;
 
-    /**
-     * Constructor
-     *
-     * @param streamsToReplicateMap A map consisting of the streams to replicate for each supported replication model
-     */
-    @VisibleForTesting
-    public LogReplicationConfig(Map<ReplicationSubscriber, Set<String>> streamsToReplicateMap) {
-        this(streamsToReplicateMap, DEFAULT_MAX_NUM_MSG_PER_BATCH, MAX_DATA_MSG_SIZE_SUPPORTED, MAX_CACHE_NUM_ENTRIES);
-    }
+    public static final String SAMPLE_CLIENT = "Sample Client";
 
     /**
-     * Constructor
-     *
-     * @param streamsToReplicateMap A map consisting of the streams to replicate for each supported replication model
-     * @param maxNumMsgPerBatch snapshot sync batch size (number of entries per batch)
+     * Constructor exposed to {@link CorfuReplicationDiscoveryService}
      */
-    public LogReplicationConfig(Map<ReplicationSubscriber, Set<String>> streamsToReplicateMap, int maxNumMsgPerBatch,
-                                int maxMsgSize, int cacheSize) {
-        replicationSubscriberToStreamsMap = streamsToReplicateMap;
+    public LogReplicationConfig(Map<ReplicationSubscriber, Set<String>> subscriberToStreamsMap, int maxNumMsgPerBatch,
+        int maxMsgSize, int cacheSize) {
         this.maxNumMsgPerBatch = maxNumMsgPerBatch;
         this.maxMsgSize = maxMsgSize;
         this.maxCacheSize = cacheSize;
         this.maxDataSizePerMsg = maxMsgSize * DATA_FRACTION_PER_MSG / 100;
+        replicationSubscriberToStreamsMap = subscriberToStreamsMap;
     }
 
     /**
-     * Constructor
-     *
-     * @param streamsToReplicateMap A map consisting of the streams to replicate for each supported replication model
-     * @param maxNumMsgPerBatch snapshot sync batch size (number of entries per batch)
+     * An enum of all supported Replication Models
      */
-    public LogReplicationConfig(Map<ReplicationSubscriber, Set<String>> streamsToReplicateMap,
-        int maxNumMsgPerBatch, int maxMsgSize) {
-        this(streamsToReplicateMap, maxNumMsgPerBatch, maxMsgSize, MAX_CACHE_NUM_ENTRIES);
-    }
-
-    public LogReplicationConfig(Map<ReplicationSubscriber, Set<String>> streamsToReplicateMap,
-        Map<UUID, List<UUID>> streamingTagsMap, int maxNumMsgPerBatch, int maxMsgSize,
-        int cacheSize) {
-        this(streamsToReplicateMap, maxNumMsgPerBatch, maxMsgSize, cacheSize);
-        this.dataStreamToTagsMap = streamingTagsMap;
-    }
-
     public static enum ReplicationModel {
         SINGLE_SOURCE_SINK
     }

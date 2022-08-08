@@ -1,10 +1,8 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValueTag;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
@@ -16,12 +14,10 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.collections.TxnContext;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.HashMap;
-import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -139,13 +135,14 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
             Table<StringKey, IntValueTag, Metadata> tableSource =
                     corfuStoreSource.openTable(NAMESPACE, mapName, StringKey.class,
                             IntValueTag.class, Metadata.class,
-                            TableOptions.fromProtoSchema(IntValueTag.class, TableOptions.builder().build()));
+                            TableOptions.fromProtoSchema(IntValueTag.class));
             mapNameToMapSource.put(mapName, tableSource);
 
+            // Open tables on Sink side with different schema options
             Table<StringKey, IntValueTag, Metadata> tableSink =
                     corfuStoreSink.openTable(NAMESPACE, mapName, StringKey.class,
                             IntValueTag.class, Metadata.class,
-                            TableOptions.fromProtoSchema(IntValue.class, TableOptions.builder().build()));
+                            TableOptions.fromProtoSchema(IntValue.class));
             mapNameToMapSink.put(mapName, tableSink);
         }
 
@@ -155,7 +152,7 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
             Table<StringKey, IntValueTag, Metadata> tableSource =
                     corfuStoreSource.openTable(NAMESPACE, mapName, StringKey.class,
                             IntValueTag.class, Metadata.class,
-                            TableOptions.fromProtoSchema(IntValueTag.class, TableOptions.builder().build()));
+                            TableOptions.fromProtoSchema(IntValueTag.class));
             mapNameToMapSource.put(mapName, tableSource);
         }
     }
@@ -164,7 +161,7 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
      * Verify tables records and contents after log replication.
      */
     private void verifyTableContentsAndRecords(int start, int splitter, int end) throws Exception {
-        // Verify Sink side records for tables before the splitter are retained, and records for the rest of
+        // Verify Sink side records for tables before the splitter are overwritten, and records for the rest of
         // the tables are replicated. Add the tables from splitter to end to mapNameToMapSink to verify all the
         // tables' contents
         for (int i = start; i <= end; i++) {
@@ -175,10 +172,10 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
                     .build();
             CorfuRecord<TableDescriptors, TableMetadata> corfuRecord =
                     sinkRuntime.getTableRegistry().getRegistryTable().get(tableNameKey);
-            if (i <= splitter) {
-                Assert.assertFalse(corfuRecord.getMetadata().getTableOptions().getIsFederated());
-            } else {
-                Assert.assertTrue(corfuRecord.getMetadata().getTableOptions().getIsFederated());
+            Assert.assertTrue(corfuRecord.getMetadata().getTableOptions().getIsFederated());
+            Assert.assertEquals(corfuRecord.getMetadata().getTableOptions().getStreamTagCount(), 1);
+            Assert.assertEquals(corfuRecord.getMetadata().getTableOptions().getStreamTag(0), "test");
+            if (i > splitter) {
                 Table<StringKey, IntValueTag, Metadata> tableSink =
                         corfuStoreSink.openTable(NAMESPACE, tableName, StringKey.class,
                                 IntValueTag.class, Metadata.class,
@@ -189,37 +186,6 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
         // Verify contents
         verifyDataOnSink(NUM_WRITES);
     }
-
-    private void verifyInLogEntrySyncState() throws InterruptedException {
-        LogReplicationMetadata.ReplicationStatusKey key =
-                LogReplicationMetadata.ReplicationStatusKey
-                        .newBuilder()
-                        .setClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-                        .build();
-
-        ReplicationStatusVal replicationStatusVal = null;
-
-        while (replicationStatusVal == null || !replicationStatusVal.getSyncType().equals(SyncType.LOG_ENTRY)
-        || !replicationStatusVal.getSnapshotSyncInfo().getStatus().equals(LogReplicationMetadata.SyncStatus.COMPLETED)) {
-            TimeUnit.SECONDS.sleep(1);
-            try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
-                replicationStatusVal = (ReplicationStatusVal) txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
-                txn.commit();
-            }
-        }
-
-        // Snapshot sync should have completed and log entry sync is ongoing
-        assertThat(replicationStatusVal.getSyncType())
-                .isEqualTo(SyncType.LOG_ENTRY);
-        assertThat(replicationStatusVal.getStatus())
-                .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
-
-        assertThat(replicationStatusVal.getSnapshotSyncInfo().getType())
-                .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
-        assertThat(replicationStatusVal.getSnapshotSyncInfo().getStatus())
-                .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
-    }
-
 
     private void openLogReplicationStatusTable() throws Exception {
         corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,

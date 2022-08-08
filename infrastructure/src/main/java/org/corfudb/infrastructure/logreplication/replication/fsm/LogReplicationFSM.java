@@ -211,7 +211,6 @@ public class LogReplicationFSM {
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
      *
      * @param runtime Corfu Runtime
-     * @param config log replication configuration
      * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
      *                   the application callback for data transmission
      * @param readProcessor read processor for data transformation
@@ -220,13 +219,13 @@ public class LogReplicationFSM {
      * @param tableManagerPlugin Plugin which builds the streams to replicate
      * @param replicationSession Replication Session to the remote(Sink) cluster
      */
-    public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfig config, DataSender dataSender,
+    public LogReplicationFSM(CorfuRuntime runtime, DataSender dataSender,
                              ReadProcessor readProcessor, ExecutorService workers, LogReplicationAckReader ackReader,
                              LogReplicationConfigManager tableManagerPlugin, ReplicationSession replicationSession) {
         // Use stream-based readers for snapshot and log entry sync reads
-        this(runtime, new StreamsSnapshotReader(runtime, config, replicationSession), dataSender,
-            new StreamsLogEntryReader(runtime, config, replicationSession), readProcessor, config, workers, ackReader,
-            tableManagerPlugin, replicationSession);
+        this(runtime, new StreamsSnapshotReader(runtime, tableManagerPlugin, replicationSession), dataSender,
+            new StreamsLogEntryReader(runtime, tableManagerPlugin, replicationSession), readProcessor, workers,
+            ackReader, tableManagerPlugin, replicationSession);
     }
 
     /**
@@ -242,7 +241,7 @@ public class LogReplicationFSM {
      */
     @VisibleForTesting
     public LogReplicationFSM(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
-                             LogEntryReader logEntryReader, ReadProcessor readProcessor, LogReplicationConfig config,
+                             LogEntryReader logEntryReader, ReadProcessor readProcessor,
                              ExecutorService workers, LogReplicationAckReader ackReader,
                              LogReplicationConfigManager tableManagerPlugin, ReplicationSession replicationSession) {
 
@@ -254,7 +253,7 @@ public class LogReplicationFSM {
         // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and send data
         // through the callbacks provided by the application
         snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor,
-            config.getMaxNumMsgPerBatch(), this);
+            tableManagerPlugin.getConfig().getMaxNumMsgPerBatch(), this);
         logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
 
         // Initialize Log Replication 5 FSM states - single instance per state
