@@ -1,10 +1,8 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValueTag;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
@@ -16,12 +14,10 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.collections.TxnContext;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.HashMap;
-import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -43,12 +39,14 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
      *
      * 1. Setup streams to replicate for both source and sink, in total 8 tables will be used for verification
      * 2. The first 4 tables will be used for snapshot sync
-     *    1). Table001 and Table002 - open on both sides with different metadata
-     *    2). Table003 and Table004 - open on source side only
+     *    1). Table001 - open on both sides with different metadata, Sink side open it with is_federated = false
+     *    2). Table002 - open on both side with same metadata (is_federated = true)
+     *    3). Table003 and Table004 - open on source side only (is_federated = true)
      * 3. Verify the table records and contents after snapshot sync
      * 4. The last 4 tables will be used for log entry sync with similar setup
-     *    1). Table005 and Table006 - open on both sides with different metadata
-     *    2). Table007 and Table008 - open on source side only
+     *    1). Table005 - open on both sides with different metadata, Sink side open it with is_federated = false
+     *    2). Table006 - open on both side with same metadata (is_federated = true)
+     *    4). Table007 and Table008 - open on source side only (is_federated = true)
      * 5. Verify the table records and contents after log entry sync
      */
     @Test
@@ -62,10 +60,6 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
         mapNameToMapStandby = new HashMap<>();
 
         /* The first 4 tables are for snapshot sync */
-
-        // Table001 and Table002 - Open in both Source and Sink, while on Sink side they will be opened with
-        // different metadata. Verify that Sink side's records are retained.
-        // Table003 and Table004 - Open only in Source side. Verify that their records are replicated to Sink.
         prepareTablesToVerify(1, 2, 4);
 
         // Add Data for Snapshot Sync
@@ -86,8 +80,8 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
 
         // Verify snapshot sync completed and cluster went into log entry sync
         verifyInLogEntrySyncState();
-        // Verify Sink side records for Table001 and Table002 are retained on the Registry table, and records for
-        // Table003 and Table004 are replicated.
+        // Verify Sink side record for Table001 is retained on the Registry table, and records for Table003 and
+        // Table004 are replicated.
         // Also verify all the table's contents for snapshot sync
         verifyTableContentsAndRecords(1, 2, 4);
 
@@ -102,9 +96,6 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
         mapNameToMapActive.clear();
         mapNameToMapStandby.clear();
 
-        // Table005 and Table006 - Open in both Source and Sink, while on Sink side they will be opened with
-        // different metadata. Verify that Sink side's records are retained.
-        // Table007 and Table008 - Open only in Source side. Verify that their records are replicated to Sink.
         prepareTablesToVerify(5, 6, 8);
 
         // Restart Source LR after opening the tables
@@ -113,11 +104,11 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
         // Write data to Source side, note that mapNameToMapActive now only have the last 4 tables
         writeToActive(0, NUM_WRITES);
 
-        // At this point mapNameToMapStandby only has 2 tables. This step is also used as a barrier to indicate
+        // At this point mapNameToMapStandby only has 1 table. This step is also used as a barrier to indicate
         // it's a good point to check records on Sink side
         verifyDataOnStandby(NUM_WRITES);
-        // Verify Sink side records for Table005 and Table006 are retained on the Registry table, and records for
-        // Table007 and Table008 are replicated.
+        // Verify Sink side record for Table005 is retained on the Registry table, and records for Table007 and
+        // Table008 are replicated.
         // Also verify all the table's contents for log entry sync
         verifyTableContentsAndRecords(5, 6, 8);
     }
@@ -125,38 +116,47 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
     /**
      * Open tables on Source and Sink side accordingly.
      *
-     * Tables from start to splitter - Open on both Source and Sink side, while on Sink side they will be
+     * Tables from start(inclusive) to splitter(exclusive) - Open on both Source and Sink side, while on Sink side they will be
      * opened with different metadata.
      *
-     * Tables from splitter to end - Open on Source side only, after log replication verify their records
+     * Table at splitter, open on both Source and Sink with same metadata, which will be used to check log entry sync
+     * status.
+     *
+     * Tables from splitter(exclusive) to end(inclusive) - Open on Source side only, after log replication verify their records
      * exist in Sink side registry table.
      */
     private void prepareTablesToVerify(int start, int splitter, int end) throws Exception {
         // From start to splitter - Open in both Source and Sink, while on Sink side they will be opened with
         // different metadata. Verify that Sink side's records are retained.
-        for (int i = start; i <= splitter; i++) {
+        for (int i = start; i < splitter; i++) {
             String mapName = TABLE_PREFIX + i;
             Table<StringKey, IntValueTag, Metadata> tableActive =
                     corfuStoreActive.openTable(NAMESPACE, mapName, StringKey.class,
                             IntValueTag.class, Metadata.class,
-                            TableOptions.fromProtoSchema(IntValueTag.class, TableOptions.builder().build()));
+                            TableOptions.fromProtoSchema(IntValueTag.class));
             mapNameToMapActive.put(mapName, tableActive);
 
-            Table<StringKey, IntValueTag, Metadata> tableStandby =
-                    corfuStoreStandby.openTable(NAMESPACE, mapName, StringKey.class,
-                            IntValueTag.class, Metadata.class,
-                            TableOptions.fromProtoSchema(IntValue.class, TableOptions.builder().build()));
-            mapNameToMapStandby.put(mapName, tableStandby);
+            // Open tables on Sink side with different schema options
+            corfuStoreStandby.openTable(NAMESPACE, mapName, StringKey.class, IntValueTag.class, Metadata.class,
+                    TableOptions.fromProtoSchema(IntValue.class));
         }
 
         // From splitter to end - Open only in Source side. Verify that their records are replicated to Sink.
-        for (int i = splitter + 1; i <= end; i++) {
+        for (int i = splitter; i <= end; i++) {
             String mapName = TABLE_PREFIX + i;
             Table<StringKey, IntValueTag, Metadata> tableActive =
                     corfuStoreActive.openTable(NAMESPACE, mapName, StringKey.class,
                             IntValueTag.class, Metadata.class,
-                            TableOptions.fromProtoSchema(IntValueTag.class, TableOptions.builder().build()));
+                            TableOptions.fromProtoSchema(IntValueTag.class));
             mapNameToMapActive.put(mapName, tableActive);
+            if (i == splitter) {
+                // Open tables on Sink side with different schema options
+                Table<StringKey, IntValueTag, Metadata> tableStandby =
+                        corfuStoreStandby.openTable(NAMESPACE, mapName, StringKey.class,
+                                IntValueTag.class, Metadata.class,
+                                TableOptions.fromProtoSchema(IntValueTag.class));
+                mapNameToMapStandby.put(mapName, tableStandby);
+            }
         }
     }
 
@@ -164,7 +164,7 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
      * Verify tables records and contents after log replication.
      */
     private void verifyTableContentsAndRecords(int start, int splitter, int end) throws Exception {
-        // Verify Sink side records for tables before the splitter are retained, and records for the rest of
+        // Verify Sink side records for tables before the splitter are overwritten, and records for the rest of
         // the tables are replicated. Add the tables from splitter to end to mapNameToMapStandby to verify all the
         // tables' contents
         for (int i = start; i <= end; i++) {
@@ -175,10 +175,18 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
                     .build();
             CorfuRecord<TableDescriptors, TableMetadata> corfuRecord =
                     standbyRuntime.getTableRegistry().getRegistryTable().get(tableNameKey);
-            if (i <= splitter) {
+            if (i < splitter) {
+                // Table with is_federated = false will be dropped
                 Assert.assertFalse(corfuRecord.getMetadata().getTableOptions().getIsFederated());
+                Table<StringKey, IntValueTag, Metadata> tableStandby =
+                        corfuStoreStandby.openTable(NAMESPACE, tableName, StringKey.class,
+                                IntValueTag.class, Metadata.class,
+                                TableOptions.fromProtoSchema(IntValue.class, TableOptions.builder().build()));
+                Assert.assertEquals(tableStandby.count(), 0);
             } else {
                 Assert.assertTrue(corfuRecord.getMetadata().getTableOptions().getIsFederated());
+                Assert.assertEquals(corfuRecord.getMetadata().getTableOptions().getStreamTagCount(), 1);
+                Assert.assertEquals(corfuRecord.getMetadata().getTableOptions().getStreamTag(0), "test");
                 Table<StringKey, IntValueTag, Metadata> tableStandby =
                         corfuStoreStandby.openTable(NAMESPACE, tableName, StringKey.class,
                                 IntValueTag.class, Metadata.class,
@@ -189,37 +197,6 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
         // Verify contents
         verifyDataOnStandby(NUM_WRITES);
     }
-
-    private void verifyInLogEntrySyncState() throws InterruptedException {
-        LogReplicationMetadata.ReplicationStatusKey key =
-                LogReplicationMetadata.ReplicationStatusKey
-                        .newBuilder()
-                        .setClusterId(DefaultClusterConfig.getStandbyClusterId())
-                        .build();
-
-        ReplicationStatusVal replicationStatusVal = null;
-
-        while (replicationStatusVal == null || !replicationStatusVal.getSyncType().equals(SyncType.LOG_ENTRY)
-        || !replicationStatusVal.getSnapshotSyncInfo().getStatus().equals(LogReplicationMetadata.SyncStatus.COMPLETED)) {
-            TimeUnit.SECONDS.sleep(1);
-            try (TxnContext txn = corfuStoreActive.txn(LogReplicationMetadataManager.NAMESPACE)) {
-                replicationStatusVal = (ReplicationStatusVal) txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
-                txn.commit();
-            }
-        }
-
-        // Snapshot sync should have completed and log entry sync is ongoing
-        assertThat(replicationStatusVal.getSyncType())
-                .isEqualTo(SyncType.LOG_ENTRY);
-        assertThat(replicationStatusVal.getStatus())
-                .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
-
-        assertThat(replicationStatusVal.getSnapshotSyncInfo().getType())
-                .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
-        assertThat(replicationStatusVal.getSnapshotSyncInfo().getStatus())
-                .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
-    }
-
 
     private void openLogReplicationStatusTable() throws Exception {
         corfuStoreActive.openTable(LogReplicationMetadataManager.NAMESPACE,

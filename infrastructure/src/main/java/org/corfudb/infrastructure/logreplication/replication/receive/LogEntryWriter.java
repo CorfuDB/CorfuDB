@@ -6,7 +6,6 @@ import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.service.CorfuProtocolLogReplication;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
@@ -19,10 +18,10 @@ import org.corfudb.util.retry.RetryNeededException;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.REGISTRY_TABLE_ID;
 
@@ -33,28 +32,16 @@ import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.REG
 @NotThreadSafe
 @Slf4j
 public class LogEntryWriter extends SinkWriter {
-    private final LogReplicationMetadataManager logReplicationMetadataManager;
-
-    // The set of streams that log entry writer will work on.
-    private final Map<UUID, String> streamMap;
-
-    private final Map<UUID, List<UUID>> dataStreamToTagsMap;
-
     // The source snapshot that the transaction logs are based
     private long srcGlobalSnapshot;
 
     // Timestamp of the last message processed.
     private long lastMsgTs;
 
-    public LogEntryWriter(CorfuRuntime rt, LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager) {
-        super(rt);
-        this.logReplicationMetadataManager = logReplicationMetadataManager;
+    public LogEntryWriter(LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager) {
+        super(config, logReplicationMetadataManager);
         this.srcGlobalSnapshot = logReplicationMetadataManager.getLastAppliedSnapshotTimestamp();
         this.lastMsgTs = logReplicationMetadataManager.getLastProcessedLogEntryBatchTimestamp();
-        this.streamMap = new HashMap<>();
-        this.dataStreamToTagsMap = config.getDataStreamToTagsMap();
-
-        config.getStreamsToReplicate().stream().forEach(stream -> streamMap.put(CorfuRuntime.getStreamID(stream), stream));
     }
 
     /**
@@ -78,7 +65,14 @@ public class LogEntryWriter extends SinkWriter {
      * @return true when all OpaqueEntries in the msg are appended to the log
      */
     private boolean applyMsg(LogReplicationEntryMsg txMessage) {
+        // Log entry sync could have slow writes. That is, there could be a relatively long duration between last
+        // snapshot/log entry sync and the current log entry sync, during which Sink side could have new tables opened.
+        // So the config needs to be synced here to capture those updates.
+        config.syncWithRegistry();
 
+        // Boolean value that indicate if the config should sync with registry table or not. Note that primitive boolean
+        // value cannot be used here as its value needs to be changed in the lambda function below.
+        AtomicBoolean registryTableUpdated = new AtomicBoolean(false);
         List<OpaqueEntry> opaqueEntryList = CorfuProtocolLogReplication.extractOpaqueEntries(txMessage);
 
         for (OpaqueEntry opaqueEntry : opaqueEntryList) {
@@ -152,7 +146,7 @@ public class LogEntryWriter extends SinkWriter {
                         }
 
                         for (UUID streamId : opaqueEntry.getEntries().keySet()) {
-                            if (!streamMap.containsKey(streamId)) {
+                            if (ignoreEntriesForStream(streamId)) {
                                 log.warn("Skip applying log entries for stream {} as it is noisy. The Source and" +
                                     "Sink sites could be on different versions", streamId);
                                 continue;
@@ -160,17 +154,32 @@ public class LogEntryWriter extends SinkWriter {
 
                             List<SMREntry> smrEntries = opaqueEntry.getEntries().get(streamId);
                             if (streamId.equals(REGISTRY_TABLE_ID)) {
-                                // Only retain tables that are not present in the registry table
-                                smrEntries = fetchNewEntries(new ArrayList<>(smrEntries));
+                                // If registry table entries are being handled, indicate the config to sync with
+                                // registry table after this transaction.
+                                registryTableUpdated.set(true);
+                                smrEntries = filterRegistryTableEntries(new ArrayList<>(smrEntries));
+                                log.info("Registry Table entries during log entry sync = {}", smrEntries.size());
                             }
 
                             for (SMREntry smrEntry : smrEntries) {
                                 // If stream tags exist for the current stream, it means its intended for streaming
                                 // on the Sink (receiver)
-                                txnContext.logUpdate(streamId, smrEntry, dataStreamToTagsMap.get(streamId));
+                                txnContext.logUpdate(streamId, smrEntry, config.getDataStreamToTagsMap().get(streamId));
                             }
                         }
                         txnContext.commit();
+                        // Sync with registry table if registry table entries are handled in last transaction, in order
+                        // to update the config with those new entries.
+                        if (registryTableUpdated.get()) {
+                            // As config is not updated automatically with registry table updates, it is possible that
+                            // config did not get the local updates and is diverged from registry. This can be avoided
+                            // by ‘touching’ the applied stream(s) registry entry(ies) within the transaction, causing
+                            // an abort if concurrent updates to the registry occur. We are currently not implementing
+                            // this, as (1) it incurs in additional RPC calls for all updates and (2) LR will filter out
+                            // these streams on the next batch.
+                            config.syncWithRegistry();
+                            registryTableUpdated.set(false);
+                        }
                     } catch (TransactionAbortedException tae) {
                         throw new RetryNeededException();
                     }
@@ -237,6 +246,9 @@ public class LogEntryWriter extends SinkWriter {
      * @param ackTimestamp
      */
     public void reset(long snapshot, long ackTimestamp) {
+        // Sync with registry table when LogEntryWriter is reset, which will happen when Snapshot sync is completed, and
+        // when LogReplicationSinkManager is initialized and reset.
+        config.syncWithRegistry();
         srcGlobalSnapshot = snapshot;
         lastMsgTs = ackTimestamp;
     }

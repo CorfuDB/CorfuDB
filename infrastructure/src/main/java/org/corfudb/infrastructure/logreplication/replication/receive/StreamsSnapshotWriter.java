@@ -31,7 +31,6 @@ import org.corfudb.util.serializer.Serializers;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -46,13 +45,17 @@ import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MER
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.REGISTRY_TABLE_ID;
 
 /**
- * This class represents the entity responsible of writing streams' snapshots into the standby cluster DB.
+ * This class represents the entity responsible for writing streams' snapshots into the sink cluster DB.
  *
- * Snapshot sync is the process of transferring a snapshot of the DB, for this reason, data is temporarily applied
- * to shadow streams in an effort to avoid inconsistent states. Once all the data is received, the shadow streams
- * are applied into the actual streams.
- */
+ * Snapshot sync is the process of transferring a snapshot of the DB. We create a shadow stream per stream to
+ * replicate. A shadow stream aims to accumulate updates temporarily while the (full) snapshot transfer completes.
+ * Shadow streams aim to avoid inconsistent states while data is still being transferred from source to sink
+ * Once all the data is received, the shadow streams are applied into the actual streams.
 
+ * There is still a window of inconsistency as apply is not atomic when transaction size exceeds the limit, but it is
+ * guarded by the isDataConsistent flag such that clients do not observe inconsistent data. In the future, we will
+ * support Table Aliasing which will enable atomic flip from shadow to regular streams, avoiding complete inconsistency.
+ */
 @Slf4j
 @NotThreadSafe
 public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter {
@@ -61,20 +64,13 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
     private static final String SHADOW_STREAM_SUFFIX = "_SHADOW";
     private static final SMREntry CLEAR_ENTRY = new SMREntry(CLEAR_SMR_METHOD, new Array[0], Serializers.PRIMITIVE);
 
-    // Mapping from regular stream Id to stream Name
-    private final HashMap<UUID, String> streamViewMap;
-
-    // Mapping from regular stream Id to shadow stream Id
-    private final HashMap<UUID, UUID> regularToShadowStreamId;
+    // Runtime from LogReplicationSinkManager, for handling shadow streams in StreamsSnapshotWriter
+    private final CorfuRuntime rt;
 
     private long topologyConfigId;
     private long srcGlobalSnapshot; // The source snapshot timestamp
     private long recvSeq;
     private Optional<SnapshotSyncStartMarker> snapshotSyncStartMarker;
-    private final Map<UUID, List<UUID>> dataStreamToTagsMap;
-
-    @Getter
-    private final LogReplicationMetadataManager logReplicationMetadataManager;
 
     // Represents the actual replicated streams from active. This is a subset of all regular streams in
     // regularToShadowStreamId map
@@ -84,55 +80,28 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
     private Phase phase;
 
     public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager) {
-        super(rt);
-        this.logReplicationMetadataManager = logReplicationMetadataManager;
-        this.streamViewMap = new HashMap<>();
-        this.regularToShadowStreamId = new HashMap<>();
+        super(config, logReplicationMetadataManager);
+        this.rt = rt;
         this.phase = Phase.TRANSFER_PHASE;
         this.snapshotSyncStartMarker = Optional.empty();
-        this.dataStreamToTagsMap = config.getDataStreamToTagsMap();
 
-        initializeShadowStreams(config);
-
-        // Serialize the clear entry once to access its constant size on each
-        // subsequent use
+        // Serialize the clear entry once to access its constant size on each subsequent use
         serializeClearEntry();
-    }
-
-    /**
-     * Create shadow streams.
-     *
-     * We create a shadow stream per stream to replicate. A shadow stream aims to accumulate updates
-     * temporarily while the (full) snapshot sync completes. Shadow streams aim to avoid inconsistent
-     * states while data is still being transferred from active to standby.
-     *
-     * We currently, wait for snapshot sync to complete before applying data in shadow streams
-     * to the actual streams, this means that there is still a window of inconsistency as apply is not atomic,
-     * but at least inconsistency is at a point where there is guarantee of all data being available on the receiver.
-     * In the future, we will support Table Aliasing which will enable atomic flip from shadow to regular streams, avoiding
-     * complete inconsistency.
-     */
-    private void initializeShadowStreams(LogReplicationConfig config) {
-        // For every stream create a shadow stream which name is unique based
-        // on the original stream and a suffix.
-        for (String streamName : config.getStreamsToReplicate()) {
-            String shadowStreamName = streamName + SHADOW_STREAM_SUFFIX;
-            UUID streamId = CorfuRuntime.getStreamID(streamName);
-            UUID shadowStreamId = CorfuRuntime.getStreamID(shadowStreamName);
-            regularToShadowStreamId.put(streamId, shadowStreamId);
-            regularToShadowStreamId.put(shadowStreamId, streamId);
-            streamViewMap.put(streamId, streamName);
-
-            log.trace("Shadow stream=[{}] for regular stream=[{}] name=({})", shadowStreamId, streamId, streamName);
-        }
-
-        log.info("Stream tag map for streaming on Standby/Sink total={}, streams={}", dataStreamToTagsMap.size(),
-                dataStreamToTagsMap);
     }
 
     private void serializeClearEntry() {
         ByteBuf byteBuf = Unpooled.buffer();
         CLEAR_ENTRY.serialize(byteBuf);
+    }
+
+    /**
+     * Get the shadow stream id of the given regular stream id.
+     */
+    private UUID getShadowStreamId(UUID regularStreamId) {
+        // The shadow stream name should be given by regularStreamId, because Sink side could have not
+        // opened the stream before Snapshot Sync and as a result it cannot get the corresponding stream name.
+        String shadowStreamName = regularStreamId.toString() + SHADOW_STREAM_SUFFIX;
+        return CorfuRuntime.getStreamID(shadowStreamName);
     }
 
     /**
@@ -163,6 +132,8 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         phase = Phase.TRANSFER_PHASE;
         snapshotSyncStartMarker = Optional.empty();
         replicatedStreamIds.clear();
+        // Sync with registry table to capture local updates on Sink side
+        config.syncWithRegistry();
     }
 
     /**
@@ -218,7 +189,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, srcGlobalSnapshot);
 
         for (SMREntry smrEntry : smrEntries) {
-            txnContext.logUpdate(streamId, smrEntry, dataStreamToTagsMap.get(streamId));
+            txnContext.logUpdate(streamId, smrEntry, config.getDataStreamToTagsMap().get(streamId));
         }
     }
 
@@ -228,7 +199,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
      * Note: We should not clear the shadow streams when a new snapshot
      * sync starts because this would overwrite(clear) merge-only streams
      * when the shadow stream is applied to the regular stream.  Shadow streams
-     * are seeked on each replication cycle and are GC'ed by the
+     * are sought on each replication cycle and are GC'ed by the
      * checkpoint/trim.
      * @param message snapshot log entry
      */
@@ -260,12 +231,9 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         }
         UUID regularStreamId = opaqueEntry.getEntries().keySet().stream().findFirst().get();
 
-        // When an upgrade has been performed and Source's streams to replicate
-        // set has streams not present in the Sink's set, they will be
-        // dropped for version compatibility consideration
-        if (!regularToShadowStreamId.containsKey(regularStreamId)) {
-            log.warn("Stream {} sent from Source is not expected in Sink. LR could be" +
-                    " undergoing a rolling upgrade", regularStreamId);
+        if (ignoreEntriesForStream(regularStreamId)) {
+            log.warn("Skip applying log entries for stream {} as it is noisy. Source and Sink are likely to be operating in" +
+                    " different versions", regularStreamId);
             recvSeq++;
             return;
         }
@@ -275,14 +243,14 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
         processUpdatesShadowStream(opaqueEntry.getEntries().get(regularStreamId),
             message.getMetadata().getSnapshotSyncSeqNum(),
-            regularToShadowStreamId.get(regularStreamId),
+            getShadowStreamId(regularStreamId),
             CorfuProtocolCommon.getUUID(message.getMetadata().getSyncRequestId()));
         recvSeq++;
     }
 
     private void clearStream(UUID streamId, TxnContext txnContext) {
         SMREntry entry = new SMREntry(CLEAR_SMR_METHOD, new Array[0], Serializers.PRIMITIVE);
-        txnContext.logUpdate(streamId, entry, dataStreamToTagsMap.get(streamId));
+        txnContext.logUpdate(streamId, entry, config.getDataStreamToTagsMap().get(streamId));
     }
 
     @Override
@@ -305,7 +273,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             rt.getSequencerView().getStreamAddressSpace(
                 new StreamAddressRange(streamId, Long.MAX_VALUE,
                     Address.NON_ADDRESS)));
-        UUID shadowStreamId = regularToShadowStreamId.get(streamId);
+        UUID shadowStreamId = getShadowStreamId(streamId);
 
         // In order to avoid data loss as part of a plugin failing to successfully
         // stop/resume checkpoint and trim. We will not ignore trims on the shadow stream.
@@ -350,8 +318,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         }
 
         if (streamId.equals(REGISTRY_TABLE_ID)) {
-            // Only keep entries that currently not exist in registry table
-            smrEntries = fetchNewEntries(new ArrayList<>(smrEntries));
+            smrEntries = filterRegistryTableEntries(smrEntries);
         }
 
         List<SMREntry> buffer = new ArrayList<>();
@@ -393,10 +360,20 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
      * Read from shadowStream and append/apply to the actual stream
      */
     public void applyShadowStreams() {
-        log.debug("Apply Shadow Streams, total={}", streamViewMap.size());
-
+        log.debug("Apply Shadow Streams, total={}", replicatedStreamIds.size());
         long snapshot = rt.getAddressSpaceView().getLogTail();
-        for (UUID regularStreamId : streamViewMap.keySet()) {
+
+        // Registry table needs to be applied first, as there could be tables that haven't been opened in Sink side,
+        // such that the config doesn't have the corresponding stream tags.
+        applyShadowStream(REGISTRY_TABLE_ID, snapshot);
+        // Sync the config with registry table after applying its entries
+        config.syncWithRegistry();
+
+        for (UUID regularStreamId : config.getStreamsIdToNameMap().keySet()) {
+            if (regularStreamId.equals(REGISTRY_TABLE_ID)) {
+                // Skip registry table as it has been applied in advance
+                continue;
+            }
             applyShadowStream(regularStreamId, snapshot);
         }
 
@@ -439,14 +416,12 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         // either on Source or Sink because we would be enforcing an update
         // without opening the stream, hence, leading to "apparent" data loss as
         // checkpoint won't run on these streams
-        Set<UUID> streamsToQuery = streamViewMap.keySet().stream()
+        Set<UUID> streamsToQuery = config.getStreamsIdToNameMap().keySet().stream()
                 .filter(id -> !replicatedStreamIds.contains(id) && !MERGE_ONLY_STREAMS.contains(id))
                 .collect(Collectors.toCollection(HashSet::new));
 
-        log.debug("Total of {} streams were replicated from Source out of {}," +
-            " sequencer query for {}, streamsToQuery={}",
-            replicatedStreamIds.size(), streamViewMap.size(),
-            streamsToQuery.size(), streamsToQuery);
+        log.debug("Total of {} streams were replicated from Source, sequencer query for {} streams, streamsToQuery={}",
+            replicatedStreamIds.size(), streamsToQuery.size(), streamsToQuery);
         TokenResponse tokenResponse = rt.getSequencerView().query(
             streamsToQuery.toArray(new UUID[0]));
         Set<UUID> streamsWithLocalWrites = new HashSet<>();

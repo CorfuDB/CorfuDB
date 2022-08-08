@@ -2,14 +2,12 @@ package org.corfudb.infrastructure.logreplication;
 
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
 
-
-import com.google.common.reflect.TypeToken;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Observable;
 import java.util.Observer;
@@ -24,6 +22,7 @@ import org.corfudb.common.compression.Codec;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
+import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.EmptyDataSender;
 import org.corfudb.infrastructure.logreplication.replication.fsm.EmptySnapshotReader;
@@ -47,9 +46,12 @@ import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManag
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
-import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.SMRObject;
+import org.corfudb.runtime.view.TableRegistry;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -62,8 +64,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
     // Parameters for writes
     private static final int NUM_ENTRIES = 10;
-    private static final int LARGE_NUM_ENTRIES = 100;
     private static final String PAYLOAD_FORMAT = "%s hello world";
+    private static final String TEST_NAMESPACE = "LR-Test";
     private static final String TEST_STREAM_NAME = "StreamA";
     private static final int BATCH_SIZE = 2;
     private static final int WAIT_TIME = 100;
@@ -83,6 +85,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
     private LogReplicationFSM fsm;
     private CorfuRuntime runtime;
+    private CorfuStore corfuStore;
     private DataSender dataSender;
     private SnapshotReader snapshotReader;
     private LogReplicationAckReader ackReader;
@@ -91,6 +94,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     public void setRuntime() {
         runtime = getDefaultRuntime();
         runtime.getParameters().setCodecType(Codec.Type.NONE);
+        corfuStore = new CorfuStore(runtime);
     }
 
     @After
@@ -391,6 +395,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Block until the snapshot sync completes and next transition occurs.
         while (fsm.getState().getType() != LogReplicationStateType.WAIT_SNAPSHOT_APPLY) {
             log.trace("Current state={}, expected={}", fsm.getState().getType(), LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
+            // Acquire the semaphore again in case transition is blocked with SNAPSHOT_SYNC_CONTINUE event
+            transitionAvailable.acquire();
         }
 
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
@@ -400,7 +406,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
         // Transactional puts into the stream (incremental updates)
-        writeTxIncrementalUpdates();
+        writeToMap();
 
         int incrementalUpdates = 0;
 
@@ -412,17 +418,22 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         assertThat(incrementalUpdates).isEqualTo(NUM_ENTRIES);
     }
 
-    private void writeTxIncrementalUpdates() {
-        PersistentCorfuTable<String, String> map = runtime.getObjectsView()
-                .build()
-                .setStreamName(TEST_STREAM_NAME)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .open();
+    private void writeToMap() throws Exception {
+        Table<Sample.StringKey, Sample.StringKey, Sample.Metadata> map = corfuStore.openTable(
+                TEST_NAMESPACE,
+                TEST_STREAM_NAME,
+                Sample.StringKey.class,
+                Sample.StringKey.class,
+                Sample.Metadata.class,
+                TableOptions.fromProtoSchema(Sample.IntValueTag.class)
+        );
 
-        for(int i=0; i<NUM_ENTRIES; i++) {
-            runtime.getObjectsView().TXBegin();
-            map.insert(String.valueOf(i), String.valueOf(i));
-            runtime.getObjectsView().TXEnd();
+        for (int i = 0; i < NUM_ENTRIES; i++) {
+            try (TxnContext txn = corfuStore.txn(TEST_NAMESPACE)) {
+                txn.putRecord(map, Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build(),
+                        Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build(), null);
+                txn.commit();
+            }
         }
     }
 
@@ -446,18 +457,6 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         return writeTokens;
     }
 
-    private void writeToMap() {
-        PersistentCorfuTable<String, String> map = runtime.getObjectsView()
-                .build()
-                .setStreamName(TEST_STREAM_NAME)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .open();
-
-        for (int i=0; i<LARGE_NUM_ENTRIES; i++) {
-            map.insert(String.valueOf(i), String.valueOf(i));
-        }
-    }
-
     /**
      * Initialize Log Replication FSM
      *
@@ -467,7 +466,14 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      */
     private void initLogReplicationFSM(ReaderImplementation readerImpl) {
 
+        String fullyQualifiedStreamName = TableRegistry.getFullyQualifiedTableName(TEST_NAMESPACE, TEST_STREAM_NAME);
         LogEntryReader logEntryReader = new TestLogEntryReader();
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, TEST_TOPOLOGY_CONFIG_ID,
+                TEST_LOCAL_CLUSTER_ID);
+        CorfuRuntime newRT = getNewRuntime(getDefaultNode()).connect();
+        LogReplicationConfigManager tableManagerPlugin = new LogReplicationConfigManager(newRT);
+        LogReplicationConfig config = new LogReplicationConfig(tableManagerPlugin, DEFAULT_MAX_NUM_MSG_PER_BATCH,
+                MAX_DATA_MSG_SIZE_SUPPORTED, MAX_CACHE_NUM_ENTRIES);
 
         switch(readerImpl) {
             case EMPTY:
@@ -483,7 +489,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                         .endpoint(getDefaultEndpoint())
                         .numEntries(NUM_ENTRIES)
                         .payloadFormat(PAYLOAD_FORMAT)
-                        .streamName(TEST_STREAM_NAME)
+                        .streamName(fullyQualifiedStreamName)
                         .batchSize(BATCH_SIZE).build();
 
                 snapshotReader = new TestSnapshotReader(testConfig);
@@ -491,19 +497,13 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 break;
             case STREAMS:
                 // Default implementation used for Log Replication (stream-based)
-                LogReplicationConfig logReplicationConfig = new LogReplicationConfig(Collections.singleton(TEST_STREAM_NAME));
-                snapshotReader = new StreamsSnapshotReader(getNewRuntime(getDefaultNode()).connect(),
-                        logReplicationConfig);
+                snapshotReader = new StreamsSnapshotReader(newRT, config);
                 dataSender = new TestDataSender();
                 break;
             default:
                 break;
         }
 
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, TEST_TOPOLOGY_CONFIG_ID,
-                TEST_LOCAL_CLUSTER_ID);
-        LogReplicationConfig config = new LogReplicationConfig(new HashSet<>(Arrays.asList(TEST_STREAM_NAME)));
-        LogReplicationConfigManager tableManagerPlugin = new LogReplicationConfigManager(runtime);
         ackReader = new LogReplicationAckReader(metadataManager, config, runtime, TEST_LOCAL_CLUSTER_ID);
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
                 new DefaultReadProcessor(runtime), config, new ClusterDescriptor("Cluster-Local",
