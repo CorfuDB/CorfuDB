@@ -1,18 +1,6 @@
 package org.corfudb.integration;
 
-import com.google.protobuf.Message;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
-import org.corfudb.infrastructure.logreplication.proto.Sample;
-import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.ExampleSchemas;
-import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.Table;
-import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.test.SampleSchema;
-import org.junit.Assert;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -22,26 +10,15 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * This IT uses a topology of 3 Sink clusters and 1 Source cluster, each with its own Corfu Server.  The Source
  * cluster replicates to all 3 Sink clusters.  The set of streams to replicate as received from the
  * LogReplicationConfig is the same for all clusters.
  */
+@Slf4j
 @RunWith(Parameterized.class)
 public class CorfuReplicationMultiSinkIT extends CorfuReplicationMultiSourceSinkIT {
-
-    protected Table<Sample.StringKey, SampleSchema.ValueFieldTagOne, Message> sink1Table1;
-    protected Table<Sample.StringKey, SampleSchema.ValueFieldTagOne, Message> sink1Table4;
-    protected Table<Sample.StringKey, SampleSchema.ValueFieldTagOne, Message> sink2Table1;
-    protected Table<Sample.StringKey, SampleSchema.ValueFieldTagOne, Message> sink2Table4;
-    protected Table<Sample.StringKey, SampleSchema.ValueFieldTagOne, Message> sink3Table1;
-    protected Table<Sample.StringKey, SampleSchema.ValueFieldTagOne, Message> sink3Table4;
-    protected Table<Sample.StringKey, SampleSchema.ValueFieldTagOne, Message> src1Table1;
-    protected Table<Sample.StringKey, SampleSchema.ValueFieldTagOne, Message> src1Table4;
 
     public CorfuReplicationMultiSinkIT(String pluginConfigFilePath) {
         this.pluginConfigFilePath = pluginConfigFilePath;
@@ -67,95 +44,45 @@ public class CorfuReplicationMultiSinkIT extends CorfuReplicationMultiSourceSink
 
     @Before
     public void setUp() throws Exception {
-        setupSourceAndSinkCorfu();
-
-        corfuStoreSink1.openTable(LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
-            LogReplicationMetadata.ReplicationStatusKey.class,
-            LogReplicationMetadata.ReplicationStatusVal.class,
-            null,
-            TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
-
-        corfuStoreSink2.openTable(LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
-            LogReplicationMetadata.ReplicationStatusKey.class,
-            LogReplicationMetadata.ReplicationStatusVal.class,
-            null,
-            TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
-
-        corfuStoreSink3.openTable(LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
-            LogReplicationMetadata.ReplicationStatusKey.class,
-            LogReplicationMetadata.ReplicationStatusVal.class,
-            null,
-            TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+        super.setUp(1, MAX_REMOTE_CLUSTERS);
     }
 
     /**
-     * Verify snapshot sync in a topology with 3 Sink clusters and 1 Source cluster.  The streams to replicate is the
-     * same for all Sink clusters.
-     * @throws Exception
+     * The test verifies snapshot and log entry sync on a topology with 1 Source clusters and 3 Sink clusters.
+     * The Source cluster replicates to all Sink clusters.  The set of streams to replicate as received from the
+     * LogReplicationConfig is the same for all clusters.
+     * Source Cluster 1 only has data in Table001.  This data will get replicated to all Sink clusters.
+     *
+     * The test verifies that the required number of updates were received on Table001 on all Sink clusters.
+     * The test also verifies that the expected number of writes were made to the ReplicationStatus table on the Sink.
+     * The number of updates depends on the number of available Source clusters(3 in this case).
+     *
+     * Later, 1 update and 1 delete(separate transactions) are performed on Table001 on the Source.  The test
+     * verifies that they were applied correctly.
      */
     @Test
-    public void testSnapshotSync() throws Exception {
-        verifySnapshotSync();
+    public void testUpdatesOnReplicatedTables() throws Exception {
+        verifySnapshotAndLogEntrySink(false);
     }
 
-    private void verifySnapshotSync() throws Exception{
-        // Open maps on the Source and Destination Sites
-        openMaps();
-
-        writeData(corfuStoreSource1, TABLE_1, src1Table1, 0, NUM_RECORDS_IN_TABLE);
-
-        Assert.assertEquals(0, sink1Table1.count());
-        Assert.assertEquals(0, sink2Table1.count());
-        Assert.assertEquals(0, sink3Table1.count());
-
-
-        int numAvailableSourceClusters = 1;
-        // On startup, an initial default replication status is written for each
-        // remote cluster(NUM_INITIAL_REPLICATION_STATUS_UPDATES).  Subsequently, the table will be updated on
-        // snapshot sync from each available Source cluster(in this case, 1).
-        int numExpectedSnapshotSyncUpdates = NUM_INITIAL_REPLICATION_STATUS_UPDATES +
-            calculateSnapshotSyncUpdatesOnSinkStatusTable(numAvailableSourceClusters);
-
-        // Subscribe to replication status table on all Sinks
-        CountDownLatch statusUpdateLatch1 = new CountDownLatch(numExpectedSnapshotSyncUpdates);
-        CountDownLatch statusUpdateLatch2 = new CountDownLatch(numExpectedSnapshotSyncUpdates);
-        CountDownLatch statusUpdateLatch3 = new CountDownLatch(numExpectedSnapshotSyncUpdates);
-
-        sinkListener1 = new ReplicationStatusListener(statusUpdateLatch1);
-        corfuStoreSink1.subscribeListener(sinkListener1, LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
-
-        sinkListener2 = new ReplicationStatusListener(statusUpdateLatch2);
-        corfuStoreSink2.subscribeListener(sinkListener2, LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
-
-        sinkListener3 = new ReplicationStatusListener(statusUpdateLatch3);
-        corfuStoreSink3.subscribeListener(sinkListener3, LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
-
-        // Start Log Replication Servers
-        startReplicationServers();
-        statusUpdateLatch1.await();
-        statusUpdateLatch2.await();
-        statusUpdateLatch3.await();
-
-        // Verify that each Sink cluster has the expected number of records in the table
-        Assert.assertEquals(NUM_RECORDS_IN_TABLE, sink1Table1.count());
-        Assert.assertEquals(NUM_RECORDS_IN_TABLE, sink2Table1.count());
-        Assert.assertEquals(NUM_RECORDS_IN_TABLE, sink3Table1.count());
+    @Test
+    public void testRoleChange() throws Exception {
+        verifySnapshotAndLogEntrySink(false);
+        log.info("Preparing for role change");
+        prepareTestTopologyForRoleChange(MAX_REMOTE_CLUSTERS, 1);
+        log.info("Testing after role change");
+        verifySnapshotAndLogEntrySink(true);
     }
 
-    /**
+    /*/**
      * Verify snapshot sync in a topology with 3 Sink clusters and 1 Source cluster.
      * Then perform a role switch by changing the topology to 3 Source clusters, 1 Sink cluster and verify that the new
      * Sink cluster successfully completes a snapshot sync.
      * @throws Exception
-     */
+     *//*
     @Test
     public void testRoleChange() throws Exception {
+
         verifySnapshotSync();
 
         // Write data to a different table(Table004) on one of the current Sink clusters.  This table did not have any
@@ -260,5 +187,5 @@ public class CorfuReplicationMultiSinkIT extends CorfuReplicationMultiSourceSink
         sinkReplicationServer1 = runReplicationServer(sinkReplicationPort1, pluginConfigFilePath);
         sinkReplicationServer2 = runReplicationServer(sinkReplicationPort2, pluginConfigFilePath);
         sinkReplicationServer3 = runReplicationServer(sinkReplicationPort3, pluginConfigFilePath);
-    }
+    }*/
 }
