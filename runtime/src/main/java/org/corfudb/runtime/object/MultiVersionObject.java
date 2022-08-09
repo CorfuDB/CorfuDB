@@ -13,7 +13,6 @@ import org.corfudb.runtime.view.Address;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.ref.SoftReference;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -39,13 +38,9 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
     private static final int TRIM_RETRY = 9;
 
-    private final ISnapshotProxyGenerator<T> snapshotReferenceProxyGenerator;
-
     private final ISnapshotProxyGenerator<T> snapshotProxyGenerator;
 
     private volatile long trimMark;
-
-    private volatile long highestResolvedAddress = -10;
 
     MultiVersionObject(CorfuRuntime corfuRuntime,
                        Supplier<T> newObjectFn,
@@ -58,9 +53,6 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         this.smrStream = smrStream;
         this.upcallTargetMap = wrapperObject.getSMRUpcallMap();
         this.streamID = streamID;
-
-        this.snapshotReferenceProxyGenerator = (voId, object) ->
-                new SnapshotReferenceProxy<>(voId.getObjectId(), voId.getVersion(), object, upcallTargetMap, SoftReference::new);
 
         this.snapshotProxyGenerator = (voId, object) ->
                 new SnapshotProxy<>(object, voId.getVersion(), upcallTargetMap);
@@ -99,9 +91,12 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         try {
             ts = lock.writeLock();
 
+            log.info("getVersionedObjectUnderLock write lock acquired for {}@{}", streamID, timestamp);
+
             Optional<ICorfuSMRSnapshotProxy<T>> snapshotProxyOptional = mvoCache.get(
-                    new VersionedObjectIdentifier(streamID, timestamp), snapshotReferenceProxyGenerator);
+                    new VersionedObjectIdentifier(streamID, timestamp), snapshotProxyGenerator);
             if (snapshotProxyOptional.isPresent()) {
+                log.info("getVersionedObjectUnderLock get for {}@{} found", streamID, timestamp);
                 return snapshotProxyOptional;
             }
 
@@ -110,19 +105,14 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
             // TODO(Zach): This should be adjusted to take into account the above.
             for (int x = 0; x < TRIM_RETRY; x++) {
                 try {
+                    log.info("getVersionedObjectUnderLock syncObject for {}@{} : try {}", streamID, timestamp, x);
                     ICorfuSMRSnapshotProxy<T> snapshotProxy = syncObjectUnsafe(timestamp);
                     versionAccessed.accept(getVersionUnsafe());
 
-                    if (snapshotProxy.getVersion() == Address.NON_EXIST) {
-                        // Since there were no previous versions in the cache
-                        // we keep the same proxy (not backed by SoftReference)
-                        return Optional.of(snapshotProxy);
-                    }
+                    log.info("getVersionedObjectUnderLock syncObject for {}@{} : snapshotProxyVersion={}, versionAccepted={}",
+                            streamID, timestamp, snapshotProxy.getVersion(), getVersionUnsafe());
 
-                    return mvoCache.get(
-                            new VersionedObjectIdentifier(streamID, snapshotProxy.getVersion()),
-                            snapshotReferenceProxyGenerator
-                    );
+                    return Optional.of(snapshotProxy);
                 } catch (TrimmedException te) {
                     log.info("accessInner: Encountered trimmed address space " +
                                     "while accessing version {} of stream {} on attempt {}",
@@ -138,30 +128,20 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
             return Optional.empty();
         } finally {
-            highestResolvedAddress = timestamp;
             lock.unlock(ts);
         }
     }
 
     public ICorfuSMRSnapshotProxy<T> syncObjectUnsafe(long timestamp) {
         ICorfuSMRSnapshotProxy<T> snapshotProxy = prepareObjectBeforeSync(timestamp);
+        log.info("syncObjectUnsafe prepareObjectBeforeSync for {}@{} done", streamID, timestamp);
         syncStreamUnsafe(snapshotProxy, smrStream, timestamp);
+        log.info("syncObjectUnsafe syncStream for {}@{} done", streamID, timestamp);
         return snapshotProxy;
     }
 
     private ICorfuSMRSnapshotProxy<T> prepareObjectBeforeSync(Long timestamp) {
-        // The first access to this object should always proceed
-        if (Boolean.FALSE.equals(mvoCache.containsObject(streamID))) {
-            resetUnsafe();
-
-            // Return a snapshot proxy that isn't backed by a SoftReference since
-            // this snapshot is not yet tied to an MVO cache entry
-            return getSMRSnapshotProxy(
-                    new VersionedObjectIdentifier(streamID, Address.NON_EXIST),
-                    newObjectFn.get(),
-                    snapshotProxyGenerator
-            );
-        }
+        log.info("prepareObjectBeforeSync");
 
         // Find the entry with the greatest version less than or equal to the given version
         Optional<ICorfuSMRSnapshotProxy<T>> snapshotProxyOptional = mvoCache.floorEntry(
@@ -169,16 +149,27 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                 this::getSMRSnapshotProxy
         );
 
-        if (!snapshotProxyOptional.isPresent()) {
-            // Do not allow going back to previous versions
-            resetUnsafe();
-            throw new StaleObjectVersionException(streamID, timestamp);
-        } else {
+        if (snapshotProxyOptional.isPresent()) {
             // Next stream read begins from a given address (inclusive),
             // so +1 to avoid applying the same update twice
             smrStream.seek(snapshotProxyOptional.get().getVersion() + 1);
+            log.info("prepareObjectBeforeSync floorEntry for {}@{} exists: proxyVersion={} (seeked to {})",
+                    streamID, timestamp, snapshotProxyOptional.get().getVersion(),
+                    snapshotProxyOptional.get().getVersion() + 1);
             return snapshotProxyOptional.get();
         }
+
+        if (Boolean.TRUE.equals(mvoCache.containsObject(streamID))) {
+            throw new StaleObjectVersionException(streamID, timestamp);
+        }
+
+        log.info("prepareObjectBeforeSync contains {} is false", streamID);
+        resetUnsafe();
+
+        return getSMRSnapshotProxy(
+            new VersionedObjectIdentifier(streamID, Address.NON_ADDRESS),
+            newObjectFn.get()
+        );
     }
 
     protected void syncStreamUnsafe(@NonNull ICorfuSMRSnapshotProxy<T> snapshotProxy,
@@ -194,12 +185,13 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                             snapshotProxy.logUpdate(entryList, () -> globalAddress);
 
                             VersionedObjectIdentifier voId = new VersionedObjectIdentifier(streamID, globalAddress);
+
+                            log.info("syncStreamUnsafe sync for {}@{} and putting {} in MVOCache and globalAdr={}",
+                                    streamID, timestamp, voId.toString(), globalAddress);
+
                             mvoCache.put(voId, snapshotProxy.get());
 
                             // TODO: handle StaleObjectVersionException
-                        } else {
-                            // TODO(Zach): Remove me
-                            log.warn("Empty entry list");
                         }
                     } catch (Exception e) {
                         log.error("Sync[{}] Error: Couldn't execute upcall due to {}", this, e);
@@ -235,12 +227,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
     }
 
     private ICorfuSMRSnapshotProxy<T> getSMRSnapshotProxy(@NonNull VersionedObjectIdentifier voId, @NonNull T object) {
-        return getSMRSnapshotProxy(voId, object, snapshotReferenceProxyGenerator);
-    }
-
-    private ICorfuSMRSnapshotProxy<T> getSMRSnapshotProxy(@NonNull VersionedObjectIdentifier voId, @NonNull T object,
-                                                          @NonNull ISnapshotProxyGenerator<T> generator) {
-        return generator.generate(voId, object);
+        return snapshotProxyGenerator.generate(voId, object);
     }
 
     /**

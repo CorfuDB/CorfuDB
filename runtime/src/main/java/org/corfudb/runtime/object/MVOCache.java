@@ -1,6 +1,5 @@
 package org.corfudb.runtime.object;
 
-import com.google.common.base.Preconditions;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalCause;
@@ -13,13 +12,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 
-import java.util.Collection;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -77,10 +74,12 @@ public class MVOCache<T extends ICorfuSMR<T>> {
                 .recordStats()
                 .build();
 
+        /*
         mvoCacheSyncThread.scheduleAtFixedRate(this::syncMVOCache,
                 runtime.getParameters().getMvoAutoSyncPeriod().toMillis(),
                 runtime.getParameters().getMvoAutoSyncPeriod().toMillis(),
                 TimeUnit.MILLISECONDS);
+         */
 
         mvoCacheEviction.start();
     }
@@ -143,13 +142,11 @@ public class MVOCache<T extends ICorfuSMR<T>> {
                                                    @NonNull ISnapshotProxyGenerator<T> snapshotProxyFn) {
         MVOCacheEntry cacheEntry = objectCache.getIfPresent(voId);
         if (cacheEntry == null) {
+            log.info("MVOCache: get: {} not in cache", voId.toString());
             return Optional.empty();
         }
 
         final ICorfuSMRSnapshotProxy<T> snapshotProxy = snapshotProxyFn.generate(voId, cacheEntry.getBaseSnapshot());
-        if (snapshotProxy instanceof SnapshotReferenceProxy) {
-            cacheEntry.getSnapshotProxies().add(snapshotProxy);
-        }
         return Optional.of(snapshotProxy);
     }
 
@@ -211,7 +208,6 @@ public class MVOCache<T extends ICorfuSMR<T>> {
                 }
 
                 final ICorfuSMRSnapshotProxy<T> snapshotProxy = snapshotProxyFn.generate(id, cacheEntry.getBaseSnapshot());
-                cacheEntry.getSnapshotProxies().add(snapshotProxy);
                 return Optional.of(snapshotProxy);
             }
         }
@@ -227,7 +223,13 @@ public class MVOCache<T extends ICorfuSMR<T>> {
     public Boolean containsObject(UUID objectId) {
         // TODO: what if an object existing in objectCache but its version is not in objectVersions?
         // This can happen when MVOCache::put is interrupted
-        return objectVersions.containsKey(objectId) && objectVersions.get(objectId).isEmpty();
+        log.info("MVOCache containsObject {}", objectId);
+        if (! objectVersions.containsKey(objectId)) {
+            return false;
+        }
+
+        log.info("MVOCache containsObject {} versionSize={}", objectId, objectVersions.get(objectId).size());
+        return objectVersions.containsKey(objectId) && !objectVersions.get(objectId).isEmpty();
     }
 
     public void registerMVO(UUID objectId, MultiVersionObject<T> mvo) {
@@ -258,16 +260,8 @@ public class MVOCache<T extends ICorfuSMR<T>> {
         @Getter
         private final T baseSnapshot;
 
-        // This is used to "tie" the snapshot proxies given out with the immutable state in the cache.
-        // Snapshot proxies should not be invalidated while the cache maintains this entry.
-        @Getter
-        private final Collection<ICorfuSMRSnapshotProxy<T>> snapshotProxies;
-
         MVOCacheEntry(@NonNull final T baseSnapshot) {
             this.baseSnapshot = baseSnapshot;
-
-            // ConcurrentLinkedQueue provides fast insertions in some ordering
-            this.snapshotProxies = new ConcurrentLinkedQueue<>();
         }
     }
 }
