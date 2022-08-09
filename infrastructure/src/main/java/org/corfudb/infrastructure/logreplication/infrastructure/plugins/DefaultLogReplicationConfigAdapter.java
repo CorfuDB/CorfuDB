@@ -24,7 +24,7 @@ public class DefaultLogReplicationConfigAdapter implements ILogReplicationConfig
     public static final String TABLE_PREFIX = "Table00";
     public static final String NAMESPACE = "LR-Test";
     public static final String TAG_ONE = "tag_one";
-    private static final int STREAMING_CONFIG_TABLES_COUNT = 4;
+    private static final int STREAMING_CONFIG_TABLES_COUNT = 3;
 
     public DefaultLogReplicationConfigAdapter() {
         streamsToReplicate = new HashSet<>();
