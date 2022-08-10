@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import com.google.common.reflect.TypeToken;
+import io.vavr.Tuple2;
 import io.vavr.collection.HashMap;
 import io.vavr.collection.HashSet;
 import io.vavr.collection.Map;
@@ -13,9 +14,15 @@ import org.corfudb.runtime.object.ICorfuExecutionContext;
 import org.corfudb.runtime.object.ICorfuSMR;
 
 import javax.annotation.Nonnull;
+import java.util.AbstractMap;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
+import java.util.NoSuchElementException;
+import java.util.Spliterator;
+import java.util.Spliterators;
 import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 @Slf4j
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
@@ -129,14 +136,55 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
         // TODO: Consider alternative to avoid conversion to Java Set.
         return mainMap.keySet().toJavaSet();
     }
+    
+    class TupleIteratorWrapper implements Iterator<java.util.Map.Entry<K, V>> {
+
+        final io.vavr.collection.Iterator<Tuple2<K, V>> iterator;
+
+        public TupleIteratorWrapper(io.vavr.collection.Iterator<Tuple2<K, V>> iterator) {
+            this.iterator = iterator;
+        }
+
+        @Override
+        public boolean hasNext() {
+            return iterator.hasNext();
+        }
+
+        @Override
+        public java.util.Map.Entry<K, V> next() {
+            if (hasNext()) {
+                Tuple2<K, V> tuple2 = iterator.next();
+                return new AbstractMap.SimpleEntry<>(tuple2._1, tuple2._2);
+            }
+            throw new NoSuchElementException();
+        }
+    }
+
+    private Spliterator<java.util.Map.Entry<K, V>> spliterator(Map<K, V> map){
+        int characteristics = Spliterator.IMMUTABLE;
+        if (map.isDistinct()) {
+            characteristics |= Spliterator.DISTINCT;
+        }
+        if (map.isOrdered()) {
+            characteristics |= (Spliterator.SORTED | Spliterator.ORDERED);
+        }
+        if (map.isSequential()) {
+            characteristics |= Spliterator.ORDERED;
+        }
+        if (map.hasDefiniteSize()) {
+            characteristics |= (Spliterator.SIZED | Spliterator.SUBSIZED);
+            return Spliterators.spliterator(new TupleIteratorWrapper(map.iterator()), map.length(), characteristics);
+        } else {
+            return Spliterators.spliteratorUnknownSize(new TupleIteratorWrapper(map.iterator()), characteristics);
+        }
+    }
 
     /**
      *
      * @return
      */
     public Stream<java.util.Map.Entry<K, V>> entryStream() {
-        // TODO: Consider alternative to avoid conversion to Java Map.
-        return mainMap.toJavaMap().entrySet().stream();
+        return StreamSupport.stream(spliterator(mainMap), true);
     }
 
     /**
