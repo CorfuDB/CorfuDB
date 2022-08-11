@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Data;
+import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
@@ -68,6 +69,7 @@ public class LogReplicationConfig {
     private Set<String> streamsToReplicate;
 
     // Streaming tags on Sink (map data stream id to list of tags associated to it)
+    @Setter
     private Map<UUID, List<UUID>> dataStreamToTagsMap = new HashMap<>();
 
     // Snapshot Sync Batch Size(number of messages)

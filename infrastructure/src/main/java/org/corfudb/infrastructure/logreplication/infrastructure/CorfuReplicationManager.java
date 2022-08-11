@@ -72,6 +72,24 @@ public class CorfuReplicationManager {
     }
 
     /**
+     * Initiate a runtime against a given subscriber on each Sink cluster
+     * @param subscriber
+     */
+    public void startConnectionToSubscriber(ReplicationSubscriber subscriber) {
+        for (ClusterDescriptor remoteCluster : context.getTopology().getSinkClusters().values()) {
+            try {
+                startLogReplicationRuntime(remoteCluster, new ReplicationSession(remoteCluster.getClusterId(),
+                    subscriber));
+            } catch (Exception e) {
+                log.error("Failed to start log replication runtime for remote session {}, replication model {}, " +
+                    "client {}", remoteCluster.getClusterId(), subscriber.getReplicationModel(),
+                    subscriber.getClient());
+            }
+        }
+
+    }
+
+    /**
      * Stop log replication for all the sink sites
      */
     public void stop() {

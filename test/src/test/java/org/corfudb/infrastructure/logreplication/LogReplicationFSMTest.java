@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.logreplication;
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 
-
 import com.google.common.reflect.TypeToken;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.util.ArrayList;

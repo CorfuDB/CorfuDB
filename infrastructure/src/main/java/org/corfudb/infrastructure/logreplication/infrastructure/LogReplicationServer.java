@@ -142,6 +142,14 @@ public class LogReplicationServer extends AbstractServer {
 
             // If no sink Manager is found, drop the message and log an error
             if (sinkManager == null) {
+                // TODO: If the subscriber is not found, create sink managers for it and add it to the config because
+                // the subscribers are discovered only when tables are opened.
+                // Also check the topology descriptor now to validate that both clusters are on the same topology
+                // config id
+
+                // TODO: Since changes in metadata manager are not yet finished, multiple metadata managers will also
+                //  have to be constructed, which is not clean here.  Wait till those changes are available.
+                // Then create the additional Sink Managers.
                 log.error("Sink Manager not found for remote cluster {}.  This could be due to a topology mismatch.",
                     getUUID(request.getHeader().getClusterId()).toString());
                 return;
@@ -194,6 +202,7 @@ public class LogReplicationServer extends AbstractServer {
 
             // If no sink Manager is found, drop the message and log an error
             if (sinkManager == null) {
+                // TODO: If the subscriber is not found, create sink managers for it and add it to the config
                 log.error("Sink Manager not found for remote cluster {}.  This could be due to a topology mismatch.",
                     getUUID(request.getHeader().getClusterId()).toString());
                 return;

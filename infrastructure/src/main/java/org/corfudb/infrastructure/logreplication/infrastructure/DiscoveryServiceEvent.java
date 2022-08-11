@@ -16,6 +16,8 @@ public class DiscoveryServiceEvent {
 
     private UUID eventId = null;
 
+    private ReplicationSubscriber replicationSubscriber;
+
     public DiscoveryServiceEvent(DiscoveryServiceEventType type) {
        this.type = type;
     }
@@ -35,10 +37,16 @@ public class DiscoveryServiceEvent {
         this.eventId = UUID.fromString(eventId);
     }
 
+    public DiscoveryServiceEvent(DiscoveryServiceEventType type, ReplicationSubscriber subscriber) {
+        this.type = type;
+        this.replicationSubscriber = subscriber;
+    }
+
     public enum DiscoveryServiceEventType {
         DISCOVERED_TOPOLOGY,
         ACQUIRE_LOCK,
         RELEASE_LOCK,
-        ENFORCE_SNAPSHOT_SYNC
+        ENFORCE_SNAPSHOT_SYNC,
+        NEW_REPLICATION_SUBSCRIBER
     }
 }

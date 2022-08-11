@@ -200,6 +200,13 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     private LogReplicationEventListener logReplicationEventListener;
 
     /**
+     * This is a listener to the registry table and is activated on the SOURCE leader.  Whenever a new table is
+     * opened with subscriber info which was not yet seen, it will notify the Discovery Service to generate the
+     * config and FSM for this subscriber.
+     */
+    private ReplicationSubscriberUpdateListener subscriberUpdateListener;
+
+    /**
      * Constructor Discovery Service
      *
      * @param serverContext         current server's context
@@ -285,6 +292,10 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 processEnforceSnapshotSync(event);
                 break;
 
+            case NEW_REPLICATION_SUBSCRIBER:
+                addNewReplicationSubscriber(event.getReplicationSubscriber());
+                break;
+
             default:
                 log.error("Invalid event type {}", event.getType());
                 break;
@@ -336,7 +347,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * Instantiate the LR components based on role
      * Source:
      * - build logReplication context(LR context available for both Source and Sink.  Currently only used on the Source)
-     * - start even listener: listens to forced snapshot sync requests
+     * - start event listener: listens to forced snapshot sync requests
      * Sink:
      * - Start Log Replication Server(listens and processes incoming requests from the Source)
      * Both:
@@ -361,6 +372,13 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             replicationContext = new LogReplicationContext(logReplicationConfig, topologyDescriptor, localCorfuEndpoint);
             logReplicationEventListener = new LogReplicationEventListener(this, getCorfuRuntime());
             logReplicationEventListener.start();
+
+            // Create a stream listener on the registry table to get updates for newly added ReplicationSubscribers.
+            // This is done only if the role is SOURCE.  On Sink, addition of new clients will be processed if/when
+            // updates are received for them.
+            // Note: This listener will only start on the leader node
+            subscriberUpdateListener = new ReplicationSubscriberUpdateListener(this, logReplicationConfig,
+                getCorfuRuntime());
         } else {
             // Sink Cluster
             remoteClusterIds.addAll(topologyDescriptor.getSourceClusters().keySet());
@@ -381,6 +399,16 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 ReplicationSession replicationSession = new ReplicationSession(remoteClusterId, subscriber);
                 remoteSessionToMetadataManagerMap.put(replicationSession, metadataManager);
             }
+        }
+    }
+
+    // TODO pankti: Clean this up
+    private void addMetadataManagers(Set<String> remoteClusterIds, ReplicationSubscriber subscriber) {
+        for (String remoteClusterId : remoteClusterIds) {
+            LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(getCorfuRuntime(),
+                topologyDescriptor.getTopologyConfigId(), remoteClusterId);
+            ReplicationSession replicationSession = new ReplicationSession(remoteClusterId, subscriber);
+            remoteSessionToMetadataManagerMap.put(replicationSession, metadataManager);
         }
     }
 
@@ -521,6 +549,9 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 initReplicationStatusForRemoteClusters(true);
                 lockAcquireSample = recordLockAcquire(localClusterDescriptor.getRole());
                 processCountOnLockAcquire(localClusterDescriptor.getRole());
+
+                // Start the listener to the registry table
+                subscriberUpdateListener.start();
                 break;
             case SINK:
                 log.info("Start as Sink (receiver)");
@@ -602,9 +633,17 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      */
     public void processLockRelease() {
         log.debug("Lock released");
+
         // Unset isLeader flag after stopping log replication
         stopLogReplication();
+
+        // Stop the listener to registry table
+        if (localClusterDescriptor != null && localClusterDescriptor.getRole() == ClusterRole.SOURCE) {
+            subscriberUpdateListener.stop();
+        }
+
         isLeader.set(false);
+
         // Signal Log Replication Server/Sink to stop receiving messages, leadership loss
         if (localClusterDescriptor != null && localClusterDescriptor.getRole() == ClusterRole.SINK) {
             interClusterServerNode.setLeadership(false);
@@ -819,7 +858,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         // command and wrote it to the event table.  So check the cluster role
         // here again.
         if (localClusterDescriptor.getRole() == ClusterRole.SINK) {
-            log.warn("The current role is STANDBY.  Ignoring the forced snapshot sync event");
+            log.warn("The current role is SINK.  Ignoring the forced snapshot sync event");
             return;
         }
         if (replicationManager == null || !isLeader.get()) {
@@ -829,6 +868,28 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         }
 
         replicationManager.enforceSnapshotSync(event);
+    }
+
+    private void addNewReplicationSubscriber(ReplicationSubscriber subscriber) {
+        if (isLeader.get()) {
+            log.warn("Update for New Replication Subscriber received on non-leader node.  Ignore it.");
+            return;
+        }
+        Set<String> streamsToReplicate = replicationConfigManager.getStreamsToReplicate(subscriber);
+        logReplicationConfig.getReplicationSubscriberToStreamsMap().put(subscriber, streamsToReplicate);
+
+        // TODO pankti: Update the streamsToTags Map cleanly
+        Map<UUID, List<UUID>> streamingConfig = replicationConfigManager.getStreamingConfigOnSink();
+        logReplicationConfig.setDataStreamToTagsMap(streamingConfig);
+
+        if (localClusterDescriptor.getRole() == ClusterRole.SOURCE) {
+            addMetadataManagers(topologyDescriptor.getSinkClusters().keySet(), subscriber);
+        } else if (localClusterDescriptor.getRole() == ClusterRole.SINK) {
+            addMetadataManagers(topologyDescriptor.getSourceClusters().keySet(), subscriber);
+        }
+
+        // Start a replication runtime to the newly discovered subscriber
+        replicationManager.startConnectionToSubscriber(subscriber);
     }
 
     public synchronized void input(DiscoveryServiceEvent event) {

@@ -28,6 +28,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -91,6 +92,10 @@ public class LogReplicationConfigManager {
             log.warn("Exception when opening config tables", e);
             throw new UnrecoverableCorfuError(e);
         }
+    }
+
+    public Set<String> getStreamsToReplicate(ReplicationSubscriber subscriber) {
+        return new HashSet<>();
     }
 
     public Map<ReplicationSubscriber, Set<String>> getSubscriberToStreamsMap() {
