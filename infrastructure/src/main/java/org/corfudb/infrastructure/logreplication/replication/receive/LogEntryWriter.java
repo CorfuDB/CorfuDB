@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 import com.google.protobuf.TextFormat;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.service.CorfuProtocolLogReplication;
@@ -31,12 +32,21 @@ import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.REG
 @Slf4j
 public class LogEntryWriter extends SinkWriter {
     private final LogReplicationMetadataManager logReplicationMetadataManager;
-    private final HashMap<UUID, String> streamMap; //the set of streams that log entry writer will work on.
-    private final Map<UUID, List<UUID>> dataStreamToTagsMap;
-    private long srcGlobalSnapshot; //the source snapshot that the transaction logs are based
-    private long lastMsgTs; //the timestamp of the last message processed.
 
-    public LogEntryWriter(CorfuRuntime rt, LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager) {
+    //the set of streams that log entry writer will work on.
+    private final Map<UUID, String> streamMap;
+
+    private final Map<UUID, List<UUID>> dataStreamToTagsMap;
+
+    //the source snapshot that the transaction logs are based
+    private long srcGlobalSnapshot;
+
+    //the timestamp of the last message processed.
+    private long lastMsgTs;
+
+    public LogEntryWriter(CorfuRuntime rt, LogReplicationConfig config,
+                          LogReplicationMetadataManager logReplicationMetadataManager,
+                          ReplicationSession replicationSession) {
         super(rt);
         this.logReplicationMetadataManager = logReplicationMetadataManager;
         this.srcGlobalSnapshot = Address.NON_ADDRESS;
@@ -44,7 +54,8 @@ public class LogEntryWriter extends SinkWriter {
         this.streamMap = new HashMap<>();
         this.dataStreamToTagsMap = config.getDataStreamToTagsMap();
 
-        config.getStreamsToReplicate().stream().forEach(stream -> streamMap.put(CorfuRuntime.getStreamID(stream), stream));
+        config.getReplicationSubscriberToStreamsMap().get(replicationSession.getSubscriber()).stream()
+            .forEach(stream -> streamMap.put(CorfuRuntime.getStreamID(stream), stream));
     }
 
     /**
