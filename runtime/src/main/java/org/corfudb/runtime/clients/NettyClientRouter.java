@@ -130,6 +130,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
     /**
      * The currently registered channel.
      */
+    @Getter
     private volatile Channel channel = null;
 
     /**
