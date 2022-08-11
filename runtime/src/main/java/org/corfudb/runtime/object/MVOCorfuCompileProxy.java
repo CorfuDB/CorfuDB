@@ -57,7 +57,7 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
                 rt,
                 this::getNewInstance,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
-                wrapperObject, streamID);
+                wrapperObject);
     }
 
     @Override
@@ -91,12 +91,13 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
         R result = null;
         try {
             ICorfuSMRSnapshotProxy<T> snapshotProxy = underlyingMVO.getSnapshotProxy(timestamp);
-            result = accessMethod.access(snapshotProxy.get());
+            result = snapshotProxy.access(accessMethod, v -> {});
         } catch (NullPointerException npe) {
             // TODO: wrap and throw ObjectEvictedException
             log.error("Object has been evicted!", npe);
         }
-        return  result;
+
+        return result;
     }
 
     @Override

@@ -1,267 +1,114 @@
 package org.corfudb.runtime.object;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.RemovalCause;
 import com.google.common.cache.RemovalNotification;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import io.micrometer.core.instrument.binder.cache.GuavaCacheMetrics;
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.CorfuRuntime;
 
+import javax.annotation.Nonnull;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 
 /**
  * MVOCache is the centralized container that holds the reference to
- * all MVOs. Overall it provides put and get APIs and manages the
- * Cache-related properties (LRU) under the hood.
- *
+ * all MVOs. Overall, it provides put and get APIs and manages the
+ * cache-related properties (LRU) under the hood.
  */
 @Slf4j
 public class MVOCache<T extends ICorfuSMR<T>> {
 
-    private final CorfuRuntime runtime;
-
-    // A registry to keep track of all opened MVOs.
+    /**
+     * A registry to keep track of all opened MVOs.
+     */
     @Getter
     private final ConcurrentHashMap<UUID, MultiVersionObject<T>> allMVOs = new ConcurrentHashMap<>();
 
-    @Getter
-    // A collection of strong references to all versioned objects and their snapshotProxies.
-    private final Cache<VersionedObjectIdentifier, MVOCacheEntry> objectCache;
-
-    // An ordered view of all versions grouped by each MVO's UUID. Used to facilitate operations such as floorEntry.
-    // Modifications to the same MVO should be explicitly synchronized.
-    @Getter
-    private final ConcurrentHashMap<UUID, TreeSet<Long>> objectVersions = new ConcurrentHashMap<>();
-
     /**
-     * TODO: access pattern
-     * Mutations: 1) objectCache, 2) objectVersions
-     * Accesses/Gets: 1) objectVersions, 2) query objectCache for real object if previous query is true
+     * A collection of strong references to all versioned objects and their state.
      */
+    @Getter
+    private final Cache<VersionedObjectIdentifier, T> objectCache;
 
     private static final long DEFAULT_CACHE_EXPIRY_TIME_IN_SECONDS = 300;
 
-    private final ScheduledExecutorService mvoCacheSyncThread = Executors.newSingleThreadScheduledExecutor(
-            new ThreadFactoryBuilder().setDaemon(true)
-                    .setNameFormat("MVOCacheSyncThread")
-                    .build());
+    private static final String HIT_RATIO_NAME = "mvo_cache.hit_ratio";
+    private static final String SIZE_NAME = "mvo_cache.size";
 
-    @Getter
-    private final MVOCacheEviction mvoCacheEviction = new MVOCacheEviction(this::prefixEvict);
-
-    public MVOCache(CorfuRuntime corfuRuntime) {
-        runtime = corfuRuntime;
-
-        CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
-        objectCache = cacheBuilder.maximumSize(runtime.getParameters().getMaxCacheEntries())
+    public MVOCache(@Nonnull CorfuRuntime corfuRuntime) {
+        this.objectCache = CacheBuilder.newBuilder()
+                .maximumSize(corfuRuntime.getParameters().getMaxCacheEntries())
                 .expireAfterAccess(DEFAULT_CACHE_EXPIRY_TIME_IN_SECONDS, TimeUnit.SECONDS)
                 .expireAfterWrite(DEFAULT_CACHE_EXPIRY_TIME_IN_SECONDS, TimeUnit.SECONDS)
                 .removalListener(this::handleEviction)
                 .recordStats()
                 .build();
 
-        /*
-        mvoCacheSyncThread.scheduleAtFixedRate(this::syncMVOCache,
-                runtime.getParameters().getMvoAutoSyncPeriod().toMillis(),
-                runtime.getParameters().getMvoAutoSyncPeriod().toMillis(),
-                TimeUnit.MILLISECONDS);
-         */
+        MeterRegistryProvider.getInstance()
+                .map(registry -> GuavaCacheMetrics.monitor(registry, objectCache, "mvo_cache"));
 
-        mvoCacheEviction.start();
+        MicroMeterUtils.gauge(HIT_RATIO_NAME, objectCache, cache -> cache.stats().hitRate());
+        MicroMeterUtils.gauge(SIZE_NAME, objectCache, Cache::size);
     }
 
+    private void handleEviction(RemovalNotification<VersionedObjectIdentifier, T> notification) {
+        log.trace("handleEviction: evicting {} cause {}", notification.getKey(), notification.getCause());
+    }
+
+    /**
+     * Shutdown the MVOCache and perform any necessary cleanup.
+     */
     public void shutdown() {
-        mvoCacheSyncThread.shutdownNow();
-        mvoCacheEviction.shutdown();
+        MicroMeterUtils.removeGaugesWithNoTags(HIT_RATIO_NAME, SIZE_NAME);
     }
 
     /**
-     * Callback function which is triggered by every guava cache eviction.
-     *
-     * @param notification guava cache eviction notification
+     * Retrieve a versioned object from the cache, if present.
+     * @param voId The desired object version.
+     * @return An optional containing the corresponding versioned object, if present.
      */
-    private void handleEviction(RemovalNotification<VersionedObjectIdentifier, Object> notification) {
-        if (notification.getCause() == RemovalCause.EXPLICIT ||
-                notification.getCause() == RemovalCause.REPLACED)
-            return;
-        mvoCacheEviction.add(notification.getKey());
-    }
-
-    /**
-     * Evict all versions of the given object up to the target version.
-     *
-     * @param voId  the object and version to perform prefixEvict
-     * @return number of versions that has been evicted
-     */
-    public int prefixEvict(VersionedObjectIdentifier voId) {
-        TreeSet<Long> allVersionsOfThisObject = objectVersions.get(voId.getObjectId());
-        if (allVersionsOfThisObject == null) {
-            return 0;
-        }
-        int count;
-
-        synchronized (allVersionsOfThisObject) {
-            // set 'inclusive' to make objectCache and objectVersions consistent
-            Set<Long> headSet = allVersionsOfThisObject.headSet(voId.getVersion(), true);
-            headSet.forEach(version -> {
-                voId.setVersion(version);
-                objectCache.invalidate(voId);
-            });
-            count = headSet.size();
-            headSet.clear();
+    public Optional<T> get(@Nonnull VersionedObjectIdentifier voId) {
+        if (log.isTraceEnabled()) {
+            log.trace("MVOCache: performing a get for {}", voId.toString());
         }
 
-        return count;
+        return Optional.ofNullable(objectCache.getIfPresent(voId));
     }
 
     /**
-     * Get the Snapshot Proxy of the versioned object specified by the given voId
-     * generated by the given snapshot proxy generator. Result is wrapped by Optional.
-     * Return Optional.empty() if the MVO cache does not have the versioned object
-     * specified by the voId.
-     *
-     * @param voId the id of the versioned object
-     * @param snapshotProxyFn the snapshot proxy generator
-     * @return an Optional of the versioned object. Empty if not present in cache.
+     * Put a versioned object into the cache.
+     * @param voId   The version of the object being placed into the cache.
+     * @param object The actual underlying object corresponding to this voId.
      */
-    public Optional<ICorfuSMRSnapshotProxy<T>> get(@NonNull VersionedObjectIdentifier voId,
-                                                   @NonNull ISnapshotProxyGenerator<T> snapshotProxyFn) {
-        MVOCacheEntry cacheEntry = objectCache.getIfPresent(voId);
-        if (cacheEntry == null) {
-            log.info("MVOCache: get: {} not in cache", voId.toString());
-            return Optional.empty();
+    public void put(@Nonnull VersionedObjectIdentifier voId, @Nonnull T object) {
+        if (log.isTraceEnabled()) {
+            log.trace("MVOCache: performing a put for {}", voId.toString());
         }
 
-        final ICorfuSMRSnapshotProxy<T> snapshotProxy = snapshotProxyFn.generate(voId, cacheEntry.getBaseSnapshot());
-        return Optional.of(snapshotProxy);
+        objectCache.put(voId, object);
     }
 
     /**
-     * Put the voId and versionedObject to objectCache, update objectVersions.
-     *
-     * @param voId the object and version to add to cache
-     * @param versionedObject the versioned object to add
+     * Register an MVO with this MVOCache.
+     * @param objectId The stream id of the provided MVO.
+     * @param mvo      The actual MVO being registered.
      */
-    public void put(@NonNull VersionedObjectIdentifier voId, @NonNull T versionedObject) {
-        TreeSet<Long> allVersionsOfThisObject = objectVersions.computeIfAbsent(
-                voId.getObjectId(), k -> new TreeSet<>());
-        synchronized (allVersionsOfThisObject) {
-            // TODO: What if voId is already there?
-            objectCache.put(voId, new MVOCacheEntry(versionedObject));
-            allVersionsOfThisObject.add(voId.getVersion());
-        }
+    public void registerMVO(@Nonnull UUID objectId, @Nonnull MultiVersionObject<T> mvo) {
+        allMVOs.putIfAbsent(objectId, mvo);
     }
 
-    /**
-     * Returns true if the objectCache has the target voId.
-     *
-     * @param voId the object and version to check
-     * @return true if target exists
-     */
-    public Boolean containsKey(VersionedObjectIdentifier voId) {
-        return objectCache.asMap().containsKey(voId);
-    }
-
-    /**
-     * For a given voId, find in all versions of this object that has the greatest
-     * version && version <= voId.getVersion.
-     *
-     * @param voId the object and version to check
-     * @param snapshotProxyFn snapshotProxy generator
-     * @return an optional of an ICorfuSMRSnapshotProxy instance which is generated
-     *         by the given snapshotProxy generator function. Empty if there is no floorEntry.
-     */
-    public Optional<ICorfuSMRSnapshotProxy<T>> floorEntry(@NonNull VersionedObjectIdentifier voId,
-                                                          @NonNull ISnapshotProxyGenerator<T> snapshotProxyFn) {
-        final TreeSet<Long> allVersionsOfThisObject = objectVersions.get(voId.getObjectId());
-
-        if (allVersionsOfThisObject == null) {
-            // The object has not been created
-            return Optional.empty();
-        } else {
-            synchronized (allVersionsOfThisObject) {
-                final Long floorVersion = allVersionsOfThisObject.floor(voId.getVersion());
-                if (floorVersion == null) {
-                    return Optional.empty();
-                }
-
-                final VersionedObjectIdentifier id = new VersionedObjectIdentifier(voId.getObjectId(), floorVersion);
-                final MVOCacheEntry cacheEntry = objectCache.getIfPresent(id);
-                // Cache eviction updates objectVersions asynchronously.
-                // The item is removed from objectVersions after cache eviction happens.
-                if (cacheEntry == null) {
-                    return Optional.empty();
-                }
-
-                final ICorfuSMRSnapshotProxy<T> snapshotProxy = snapshotProxyFn.generate(id, cacheEntry.getBaseSnapshot());
-                return Optional.of(snapshotProxy);
-            }
-        }
-    }
-
-    /**
-     * Returns true if objectCache has any versionedObject of a certain object.
-     * Checks the objectVersions.
-     *
-     * @param objectId the object id to check
-     * @return true if target object exists
-     */
-    public Boolean containsObject(UUID objectId) {
-        // TODO: what if an object existing in objectCache but its version is not in objectVersions?
-        // This can happen when MVOCache::put is interrupted
-        log.info("MVOCache containsObject {}", objectId);
-        if (! objectVersions.containsKey(objectId)) {
-            return false;
-        }
-
-        log.info("MVOCache containsObject {} versionSize={}", objectId, objectVersions.get(objectId).size());
-        return objectVersions.containsKey(objectId) && !objectVersions.get(objectId).isEmpty();
-    }
-
-    public void registerMVO(UUID objectId, MultiVersionObject<T> mvo) {
-        allMVOs.computeIfAbsent(objectId, key -> mvo);
-    }
-
-    private void syncMVOCache() {
-        TokenResponse streamTails = runtime.getSequencerView()
-                .query(allMVOs.keySet().toArray(new UUID[0]));
-        final AtomicInteger count = new AtomicInteger(0);
-        allMVOs.forEach((uuid, mvo) -> {
-            if (objectVersions.get(uuid) != null &&
-                    objectVersions.get(uuid).last() < streamTails.getStreamTail(uuid)) {
-                // Sync to the latest state
-                mvo.getVersionedObjectUnderLock(streamTails.getStreamTail(uuid), v -> {});
-                count.getAndIncrement();
-            }
-        });
-        log.info("Synced {} objects.", count);
-    }
-
-    // For testing purpose
+    @VisibleForTesting
     public Set<VersionedObjectIdentifier> keySet() {
         return ImmutableSet.copyOf(objectCache.asMap().keySet());
-    }
-
-    private class MVOCacheEntry {
-        @Getter
-        private final T baseSnapshot;
-
-        MVOCacheEntry(@NonNull final T baseSnapshot) {
-            this.baseSnapshot = baseSnapshot;
-        }
     }
 }

@@ -29,7 +29,6 @@ import org.corfudb.test.SampleSchema.SampleTableCMsg;
 import org.corfudb.test.SampleSchema.Uuid;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -407,14 +406,16 @@ public class StreamingIT extends AbstractIT {
         public void onNext(CorfuStreamEntries results) {
             results.getEntries().forEach((k, v) -> {
                 v.forEach(entry -> {
-                    final CorfuStoreEntry<K, V, M> previousRecord =
-                            getPreviousRecord(namespace, tableName, entry, results.getTimestamp().getEpoch(),
-                                    results.getTimestamp().getSequence());
-                    SampleTableAMsg prevMsg = (SampleTableAMsg) previousRecord.getPayload();
                     if (recordCount > 0) {
-                        assertThat(prevMsg.getPayload()).isEqualTo("val"+(recordCount - 1));
-                    } else {
-                        assertThat(previousRecord.getPayload()).isNull();
+                        final CorfuStoreEntry<K, V, M> previousRecord =
+                                getPreviousRecord(namespace, tableName, entry, results.getTimestamp().getEpoch(),
+                                        results.getTimestamp().getSequence());
+                        SampleTableAMsg prevMsg = (SampleTableAMsg) previousRecord.getPayload();
+                        if (recordCount > 0) {
+                            assertThat(prevMsg.getPayload()).isEqualTo("val"+(recordCount - 1));
+                        } else {
+                            assertThat(previousRecord.getPayload()).isNull();
+                        }
                     }
                 });
             });
@@ -465,7 +466,6 @@ public class StreamingIT extends AbstractIT {
      * @throws Exception
      */
     @Test
-    @Ignore // TODO: Fix me
     public void testStreamingPrevValue() throws Exception {
         // Run a corfu server and start runtime
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);

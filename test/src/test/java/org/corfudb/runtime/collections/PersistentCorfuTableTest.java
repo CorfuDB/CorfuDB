@@ -4,7 +4,6 @@ import com.google.protobuf.Descriptors;
 import com.google.protobuf.Message;
 import lombok.SneakyThrows;
 import org.apache.commons.lang3.tuple.Pair;
-import org.assertj.core.api.Assertions;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
@@ -13,9 +12,6 @@ import org.corfudb.runtime.ExampleSchemas.Company;
 import org.corfudb.runtime.ExampleSchemas.ExampleValue;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.ExampleSchemas.Uuid;
-import org.corfudb.runtime.exceptions.StaleObjectVersionException;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.MVOCacheEviction;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -27,18 +23,15 @@ import org.junit.Test;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -206,6 +199,58 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
     }
 
     @Test
+    public void testMultiRuntime() {
+        addSingleServer(SERVERS.PORT_0);
+        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(LARGE_CACHE_SIZE)
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+        setupSerializer();
+        openTable();
+
+        TestSchema.Uuid key1 = TestSchema.Uuid.newBuilder().setLsb(1).setMsb(1).build();
+        TestSchema.Uuid payload1 = TestSchema.Uuid.newBuilder().setLsb(1).setMsb(1).build();
+        TestSchema.Uuid metadata1 = TestSchema.Uuid.newBuilder().setLsb(1).setMsb(1).build();
+        CorfuRecord value1 = new CorfuRecord(payload1, metadata1);
+
+        rt.getObjectsView().TXBegin();
+
+        // Table should be empty
+        assertThat(corfuTable.get(key1)).isNull();
+        assertThat(corfuTable.size()).isZero();
+
+        // Put key1
+        corfuTable.insert(key1, value1);
+
+        // Table should now have size 1 and contain key1
+        assertThat(corfuTable.get(key1).getPayload().getLsb()).isEqualTo(payload1.getLsb());
+        assertThat(corfuTable.get(key1).getPayload().getMsb()).isEqualTo(payload1.getMsb());
+        assertThat(corfuTable.size()).isEqualTo(1);
+        rt.getObjectsView().TXEnd();
+
+        assertThat(corfuTable.get(key1).getPayload().getLsb()).isEqualTo(payload1.getLsb());
+        assertThat(corfuTable.get(key1).getPayload().getMsb()).isEqualTo(payload1.getMsb());
+        assertThat(corfuTable.size()).isEqualTo(1);
+
+        CorfuRuntime rt2 = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(LARGE_CACHE_SIZE)
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+
+        setupSerializer(rt2, new ProtobufSerializer(new ConcurrentHashMap<>()));
+
+        PersistentCorfuTable<TestSchema.Uuid, CorfuRecord<TestSchema.Uuid, TestSchema.Uuid>> ct =
+                openTable(rt2, someNamespace, someTable, TestSchema.Uuid.class, TestSchema.Uuid.class, TestSchema.Uuid.class, null);
+
+
+        assertThat(ct.get(key1).getPayload().getLsb()).isEqualTo(payload1.getLsb());
+        assertThat(ct.get(key1).getPayload().getMsb()).isEqualTo(payload1.getMsb());
+        assertThat(ct.size()).isEqualTo(1);
+    }
+
+    @Test
     public void testTxn() {
         addSingleServer(SERVERS.PORT_0);
         rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
@@ -292,60 +337,6 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                 new VersionedObjectIdentifier(corfuTable.getCorfuStreamID(), 1));
     }
 
-    /**
-     * Do not allow accessing a stale version which is older than the smallest
-     * version of the same object in MVOCache
-     */
-    @Test
-    public void testAccessStaleVersion() throws InterruptedException {
-        addSingleServer(SERVERS.PORT_0);
-        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
-                .maxCacheEntries(SMALL_CACHE_SIZE)
-                .build())
-                .parseConfigurationString(getDefaultConfigurationString())
-                .connect();
-        setupSerializer();
-        openTable();
-
-        // Create 4 versions of the table
-        for (int i = 0; i < 4; i++) {
-            TestSchema.Uuid key = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
-            TestSchema.Uuid payload = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
-            TestSchema.Uuid metadata = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
-            CorfuRecord value = new CorfuRecord(payload, metadata);
-            corfuTable.insert(key, value);
-        }
-
-        // Populate the MVOCache with v1, v2 and v3.
-        // v0 is evicted when v3 is put into the cache
-        rt.getObjectsView().TXBuild()
-                .type(TransactionType.SNAPSHOT)
-                .snapshot(new Token(0, 3))
-                .build()
-                .begin();
-
-        final TestSchema.Uuid key = TestSchema.Uuid.newBuilder().setLsb(0).setMsb(0).build();
-        assertThat(corfuTable.get(key).getPayload().getLsb()).isEqualTo(0);
-        assertThat(corfuTable.get(key).getPayload().getMsb()).isEqualTo(0);
-        rt.getObjectsView().TXEnd();
-
-        // Accessing v0 is not allowed
-        rt.getObjectsView().TXBuild()
-                .type(TransactionType.SNAPSHOT)
-                .snapshot(new Token(0, 0))
-                .build()
-                .begin();
-
-        TimeUnit.MILLISECONDS.sleep(MVOCacheEviction.getDEFAULT_EVICTION_INTERVAL_IN_MILLISECONDS());
-        TreeSet<Long> allVersions = (TreeSet<Long>) rt.getObjectsView().getMvoCache().getObjectVersions()
-                .get(corfuTable.getCorfuStreamID());
-        Assertions.assertThat(allVersions).containsExactlyInAnyOrder(1L, 2L, 3L);
-
-        Assertions.assertThatExceptionOfType(TransactionAbortedException.class)
-                .isThrownBy(() -> corfuTable.get(key).getPayload())
-                .withCauseInstanceOf(StaleObjectVersionException.class);
-    }
-
     @Test
     public void simpleParallelAccess() throws InterruptedException {
         addSingleServer(SERVERS.PORT_0);
@@ -403,48 +394,6 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
             assertThat(corfuTable.get(key).getPayload().getMsb()).isEqualTo(i);
         }
         rt.getObjectsView().TXEnd();
-    }
-
-    @Test
-    public void testMVOCacheAutoSync() throws Exception {
-        addSingleServer(SERVERS.PORT_0);
-        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
-                .maxCacheEntries(MEDIUM_CACHE_SIZE)
-                .mvoAutoSyncPeriod(Duration.ofSeconds(MVO_AUTO_SYNC_PERIOD_SECONDS))
-                .build())
-                .parseConfigurationString(getDefaultConfigurationString())
-                .connect();
-        setupSerializer();
-        openTable();
-
-        int writeSize = 20;
-
-        for (int i = 0; i < writeSize; i++) {
-            rt.getObjectsView().TXBegin();
-            TestSchema.Uuid key = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
-            TestSchema.Uuid payload = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
-            TestSchema.Uuid metadata = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
-            CorfuRecord value = new CorfuRecord(payload, metadata);
-            corfuTable.insert(key, value);
-            rt.getObjectsView().TXEnd();
-        }
-        // Transactions obtain the object state at the beginning.
-        // A pure write txn will not add its version to the cache.
-        assertThat(rt.getObjectsView().getMvoCache().keySet().size()).isEqualTo(writeSize - 1);
-        TimeUnit.SECONDS.sleep(MVO_AUTO_SYNC_PERIOD_SECONDS * 2);
-        assertThat(rt.getObjectsView().getMvoCache().keySet().size()).isEqualTo(writeSize);
-
-        for (int i = 0; i < writeSize; i++) {
-            TestSchema.Uuid key = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
-            TestSchema.Uuid payload = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
-            TestSchema.Uuid metadata = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
-            CorfuRecord value = new CorfuRecord(payload, metadata);
-            corfuTable.insert(key, value);
-        }
-        // Non-transactional writes does not obtain object state at all.
-        assertThat(rt.getObjectsView().getMvoCache().keySet().size()).isEqualTo(writeSize);
-        TimeUnit.SECONDS.sleep(MVO_AUTO_SYNC_PERIOD_SECONDS * 2);
-        assertThat(rt.getObjectsView().getMvoCache().keySet().size()).isEqualTo(writeSize * 2);
     }
 
     @Test
@@ -506,44 +455,6 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         assertThat(readerResult.get()).isEqualTo(payload1.getLsb());
         assertThat(writerResult.get()).isEqualTo(payload2.getLsb());
-    }
-
-    @Test
-    public void testMVOGC() throws InterruptedException {
-        addSingleServer(SERVERS.PORT_0);
-        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
-                .maxCacheEntries(MEDIUM_CACHE_SIZE)
-                .runtimeGCPeriod(Duration.ofMillis(500))
-                .build())
-                .parseConfigurationString(getDefaultConfigurationString())
-                .connect();
-        setupSerializer();
-        openTable();
-
-        // Create 4 versions of the table which takes address 0,1,2,3
-        for (int i = 0; i < 4; i++) {
-            TestSchema.Uuid key = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
-            TestSchema.Uuid payload = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
-            TestSchema.Uuid metadata = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
-            CorfuRecord value = new CorfuRecord(payload, metadata);
-            corfuTable.insert(key, value);
-        }
-
-        // Sync the corfu to latest, populate MVOCache
-        rt.getObjectsView().TXBegin();
-        assertThat(corfuTable.size()).isEqualTo(4);
-        rt.getObjectsView().TXEnd();
-
-        // Prefix trim removes versions 0,1,2
-        rt.getAddressSpaceView().prefixTrim(new Token(0, 2));
-
-        // Wait for Runtime GC and async prefix eviction to happen
-        TimeUnit.MILLISECONDS.sleep(2 * (rt.getParameters().getRuntimeGCPeriod().toMillis() +
-                MVOCacheEviction.getDEFAULT_EVICTION_INTERVAL_IN_MILLISECONDS()));
-
-        // Verify that versions 0,1,2 has been evicted
-        assertThat(rt.getObjectsView().getMvoCache().keySet())
-                .containsExactlyInAnyOrder(new VersionedObjectIdentifier(corfuTable.getCorfuStreamID(),3L));
     }
 
     // PersistentCorfuTable SecondaryIndexes Tests - Adapted From CorfuTableTest & CorfuStoreSecondaryIndexTest

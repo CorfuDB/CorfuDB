@@ -599,30 +599,17 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         int numSmrEntries = i;
 
         // Write all CP data.
-        r.getObjectsView().TXBuild()
-                .type(TransactionType.SNAPSHOT)
-                .build()
-                .begin();
-        Token snapshot = TransactionalContext
-                .getCurrentContext()
-                .getSnapshotTimestamp();
-        try {
-            cpw.startCheckpoint(snapshot);
-            cpw.appendObjectState(m.entryStream());
-            cpw.finishCheckpoint();
+        cpw.appendCheckpoint();
 
-            // Instantiate new runtime & table.
-            setRuntime();
-            PersistentCorfuTable<String, String> m2 = instantiateStringTable(streamName);
-            for (i = 0; i < numSmrEntries; i++) {
-                assertThat(m2.get(keyPrefix + i)).describedAs("get " + i)
-                        .isEqualTo(mockedMap.get(keyPrefix + i));
-            }
-            // 1 CheckpointEntry for SMREntries, 1 CheckpointEntry for finishCheckpoint()
-            assertThat(cpw.getNumEntries()).isEqualTo(2);
-        } finally {
-            r.getObjectsView().TXEnd();
+        // Instantiate new runtime & table.
+        setRuntime();
+        PersistentCorfuTable<String, String> m2 = instantiateStringTable(streamName);
+        for (i = 0; i < numSmrEntries; i++) {
+            assertThat(m2.get(keyPrefix + i)).describedAs("get " + i)
+                    .isEqualTo(mockedMap.get(keyPrefix + i));
         }
+        // 1 CheckpointEntry for SMREntries, 1 CheckpointEntry for finishCheckpoint()
+        assertThat(cpw.getNumEntries()).isEqualTo(2);
 
         populateMapForFollowUpTest(cpw, m, numBytesPerCheckpointEntry, batchThresholdPercentage,
                 keyPrefix, mockedMap, numSmrEntries, i);
@@ -630,35 +617,22 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         numSmrEntries++;
 
         // Write all CP data.
-        r.getObjectsView().TXBuild()
-                .type(TransactionType.SNAPSHOT)
-                .build()
-                .begin();
-        snapshot = TransactionalContext
-                .getCurrentContext()
-                .getSnapshotTimestamp();
-        try {
-            cpw.startCheckpoint(snapshot);
-            cpw.appendObjectState(m.entryStream());
-            cpw.finishCheckpoint();
+        cpw.appendCheckpoint();
 
-            // Instantiate new runtime & table.
-            setRuntime();
-            PersistentCorfuTable<String, String> m2 = instantiateStringTable(streamName);
-            for (i = 0; i < numSmrEntries - 1; i++) {
-                assertThat(m2.get(keyPrefix + i)).describedAs("get " + i)
-                        .isEqualTo(mockedMap.get(keyPrefix + i));
-            }
-            i = numSmrEntries - 1;
-            assertThat(m2.get(keyPrefix + i)).describedAs("get " + i)
+        // Instantiate new runtime & table.
+        setRuntime();
+        PersistentCorfuTable<String, String> m3 = instantiateStringTable(streamName);
+        for (i = 0; i < numSmrEntries - 1; i++) {
+            assertThat(m3.get(keyPrefix + i)).describedAs("get " + i)
                     .isEqualTo(mockedMap.get(keyPrefix + i));
-            // 2 CheckpointEntries from previous run
-            // 2 CheckpointEntries for SMREntries
-            // 1 CheckpointEntry for finishCheckpoint()
-            assertThat(cpw.getNumEntries()).isEqualTo(5);
-        } finally {
-            r.getObjectsView().TXEnd();
         }
+        i = numSmrEntries - 1;
+        assertThat(m3.get(keyPrefix + i)).describedAs("get " + i)
+                .isEqualTo(mockedMap.get(keyPrefix + i));
+        // 2 CheckpointEntries from previous run
+        // 2 CheckpointEntries for SMREntries
+        // 1 CheckpointEntry for finishCheckpoint()
+        assertThat(cpw.getNumEntries()).isEqualTo(5);
     }
 
     /**

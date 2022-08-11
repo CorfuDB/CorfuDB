@@ -30,7 +30,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;

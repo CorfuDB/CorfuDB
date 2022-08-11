@@ -46,8 +46,9 @@ import org.corfudb.infrastructure.logreplication.replication.send.logreader.Stre
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.SMRObject;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -411,15 +412,16 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     }
 
     private void writeTxIncrementalUpdates() {
-        CorfuTable<String, String> map = runtime.getObjectsView()
+        PersistentCorfuTable<String, String> map = runtime.getObjectsView()
                 .build()
                 .setStreamName(TEST_STREAM_NAME)
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         for(int i=0; i<NUM_ENTRIES; i++) {
             runtime.getObjectsView().TXBegin();
-            map.put(String.valueOf(i), String.valueOf(i));
+            map.insert(String.valueOf(i), String.valueOf(i));
             runtime.getObjectsView().TXEnd();
         }
     }
@@ -445,14 +447,15 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     }
 
     private void writeToMap() {
-        CorfuTable<String, String> map = runtime.getObjectsView()
+        PersistentCorfuTable<String, String> map = runtime.getObjectsView()
                 .build()
                 .setStreamName(TEST_STREAM_NAME)
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         for (int i=0; i<LARGE_NUM_ENTRIES; i++) {
-            map.put(String.valueOf(i), String.valueOf(i));
+            map.insert(String.valueOf(i), String.valueOf(i));
         }
     }
 

@@ -170,8 +170,9 @@ public class DynamicProtobufSerializer implements ISerializer {
             cachedProtobufDescriptorTable.put(entry.getKey(), entry.getValue());
         }
 
-        // Remove the protobuf serializer
+        // Remove the protobuf serializer and reset the cache
         corfuRuntime.getSerializers().clearCustomSerializers();
+        corfuRuntime.getObjectsView().getMvoCache().shutdown();
         corfuRuntime.getObjectsView().setMvoCache(new MVOCache(corfuRuntime));
     }
 

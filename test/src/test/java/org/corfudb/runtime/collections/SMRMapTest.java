@@ -9,8 +9,6 @@ import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
@@ -26,7 +24,6 @@ import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -242,22 +239,21 @@ public class SMRMapTest extends AbstractViewTest {
         calculateRequestsPerSecond("RPS", num_records * num_threads, startTime);
     }
 
+    /*
     @Test
     @SuppressWarnings("unchecked")
-    @Ignore // TODO(Zach):
+    @Ignore // PersistentCorfuTable does not implement compute
     public void readSetDiffFromWriteSet() throws Exception {
-        PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
+        CorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test1")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
-        PersistentCorfuTable<String, String> testTable2 = getRuntime().getObjectsView()
+        CorfuTable<String, String> testTable2 = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test2")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .open();
 
         testTable.insert("a", "b");
@@ -277,7 +273,7 @@ public class SMRMapTest extends AbstractViewTest {
         scheduleConcurrently(1, threadNumber -> {
             getRuntime().getObjectsView().TXBegin();
             // PersistentCorfuTable does not implement compute
-            // testTable.compute("b", (k, v) -> testTable2.get("a"));
+            testTable.compute("b", (k, v) -> testTable2.get("a"));
             s1.release();
             s2.tryAcquire(PARAMETERS.TIMEOUT_NORMAL.toMillis(),
                     TimeUnit.MILLISECONDS);
@@ -286,6 +282,7 @@ public class SMRMapTest extends AbstractViewTest {
         });
         executeScheduled(PARAMETERS.CONCURRENCY_TWO, PARAMETERS.TIMEOUT_NORMAL);
     }
+    */
 
    @Test
     @SuppressWarnings("unchecked")
@@ -443,7 +440,6 @@ public class SMRMapTest extends AbstractViewTest {
         assertThat(testTable.get("a")).isNull();
         getRuntime().getObjectsView().TXAbort();
         assertThat(testTable.size()).isEqualTo(1);
-        // TODO(Zach): FAILS
     }
 
     @Test
@@ -561,7 +557,6 @@ public class SMRMapTest extends AbstractViewTest {
             final int putKey = r.nextInt(numKeys);
             final int getKey = r.nextInt(numKeys);
 
-            // TODO(Zach): this creates null values
             testTables[task_num%numThreads].insert(Integer.toString(putKey),
                     testTables[task_num%numThreads].get(Integer.toString(getKey)));
 

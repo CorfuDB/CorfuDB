@@ -6,10 +6,10 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 
 import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.junit.Test;
 
 import java.time.Duration;
-import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -40,7 +40,11 @@ public class ViewsGarbageCollectorTest extends AbstractViewTest {
 
         for (int x = 0; x < numWrites; x++) {
             table.insert(String.valueOf(x), String.valueOf(x));
+            table.get(String.valueOf(x));
         }
+
+        assertThat(((MVOCorfuCompileProxy <PersistentCorfuTable<String, String>>)table.getCorfuSMRProxy())
+                .getUnderlyingMVO().getAddressSpace().size()).isNotZero();
 
         MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();
         mcw.addMap(table);
@@ -50,8 +54,8 @@ public class ViewsGarbageCollectorTest extends AbstractViewTest {
         rt.getGarbageCollector().runRuntimeGC();
         assertThat(rt.getAddressSpaceView().getReadCache().asMap()).isEmpty();
 
-        TimeUnit.SECONDS.sleep(1); // MVOCache eviction is async
-        assertThat(rt.getObjectsView().getMvoCache().getObjectCache().size()).isZero();
+        assertThat(((MVOCorfuCompileProxy <PersistentCorfuTable<String, String>>)table.getCorfuSMRProxy())
+                .getUnderlyingMVO().getAddressSpace().size()).isZero();
 
         rt.shutdown();
         assertThat(rt.getGarbageCollector().isStarted()).isFalse();

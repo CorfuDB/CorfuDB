@@ -6,9 +6,9 @@ import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.NodeLocator;
 import org.junit.Before;
 import org.junit.Test;
@@ -110,7 +110,6 @@ public class SecurityIT extends AbstractIT {
      * @throws Exception
      */
     @Test
-    // TODO(Zach): It looks like this test can be removed?
     public void testServerRuntimeTlsEnabledMethod() throws Exception {
         // Run a corfu server
         Process corfuServer = runSinglePersistentServerTls();
@@ -125,10 +124,11 @@ public class SecurityIT extends AbstractIT {
                                     .connect();
 
         // Create CorfuTable
-        CorfuTable testTable = runtime
+        PersistentCorfuTable<String, Object> testTable = runtime
                 .getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<CorfuTable<String, Object>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, Object>>() {})
+                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("volbeat")
                 .open();
 
@@ -139,7 +139,7 @@ public class SecurityIT extends AbstractIT {
         final int count = 100;
         final int entrySize = 1000;
         for (int i = 0; i < count; i++) {
-            testTable.put(String.valueOf(i), new byte[entrySize]);
+            testTable.insert(String.valueOf(i), new byte[entrySize]);
         }
 
         // Assert that put operation was successful

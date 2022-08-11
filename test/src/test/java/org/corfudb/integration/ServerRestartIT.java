@@ -172,7 +172,6 @@ public class ServerRestartIT extends AbstractIT {
                     try {
                         if (i != 0) {
                             for (int j = 0; j < MAPS; j++) {
-                                // TODO(Zach): Verify this works as expected
                                 assertThat(smrMapList.get(j).entryStream())
                                         .containsExactlyInAnyOrderElementsOf(expectedMapList.get(j).entrySet());
                             }

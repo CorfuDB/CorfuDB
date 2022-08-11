@@ -51,13 +51,14 @@ public class ObjectsViewTest extends AbstractViewTest {
                 .open();
 
         // TODO: fix so this does not require mapCopy.
-        ICorfuTable<String, String> mapCopy = getDefaultRuntime().getObjectsView()
+        // Since we only allow one MVO for an object per runtime,
+        // NO_CACHE must not be used here. Instead, use another runtime.
+        ICorfuTable<String, String> mapCopy = getNewRuntime(getDefaultNode()).connect().getObjectsView()
                 .build()
                 .setStreamName(mapA)
                 .setStreamTags(CorfuRuntime.getStreamID(streamA))
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
-                .option(ObjectOpenOption.NO_CACHE)
                 .open();
 
         map.insert("initial", "value");
