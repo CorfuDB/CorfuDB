@@ -6,6 +6,7 @@ import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
+import org.corfudb.common.config.ConfigParamsHelper;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -154,7 +155,7 @@ public class CorfuServer {
                     + " -x <ciphers>, --tls-ciphers=<ciphers>                                    "
                     + "              Comma separated list of TLS ciphers to use.\n"
                     + "                                                                          "
-                    + "              [default: TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256].\n"
+                    + "              [default: " + ConfigParamsHelper.getTlsCiphersCSV() + "].\n"
                     + " -z <tls-protocols>, --tls-protocols=<tls-protocols>                      "
                     + "              Comma separated list of TLS protocols to use.\n"
                     + "                                                                          "
