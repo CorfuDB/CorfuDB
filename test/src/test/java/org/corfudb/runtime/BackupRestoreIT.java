@@ -43,14 +43,15 @@ import java.util.UUID;
 @Slf4j
 public class BackupRestoreIT extends AbstractIT {
 
-    final static public int numEntries = 123;
-    final static public int valSize = 2000;
-    static final public int numTables = 5;
-    static final private String NAMESPACE = "test_namespace";
-    static final private String backupTable = "test_table";
+    public static final int numEntries = 123;
+    public static final int valSize = 2000;
+    public static final int numTables = 5;
+    private static final String NAMESPACE = "test_namespace";
+    private static final String backupTable = "test_table";
+    private static final int longNameRepeat = 15;
 
-    static final private String DEFAULT_HOST = "localhost";
-    static final private int DEFAULT_PORT = 9000;
+    private static final String DEFAULT_HOST = "localhost";
+    private static final int DEFAULT_PORT = 9000;
     private static final int WRITER_PORT = DEFAULT_PORT + 1;
     private static final String SOURCE_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
     private static final String DESTINATION_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
@@ -150,6 +151,20 @@ public class BackupRestoreIT extends AbstractIT {
         List<String> tableNames = new ArrayList<>();
         for (int i = 0; i < numTables; i++) {
             tableNames.add(backupTable + "_" + i);
+        }
+        return tableNames;
+    }
+
+    private List<String> getLongTableNames(int numTables) {
+        StringBuilder longPrefix = new StringBuilder();
+        // generate a 150-character long prefix
+        for (int i = 0; i < longNameRepeat; i++) {
+            longPrefix.append(backupTable);
+        }
+
+        List<String> tableNames = new ArrayList<>();
+        for (int i = 0; i < numTables; i++) {
+            tableNames.add(longPrefix + "_" + i);
         }
         return tableNames;
     }
@@ -780,7 +795,7 @@ public class BackupRestoreIT extends AbstractIT {
         CorfuStore srcDataCorfuStore = new CorfuStore(srcDataRuntime);
         CorfuStore destDataCorfuStore = new CorfuStore(destDataRuntime);
 
-        List<String> tableNames = getTableNames(numTables);
+        List<String> tableNames = getLongTableNames(numTables);
 
         // Generate random entries and save into sourceServer
         // Set half of the tables with backup tag, and the other half without backup tag
