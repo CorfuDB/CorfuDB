@@ -27,9 +27,13 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+
+import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 
 /**
  * Provides Corfu native restore support. Works together with Backup.
@@ -59,6 +63,9 @@ public class Restore {
 
     // Restore mode. Refer to class definition for details
     private RestoreMode restoreMode;
+
+    // Cache the mapping from table uuid to requires_backup_support in RegistryTable
+    private Map<UUID, Boolean> tableTagged = new HashMap<>();
 
     /**
      * Unpacked files from backup tar file are stored under RESTORE_TEMP_DIR. They are deleted after restore finishes.
@@ -108,7 +115,7 @@ public class Restore {
         long startTime = System.currentTimeMillis();
         for (String tableBackup : tableBackups) {
             if (restoreMode == RestoreMode.PARTIAL_TAGGED && !isTableTagged(tableBackup)) {
-                log.info("Skip restoring table {} since it doesn't have requires_back_support tag", tableBackup);
+                log.info("skip restoring table {} since it doesn't have requires_backup_support tag", tableBackup);
                 continue;
             }
 
@@ -172,20 +179,42 @@ public class Restore {
      */
     private boolean isTableTagged(String tableBackup) {
         // tableBackup name format: uuid.namespace$tableName
+        UUID uuid = UUID.fromString(tableBackup.substring(0, tableBackup.indexOf(".")));
+        if (!tableTagged.isEmpty()) {
+            return tableTagged.get(uuid);
+        }
+
         String[] strings = tableBackup.substring(tableBackup.indexOf(".")+1).split("\\$");
         if (Objects.equals(strings[0], TableRegistry.CORFU_SYSTEM_NAMESPACE) &&
                 Objects.equals(strings[1], TableRegistry.REGISTRY_TABLE_NAME)) {
             return true;
         }
 
-        CorfuStoreMetadata.TableName tableName = CorfuStoreMetadata.TableName.newBuilder()
-                .setNamespace(strings[0]).setTableName(strings[1]).build();
-        return rt.getTableRegistry()
-                .getRegistryTable()
-                .get(tableName)
-                .getMetadata()
-                .getTableOptions()
-                .getRequiresBackupSupport();
+        // Populate tableTagged map
+        // The reason we don't read the tag by getRegistryTable().get(tableName)
+        // is that, the tableName extracted from tableBackup is not guaranteed
+        // to be a full name. 'TarArchiveOutputStream.LONGFILE_TRUNCATE' is used
+        // to generate the backup files which truncates the table names which are
+        // too long. The uuid as the first part of the file name is always complete
+        // since it has fixed length and is smaller than the truncate limit (100).
+        try {
+            rt.getTableRegistry()
+                    .getRegistryTable()
+                    .entryStream()
+                    .forEach(entry -> {
+                        String tableName = getFullyQualifiedTableName(entry.getKey().getNamespace(),
+                                entry.getKey().getTableName());
+                        Boolean tagged = entry.getValue().getMetadata().hasTableOptions() &&
+                                entry.getValue().getMetadata().getTableOptions().getRequiresBackupSupport();
+                        tableTagged.put(CorfuRuntime.getStreamID(tableName), tagged);
+                    });
+
+        } catch (Exception ex) {
+            log.error("failed to populate the tableTagged map!", ex);
+            throw ex;
+        }
+
+        return tableTagged.get(uuid);
     }
 
     /**
@@ -218,7 +247,7 @@ public class Restore {
         }
 
         // Move the RegistryTable to the beginning of the list
-        String registryTableName = TableRegistry.getFullyQualifiedTableName(
+        String registryTableName = getFullyQualifiedTableName(
                 TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME);
         UUID registryTableUUID = CorfuRuntime.getStreamID(registryTableName);
         // format: uuid.namespace$tableName
@@ -260,7 +289,7 @@ public class Restore {
         TxnContext txn = corfuStore.txn(TableRegistry.CORFU_SYSTEM_NAMESPACE);
 
         corfuStore.getRuntime().getTableRegistry().listTables().forEach(tableName -> {
-            String name = TableRegistry.getFullyQualifiedTableName(tableName);
+            String name = getFullyQualifiedTableName(tableName);
             UUID streamId = CorfuRuntime.getStreamID(name);
             SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
             txn.logUpdate(streamId, entry);
