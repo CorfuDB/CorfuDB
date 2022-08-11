@@ -118,7 +118,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     private void initializeShadowStreams(LogReplicationConfig config) {
         // For every stream create a shadow stream which name is unique based
         // on the original stream and a suffix.
-        for (String streamName : config.getStreamsToReplicate()) {
+        for (String streamName : config.getReplicationModelToStreamsMap().get(
+            LogReplicationConfig.ReplicationModel.SINGLE_SOURCE_SINK)) {
             String shadowStreamName = streamName + SHADOW_STREAM_SUFFIX;
             UUID streamId = CorfuRuntime.getStreamID(streamName);
             UUID shadowStreamId = CorfuRuntime.getStreamID(shadowStreamName);

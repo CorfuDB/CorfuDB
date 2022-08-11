@@ -88,7 +88,8 @@ public class StreamsLogEntryReader implements LogEntryReader {
         this.deltaCounter = configureDeltaCounter();
         this.validDeltaCounter = configureValidDeltaCounter();
         this.opaqueEntryCounter = configureOpaqueEntryCounter();
-        Set<String> streams = config.getStreamsToReplicate();
+        Set<String> streams = config.getReplicationModelToStreamsMap().get(
+            LogReplicationConfig.ReplicationModel.SINGLE_SOURCE_SINK);
 
         streamUUIDs = new HashSet<>();
         for (String s : streams) {

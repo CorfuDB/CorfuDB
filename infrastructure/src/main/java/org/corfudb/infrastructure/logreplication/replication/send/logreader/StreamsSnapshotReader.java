@@ -77,7 +77,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         this.rt = runtime;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
-        this.streams = config.getStreamsToReplicate();
+        this.streams = config.getReplicationModelToStreamsMap().get(LogReplicationConfig.ReplicationModel.SINGLE_SOURCE_SINK);
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
     }
 

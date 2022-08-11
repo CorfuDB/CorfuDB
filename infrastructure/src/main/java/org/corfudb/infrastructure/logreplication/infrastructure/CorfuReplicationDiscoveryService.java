@@ -349,6 +349,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         // Through LogReplicationConfigAdapter retrieve system-specific configurations
         // such as streams to replicate and version
+        // Get config for all replication models
         LogReplicationConfig logReplicationConfig = getLogReplicationConfiguration(getCorfuRuntime());
 
         Set<String> remoteClusterIds = new HashSet<>();

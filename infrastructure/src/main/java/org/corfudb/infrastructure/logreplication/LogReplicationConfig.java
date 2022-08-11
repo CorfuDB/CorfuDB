@@ -39,8 +39,8 @@ public class LogReplicationConfig {
     // Percentage of log data per log replication message
     public static final int DATA_FRACTION_PER_MSG = 90;
 
-    // Unique identifiers for all streams to be replicated across sites
-    private Set<String> streamsToReplicate;
+    // A map consisting of the streams to replicate for each supported replication model
+    private Map<ReplicationModel, Set<String>> replicationModelToStreamsMap = new HashMap<>();
 
     // Streaming tags on Sink/Standby (map data stream id to list of tags associated to it)
     private Map<UUID, List<UUID>> dataStreamToTagsMap = new HashMap<>();
@@ -81,7 +81,7 @@ public class LogReplicationConfig {
      * @param maxNumMsgPerBatch snapshot sync batch size (number of entries per batch)
      */
     public LogReplicationConfig(Set<String> streamsToReplicate, int maxNumMsgPerBatch, int maxMsgSize, int cacheSize) {
-        this.streamsToReplicate = streamsToReplicate;
+        replicationModelToStreamsMap.put(ReplicationModel.SINGLE_SOURCE_SINK, streamsToReplicate);
         this.maxNumMsgPerBatch = maxNumMsgPerBatch;
         this.maxMsgSize = maxMsgSize;
         this.maxCacheSize = cacheSize;
@@ -103,5 +103,11 @@ public class LogReplicationConfig {
         this(streamsToReplicate, maxNumMsgPerBatch, maxMsgSize, cacheSize);
         this.dataStreamToTagsMap = streamingTagsMap;
         this.mergeOnlyStreams = mergeOnlyStreams;
+    }
+
+    public enum ReplicationModel {
+        SINGLE_SOURCE_SINK,
+        MULTI_SOURCE_MERGE_AT_SINK,
+        MULTI_SINK_MERGE_AT_SINK
     }
 }

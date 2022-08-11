@@ -21,6 +21,7 @@ import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManag
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -96,7 +97,9 @@ public class LogReplicationSourceManager {
 
         this.config = parameters.getReplicationConfig();
 
-        if (config.getStreamsToReplicate() == null || config.getStreamsToReplicate().isEmpty()) {
+        Set<String> streamsToReplicate = config.getReplicationModelToStreamsMap().get(
+            LogReplicationConfig.ReplicationModel.SINGLE_SOURCE_SINK);
+        if (streamsToReplicate == null || streamsToReplicate.isEmpty() ) {
             // Avoid FSM being initialized if there are no streams to replicate
             throw new IllegalArgumentException("Invalid Log Replication: Streams to replicate is EMPTY");
         }

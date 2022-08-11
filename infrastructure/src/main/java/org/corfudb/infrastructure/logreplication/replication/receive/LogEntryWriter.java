@@ -41,7 +41,8 @@ public class LogEntryWriter {
         this.streamMap = new HashMap<>();
         this.dataStreamToTagsMap = config.getDataStreamToTagsMap();
 
-        config.getStreamsToReplicate().stream().forEach(stream -> streamMap.put(CorfuRuntime.getStreamID(stream), stream));
+        config.getReplicationModelToStreamsMap().get(LogReplicationConfig.ReplicationModel.SINGLE_SOURCE_SINK).stream()
+            .forEach(stream -> streamMap.put(CorfuRuntime.getStreamID(stream), stream));
     }
 
     /**
