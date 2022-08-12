@@ -5,6 +5,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+import lombok.Data;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 
@@ -42,7 +43,7 @@ public interface ISMRStream {
 
     Stream<SMREntry> streamUpTo(long maxGlobal);
 
-    Stream<List<SMREntry>> streamUpToInList(long maxGlobal);
+    Stream<SingleAddressUpdates> streamUpToInList(long maxGlobal);
 
     /**
      * Append a SMREntry to the stream, returning the global address
@@ -74,4 +75,12 @@ public interface ISMRStream {
      */
     @SuppressWarnings("checkstyle:abbreviation")
     UUID getID();
+
+    @Data
+    class SingleAddressUpdates {
+
+        private final Long globalAddress;
+
+        private final List<SMREntry> smrEntryList;
+    }
 }

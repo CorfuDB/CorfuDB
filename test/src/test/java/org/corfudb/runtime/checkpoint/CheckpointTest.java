@@ -262,6 +262,43 @@ public class CheckpointTest extends AbstractObjectTest {
     }
 
     @Test
+    public void emptyCkpointMVOTest() throws Exception {
+
+        CorfuRuntime rt = getNewRuntime();
+        PersistentCorfuTable<String, Long> tableA = openTable(rt, streamNameA);
+
+        tableA.insert("a", 0L);
+        tableA.delete("a");
+
+        // Checkpoint
+        MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw1 = new MultiCheckpointWriter<>();
+        mcw1.addMap(tableA);
+        Token trimToken = mcw1.appendCheckpoints(rt, author);
+
+        rt.getAddressSpaceView().prefixTrim(trimToken);
+        rt.shutdown();
+
+        // Start a new runtime otherwise the old runtime will not load the CP
+        // entries since the read queue has already resolved the updates
+        rt = getNewRuntime();
+        tableA = openTable(rt, streamNameA);
+
+        tableA.insert("c", 1L);
+        assertThat(tableA.size()).isEqualTo(1);
+
+        // Access should be served with version 2
+        rt.getObjectsView().TXBuild()
+                .type(TransactionType.SNAPSHOT)
+                .snapshot(new Token(0, 4))
+                .build()
+                .begin();
+        assertThat(tableA.size()).isZero();
+        rt.getObjectsView().TXEnd();
+
+        rt.shutdown();
+    }
+
+    @Test
     public void emptyCkpointTest2() throws Exception {
         CorfuRuntime rt = getNewRuntime();
         rt.shutdown();

@@ -54,11 +54,9 @@ public class StreamViewSMRAdapter implements ISMRStream {
             CheckpointEntry cp = (CheckpointEntry) logData.getPayload(runtime);
             if (cp.getSmrEntries() != null
                     && cp.getSmrEntries().getUpdates().size() > 0) {
-                Long logStartAddress = Long.decode(cp.getDict()
-                        .get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS));
                 cp.getSmrEntries().getUpdates().forEach(e -> {
                     e.setRuntime(runtime);
-                    e.setGlobalAddress(logStartAddress);
+                    e.setGlobalAddress(logData.getGlobalAddress());
                 });
                 return cp.getSmrEntries().getUpdates();
             } else {
@@ -66,6 +64,28 @@ public class StreamViewSMRAdapter implements ISMRStream {
             }
         } else {
             return ((ISMRConsumable) logData.getPayload(runtime)).getSMRUpdates(streamView.getId());
+        }
+    }
+
+    private SingleAddressUpdates dataCheckpointMapper(ILogData logData) {
+        if (logData.hasCheckpointMetadata()) {
+            // This is a CHECKPOINT record.  Extract the SMREntries, if any.
+            CheckpointEntry cp = (CheckpointEntry) logData.getPayload(runtime);
+            Long logStartAddress = Long.decode(cp.getDict()
+                    .get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS));
+            if (cp.getSmrEntries() != null
+                    && cp.getSmrEntries().getUpdates().size() > 0) {
+                cp.getSmrEntries().getUpdates().forEach(e -> {
+                    e.setRuntime(runtime);
+                    e.setGlobalAddress(logStartAddress);
+                });
+                return new SingleAddressUpdates(logStartAddress, cp.getSmrEntries().getUpdates());
+            } else {
+                return new SingleAddressUpdates(logStartAddress, Collections.EMPTY_LIST);
+            }
+        } else {
+            return new SingleAddressUpdates(logData.getGlobalAddress(),
+                    ((ISMRConsumable) logData.getPayload(runtime)).getSMRUpdates(streamView.getId()));
         }
     }
 
@@ -158,12 +178,12 @@ public class StreamViewSMRAdapter implements ISMRStream {
     }
 
     @Override
-    public Stream<List<SMREntry>> streamUpToInList(long maxGlobal) {
+    public Stream<SingleAddressUpdates> streamUpToInList(long maxGlobal) {
         return streamView.streamUpTo(maxGlobal)
                 .filter(m -> m.getType() == DataType.DATA)
                 .filter(m -> m.getPayload(runtime) instanceof ISMRConsumable
                         || m.hasCheckpointMetadata())
-                .map(this::dataAndCheckpointMapper);
+                .map(this::dataCheckpointMapper);
     }
 
     /**

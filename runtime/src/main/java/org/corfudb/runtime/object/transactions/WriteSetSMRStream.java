@@ -242,8 +242,8 @@ public class WriteSetSMRStream implements ISMRStream {
     }
 
     @Override
-    public Stream<List<SMREntry>> streamUpToInList(long maxGlobal) {
-        return Stream.of(remainingUpTo(maxGlobal));
+    public Stream<SingleAddressUpdates> streamUpToInList(long maxGlobal) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
