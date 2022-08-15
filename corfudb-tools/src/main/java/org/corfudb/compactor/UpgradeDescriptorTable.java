@@ -10,7 +10,7 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -74,9 +74,9 @@ public class UpgradeDescriptorTable {
         CorfuStore corfuStore = new CorfuStore(corfuRuntime);
         while (true) {
             try (TxnContext tx = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>
+                PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>
                         registryTable = corfuRuntime.getTableRegistry().getRegistryTable();
-                CorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>
+                PersistentCorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>
                         descriptorTable = corfuRuntime.getTableRegistry().getProtobufDescriptorTable();
 
                 Set<TableName> allTableNames = registryTable.keySet();
@@ -97,8 +97,8 @@ public class UpgradeDescriptorTable {
     }
 
     private void populateDescriptorTable(TableName tableName,
-                                         CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable,
-                                         CorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> descriptorTable) {
+                                         PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable,
+                                         PersistentCorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> descriptorTable) {
 
         CorfuRecord<TableDescriptors, TableMetadata> registryRecord = registryTable.get(tableName);
         TableDescriptors.Builder tableDescriptorsBuilder = TableDescriptors.newBuilder();
@@ -109,9 +109,13 @@ public class UpgradeDescriptorTable {
                             .newBuilder().setFileName(protoName).build();
                     ProtobufFileDescriptor fileDescriptor = ProtobufFileDescriptor
                             .newBuilder().setFileDescriptor(fileDescriptorProto).build();
+
+                    // TODO(Zach): replaced putIfAbsent
                     CorfuRecord<ProtobufFileDescriptor, TableMetadata> corfuRecord =
-                            descriptorTable.putIfAbsent(fileName, new CorfuRecord<>(fileDescriptor, null));
+                            descriptorTable.get(fileName);
+
                     if (corfuRecord == null) {
+                        descriptorTable.insert(fileName, new CorfuRecord<>(fileDescriptor, null));
                         log.info("Add proto file {}, fileDescriptor {} to ProtobufDescriptorTable",
                                 fileName, fileDescriptor.getFileDescriptor());
                     }
@@ -126,7 +130,7 @@ public class UpgradeDescriptorTable {
 
         // clean up FileDescriptorsMap inside RegistryTable to optimize memory
         TableDescriptors tableDescriptors = tableDescriptorsBuilder.build();
-        registryTable.put(tableName, new CorfuRecord<>(tableDescriptors, registryRecord.getMetadata()));
+        registryTable.insert(tableName, new CorfuRecord<>(tableDescriptors, registryRecord.getMetadata()));
 
         log.info("Cleaned up an entry in RegistryTable: {}${}",
                 tableName.getNamespace(), tableName.getTableName());

@@ -16,7 +16,7 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
-import org.corfudb.runtime.collections.StreamingMap;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
@@ -46,7 +46,7 @@ public class DistributedCheckpointerUnitTest {
     private final TxnContext txn = mock(TxnContext.class);
     private final CorfuStoreEntry<? extends Message, ? extends Message, ? extends Message> corfuStoreEntry =
             (CorfuStoreEntry<? extends Message, ? extends Message, ? extends Message>) mock(CorfuStoreEntry.class);
-    private final CheckpointWriter<StreamingMap> cpw = (CheckpointWriter<StreamingMap>) mock(CheckpointWriter.class);
+    private final CheckpointWriter<ICorfuTable<?, ?>> cpw = (CheckpointWriter<ICorfuTable<?, ?>>) mock(CheckpointWriter.class);
 
     private static final String NAMESPACE = "TestNamespace";
     private static final String TABLE_NAME = "TestTableName";
@@ -114,7 +114,7 @@ public class DistributedCheckpointerUnitTest {
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build());
         //When appendCheckpoint throws an exception
-        CheckpointWriter<StreamingMap> cpwThrowException = mock(CheckpointWriter.class);
+        CheckpointWriter<ICorfuTable<?, ?>> cpwThrowException = mock(CheckpointWriter.class);
         when(cpwThrowException.appendCheckpoint(any(Optional.class))).thenThrow(new IllegalStateException());
         assert distributedCheckpointer.tryCheckpointTable(tableName, t -> cpwThrowException);
 

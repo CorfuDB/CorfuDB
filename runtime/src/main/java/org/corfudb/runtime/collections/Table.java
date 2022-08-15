@@ -245,8 +245,8 @@ public class Table<K extends Message, V extends Message, M extends Message> {
             builder = runtime.getObjectsView().build()
                     .setTypeToken(new TypeToken<CorfuTable<K, CorfuRecord<V, M>>>() {})
                     .setArguments(new ProtobufIndexer(
-                                    tableParameters.getValueSchema(),
-                                    tableParameters.getSchemaOptions()),
+                            tableParameters.getValueSchema(),
+                            tableParameters.getSchemaOptions()),
                             streamingMapSupplier,
                             ICorfuVersionPolicy.MONOTONIC);
         }
