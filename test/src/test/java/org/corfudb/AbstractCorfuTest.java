@@ -627,24 +627,6 @@ public class AbstractCorfuTest {
     @SuppressWarnings("checkstyle:magicnumber")
     public <T> AssertableObject<T> t2(ExceptionFunction<T> toRun) {return t(2, toRun);}
 
-    /** Launch a thread on test thread 3.
-     *
-     * @param toRun The function to run.
-     * @param <T>   The return type.
-     * @return      An assertable object the function returns.
-     */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t3(ExceptionFunction<T> toRun) {return t(3, toRun);}
-
-    /** Launch a thread on test thread 4.
-     *
-     * @param toRun The function to run.
-     * @param <T>   The return type.
-     * @return      An assertable object the function returns.
-     */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t4(ExceptionFunction<T> toRun) {return t(4, toRun);}
-
     /** Launch a thread on test thread 1.
      *
      * @param toRun The function to run.
@@ -671,24 +653,6 @@ public class AbstractCorfuTest {
      */
     @SuppressWarnings("checkstyle:magicnumber")
     public <T> AssertableObject<T> t4(VoidExceptionFunction toRun) {return t(4, toRun);}
-
-    /** Launch a thread on test thread 2.
-     *
-     * @param toRun The function to run.
-     * @param <T>   The return type.
-     * @return      An assertable object the function returns.
-     */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t3(VoidExceptionFunction toRun) {return t(2, toRun);}
-
-    /** Launch a thread on test thread 3.
-     *
-     * @param toRun The function to run.
-     * @param <T>   The return type.
-     * @return      An assertable object the function returns.
-     */
-    @SuppressWarnings("checkstyle:magicnumber")
-    public <T> AssertableObject<T> t4(VoidExceptionFunction toRun) {return t(2, toRun);}
 
     /** Launch a thread on test thread 2.
      *
