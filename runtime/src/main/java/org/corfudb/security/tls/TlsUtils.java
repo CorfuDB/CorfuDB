@@ -1,5 +1,6 @@
 package org.corfudb.security.tls;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.ToString;
@@ -19,6 +20,8 @@ import java.security.NoSuchAlgorithmException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 /**
@@ -28,6 +31,11 @@ import java.util.function.Consumer;
 @Slf4j
 public class TlsUtils {
     public static final String PASSWORD_FILE_NOT_FOUND_ERROR = "Password file not found";
+
+    private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(new ThreadFactoryBuilder()
+            .setDaemon(true)
+            .setNameFormat("Tls-utils-%d")
+            .build());
 
     private TlsUtils() {
         // prevent instantiation of this class
@@ -43,9 +51,9 @@ public class TlsUtils {
     public static CompletableFuture<KeyStore> openCertStore(CertStoreConfig certStoreCfg) {
         return CompletableFuture
                 //validation step
-                .runAsync(certStoreCfg::checkCertStoreExists)
+                .runAsync(certStoreCfg::checkCertStoreExists, EXECUTOR)
                 .thenCompose(empty -> getCertStorePassword(certStoreCfg.getPasswordFile()))
-                .thenApply(certStorePassword -> {
+                .thenApplyAsync(certStorePassword -> {
                     KeyStore keyStore = getKeyStoreInstance();
 
                     Path certStore = certStoreCfg.getCertStore();
@@ -69,7 +77,7 @@ public class TlsUtils {
                         };
                         IOUtils.closeQuietly(inputStream, emptyExceptionHandler);
                     }
-                });
+                }, EXECUTOR);
     }
 
     private static KeyStore getKeyStoreInstance() {
@@ -104,15 +112,15 @@ public class TlsUtils {
             }
 
             return password;
-        });
+        }, EXECUTOR);
     }
 
     public static CompletableFuture<KeyManagerFactory> createKeyManagerFactory(KeyStoreConfig cfg) {
 
         CompletableFuture<String> passwordAsync = getCertStorePassword(cfg.getPasswordFile());
-        CompletableFuture<KeyStore> keyStoreAsync = TlsUtils.openCertStore(cfg);
+        CompletableFuture<KeyStore> keyStoreAsync = openCertStore(cfg);
 
-        return passwordAsync.thenCombine(keyStoreAsync, (password, keyStore) -> {
+        return passwordAsync.thenCombineAsync(keyStoreAsync, (password, keyStore) -> {
                     KeyManagerFactory kmf;
                     try {
                         kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
@@ -129,7 +137,7 @@ public class TlsUtils {
                         String errorMessage = "Can not initialize key manager factory from " + cfg.getKeyStoreFile() + ".";
                         throw new IllegalStateException(errorMessage, e);
                     }
-                });
+                }, EXECUTOR);
     }
 
     /**

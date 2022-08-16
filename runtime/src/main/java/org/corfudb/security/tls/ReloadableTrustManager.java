@@ -98,7 +98,7 @@ public class ReloadableTrustManager implements X509TrustManager {
                 .setNameFormat("TrustStore-watcher-%d")
                 .build());
 
-        private CompletableFuture<TrustManagerContext> trustManagerAsync;
+        private volatile CompletableFuture<TrustManagerContext> trustManagerAsync;
 
         public TrustStoreWatcher(@NonNull TrustStoreConfig trustStoreConfig) {
             this.trustStoreConfig = trustStoreConfig;
