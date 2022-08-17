@@ -4,6 +4,7 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.infrastructure.log.LogFormat;
+import org.corfudb.infrastructure.log.LogFormat.LogEntry;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
@@ -28,8 +29,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
-
-import org.corfudb.infrastructure.log.LogFormat.LogEntry;
 
 import static org.corfudb.infrastructure.log.StreamLogFiles.*;
 
@@ -79,6 +78,10 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         File dir = logDir.toFile();
         Collection<File> files = FileUtils.listFiles(dir, extension, true);
 
+        // temporary lists that store SMREntries in causal order before they are put into the ConcurrentMap
+        List<LogEntryOrdering> registryTableEntries = new ArrayList<>();
+        List<LogEntryOrdering> protobufDescriptorTableEntries = new ArrayList<>();
+
         // get the UUIDs of the streams of interest
         String registryTableName = TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME);
         UUID registryTableStreamId = CorfuRuntime.getStreamID(registryTableName);
@@ -91,14 +94,6 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
 
         ConcurrentMap cachedRegistryTable = new ConcurrentHashMap();
         ConcurrentMap cachedProtobufDescriptorTable = new ConcurrentHashMap();
-
-        // temporary ArrayLists to store the log entries in causal order before they are put into the ConcurrentMap
-        List<SMREntry> registryTableEntries = new ArrayList<>();
-        List<SMREntry> protobufDescriptorTableEntries = new ArrayList<>();
-
-        // tracking the highest globalAddress seen among the specified table's entries
-        long rtEntryGlobalAddress = -1;
-        long pdtEntryGlobalAddress = -1;
 
         for (File file : files) {
             try (FileChannel fileChannel = FileChannel.open(file.toPath())) {
@@ -127,7 +122,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                         // convert the LogEntry to LogData to access getPayload
                         LogData data = StreamLogFiles.getLogData(entry);
                         //System.out.println(data.getData());
-                        
+
                         processLogData(data, registryTableStreamId, registryTableCheckpointStream, runtimeWithOnlyProtoSerializer, cachedRegistryTable, registryTableEntries);
                         processLogData(data, protobufDescriptorStreamId, protobufDescriptorCheckpointStream, runtimeWithOnlyProtoSerializer, cachedProtobufDescriptorTable, protobufDescriptorTableEntries);
                         /**
@@ -327,7 +322,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
     }
 
     public void processLogData(LogData data, UUID tableStreamID, UUID tableCheckPointStream, CorfuRuntime runtimeWithOnlyProtoSerializer,
-                               ConcurrentMap cachedTable, List<SMREntry> tableEntries) {
+                               ConcurrentMap cachedTable, List<LogEntryOrdering> tableEntries) {
         if(data.containsStream(tableStreamID)
                 || data.containsStream(tableCheckPointStream)) {
             // call get payload to decompress and deserialize data
@@ -346,7 +341,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                         smrUpdates = smrEntries.getUpdates();
                         //System.out.println("SMR Updates: " + smrUpdates);
                         for (int i = 0; i < smrUpdates.size(); i++) {
-                            Object[] smrUpdateArg = smrUpdates.get(i).getSMRArguments();
+                            /**Object[] smrUpdateArg = smrUpdates.get(i).getSMRArguments();
                             Object smrUpdateTable = smrUpdateArg[0];
                             Object smrUpdateCorfuRecord = smrUpdateArg[1];
                             //CorfuStoreMetadata.TableName corfuRecordTableName = smrUpdateTable;
@@ -358,19 +353,35 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
 
                             CorfuRecord corfuRecord = (CorfuRecord) smrUpdateCorfuRecord;
                             //System.out.println(corfuRecord);
+                            */
 
-                            // check which smr method it belongs to: put, clear, or delete
-                            // and modify table accordingly
-                            String smrMethod = smrUpdates.get(i).getSMRMethod();
-                            if(smrMethod.equals("put")) {
-                                cachedTable.put(corfuRecordTableName, corfuRecord);
-                            } else if(smrMethod.equals("delete")) {
-                                cachedTable.remove(corfuRecordTableName, corfuRecord);
-                            } else if(smrMethod.equals("clear")) {
-                                cachedTable.clear();
+                            LogEntryOrdering entry = new LogEntryOrdering(smrUpdates.get(i), snapshotAddress);
+                            tableEntries.add(entry);
+
+                            if (tableEntries.size() == 15 || i == smrUpdates.size() - 1) {
+                                Collections.sort(tableEntries, new LogEntryComparator());
+                                for (LogEntryOrdering tableEntry : tableEntries) {
+                                    Object[] smrUpdateArg = ((SMREntry) tableEntry.getObj()).getSMRArguments();
+                                    Object smrUpdateTable = smrUpdateArg[0];
+                                    Object smrUpdateCorfuRecord = smrUpdateArg[1];
+
+                                    Object corfuRecordTableName = callback(smrUpdateTable);
+
+                                    CorfuRecord corfuRecord = ((CorfuRecord) smrUpdateCorfuRecord);
+
+                                    // check which smr method it belongs to: put, clear, or delete
+                                    // and modify table accordingly
+                                    String smrMethod = ((SMREntry) tableEntry.getObj()).getSMRMethod();
+                                    if (smrMethod.equals("put")) {
+                                        cachedTable.put(corfuRecordTableName, corfuRecord);
+                                    } else if (smrMethod.equals("delete")) {
+                                        cachedTable.remove(corfuRecordTableName, corfuRecord);
+                                    } else if (smrMethod.equals("clear")) {
+                                        cachedTable.clear();
+                                    }
+                                }
+                                tableEntries.clear(); //clear the buffer
                             }
-
-                            tableEntries.add(smrUpdates.get(i));
                         }
                     }
                 }
@@ -379,7 +390,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                     if(smrUpdates != null) {
                         //System.out.println("SMR Updates: " + smrUpdates);
                         for (int i = 0; i < smrUpdates.size(); i++) {
-                            Object[] smrUpdateArg = smrUpdates.get(i).getSMRArguments();
+                            /**Object[] smrUpdateArg = smrUpdates.get(i).getSMRArguments();
                             Object smrUpdateTable = smrUpdateArg[0];
                             Object smrUpdateCorfuRecord = smrUpdateArg[1];
 
@@ -389,19 +400,35 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
 
                             CorfuRecord corfuRecord = (CorfuRecord) smrUpdateCorfuRecord;
                             //System.out.println(corfuRecord);
+                            */
 
-                            // check which smr method it belongs to: put, clear, or delete
-                            // and modify table accordingly
-                            String smrMethod = smrUpdates.get(i).getSMRMethod();
-                            if(smrMethod.equals("put")) {
-                                cachedTable.put(corfuRecordTableName, corfuRecord);
-                            } else if(smrMethod.equals("delete")) {
-                                cachedTable.remove(corfuRecordTableName, corfuRecord);
-                            } else if(smrMethod.equals("clear")) {
-                                cachedTable.clear();
+                            LogEntryOrdering entry = new LogEntryOrdering(smrUpdates.get(i), smrUpdates.get(i).getGlobalAddress());
+                            tableEntries.add(entry);
+
+                            if (tableEntries.size() == 15 || i == smrUpdates.size() - 1) {
+                                Collections.sort(tableEntries, new LogEntryComparator());
+                                for (LogEntryOrdering tableEntry : tableEntries) {
+                                    Object[] smrUpdateArg = ((SMREntry) tableEntry.getObj()).getSMRArguments();
+                                    Object smrUpdateTable = smrUpdateArg[0];
+                                    Object smrUpdateCorfuRecord = smrUpdateArg[1];
+
+                                    Object corfuRecordTableName = callback(smrUpdateTable);
+
+                                    CorfuRecord corfuRecord = ((CorfuRecord) smrUpdateCorfuRecord);
+
+                                    // check which smr method it belongs to: put, clear, or delete
+                                    // and modify table accordingly
+                                    String smrMethod = ((SMREntry) tableEntry.getObj()).getSMRMethod();
+                                    if (smrMethod.equals("put")) {
+                                        cachedTable.put(corfuRecordTableName, corfuRecord);
+                                    } else if (smrMethod.equals("delete")) {
+                                        cachedTable.remove(corfuRecordTableName, corfuRecord);
+                                    } else if (smrMethod.equals("clear")) {
+                                        cachedTable.clear();
+                                    }
+                                }
+                                tableEntries.clear(); //clear the buffer
                             }
-
-                            tableEntries.add(smrUpdates.get(i));
                         }
                     }
                 }
@@ -620,20 +647,40 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
 }
 
 /**
-class AgeComparator implements Comparator<CheckpointEntry> {
-    @Override
-    public int compare(CheckpointEntry a, CheckpointEntry b) {
-        return a. < b.age ? -1 : a.age == b.age ? 0 : 1;
+ * Wrapper class for LogEntry objects with an address
+ */
+class LogEntryOrdering {
+    org.corfudb.protocols.logprotocol.LogEntry obj;
+    long ordering; //address is stored here
+
+    public LogEntryOrdering(org.corfudb.protocols.logprotocol.LogEntry obj, long ordering) {
+        this.obj = obj;
+        this.ordering = ordering;
     }
 
-    Comparator<LogEntry> compareByAddressOnly = (LogEntry r1, LogEntry r2) -> {
-        long r1Order = r1 instanceOf CheckpointEntry ? r1.getSnapshotAddress(): r1.getGlobalAddress();
-        long r2Order = r2 instanceOf CheckpointEntry ? r2.getSnapshotAddress(): r2.getGlobalAddress();
-        if (r1Order == r2Order) return 0;
-        if (r1Order > r2Order) return 1;
-        return -1;
-    };
+    public org.corfudb.protocols.logprotocol.LogEntry getObj() {
+        return obj;
+    }
 
-Collections.sort(myArrayList, compareByAddressOnly);
+    public void setObj(org.corfudb.protocols.logprotocol.LogEntry obj) {
+        this.obj = obj;
+    }
+
+    public long getOrdering() {
+        return ordering;
+    }
+
+    public void setOrdering(long ordering) {
+        this.ordering = ordering;
+    }
 }
-*/
+
+/**
+ * Comparator class for LogEntry objects
+ */
+class LogEntryComparator implements Comparator<LogEntryOrdering> {
+    @Override
+    public int compare(LogEntryOrdering a, LogEntryOrdering b) {
+        return Long.compare(a.getOrdering(), b.getOrdering());
+    }
+}
