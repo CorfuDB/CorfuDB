@@ -256,8 +256,8 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
 
         private SecondaryIndexesWrapper<K, V> clear() {
             Map<String, Map<Object, Map<K, V>>> clearedIndexes = HashMap.empty();
-            for (String indexName : secondaryIndexes.keysIterator()) {
-                clearedIndexes = clearedIndexes.put(indexName, HashMap.empty());
+            for (Tuple2<String, ?> index : secondaryIndexes.iterator()) {
+                clearedIndexes = clearedIndexes.put(index._1(), HashMap.empty());
             }
 
             return new SecondaryIndexesWrapper<>(indexSpec, clearedIndexes, secondaryIndexesAliasToPath);
