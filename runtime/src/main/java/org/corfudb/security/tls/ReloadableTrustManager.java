@@ -25,8 +25,7 @@ public class ReloadableTrustManager implements X509TrustManager {
     /**
      * Constructor.
      *
-     * @param TrustStoreConfig Location of trust store.
-     * @throws SSLException Thrown when there's an issue with loading the trust store.
+     * @param trustStoreConfig Location of trust store.
      */
     public ReloadableTrustManager(TrustStoreConfig trustStoreConfig) throws SSLException {
         this.trustStoreConfig = trustStoreConfig;
@@ -35,14 +34,41 @@ public class ReloadableTrustManager implements X509TrustManager {
 
     @Override
     public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+        if (isCertExpiryCheckEnabled()) {
+            for (X509Certificate cert : chain) {
+                cert.checkValidity();
+            }
+        } else {
+            logCertExpiryCheck();
+        }
+
         reloadTrustStoreWrapper();
         trustManager.checkClientTrusted(chain, authType);
     }
 
     @Override
     public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+        if (isCertExpiryCheckEnabled()) {
+            for (X509Certificate cert : chain) {
+                cert.checkValidity();
+            }
+        } else {
+            logCertExpiryCheck();
+        }
+
         reloadTrustStoreWrapper();
         trustManager.checkServerTrusted(chain, authType);
+    }
+
+    private boolean isCertExpiryCheckEnabled() {
+        return trustStoreConfig.isCertExpiryCheckEnabled();
+    }
+
+    private void logCertExpiryCheck() {
+        log.info(
+                "Certificate expiry check has been disabled with: {}",
+                trustStoreConfig.getDisableCertExpiryCheckFile()
+        );
     }
 
     @Override

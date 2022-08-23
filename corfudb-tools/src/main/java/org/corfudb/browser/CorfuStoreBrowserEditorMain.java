@@ -10,6 +10,7 @@ import java.util.Set;
 import com.google.common.base.Preconditions;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -119,9 +120,9 @@ public class CorfuStoreBrowserEditorMain {
                     .priorityLevel(CorfuMessage.PriorityLevel.HIGH)
                     .tlsEnabled(tlsEnabled);
             if (tlsEnabled) {
-                String keystore = opts.get("--keystore").toString();
+                String keystore = opts.get(ConfigParamNames.KEY_STORE).toString();
                 String ks_password = opts.get("--ks_password").toString();
-                String truststore = opts.get("--truststore").toString();
+                String truststore = opts.get(ConfigParamNames.TRUST_STORE).toString();
                 String truststore_password =
                         opts.get("--truststore_password").toString();
                 builder.tlsEnabled(tlsEnabled)

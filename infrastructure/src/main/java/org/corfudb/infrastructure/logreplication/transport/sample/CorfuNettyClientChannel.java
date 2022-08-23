@@ -140,7 +140,7 @@ public class CorfuNettyClientChannel extends SimpleChannelInboundHandler<Respons
      * Channel event that is triggered when a new connected channel is created.
      *
      * @param ctx channel handler context
-     * @throws Exception
+     * @throws Exception exception
      */
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
