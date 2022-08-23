@@ -199,7 +199,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         snapshotSyncPlugin = getOnSnapshotSyncPlugin();
 
         snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadataManager);
-        logEntryWriter = new LogEntryWriter(config, logReplicationMetadataManager);
+        logEntryWriter = new LogEntryWriter(runtime, config, logReplicationMetadataManager);
         logEntryWriter.reset(logReplicationMetadataManager.getLastAppliedSnapshotTimestamp(),
                 logReplicationMetadataManager.getLastProcessedLogEntryTimestamp());
 
