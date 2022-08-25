@@ -765,7 +765,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Verify Destination
         verifyData(dstCorfuTables, srcDataForVerification);
         expectedAckTimestamp.set(srcDataRuntime.getAddressSpaceView().getLogTail());
-        assertThat(expectedAckTimestamp.get()).isEqualTo(logReplicationMetadataManager.getLastProcessedLogEntryTimestamp());
+        assertThat(expectedAckTimestamp.get()).isEqualTo(logReplicationMetadataManager.getLastProcessedLogEntryBatchTimestamp());
         verifyPersistedSnapshotMetadata();
         verifyPersistedLogEntryMetadata();
 
@@ -1475,7 +1475,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                     blockUntilExpectedAckType.release();
                 }
 
-                log.debug("expectedAckTs={}, logEntryTs={}", expectedAckTimestamp.get(), logReplicationEntry.getMetadata().getTimestamp());
+                log.debug("expectedAckTs={}, logEntryTs={}", expectedAckTimestamp.get(),
+                    logReplicationEntry.getMetadata().getTimestamp());
 
                 if (expectedAckTimestamp.get() == logReplicationEntry.getMetadata().getTimestamp()) {
                     blockUntilExpectedAckTs.release();
@@ -1491,7 +1492,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private void verifyPersistedLogEntryMetadata() {
-        long lastLogProcessed = logReplicationMetadataManager.getLastProcessedLogEntryTimestamp();
+        long lastLogProcessed = logReplicationMetadataManager.getLastProcessedLogEntryBatchTimestamp();
 
         log.debug("\nlastLogProcessed " + lastLogProcessed + " expectedTimestamp " + expectedAckTimestamp.get());
         assertThat(expectedAckTimestamp.get() == lastLogProcessed).isTrue();

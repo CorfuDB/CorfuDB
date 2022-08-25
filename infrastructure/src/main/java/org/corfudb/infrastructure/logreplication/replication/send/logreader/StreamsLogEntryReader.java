@@ -212,7 +212,6 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
                     lastOpaqueEntry = null;
                 }
-
                 if (!txOpaqueStream.hasNext()) {
                     break;
                 }
@@ -227,7 +226,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
             }
 
             log.trace("Generate LogEntryDataMessage size {} with {} entries for maxDataSizePerMsg {}. lastEntry size {}",
-                    currentMsgSize, opaqueEntryList.size(), maxDataSizePerMsg, lastOpaqueEntry == null ? 0 : currentEntrySize);
+                currentMsgSize, opaqueEntryList.size(), maxDataSizePerMsg, lastOpaqueEntry == null ? 0 : currentEntrySize);
             final double currentMsgSizeSnapshot = currentMsgSize;
 
             messageSizeDistributionSummary.ifPresent(distribution -> distribution.record(currentMsgSizeSnapshot));
@@ -290,6 +289,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         messageExceededSize = false;
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         setGlobalBaseSnapshot(lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
+        lastOpaqueEntry = null;
     }
 
     @Override

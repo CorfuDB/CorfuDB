@@ -201,11 +201,9 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadataManager);
         logEntryWriter = new LogEntryWriter(runtime, config, logReplicationMetadataManager);
-        logEntryWriter.reset(logReplicationMetadataManager.getLastAppliedSnapshotTimestamp(),
-                logReplicationMetadataManager.getLastProcessedLogEntryTimestamp());
 
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadataManager.getLastProcessedLogEntryTimestamp(), this);
+                logReplicationMetadataManager.getLastProcessedLogEntryBatchTimestamp(), this);
     }
 
     private ISnapshotSyncPlugin getOnSnapshotSyncPlugin() {
@@ -433,7 +431,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         rxState = RxState.LOG_ENTRY_SYNC;
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadataManager.getLastProcessedLogEntryTimestamp(), this);
+                logReplicationMetadataManager.getLastProcessedLogEntryBatchTimestamp(), this);
         logEntryWriter.reset(entry.getMetadata().getSnapshotTimestamp(), entry.getMetadata().getSnapshotTimestamp());
 
         log.info("Snapshot apply complete, sync_id={}, snapshot={}, state={}", entry.getMetadata().getSyncRequestId(),
@@ -540,7 +538,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      * */
     public void reset() {
         long lastAppliedSnapshotTimestamp = logReplicationMetadataManager.getLastAppliedSnapshotTimestamp();
-        long lastProcessedLogEntryTimestamp = logReplicationMetadataManager.getLastProcessedLogEntryTimestamp();
+        long lastProcessedLogEntryTimestamp = logReplicationMetadataManager.getLastProcessedLogEntryBatchTimestamp();
         log.debug("Reset Sink Manager, lastAppliedSnapshotTs={}, lastProcessedLogEntryTs={}", lastAppliedSnapshotTimestamp,
                 lastProcessedLogEntryTimestamp);
         snapshotWriter.reset(topologyConfigId, lastAppliedSnapshotTimestamp);
