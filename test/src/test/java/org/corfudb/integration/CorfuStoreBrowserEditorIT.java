@@ -213,7 +213,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
     @Test
     public void offlineTest() throws IOException, InvocationTargetException, NoSuchMethodException, IllegalAccessException {
-        CorfuOfflineBrowserEditor a = new CorfuOfflineBrowserEditor("/Users/michaelc1/downloads/config/corfu");
+        CorfuOfflineBrowserEditor a = new CorfuOfflineBrowserEditor("/Users/adharmadhika/downloads/config/corfu");
     }
 
     /**
