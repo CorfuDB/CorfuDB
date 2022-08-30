@@ -1,5 +1,6 @@
 package org.corfudb.runtime;
 
+import com.google.common.base.Preconditions;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
@@ -100,6 +101,7 @@ public class Restore {
             verify();
             restore();
         } catch (Exception e) {
+            log.error("failed to run restore.", e);
             throw new BackupRestoreException("failed to restore from backup file " + filePath, e);
         } finally {
             cleanup();
@@ -114,6 +116,7 @@ public class Restore {
 
         long startTime = System.currentTimeMillis();
         for (String tableBackup : tableBackups) {
+            log.info("start restoring table {}", tableBackup);
             if (restoreMode == RestoreMode.PARTIAL_TAGGED && !isTableTagged(tableBackup)) {
                 log.info("skip restoring table {} since it doesn't have requires_backup_support tag", tableBackup);
                 continue;
@@ -180,7 +183,10 @@ public class Restore {
     private boolean isTableTagged(String tableBackup) {
         // tableBackup name format: uuid.namespace$tableName
         UUID uuid = UUID.fromString(tableBackup.substring(0, tableBackup.indexOf(".")));
+
         if (!tableTagged.isEmpty()) {
+            // tableTagged is read from RegistryTable which should contain all tables
+            Preconditions.checkState(tableTagged.containsKey(uuid));
             return tableTagged.get(uuid);
         }
 
@@ -201,14 +207,18 @@ public class Restore {
             rt.getTableRegistry()
                     .getRegistryTable()
                     .entryStream()
+                    .sequential()
                     .forEach(entry -> {
                         String tableName = getFullyQualifiedTableName(entry.getKey().getNamespace(),
                                 entry.getKey().getTableName());
+                        UUID streamId = CorfuRuntime.getStreamID(tableName);
                         Boolean tagged = entry.getValue().getMetadata().hasTableOptions() &&
                                 entry.getValue().getMetadata().getTableOptions().getRequiresBackupSupport();
-                        tableTagged.put(CorfuRuntime.getStreamID(tableName), tagged);
-                    });
+                        log.info("table name is {}, uuid is {}, has backup restore tag {}", tableName, streamId, tagged);
 
+                        tableTagged.put(streamId, tagged);
+                    });
+            log.info("finished caching backup tag information");
         } catch (Exception ex) {
             log.error("failed to populate the tableTagged map!", ex);
             throw ex;
@@ -296,6 +306,7 @@ public class Restore {
         });
 
         txn.commit();
+        log.info("Cleared all tables.");
     }
 
     private void nonCachedAppendSMREntries(UUID streamId, SMREntry... smrEntries) {
