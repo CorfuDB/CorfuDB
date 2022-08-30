@@ -8,6 +8,18 @@ import java.nio.file.Paths;
 
 public final class TlsTestContext {
 
+    static final class ValidCerts {
+        public static final Path CERT_DIR = Paths.get("src/test/resources/security/valid_certs");
+        public static final Path PASSWORD_FILE = CERT_DIR.resolve("pass.txt");
+        public static final Path RUNTIME_CERT = CERT_DIR.resolve("runtime.cert");;
+
+        public static final TrustStoreConfig TRUST_STORE_CONFIG = new TrustStoreConfig(
+                CERT_DIR.resolve("truststore.jks"),
+                PASSWORD_FILE,
+                TrustStoreConfig.DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE
+        );
+    }
+
     public static final Path CERT_DIR = Paths.get("src/test/resources/security/reload");
     public static final Path PASSWORD_FILE = CERT_DIR.resolve("password");
 

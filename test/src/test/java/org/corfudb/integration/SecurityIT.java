@@ -12,13 +12,11 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
+import java.nio.file.*;
 import java.util.Arrays;
 
 /**
  * This test suit exercises the ability to enable TLS on Corfu servers and runtime
- *
  * Created by Sam Behnam on 8/13/18.
  */
 @Slf4j
@@ -110,16 +108,17 @@ public class SecurityIT extends AbstractIT {
     @Test
     public void testServerRuntimeTlsEnabledMethod() throws Exception {
         // Run a corfu server
-        Process corfuServer = runSinglePersistentServerTls();
+        final Process corfuServer = runSinglePersistentServerTls();
 
         // Start a Corfu runtime
         runtime = new CorfuRuntime(singleNodeEndpoint)
-                                    .enableTls(runtimePathToKeyStore,
-                                               runtimePathToKeyStorePassword,
-                                               runtimePathToTrustStore,
-                                               runtimePathToTrustStorePassword)
-                                    .setCacheDisabled(true)
-                                    .connect();
+                .enableTls(runtimePathToKeyStore,
+                        runtimePathToKeyStorePassword,
+                        runtimePathToTrustStore,
+                        runtimePathToTrustStorePassword)
+                .setCacheDisabled(true)
+                .registerSystemDownHandler(getShutdownHandler(corfuServer))
+                .connect();
 
         // Create CorfuTable
         CorfuTable testTable = runtime
@@ -230,5 +229,26 @@ public class SecurityIT extends AbstractIT {
 
         // Connecting to runtime
         runtime = CorfuRuntime.fromParameters(runtimeParameters).connect();
+    }
+
+    private Runnable getShutdownHandler(Process corfuServer) {
+        return () -> {
+            if (corfuServer.isAlive()) {
+                return;
+            }
+
+            log.error("Corfu server is down!");
+            Path testDir = Paths.get(PARAMETERS.TEST_TEMP_DIR);
+            Path buildDir = Paths.get("target/logs", testDir.getFileName().toString());
+            Path corfuLogs = testDir.resolve("localhost_9000_consolelog");
+
+            log.info("Save server logs into: {}", buildDir);
+            try {
+                Files.createDirectories(buildDir);
+                Files.copy(corfuLogs, buildDir.resolve("corfu.log"), StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        };
     }
 }
