@@ -207,36 +207,6 @@ public class SecurityIT extends AbstractIT {
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 
-    /**
-     * Testing that configuring incorrect TLS parameters will lead to throwing
-     * {@link UnrecoverableCorfuError} exception.
-     *
-     * @throws Exception
-     */
-    @Test(expected = UnrecoverableCorfuError.class)
-    public void testIncorrectKeyStoreException() throws Exception {
-        // Run a corfu server with incorrect truststore
-        Process corfuServer = runSinglePersistentServerTls();
-
-        // Start a Corfu runtime with incorrect truststore
-        final CorfuRuntimeParameters runtimeParameters = CorfuRuntimeParameters
-                .builder()
-                .layoutServers(Arrays.asList(NodeLocator.parseString(singleNodeEndpoint)))
-                .tlsEnabled(tlsEnabled)
-                .keyStore(runtimePathToKeyStore)
-                .ksPasswordFile(runtimePathToKeyStorePassword)
-                .trustStore(runtimePathToKeyStore)
-                .tsPasswordFile(runtimePathToTrustStorePassword)
-                .build();
-
-        // Connecting to runtime
-        runtime = CorfuRuntime.fromParameters(runtimeParameters)
-                .registerSystemDownHandler(getShutdownHandler(corfuServer))
-                .connect();
-
-        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
-    }
-
     private Runnable getShutdownHandler(Process corfuServer) {
         return () -> {
             if (corfuServer.isAlive()) {
