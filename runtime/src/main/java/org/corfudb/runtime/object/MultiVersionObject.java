@@ -2,6 +2,7 @@ package org.corfudb.runtime.object;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import io.micrometer.core.instrument.Counter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -90,6 +91,11 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
     private static final String CORRECTNESS_LOG_MSG = "Version, {}";
 
+    private static final String STREAM_ID_TAG_NAME = "streamId";
+
+    private final Optional<Counter> optimisticReadCounter;
+    private final Optional<Counter> pessimisticReadCounter;
+
     /**
      * Create a new MultiVersionObject.
      * @param corfuRuntime  The Corfu runtime containing the MVOCache used to store and
@@ -111,6 +117,12 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         this.trimRetry = corfuRuntime.getParameters().getTrimRetry();
         this.mvoCache.registerMVO(getID(),this);
         wrapperObject.closeWrapper();
+
+        this.optimisticReadCounter = MicroMeterUtils.counter(
+                "mvo.read.optimistic", STREAM_ID_TAG_NAME, getID().toString());
+
+        this.pessimisticReadCounter = MicroMeterUtils.counter(
+                "mvo.read.pessimistic", STREAM_ID_TAG_NAME, getID().toString());
     }
 
     /**
@@ -127,6 +139,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                 Optional<ICorfuSMRSnapshotProxy<T>> snapshot = getFromCacheUnsafe(voId, lockTs);
                 if (snapshot.isPresent()) {
                     // Lock was validated within getFromCacheUnsafe.
+                    optimisticReadCounter.ifPresent(Counter::increment);
                     return snapshot.get();
                 }
             } catch (Exception e) {
@@ -148,6 +161,8 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
             if (lockTs == 0) {
                 lockTs = lock.writeLock();
             }
+
+            pessimisticReadCounter.ifPresent(Counter::increment);
 
             // Check if our timestamp has since been materialized by another thread.
             Optional<ICorfuSMRSnapshotProxy<T>> snapshot = getFromCacheUnsafe(voId, lockTs);
@@ -280,8 +295,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                     }
                 });
 
-        MicroMeterUtils.time(syncStreamRunnable, "mvo.sync.timer",
-                "streamId", getID().toString());
+        MicroMeterUtils.time(syncStreamRunnable, "mvo.sync.timer", STREAM_ID_TAG_NAME, getID().toString());
     }
 
     /**

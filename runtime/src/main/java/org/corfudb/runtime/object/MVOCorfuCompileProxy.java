@@ -68,7 +68,7 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
     @Override
     public <R> R access(ICorfuSMRAccess<R, T> accessMethod, Object[] conflictObject) {
         return MicroMeterUtils.time(() -> accessInner(accessMethod, conflictObject),
-                "vlo.read.timer", "streamId", streamID.toString());
+                "mvo.read.timer", "streamId", streamID.toString());
     }
 
     private <R> R accessInner(ICorfuSMRAccess<R, T> accessMethod,
@@ -104,7 +104,7 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
     public long logUpdate(String smrUpdateFunction, boolean keepUpcallResult, Object[] conflictObject, Object... args) {
         return MicroMeterUtils.time(
                 () -> logUpdateInner(smrUpdateFunction, conflictObject, args),
-                "vlo.write.timer", "streamId", streamID.toString());
+                "mvo.write.timer", "streamId", streamID.toString());
     }
 
     private long logUpdateInner(String smrUpdateFunction,
