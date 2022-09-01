@@ -564,7 +564,7 @@ public class SequencerServerTest {
         // (Note: SequencerTrimResponse will not have any body)
         assertTrue(response.getPayload().hasSequencerTrimResponse());
         // Verify that sequencerServerCache was invalidated up to the trimMark
-        verify(cache).invalidateUpTo(trimMark);
+        verify(cache).evictUpTo(trimMark);
 
         // Verify that the streamAddressSpace.trim() was called with trimMark argument.
         verify(streamAddressSpace).trim(trimMark);
