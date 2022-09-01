@@ -42,8 +42,7 @@ public class WriteAfterWriteTransactionalContext
      *                          available.
      */
     public void addToReadSet(ICorfuSMRProxyInternal proxy, Object[] conflictObjects) {
-        // CorfuStore.txn() maps any TX to write-write TX, keep track of read-set to
-        // resolve valid snapshot across all accessed streams.
-        getReadSetInfo().add(proxy, conflictObjects);
+        // no-op: since WRITE_AFTER_WRITE transaction type only need to detect write-write conflicts there
+        // is no need to track the the read set
     }
 }
