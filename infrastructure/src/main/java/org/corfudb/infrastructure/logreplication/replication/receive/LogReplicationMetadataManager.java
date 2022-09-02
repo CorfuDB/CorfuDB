@@ -508,6 +508,16 @@ public class LogReplicationMetadataManager {
 
             CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, Message> record = txn.getRecord(replicationStatusTable, key);
 
+            // When a remote cluster has been removed from topology, the corresponding entry in the status table is
+            // removed and FSM is shutdown. Since FSM shutdown is async, we ensure that we don't update a record which
+            // has already been deleted.
+            // (STOPPED status is used for other FSM states as well, so cannot rely only on the incoming status)
+            if(record.getPayload() == null && status == SyncStatus.STOPPED) {
+                log.debug("syncStatus :: ignoring update for {} to syncType {} and status {} as no record exists for the same",
+                        clusterId, lastSyncType, status);
+                return;
+            }
+
             ReplicationStatusVal previous = record.getPayload() != null ? record.getPayload() : ReplicationStatusVal.newBuilder().build();
             ReplicationStatusVal current;
 
@@ -782,6 +792,16 @@ public class LogReplicationMetadataManager {
             txn.putRecord(replicationEventTable, key, event, null);
             txn.commit();
         }
+    }
+
+    public void removeFromStatusTable(String clusterId) {
+        ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(clusterId).build();
+
+        try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
+            txn.delete(replicationStatusTable, key);
+            txn.commit();
+        }
+        log.debug("successfully deleted clusterID {} from {}", clusterId, REPLICATION_STATUS_TABLE);
     }
 
     /**
