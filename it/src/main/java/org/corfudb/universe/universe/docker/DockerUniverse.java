@@ -81,13 +81,14 @@ public class DockerUniverse extends AbstractUniverse<NodeParams, UniverseParams>
         }
 
         shutdownGroups();
-
         // Remove docker network
         try {
             network.shutdown();
         } catch (UniverseException e) {
             log.debug("Can't remove docker network: {}", universeParams.getNetworkName());
         }
+
+        docker.close();
     }
 
     @Override
