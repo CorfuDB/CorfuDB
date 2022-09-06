@@ -1,4 +1,4 @@
-FROM openjdk:8-jdk-alpine3.8
+FROM openjdk:8-jdk-bullseye
 
 ARG CORFU_JAR
 ARG CMDLETS_JAR
@@ -6,7 +6,7 @@ ARG CORFU_TOOLS_JAR
 
 WORKDIR /app
 
-RUN apk add --update iptables bash jq python3 sudo
+RUN apt update && apt -y install iptables bash jq python3 sudo iproute2
 
 COPY target/${CORFU_JAR} /usr/share/corfu/lib/${CORFU_JAR}
 COPY target/${CMDLETS_JAR} /usr/share/corfu/lib/${CMDLETS_JAR}
