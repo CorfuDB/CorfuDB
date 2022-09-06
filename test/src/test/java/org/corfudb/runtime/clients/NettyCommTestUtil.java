@@ -46,11 +46,14 @@ public interface NettyCommTestUtil {
         public final CertManagementConfig certManagementConfig;
 
         public static CertificateManager buildSHA384withECDSA(Path certDir) throws Exception {
+            final int aliasNameLength = 6;
+            final int validDays = 30;
+            final int oneDay = 1;
             return buildSHA384withECDSA(
                     certDir,
-                    RandomStringUtils.randomAlphabetic(6),
-                    Duration.ofDays(10),
-                    new Date(System.currentTimeMillis() - Duration.ofDays(1).toMillis())
+                    RandomStringUtils.randomAlphabetic(aliasNameLength),
+                    Duration.ofDays(validDays),
+                    new Date(System.currentTimeMillis() - Duration.ofDays(oneDay).toMillis())
             );
         }
 
@@ -64,11 +67,12 @@ public interface NettyCommTestUtil {
                 String keyType, String sigAlg, String password, Path certDir, String alias,
                 Duration validity, Date firstDate) throws Exception {
 
-            Path jksPath = certDir.resolve(String.format("keystore-%s.jks", RND.nextInt(100_000)));
+            Path jksPath = certDir.resolve(String.format("keystore-%s.jks", generateRandom()));
 
             CertAndKeyGen gen = new CertAndKeyGen(keyType, sigAlg);
             X500Name certName = new X500Name("CN=ROOT");
-            gen.generate(384);
+            final int keyBits = 384;
+            gen.generate(keyBits);
 
             X509Certificate cert = gen.getSelfCertificate(certName, firstDate, validity.getSeconds());
             X509Certificate[] chain = new X509Certificate[1];
@@ -92,7 +96,7 @@ public interface NettyCommTestUtil {
                     Paths.get("src/test/resources/security/storepass")
             );
 
-            Path trustStorePath = certDir.resolve("truststore-" + RND.nextInt(100_000) + ".jks");
+            Path trustStorePath = certDir.resolve("truststore-" + generateRandom() + ".jks");
             TrustStoreManager trustStoreManager = TrustStoreManager.build(trustStorePath);
             trustStoreManager.trustStore.setCertificateEntry(alias, cert);
             trustStoreManager.save();
@@ -106,6 +110,11 @@ public interface NettyCommTestUtil {
                     gen, certName, chain, cert, keyStore, password, alias, jksPath, keyStoreConfig,
                     trustStoreManager, cfg
             );
+        }
+
+        private static int generateRandom() {
+            final int bound = 100_000;
+            return RND.nextInt(bound);
         }
 
         /**
