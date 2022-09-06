@@ -183,5 +183,13 @@ public class TlsUtils {
                 return !Files.exists(disableCertExpiryCheckFile);
             }
         }
+
+        @AllArgsConstructor
+        @Getter
+        @ToString
+        class CertManagementConfig {
+            private final KeyStoreConfig keyStoreConfig;
+            private final TrustStoreConfig trustStoreConfig;
+        }
     }
 }
