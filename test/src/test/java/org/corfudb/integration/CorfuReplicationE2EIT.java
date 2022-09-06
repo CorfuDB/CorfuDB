@@ -21,7 +21,7 @@ public class CorfuReplicationE2EIT extends LogReplicationAbstractIT {
 
     // Static method that generates and returns test data (automatically test for two transport protocols: netty and GRPC)
     @Parameterized.Parameters
-    public static Collection input() {
+    public static Collection<String> input() {
 
         List<String> transportPlugins = Arrays.asList(
                 "src/test/resources/transport/grpcConfig.properties",
@@ -52,7 +52,7 @@ public class CorfuReplicationE2EIT extends LogReplicationAbstractIT {
      *
      * This is a parameterized test and both plugins are tested.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testLogReplicationEndToEnd() throws Exception {
