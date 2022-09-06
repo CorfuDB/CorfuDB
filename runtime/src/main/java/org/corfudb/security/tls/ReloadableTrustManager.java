@@ -11,6 +11,8 @@ import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
+import java.security.cert.CertificateExpiredException;
+import java.security.cert.CertificateNotYetValidException;
 import java.security.cert.X509Certificate;
 
 /**
@@ -34,13 +36,7 @@ public class ReloadableTrustManager implements X509TrustManager {
 
     @Override
     public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-        if (isCertExpiryCheckEnabled()) {
-            for (X509Certificate cert : chain) {
-                cert.checkValidity();
-            }
-        } else {
-            logCertExpiryCheck();
-        }
+        checkValidity(chain);
 
         reloadTrustStoreWrapper();
         trustManager.checkClientTrusted(chain, authType);
@@ -48,6 +44,12 @@ public class ReloadableTrustManager implements X509TrustManager {
 
     @Override
     public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+        checkValidity(chain);
+        reloadTrustStoreWrapper();
+        trustManager.checkServerTrusted(chain, authType);
+    }
+
+    private void checkValidity(X509Certificate[] chain) throws CertificateExpiredException, CertificateNotYetValidException {
         if (isCertExpiryCheckEnabled()) {
             for (X509Certificate cert : chain) {
                 cert.checkValidity();
@@ -55,9 +57,6 @@ public class ReloadableTrustManager implements X509TrustManager {
         } else {
             logCertExpiryCheck();
         }
-
-        reloadTrustStoreWrapper();
-        trustManager.checkServerTrusted(chain, authType);
     }
 
     private boolean isCertExpiryCheckEnabled() {
