@@ -4,7 +4,6 @@ import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import org.corfudb.comm.ChannelImplementation;
-import org.corfudb.security.tls.TlsUtils;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 
 import java.nio.file.Path;

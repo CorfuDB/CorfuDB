@@ -10,7 +10,11 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.common.config.ConfigParamsHelper;
-import org.corfudb.infrastructure.*;
+import org.corfudb.infrastructure.BaseServer;
+import org.corfudb.infrastructure.CorfuServerNode;
+import org.corfudb.infrastructure.NettyServerRouter;
+import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.clients.NettyCommTestUtil.CertificateManager;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.CertManagementConfig;
@@ -363,9 +367,9 @@ public class NettyCommTest extends AbstractCorfuTest {
 
         Path certDir = Paths.get(PARAMETERS.TEST_TEMP_DIR);
 
-        CertificateManager serverCertManager = CertificateManager.buildSHA384withECDSA(certDir);
+        CertificateManager serverCertManager = CertificateManager.buildSHA384withEcDsa(certDir);
 
-        CertificateManager clientCertManager = CertificateManager.buildSHA384withECDSA(certDir);
+        CertificateManager clientCertManager = CertificateManager.buildSHA384withEcDsa(certDir);
         clientCertManager.trustStoreManager.addCertificate(serverCertManager);
         clientCertManager.trustStoreManager.save();
 
@@ -401,9 +405,9 @@ public class NettyCommTest extends AbstractCorfuTest {
 
         Path certDir = Paths.get(PARAMETERS.TEST_TEMP_DIR);
 
-        CertificateManager clientCertManager = CertificateManager.buildSHA384withECDSA(certDir);
+        CertificateManager clientCertManager = CertificateManager.buildSHA384withEcDsa(certDir);
 
-        CertificateManager serverCertManager = CertificateManager.buildSHA384withECDSA(certDir);
+        CertificateManager serverCertManager = CertificateManager.buildSHA384withEcDsa(certDir);
         serverCertManager.trustStoreManager.addCertificate(clientCertManager);
         serverCertManager.trustStoreManager.save();
 

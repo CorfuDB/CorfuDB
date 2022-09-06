@@ -24,6 +24,8 @@ import java.util.Random;
 import static org.assertj.core.api.Assertions.fail;
 
 public interface NettyCommTestUtil {
+    String PASSWORD = "test123";
+    String PASSWORD_FILE = "src/test/resources/security/storepass";
 
     /**
      * <a href="https://www.baeldung.com/java-keystore">JKS Documentation</a>
@@ -45,11 +47,11 @@ public interface NettyCommTestUtil {
         public final TrustStoreManager trustStoreManager;
         public final CertManagementConfig certManagementConfig;
 
-        public static CertificateManager buildSHA384withECDSA(Path certDir) throws Exception {
+        public static CertificateManager buildSHA384withEcDsa(Path certDir) throws Exception {
             final int aliasNameLength = 6;
             final int validDays = 30;
             final int oneDay = 1;
-            return buildSHA384withECDSA(
+            return buildSHA384withEcDsa(
                     certDir,
                     RandomStringUtils.randomAlphabetic(aliasNameLength),
                     Duration.ofDays(validDays),
@@ -57,10 +59,12 @@ public interface NettyCommTestUtil {
             );
         }
 
-        public static CertificateManager buildSHA384withECDSA(Path certDir, String alias, Duration validity,
+        public static CertificateManager buildSHA384withEcDsa(Path certDir, String alias, Duration validity,
                                                               Date firstDate) throws Exception {
 
-            return build("EC", "SHA384withECDSA", "test123", certDir, alias, validity, firstDate);
+            final String keyType = "EC";
+            final String sigAlg = "SHA384withECDSA";
+            return build(keyType, sigAlg, PASSWORD, certDir, alias, validity, firstDate);
         }
 
         public static CertificateManager build(
@@ -93,7 +97,7 @@ public interface NettyCommTestUtil {
 
             KeyStoreConfig keyStoreConfig = new KeyStoreConfig(
                     jksPath,
-                    Paths.get("src/test/resources/security/storepass")
+                    Paths.get(PASSWORD_FILE)
             );
 
             Path trustStorePath = certDir.resolve("truststore-" + generateRandom() + ".jks");
@@ -153,7 +157,6 @@ public interface NettyCommTestUtil {
          * @throws Exception error
          */
         public static TrustStoreManager build(Path trustStorePath) throws Exception {
-            String password = "test123";
             KeyStore trustStore = KeyStore.getInstance(KeyStore.getDefaultType());
             if (Files.exists(trustStorePath)) {
                 fail("Trust store file: " + trustStorePath + " already exists");
@@ -163,11 +166,11 @@ public interface NettyCommTestUtil {
 
             TrustStoreConfig config = new TrustStoreConfig(
                     trustStorePath,
-                    Paths.get("src/test/resources/security/storepass"),
+                    Paths.get(PASSWORD_FILE),
                     TrustStoreConfig.DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE
             );
 
-            return new TrustStoreManager(trustStore, trustStorePath, password, config);
+            return new TrustStoreManager(trustStore, trustStorePath, PASSWORD, config);
         }
 
         public void addCertificate(CertificateManager certManager) throws Exception {
