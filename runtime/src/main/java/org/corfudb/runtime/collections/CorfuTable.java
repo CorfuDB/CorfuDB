@@ -21,6 +21,7 @@ import org.corfudb.util.ImmutableListSetWrapper;
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -227,13 +228,13 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
      *
      * @param indexName Name of the the secondary index to query.
      * @param indexKey  The index key used to query the secondary index
-     * @return A stream of {@code Map.Entry<K, V>}
+     * @return A collection of Map.Entry<K, V>
      */
     @SuppressWarnings("unchecked")
     @Accessor
     public @Nonnull
     <I>
-    Stream<Entry<K, V>> getByIndex(@Nonnull Index.Name indexName, I indexKey) {
+    Collection<Entry<K, V>> getByIndex(@Nonnull Index.Name indexName, I indexKey) {
         String secondaryIndex = indexName.get();
         Map<Object, Map<K, V>> secondaryMap;
         if ((secondaryIndexes.containsKey(secondaryIndex) &&
@@ -243,8 +244,8 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
             Map<K, V> res = secondaryMap.get(indexKey);
 
             return res == null ?
-                    Stream.empty() :
-                    res.entrySet().stream();
+                    Collections.emptySet() :
+                    new HashSet<>(res.entrySet());
         }
 
         // If index is not specified, the lookup by index API must fail.
@@ -257,8 +258,8 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
      *
      * @param indexName      Name of the the secondary index to query.
      * @param entryPredicate The predicate to scan and filter with.
-     * @param indexKey       The index key used to query the secondary index
-     * @return A collection of {@code Map.Entry<K, V>}
+     * @param indexKey       A collection of Map.Entry<K, V>
+     * @return
      */
     @Accessor
     public @Nonnull
