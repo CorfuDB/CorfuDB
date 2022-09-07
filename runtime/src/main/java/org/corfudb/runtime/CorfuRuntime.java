@@ -932,8 +932,8 @@ public class CorfuRuntime {
             log.warn("Runtime metrics are disabled.");
         }
 
-//        log.info("Corfu runtime version {} initialized.",
-//                Long.toHexString(GitRepositoryState.getCorfuSourceCodeVersion()));
+        log.info("Corfu runtime version {} initialized.",
+                Long.toHexString(GitRepositoryState.getCorfuSourceCodeVersion()));
     }
 
     /**

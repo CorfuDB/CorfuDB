@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.health;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import lombok.extern.slf4j.Slf4j;
 
@@ -8,6 +9,9 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+/**
+ * HealthMonitor keeps track of the HealthStatus of each Component.
+ */
 @Slf4j
 public class HealthMonitor {
 
@@ -25,6 +29,10 @@ public class HealthMonitor {
 
     private static final String ERR_MSG = "Health Monitor is not initialized";
 
+    /**
+     * Report the issue that will be reflected in the health report.
+     * @param issue An issue
+     */
     public static void reportIssue(Issue issue) {
         instance.ifPresent(monitor -> monitor.addIssue(issue));
     }
@@ -47,6 +55,10 @@ public class HealthMonitor {
         });
     }
 
+    /**
+     * Resolve the issue. If there was no issue to begin with, it's a NOOP.
+     * @param issue An issue
+     */
     public static void resolveIssue(Issue issue) {
         instance.ifPresent(monitor -> monitor.removeIssue(issue));
     }
@@ -75,6 +87,10 @@ public class HealthMonitor {
         return HealthReport.fromComponentHealthStatus(componentHealthStatus);
     }
 
+    /**
+     * Generate health report from the current componentHealthStatus map.
+     * @return A health report
+     */
     public static HealthReport generateHealthReport() {
         return instance.map(HealthMonitor::healthReport).orElseThrow(() -> new IllegalStateException(ERR_MSG));
     }
@@ -91,6 +107,7 @@ public class HealthMonitor {
         return instance.map(monitor -> monitor.containsIssue(issue)).orElse(false);
     }
 
+    @VisibleForTesting
     public static Map<Component, HealthStatus> getHealthStatusSnapshot() {
         return instance.map(monitor -> ImmutableMap.copyOf(monitor.componentHealthStatus))
                 .orElseThrow(() -> new IllegalStateException(ERR_MSG));

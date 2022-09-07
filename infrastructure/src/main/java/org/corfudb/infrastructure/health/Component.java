@@ -1,6 +1,9 @@
 package org.corfudb.infrastructure.health;
 import com.google.gson.annotations.SerializedName;
 
+/**
+ * Component is the infrastructure service for which the health is tracked
+ */
 public enum Component {
 
     @SerializedName("Failure Detector")

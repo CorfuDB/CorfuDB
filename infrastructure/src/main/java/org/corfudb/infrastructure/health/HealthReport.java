@@ -11,29 +11,49 @@ import lombok.NonNull;
 import lombok.ToString;
 import org.corfudb.common.util.Tuple;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * HealthReport represents the overall health status of the node.
+ */
 @Builder
 @ToString
 @EqualsAndHashCode
 public class HealthReport {
-
+    /**
+     * Health status false = not healthy, true = healthy
+     */
     @Builder.Default
     @Getter
     private final boolean status = false;
+    /**
+     * Description
+     */
     @Builder.Default
     @Getter
     private final String reason = "Unknown";
+    /**
+     * Map of component initialization health issues
+     */
     @NonNull
     @Getter
     private final Map<Component, ReportedHealthStatus> init;
+    /**
+     * Map of component runtime health issues
+     */
     @NonNull
     @Getter
     private final Map<Component, ReportedHealthStatus> runtime;
 
-
+    /**
+     * Create a HealthReport from the HealthMonitor's componentHealthStatus. Overall status is healthy if all the
+     * components are init and runtime healthy. If init report is empty - the overall status is unknown. If at least
+     * one init component is unhealthy or at least one runtime component is unhealthy, it's reflected in the overall status.
+     * Otherwise, the status is healthy.
+     * @param componentHealthStatus HealthMonitor's componentHealthStatus
+     * @return A health report
+     */
     public static HealthReport fromComponentHealthStatus(Map<Component, HealthStatus> componentHealthStatus) {
         Map<Component, HealthStatus> componentHealthStatusSnapshot = ImmutableMap.copyOf(componentHealthStatus);
         final Map<Component, ReportedHealthStatus> initReportedHealthStatus = createInitReportedHealthStatus(componentHealthStatusSnapshot);
@@ -57,6 +77,10 @@ public class HealthReport {
                 .build();
     }
 
+    /**
+     *
+     * @return A json representation of a health report
+     */
     public String asJson() {
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
         return gson.toJson(this);

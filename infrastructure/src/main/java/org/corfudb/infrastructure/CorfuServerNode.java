@@ -233,9 +233,6 @@ public class CorfuServerNode implements AutoCloseable {
             bootstrapConfigurer.configure(bootstrap);
             bootstrap.childHandler(getServerChannelInitializer(context, router));
 
-            // https://stackoverflow.com/questions/27112084/how-to-use-multiple-serverbootstrap-objects-in-netty
-            // https://github.com/netty/netty/tree/4.0/example/src/main/java/io/netty/example/portunification
-
             boolean bindToAllInterfaces =
                     Optional.ofNullable(context.getServerConfig(Boolean.class, "--bind-to-all-interfaces"))
                             .orElse(false);

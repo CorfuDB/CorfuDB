@@ -39,7 +39,7 @@ public class CorfuServerParams implements NodeParams {
     @Default
     private final AtomicInteger healthServerPortBase = new AtomicInteger(-1);
 
-    private int healthPort = -1;
+    private final int healthPort = ServerUtil.getRandomOpenPort();
 
     @Default
     @NonNull
@@ -102,36 +102,14 @@ public class CorfuServerParams implements NodeParams {
         return Paths.get(getName(), streamLogDir);
     }
 
-    public void setHealthPortAndIncrement() {
-        if (healthPortEnabled()) {
-            healthPort = healthServerPortBase.getAndIncrement();
-        }
-    }
-
     @Override
     public Set<Integer> getPorts() {
-        if (healthPortEnabled()) {
-            if (!healthPortIsSet()) {
-                throw new IllegalStateException("Health port not set");
-            }
-            return ImmutableSet.of(port, healthPort);
-        }
-        return ImmutableSet.of(port);
+        return ImmutableSet.of(port, healthPort);
     }
 
     public String getDockerImageNameFullName() {
         return dockerImage + ":" + "0.4.0-SNAPSHOT";
     }
-
-
-    public boolean healthPortEnabled() {
-        return healthServerPortBase.get() != -1;
-    }
-
-    public boolean healthPortIsSet() {
-        return healthPort != -1;
-    }
-
 
     public Path getInfrastructureJar() {
         return universeDirectory.resolve(

@@ -77,6 +77,7 @@ public class HealthMonitorIT extends AbstractIT {
                 UUID.randomUUID());
     }
 
+    @SuppressWarnings("checkstyle:magicnumber")
     private HealthReport queryCurrentHealthReport() throws IOException {
         URL url = new URL("http://" + ADDRESS + ":" + HEALTH_PORT + "/health");
         HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
@@ -113,6 +114,7 @@ public class HealthMonitorIT extends AbstractIT {
     }
 
     @Test
+    @SuppressWarnings("checkstyle:magicnumber")
     void testInitComponentsHealth() throws IOException, InterruptedException {
         Process corfuServer = runCorfuServerWithHealthMonitor();
         HealthReport expectedHealthReport = builder()
@@ -168,6 +170,7 @@ public class HealthMonitorIT extends AbstractIT {
     }
 
     @Test
+    @SuppressWarnings("checkstyle:magicnumber")
     void testQuotaExceededReport() throws IOException, InterruptedException {
         final Process process = runCorfuServerWithHealthMonitorAndExceededQuota();
         BootstrapUtil.bootstrap(getLayout(), RETRIES, PARAMETERS.TIMEOUT_SHORT);

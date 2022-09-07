@@ -22,6 +22,9 @@ import static io.netty.handler.codec.http.HttpHeaderValues.TEXT_PLAIN;
 import static io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
 import static io.netty.handler.codec.http.HttpResponseStatus.OK;
 
+/**
+ * Http server that handles /health get requests for HealthReport.
+ */
 @Slf4j
 public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
 
@@ -39,7 +42,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
             FullHttpResponse response;
             if (req.uri().equals("/health")) {
                 if (!HealthMonitor.isInit()) {
-                    log.info("Health not initialized");
+                    log.debug("Health not initialized");
                     response = new DefaultFullHttpResponse(req.protocolVersion(), BAD_REQUEST,
                             Unpooled.copiedBuffer("Health monitor is not initialized", CharsetUtil.UTF_8));
                     response.headers()
@@ -47,15 +50,14 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
                 }
                 else{
                     final HealthReport healthReport = HealthMonitor.generateHealthReport();
-                    log.info("Generating report: ");
-                    log.info(healthReport.asJson());
+                    log.debug("Generating health report");
                     response = new DefaultFullHttpResponse(req.protocolVersion(), OK,
                             Unpooled.copiedBuffer(healthReport.asJson(), CharsetUtil.UTF_8));
                     response.headers()
                             .set(CONTENT_TYPE, "application/json");
                 }
             } else {
-                log.info("Bad request: ");
+                log.debug("Bad http request");
                 response = new DefaultFullHttpResponse(req.protocolVersion(), BAD_REQUEST,
                         Unpooled.copiedBuffer("Bad request", CharsetUtil.UTF_8));
                 response.headers()

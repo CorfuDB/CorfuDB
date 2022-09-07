@@ -56,6 +56,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.corfudb.infrastructure.health.Issue.IssueId.SEQUENCER_REQUIRES_FULL_BOOTSTRAP;
 import static org.corfudb.protocols.CorfuProtocolCommon.getStreamAddressRange;
 import static org.corfudb.protocols.CorfuProtocolCommon.getStreamAddressSpace;
@@ -159,7 +160,9 @@ public class SequencerServer extends AbstractServer {
 
     private final ScheduledExecutorService healthReportScheduler;
 
-    private static final Duration HEALTH_REPORT_INTERVAL = Duration.ofSeconds(5);
+    private static final int INIT_DELAY = 0;
+    private static final int DELAY_NUM = 1;
+    private static final TimeUnit DELAY_UNITS = SECONDS;
 
     /**
      * - {@link SequencerServer::globalLogTail}:
@@ -215,7 +218,7 @@ public class SequencerServer extends AbstractServer {
                         .setNameFormat("sequencer-health")
                         .build());
         HealthMonitor.reportIssue(Issue.createInitIssue(Component.SEQUENCER));
-        healthReportScheduler.scheduleAtFixedRate(reportSequencerHealth(), 0, 1, TimeUnit.SECONDS);
+        healthReportScheduler.scheduleAtFixedRate(reportSequencerHealth(), INIT_DELAY, DELAY_NUM, DELAY_UNITS);
     }
 
     @Override
@@ -226,7 +229,6 @@ public class SequencerServer extends AbstractServer {
     private Runnable reportSequencerHealth() {
         return () -> {
             Layout layout = serverContext.getCurrentLayout();
-            log.info("Current layout: " + layout);
             if (layout == null) {
                 return;
             }

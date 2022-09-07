@@ -6,6 +6,9 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.HttpServerExpectContinueHandler;
 
+/**
+ * Http netty channel initializer
+ */
 public class HttpServerInitializer extends ChannelInitializer<SocketChannel> {
 
     @Override

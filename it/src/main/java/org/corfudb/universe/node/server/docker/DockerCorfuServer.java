@@ -297,7 +297,6 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
         try {
             ListImagesParam corfuImageQuery = ListImagesParam
                     .byName(params.getDockerImageNameFullName());
-            System.out.println("Image: " + params.getDockerImageNameFullName());
             List<Image> corfuImages = docker.listImages(corfuImageQuery);
             if (corfuImages.isEmpty()) {
                 docker.pull(params.getDockerImageNameFullName());
@@ -335,11 +334,8 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
 
     private ContainerConfig buildContainerConfig() {
         // Bind ports
-
-        params.setHealthPortAndIncrement();
         List<String> ports = params.getPorts().stream()
                 .map(Objects::toString).collect(Collectors.toList());
-        System.out.println("Bound ports: " + ports);
         Map<String, List<PortBinding>> portBindings = new HashMap<>();
         for (String port : ports) {
             List<PortBinding> hostPorts = new ArrayList<>();

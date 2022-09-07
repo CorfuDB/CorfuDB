@@ -22,16 +22,14 @@ import static org.corfudb.infrastructure.health.HealthReport.builder;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutChange;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitUninterruptibly;
 
-public class OrchestratorFailsReportIT extends GenericIntegrationTest {
+public class ClusteringFailuresHealthReportIT extends GenericIntegrationTest {
 
 
     @Test(timeout = 300000)
-    public void orchestratorTaskFailedReport() {
-
-        int firstNodePort = 8080;
+    @SuppressWarnings("checkstyle:magicnumber")
+    public void clusteringFailuresHealthReport() {
         workflow(wf -> {
             wf.setupDocker(fixture -> {
-                fixture.getServer().healthServerPortBase(new AtomicInteger(firstNodePort));
                 fixture.getCluster().numNodes(3);
                 fixture.getLogging().enabled(true);
                 fixture.getServer().logLevel(Level.DEBUG);
@@ -46,15 +44,13 @@ public class OrchestratorFailsReportIT extends GenericIntegrationTest {
                     .getGroup(params.getGroupParamByIndex(0).getName());
             List<CorfuServer> allServers = new ArrayList<>(corfuCluster.<CorfuServer>nodes().values().asList());
             final CorfuServer corfuServer = allServers.remove(0);
-            System.out.println("Disconnecting: " + corfuServer.getParams().getPort() + " " + corfuServer.getParams().getHealthPort());
+            // Disconnecting the first server
             CorfuClient corfuClient = corfuCluster.getLocalCorfuClient();
             corfuServer.disconnect();
+            // Wait for layout change and find the unresponsive nodes in other node's health report
             waitForLayoutChange(layout -> layout.getUnresponsiveServers().contains(corfuServer.getEndpoint()), corfuClient);
             waitUninterruptibly(Duration.ofSeconds(4));
             final CorfuServer otherServer = allServers.remove(0);
-
-            System.out.println("Other server's report:");
-            System.out.println(queryHealthReport(otherServer.getParams().getHealthPort()).asJson());
             HealthReport expectedHealthReport = builder()
                     .status(false)
                     .reason("Some of the services experience runtime health issues")
@@ -75,14 +71,12 @@ public class OrchestratorFailsReportIT extends GenericIntegrationTest {
                     .build();
             assertThat(queryHealthReport(otherServer.getParams().getHealthPort())).isEqualTo(expectedHealthReport);
 
-            System.out.println("Now trying to perform a clustering operation on a node that cant reach quorum");
+            // Now trying to perform a clustering operation on a node that cant reach quorum
             try {
                 corfuClient.getManagementView().healNode(corfuServer.getEndpoint(), 3, Duration.ofSeconds(3), Duration.ofMillis(1000));
             } catch (Exception e) {
-                System.out.println("Expected that we have error: " + e);
+                // Expected that we have error
             }
-
-
 
             HealthReport healthReport = queryHealthReport(corfuServer.getParams().getHealthPort());
             expectedHealthReport = builder()
@@ -103,16 +97,11 @@ public class OrchestratorFailsReportIT extends GenericIntegrationTest {
                             Component.SEQUENCER, new HealthReport.ReportedHealthStatus(false, "Sequencer requires bootstrap")
                     ))
                     .build();
-            System.out.println("Our report:");
-            System.out.println(healthReport.asJson());
-            System.out.println("Expected report:");
-            System.out.println(expectedHealthReport.asJson());
             assertThat(healthReport).isEqualTo(expectedHealthReport);
 
 
-            System.out.println("Reconnect: " + corfuServer.getParams().getPort() + " " + corfuServer.getParams().getHealthPort());
+            // Now reconnect the node and wait for the healing to take place and the FD report that the node is healed
             corfuServer.reconnect();
-            System.out.println("Wait for the healing to take place and the FD report that the node is healed");
             waitForLayoutChange(layout -> layout.getUnresponsiveServers().isEmpty(), corfuClient);
             waitUninterruptibly(Duration.ofSeconds(4));
             healthReport = queryHealthReport(corfuServer.getParams().getHealthPort());
@@ -134,8 +123,6 @@ public class OrchestratorFailsReportIT extends GenericIntegrationTest {
                             Component.SEQUENCER, new HealthReport.ReportedHealthStatus(true, "Up and running")
                     ))
                     .build();
-            System.out.println("Our report again:");
-            System.out.println(healthReport.asJson());
             assertThat(healthReport).isEqualTo(expectedHealthReport);
         });
     }

@@ -353,9 +353,6 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
 
     @Test
     public void finishCompactionCycleSuccessTest() throws Exception {
-        HealthMonitor.reportIssue(Issue.createInitIssue(Component.COMPACTOR));
-        HealthMonitor.resolveIssue(Issue.createInitIssue(Component.COMPACTOR));
-
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0,
                 corfuStore, livenessValidator);
         compactorLeaderServices1.initCompactionCycle();
@@ -373,7 +370,6 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
         assert verifyManagerStatus(StatusType.COMPLETED);
         assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
         assert verifyCheckpointTable();
-        System.out.println(HealthMonitor.generateHealthReport().asJson());
     }
 
     @Test

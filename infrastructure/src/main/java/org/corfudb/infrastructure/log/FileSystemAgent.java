@@ -27,6 +27,7 @@ import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
@@ -37,6 +38,9 @@ import static org.corfudb.infrastructure.log.FileSystemAgent.PartitionAgent.*;
 @Slf4j
 public final class FileSystemAgent {
     private static final String NOT_CONFIGURED_ERR_MSG = "FileSystemAgent not configured";
+    private static final int INIT_DELAY = 0;
+    private static final int DELAY_NUM = 1;
+    private static final TimeUnit DELAY_UNITS = SECONDS;
 
     private static Optional<FileSystemAgent> instance = Optional.empty();
 
@@ -70,7 +74,7 @@ public final class FileSystemAgent {
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
         logSizeQuota.consume(initialLogSize);
         scheduler.scheduleWithFixedDelay(
-                this::reportQuotaExceeded, 0, 1, SECONDS);
+                this::reportQuotaExceeded, INIT_DELAY, DELAY_NUM, DELAY_UNITS);
         log.info("FileSystemAgent: {} size is {} bytes, limit {}", config.logDir, initialLogSize, logSizeLimit);
     }
 
@@ -85,12 +89,9 @@ public final class FileSystemAgent {
     private void reportQuotaExceeded() {
         try {
             Issue issue = Issue.createIssue(LOG_UNIT, Issue.IssueId.QUOTA_EXCEEDED_ERROR, "Quota exceeded");
-            log.info("Available: " + getResourceQuota().getAvailable());
             if (!getResourceQuota().hasAvailable()) {
-                log.info("Reporting exceeded quota");
                 HealthMonitor.reportIssue(issue);
             } else {
-                log.info("Resolving exceeded quota");
                 HealthMonitor.resolveIssue(issue);
             }
         }
@@ -229,7 +230,7 @@ public final class FileSystemAgent {
             logPartition = Paths.get(config.logDir.getRoot().toString(),
                     config.logDir.subpath(0, 1).toString());
             initializeScheduler();
-            setPartitionAttributeAndReportQuota();
+            setPartitionAttribute();
         }
 
         /**
@@ -238,14 +239,14 @@ public final class FileSystemAgent {
          */
         private void initializeScheduler() {
             scheduledFuture = scheduler.scheduleWithFixedDelay(
-                    this::setPartitionAttributeAndReportQuota, NO_DELAY, UPDATE_INTERVAL, SECONDS
+                    this::setPartitionAttribute, NO_DELAY, UPDATE_INTERVAL, SECONDS
             );
         }
 
         /**
          * Sets PartitionAttribute's fields with the values from log file and the log partition.
          */
-        private void setPartitionAttributeAndReportQuota() {
+        private void setPartitionAttribute() {
             log.info("setPartitionAttribute: fetching PartitionAttribute.");
             try {
                 // Log path to check if it is in readOnly mode
