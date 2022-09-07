@@ -4,7 +4,9 @@ import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
 
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
@@ -15,6 +17,7 @@ public class RuntimeParametersBuilder {
     protected String ksPasswordFile;
     protected String trustStore;
     protected String tsPasswordFile;
+    protected Path disableCertExpiryCheckFile = TrustStoreConfig.DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE;
     protected boolean saslPlainTextEnabled = false;
     protected String usernameFile;
     protected String passwordFile;
@@ -58,6 +61,11 @@ public class RuntimeParametersBuilder {
 
     public RuntimeParametersBuilder trustStore(String trustStore) {
         this.trustStore = trustStore;
+        return this;
+    }
+
+    public RuntimeParametersBuilder disableCertExpiryCheckFile(Path disableCertExpiryCheckFile) {
+        this.disableCertExpiryCheckFile = disableCertExpiryCheckFile;
         return this;
     }
 
@@ -168,6 +176,7 @@ public class RuntimeParametersBuilder {
         runtimeParameters.setKsPasswordFile(ksPasswordFile);
         runtimeParameters.setTrustStore(trustStore);
         runtimeParameters.setTsPasswordFile(tsPasswordFile);
+        runtimeParameters.setDisableCertExpiryCheckFile(disableCertExpiryCheckFile);
         runtimeParameters.setSaslPlainTextEnabled(saslPlainTextEnabled);
         runtimeParameters.setUsernameFile(usernameFile);
         runtimeParameters.setPasswordFile(passwordFile);

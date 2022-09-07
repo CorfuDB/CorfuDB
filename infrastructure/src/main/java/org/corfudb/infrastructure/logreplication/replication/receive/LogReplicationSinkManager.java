@@ -5,6 +5,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.protobuf.TextFormat;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
@@ -112,10 +113,10 @@ public class LogReplicationSinkManager implements DataReceiver {
                                      ServerContext context, long topologyConfigId) {
 
         this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
-                .trustStore((String) context.getServerConfig().get("--truststore"))
-                .tsPasswordFile((String) context.getServerConfig().get("--truststore-password-file"))
-                .keyStore((String) context.getServerConfig().get("--keystore"))
-                .ksPasswordFile((String) context.getServerConfig().get("--keystore-password-file"))
+                .trustStore((String) context.getServerConfig().get(ConfigParamNames.TRUST_STORE))
+                .tsPasswordFile((String) context.getServerConfig().get(ConfigParamNames.TRUST_STORE_PASS_FILE))
+                .keyStore((String) context.getServerConfig().get(ConfigParamNames.KEY_STORE))
+                .ksPasswordFile((String) context.getServerConfig().get(ConfigParamNames.KEY_STORE_PASS_FILE))
                 .tlsEnabled((Boolean) context.getServerConfig().get("--enable-tls"))
                 .maxCacheEntries(config.getMaxCacheSize())
                 .maxWriteSize(context.getMaxWriteSize())

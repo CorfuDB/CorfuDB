@@ -2,6 +2,7 @@ package org.corfudb.security.tls;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig;
@@ -135,6 +136,7 @@ public class TlsUtils {
 
         @AllArgsConstructor
         @Getter
+        @ToString
         class KeyStoreConfig implements CertStoreConfig {
             private final Path keyStoreFile;
             private final Path passwordFile;
@@ -151,21 +153,43 @@ public class TlsUtils {
 
         @AllArgsConstructor
         @Getter
+        @ToString
         class TrustStoreConfig implements CertStoreConfig {
+            public static final Path DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE = Paths.get(
+                    "/", "config", "corfu", "DISABLE_CERT_EXPIRY_CHECK"
+            );
+
             /**
-             * KeyStore or TrustStore path
+             * TrustStore path
              */
             private final Path trustStoreFile;
             private final Path passwordFile;
+            private final Path disableCertExpiryCheckFile;
 
-            public static TrustStoreConfig from(String trustStorePath, String passwordFile) {
-                return new TrustStoreConfig(Paths.get(trustStorePath), Paths.get(passwordFile));
+            public static TrustStoreConfig from(String trustStorePath, String passwordFile, Path disableCertExpiryCheckFile) {
+                return new TrustStoreConfig(
+                        Paths.get(trustStorePath),
+                        Paths.get(passwordFile),
+                        disableCertExpiryCheckFile
+                );
             }
 
             @Override
             public Path getCertStore() {
                 return trustStoreFile;
             }
+
+            public boolean isCertExpiryCheckEnabled() {
+                return !Files.exists(disableCertExpiryCheckFile);
+            }
+        }
+
+        @AllArgsConstructor
+        @Getter
+        @ToString
+        class CertManagementConfig {
+            private final KeyStoreConfig keyStoreConfig;
+            private final TrustStoreConfig trustStoreConfig;
         }
     }
 }

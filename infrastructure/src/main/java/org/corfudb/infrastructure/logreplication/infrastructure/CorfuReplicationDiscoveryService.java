@@ -5,6 +5,7 @@ import io.micrometer.core.instrument.LongTaskTimer;
 import io.micrometer.core.instrument.Tag;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.LogReplicationServer;
 import org.corfudb.infrastructure.ServerContext;
@@ -363,10 +364,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         if (runtime == null) {
             log.debug("Connecting to local Corfu {}", localCorfuEndpoint);
             runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
-                    .trustStore((String) serverContext.getServerConfig().get("--truststore"))
-                    .tsPasswordFile((String) serverContext.getServerConfig().get("--truststore-password-file"))
-                    .keyStore((String) serverContext.getServerConfig().get("--keystore"))
-                    .ksPasswordFile((String) serverContext.getServerConfig().get("--keystore-password-file"))
+                    .trustStore((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE))
+                    .tsPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE_PASS_FILE))
+                    .keyStore((String) serverContext.getServerConfig().get(ConfigParamNames.KEY_STORE))
+                    .ksPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.KEY_STORE_PASS_FILE))
                     .tlsEnabled((Boolean) serverContext.getServerConfig().get("--enable-tls"))
                     .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
                     // This runtime is used for the LockStore, Metadata Manager and Log Entry Sync, which don't rely

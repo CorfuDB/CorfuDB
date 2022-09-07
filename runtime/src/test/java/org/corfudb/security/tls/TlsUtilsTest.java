@@ -1,12 +1,12 @@
 package org.corfudb.security.tls;
 
+import org.corfudb.security.tls.TlsTestContext.ValidCerts;
 import org.junit.jupiter.api.Test;
 
 import javax.net.ssl.SSLException;
 import java.nio.file.Paths;
 import java.security.KeyStore;
 
-import static org.corfudb.security.tls.TlsTestContext.CLIENT_TRUST_WITH_SERVER;
 import static org.corfudb.security.tls.TlsTestContext.FAKE_LOCATION_AND_PASS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -17,8 +17,8 @@ public class TlsUtilsTest {
 
     @Test
     public void testGetPassword() throws Exception {
-        String password = TlsUtils.getKeyStorePassword(CLIENT_TRUST_WITH_SERVER.getPasswordFile());
-        assertEquals("password", password);
+        String password = TlsUtils.getKeyStorePassword(ValidCerts.PASSWORD_FILE);
+        assertEquals("test123", password);
     }
 
     @Test
@@ -33,7 +33,7 @@ public class TlsUtilsTest {
 
     @Test
     public void testOpenKeyStore() throws Exception {
-        KeyStore keyStore = TlsUtils.openCertStore(CLIENT_TRUST_WITH_SERVER);
+        KeyStore keyStore = TlsUtils.openCertStore(ValidCerts.TRUST_STORE_CONFIG);
         assertEquals(2, keyStore.size());
     }
 

@@ -5,20 +5,21 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.NodeLocator;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
 
 /**
  * This test suit exercises the ability to enable TLS on Corfu servers and runtime
- *
  * Created by Sam Behnam on 8/13/18.
  */
 @Slf4j
@@ -110,16 +111,17 @@ public class SecurityIT extends AbstractIT {
     @Test
     public void testServerRuntimeTlsEnabledMethod() throws Exception {
         // Run a corfu server
-        Process corfuServer = runSinglePersistentServerTls();
+        final Process corfuServer = runSinglePersistentServerTls();
 
         // Start a Corfu runtime
         runtime = new CorfuRuntime(singleNodeEndpoint)
-                                    .enableTls(runtimePathToKeyStore,
-                                               runtimePathToKeyStorePassword,
-                                               runtimePathToTrustStore,
-                                               runtimePathToTrustStorePassword)
-                                    .setCacheDisabled(true)
-                                    .connect();
+                .enableTls(runtimePathToKeyStore,
+                        runtimePathToKeyStorePassword,
+                        runtimePathToTrustStore,
+                        runtimePathToTrustStorePassword)
+                .setCacheDisabled(true)
+                .registerSystemDownHandler(getShutdownHandler(corfuServer))
+                .connect();
 
         // Create CorfuTable
         CorfuTable testTable = runtime
@@ -152,7 +154,7 @@ public class SecurityIT extends AbstractIT {
     /**
      * This test creates Corfu runtime and a single Corfu server according to the configuration
      * provided in CorfuDB.properties. Corfu runtime configures TLS related parameters using
-     * {@link org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters} and then asserts that
+     * {@link CorfuRuntimeParameters} and then asserts that
      * operations on a CorfuTable is executed as Expected.
      *
      * @throws Exception
@@ -163,7 +165,7 @@ public class SecurityIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServerTls();
 
         // Create Runtime parameters for enabling TLS
-        final CorfuRuntime.CorfuRuntimeParameters runtimeParameters = CorfuRuntime.CorfuRuntimeParameters
+        final CorfuRuntimeParameters runtimeParameters = CorfuRuntimeParameters
                 .builder()
                 .layoutServers(Arrays.asList(NodeLocator.parseString(singleNodeEndpoint)))
                 .tlsEnabled(tlsEnabled)
@@ -176,6 +178,7 @@ public class SecurityIT extends AbstractIT {
         // Start a Corfu runtime from parameters
         runtime = CorfuRuntime
                 .fromParameters(runtimeParameters)
+                .registerSystemDownHandler(getShutdownHandler(corfuServer))
                 .connect();
 
         // Create CorfuTable
@@ -206,29 +209,24 @@ public class SecurityIT extends AbstractIT {
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 
-    /**
-     * Testing that configuring incorrect TLS parameters will lead to throwing
-     * {@link UnrecoverableCorfuError} exception.
-     *
-     * @throws Exception
-     */
-    @Test(expected = UnrecoverableCorfuError.class)
-    public void testIncorrectKeyStoreException() throws Exception {
-        // Run a corfu server with incorrect truststore
-        runSinglePersistentServerTls();
+    private Runnable getShutdownHandler(Process corfuServer) {
+        return () -> {
+            if (corfuServer.isAlive()) {
+                return;
+            }
 
-        // Start a Corfu runtime with incorrect truststore
-        final CorfuRuntime.CorfuRuntimeParameters runtimeParameters = CorfuRuntime.CorfuRuntimeParameters
-                .builder()
-                .layoutServers(Arrays.asList(NodeLocator.parseString(singleNodeEndpoint)))
-                .tlsEnabled(tlsEnabled)
-                .keyStore(runtimePathToKeyStore)
-                .ksPasswordFile(runtimePathToKeyStorePassword)
-                .trustStore(runtimePathToKeyStore)
-                .tsPasswordFile(runtimePathToTrustStorePassword)
-                .build();
+            log.error("Corfu server is down!");
+            Path testDir = Paths.get(PARAMETERS.TEST_TEMP_DIR);
+            Path buildDir = Paths.get("target/logs", testDir.getFileName().toString());
+            Path corfuLogs = testDir.resolve("localhost_9000_consolelog");
 
-        // Connecting to runtime
-        runtime = CorfuRuntime.fromParameters(runtimeParameters).connect();
+            log.info("Save server logs into: {}", buildDir);
+            try {
+                Files.createDirectories(buildDir);
+                Files.copy(corfuLogs, buildDir.resolve("corfu.log"), StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException e) {
+                throw new IllegalStateException(e);
+            }
+        };
     }
 }
