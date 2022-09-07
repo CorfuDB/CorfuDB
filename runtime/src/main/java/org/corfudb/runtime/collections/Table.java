@@ -441,7 +441,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     <I>
     List<CorfuStoreEntry<K, V, M>> getByIndex(@Nonnull final String indexName,
                                               @Nonnull final I indexKey) {
-        return corfuTable.getByIndex(() -> indexName, indexKey)
+        return corfuTable.getByIndex(() -> indexName, indexKey).stream()
                 .map(entry -> new CorfuStoreEntry<K, V, M>(entry.getKey(),
                         entry.getValue().getPayload(),
                         entry.getValue().getMetadata()))

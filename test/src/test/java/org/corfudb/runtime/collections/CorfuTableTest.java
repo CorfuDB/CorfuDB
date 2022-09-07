@@ -33,8 +33,8 @@ public class CorfuTableTest extends AbstractViewTest {
 
     private static final int ITERATIONS = 20;
 
-    Collection<String> project(Stream<Map.Entry<String, String>> entries) {
-        return entries.map(Map.Entry::getValue).collect(Collectors.toCollection(ArrayList::new));
+    Collection<String> project(Collection<Map.Entry<String, String>> entries) {
+        return entries.stream().map(entry -> entry.getValue()).collect(Collectors.toCollection(ArrayList::new));
     }
 
     @Test
@@ -100,10 +100,10 @@ public class CorfuTableTest extends AbstractViewTest {
         corfuTable.put("k3", "b");
 
         assertThat(project(corfuTable.getByIndex(StringIndexer.BY_FIRST_LETTER, "a")))
-                .containsExactlyInAnyOrder("ab", "a");
+                .containsExactly("ab", "a");
 
         assertThat(project(corfuTable.getByIndex(StringIndexer.BY_VALUE, "ab")))
-                .containsExactlyInAnyOrder("ab");
+                .containsExactly("ab");
     }
 
     /**
@@ -195,8 +195,9 @@ public class CorfuTableTest extends AbstractViewTest {
         corfuTable.put("k2", "dog bat");
         corfuTable.put("k3", "fox");
 
-        assertThat(project(corfuTable.getByIndex(StringMultiIndexer.BY_EACH_WORD, "fox")))
-                .containsExactlyInAnyOrder("dog fox cat", "fox");
+        final Collection<Map.Entry<String, String>> result =
+                corfuTable.getByIndex(StringMultiIndexer.BY_EACH_WORD, "fox");
+        assertThat(project(result)).containsExactlyInAnyOrder("dog fox cat", "fox");
     }
 
     @Test
@@ -210,10 +211,10 @@ public class CorfuTableTest extends AbstractViewTest {
                 .open();
 
 
-        assertThat(project(corfuTable.getByIndex(StringIndexer.BY_FIRST_LETTER, "a")))
+        assertThat(corfuTable.getByIndex(StringIndexer.BY_FIRST_LETTER, "a"))
                 .isEmpty();
 
-        assertThat(project(corfuTable.getByIndex(StringIndexer.BY_VALUE, "ab")))
+        assertThat(corfuTable.getByIndex(StringIndexer.BY_VALUE, "ab"))
                 .isEmpty();
     }
 
