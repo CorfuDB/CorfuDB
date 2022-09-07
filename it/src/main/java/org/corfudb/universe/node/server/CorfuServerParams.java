@@ -20,6 +20,7 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @SuperBuilder(builderMethodName = "serverParamsBuilder")
 @AllArgsConstructor
@@ -34,6 +35,11 @@ public class CorfuServerParams implements NodeParams {
 
     @Default
     private final int port = ServerUtil.getRandomOpenPort();
+
+    @Default
+    private final AtomicInteger healthServerPortBase = new AtomicInteger(-1);
+
+    private int healthPort = -1;
 
     @Default
     @NonNull
@@ -96,14 +102,36 @@ public class CorfuServerParams implements NodeParams {
         return Paths.get(getName(), streamLogDir);
     }
 
+    public void setHealthPortAndIncrement() {
+        if (healthPortEnabled()) {
+            healthPort = healthServerPortBase.getAndIncrement();
+        }
+    }
+
     @Override
     public Set<Integer> getPorts() {
+        if (healthPortEnabled()) {
+            if (!healthPortIsSet()) {
+                throw new IllegalStateException("Health port not set");
+            }
+            return ImmutableSet.of(port, healthPort);
+        }
         return ImmutableSet.of(port);
     }
 
     public String getDockerImageNameFullName() {
-        return dockerImage + ":" + serverVersion;
+        return dockerImage + ":" + "0.4.0-SNAPSHOT";
     }
+
+
+    public boolean healthPortEnabled() {
+        return healthServerPortBase.get() != -1;
+    }
+
+    public boolean healthPortIsSet() {
+        return healthPort != -1;
+    }
+
 
     public Path getInfrastructureJar() {
         return universeDirectory.resolve(

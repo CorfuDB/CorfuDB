@@ -9,6 +9,9 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
+import org.corfudb.infrastructure.health.Component;
+import org.corfudb.infrastructure.health.HealthMonitor;
+import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.runtime.CheckpointerBuilder;
 import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuRuntime;
@@ -25,6 +28,7 @@ import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.RpcCommon.TokenMsg;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Layout;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -73,6 +77,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
      * @return The generated layout.
      */
     private Layout setup3NodeCluster() {
+        HealthMonitor.init();
         ServerContext sc0 = new ServerContextBuilder()
                 .setSingle(false)
                 .setServerRouter(new TestServerRouter(SERVERS.PORT_0))
@@ -156,6 +161,11 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
         } catch (Exception e) {
             log.warn("Caught exception while opening MetadataTables: ", e);
         }
+    }
+
+    @After
+    public void clearMonitor() {
+        HealthMonitor.shutdown();
     }
 
     private Table<StringKey, CheckpointingStatus, Message> openCompactionManagerTable() {
@@ -343,6 +353,9 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
 
     @Test
     public void finishCompactionCycleSuccessTest() throws Exception {
+        HealthMonitor.reportIssue(Issue.createInitIssue(Component.COMPACTOR));
+        HealthMonitor.resolveIssue(Issue.createInitIssue(Component.COMPACTOR));
+
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0,
                 corfuStore, livenessValidator);
         compactorLeaderServices1.initCompactionCycle();
@@ -360,6 +373,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
         assert verifyManagerStatus(StatusType.COMPLETED);
         assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
         assert verifyCheckpointTable();
+        System.out.println(HealthMonitor.generateHealthReport().asJson());
     }
 
     @Test
@@ -373,6 +387,35 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
 
         assert verifyManagerStatus(StatusType.FAILED);
         assert verifyCheckpointStatusTable(StatusType.IDLE, 0);
+    }
+
+    @Test
+    public void compactionHealthReportTest() throws Exception {
+        HealthMonitor.reportIssue(Issue.createInitIssue(Component.COMPACTOR));
+        HealthMonitor.resolveIssue(Issue.createInitIssue(Component.COMPACTOR));
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0,
+                corfuStore, livenessValidator);
+        compactorLeaderServices1.initCompactionCycle();
+        compactorLeaderServices1.finishCompactionCycle();
+        assert verifyManagerStatus(StatusType.FAILED);
+        assert verifyCheckpointStatusTable(StatusType.IDLE, 0);
+        assert HealthMonitor.generateHealthReport().getRuntime().get(Component.COMPACTOR).getReason().equals("Last compaction cycle failed");
+
+        compactorLeaderServices1.initCompactionCycle();
+        ServerTriggeredCheckpointer distributedCheckpointer = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
+                .corfuRuntime(runtime0)
+                .cpRuntime(Optional.of(cpRuntime0))
+                .isClient(false)
+                .persistedCacheRoot(Optional.empty())
+                .build(), corfuStore, compactorMetadataTables);
+        distributedCheckpointer.checkpointTables();
+
+        compactorLeaderServices1.finishCompactionCycle();
+
+        assert verifyManagerStatus(StatusType.COMPLETED);
+        assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
+        assert verifyCheckpointTable();
+        assert HealthMonitor.generateHealthReport().getRuntime().get(Component.COMPACTOR).getReason().equals("Up and running");
     }
 
     private boolean pollForFinishCheckpointing() {

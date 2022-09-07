@@ -2,6 +2,8 @@ package org.corfudb.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
+import org.corfudb.infrastructure.health.HealthMonitor;
+import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
@@ -20,6 +22,8 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.corfudb.infrastructure.health.Component.COMPACTOR;
+import static org.corfudb.infrastructure.health.Issue.IssueId.COMPACTION_CYCLE_FAILED;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -240,6 +244,14 @@ public class CompactorLeaderServices {
                     tableNames.size(), finalStatus);
             MicroMeterUtils.time(Duration.ofMillis(totalTimeElapsed), "compaction.total.timer",
                     "nodeEndpoint", nodeEndpoint);
+            Issue compactionCycleIssue =
+                    Issue.createIssue(COMPACTOR, COMPACTION_CYCLE_FAILED, "Last compaction cycle failed");
+
+            if (finalStatus == StatusType.FAILED) {
+                HealthMonitor.reportIssue(compactionCycleIssue);
+            } else {
+                HealthMonitor.resolveIssue(compactionCycleIssue);
+            }
         } catch (RuntimeException re) {
             //Do not retry here, the compactor service will trigger this method again
             syslog.warn("Exception in finishCompactionCycle: {}. StackTrace={}", re, re.getStackTrace());

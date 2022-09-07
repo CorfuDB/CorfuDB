@@ -3,6 +3,9 @@ package org.corfudb.infrastructure;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.NonNull;
+import org.corfudb.infrastructure.health.Component;
+import org.corfudb.infrastructure.health.HealthMonitor;
+import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
@@ -84,6 +87,7 @@ public class CompactorService implements ManagementService {
                 interval.toMillis(),
                 TimeUnit.MILLISECONDS
         );
+        HealthMonitor.resolveIssue(Issue.createInitIssue(Component.COMPACTOR));
     }
 
     @VisibleForTesting
@@ -168,5 +172,6 @@ public class CompactorService implements ManagementService {
         checkpointerJvmManager.shutdown();
         orchestratorThread.shutdownNow();
         syslog.info("Compactor Orchestrator service shutting down.");
+        HealthMonitor.reportIssue(Issue.createInitIssue(Component.COMPACTOR));
     }
 }

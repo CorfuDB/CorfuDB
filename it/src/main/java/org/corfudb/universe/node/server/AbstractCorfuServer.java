@@ -54,7 +54,10 @@ public abstract class AbstractCorfuServer<T extends CorfuServerParams, U extends
         if (params.getMode() == Mode.SINGLE) {
             cmd.append(" -s");
         }
-
+        if (params.healthPortEnabled()) {
+            int healthPort = params.getHealthPort();
+            cmd.append(" --health-port=").append(healthPort);
+        }
         cmd.append(" --log-size-quota-percentage=").append(params.getLogSizeQuotaPercentage()).append(" ");
 
         cmd.append(" -d ").append(params.getLogLevel().toString()).append(" ");
@@ -62,7 +65,7 @@ public abstract class AbstractCorfuServer<T extends CorfuServerParams, U extends
         cmd.append(params.getPort());
 
         String cmdLineParams = cmd.toString();
-        log.trace("Corfu server. Command line parameters: {}", cmdLineParams);
+        log.info("Corfu server. Command line parameters: {}", cmdLineParams);
 
         return cmdLineParams;
     }

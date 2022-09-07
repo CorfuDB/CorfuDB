@@ -6,6 +6,9 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.health.Component;
+import org.corfudb.infrastructure.health.HealthMonitor;
+import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
@@ -137,7 +140,7 @@ public class LogUnitServer extends AbstractServer {
         this.serverContext = serverContext;
         config = LogUnitServerConfig.parse(serverContext.getServerConfig());
         executor = serverContext.getExecutorService(serverContext.getLogUnitThreadCount(), "LogUnit-");
-
+        HealthMonitor.reportIssue(Issue.createInitIssue(Component.LOG_UNIT));
         if (config.isMemoryMode()) {
             log.warn("Log unit opened in-memory mode (Maximum size={}). "
                     + "This should be run for testing purposes only. "
@@ -536,6 +539,7 @@ public class LogUnitServer extends AbstractServer {
         logCleaner.shutdown();
         batchWriter.close();
         streamLog.close();
+        HealthMonitor.reportIssue(Issue.createInitIssue(Component.LOG_UNIT));
     }
 
     @VisibleForTesting

@@ -8,6 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.health.HealthMonitor;
+import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.infrastructure.log.FileSystemAgent.PartitionAgent.PartitionAttribute;
 import org.corfudb.infrastructure.log.StreamLog.PersistenceMode;
 import org.corfudb.runtime.exceptions.LogUnitException;
@@ -29,6 +31,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.corfudb.infrastructure.health.Component.LOG_UNIT;
+import static org.corfudb.infrastructure.log.FileSystemAgent.PartitionAgent.*;
 
 @Slf4j
 public final class FileSystemAgent {
@@ -42,6 +46,9 @@ public final class FileSystemAgent {
     private final ResourceQuota logSizeQuota;
 
     private final PartitionAttribute partitionAttribute;
+
+    private static final ScheduledExecutorService scheduler =
+            Executors.newSingleThreadScheduledExecutor();
 
     private FileSystemAgent(FileSystemConfig config) {
         this.config = config;
@@ -62,7 +69,8 @@ public final class FileSystemAgent {
 
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
         logSizeQuota.consume(initialLogSize);
-
+        scheduler.scheduleWithFixedDelay(
+                this::reportQuotaExceeded, 0, 1, SECONDS);
         log.info("FileSystemAgent: {} size is {} bytes, limit {}", config.logDir, initialLogSize, logSizeLimit);
     }
 
@@ -72,6 +80,24 @@ public final class FileSystemAgent {
         // Derived size in bytes that normal writes to the log unit are capped at.
         // This is derived as a percentage of the log's filesystem capacity.
         return (long) (fileSystemCapacity * config.limitPercentage / 100);
+    }
+
+    private void reportQuotaExceeded() {
+        try {
+            Issue issue = Issue.createIssue(LOG_UNIT, Issue.IssueId.QUOTA_EXCEEDED_ERROR, "Quota exceeded");
+            log.info("Available: " + getResourceQuota().getAvailable());
+            if (!getResourceQuota().hasAvailable()) {
+                log.info("Reporting exceeded quota");
+                HealthMonitor.reportIssue(issue);
+            } else {
+                log.info("Resolving exceeded quota");
+                HealthMonitor.resolveIssue(issue);
+            }
+        }
+        catch (Exception e) {
+            log.error("Exception in quota monitor:", e);
+        }
+
     }
 
     public static void init(FileSystemConfig config) {
@@ -203,23 +229,23 @@ public final class FileSystemAgent {
             logPartition = Paths.get(config.logDir.getRoot().toString(),
                     config.logDir.subpath(0, 1).toString());
             initializeScheduler();
-            setPartitionAttribute();
+            setPartitionAttributeAndReportQuota();
         }
 
         /**
          * Resets PartitionAttribute's fields every {@link PartitionAttribute#UPDATE_INTERVAL}
          * seconds after the previous set task is completed.
          */
-        private void initializeScheduler(){
+        private void initializeScheduler() {
             scheduledFuture = scheduler.scheduleWithFixedDelay(
-                    this::setPartitionAttribute, NO_DELAY, UPDATE_INTERVAL, SECONDS
+                    this::setPartitionAttributeAndReportQuota, NO_DELAY, UPDATE_INTERVAL, SECONDS
             );
         }
 
         /**
          * Sets PartitionAttribute's fields with the values from log file and the log partition.
          */
-        private void setPartitionAttribute() {
+        private void setPartitionAttributeAndReportQuota() {
             log.info("setPartitionAttribute: fetching PartitionAttribute.");
             try {
                 // Log path to check if it is in readOnly mode
@@ -234,6 +260,7 @@ public final class FileSystemAgent {
                 );
                 log.info("setPartitionAttribute: fetched PartitionAttribute successfully. " +
                         "{}", partitionAttribute);
+
             } catch (Exception ex) {
                 log.error("setPartitionAttribute: Error while fetching PartitionAttributes.", ex);
             }

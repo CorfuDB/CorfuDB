@@ -17,6 +17,9 @@ import org.corfudb.common.compression.Codec;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.health.Component;
+import org.corfudb.infrastructure.health.HealthMonitor;
+import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.infrastructure.log.FileSystemAgent.FileSystemConfig;
 import org.corfudb.infrastructure.log.LogFormat.CheckpointEntryType;
 import org.corfudb.infrastructure.log.LogFormat.DataType;
@@ -125,6 +128,7 @@ public class StreamLogFiles implements StreamLog {
      * @param noVerify      Disable checksum if true
      */
     public StreamLogFiles(ServerContext serverContext, boolean noVerify) {
+
         logDir = Paths.get(serverContext.getServerConfig().get("--log-path").toString(), "log");
         writeChannels = new ConcurrentHashMap<>();
         channelsToSync = new HashSet<>();

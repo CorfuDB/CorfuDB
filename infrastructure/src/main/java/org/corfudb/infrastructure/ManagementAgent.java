@@ -1,9 +1,13 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.collect.ImmutableList;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.health.Component;
+import org.corfudb.infrastructure.health.HealthMonitor;
+import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.runtime.CorfuRuntime;
@@ -136,8 +140,13 @@ public class ManagementAgent {
                 failureDetector,
                 localMonitoringService
         );
+        HealthMonitor.reportIssue(Issue.createInitIssue(Component.FAILURE_DETECTOR));
 
         this.autoCommitService = new AutoCommitService(serverContext, runtimeSingletonResource);
+
+        if (serverContext.getServerConfig(String.class, "--compactor-script") != null) {
+            HealthMonitor.reportIssue(Issue.createInitIssue(Component.COMPACTOR));
+        }
 
         this.compactorService = new CompactorService(serverContext, runtimeSingletonResource,
                 new InvokeCheckpointingJvm(serverContext), new DynamicTriggerPolicy());
@@ -189,7 +198,6 @@ public class ManagementAgent {
      */
     private void initializationTask() {
         log.info("Start initialization task");
-
         // Wait for management server to be bootstrapped.
         try {
             while (!shutdown && serverContext.getManagementLayout() == null) {
