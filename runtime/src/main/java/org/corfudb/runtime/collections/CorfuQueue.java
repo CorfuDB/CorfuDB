@@ -315,8 +315,9 @@ public class CorfuQueue {
         Comparator<Map.Entry<CorfuRecordId, ByteString>> recordIdComparator = Comparator.comparing(Map.Entry::getKey);
         for (Map.Entry<CorfuRecordId, ByteString> entry : corfuTable.entryStream()
                 .filter(e -> e.getKey().compareTo(entriesAfter) > 0)
+                .sorted(recordIdComparator)
                 .limit(maxEntries)
-                .sorted(recordIdComparator).collect(Collectors.toList())) {
+                .collect(Collectors.toList())) {
             copy.add(new CorfuQueueRecord(entry.getKey(), entry.getValue()));
         }
         return copy;
