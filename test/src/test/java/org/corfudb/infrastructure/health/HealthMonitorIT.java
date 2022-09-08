@@ -121,14 +121,14 @@ public class HealthMonitorIT extends AbstractIT {
                 .status(false)
                 .reason("Some of the services are not initialized")
                 .init(ImmutableMap.of(
-                        Component.LOG_UNIT, new ReportedHealthStatus(true, "Initialization successful"),
+                        Component.LOG_UNIT, new ReportedHealthStatus(false, "Service is not initialized"),
                         Component.LAYOUT_SERVER, new ReportedHealthStatus(false, "Service is not initialized"),
                         Component.ORCHESTRATOR, new ReportedHealthStatus(true, "Initialization successful"),
                         Component.FAILURE_DETECTOR, new ReportedHealthStatus(false, "Service is not initialized"),
                         Component.SEQUENCER, new ReportedHealthStatus(false, "Service is not initialized")
                 ))
                 .runtime(ImmutableMap.of(
-                        Component.LOG_UNIT, new ReportedHealthStatus(true, "Up and running"),
+                        Component.LOG_UNIT, new ReportedHealthStatus(false, "Service is not running"),
                         Component.LAYOUT_SERVER, new ReportedHealthStatus(false, "Service is not running"),
                         Component.ORCHESTRATOR, new ReportedHealthStatus(true, "Up and running"),
                         Component.FAILURE_DETECTOR, new ReportedHealthStatus(false, "Service is not running"),

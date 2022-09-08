@@ -13,10 +13,12 @@ public class CorfuServerParamsTest {
     @Test
     public void testEquals() {
         final int port = 9000;
+        final int healthPort = 8080;
 
         CorfuServerParams p1 = CorfuServerParams.serverParamsBuilder()
                 .clusterName("test-cluster")
                 .port(port)
+                .healthPort(healthPort)
                 .logLevel(Level.TRACE)
                 .mode(CorfuServer.Mode.CLUSTER)
                 .persistence(CorfuServer.Persistence.DISK)
@@ -27,6 +29,7 @@ public class CorfuServerParamsTest {
         CorfuServerParams p2 = CorfuServerParams.serverParamsBuilder()
                 .clusterName("test-cluster")
                 .port(port)
+                .healthPort(healthPort)
                 .logLevel(Level.WARN)
                 .mode(CorfuServer.Mode.CLUSTER)
                 .persistence(CorfuServer.Persistence.DISK)

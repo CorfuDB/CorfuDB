@@ -37,8 +37,6 @@ public class CorfuServerParams implements NodeParams {
     private final int port = ServerUtil.getRandomOpenPort();
 
     @Default
-    private final AtomicInteger healthServerPortBase = new AtomicInteger(-1);
-
     private final int healthPort = ServerUtil.getRandomOpenPort();
 
     @Default
@@ -108,7 +106,7 @@ public class CorfuServerParams implements NodeParams {
     }
 
     public String getDockerImageNameFullName() {
-        return dockerImage + ":" + "0.4.0-SNAPSHOT";
+        return dockerImage + ":" + serverVersion;
     }
 
     public Path getInfrastructureJar() {
