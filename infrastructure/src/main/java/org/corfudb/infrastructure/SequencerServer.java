@@ -39,6 +39,8 @@ import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
+
+import java.time.Duration;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -201,7 +203,12 @@ public class SequencerServer extends AbstractServer {
 
     @Override
     protected void processRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
-        executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
+        // Capture total cost: queueing delay + handler cost
+        long start = System.nanoTime();
+        executor.submit(() -> {
+            getHandlerMethods().handle(req, ctx, r);
+            MicroMeterUtils.time(Duration.ofNanos(System.nanoTime() - start), "sequencer.loop.latency");
+        });
     }
 
     @Override
