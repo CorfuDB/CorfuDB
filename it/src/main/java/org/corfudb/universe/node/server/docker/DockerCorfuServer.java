@@ -345,8 +345,9 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
         }
 
         HostConfig.Builder hostConfigBuilder = HostConfig.builder();
-        params.getContainerResources()
-                .ifPresent(limits -> hostConfigBuilder.memory(limits.getMemory()));
+        if (params.getContainerResources().getMemory().isPresent()) {
+            hostConfigBuilder.memory(params.getContainerResources().getMemory().get());
+        }
 
         HostConfig hostConfig = hostConfigBuilder
                 .privileged(true)

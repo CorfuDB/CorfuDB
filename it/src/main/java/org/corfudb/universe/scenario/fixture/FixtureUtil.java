@@ -51,7 +51,7 @@ public class FixtureUtil {
                 .map(port -> serverBuilder
                         .port(port)
                         .clusterName(cluster.getName())
-                        .containerResources(Optional.of(ContainerResources.builder().build()))
+                        .containerResources(cluster.getContainerResources())
                         .serverVersion(cluster.getServerVersion())
                         .build()
                 )

@@ -2,6 +2,7 @@ package org.corfudb.universe.node.server;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import org.corfudb.universe.node.server.CorfuServerParams.ContainerResources;
 import org.junit.Test;
 import org.slf4j.event.Level;
 
@@ -22,6 +23,7 @@ public class CorfuServerParamsTest {
                 .persistence(CorfuServer.Persistence.DISK)
                 .stopTimeout(Duration.ofSeconds(123))
                 .serverVersion("1.0.0")
+                .containerResources(ContainerResources.builder().build())
                 .build();
 
         CorfuServerParams p2 = CorfuServerParams.serverParamsBuilder()
@@ -32,6 +34,7 @@ public class CorfuServerParamsTest {
                 .persistence(CorfuServer.Persistence.DISK)
                 .stopTimeout(Duration.ofSeconds(555))
                 .serverVersion("1.0.0")
+                .containerResources(ContainerResources.builder().build())
                 .build();
 
         assertThat(p1).isEqualTo(p2);

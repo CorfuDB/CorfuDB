@@ -75,6 +75,7 @@ public interface Fixtures {
 
         private final UniverseParamsBuilder universe = UniverseParams.universeBuilder();
 
+        @Getter
         private final CorfuClusterParamsBuilder<CorfuServerParams> cluster = CorfuClusterParams
                 .builder();
 
