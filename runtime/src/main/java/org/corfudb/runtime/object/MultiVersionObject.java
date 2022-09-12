@@ -48,7 +48,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
     /**
      * Metadata on object versions generated.
      */
-    private final StreamAddressSpace addressSpace;
+    private StreamAddressSpace addressSpace;
 
     /**
      * Current state of the underlying object. We maintain a reference here explicitly
@@ -358,6 +358,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         currentObject.close();
         currentObject = newObjectFn.get();
         currentObjectVersion = Address.NON_EXIST;
+        addressSpace = new StreamAddressSpace();
         smrStream.reset();
     }
 
