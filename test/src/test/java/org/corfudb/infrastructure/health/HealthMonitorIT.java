@@ -23,8 +23,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.health.HealthReport.ReportedHealthStatus;
@@ -33,36 +31,38 @@ import static org.corfudb.infrastructure.health.HealthReport.builder;
 @Slf4j
 public class HealthMonitorIT extends AbstractIT {
 
-    private static final int CORFU_PORT = 9000;
-    private static final int HEALTH_PORT = 8080;
+    private static final int CORFU_PORT_1 = 9000;
+    private static final int CORFU_PORT_2 = 9001;
+    private static final int HEALTH_PORT_1 = 8080;
+    private static final int HEALTH_PORT_2 = 8081;
     private static final String ADDRESS = "localhost";
     private static final int RETRIES = 3;
     private static final int WAIT_TIME_MILLIS = 1000;
 
-    private Process runCorfuServerWithHealthMonitor() throws IOException {
+    private Process runCorfuServerWithHealthMonitor(int port, int healthPort) throws IOException {
         return new CorfuServerRunner()
                 .setHost(ADDRESS)
-                .setPort(CORFU_PORT)
-                .setHealthPort(HEALTH_PORT)
-                .setLogPath(getCorfuServerLogPath(ADDRESS, CORFU_PORT))
+                .setPort(port)
+                .setHealthPort(healthPort)
+                .setLogPath(getCorfuServerLogPath(ADDRESS, port))
                 .setSingle(false)
                 .runServer();
     }
 
-    private Process runCorfuServerWithHealthMonitorAndExceededQuota() throws IOException {
+    private Process runCorfuServerWithHealthMonitorAndExceededQuota(int port, int healthPort) throws IOException {
         return new CorfuServerRunner()
                 .setHost(ADDRESS)
-                .setPort(CORFU_PORT)
-                .setHealthPort(HEALTH_PORT)
+                .setPort(port)
+                .setHealthPort(healthPort)
                 .setLogSizeLimitPercentage("0.00000001")
-                .setLogPath(getCorfuServerLogPath(ADDRESS, CORFU_PORT))
+                .setLogPath(getCorfuServerLogPath(ADDRESS, port))
                 .setSingle(false)
                 .runServer();
     }
 
-    private Layout getLayout() {
+    private Layout getLayout(int port) {
         List<String> servers = new ArrayList<>();
-        String serverAddress = ADDRESS + ":" + CORFU_PORT;
+        String serverAddress = ADDRESS + ":" + port;
         servers.add(serverAddress);
 
         return new Layout(
@@ -78,8 +78,8 @@ public class HealthMonitorIT extends AbstractIT {
     }
 
     @SuppressWarnings("checkstyle:magicnumber")
-    private HealthReport queryCurrentHealthReport() throws IOException {
-        URL url = new URL("http://" + ADDRESS + ":" + HEALTH_PORT + "/health");
+    private HealthReport queryCurrentHealthReport(int healthPort) throws IOException {
+        URL url = new URL("http://" + ADDRESS + ":" + healthPort + "/health");
         HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
         urlConnection.setRequestMethod("GET");
         urlConnection.setRequestProperty("Content-Type", "application/json");
@@ -116,7 +116,7 @@ public class HealthMonitorIT extends AbstractIT {
     @Test
     @SuppressWarnings("checkstyle:magicnumber")
     void testInitComponentsHealth() throws IOException, InterruptedException {
-        Process corfuServer = runCorfuServerWithHealthMonitor();
+        Process corfuServer = runCorfuServerWithHealthMonitor(CORFU_PORT_1, HEALTH_PORT_1);
         HealthReport expectedHealthReport = builder()
                 .status(false)
                 .reason("Some of the services are not initialized")
@@ -136,10 +136,11 @@ public class HealthMonitorIT extends AbstractIT {
                 ))
                 .build();
         Thread.sleep(WAIT_TIME_MILLIS * 3);
-        assertThat(queryCurrentHealthReport()).isEqualTo(expectedHealthReport);
+
+        assertThat(queryCurrentHealthReport(HEALTH_PORT_1)).isEqualTo(expectedHealthReport);
 
         // Bootstrap corfu - services become healthy
-        BootstrapUtil.bootstrap(getLayout(), RETRIES, PARAMETERS.TIMEOUT_SHORT);
+        BootstrapUtil.bootstrap(getLayout(CORFU_PORT_1), RETRIES, PARAMETERS.TIMEOUT_SHORT);
         Thread.sleep(WAIT_TIME_MILLIS * 2);
         expectedHealthReport = builder()
                 .status(true)
@@ -159,27 +160,28 @@ public class HealthMonitorIT extends AbstractIT {
                         Component.SEQUENCER, new ReportedHealthStatus(true, "Up and running")
                 ))
                 .build();
-        assertThat(queryCurrentHealthReport()).isEqualTo(expectedHealthReport);
+
+        assertThat(queryCurrentHealthReport(HEALTH_PORT_1)).isEqualTo(expectedHealthReport);
 
         // Kill the process and start again - corfu still should be healthy because it's bootstrapped
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
-        Process restartedServer = runCorfuServerWithHealthMonitor();
+        Process restartedServer = runCorfuServerWithHealthMonitor(CORFU_PORT_1, HEALTH_PORT_1);
         Thread.sleep(WAIT_TIME_MILLIS * 3);
-        assertThat(queryCurrentHealthReport()).isEqualTo(expectedHealthReport);
+        assertThat(queryCurrentHealthReport(HEALTH_PORT_1)).isEqualTo(expectedHealthReport);
         assertThat(shutdownCorfuServer(restartedServer)).isTrue();
     }
 
     @Test
     @SuppressWarnings("checkstyle:magicnumber")
     void testQuotaExceededReport() throws IOException, InterruptedException {
-        final Process process = runCorfuServerWithHealthMonitorAndExceededQuota();
-        BootstrapUtil.bootstrap(getLayout(), RETRIES, PARAMETERS.TIMEOUT_SHORT);
-        final CorfuRuntime defaultRuntime = createDefaultRuntime();
+        final Process process = runCorfuServerWithHealthMonitorAndExceededQuota(CORFU_PORT_2, HEALTH_PORT_2);
+        BootstrapUtil.bootstrap(getLayout(CORFU_PORT_2), RETRIES, PARAMETERS.TIMEOUT_SHORT);
+        final CorfuRuntime defaultRuntime = createRuntime("localhost:" +  CORFU_PORT_2);
         while (true) {
             TokenResponse token = defaultRuntime.getSequencerView().next();
             try {
                 CFUtils.getUninterruptibly(defaultRuntime.getLayoutView().getRuntimeLayout()
-                        .getLogUnitClient("localhost:9000")
+                        .getLogUnitClient("localhost:" +  CORFU_PORT_2)
                         .write(getLogData(token, "some data".getBytes())), QuotaExceededException.class);
             }
             catch (QuotaExceededException qee) {
@@ -207,19 +209,19 @@ public class HealthMonitorIT extends AbstractIT {
                 ))
                 .build();
 
-        HealthReport healthReport = queryCurrentHealthReport();
+        HealthReport healthReport = queryCurrentHealthReport(HEALTH_PORT_2);
         assertThat(healthReport).isEqualTo(expectedHealthReport);
         assertThat(shutdownCorfuServer(process)).isTrue();
         // Bring corfu again and verify that the issue persists
-        Process anotherProcess = runCorfuServerWithHealthMonitorAndExceededQuota();
+        Process anotherProcess = runCorfuServerWithHealthMonitorAndExceededQuota(CORFU_PORT_2, HEALTH_PORT_2);
         Thread.sleep(WAIT_TIME_MILLIS * 2);
-        healthReport = queryCurrentHealthReport();
+        healthReport = queryCurrentHealthReport(HEALTH_PORT_2);
         assertThat(healthReport).isEqualTo(expectedHealthReport);
         assertThat(shutdownCorfuServer(anotherProcess)).isTrue();
         // Now bring corfu such that the quota is not exceed
-        Process anotherProcessAgain = runCorfuServerWithHealthMonitor();
+        Process anotherProcessAgain = runCorfuServerWithHealthMonitor(CORFU_PORT_2, HEALTH_PORT_2);
         Thread.sleep(WAIT_TIME_MILLIS * 2);
-        healthReport = queryCurrentHealthReport();
+        healthReport = queryCurrentHealthReport(HEALTH_PORT_2);
         expectedHealthReport = builder()
                 .status(true)
                 .reason("Healthy")
@@ -240,6 +242,7 @@ public class HealthMonitorIT extends AbstractIT {
                 .build();
         assertThat(healthReport).isEqualTo(expectedHealthReport);
         assertThat(shutdownCorfuServer(anotherProcessAgain)).isTrue();
+        defaultRuntime.shutdown();
     }
 
 }
