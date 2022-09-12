@@ -2,6 +2,7 @@ package org.corfudb.runtime;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
+import com.sun.management.HotSpotDiagnosticMXBean;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.Getter;
@@ -25,6 +26,9 @@ import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.corfudb.util.serializer.Serializers;
 
+import javax.management.MBeanServer;
+import java.io.IOException;
+import java.lang.management.ManagementFactory;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -189,6 +193,20 @@ public class CheckpointWriter<T extends StreamingMap> {
         return snapshotTimestamp;
     }
 
+    public void createHeapDump(String fileName) {
+        MBeanServer server = ManagementFactory.getPlatformMBeanServer();
+        HotSpotDiagnosticMXBean mxBean = null;
+        try {
+            mxBean = ManagementFactory.newPlatformMXBeanProxy(
+                    server, "com.sun.management:type=HotSpotDiagnostic", HotSpotDiagnosticMXBean.class);
+            log.info("created mxBean");
+            mxBean.dumpHeap("/image/core/" + fileName, false);
+            log.info("created heapdump {} ", fileName);
+        } catch (IOException e) {
+            log.error("Error during heap-dump generation");
+        }
+    }
+
     private Set<UUID> discoverTableTags(UUID stream) {
         Set<UUID> tags = new HashSet<>();
         Set<CorfuStoreMetadata.TableName> names = ((DynamicProtobufSerializer) serializer).getCachedRegistryTable().keySet();
@@ -316,6 +334,8 @@ public class CheckpointWriter<T extends StreamingMap> {
         MultiSMREntry smrEntries = new MultiSMREntry();
 
         Iterator<Map.Entry> iterator = entryStream.iterator();
+
+        int numEntriesCount = 0;
         while (iterator.hasNext()) {
             Map.Entry entry = iterator.next();
             SMREntry smrPutEntry = new SMREntry("put",
@@ -334,6 +354,18 @@ public class CheckpointWriter<T extends StreamingMap> {
                             inputBuffer.readerIndex(), inputBuffer.writerIndex()));
 
             numBytesPerCheckpointEntry += compressedBuffer.limit();
+
+            if(streamId.toString().equals("97de7d25-a060-3ff7-a3db-32da444533e9")) {
+                ++numEntriesCount;
+                if(numEntriesCount == 42) {
+                    createHeapDump("nonConfig-duringCheckpoint.hprof");
+                }
+            } else if(streamId.toString().equals("dabf8af4-9eb6-3374-9a18-d273ed7132e9")) {
+                ++numEntriesCount;
+                if (numEntriesCount == 36619) {
+                    createHeapDump("config-duringCheckpoint.hprof");
+                }
+            }
 
             /* CheckpointEntry has some metadata and make the total size larger than the actual size
              * of SMR entries. Its a safeguard against the smr entries amounting to the actual
@@ -380,7 +412,6 @@ public class CheckpointWriter<T extends StreamingMap> {
 
         CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.END,
                 author, checkpointId, streamId, mdkv, null);
-
         long endAddress = nonCachedAppend(cp, checkpointStreamID);
 
         postAppendFunc.accept(cp, endAddress);

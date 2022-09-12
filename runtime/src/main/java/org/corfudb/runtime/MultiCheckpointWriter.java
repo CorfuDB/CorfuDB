@@ -49,7 +49,8 @@ public class MultiCheckpointWriter<T extends StreamingMap> {
         log.info("appendCheckpoints: appending checkpoints for {} maps", maps.size());
 
         Token minSnapshot = Token.UNINITIALIZED;
-
+        CheckpointWriter<T> cpwForHeapDump = null;
+        String streamID = null;
         final long cpStart = System.currentTimeMillis();
         try {
             for (ICorfuSMR<T> map : maps) {
@@ -59,6 +60,16 @@ public class MultiCheckpointWriter<T extends StreamingMap> {
                 ISerializer serializer = ((CorfuCompileProxy) map.getCorfuSMRProxy())
                                 .getSerializer();
                 cpw.setSerializer(serializer);
+
+                if(streamId.toString().equals("97de7d25-a060-3ff7-a3db-32da444533e9")) {
+                    cpwForHeapDump = cpw;
+                    cpw.createHeapDump("nonConfig-beforeCheckpoint.hprof");
+                    streamID = streamId.toString();
+                } else if(streamId.toString().equals("dabf8af4-9eb6-3374-9a18-d273ed7132e9")) {
+                    cpwForHeapDump = cpw;
+                    cpw.createHeapDump("config-beforeCheckpoint.hprof");
+                    streamID = streamId.toString();
+                }
 
                 Token minCPSnapshot = Token.UNINITIALIZED;
                 while (retry < numRetries) {
@@ -98,6 +109,13 @@ public class MultiCheckpointWriter<T extends StreamingMap> {
 
         log.info("appendCheckpoints: took {} ms to append {} checkpoints", cpStop - cpStart,
                 maps.size());
+
+        if(streamID.equals("97de7d25-a060-3ff7-a3db-32da444533e9")) {
+            cpwForHeapDump.createHeapDump("nonConfig-afterCheckpoint.hprof");
+        } else if(streamID.equals("dabf8af4-9eb6-3374-9a18-d273ed7132e9")) {
+            cpwForHeapDump.createHeapDump("config-afterCheckpoint.hprof");
+        }
+
         return minSnapshot;
     }
 
