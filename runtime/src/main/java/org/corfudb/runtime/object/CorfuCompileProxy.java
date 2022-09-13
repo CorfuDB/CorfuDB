@@ -247,6 +247,12 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
         // If we aren't coming from a transactional context,
         // redirect us to a transactional context first.
         if (TransactionalContext.isInTransaction()) {
+            // Monotonic objects leverage a no-op optimistic stream,
+            // therefore, we must stub the upcall result.
+            if (underlyingObject.isMonotonicObject()) {
+                return null;
+            }
+
             try {
                 return (R) TransactionalContext.getCurrentContext()
                         .getUpcallResult(this, timestamp, conflictObject);
