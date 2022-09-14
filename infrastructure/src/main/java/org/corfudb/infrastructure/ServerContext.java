@@ -231,6 +231,16 @@ public class ServerContext implements AutoCloseable {
     }
 
     /**
+     * Get a new ExecutorService backed by a cached thread pool.
+     * @param threadPrefix  The naming prefix
+     * @return The newly created ExecutorService
+     */
+    public static ExecutorService getCachedExecutorService(@Nonnull String threadPrefix) {
+        return Executors.newCachedThreadPool(
+                new ServerThreadFactory(threadPrefix, new ServerThreadFactory.ExceptionHandler()));
+    }
+
+    /**
      * Get the max number of messages can be sent over per batch.
      * @return
      */

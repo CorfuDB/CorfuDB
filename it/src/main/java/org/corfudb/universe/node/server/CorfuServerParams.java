@@ -102,7 +102,7 @@ public class CorfuServerParams implements NodeParams {
     }
 
     public String getDockerImageNameFullName() {
-        return dockerImage + ":" + serverVersion;
+        return (dockerImage + ":" + serverVersion).trim();
     }
 
     public Path getInfrastructureJar() {
