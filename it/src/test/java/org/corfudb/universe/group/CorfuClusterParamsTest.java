@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.corfudb.universe.group.cluster.CorfuClusterParams;
 import org.corfudb.universe.node.server.CorfuServerParams;
+import org.corfudb.universe.node.server.CorfuServerParams.ContainerResources;
 import org.corfudb.universe.node.server.ServerUtil;
 import org.junit.Test;
 
@@ -23,6 +24,7 @@ public class CorfuClusterParamsTest {
                 .port(port)
                 .clusterName(clusterName)
                 .serverVersion("1.0.0")
+                .containerResources(ContainerResources.builder().build())
                 .build();
 
         SortedSet<CorfuServerParams> corfuServers = new TreeSet<>(Collections.singletonList(param));

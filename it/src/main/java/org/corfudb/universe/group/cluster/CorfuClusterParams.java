@@ -13,6 +13,7 @@ import org.corfudb.universe.group.Group.GroupParams;
 import org.corfudb.universe.group.cluster.Cluster.ClusterType;
 import org.corfudb.universe.node.Node.NodeType;
 import org.corfudb.universe.node.server.CorfuServerParams;
+import org.corfudb.universe.node.server.CorfuServerParams.ContainerResources;
 
 import java.time.Duration;
 import java.util.List;
@@ -34,6 +35,11 @@ public class CorfuClusterParams<T extends CorfuServerParams> implements GroupPar
     @Default
     @Getter
     private final int numNodes = 3;
+
+    @Default
+    @Getter
+    private final ContainerResources containerResources =
+            ContainerResources.builder().build();
 
     /**
      * Corfu server version, for instance: 0.4.0-SNAPSHOT

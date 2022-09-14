@@ -60,7 +60,7 @@ public class UniverseManager {
         return wf;
     }
 
-    private <T extends Fixture<UniverseParams>> UniverseWorkflow<T> workflow() {
+    public <T extends Fixture<UniverseParams>> UniverseWorkflow<T> workflow() {
 
         T fixture;
         switch (universeMode) {
