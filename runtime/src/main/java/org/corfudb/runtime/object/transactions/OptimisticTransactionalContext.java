@@ -102,7 +102,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                                     o::setUncommittedChanges);
                         },
                         accessFunction::access,
-                        version -> updateKnownStreamPosition(proxy.getStreamID(), version)
+                        version -> updateKnownStreamPosition(proxy, version)
         );
     }
 
@@ -236,14 +236,22 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         }
 
         // If the write set is empty, this is a read-only transaction.
-        // Return the max address of all accessed streams, this will provide a safe token of the
+        // If the transaction has only read non-monotonic objects, then return the
+        // max address of all accessed streams, this will provide a safe token of the
         // transaction's snapshot. Notice that, providing the snapshot of the tx (vs. max address)
         // can lead to data loss, as a sequencer reboot might incur in sequence regression.
         // This timestamp is aimed to provide clients with a secure point for delta/streaming
         // subscription, the later could lead to data loss scenarios.
+        // If the transaction has read monotonic objects, we instead return the min address
+        // of all accessed streams. Although this avoids data loss, clients subscribing at
+        // this point for delta/streaming may observe duplicate data.
         if (getWriteSetInfo().getWriteSet().getEntryMap().isEmpty()) {
             log.trace("Commit[{}] Read-only commit (no write)", this);
-            return getMaxAddressRead();
+            if (hasAccessedMonotonicObject) {
+                return getMinAddressRead();
+            } else {
+                return getMaxAddressRead();
+            }
         }
 
         Set<UUID> affectedStreamsIds = new HashSet<>(getWriteSetInfo()

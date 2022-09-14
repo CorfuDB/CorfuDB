@@ -25,6 +25,7 @@ import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.EventInfo;
 import org.corfudb.test.SampleSchema.Uuid;
@@ -44,7 +45,6 @@ import java.util.AbstractMap.SimpleEntry;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -60,11 +60,18 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoCloseable {
 
-    private final static Path persistedCacheLocation = Paths.get("/tmp/", "diskBackedMap2");
-    private final static int SAMPLE_SIZE = 100;
-    private final static int NUM_OF_TRIES = 1;
-    private final static int STRING_MIN = 5;
-    private final static int STRING_MAX = 10;
+    private static final String defaultMapName = "diskBackedMap";
+    private static final String alternateMapName = "diskBackedMap2";
+    private static final String diskBackedDirectory = "/tmp/";
+
+    private static final Path persistedCacheLocation = Paths.get(diskBackedDirectory, alternateMapName);
+    private static final int SAMPLE_SIZE = 100;
+    private static final int NUM_OF_TRIES = 1;
+    private static final int STRING_MIN = 5;
+    private static final int STRING_MAX = 10;
+
+    private static final String nonExistingKey = "nonExistingKey";
+    private static final String defaultNewMapEntry = "newEntry";
 
     public DiskBackedCorfuClientTest() {
         AbstractViewTest.initEventGroup();
@@ -122,8 +129,8 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
         public final String payload;
     }
 
-    private CorfuTable<String, String> setupTable() {
-        final Path persistedCacheLocation = Paths.get("/tmp/", "diskBackedMap");
+    private CorfuTable<String, String> setupTable(String streamName) {
+        final Path persistedCacheLocation = Paths.get(diskBackedDirectory, streamName);
         final Options options = new Options().setCreateIfMissing(true);
         final Supplier<StreamingMap> mapSupplier = () -> new PersistedStreamingMap<String, String>(
                 persistedCacheLocation, options,
@@ -131,23 +138,29 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
         return getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setArguments(mapSupplier, ICorfuVersionPolicy.MONOTONIC)
-                .setStreamName("diskBackedMap")
+                .setStreamName(streamName)
                 .open();
+    }
+
+    private CorfuTable<String, String> setupTable() {
+        return setupTable(defaultMapName);
     }
 
     /**
      * Executed the specified function in a transaction.
-     *
      * @param functor function which will be executed within a transaction
+     * @return the address of the commit
      */
-    private void executeTx(Runnable functor) {
+    private long executeTx(Runnable functor) {
+        long commitAddress;
         getDefaultRuntime().getObjectsView().TXBegin();
         try {
             functor.run();
         } finally {
-            getDefaultRuntime().getObjectsView().TXEnd();
+            commitAddress = getDefaultRuntime().getObjectsView().TXEnd();
         }
 
+        return commitAddress;
     }
 
     @Override
@@ -180,7 +193,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
         final CorfuTable<String, String> table = getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setArguments(mapSupplier,ICorfuVersionPolicy.MONOTONIC)
-                .setStreamName("diskBackedMap")
+                .setStreamName(defaultMapName)
                 .open();
 
         final long ITERATION_COUNT = 100000;
@@ -216,7 +229,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
                 table = getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<String, Pojo>>() {})
                 .setArguments(mapSupplier, ICorfuVersionPolicy.MONOTONIC)
-                .setStreamName("diskBackedMap")
+                .setStreamName(defaultMapName)
                 .open();
 
         final long ITERATION_COUNT = 100;
@@ -236,10 +249,10 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
     }
 
     /**
-     * Non-transactional property based test that does puts followed by scan and filter.
+     * Transactional property based test that does puts followed by scan and filter.
      */
     @Property(tries = NUM_OF_TRIES)
-    void nonTxPutScanAndFilter(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
+    void txPutScanAndFilter(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
         resetTests();
         try (final CorfuTable<String, String> table = setupTable()) {
             executeTx(() -> intended.forEach(value -> table.put(value, value)));
@@ -255,10 +268,10 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
 
 
     /**
-     * Transactional property based test that does puts followed by scan and filter.
+     * Non-transactional property based test that does puts followed by scan and filter.
      */
     @Property(tries = NUM_OF_TRIES)
-    void txPutScanAndFilter(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
+    void nonTxPutScanAndFilter(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
         resetTests();
         try (final CorfuTable<String, String> table = setupTable()) {
             intended.forEach(value -> table.put(value, value));
@@ -393,6 +406,86 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
     }
 
     /**
+     * Verify commit address of empty transactions.
+     */
+    @Property(tries = NUM_OF_TRIES)
+    void verifyCommitAddressEmpty(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
+        resetTests();
+        try (final CorfuTable<String, String> table = setupTable()) {
+            assertThat(executeTx(() -> {})).isEqualTo(Address.NON_ADDRESS);
+            intended.forEach(value -> table.put(value, value));
+            assertThat(executeTx(() -> {})).isEqualTo(intended.size() - 1);
+        }
+    }
+
+    /**
+     * Verify commit address of transactions for disk-backed tables.
+     */
+    @Property(tries = NUM_OF_TRIES)
+    void verifyCommitAddressMultiTable(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
+        resetTests();
+        try (final CorfuTable<String, String> table1 = setupTable();
+             final CorfuTable<String, String> table2 = setupTable(alternateMapName)) {
+            table1.put(defaultNewMapEntry, defaultNewMapEntry);
+
+            assertThat(executeTx(() -> {
+                table1.get(nonExistingKey);
+                table2.get(nonExistingKey);
+            })).isZero();
+
+            intended.forEach(value -> table2.put(value, value));
+            assertThat(executeTx(() -> {
+                table1.get(nonExistingKey);
+                table2.get(nonExistingKey);
+            })).isZero();
+        }
+    }
+
+    /**
+     * Verify commit address of interleaving transactions on disk-backed tables.
+     */
+    @Property(tries = NUM_OF_TRIES)
+    void verifyCommitAddressInterleavingTxn(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) throws Exception {
+        resetTests();
+        try (final CorfuTable<String, String> table = setupTable()) {
+            CountDownLatch latch1 = new CountDownLatch(1);
+            CountDownLatch latch2 = new CountDownLatch(1);
+
+            Thread t1 = new Thread(() -> {
+                table.put(defaultNewMapEntry, defaultNewMapEntry);
+                assertThat(executeTx(() -> table.get(nonExistingKey))).isEqualTo(0L);
+                assertThat(executeTx(() -> {
+                    try {
+                        table.get(nonExistingKey);
+                        latch2.countDown();
+                        latch1.await();
+                        table.get(nonExistingKey);
+                    } catch (InterruptedException ignored) {
+                        // Ignored
+                    }
+                })).isEqualTo(intended.size());
+            });
+
+            Thread t2 = new Thread(() -> {
+                try {
+                    latch2.await();
+                    intended.forEach(value -> table.put(value, value));
+                    assertThat(executeTx(() -> table.get(nonExistingKey))).isEqualTo(intended.size());
+                    latch1.countDown();
+                } catch (InterruptedException ex) {
+                    // Ignored
+                }
+            });
+
+            t1.start();
+            t2.start();
+            t1.join();
+            t2.join();
+            intended.forEach(value -> assertThat(table.get(value)).isEqualTo(value));
+        }
+    }
+
+    /**
      * A custom generator for a set of {@link Uuid}.
      */
     @Provide
@@ -451,7 +544,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
 
         // Create & Register the table.
         // This is required to initialize the table for the current corfu client.
-        final Path persistedCacheLocation = Paths.get("/tmp/", "diskBackedMap");
+        final Path persistedCacheLocation = Paths.get(diskBackedDirectory, defaultMapName);
         final Table<Uuid, EventInfo, SampleSchema.ManagedResources> table =
                 corfuStore.openTable(namespace, tableName,
                         Uuid.class, EventInfo.class,
