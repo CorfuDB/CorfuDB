@@ -9,6 +9,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
@@ -80,7 +81,8 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     private StreamIteratorMetadata currentProcessedEntryMetadata;
 
-    public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
+    public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config,
+                                 ReplicationSession replicationSession) {
         runtime.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
@@ -88,7 +90,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         this.deltaCounter = configureDeltaCounter();
         this.validDeltaCounter = configureValidDeltaCounter();
         this.opaqueEntryCounter = configureOpaqueEntryCounter();
-        Set<String> streams = config.getStreamsToReplicate();
+        Set<String> streams = config.getReplicationSubscriberToStreamsMap().get(replicationSession.getSubscriber());
 
         streamUUIDs = new HashSet<>();
         for (String s : streams) {

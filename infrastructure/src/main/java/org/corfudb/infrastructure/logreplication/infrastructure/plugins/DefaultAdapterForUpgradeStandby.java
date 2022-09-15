@@ -15,5 +15,6 @@ public class DefaultAdapterForUpgradeStandby extends DefaultAdapterForUpgrade {
             CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
                     .parseConfigurationString(ENDPOINT).connect();
         corfuStore = new CorfuStore(runtime);
+        init();
     }
 }

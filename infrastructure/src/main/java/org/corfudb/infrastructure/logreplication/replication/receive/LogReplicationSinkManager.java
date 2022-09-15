@@ -9,6 +9,7 @@ import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ISnapshotSyncPlugin;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.runtime.CorfuRuntime;
@@ -83,9 +84,9 @@ public class LogReplicationSinkManager implements DataReceiver {
     // Current topologyConfigId, used to drop out of date messages.
     private long topologyConfigId = 0;
 
-    // Cluster id of the Source cluster from which this Sink Manager receives updates
+    // Replication Session corresponding to the Source cluster from which this Sink Manager receives updates
     @Getter
-    private String sourceClusterId = null;
+    private ReplicationSession sourceSession = null;
 
     @VisibleForTesting
     private int rxMessageCounter = 0;
@@ -113,9 +114,8 @@ public class LogReplicationSinkManager implements DataReceiver {
      * @param context
      */
     public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config,
-                                     LogReplicationMetadataManager metadataManager,
-                                     ServerContext context, long topologyConfigId,
-                                     String remoteClusterId) {
+                                     LogReplicationMetadataManager metadataManager, ServerContext context,
+                                     long topologyConfigId, ReplicationSession replicationSession) {
 
         this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
                 .trustStore((String) context.getServerConfig().get(ConfigParamNames.TRUST_STORE))
@@ -129,7 +129,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.pluginConfigFilePath = context.getPluginConfigFilePath();
         this.topologyConfigId = topologyConfigId;
-        init(metadataManager, config, remoteClusterId);
+        init(metadataManager, config, replicationSession);
     }
 
     /**
@@ -140,12 +140,13 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     @VisibleForTesting
     public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config,
-                                     LogReplicationMetadataManager metadataManager, String pluginConfigFilePath) {
+                                     LogReplicationMetadataManager metadataManager, String pluginConfigFilePath,
+                                     ReplicationSession replicationSession) {
         this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
                 .maxCacheEntries(config.getMaxCacheSize()).build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.pluginConfigFilePath = pluginConfigFilePath;
-        init(metadataManager, config, sourceClusterId);
+        init(metadataManager, config, replicationSession);
     }
 
     /**
@@ -154,9 +155,9 @@ public class LogReplicationSinkManager implements DataReceiver {
      * @param metadataManager metadata manager instance
      * @param config log replication configuration
      */
-    private void init(LogReplicationMetadataManager metadataManager,
-                      LogReplicationConfig config, String remoteClusterId) {
-        this.sourceClusterId = remoteClusterId;
+    private void init(LogReplicationMetadataManager metadataManager, LogReplicationConfig config,
+                      ReplicationSession replicationSession) {
+        this.sourceSession = replicationSession;
         this.logReplicationMetadataManager = metadataManager;
         this.config = config;
 
@@ -168,7 +169,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         this.applyExecutor = Executors.newSingleThreadExecutor(
                 new ThreadFactoryBuilder()
                         .setDaemon(true)
-                        .setNameFormat("snapshotSyncApplyExecutor-" + remoteClusterId)
+                        .setNameFormat("snapshotSyncApplyExecutor-" + replicationSession.getRemoteClusterId())
                         .build());
 
         initWriterAndBufferMgr();
@@ -204,12 +205,10 @@ public class LogReplicationSinkManager implements DataReceiver {
         // Instantiate Snapshot Sync Plugin, this is an external service which will be triggered on start and end
         // of a snapshot sync.
         snapshotSyncPlugin = getOnSnapshotSyncPlugin();
-        snapshotWriter = new StreamsSnapshotWriter(runtime, config,
-            logReplicationMetadataManager);
-        logEntryWriter = new LogEntryWriter(runtime, config,
-            logReplicationMetadataManager);
+        snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadataManager, sourceSession);
+        logEntryWriter = new LogEntryWriter(runtime, config, logReplicationMetadataManager, sourceSession);
         logEntryWriter.reset(logReplicationMetadataManager.getLastAppliedSnapshotTimestamp(),
-                logReplicationMetadataManager.getLastProcessedLogEntryTimestamp());
+            logReplicationMetadataManager.getLastProcessedLogEntryTimestamp());
 
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
                 logReplicationMetadataManager.getLastProcessedLogEntryTimestamp(), this);
@@ -247,8 +246,8 @@ public class LogReplicationSinkManager implements DataReceiver {
         } catch (IOException e) {
             log.error("IO Exception when reading config file", e);
         }
-        log.info("Sink Manager Buffer config queue size {} ackCycleCnt {} ackCycleTime {}",
-                bufferSize, ackCycleCnt, ackCycleTime);
+        log.info("Sink Manager Buffer config queue size {} ackCycleCnt {} ackCycleTime {}", bufferSize, ackCycleCnt,
+            ackCycleTime);
     }
 
     /**
