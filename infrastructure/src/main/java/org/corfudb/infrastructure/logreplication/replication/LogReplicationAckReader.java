@@ -3,13 +3,15 @@ package org.corfudb.infrastructure.logreplication.replication;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader.StreamIteratorMetadata;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -21,7 +23,9 @@ import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
 
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -33,9 +37,10 @@ import java.util.concurrent.locks.ReentrantLock;
 @Slf4j
 public class LogReplicationAckReader {
     private final LogReplicationMetadataManager metadataManager;
-    private final LogReplicationConfig config;
+    private final LogReplicationConfigManager configManager;
     private final CorfuRuntime runtime;
     private final String remoteClusterId;
+    private final ReplicationSession replicationSession;
 
     // Log tail when the current snapshot sync started.  We do not need to synchronize access to it because it will not
     // be read(calculateRemainingEntriesToSend) and written(setBaseSnapshot) concurrently.
@@ -61,12 +66,13 @@ public class LogReplicationAckReader {
 
     private final Lock lock = new ReentrantLock();
 
-    public LogReplicationAckReader(LogReplicationMetadataManager metadataManager, LogReplicationConfig config,
-                                    CorfuRuntime runtime, String remoteClusterId) {
+    public LogReplicationAckReader(LogReplicationMetadataManager metadataManager, LogReplicationConfigManager configManager,
+                                   CorfuRuntime runtime, ReplicationSession replicationSession) {
         this.metadataManager = metadataManager;
-        this.config = config;
+        this.configManager = configManager;
         this.runtime = runtime;
-        this.remoteClusterId = remoteClusterId;
+        this.remoteClusterId = replicationSession.getRemoteClusterId();
+        this.replicationSession = replicationSession;
     }
 
     public void setAckedTsAndSyncType(long ackedTs, SyncType syncType) {
@@ -102,7 +108,7 @@ public class LogReplicationAckReader {
      * @param ackedTimestamp Timestamp ack'd by the receiver
      *
      * For Log Entry Sync, this function returns the total number of entries remaining to be sent across all replicated
-     * streams based on the transaction stream.
+     * streams based on LOG_REPLICATION_STREAM.
      *
      * For Snapshot Sync, a snapshot of each stream at a given point in time is sent. The stream could have been
      * checkpointed and trimmed so we cannot find the remaining number of entries accurately. In this case, we simply
@@ -171,7 +177,9 @@ public class LogReplicationAckReader {
      */
     private long getMaxReplicatedStreamsTail(Map<UUID, Long> tailMap) {
         long maxTail = Address.NON_ADDRESS;
-        for (String streamName : config.getStreamsToReplicate()) {
+        Set<String> streamsToReplicate = configManager.getUpdatedConfig().getReplicationSubscriberToStreamsMap()
+            .getOrDefault(replicationSession.getSubscriber(), new HashSet<>());
+        for (String streamName : streamsToReplicate) {
             UUID streamUuid = CorfuRuntime.getStreamID(streamName);
             if (tailMap.containsKey(streamUuid)) {
                 long streamTail = tailMap.get(streamUuid);

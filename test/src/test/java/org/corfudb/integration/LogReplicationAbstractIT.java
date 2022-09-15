@@ -149,7 +149,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
             writeToActiveNonUFO(numWrites, numWrites/2);
 
             log.debug("Wait ... Delta log replication in progress ...");
-            verifyDataOnStandbyNonUFO((numWrites + (numWrites / 2)));
+            verifyDataOnStandbyNonUFO(numWrites + (numWrites / 2));
         } finally {
             executorService.shutdownNow();
 
@@ -330,7 +330,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
             LogReplicationMetadata.ReplicationStatusVal> replicationStatusTable =
             corfuStoreActive.openTable(
                     LogReplicationMetadataManager.NAMESPACE,
-                    LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                    REPLICATION_STATUS_TABLE,
                     LogReplicationMetadata.ReplicationStatusKey.class,
                     LogReplicationMetadata.ReplicationStatusVal.class,
                     null,
