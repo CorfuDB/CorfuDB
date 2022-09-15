@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.utils;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ILogReplicationConfigAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.runtime.CorfuRuntime;
@@ -27,7 +28,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -59,8 +59,7 @@ public class LogReplicationConfigManager {
 
     private final CorfuStore corfuStore;
 
-    private static final Uuid defaultMetadata =
-        Uuid.newBuilder().setLsb(0).setMsb(0).build();
+    private static final Uuid defaultMetadata = Uuid.newBuilder().setLsb(0).setMsb(0).build();
 
     @Getter
     private static String currentVersion;
@@ -86,28 +85,31 @@ public class LogReplicationConfigManager {
 
     private void openVersionTable() {
         try {
-            pluginVersionTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    LOG_REPLICATION_PLUGIN_VERSION_TABLE, VersionString.class,
-                    Version.class, Uuid.class, TableOptions.builder().build());
+            pluginVersionTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_PLUGIN_VERSION_TABLE,
+                VersionString.class, Version.class, Uuid.class, TableOptions.builder().build());
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             log.warn("Exception when opening config tables", e);
             throw new UnrecoverableCorfuError(e);
         }
     }
 
-    public Set<String> getStreamsToReplicate() {
+    public Map<ReplicationSubscriber, Set<String>> getSubscriberToStreamsMap() {
         try {
             currentVersion = logReplicationConfigAdapter.getVersion();
-            Set<String> streams = logReplicationConfigAdapter.fetchStreamsToReplicate();
-            // Add registryTable to the streams
-            String registryTable = getFullyQualifiedTableName(
-                    CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME);
-            streams.add(registryTable);
+            Map<ReplicationSubscriber, Set<String>> subscriberToStreamsMap =
+                logReplicationConfigAdapter.getSubscriberToStreamsMap();
 
-            // Add protoBufDescriptorTable to the streams
-            String protoTable = getFullyQualifiedTableName(
-                    CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME);
-            streams.add(protoTable);
+            // Add merge-only streams(Registry and ProtobufDescriptor tables) to the list of streams to replicate for
+            // each subscriber
+            String registryTable = getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME);
+
+            String protoTable = getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+                TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME);
+
+            for (Set<String> streams : subscriberToStreamsMap.values()) {
+                streams.add(registryTable);
+                streams.add(protoTable);
+            }
 
             return IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -119,13 +121,13 @@ public class LogReplicationConfigManager {
                         // Persist upgrade flag so a snapshot-sync is enforced upon negotiation
                         // (when it is set to true)
                         Version version = Version.newBuilder()
-                                .setVersion(currentVersion)
-                                .setIsUpgraded(isUpgraded)
-                                .build();
+                            .setVersion(currentVersion)
+                            .setIsUpgraded(isUpgraded)
+                            .build();
                         txn.putRecord(pluginVersionTable, versionString, version, defaultMetadata);
                     }
                     txn.commit();
-                    return streams;
+                    return subscriberToStreamsMap;
                 } catch (TransactionAbortedException e) {
                     log.warn("Exception on getStreamsToReplicate()", e);
                     throw new RetryNeededException();
@@ -143,8 +145,7 @@ public class LogReplicationConfigManager {
         File jar = new File(config.getStreamFetcherPluginJARPath());
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
             Class plugin = Class.forName(config.getStreamFetcherClassCanonicalName(), true, child);
-            logReplicationConfigAdapter = (ILogReplicationConfigAdapter) plugin.getDeclaredConstructor()
-                    .newInstance();
+            logReplicationConfigAdapter = (ILogReplicationConfigAdapter) plugin.getDeclaredConstructor().newInstance();
         } catch (Exception e) {
             log.error("Fatal error: Failed to get Stream Fetcher Plugin", e);
             throw new UnrecoverableCorfuError(e);
@@ -153,7 +154,7 @@ public class LogReplicationConfigManager {
 
     private VersionResult verifyVersionResult(TxnContext txn) {
         CorfuStoreEntry<VersionString, Version, Uuid> record =
-                txn.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE, versionString);
+            txn.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE, versionString);
 
         if (record.getPayload() == null) {
             // Initializing
@@ -175,8 +176,7 @@ public class LogReplicationConfigManager {
      * @return True if LR is in upgrading path, false otherwise.
      */
     public boolean isUpgraded() {
-        VersionString versionString = VersionString.newBuilder()
-                .setName(VERSION_PLUGIN_KEY).build();
+        VersionString versionString = VersionString.newBuilder().setName(VERSION_PLUGIN_KEY).build();
         CorfuStoreEntry<VersionString, Version, Uuid> record;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             record = txn.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE, versionString);
@@ -200,10 +200,9 @@ public class LogReplicationConfigManager {
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                    VersionString versionString = VersionString.newBuilder()
-                            .setName(VERSION_PLUGIN_KEY).build();
+                    VersionString versionString = VersionString.newBuilder().setName(VERSION_PLUGIN_KEY).build();
                     CorfuStoreEntry<VersionString, Version, Uuid> versionEntry =
-                            txn.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE, versionString);
+                        txn.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE, versionString);
                     Version version = Version.newBuilder().mergeFrom(versionEntry.getPayload()).setIsUpgraded(false).build();
 
                     txn.putRecord(pluginVersionTable, versionString, version, defaultMetadata);
@@ -231,13 +230,12 @@ public class LogReplicationConfigManager {
      * Data is replicated at the stream level and not deserialized, hence we cannot infer from the transferred log
      * entries, the tags associated to them.
      *
-     * @return map of stream tag UUID to data streams UUIDs.
+     * @return map of data stream IDs to stream tags
      */
     public Map<UUID, List<UUID>> getStreamingConfigOnSink() {
         Map<UUID, List<UUID>> streamingConfig = logReplicationConfigAdapter.getStreamingConfigOnSink();
         for (UUID id : MERGE_ONLY_STREAMS) {
-            streamingConfig.put(id,
-                    Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId()));
+            streamingConfig.put(id, Collections.singletonList(LOG_REPLICATOR_STREAM_INFO.getStreamId()));
         }
         return streamingConfig;
     }

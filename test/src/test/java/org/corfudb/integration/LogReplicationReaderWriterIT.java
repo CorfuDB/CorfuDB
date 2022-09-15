@@ -3,6 +3,8 @@ package org.corfudb.integration;
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.StreamsSnapshotWriter;
@@ -33,6 +35,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
@@ -52,7 +55,8 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     private static final int NUM_KEYS = 10;
     private static final int NUM_STREAMS = 2;
     public static final int NUM_TRANSACTIONS = 20;
-    public static final String PRIMARY_SITE_ID = "Cluster-Paris";
+    public static final String SOURCE_CLUSTER_ID = "Cluster-Paris";
+    public static final String SINK_CLUSTER_ID = "Cluster-London";
     public static final int BATCH_SIZE = 2;
 
     // Enforce to read each entry for each message
@@ -262,8 +266,13 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
     public static void readSnapLogMsgs(List<LogReplicationEntryMsg> msgQ, Set<String> streams, CorfuRuntime rt, boolean blockOnSem)  {
         int cnt = 0;
-        LogReplicationConfig config = new LogReplicationConfig(streams, BATCH_SIZE, MAX_MSG_SIZE);
-        StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config);
+        ReplicationSession replicationSession =
+            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
+        Map<ReplicationSubscriber, Set<String>> streamsMap = new HashMap<>();
+        streamsMap.put(replicationSession.getSubscriber(), streams);
+
+        LogReplicationConfig config = new LogReplicationConfig(streamsMap, BATCH_SIZE, MAX_MSG_SIZE);
+        StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config, replicationSession);
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
         while (true) {
@@ -291,9 +300,14 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     }
 
     public static void writeSnapLogMsgs(List<LogReplicationEntryMsg> msgQ, Set<String> streams, CorfuRuntime rt) {
-        LogReplicationConfig config = new LogReplicationConfig(streams, BATCH_SIZE, MAX_MSG_SIZE);
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
-        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataManager);
+        ReplicationSession replicationSession =
+            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
+        Map<ReplicationSubscriber, Set<String>> streamsMap = new HashMap<>();
+        streamsMap.put(replicationSession.getSubscriber(), streams);
+        LogReplicationConfig config = new LogReplicationConfig(streamsMap, BATCH_SIZE, MAX_MSG_SIZE);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt,
+            0, SINK_CLUSTER_ID);
+        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataManager, replicationSession);
 
         if (msgQ.isEmpty()) {
             log.debug("msgQ is empty");
@@ -315,10 +329,14 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         readLogEntryMsgs(msgQ, streams, rt, false);
     }
 
-    public static void readLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, Set<String> streams, CorfuRuntime rt, boolean blockOnce) throws
-            TrimmedException {
-        LogReplicationConfig config = new LogReplicationConfig(streams, BATCH_SIZE, MAX_MSG_SIZE);
-        StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, config);
+    public static void readLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, Set<String> streams, CorfuRuntime rt,
+        boolean blockOnce) throws TrimmedException {
+        ReplicationSession replicationSession =
+            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
+        Map<ReplicationSubscriber, Set<String>> streamsMap = new HashMap<>();
+        streamsMap.put(replicationSession.getSubscriber(), streams);
+        LogReplicationConfig config = new LogReplicationConfig(streamsMap, BATCH_SIZE, MAX_MSG_SIZE);
+        StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, config, replicationSession);
         reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
 
         LogReplicationEntryMsg entry;
@@ -347,9 +365,14 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     }
 
     public static void writeLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, Set<String> streams, CorfuRuntime rt) {
-        LogReplicationConfig config = new LogReplicationConfig(streams);
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
-        LogEntryWriter writer = new LogEntryWriter(rt, config, logReplicationMetadataManager);
+        ReplicationSession replicationSession =
+            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
+        Map<ReplicationSubscriber, Set<String>> streamsMap = new HashMap<>();
+        streamsMap.put(replicationSession.getSubscriber(), streams);
+        LogReplicationConfig config = new LogReplicationConfig(streamsMap);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt,
+            0, SOURCE_CLUSTER_ID);
+        LogEntryWriter writer = new LogEntryWriter(rt, config, logReplicationMetadataManager, replicationSession);
 
         if (msgQ.isEmpty()) {
             log.debug("msgQ is EMPTY");
@@ -677,7 +700,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
         cleanUp();
     }
-    
+
     /**
      * This test verifies that the Log Entry Reader sets the last processed entry
      * as NULL whenever all entries written to the TX stream are of no interest for
