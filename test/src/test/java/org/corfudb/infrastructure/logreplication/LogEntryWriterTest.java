@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication;
 
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType;
@@ -33,20 +34,28 @@ public class LogEntryWriterTest extends AbstractViewTest {
     private TestUtils utils;
     private int numOpaqueEntries;
     private int topologyConfigId;
+    private String remoteClusterId = "Remote Cluster";
 
     @Before
     public void setUp() {
         corfuRuntime = getDefaultRuntime();
+
         // Initialize TableRegistry and register ProtobufSerializer
         corfuRuntime.getTableRegistry();
-        LogReplicationConfig replicationConfig = Mockito.mock(LogReplicationConfig.class);
+
+        // Create the default replication session
+        ReplicationSession replicationSession =
+            ReplicationSession.getDefaultReplicationSessionForCluster(remoteClusterId);
+
         metadataManager = Mockito.mock(LogReplicationMetadataManager.class);
         initMocksForMetadataManager();
+
         // Mocking steps for initializing LogEntryWriter.
-        LogReplicationConfigManager mockConfigManager = Mockito.mock(LogReplicationConfigManager.class);
-        Mockito.doReturn(mockConfigManager).when(replicationConfig).getConfigManager();
-        Mockito.doReturn(corfuRuntime).when(mockConfigManager).getConfigRuntime();
-        logEntryWriter = new LogEntryWriter(replicationConfig, metadataManager);
+        /*LogReplicationConfigManager mockConfigManager = Mockito.mock(LogReplicationConfigManager.class);
+        Mockito.doReturn(corfuRuntime).when(mockConfigManager).getRuntime();*/
+
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(corfuRuntime);
+        logEntryWriter = new LogEntryWriter(configManager, metadataManager, replicationSession);
         numOpaqueEntries = 3;
         topologyConfigId = 5;
         utils = new TestUtils();
