@@ -1,10 +1,7 @@
 package org.corfudb.infrastructure.logreplication;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
@@ -35,19 +32,20 @@ public class MetadataManagerTest extends AbstractViewTest {
 
     private static final String LOCAL_SOURCE_CLUSTER_ID = DefaultClusterConfig.getSourceClusterIds().get(0);
     private CorfuRuntime corfuRuntime;
-    private LogReplicationConfigManager configManager = Mockito.mock(LogReplicationConfigManager.class);
-
+    private LogReplicationConfigManager configManager;
     private boolean success;
     private long topologyConfigId = 5L;
     private TestUtils utils;
-    private List<LogReplicationSession> sessions = DefaultClusterConfig.getSessions();
-    private LogReplicationSession defaultSession = sessions.get(0);
-    private LogReplicationMetadataManager metadataManager;
-    private LogReplicationContext replicationContext;
+    private String remoteClusterId = "Remote Cluster";
+    private ReplicationSession replicationSession =
+        ReplicationSession.getDefaultReplicationSessionForCluster(remoteClusterId);
 
     @Before
     public void setUp() {
         corfuRuntime = getDefaultRuntime();
+
+        configManager = Mockito.mock(LogReplicationConfigManager.class);
+
         Mockito.doReturn(corfuRuntime).when(configManager).getRuntime();
         utils = new TestUtils();
         replicationContext = new LogReplicationContext(new LogReplicationConfigManager(corfuRuntime,
@@ -72,7 +70,11 @@ public class MetadataManagerTest extends AbstractViewTest {
                 getEndpoint(SERVERS.PORT_0), Mockito.mock(LogReplicationPluginConfig.class));
         LogEntryWriter writer = new LogEntryWriter(metadataManager, defaultSession, context);
 
-        long numOpaqueEntries = 3L;
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId,
+            localClusterId);
+        LogEntryWriter writer = new LogEntryWriter(configManager, metadataManager, replicationSession);
+
+        Long numOpaqueEntries = 3L;
         LogReplication.LogReplicationEntryMsg lrEntryMsg = utils.generateLogEntryMsg(1, numOpaqueEntries,
                 Address.NON_ADDRESS, topologyConfigId, Address.NON_ADDRESS);
 
@@ -123,11 +125,9 @@ public class MetadataManagerTest extends AbstractViewTest {
     @Test
     public void testConcurrentTopologyChange() throws Exception {
 
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, replicationContext);
-        metadataManager.addSession(defaultSession, topologyConfigId, true);
-        LogReplicationContext context = new LogReplicationContext(configManager, 0,
-                defaultSession.getSourceClusterId(), Mockito.mock(LogReplicationPluginConfig.class));
-        LogEntryWriter writer = new LogEntryWriter(metadataManager, defaultSession, context);
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId,
+            localClusterId);
+        LogEntryWriter writer = new LogEntryWriter(configManager, metadataManager, replicationSession);
 
         // Create a message with 50 opaque entries
         long numOpaqueEntries = 50L;

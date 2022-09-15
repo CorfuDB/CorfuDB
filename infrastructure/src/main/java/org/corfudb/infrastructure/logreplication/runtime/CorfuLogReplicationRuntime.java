@@ -5,9 +5,9 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
-import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationSourceManager;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
+import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.IllegalTransitionException;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
@@ -162,19 +162,17 @@ public class CorfuLogReplicationRuntime {
      * Default Constructor
      */
     public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters, LogReplicationMetadataManager metadataManager,
-                                      LogReplicationConfigManager replicationConfigManager) {
-        this.remoteClusterId = parameters.getRemoteClusterDescriptor().getClusterId();
+        LogReplicationConfigManager replicationConfigManager, ReplicationSession replicationSession) {
+        this.remoteClusterId = replicationSession.getRemoteClusterId();
         this.metadataManager = metadataManager;
         this.router = new LogReplicationClientRouter(parameters, this);
         this.router.addClient(new LogReplicationHandler());
         this.sourceManager = new LogReplicationSourceManager(parameters,
-            new LogReplicationClient(router, remoteClusterId), metadataManager,
-            replicationConfigManager);
+            new LogReplicationClient(router, remoteClusterId), metadataManager, replicationConfigManager, replicationSession);
         this.connectedNodes = new HashSet<>();
 
-        ThreadFactory threadFactory =
-            new ThreadFactoryBuilder().setNameFormat(
-                "runtime-fsm-worker-"+remoteClusterId).build();
+        ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker-"+remoteClusterId)
+            .build();
 
         this.communicationFSMWorkers = new ThreadPoolExecutor(1, 1, 0L,
             TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), threadFactory);
@@ -209,7 +207,7 @@ public class CorfuLogReplicationRuntime {
          * per every transition (reduce GC cycles).
          */
         states.put(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY, new WaitingForConnectionsState(this));
-        states.put(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER, new VerifyingRemoteSinkLeaderState(this,
+        states.put(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER, new VerifyingRemoteLeaderState(this,
             communicationFSMWorkers, router));
         states.put(LogReplicationRuntimeStateType.NEGOTIATING, new NegotiatingState(this, communicationFSMWorkers,
                 router, metadataManager));

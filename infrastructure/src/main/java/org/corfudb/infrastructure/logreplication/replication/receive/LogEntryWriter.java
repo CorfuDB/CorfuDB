@@ -3,7 +3,8 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 import com.google.protobuf.TextFormat;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.service.CorfuProtocolLogReplication;
@@ -23,7 +24,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.corfudb.infrastructure.logreplication.config.LogReplicationConfig.REGISTRY_TABLE_ID;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.REGISTRY_TABLE_ID;
 
 /**
  * Process TxMessage that contains transaction logs for registered streams.
@@ -37,21 +38,18 @@ public class LogEntryWriter extends SinkWriter {
     // Timestamp of the last message processed.
     private long lastMsgTs;
 
-    @Getter
-    private final LogReplicationSession session;
+    private final LogReplicationConfigManager configManager;
 
     private final LogReplicationMetadataManager metadataManager;
 
-    public LogEntryWriter(LogReplicationMetadataManager metadataManager,
-                          LogReplicationSession session, LogReplicationContext replicationContext) {
-        super(session, replicationContext);
-
-        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session);
-
-        this.srcGlobalSnapshot = metadata.getLastSnapshotApplied();
-        this.lastMsgTs = metadata.getLastLogEntryBatchProcessed();
-        this.metadataManager = metadataManager;
-        this.session = session;
+    public LogEntryWriter(LogReplicationConfigManager configManager,
+                          LogReplicationMetadataManager logReplicationMetadataManager,
+                          ReplicationSession replicationSession) {
+        super(configManager, replicationSession);
+        this.srcGlobalSnapshot = logReplicationMetadataManager.getLastAppliedSnapshotTimestamp();
+        this.lastMsgTs = logReplicationMetadataManager.getLastProcessedLogEntryBatchTimestamp();
+        this.metadataManager = logReplicationMetadataManager;
+        this.configManager = configManager;
     }
 
     /**
@@ -78,7 +76,7 @@ public class LogEntryWriter extends SinkWriter {
         // Log entry sync could have slow writes. That is, there could be a relatively long duration between last
         // snapshot/log entry sync and the current log entry sync, during which Sink side could have new tables opened.
         // So the config needs to be synced here to capture those updates.
-        replicationContext.refreshConfig(session, true);
+        configManager.getUpdatedConfig();
 
         // Boolean value that indicate if the config should sync with registry table or not. Note that primitive boolean
         // value cannot be used here as its value needs to be changed in the lambda function below.
@@ -95,13 +93,23 @@ public class LogEntryWriter extends SinkWriter {
                         // single read to fetch multiple metadata types. This will be cleanly handled when the
                         // Metadata table's schema is changed to use the remote session as the key instead of
                         // metadata type.
-                        ReplicationMetadata metadata = metadataManager.queryReplicationMetadata(txnContext, session);
+                        Map<LogReplicationMetadataType, Long> metadataMap = metadataManager.queryMetadata(txnContext,
+                            LogReplicationMetadataType.TOPOLOGY_CONFIG_ID,
+                            LogReplicationMetadataType.LAST_SNAPSHOT_STARTED,
+                            LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED,
+                            LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED,
+                            LogReplicationMetadataType.LAST_LOG_ENTRY_APPLIED);
 
-                        long persistedTopologyConfigId = metadata.getTopologyConfigId();
-                        long persistedSnapshotStart = metadata.getLastSnapshotStarted();
-                        long persistedSnapshotDone = metadata.getLastSnapshotApplied();
-                        long persistedBatchTs = metadata.getLastLogEntryBatchProcessed();
-                        long persistedOpaqueEntryTs = metadata.getLastLogEntryApplied();
+                        long persistedTopologyConfigId =
+                            metadataMap.get(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
+                        long persistedSnapshotStart =
+                            metadataMap.get(LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
+                        long persistedSnapshotDone =
+                            metadataMap.get(LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED);
+                        long persistedBatchTs =
+                            metadataMap.get(LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED);
+                        long persistedOpaqueEntryTs =
+                            metadataMap.get(LogReplicationMetadataType.LAST_LOG_ENTRY_APPLIED);
 
                         long topologyConfigId = txMessage.getMetadata().getTopologyConfigID();
                         long baseSnapshotTs = txMessage.getMetadata().getSnapshotTimestamp();
@@ -124,14 +132,24 @@ public class LogEntryWriter extends SinkWriter {
                             return null;
                         }
 
-                        ReplicationMetadata.Builder updatedMetadata = metadata.toBuilder()
-                                .setTopologyConfigId(topologyConfigId)
-                                .setLastLogEntryApplied(opaqueEntry.getVersion());
+                        // LAST_LOG_ENTRY_APPLIED has the timestamp of the last OpaqueEntry applied from a
+                        // batch of opaque entries received.
+                        metadataManager.appendUpdate(txnContext,
+                            LogReplicationMetadataType.LAST_LOG_ENTRY_APPLIED, opaqueEntry.getVersion());
+
+                        // CorfuStore uses WriteAfterWriteTransaction type so even though the topology is read
+                        // and validated for each OpaqueEntry, this read will not be used to detect a concurrent
+                        // topology update on the Sink.  So force an update to this key by using the touch() api.
+                        // NOTE: This will be addressed once the schema of the metadata table is updated to have
+                        // all types in a single key (remote session)
+                        metadataManager.touch(txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
 
                         // If this is the last OpaqueEntry in the message/batch, update LAST_LOG_ENTRY_BATCH_PROCESSED
                         // with its timestamp
                         if (opaqueEntry.getVersion() == txMessage.getMetadata().getTimestamp()) {
-                            updatedMetadata.setLastLogEntryBatchProcessed(txMessage.getMetadata().getTimestamp());
+                            metadataManager.appendUpdate(txnContext,
+                                LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED,
+                                txMessage.getMetadata().getTimestamp());
                         }
 
                         metadataManager.updateReplicationMetadata(txnContext, session, updatedMetadata.build());
@@ -158,7 +176,7 @@ public class LogEntryWriter extends SinkWriter {
                                 // If stream tags exist for the current stream, it means its intended for streaming
                                 // on the Sink (receiver)
                                 txnContext.logUpdate(streamId, smrEntry,
-                                    replicationContext.getConfig(session).getDataStreamToTagsMap().get(streamId));
+                                    configManager.getConfig().getDataStreamToTagsMap().get(streamId));
                             }
                         }
                         txnContext.commit();
@@ -172,7 +190,7 @@ public class LogEntryWriter extends SinkWriter {
                             // an abort if concurrent updates to the registry occur. We are currently not implementing
                             // this, as (1) it incurs in additional RPC calls for all updates and (2) LR will filter out
                             // these streams on the next batch.
-                            replicationContext.refreshConfig(session, true);
+                            configManager.getUpdatedConfig();
                             registryTableUpdated.set(false);
                         }
                     } catch (TransactionAbortedException tae) {
@@ -243,7 +261,7 @@ public class LogEntryWriter extends SinkWriter {
     public void reset(long snapshot, long ackTimestamp) {
         // Sync with registry table when LogEntryWriter is reset, which will happen when Snapshot sync is completed, and
         // when LogReplicationSinkManager is initialized and reset.
-        replicationContext.refreshConfig(session, true);
+        configManager.getUpdatedConfig();
         srcGlobalSnapshot = snapshot;
         lastMsgTs = ackTimestamp;
     }

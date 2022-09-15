@@ -6,10 +6,8 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.DataSender;
-import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.transport.IClientServerRouter;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
-import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
@@ -59,16 +57,16 @@ public class LogReplicationSourceManager {
      * @param params Log Replication parameters
      * @param metadataManager Replication Metadata Manager
      */
-    public LogReplicationSourceManager(LogReplicationRuntimeParameters params, IClientServerRouter router,
-                                       LogReplicationMetadataManager metadataManager,
-                                       LogReplicationSession session, LogReplicationContext replicationContext) {
-        this(params, metadataManager, new CorfuDataSender(router, session), session, replicationContext);
+    public LogReplicationSourceManager(LogReplicationRuntimeParameters params, LogReplicationClient client,
+        LogReplicationMetadataManager metadataManager, LogReplicationConfigManager tableManagerPlugin,
+        ReplicationSession replicationSession) {
+        this(params, metadataManager, new CorfuDataSender(client), tableManagerPlugin, replicationSession);
     }
 
     @VisibleForTesting
     public LogReplicationSourceManager(LogReplicationRuntimeParameters params,
-                                       LogReplicationMetadataManager metadataManager, DataSender dataSender,
-                                       LogReplicationSession session, LogReplicationContext replicationContext) {
+        LogReplicationMetadataManager metadataManager, DataSender dataSender,
+        LogReplicationConfigManager tableManagerPlugin, ReplicationSession replicationSession) {
 
         // This runtime is used exclusively for the snapshot and log entry reader which do not require a cache
         // as these are one time operations.
@@ -86,26 +84,27 @@ public class LogReplicationSourceManager {
 
         this.parameters = params;
 
-        Set<String> streamsToReplicate = replicationContext.getConfig(session).getStreamsToReplicate();
+        this.config = parameters.getReplicationConfig();
+
+        Set<String> streamsToReplicate =
+            config.getReplicationSubscriberToStreamsMap().get(replicationSession.getSubscriber());
         if (streamsToReplicate == null || streamsToReplicate.isEmpty()) {
             // Avoid FSM being initialized if there are no streams to replicate
             throw new IllegalArgumentException("Invalid Log Replication: Streams to replicate is EMPTY");
         }
 
-        ExecutorService logReplicationFSMWorkers = Executors.newFixedThreadPool(
-            DEFAULT_FSM_WORKER_THREADS, new ThreadFactoryBuilder()
-                .setNameFormat("state-machine-worker-" +
-                    params.getRemoteClusterDescriptor().getClusterId()).build());
+        ExecutorService logReplicationFSMWorkers = Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS,
+            new ThreadFactoryBuilder().setNameFormat("state-machine-worker-" + replicationSession.getRemoteClusterId())
+                .build());
 
         ReadProcessor readProcessor = new DefaultReadProcessor(runtime);
         this.metadataManager = metadataManager;
         // Ack Reader for Snapshot and LogEntry Sync
-        this.ackReader = new LogReplicationAckReader(this.metadataManager, config,
-            runtime, params.getRemoteClusterDescriptor().getClusterId());
+        // TODO pankti: Should AckReader also get tableManagerPlugin?
+        this.ackReader = new LogReplicationAckReader(this.metadataManager, tableManagerPlugin, runtime, replicationSession);
 
-        this.logReplicationFSM = new LogReplicationFSM(this.runtime, config,
-            params.getRemoteClusterDescriptor(), dataSender, readProcessor,
-            logReplicationFSMWorkers, ackReader, tableManagerPlugin);
+        this.logReplicationFSM = new LogReplicationFSM(this.runtime, tableManagerPlugin, dataSender, readProcessor,
+            logReplicationFSMWorkers, ackReader, tableManagerPlugin, replicationSession);
 
         this.logReplicationFSM = new LogReplicationFSM(this.runtime, dataSender, readProcessor,
                 logReplicationFSMWorkers, ackReader, session, replicationContext);

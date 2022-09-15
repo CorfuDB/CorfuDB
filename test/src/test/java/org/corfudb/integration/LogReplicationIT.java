@@ -7,11 +7,8 @@ import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.config.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
@@ -83,6 +80,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private static final String SOURCE_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
     private static final int WRITER_PORT = DEFAULT_PORT + 1;
     private static final String DESTINATION_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
+
     private static final String REMOTE_CLUSTER_ID = UUID.randomUUID().toString();
     private static final int CORFU_PORT = 9000;
     private static final String TABLE_PREFIX = "test";
@@ -787,10 +785,14 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         log.debug("****** Wait Data on Destination");
         waitData(dstCorfuTables, srcDataForVerification);
 
+        // expectedAckTimestamp was set in 'startLogEntrySync' to the tail of the Log Replication Stream.  Verify
+        // that the metadata table was updated with it after a successful LogEntrySync
         log.debug("****** Verify Data on Destination");
         // Verify Data on Destination
         verifyData(dstCorfuStore, dstCorfuTables, srcDataForVerification);
 
+
+        assertThat(expectedAckTimestamp.get()).isEqualTo(logReplicationMetadataManager.getLastProcessedLogEntryBatchTimestamp());
         verifyPersistedSnapshotMetadata();
 
         // expectedAckTimestamp was set in 'startLogEntrySync' to the tail of the Log Replication Stream.  Verify
@@ -1148,6 +1150,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     // startCrossTx indicates if we start with a transaction across Tables
     private void writeCrossTableTransactions(Set<String> tableNames, boolean startCrossTx) throws Exception {
+        // Setup two separate Corfu Servers: source (primary) and destination (standby)
+        setupEnv();
 
         // Open streams in source Corfu
         int totalStreams = TOTAL_STREAM_COUNT; // test0, test1, test2 (open stream tables)
@@ -1267,27 +1271,27 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private LogReplicationSourceManager setupSourceManagerAndObservedValues(Set<WAIT> waitConditions,
         TransitionSource function) throws InterruptedException {
 
-        LogReplicationConfigManager configManager = new LogReplicationConfigManager(srcTestRuntime, LOCAL_SOURCE_CLUSTER_ID);
-        LogReplicationContext context = new LogReplicationContext(configManager, 0, DEFAULT_ENDPOINT, pluginConfig);
-
-        configManager.generateConfig(Collections.singleton(session), false);
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(srcTestRuntime);
 
         // This IT requires custom values to be set for the replication config.  Set these values so that the default
         // values are not used
-        context.getConfig(session).setMaxNumMsgPerBatch(BATCH_SIZE);
-        context.getConfig(session).setMaxTransferSize(SMALL_MSG_SIZE * LogReplicationConfig.DATA_FRACTION_OF_UNCOMPRESSED_WRITE_SIZE / 100);
+        configManager.getConfig().setMaxNumMsgPerBatch(BATCH_SIZE);
+        configManager.getConfig().setMaxMsgSize(SMALL_MSG_SIZE);
+        configManager.getConfig().setMaxDataSizePerMsg(SMALL_MSG_SIZE * LogReplicationConfig.DATA_FRACTION_PER_MSG / 100);
 
         // Data Sender
-        sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, testConfig, metadataManager,
-                function, context);
+        sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, configManager, testConfig,
+            logReplicationMetadataManager, nettyConfig, function);
+
+        ReplicationSession replicationSession =
+            ReplicationSession.getDefaultReplicationSessionForCluster(REMOTE_CLUSTER_ID);
 
         // Source Manager
-        LogReplicationRuntimeParameters runtimeParameters = LogReplicationRuntimeParameters.builder()
-                .remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID, CORFU_PORT, new ArrayList<>()))
-                .localCorfuEndpoint(SOURCE_ENDPOINT)
-                .build();
-        LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(runtimeParameters,
-                metadataManager, sourceDataSender, session, context);
+        LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(
+            LogReplicationRuntimeParameters.builder().remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID,
+                LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT)).replicationConfig(configManager.getConfig())
+                .localCorfuEndpoint(SOURCE_ENDPOINT).build(), logReplicationMetadataManager, sourceDataSender,
+            configManager, replicationSession);
 
         // Set Log Replication Source Manager so we can emulate the channel for data & control messages (required
         // for testing)
@@ -1470,17 +1474,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         private WAIT waitOn = WAIT.ON_ACK;
         private boolean timeoutMetadataResponse = false;
         private String remoteClusterId = null;
-
-        // Indicates if a snapshot start message should be dropped
-        private boolean dropSnapshotStartMsg = false;
-
-        // If dropSnapshotStartMsg == true, the number of times it must be dropped
-        private int numDropsForSnapshotStart;
-
-        // If dropSnapshotStartMsg == true, the default number of null acks to wait for
-        private static final int DEFAULT_NULL_ACKS_TO_WAIT_FOR = 5;
-
-        private int numNullAcksToWaitFor = DEFAULT_NULL_ACKS_TO_WAIT_FOR;
 
         public TestConfig clear() {
             dropMessageLevel = 0;

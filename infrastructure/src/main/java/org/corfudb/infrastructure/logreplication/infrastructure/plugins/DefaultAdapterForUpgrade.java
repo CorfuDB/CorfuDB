@@ -10,10 +10,9 @@ import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.utils.LogReplicationStreams.Version;
 import org.corfudb.utils.LogReplicationStreams.VersionString;
 
-import java.lang.reflect.InvocationTargetException;
+public abstract class DefaultAdapterForUpgrade implements ILogReplicationVersionAdapter {
 
-import static org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager.LOG_REPLICATION_PLUGIN_VERSION_TABLE;
-import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+    public static final String VERSION_TEST_TABLE = "VersionTestTable";
 
 @Slf4j
 public class DefaultAdapterForUpgrade implements ILogReplicationVersionAdapter {

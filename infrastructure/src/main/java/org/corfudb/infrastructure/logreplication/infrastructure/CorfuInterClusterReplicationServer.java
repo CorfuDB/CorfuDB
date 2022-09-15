@@ -332,8 +332,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         // Start LogReplicationDiscovery Service, responsible for
         // acquiring lock, retrieving Site Manager Info and processing this info
         // so this node is initialized as Source (sender) or Sink (receiver)
-        replicationDiscoveryService = new CorfuReplicationDiscoveryService(
-            serverContext);
+        replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext);
         replicationDiscoveryService.run();
     }
 

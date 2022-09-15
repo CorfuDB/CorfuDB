@@ -584,8 +584,8 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             // Add Delta's for Log Entry Sync
             writeToActiveDifferentTypes(totalEntries, totalEntries);
 
-            // Verify Delta's are replicated to sink
-            verifySinkData(totalEntries*2);
+            // Verify Delta's are replicated to standby
+            verifyStandbyData(totalEntries*2);
 
             // Confirm data has been received by standby streaming listeners (deltas generated)
             // Block until all updates are received

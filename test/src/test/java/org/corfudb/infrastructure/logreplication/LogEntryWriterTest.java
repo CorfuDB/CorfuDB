@@ -1,9 +1,6 @@
 package org.corfudb.infrastructure.logreplication;
 
-import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
@@ -36,28 +33,35 @@ public class LogEntryWriterTest extends AbstractViewTest {
     private LogReplicationMetadataManager metadataManager = Mockito.mock(LogReplicationMetadataManager.class);
     private TxnContext txnContext = Mockito.mock(TxnContext.class);
     private LogEntryWriter logEntryWriter;
-
-    private TestUtils utils = new TestUtils();
-    private final int numOpaqueEntries = 3;
-    private final int topologyConfigId = 5;
+    private TxnContext txnContext;
+    private TestUtils utils;
+    private int numOpaqueEntries;
+    private int topologyConfigId;
+    private String remoteClusterId = "Remote Cluster";
 
     @Before
     public void setUp() {
         corfuRuntime = getDefaultRuntime();
 
-        Mockito.doReturn(txnContext).when(metadataManager).getTxnContext();
-        Mockito.doReturn(getDefaultMetadata()).when(metadataManager).queryReplicationMetadata(txnContext,
-            getDefaultSession());
-        Mockito.doReturn(getDefaultMetadata()).when(metadataManager).getReplicationMetadata(getDefaultSession());
+        // Initialize TableRegistry and register ProtobufSerializer
+        corfuRuntime.getTableRegistry();
 
-        logEntryWriter = new LogEntryWriter(metadataManager, getDefaultSession(),
-                new LogReplicationContext(new LogReplicationConfigManager(corfuRuntime, LOCAL_SINK_CLUSTER_ID), topologyConfigId,
-                        getEndpoint(SERVERS.PORT_0), Mockito.mock(LogReplicationPluginConfig.class)));
-    }
+        // Create the default replication session
+        ReplicationSession replicationSession =
+            ReplicationSession.getDefaultReplicationSessionForCluster(remoteClusterId);
 
-    @After
-    public void tearDown() {
-        corfuRuntime.shutdown();
+        metadataManager = Mockito.mock(LogReplicationMetadataManager.class);
+        initMocksForMetadataManager();
+
+        // Mocking steps for initializing LogEntryWriter.
+        /*LogReplicationConfigManager mockConfigManager = Mockito.mock(LogReplicationConfigManager.class);
+        Mockito.doReturn(corfuRuntime).when(mockConfigManager).getRuntime();*/
+
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(corfuRuntime);
+        logEntryWriter = new LogEntryWriter(configManager, metadataManager, replicationSession);
+        numOpaqueEntries = 3;
+        topologyConfigId = 5;
+        utils = new TestUtils();
     }
 
     /**
