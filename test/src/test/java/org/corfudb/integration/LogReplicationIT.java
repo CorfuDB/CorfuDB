@@ -7,6 +7,8 @@ import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
@@ -33,6 +35,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Observable;
 import java.util.Observer;
 import java.util.Set;
@@ -1359,25 +1362,26 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private LogReplicationSourceManager setupSourceManagerAndObservedValues(Set<String> tablesToReplicate,
-                                                                            Set<WAIT> waitConditions,
-                                                                            TransitionSource function) throws InterruptedException {
+        Set<WAIT> waitConditions, TransitionSource function) throws InterruptedException {
+        ReplicationSession replicationSession =
+            ReplicationSession.getDefaultReplicationSessionForCluster(REMOTE_CLUSTER_ID);
 
-        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, BATCH_SIZE, SMALL_MSG_SIZE);
+        Map<ReplicationSubscriber, Set<String>> tablesMap = new HashMap<>();
+        tablesMap.put(replicationSession.getSubscriber(), tablesToReplicate);
+        LogReplicationConfig config = new LogReplicationConfig(tablesMap, BATCH_SIZE, SMALL_MSG_SIZE);
 
         // Data Sender
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig,
-                logReplicationMetadataManager, nettyConfig, function);
+            logReplicationMetadataManager, nettyConfig, function);
 
         LogReplicationConfigManager tableManagerPlugin = new LogReplicationConfigManager(srcTestRuntime);
 
         // Source Manager
         LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(
-                LogReplicationRuntimeParameters.builder()
-                        .remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID,
-                                LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT))
-                                .replicationConfig(config).localCorfuEndpoint(SOURCE_ENDPOINT).build(),
-                logReplicationMetadataManager,
-                sourceDataSender, tableManagerPlugin);
+            LogReplicationRuntimeParameters.builder().remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID,
+                LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT)).replicationConfig(config)
+                .localCorfuEndpoint(SOURCE_ENDPOINT).build(), logReplicationMetadataManager, sourceDataSender,
+            tableManagerPlugin, replicationSession);
 
         // Set Log Replication Source Manager so we can emulate the channel for data & control messages (required
         // for testing)
@@ -1541,7 +1545,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         private WAIT waitOn = WAIT.ON_ACK;
         private boolean timeoutMetadataResponse = false;
         private String remoteClusterId = null;
-        
+
         public TestConfig clear() {
             dropMessageLevel = 0;
             dropAckLevel = 0;
