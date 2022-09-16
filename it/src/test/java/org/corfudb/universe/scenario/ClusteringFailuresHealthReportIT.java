@@ -1,7 +1,6 @@
 package org.corfudb.universe.scenario;
 
-import com.google.common.collect.ImmutableMap;
-import org.corfudb.infrastructure.health.Component;
+import com.google.common.collect.ImmutableSet;
 import org.corfudb.infrastructure.health.HealthReport;
 import org.corfudb.universe.GenericIntegrationTest;
 import org.corfudb.universe.group.cluster.CorfuCluster;
@@ -15,15 +14,24 @@ import org.slf4j.event.Level;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.health.Component.FAILURE_DETECTOR;
+import static org.corfudb.infrastructure.health.Component.LAYOUT_SERVER;
+import static org.corfudb.infrastructure.health.Component.LOG_UNIT;
+import static org.corfudb.infrastructure.health.Component.ORCHESTRATOR;
+import static org.corfudb.infrastructure.health.Component.SEQUENCER;
+import static org.corfudb.infrastructure.health.HealthReport.COMPONENT_INITIALIZED;
+import static org.corfudb.infrastructure.health.HealthReport.COMPONENT_IS_RUNNING;
+import static org.corfudb.infrastructure.health.HealthReport.ComponentStatus.FAILURE;
+import static org.corfudb.infrastructure.health.HealthReport.ComponentStatus.UP;
+import static org.corfudb.infrastructure.health.HealthReport.OVERALL_STATUS_FAILURE;
+import static org.corfudb.infrastructure.health.HealthReport.OVERALL_STATUS_UP;
 import static org.corfudb.infrastructure.health.HealthReport.builder;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutChange;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitUninterruptibly;
 
 public class ClusteringFailuresHealthReportIT extends GenericIntegrationTest {
-
 
     @Test(timeout = 300000)
     @SuppressWarnings("checkstyle:magicnumber")
@@ -51,23 +59,22 @@ public class ClusteringFailuresHealthReportIT extends GenericIntegrationTest {
             waitForLayoutChange(layout -> layout.getUnresponsiveServers().contains(corfuServer.getEndpoint()), corfuClient);
             waitUninterruptibly(Duration.ofSeconds(4));
             final CorfuServer otherServer = allServers.remove(0);
+            String unresponsiveNodesMsg = "There are nodes in the unresponsive list";
             HealthReport expectedHealthReport = builder()
-                    .status(false)
-                    .reason("Some of the services experience runtime health issues")
-                    .init(ImmutableMap.of(
-                            Component.LOG_UNIT, new HealthReport.ReportedHealthStatus(true, "Initialization successful"),
-                            Component.LAYOUT_SERVER, new HealthReport.ReportedHealthStatus(true, "Initialization successful"),
-                            Component.ORCHESTRATOR, new HealthReport.ReportedHealthStatus(true, "Initialization successful"),
-                            Component.FAILURE_DETECTOR, new HealthReport.ReportedHealthStatus(true, "Initialization successful"),
-                            Component.SEQUENCER, new HealthReport.ReportedHealthStatus(true, "Initialization successful")
-                    ))
-                    .runtime(ImmutableMap.of(
-                            Component.LOG_UNIT, new HealthReport.ReportedHealthStatus(true, "Up and running"),
-                            Component.LAYOUT_SERVER, new HealthReport.ReportedHealthStatus(true, "Up and running"),
-                            Component.ORCHESTRATOR, new HealthReport.ReportedHealthStatus(true, "Up and running"),
-                            Component.FAILURE_DETECTOR, new HealthReport.ReportedHealthStatus(false, "There are nodes in the unresponsive list"),
-                            Component.SEQUENCER, new HealthReport.ReportedHealthStatus(true, "Up and running")
-                    ))
+                    .status(FAILURE)
+                    .reason(OVERALL_STATUS_FAILURE)
+                    .init(ImmutableSet.of(
+                            new HealthReport.ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_INITIALIZED),
+                            new HealthReport.ComponentReportedHealthStatus(LAYOUT_SERVER, UP, COMPONENT_INITIALIZED),
+                            new HealthReport.ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_INITIALIZED),
+                            new HealthReport.ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_INITIALIZED),
+                            new HealthReport.ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_INITIALIZED)))
+                    .runtime(ImmutableSet.of(
+                            new HealthReport.ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_IS_RUNNING),
+                            new HealthReport.ComponentReportedHealthStatus(LAYOUT_SERVER, UP, COMPONENT_IS_RUNNING),
+                            new HealthReport.ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_IS_RUNNING),
+                            new HealthReport.ComponentReportedHealthStatus(FAILURE_DETECTOR, FAILURE, unresponsiveNodesMsg),
+                            new HealthReport.ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING)))
                     .build();
             assertThat(queryHealthReport(otherServer.getParams().getHealthPort())).isEqualTo(expectedHealthReport);
 
@@ -79,23 +86,24 @@ public class ClusteringFailuresHealthReportIT extends GenericIntegrationTest {
             }
 
             HealthReport healthReport = queryHealthReport(corfuServer.getParams().getHealthPort());
+            String sequencerMsg = "Sequencer requires bootstrap";
+            String healNodeMsg = "Failed to execute action HealNodeToLayout for workflow HEAL_NODE";
+
             expectedHealthReport = builder()
-                    .status(false)
-                    .reason("Some of the services experience runtime health issues")
-                    .init(ImmutableMap.of(
-                            Component.LOG_UNIT, new HealthReport.ReportedHealthStatus(true, "Initialization successful"),
-                            Component.LAYOUT_SERVER, new HealthReport.ReportedHealthStatus(true, "Initialization successful"),
-                            Component.ORCHESTRATOR, new HealthReport.ReportedHealthStatus(true, "Initialization successful"),
-                            Component.FAILURE_DETECTOR, new HealthReport.ReportedHealthStatus(true, "Initialization successful"),
-                            Component.SEQUENCER, new HealthReport.ReportedHealthStatus(true, "Initialization successful")
-                    ))
-                    .runtime(ImmutableMap.of(
-                            Component.LOG_UNIT, new HealthReport.ReportedHealthStatus(true, "Up and running"),
-                            Component.LAYOUT_SERVER, new HealthReport.ReportedHealthStatus(true, "Up and running"),
-                            Component.ORCHESTRATOR, new HealthReport.ReportedHealthStatus(false, "Failed to execute action HealNodeToLayout for workflow HEAL_NODE"),
-                            Component.FAILURE_DETECTOR, new HealthReport.ReportedHealthStatus(true, "Up and running"),
-                            Component.SEQUENCER, new HealthReport.ReportedHealthStatus(false, "Sequencer requires bootstrap")
-                    ))
+                    .status(FAILURE)
+                    .reason(OVERALL_STATUS_FAILURE)
+                    .init(ImmutableSet.of(
+                            new HealthReport.ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_INITIALIZED),
+                            new HealthReport.ComponentReportedHealthStatus(LAYOUT_SERVER, UP, COMPONENT_INITIALIZED),
+                            new HealthReport.ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_INITIALIZED),
+                            new HealthReport.ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_INITIALIZED),
+                            new HealthReport.ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_INITIALIZED)))
+                    .runtime(ImmutableSet.of(
+                            new HealthReport.ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_IS_RUNNING),
+                            new HealthReport.ComponentReportedHealthStatus(LAYOUT_SERVER, UP, COMPONENT_IS_RUNNING),
+                            new HealthReport.ComponentReportedHealthStatus(ORCHESTRATOR, FAILURE, healNodeMsg),
+                            new HealthReport.ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_IS_RUNNING),
+                            new HealthReport.ComponentReportedHealthStatus(SEQUENCER, FAILURE, sequencerMsg)))
                     .build();
             assertThat(healthReport).isEqualTo(expectedHealthReport);
 
@@ -106,22 +114,20 @@ public class ClusteringFailuresHealthReportIT extends GenericIntegrationTest {
             waitUninterruptibly(Duration.ofSeconds(4));
             healthReport = queryHealthReport(corfuServer.getParams().getHealthPort());
             expectedHealthReport = builder()
-                    .status(true)
-                    .reason("Healthy")
-                    .init(ImmutableMap.of(
-                            Component.LOG_UNIT, new HealthReport.ReportedHealthStatus(true, "Initialization successful"),
-                            Component.LAYOUT_SERVER, new HealthReport.ReportedHealthStatus(true, "Initialization successful"),
-                            Component.ORCHESTRATOR, new HealthReport.ReportedHealthStatus(true, "Initialization successful"),
-                            Component.FAILURE_DETECTOR, new HealthReport.ReportedHealthStatus(true, "Initialization successful"),
-                            Component.SEQUENCER, new HealthReport.ReportedHealthStatus(true, "Initialization successful")
-                    ))
-                    .runtime(ImmutableMap.of(
-                            Component.LOG_UNIT, new HealthReport.ReportedHealthStatus(true, "Up and running"),
-                            Component.LAYOUT_SERVER, new HealthReport.ReportedHealthStatus(true, "Up and running"),
-                            Component.ORCHESTRATOR, new HealthReport.ReportedHealthStatus(true, "Up and running"),
-                            Component.FAILURE_DETECTOR, new HealthReport.ReportedHealthStatus(true, "Up and running"),
-                            Component.SEQUENCER, new HealthReport.ReportedHealthStatus(true, "Up and running")
-                    ))
+                    .status(UP)
+                    .reason(OVERALL_STATUS_UP)
+                    .init(ImmutableSet.of(
+                            new HealthReport.ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_INITIALIZED),
+                            new HealthReport.ComponentReportedHealthStatus(LAYOUT_SERVER, UP, COMPONENT_INITIALIZED),
+                            new HealthReport.ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_INITIALIZED),
+                            new HealthReport.ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_INITIALIZED),
+                            new HealthReport.ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_INITIALIZED)))
+                    .runtime(ImmutableSet.of(
+                            new HealthReport.ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_IS_RUNNING),
+                            new HealthReport.ComponentReportedHealthStatus(LAYOUT_SERVER, UP, COMPONENT_IS_RUNNING),
+                            new HealthReport.ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_IS_RUNNING),
+                            new HealthReport.ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_IS_RUNNING),
+                            new HealthReport.ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING)))
                     .build();
             assertThat(healthReport).isEqualTo(expectedHealthReport);
         });

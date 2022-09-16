@@ -9,18 +9,17 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
-import org.corfudb.infrastructure.health.Component;
 import org.corfudb.infrastructure.health.HealthMonitor;
 import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.runtime.CheckpointerBuilder;
 import org.corfudb.runtime.CompactorMetadataTables;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.ServerTriggeredCheckpointer;
 import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.ServerTriggeredCheckpointer;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -37,12 +36,17 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import static org.corfudb.infrastructure.health.Component.COMPACTOR;
+import static org.corfudb.infrastructure.health.HealthReport.COMPONENT_IS_RUNNING;
+import static org.corfudb.infrastructure.health.HealthReport.ComponentReportedHealthStatus;
+import static org.corfudb.infrastructure.health.HealthReport.ComponentStatus.FAILURE;
+import static org.corfudb.infrastructure.health.HealthReport.ComponentStatus.UP;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
@@ -387,15 +391,17 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
 
     @Test
     public void compactionHealthReportTest() throws Exception {
-        HealthMonitor.reportIssue(Issue.createInitIssue(Component.COMPACTOR));
-        HealthMonitor.resolveIssue(Issue.createInitIssue(Component.COMPACTOR));
+        HealthMonitor.reportIssue(Issue.createInitIssue(COMPACTOR));
+        HealthMonitor.resolveIssue(Issue.createInitIssue(COMPACTOR));
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0,
                 corfuStore, livenessValidator);
         compactorLeaderServices1.initCompactionCycle();
         compactorLeaderServices1.finishCompactionCycle();
         assert verifyManagerStatus(StatusType.FAILED);
         assert verifyCheckpointStatusTable(StatusType.IDLE, 0);
-        assert HealthMonitor.generateHealthReport().getRuntime().get(Component.COMPACTOR).getReason().equals("Last compaction cycle failed");
+        ComponentReportedHealthStatus compactorHealthStatus =
+                new ComponentReportedHealthStatus(COMPACTOR, FAILURE, "Last compaction cycle failed");
+        assert HealthMonitor.generateHealthReport().getRuntime().contains(compactorHealthStatus);
 
         compactorLeaderServices1.initCompactionCycle();
         ServerTriggeredCheckpointer distributedCheckpointer = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
@@ -411,7 +417,9 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
         assert verifyManagerStatus(StatusType.COMPLETED);
         assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
         assert verifyCheckpointTable();
-        assert HealthMonitor.generateHealthReport().getRuntime().get(Component.COMPACTOR).getReason().equals("Up and running");
+        compactorHealthStatus =
+                new ComponentReportedHealthStatus(COMPACTOR, UP, COMPONENT_IS_RUNNING);
+        assert HealthMonitor.generateHealthReport().getRuntime().contains(compactorHealthStatus);
     }
 
     private boolean pollForFinishCheckpointing() {

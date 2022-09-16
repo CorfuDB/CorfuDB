@@ -1,8 +1,9 @@
 package org.corfudb.infrastructure.health;
 
-import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.gson.Gson;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.health.HealthReport.ComponentReportedHealthStatus;
 import org.corfudb.integration.AbstractIT;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -25,7 +26,21 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.infrastructure.health.HealthReport.ReportedHealthStatus;
+import static org.corfudb.infrastructure.health.Component.FAILURE_DETECTOR;
+import static org.corfudb.infrastructure.health.Component.LAYOUT_SERVER;
+import static org.corfudb.infrastructure.health.Component.LOG_UNIT;
+import static org.corfudb.infrastructure.health.Component.ORCHESTRATOR;
+import static org.corfudb.infrastructure.health.Component.SEQUENCER;
+import static org.corfudb.infrastructure.health.HealthReport.COMPONENT_INITIALIZED;
+import static org.corfudb.infrastructure.health.HealthReport.COMPONENT_IS_NOT_RUNNING;
+import static org.corfudb.infrastructure.health.HealthReport.COMPONENT_IS_RUNNING;
+import static org.corfudb.infrastructure.health.HealthReport.COMPONENT_NOT_INITIALIZED;
+import static org.corfudb.infrastructure.health.HealthReport.ComponentStatus.DOWN;
+import static org.corfudb.infrastructure.health.HealthReport.ComponentStatus.FAILURE;
+import static org.corfudb.infrastructure.health.HealthReport.ComponentStatus.UP;
+import static org.corfudb.infrastructure.health.HealthReport.OVERALL_STATUS_DOWN;
+import static org.corfudb.infrastructure.health.HealthReport.OVERALL_STATUS_FAILURE;
+import static org.corfudb.infrastructure.health.HealthReport.OVERALL_STATUS_UP;
 import static org.corfudb.infrastructure.health.HealthReport.builder;
 
 @Slf4j
@@ -118,22 +133,20 @@ public class HealthMonitorIT extends AbstractIT {
     void testInitComponentsHealth() throws IOException, InterruptedException {
         Process corfuServer = runCorfuServerWithHealthMonitor(CORFU_PORT_1, HEALTH_PORT_1);
         HealthReport expectedHealthReport = builder()
-                .status(false)
-                .reason("Some of the services are not initialized")
-                .init(ImmutableMap.of(
-                        Component.LOG_UNIT, new ReportedHealthStatus(false, "Service is not initialized"),
-                        Component.LAYOUT_SERVER, new ReportedHealthStatus(false, "Service is not initialized"),
-                        Component.ORCHESTRATOR, new ReportedHealthStatus(true, "Initialization successful"),
-                        Component.FAILURE_DETECTOR, new ReportedHealthStatus(false, "Service is not initialized"),
-                        Component.SEQUENCER, new ReportedHealthStatus(false, "Service is not initialized")
-                ))
-                .runtime(ImmutableMap.of(
-                        Component.LOG_UNIT, new ReportedHealthStatus(false, "Service is not running"),
-                        Component.LAYOUT_SERVER, new ReportedHealthStatus(false, "Service is not running"),
-                        Component.ORCHESTRATOR, new ReportedHealthStatus(true, "Up and running"),
-                        Component.FAILURE_DETECTOR, new ReportedHealthStatus(false, "Service is not running"),
-                        Component.SEQUENCER, new ReportedHealthStatus(false, "Service is not running")
-                ))
+                .status(DOWN)
+                .reason(OVERALL_STATUS_DOWN)
+                .init(ImmutableSet.of(
+                        new ComponentReportedHealthStatus(LOG_UNIT, DOWN, COMPONENT_NOT_INITIALIZED),
+                        new ComponentReportedHealthStatus(LAYOUT_SERVER, DOWN, COMPONENT_NOT_INITIALIZED),
+                        new ComponentReportedHealthStatus(ORCHESTRATOR, DOWN, COMPONENT_NOT_INITIALIZED),
+                        new ComponentReportedHealthStatus(FAILURE_DETECTOR, DOWN, COMPONENT_NOT_INITIALIZED),
+                        new ComponentReportedHealthStatus(SEQUENCER, DOWN, COMPONENT_NOT_INITIALIZED)))
+                .runtime(ImmutableSet.of(
+                        new ComponentReportedHealthStatus(LOG_UNIT, DOWN, COMPONENT_IS_NOT_RUNNING),
+                        new ComponentReportedHealthStatus(LAYOUT_SERVER, DOWN, COMPONENT_IS_NOT_RUNNING),
+                        new ComponentReportedHealthStatus(ORCHESTRATOR, DOWN, COMPONENT_IS_NOT_RUNNING),
+                        new ComponentReportedHealthStatus(FAILURE_DETECTOR, DOWN, COMPONENT_IS_NOT_RUNNING),
+                        new ComponentReportedHealthStatus(SEQUENCER, DOWN, COMPONENT_IS_NOT_RUNNING)))
                 .build();
         Thread.sleep(WAIT_TIME_MILLIS * 3);
 
@@ -143,22 +156,20 @@ public class HealthMonitorIT extends AbstractIT {
         BootstrapUtil.bootstrap(getLayout(CORFU_PORT_1), RETRIES, PARAMETERS.TIMEOUT_SHORT);
         Thread.sleep(WAIT_TIME_MILLIS * 2);
         expectedHealthReport = builder()
-                .status(true)
-                .reason("Healthy")
-                .init(ImmutableMap.of(
-                        Component.LOG_UNIT, new ReportedHealthStatus(true, "Initialization successful"),
-                        Component.LAYOUT_SERVER, new ReportedHealthStatus(true, "Initialization successful"),
-                        Component.ORCHESTRATOR, new ReportedHealthStatus(true, "Initialization successful"),
-                        Component.FAILURE_DETECTOR, new ReportedHealthStatus(true, "Initialization successful"),
-                        Component.SEQUENCER, new ReportedHealthStatus(true, "Initialization successful")
-                ))
-                .runtime(ImmutableMap.of(
-                        Component.LOG_UNIT, new ReportedHealthStatus(true, "Up and running"),
-                        Component.LAYOUT_SERVER, new ReportedHealthStatus(true, "Up and running"),
-                        Component.ORCHESTRATOR, new ReportedHealthStatus(true, "Up and running"),
-                        Component.FAILURE_DETECTOR, new ReportedHealthStatus(true, "Up and running"),
-                        Component.SEQUENCER, new ReportedHealthStatus(true, "Up and running")
-                ))
+                .status(UP)
+                .reason(OVERALL_STATUS_UP)
+                .init(ImmutableSet.of(
+                        new ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_INITIALIZED),
+                        new ComponentReportedHealthStatus(LAYOUT_SERVER, UP, COMPONENT_INITIALIZED),
+                        new ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_INITIALIZED),
+                        new ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_INITIALIZED),
+                        new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_INITIALIZED)))
+                .runtime(ImmutableSet.of(
+                        new ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_IS_RUNNING),
+                        new ComponentReportedHealthStatus(LAYOUT_SERVER, UP, COMPONENT_IS_RUNNING),
+                        new ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_IS_RUNNING),
+                        new ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_IS_RUNNING),
+                        new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING)))
                 .build();
 
         assertThat(queryCurrentHealthReport(HEALTH_PORT_1)).isEqualTo(expectedHealthReport);
@@ -191,22 +202,20 @@ public class HealthMonitorIT extends AbstractIT {
         }
         Thread.sleep(WAIT_TIME_MILLIS * 2);
         HealthReport expectedHealthReport = builder()
-                .status(false)
-                .reason("Some of the services experience runtime health issues")
-                .init(ImmutableMap.of(
-                        Component.LOG_UNIT, new ReportedHealthStatus(true, "Initialization successful"),
-                        Component.LAYOUT_SERVER, new ReportedHealthStatus(true, "Initialization successful"),
-                        Component.ORCHESTRATOR, new ReportedHealthStatus(true, "Initialization successful"),
-                        Component.FAILURE_DETECTOR, new ReportedHealthStatus(true, "Initialization successful"),
-                        Component.SEQUENCER, new ReportedHealthStatus(true, "Initialization successful")
-                ))
-                .runtime(ImmutableMap.of(
-                        Component.LOG_UNIT, new ReportedHealthStatus(false, "Quota exceeded"),
-                        Component.LAYOUT_SERVER, new ReportedHealthStatus(true, "Up and running"),
-                        Component.ORCHESTRATOR, new ReportedHealthStatus(true, "Up and running"),
-                        Component.FAILURE_DETECTOR, new ReportedHealthStatus(true, "Up and running"),
-                        Component.SEQUENCER, new ReportedHealthStatus(true, "Up and running")
-                ))
+                .status(FAILURE)
+                .reason(OVERALL_STATUS_FAILURE)
+                .init(ImmutableSet.of(
+                        new ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_INITIALIZED),
+                        new ComponentReportedHealthStatus(LAYOUT_SERVER, UP, COMPONENT_INITIALIZED),
+                        new ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_INITIALIZED),
+                        new ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_INITIALIZED),
+                        new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_INITIALIZED)))
+                .runtime(ImmutableSet.of(
+                        new ComponentReportedHealthStatus(LOG_UNIT, FAILURE, "Quota exceeded"),
+                        new ComponentReportedHealthStatus(LAYOUT_SERVER, UP, COMPONENT_INITIALIZED),
+                        new ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_INITIALIZED),
+                        new ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_INITIALIZED),
+                        new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_INITIALIZED)))
                 .build();
 
         HealthReport healthReport = queryCurrentHealthReport(HEALTH_PORT_2);
@@ -223,22 +232,20 @@ public class HealthMonitorIT extends AbstractIT {
         Thread.sleep(WAIT_TIME_MILLIS * 2);
         healthReport = queryCurrentHealthReport(HEALTH_PORT_2);
         expectedHealthReport = builder()
-                .status(true)
-                .reason("Healthy")
-                .init(ImmutableMap.of(
-                        Component.LOG_UNIT, new ReportedHealthStatus(true, "Initialization successful"),
-                        Component.LAYOUT_SERVER, new ReportedHealthStatus(true, "Initialization successful"),
-                        Component.ORCHESTRATOR, new ReportedHealthStatus(true, "Initialization successful"),
-                        Component.FAILURE_DETECTOR, new ReportedHealthStatus(true, "Initialization successful"),
-                        Component.SEQUENCER, new ReportedHealthStatus(true, "Initialization successful")
-                ))
-                .runtime(ImmutableMap.of(
-                        Component.LOG_UNIT, new ReportedHealthStatus(true, "Up and running"),
-                        Component.LAYOUT_SERVER, new ReportedHealthStatus(true, "Up and running"),
-                        Component.ORCHESTRATOR, new ReportedHealthStatus(true, "Up and running"),
-                        Component.FAILURE_DETECTOR, new ReportedHealthStatus(true, "Up and running"),
-                        Component.SEQUENCER, new ReportedHealthStatus(true, "Up and running")
-                ))
+                .status(UP)
+                .reason(OVERALL_STATUS_UP)
+                .init(ImmutableSet.of(
+                        new ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_INITIALIZED),
+                        new ComponentReportedHealthStatus(LAYOUT_SERVER, UP, COMPONENT_INITIALIZED),
+                        new ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_INITIALIZED),
+                        new ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_INITIALIZED),
+                        new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_INITIALIZED)))
+                .runtime(ImmutableSet.of(
+                        new ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_IS_RUNNING),
+                        new ComponentReportedHealthStatus(LAYOUT_SERVER, UP, COMPONENT_IS_RUNNING),
+                        new ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_IS_RUNNING),
+                        new ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_IS_RUNNING),
+                        new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING)))
                 .build();
         assertThat(healthReport).isEqualTo(expectedHealthReport);
         assertThat(shutdownCorfuServer(anotherProcessAgain)).isTrue();

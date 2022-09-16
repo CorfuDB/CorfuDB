@@ -1,7 +1,7 @@
 package org.corfudb.infrastructure.health;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
@@ -11,11 +11,14 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
-import org.corfudb.common.util.Tuple;
 
-import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
+import java.util.Set;
+
+import static org.corfudb.infrastructure.health.HealthReport.ComponentStatus.DOWN;
+import static org.corfudb.infrastructure.health.HealthReport.ComponentStatus.FAILURE;
+import static org.corfudb.infrastructure.health.HealthReport.ComponentStatus.UNKNOWN;
+import static org.corfudb.infrastructure.health.HealthReport.ComponentStatus.UP;
 
 /**
  * HealthReport represents the overall health status of the node.
@@ -24,35 +27,48 @@ import java.util.stream.Collectors;
 @ToString
 @EqualsAndHashCode
 public class HealthReport {
+
+    /**
+     * Overall status msgs
+     */
+    public static final transient String OVERALL_STATUS_UNKNOWN = "Status is unknown";
+    public static final transient String OVERALL_STATUS_UP = "Healthy";
+    public static final transient String OVERALL_STATUS_DOWN = "Some of the services are not initialized";
+    public static final transient String OVERALL_STATUS_FAILURE = "Some of the services experience runtime health issues";
+
+    /**
+     * Component status msgs
+     */
+    public static final transient String COMPONENT_INITIALIZED = "Initialization successful";
+    public static final transient String COMPONENT_NOT_INITIALIZED = "Service is not initialized";
+    public static final transient String COMPONENT_IS_NOT_RUNNING = "Service is not running";
+    public static final transient String COMPONENT_IS_RUNNING = "Up and running";
+
     /**
      * Health status false = not healthy, true = healthy
      */
     @Builder.Default
     @Getter
-    private final boolean status = false;
+    private final ComponentStatus status = UNKNOWN;
     /**
      * Description
      */
     @Builder.Default
     @Getter
-    private final String reason = "Unknown";
-
-    @NonNull
-    @Getter
-    private final List<Map.Entry<Component, ReportedHealthStatus>> initList;
+    private final String reason = OVERALL_STATUS_UNKNOWN;
 
     /**
      * Map of component initialization health issues
      */
     @NonNull
     @Getter
-    private final Map<Component, ReportedHealthStatus> init;
+    private final Set<ComponentReportedHealthStatus> init;
     /**
      * Map of component runtime health issues
      */
     @NonNull
     @Getter
-    private final Map<Component, ReportedHealthStatus> runtime;
+    private final Set<ComponentReportedHealthStatus> runtime;
 
     /**
      * Create a HealthReport from the HealthMonitor's componentHealthStatus. Overall status is healthy if all the
@@ -63,27 +79,31 @@ public class HealthReport {
      * @param componentHealthStatus HealthMonitor's componentHealthStatus
      * @return A health report
      */
-    public static HealthReport fromComponentHealthStatus(Map<Component, ComponentStatus> componentHealthStatus) {
-        Map<Component, ComponentStatus> componentHealthStatusSnapshot = ImmutableMap.copyOf(componentHealthStatus);
-        final Map<Component, ReportedHealthStatus> initReportedHealthStatus = createInitReportedHealthStatus(componentHealthStatusSnapshot);
-        final List<Map.Entry<Component, ReportedHealthStatus>> collect = initReportedHealthStatus.entrySet().stream().collect(ImmutableList.toImmutableList());
-        final Map<Component, ReportedHealthStatus> runtimeReportedHealthStatus = createRuntimeReportedHealthStatus(componentHealthStatusSnapshot);
-        boolean overallStatus = isHealthy(initReportedHealthStatus) && isHealthy(runtimeReportedHealthStatus);
+    public static HealthReport fromComponentHealthStatus(Map<Component, HealthStatus> componentHealthStatus) {
+        Map<Component, HealthStatus> componentHealthStatusSnapshot = ImmutableMap.copyOf(componentHealthStatus);
+        Set<ComponentReportedHealthStatus> initReportedHealthStatus =
+                createInitReportedHealthStatus(componentHealthStatusSnapshot);
+        Set<ComponentReportedHealthStatus> runtimeReportedHealthStatus =
+                createRuntimeReportedHealthStatus(componentHealthStatusSnapshot);
         String overallReason;
+        ComponentStatus overallStatus;
         if (initReportedHealthStatus.isEmpty()) {
-            overallReason = "Status is unknown";
+            overallStatus = UNKNOWN;
+            overallReason = OVERALL_STATUS_UNKNOWN;
         } else if (!isHealthy(initReportedHealthStatus)) {
-            overallReason = "Some of the services are not initialized";
+            overallStatus = DOWN;
+            overallReason = OVERALL_STATUS_DOWN;
         } else if (!isHealthy(runtimeReportedHealthStatus)) {
-            overallReason = "Some of the services experience runtime health issues";
+            overallStatus = FAILURE;
+            overallReason = OVERALL_STATUS_FAILURE;
         } else {
-            overallReason = "Healthy";
+            overallStatus = UP;
+            overallReason = OVERALL_STATUS_UP;
         }
         return HealthReport.builder()
                 .status(overallStatus)
                 .reason(overallReason)
                 .init(initReportedHealthStatus)
-                .initList(collect)
                 .runtime(runtimeReportedHealthStatus)
                 .build();
     }
@@ -96,46 +116,40 @@ public class HealthReport {
         return gson.toJson(this);
     }
 
-    private static boolean isHealthy(Map<Component, ReportedHealthStatus> componentHealthMap) {
-        return !componentHealthMap.isEmpty() && componentHealthMap.values().stream()
-                .allMatch(healthStatus -> healthStatus.status);
+    private static boolean isHealthy(Set<ComponentReportedHealthStatus> componentHealthMap) {
+        return !componentHealthMap.isEmpty() && componentHealthMap.stream()
+                .allMatch(healthStatus -> healthStatus.status == UP);
     }
 
-    private static Map<Component, ReportedHealthStatus> createInitReportedHealthStatus(Map<Component, ComponentStatus> componentHealthStatus) {
+    private static Set<ComponentReportedHealthStatus> createInitReportedHealthStatus(Map<Component,
+            HealthStatus> componentHealthStatus) {
         return componentHealthStatus.entrySet().stream().map(entry -> {
             final Component component = entry.getKey();
-            final ComponentStatus healthStatus = entry.getValue();
+            final HealthStatus healthStatus = entry.getValue();
             if (healthStatus.isInitHealthy()) {
-                return Tuple.of(component, new ReportedHealthStatus(true, "Initialization successful"));
+                return new ComponentReportedHealthStatus(component, UP,
+                        COMPONENT_INITIALIZED);
             } else {
-                return Tuple.of(component, new ReportedHealthStatus(false, "Service is not initialized"));
+                return new ComponentReportedHealthStatus(component, DOWN,
+                        COMPONENT_NOT_INITIALIZED);
             }
-        }).collect(Collectors.toMap(tuple -> tuple.first, tuple -> tuple.second));
+        }).collect(ImmutableSet.toImmutableSet());
     }
 
-    private static Map<Component, ReportedHealthStatus> createRuntimeReportedHealthStatus(Map<Component, ComponentStatus> componentHealthStatus) {
+    private static Set<ComponentReportedHealthStatus> createRuntimeReportedHealthStatus(Map<Component,
+            HealthStatus> componentHealthStatus) {
         return componentHealthStatus.entrySet().stream().map(entry -> {
             final Component component = entry.getKey();
-            final ComponentStatus healthStatus = entry.getValue();
+            final HealthStatus healthStatus = entry.getValue();
             if (healthStatus.getLatestRuntimeIssue().isPresent()) {
                 Issue issue = healthStatus.getLatestRuntimeIssue().get();
-                return Tuple.of(component, new ReportedHealthStatus(false, issue.getDescription()));
+                return new ComponentReportedHealthStatus(component, FAILURE, issue.getDescription());
             } else if (!healthStatus.isRuntimeHealthy()) {
-                return Tuple.of(component, new ReportedHealthStatus(false, "Service is not running"));
+                return new ComponentReportedHealthStatus(component, DOWN, COMPONENT_IS_NOT_RUNNING);
             } else {
-                return Tuple.of(component, new ReportedHealthStatus(true, "Up and running"));
+                return new ComponentReportedHealthStatus(component, UP, COMPONENT_IS_RUNNING);
             }
-        }).collect(Collectors.toMap(tuple -> tuple.first, tuple -> tuple.second));
-    }
-
-    @AllArgsConstructor
-    @ToString
-    @EqualsAndHashCode
-    public static class ReportedHealthStatus {
-        @Getter
-        private final boolean status;
-        @Getter
-        private final String reason;
+        }).collect(ImmutableSet.toImmutableSet());
     }
 
     @AllArgsConstructor
@@ -147,8 +161,11 @@ public class HealthReport {
         @SerializedName("DOWN")
         DOWN("DOWN"),
 
-        @SerializedName("DEGRADED")
-        DEGRADED("DEGRADED");
+        @SerializedName("FAILURE")
+        FAILURE("FAILURE"),
+
+        @SerializedName("UNKNOWN")
+        UNKNOWN("UNKNOWN");
 
 
         private final String fullName;
@@ -158,5 +175,19 @@ public class HealthReport {
             return fullName;
         }
 
-        }
+    }
+
+    @AllArgsConstructor
+    @ToString
+    @EqualsAndHashCode
+    public static class ComponentReportedHealthStatus {
+        @Getter
+        private final Component name;
+
+        @Getter
+        private final ComponentStatus status;
+
+        @Getter
+        private final String reason;
+    }
 }
