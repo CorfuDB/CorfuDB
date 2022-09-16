@@ -73,7 +73,7 @@ public class WriteSetSMRStream implements ISMRStream {
     /**
      * Current write position in an SMREntry
      */
-    private long writePos;
+    protected long writePos;
 
     // the specific stream-id for which this SMRstream wraps the write-set
     private final UUID id;

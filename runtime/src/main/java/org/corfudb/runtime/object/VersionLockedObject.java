@@ -1,6 +1,7 @@
 package org.corfudb.runtime.object;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
 import io.micrometer.core.instrument.Counter;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -8,6 +9,9 @@ import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.object.ICorfuVersionPolicy.VersionPolicy;
+import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.object.transactions.NoOpSMRStream;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.object.transactions.WriteSetSMRStream;
 import org.corfudb.runtime.view.Address;
@@ -24,6 +28,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.StampedLock;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -119,9 +124,15 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      * Correctness Logging
      */
     private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
+    private final Optional<Counter> noRollBackExceptionCounter;
 
     private static final String noRollbackName = "vlo.no_rollback_exception.count";
-    private final Optional<Counter> noRollBackExceptionCounter;
+    private static final Map<VersionPolicy, BiFunction<List<AbstractTransactionalContext>, UUID, WriteSetSMRStream>>
+            optimisticStreamFactory = ImmutableMap.
+            <VersionPolicy, BiFunction<List<AbstractTransactionalContext>, UUID, WriteSetSMRStream>>builder()
+            .put(ICorfuVersionPolicy.DEFAULT, WriteSetSMRStream::new)
+            .put(ICorfuVersionPolicy.MONOTONIC, NoOpSMRStream::new)
+            .build();
 
     /*
      * The VersionLockedObject maintains a versioned object which is backed by an ISMRStream,
@@ -298,7 +309,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      *                             the supplied version.
      */
     public void rollbackObjectUnsafe(long timestamp) {
-        if (object.getVersionPolicy() == ICorfuVersionPolicy.MONOTONIC) {
+        if (isMonotonicObject()) {
             return; // We are not allowed to go back in time.
         }
 
@@ -388,8 +399,9 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
             // We are setting the current context to the root context of nested transactions.
             // Upon sync forward
             // the stream will replay every entries from all parent transactional context.
-            WriteSetSMRStream newSmrStream =
-                    new WriteSetSMRStream(TransactionalContext.getTransactionStackAsList(), getID());
+            WriteSetSMRStream newSmrStream = optimisticStreamFactory
+                    .get(object.getVersionPolicy())
+                    .apply(TransactionalContext.getTransactionStackAsList(), getID());
 
             setUncommittedChanges(newSmrStream);
         }
@@ -464,6 +476,13 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      */
     public boolean isOptimisticallyModifiedUnsafe() {
         return optimisticStream != null && optimisticStream.pos() != Address.NEVER_READ;
+    }
+
+    /**
+     * Check whether this object is monotonic.
+     */
+    public boolean isMonotonicObject() {
+        return object.getVersionPolicy() == ICorfuVersionPolicy.MONOTONIC;
     }
 
     /**
@@ -599,7 +618,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
             // If there was no previously calculated undo entry
             // The undo records shouldn't be computed for objects with a MONOTONIC version
             // policy because they simply don't sync backwards to older versions.
-            if (undoRecordTarget != null && object.getVersionPolicy() != ICorfuVersionPolicy.MONOTONIC) {
+            if (undoRecordTarget != null && !isMonotonicObject()) {
                 // Calculate the undo record.
                 entry.setUndoRecord(undoRecordTarget
                         .getUndoRecord(object.getContext(context), entry.getSMRArguments()));
@@ -679,34 +698,31 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      * @param timestamp The timestamp to sync up to.
      */
     protected void syncStreamUnsafe(ISMRStream stream, long timestamp) {
-        log.trace("Sync[{}] {}", this, (timestamp == Address.OPTIMISTIC)
-                ? "Optimistic" : "to " + timestamp);
-        long syncTo = (timestamp == Address.OPTIMISTIC) ? Address.MAX : timestamp;
+        final boolean isOptimisticStream = timestamp == Address.OPTIMISTIC;
+        log.trace("Sync[{}] {}", this, isOptimisticStream ? "Optimistic" : "to " + timestamp);
+        long syncTo = isOptimisticStream ? Address.MAX : timestamp;
 
         AtomicLong numBytes = new AtomicLong();
         AtomicLong numEntries = new AtomicLong();
-        Runnable syncStreamRunnable = () ->
-                stream.streamUpTo(syncTo)
-                        .forEachOrdered(entry -> {
-                            try {
-                                Object res = applyUpdateUnsafe(entry, timestamp);
-                                if (timestamp == Address.OPTIMISTIC) {
-                                    entry.setUpcallResult(res);
-                                } else if (pendingUpcalls.contains(entry.getGlobalAddress())) {
-                                    log.debug("Sync[{}] Upcall Result {}",
-                                            this, entry.getGlobalAddress());
-                                    upcallResults.put(entry.getGlobalAddress(), res == null
-                                            ? NullValue.NULL_VALUE : res);
-                                    pendingUpcalls.remove(entry.getGlobalAddress());
-                                }
-                                entry.setUpcallResult(res);
-                                numEntries.getAndIncrement();
-                                numBytes.getAndAdd(entry.getSerializedSize()==null ? 0: entry.getSerializedSize());
-                            } catch (Exception e) {
-                                log.error("Sync[{}] Error: Couldn't execute upcall due to {}", this, e);
-                                throw new UnrecoverableCorfuError(e);
-                            }
-                        });
+        Runnable syncStreamRunnable = () -> stream.streamUpTo(syncTo).forEachOrdered(entry -> {
+                try {
+                    Object res = applyUpdateUnsafe(entry, timestamp);;
+                    entry.setUpcallResult(res);
+
+                    if (pendingUpcalls.contains(entry.getGlobalAddress())) {
+                        log.debug("Sync[{}] Upcall Result {}",
+                                this, entry.getGlobalAddress());
+                        upcallResults.put(entry.getGlobalAddress(), res == null
+                                ? NullValue.NULL_VALUE : res);
+                        pendingUpcalls.remove(entry.getGlobalAddress());
+                    }
+                    numEntries.getAndIncrement();
+                    numBytes.getAndAdd(entry.getSerializedSize()==null ? 0: entry.getSerializedSize());
+                } catch (Exception e) {
+                    log.error("Sync[{}] Error: Couldn't execute upcall due to {}", this, e);
+                    throw new UnrecoverableCorfuError(e);
+                }
+            });
         MicroMeterUtils.time(syncStreamRunnable, "vlo.sync.timer",
                 "streamId", getID().toString());
         MicroMeterUtils.measure(numBytes.longValue(), "vlo.sync.read_size");
