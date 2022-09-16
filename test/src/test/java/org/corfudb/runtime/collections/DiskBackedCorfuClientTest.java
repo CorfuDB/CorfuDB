@@ -47,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
@@ -129,7 +130,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
                 new PojoSerializer(String.class), getRuntime());
         return getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setArguments(mapSupplier, ICorfuVersionPolicy.DEFAULT)
+                .setArguments(mapSupplier, ICorfuVersionPolicy.MONOTONIC)
                 .setStreamName("diskBackedMap")
                 .open();
     }
@@ -178,7 +179,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
                 persistedCacheLocation, options, Serializers.JSON, getRuntime());
         final CorfuTable<String, String> table = getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setArguments(mapSupplier,ICorfuVersionPolicy.DEFAULT)
+                .setArguments(mapSupplier,ICorfuVersionPolicy.MONOTONIC)
                 .setStreamName("diskBackedMap")
                 .open();
 
@@ -214,7 +215,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
         CorfuTable<String, Pojo>
                 table = getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<String, Pojo>>() {})
-                .setArguments(mapSupplier, ICorfuVersionPolicy.DEFAULT)
+                .setArguments(mapSupplier, ICorfuVersionPolicy.MONOTONIC)
                 .setStreamName("diskBackedMap")
                 .open();
 
