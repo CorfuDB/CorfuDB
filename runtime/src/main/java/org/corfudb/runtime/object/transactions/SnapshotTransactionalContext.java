@@ -39,7 +39,7 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
                         && !o.isOptimisticallyModifiedUnsafe(),
                 o -> syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy, null),
                 accessFunction::access,
-                version -> updateKnownStreamPosition(proxy.getStreamID(), version));
+                version -> updateKnownStreamPosition(proxy, version));
     }
 
     /**
@@ -47,7 +47,14 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
      */
     @Override
     public long commitTransaction() throws TransactionAbortedException {
-        return getMaxAddressRead();
+        // If the transaction has read monotonic objects, we instead return the min address
+        // of all accessed streams. Although this avoids data loss, clients subscribing at
+        // this point for delta/streaming may observe duplicate data.
+        if (hasAccessedMonotonicObject) {
+            return getMinAddressRead();
+        } else {
+            return getMaxAddressRead();
+        }
     }
 
     /**
