@@ -10,6 +10,7 @@ import javax.annotation.Nullable;
 
 import com.google.common.base.Preconditions;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
@@ -124,6 +125,13 @@ public abstract class AbstractTransactionalContext implements
     @Setter
     private TxnContext txnContext;
 
+    /**
+     * Flag used to track if this transaction has performed any accesses
+     * on monotonic objects. This is used to compute the commit address
+     * of read-only transactions.
+     */
+    protected boolean hasAccessedMonotonicObject = false;
+
     @Getter
     private final WriteSetInfo writeSetInfo = new WriteSetInfo();
 
@@ -143,15 +151,27 @@ public abstract class AbstractTransactionalContext implements
         AbstractTransactionalContext.log.debug("TXBegin[{}]", this);
     }
 
-    protected void updateKnownStreamPosition(UUID streamId, long position) {
-        Long val = knownStreamsPosition.get(streamId);
+    protected void updateKnownStreamPosition(@NonNull ICorfuSMRProxyInternal<?> proxy, long position) {
+        final boolean isMonotonicObject = proxy.getUnderlyingObject().isMonotonicObject();
+        Long val = knownStreamsPosition.get(proxy.getStreamID());
+
         if (val != null) {
-            Preconditions.checkState(val == position, "inconsistent stream positions %s and %s",
-                    val, position);
-            return;
+            if (isMonotonicObject) {
+                Preconditions.checkState(val <= position,
+                        "new stream position %s has decreased from %s", position, val);
+            } else {
+                // This precondition is not valid for monotonic objects since multiple accesses
+                // performed by a transaction may not always see the same stream position.
+                // This can occur if another thread performs accesses at a later snapshot and
+                // interleaves with this transaction.
+                Preconditions.checkState(val == position,
+                        "inconsistent stream positions %s and %s", val, position);
+                return;
+            }
         }
 
-        knownStreamsPosition.put(streamId, position);
+        hasAccessedMonotonicObject = hasAccessedMonotonicObject || isMonotonicObject;
+        knownStreamsPosition.put(proxy.getStreamID(), position);
     }
 
     /**
@@ -285,6 +305,18 @@ public abstract class AbstractTransactionalContext implements
             return Address.NON_ADDRESS;
         }
         return Collections.max(knownStreamsPosition.values());
+    }
+
+    /**
+     * Returns the min address that has been read in this transaction,
+     * or NON_ADDRESS if no such address exists.
+     */
+    protected long getMinAddressRead() {
+        if (knownStreamsPosition.isEmpty()) {
+            return Address.NON_ADDRESS;
+        }
+
+        return Collections.min(knownStreamsPosition.values());
     }
 
     /**
