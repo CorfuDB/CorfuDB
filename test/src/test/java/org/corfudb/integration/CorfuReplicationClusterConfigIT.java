@@ -1147,6 +1147,18 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         for (int i = 0; i < secondBatch; i++) {
             assertThat(mapStandby.containsKey(String.valueOf(i))).isTrue();
         }
+        //verify the status table before topology change
+        LogReplicationMetadata.ReplicationStatusKey key =
+                LogReplicationMetadata.ReplicationStatusKey
+                        .newBuilder()
+                        .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                        .build();
+        ReplicationStatusVal replicationStatus;
+        try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            replicationStatus = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+            txn.commit();
+        }
+        assertThat(replicationStatus).isNotNull();
         log.info("Log replication succeeds without config change!");
 
         // Perform a config update with invalid state
@@ -1173,6 +1185,12 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         TimeUnit.SECONDS.sleep(mediumInterval);
         assertThat(mapActive.size()).isEqualTo(thirdBatch);
         assertThat(mapStandby.size()).isEqualTo(secondBatch);
+        // verify that active doesn't have the invalid cluster info in the LR status table
+        try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            replicationStatus = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+            txn.commit();
+        }
+        assertThat(replicationStatus).isNull();
         log.info("After {} seconds sleep, double check passed", mediumInterval);
 
         // Change to default active standby config
