@@ -138,13 +138,13 @@ public class HealthMonitorIT extends AbstractIT {
                 .init(ImmutableSet.of(
                         new ComponentReportedHealthStatus(LOG_UNIT, DOWN, COMPONENT_NOT_INITIALIZED),
                         new ComponentReportedHealthStatus(LAYOUT_SERVER, DOWN, COMPONENT_NOT_INITIALIZED),
-                        new ComponentReportedHealthStatus(ORCHESTRATOR, DOWN, COMPONENT_NOT_INITIALIZED),
+                        new ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_INITIALIZED),
                         new ComponentReportedHealthStatus(FAILURE_DETECTOR, DOWN, COMPONENT_NOT_INITIALIZED),
                         new ComponentReportedHealthStatus(SEQUENCER, DOWN, COMPONENT_NOT_INITIALIZED)))
                 .runtime(ImmutableSet.of(
                         new ComponentReportedHealthStatus(LOG_UNIT, DOWN, COMPONENT_IS_NOT_RUNNING),
                         new ComponentReportedHealthStatus(LAYOUT_SERVER, DOWN, COMPONENT_IS_NOT_RUNNING),
-                        new ComponentReportedHealthStatus(ORCHESTRATOR, DOWN, COMPONENT_IS_NOT_RUNNING),
+                        new ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_IS_RUNNING),
                         new ComponentReportedHealthStatus(FAILURE_DETECTOR, DOWN, COMPONENT_IS_NOT_RUNNING),
                         new ComponentReportedHealthStatus(SEQUENCER, DOWN, COMPONENT_IS_NOT_RUNNING)))
                 .build();
@@ -212,10 +212,10 @@ public class HealthMonitorIT extends AbstractIT {
                         new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_INITIALIZED)))
                 .runtime(ImmutableSet.of(
                         new ComponentReportedHealthStatus(LOG_UNIT, FAILURE, "Quota exceeded"),
-                        new ComponentReportedHealthStatus(LAYOUT_SERVER, UP, COMPONENT_INITIALIZED),
-                        new ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_INITIALIZED),
-                        new ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_INITIALIZED),
-                        new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_INITIALIZED)))
+                        new ComponentReportedHealthStatus(LAYOUT_SERVER, UP, COMPONENT_IS_RUNNING),
+                        new ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_IS_RUNNING),
+                        new ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_IS_RUNNING),
+                        new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING)))
                 .build();
 
         HealthReport healthReport = queryCurrentHealthReport(HEALTH_PORT_2);
