@@ -83,6 +83,10 @@ public class LogReplicationSinkManager implements DataReceiver {
     // Current topologyConfigId, used to drop out of date messages.
     private long topologyConfigId = 0;
 
+    // Cluster id of the Source cluster from which this Sink Manager receives updates
+    @Getter
+    private String sourceClusterId = null;
+
     @VisibleForTesting
     private int rxMessageCounter = 0;
 
@@ -110,7 +114,8 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config,
                                      LogReplicationMetadataManager metadataManager,
-                                     ServerContext context, long topologyConfigId) {
+                                     ServerContext context, long topologyConfigId,
+                                     String remoteClusterId) {
 
         this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
                 .trustStore((String) context.getServerConfig().get(ConfigParamNames.TRUST_STORE))
@@ -124,7 +129,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.pluginConfigFilePath = context.getPluginConfigFilePath();
         this.topologyConfigId = topologyConfigId;
-        init(metadataManager, config);
+        init(metadataManager, config, remoteClusterId);
     }
 
     /**
@@ -137,11 +142,10 @@ public class LogReplicationSinkManager implements DataReceiver {
     public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config,
                                      LogReplicationMetadataManager metadataManager, String pluginConfigFilePath) {
         this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
-                .maxCacheEntries(config.getMaxCacheSize())
-                .build())
+                .maxCacheEntries(config.getMaxCacheSize()).build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.pluginConfigFilePath = pluginConfigFilePath;
-        init(metadataManager, config);
+        init(metadataManager, config, sourceClusterId);
     }
 
     /**
@@ -150,7 +154,9 @@ public class LogReplicationSinkManager implements DataReceiver {
      * @param metadataManager metadata manager instance
      * @param config log replication configuration
      */
-    private void init(LogReplicationMetadataManager metadataManager, LogReplicationConfig config) {
+    private void init(LogReplicationMetadataManager metadataManager,
+                      LogReplicationConfig config, String remoteClusterId) {
+        this.sourceClusterId = remoteClusterId;
         this.logReplicationMetadataManager = metadataManager;
         this.config = config;
 
@@ -162,7 +168,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         this.applyExecutor = Executors.newSingleThreadExecutor(
                 new ThreadFactoryBuilder()
                         .setDaemon(true)
-                        .setNameFormat("snapshotSyncApplyExecutor")
+                        .setNameFormat("snapshotSyncApplyExecutor-" + remoteClusterId)
                         .build());
 
         initWriterAndBufferMgr();
@@ -198,9 +204,10 @@ public class LogReplicationSinkManager implements DataReceiver {
         // Instantiate Snapshot Sync Plugin, this is an external service which will be triggered on start and end
         // of a snapshot sync.
         snapshotSyncPlugin = getOnSnapshotSyncPlugin();
-
-        snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadataManager);
-        logEntryWriter = new LogEntryWriter(runtime, config, logReplicationMetadataManager);
+        snapshotWriter = new StreamsSnapshotWriter(runtime, config,
+            logReplicationMetadataManager);
+        logEntryWriter = new LogEntryWriter(runtime, config,
+            logReplicationMetadataManager);
         logEntryWriter.reset(logReplicationMetadataManager.getLastAppliedSnapshotTimestamp(),
                 logReplicationMetadataManager.getLastProcessedLogEntryTimestamp());
 
@@ -568,7 +575,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         // Construct Log Replication Entry message used to complete the Snapshot Sync with info in the metadata manager
         LogReplicationEntryMetadataMsg metadata = LogReplicationEntryMetadataMsg.newBuilder()
                 .setEntryType(LogReplicationEntryType.SNAPSHOT_END)
-                .setTopologyConfigID(logReplicationMetadataManager.getTopologyConfigId())
+                .setTopologyConfigID(topologyConfigId)
                 .setTimestamp(-1L)
                 .setSnapshotTimestamp(snapshotTransferTs)
                 .setSyncRequestId(getUuidMsg(snapshotSyncId)).build();
