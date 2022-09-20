@@ -71,7 +71,8 @@ public final class FileSystemAgent {
 
         // Derived size in bytes that normal writes to the log unit are capped at.
         // This is derived as a percentage of the log's filesystem capacity.
-        return (long) (fileSystemCapacity * config.limitPercentage / 100);
+        long totalCorfuDataCapacity = fileSystemCapacity - config.reservedSpace;
+        return (long) (totalCorfuDataCapacity * config.limitPercentage / 100);
     }
 
     public static void init(FileSystemConfig config) {
@@ -139,9 +140,11 @@ public final class FileSystemAgent {
         private final Path logDir;
         private final double limitPercentage;
         private final PersistenceMode mode;
+        private final long reservedSpace;
 
         public FileSystemConfig(ServerContext serverContext) {
             String limitParam = serverContext.getServerConfig(String.class, "--log-size-quota-percentage");
+            reservedSpace = Long.parseLong(serverContext.getServerConfig(String.class, "--reserved-space-bytes"));
             limitPercentage = Double.parseDouble(limitParam);
 
             checkLimits();
@@ -153,10 +156,11 @@ public final class FileSystemAgent {
             mode = PersistenceMode.fromBool(luConfig.isMemoryMode());
         }
 
-        public FileSystemConfig(Path logDir, double limitPercentage, PersistenceMode mode) {
+        public FileSystemConfig(Path logDir, double limitPercentage, long reservedSpace, PersistenceMode mode) {
             this.logDir = logDir;
             this.limitPercentage = limitPercentage;
             this.mode = mode;
+            this.reservedSpace = reservedSpace;
             checkLimits();
         }
 
