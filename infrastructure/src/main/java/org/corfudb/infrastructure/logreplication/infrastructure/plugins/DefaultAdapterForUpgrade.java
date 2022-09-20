@@ -36,7 +36,6 @@ public abstract class DefaultAdapterForUpgrade implements ILogReplicationConfigA
 
     // Provides the fully qualified names of streams to replicate
     @Override
-    @SuppressWarnings("checkstyle:printLine")
     public Set<String> fetchStreamsToReplicate() {
         if (corfuStore != null) {
             try {
