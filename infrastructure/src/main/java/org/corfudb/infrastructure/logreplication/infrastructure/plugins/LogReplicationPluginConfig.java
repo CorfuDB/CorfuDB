@@ -109,8 +109,6 @@ public class LogReplicationPluginConfig {
 
             this.nodeIdFilePath = null;
         }
-
-        log.debug("{} ", this);
     }
 
     private static String getParentDir() {

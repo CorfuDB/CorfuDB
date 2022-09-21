@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultLogReplicationConfigAdapter;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -34,9 +35,11 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
             replicationConfigManager.getSubscriberToStreamsMap();
 
         // Verify that an entry exists for each supported replication model
-        Set<LogReplicationConfig.ReplicationModel> modelsInConfig =
+        Set<LogReplicationMetadata.ReplicationModels> modelsInConfig =
             subscriberToStreamsMap.keySet().stream().map(key -> key.getReplicationModel()).collect(Collectors.toSet());
-        Assert.assertTrue(modelsInConfig.containsAll(Arrays.asList(LogReplicationConfig.ReplicationModel.values())));
+        // TODO: this will be un-commented as we use the replication Models. Currently, we use only 1 out of the four replication models.
+//        Assert.assertTrue(modelsInConfig.containsAll(Arrays.asList(LogReplicationConfig.ReplicationModel.values())));
+        Assert.assertTrue(modelsInConfig.size() == 1 && modelsInConfig.contains(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES));
 
         // Verify that all streams returned by the default config adapter are present in the constructed config
         // TODO pankti: After the change to read options from the registry table is available, verification must be

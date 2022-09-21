@@ -22,6 +22,7 @@ import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -148,6 +149,19 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 ClusterUuidMsg.class, ClusterUuidMsg.class, ClusterUuidMsg.class,
                 TableOptions.fromProtoSchema(ClusterUuidMsg.class)
         );
+
+        try (TxnContext txn = sourceCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_SINGLE_SOURCE_SINK,
+                    DefaultClusterManager.OP_SINGLE_SOURCE_SINK, DefaultClusterManager.OP_SINGLE_SOURCE_SINK);
+            txn.commit();
+        }
+        try (TxnContext txn = sinkCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_SINGLE_SOURCE_SINK,
+                    DefaultClusterManager.OP_SINGLE_SOURCE_SINK, DefaultClusterManager.OP_SINGLE_SOURCE_SINK);
+            txn.commit();
+        }
+
+        assertThat(configTable.count()).isOne();
 
         sourceLockTable = sourceCorfuStore.openTable(
                 CORFU_SYSTEM_NAMESPACE,
@@ -791,7 +805,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         // (5) Confirm that if sink LR is stopped, in the middle of replication, the status changes to STOPPED
         shutdownCorfuServer(sinkReplicationServer);
-
         while (!sinkStatus.getStatus().equals(LogReplicationMetadata.SyncStatus.STOPPED)) {
             try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
                 sinkStatus = (ReplicationStatusVal) txn.getRecord(REPLICATION_STATUS_TABLE, sinkClusterId).getPayload();

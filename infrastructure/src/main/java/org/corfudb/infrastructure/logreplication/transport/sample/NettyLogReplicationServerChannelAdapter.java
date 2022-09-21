@@ -15,7 +15,7 @@ import io.netty.handler.ssl.SslHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
+import org.corfudb.infrastructure.logreplication.runtime.ReplicationSinkRouter;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
@@ -48,7 +48,7 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
 
     public NettyLogReplicationServerChannelAdapter(
             @Nonnull ServerContext serverContext,
-            @Nonnull LogReplicationServerRouter router) {
+            @Nonnull ReplicationSinkRouter router) {
         super(serverContext, router);
         this.port = Integer.parseInt((String) serverContext.getServerConfig().get("<port>"));
         this.nettyServerChannel = new CorfuNettyServerChannel(this);

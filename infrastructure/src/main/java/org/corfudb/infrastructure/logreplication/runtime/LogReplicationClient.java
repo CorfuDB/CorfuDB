@@ -13,7 +13,7 @@ import org.corfudb.runtime.proto.service.CorfuMessage;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-import static org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter.REMOTE_LEADER;
+import static org.corfudb.infrastructure.logreplication.runtime.ReplicationSourceRouter.REMOTE_LEADER;
 
 /**
  * A client to send messages to the Log Replication Unit.

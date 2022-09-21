@@ -9,6 +9,8 @@ import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -26,14 +28,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+//==================================================================
 /**
- * This class represents the Corfu interface to route incoming messages from external adapters when
- * custom communication channels are used.
- *
- * Created by annym on 14/5/20.
+ *   NOT READY FOR REVIEW. PLACEHOLDER
  */
+//==================================================================
 @Slf4j
-public class LogReplicationServerRouter implements IServerRouter {
+public class ReplicationSinkClientRouter extends ReplicationRouter implements IServerRouter {
 
     @Getter
     private final IServerChannelAdapter serverAdapter;
@@ -50,15 +51,21 @@ public class LogReplicationServerRouter implements IServerRouter {
     @Setter
     private volatile long serverEpoch;
 
-    /** The {@link AbstractServer}s this {@link LogReplicationServerRouter} routes messages for. */
+    /** The {@link AbstractServer}s this {@link ReplicationSinkRouter} routes messages for. */
     final List<AbstractServer> servers;
 
-    /** Construct a new {@link LogReplicationServerRouter}.
+    /** Construct a new {@link ReplicationSinkRouter}.
      *
      * @param servers   A list of {@link AbstractServer}s this router will route
      *                  messages for.
+     * @param remoteCluster the remote source cluster
+     * @param localClusterId local cluster ID
+     * @param  pluginFilePath file path to fetch plugin information
+     * @param session replication session between current and remote cluster
      */
-    public LogReplicationServerRouter(List<AbstractServer> servers) {
+    public ReplicationSinkClientRouter(List<AbstractServer> servers, ClusterDescriptor remoteCluster,
+                                 String localClusterId, String pluginFilePath, ReplicationSession session) {
+        super(remoteCluster, localClusterId, pluginFilePath, session, false);
         this.serverEpoch = ((BaseServer) servers.get(0)).serverContext.getServerEpoch();
         this.servers = ImmutableList.copyOf(servers);
         this.handlerMap = new EnumMap<>(RequestPayloadMsg.PayloadCase.class);
@@ -74,6 +81,7 @@ public class LogReplicationServerRouter implements IServerRouter {
         this.serverAdapter = getAdapter(((BaseServer) servers.get(0)).serverContext);
     }
 
+
     private IServerChannelAdapter getAdapter(ServerContext serverContext) {
 
         LogReplicationPluginConfig config = new LogReplicationPluginConfig(serverContext.getPluginConfigFilePath());
@@ -82,12 +90,43 @@ public class LogReplicationServerRouter implements IServerRouter {
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
             Class adapter = Class.forName(config.getTransportServerClassCanonicalName(), true, child);
             return (IServerChannelAdapter) adapter.getDeclaredConstructor(
-                    ServerContext.class, LogReplicationServerRouter.class).newInstance(serverContext, this);
+                    ServerContext.class, ReplicationSinkClientRouter.class).newInstance(serverContext, this);
         } catch (Exception e) {
             log.error("Fatal error: Failed to create serverAdapter", e);
             throw new UnrecoverableCorfuError(e);
         }
     }
+
+    /**
+     * Connection Up Callback.
+     *
+     * @param nodeId id of the remote node to which connection was established.
+     */
+    @Override
+    public synchronized void onConnectionUp(String nodeId) {
+        log.info("Connection established to remote node {}", nodeId);
+        //no op
+    }
+
+    /**
+     * Connection Down Callback.
+     *
+     * @param nodeId id of the remote node to which connection came down.
+     */
+    @Override
+    public synchronized void onConnectionDown(String nodeId) {
+        log.info("Connection lost to remote node {} on cluster {}", nodeId, this.remoteClusterDescriptor.getClusterId());
+        // Attempt to reconnect to this endpoint
+        channelAdapter.connectAsync(nodeId);
+    }
+
+    /**
+     * Channel Adapter On Error Callback
+     */
+    public synchronized void onError(Throwable t) {
+        log.info("Error on Connection {}", t.getMessage());
+    }
+
 
     // ============ IServerRouter Methods =============
 
@@ -150,6 +189,14 @@ public class LogReplicationServerRouter implements IServerRouter {
                 }
             }
         }
+    }
+
+    public void receive(ResponseMsg message) {
+        log.info("Received ResponseMsg {} ", message);
+    }
+
+    public void completeAllExceptionally(Exception e) {
+        log.info("Error in connecting....have the reconnection logic in sink");
     }
 
     /**

@@ -2,7 +2,8 @@ package org.corfudb.infrastructure.logreplication.transport.client;
 
 import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
+import org.corfudb.infrastructure.logreplication.runtime.ReplicationSinkClientRouter;
+import org.corfudb.infrastructure.logreplication.runtime.ReplicationSourceRouter;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 
@@ -27,21 +28,26 @@ public abstract class IClientChannelAdapter {
     private final ClusterDescriptor remoteClusterDescriptor;
 
     @Getter
-    private final LogReplicationClientRouter router;
+    private final ReplicationSourceRouter sourceRouter;
+
+    @Getter
+    private final ReplicationSinkClientRouter sinkRouter;
 
     /**
      * Default Constructor
      *
      * @param localClusterId local cluster unique identifier
      * @param remoteClusterDescriptor descriptor of the remote cluster (sink)
-     * @param router interface to forward
+     * @param sourceRouter interface to forward
      */
     public IClientChannelAdapter(@Nonnull String localClusterId,
                                  @Nonnull ClusterDescriptor remoteClusterDescriptor,
-                                 @Nonnull LogReplicationClientRouter router) {
+                                 @Nonnull ReplicationSourceRouter sourceRouter,
+                                 @Nonnull ReplicationSinkClientRouter sinkRouter) {
         this.localClusterId = localClusterId;
         this.remoteClusterDescriptor = remoteClusterDescriptor;
-        this.router = router;
+        this.sourceRouter = sourceRouter;
+        this.sinkRouter = sinkRouter;
     }
 
     /**
@@ -84,18 +90,26 @@ public abstract class IClientChannelAdapter {
      * @param msg received corfu message
      */
     public void receive(ResponseMsg msg) {
-        getRouter().receive(msg);
+        if (getSinkRouter() != null) {
+            getSinkRouter().receive(msg);
+        } else {
+            getSourceRouter().receive(msg);
+        }
     }
 
     /**
      * Callback upon connectivity.
      *
-     * The implementer of the adapter must notify back on a connection being stablished.
+     * The implementer of the adapter must notify back on a connection being established.
      *
      * @param nodeId remote node id for which the connection was established.
      */
     public void onConnectionUp(String nodeId) {
-        getRouter().onConnectionUp(nodeId);
+        if (getSinkRouter() != null) {
+            getSinkRouter().onConnectionUp(nodeId);
+        } else {
+            getSourceRouter().onConnectionUp(nodeId);
+        }
     }
 
     /**
@@ -106,7 +120,11 @@ public abstract class IClientChannelAdapter {
      * @param nodeId remote node id for which the connection was lost.
      */
     public void onConnectionDown(String nodeId) {
-        getRouter().onConnectionDown(nodeId);
+        if (getSinkRouter() != null) {
+            getSinkRouter().onConnectionDown(nodeId);
+        } else {
+            getSourceRouter().onConnectionDown(nodeId);
+        }
     }
 
     /**
@@ -117,7 +135,11 @@ public abstract class IClientChannelAdapter {
      * @param t
      */
     public void onError(Throwable t) {
-        getRouter().onError(t);
+        if (getSinkRouter() != null) {
+            getSinkRouter().onError(t);
+        } else {
+            getSourceRouter().onError(t);
+        }
     }
 
     /**
@@ -126,7 +148,10 @@ public abstract class IClientChannelAdapter {
      * @return leader in remote cluster
      */
     public Optional<String> getRemoteLeader() {
-        return getRouter().getRemoteLeaderNodeId();
+        if(getSourceRouter() != null) {
+            return getSourceRouter().getRemoteLeaderNodeId();
+        }
+        return Optional.empty();
     }
 
     public abstract void resetRemoteLeader();

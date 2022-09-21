@@ -4,13 +4,16 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc;
 import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc.LogReplicationChannelBlockingStub;
 import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc.LogReplicationChannelStub;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
+import org.corfudb.infrastructure.logreplication.runtime.ReplicationSinkClientRouter;
+import org.corfudb.infrastructure.logreplication.runtime.ReplicationSinkRouter;
+import org.corfudb.infrastructure.logreplication.runtime.ReplicationSourceRouter;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
@@ -58,8 +61,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     public GRPCLogReplicationClientChannelAdapter(
             String localClusterId,
             ClusterDescriptor remoteClusterDescriptor,
-            LogReplicationClientRouter adapter) {
-        super(localClusterId, remoteClusterDescriptor, adapter);
+            ReplicationSourceRouter adapter, ReplicationSinkClientRouter sinkRouter ) {
+        super(localClusterId, remoteClusterDescriptor, adapter, sinkRouter);
 
         this.channelMap = new HashMap<>();
         this.blockingStubMap = new HashMap<>();
@@ -150,7 +153,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         } catch (Exception e) {
             log.error("Caught exception while sending message to query leadership status id {}",
                     request.getHeader().getRequestId(), e);
-            getRouter().completeExceptionally(request.getHeader().getRequestId(), e);
+            getSourceRouter().completeExceptionally(request.getHeader().getRequestId(), e);
         }
     }
 
@@ -166,7 +169,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         } catch (Exception e) {
             log.error("Caught exception while sending message to query metadata id={}",
                     request.getHeader().getRequestId(), e);
-            getRouter().completeExceptionally(request.getHeader().getRequestId(), e);
+            getSourceRouter().completeExceptionally(request.getHeader().getRequestId(), e);
         }
     }
 
@@ -181,7 +184,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                         receive(response);
                     } catch (Exception e) {
                         log.error("Caught exception while receiving ACK", e);
-                        getRouter().completeExceptionally(response.getHeader().getRequestId(), e);
+                        getSourceRouter().completeExceptionally(response.getHeader().getRequestId(), e);
                         requestObserverMap.remove(requestId);
                     }
                 }
@@ -189,7 +192,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 @Override
                 public void onError(Throwable t) {
                     log.error("Error from response observer", t);
-                    getRouter().completeExceptionally(requestId, t);
+                    getSourceRouter().completeExceptionally(requestId, t);
                     requestObserverMap.remove(requestId);
                 }
 

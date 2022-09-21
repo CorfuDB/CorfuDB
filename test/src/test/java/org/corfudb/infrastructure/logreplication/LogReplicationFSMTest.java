@@ -505,7 +505,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         }
 
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, TEST_TOPOLOGY_CONFIG_ID,
-                TEST_LOCAL_CLUSTER_ID);
+                replicationSession
+        );
         Map<ReplicationSubscriber, Set<String>> tablesMap = new HashMap<>();
         tablesMap.put(replicationSession.getSubscriber(), Collections.singleton(TEST_STREAM_NAME));
         LogReplicationConfig config = new LogReplicationConfig(tablesMap);

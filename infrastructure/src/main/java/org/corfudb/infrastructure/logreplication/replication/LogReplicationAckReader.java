@@ -64,6 +64,8 @@ public class LogReplicationAckReader {
 
     private final Lock lock = new ReentrantLock();
 
+    private ReplicationSession replicationSession;
+
     public LogReplicationAckReader(LogReplicationMetadataManager metadataManager, LogReplicationConfig config,
                                    CorfuRuntime runtime, ReplicationSession replicationSession) {
         this.metadataManager = metadataManager;
@@ -71,6 +73,7 @@ public class LogReplicationAckReader {
         this.runtime = runtime;
         this.remoteClusterId = replicationSession.getRemoteClusterId();
         this.replicationSubscriber = replicationSession.getSubscriber();
+        this.replicationSession = replicationSession;
     }
 
     public void setAckedTsAndSyncType(long ackedTs, SyncType syncType) {
@@ -352,7 +355,7 @@ public class LogReplicationAckReader {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
                     lock.lock();
-                    metadataManager.updateSnapshotSyncStatusCompleted(remoteClusterId,
+                    metadataManager.updateSnapshotSyncStatusCompleted(replicationSession,
                             calculateRemainingEntriesToSend(baseSnapshotTimestamp), baseSnapshotTimestamp);
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to markSnapshotSyncInfoCompleted for remote cluster {}.", remoteClusterId, tae);
@@ -378,7 +381,7 @@ public class LogReplicationAckReader {
                 try {
                     lock.lock();
                     long remainingEntriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
-                    metadataManager.updateSnapshotSyncStatusOngoing(remoteClusterId, forced, eventId,
+                    metadataManager.updateSnapshotSyncStatusOngoing(replicationSession, forced, eventId,
                             baseSnapshotTimestamp, remainingEntriesToSend);
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to markSnapshotSyncInfoOngoing for event {}.", eventId, tae);
@@ -403,7 +406,7 @@ public class LogReplicationAckReader {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
                     lock.lock();
-                    metadataManager.updateSyncStatus(remoteClusterId, SyncType.SNAPSHOT, SyncStatus.ONGOING);
+                    metadataManager.updateSyncStatus(replicationSession, SyncType.SNAPSHOT, SyncStatus.ONGOING);
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to markSnapshotSyncInfoOngoing for cluster {}.", remoteClusterId, tae);
                     throw new RetryNeededException();
@@ -424,7 +427,7 @@ public class LogReplicationAckReader {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
                     lock.lock();
-                    metadataManager.updateSyncStatus(remoteClusterId, lastSyncType, status);
+                    metadataManager.updateSyncStatus(replicationSession, lastSyncType, status);
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to markSyncStatus as {}.", status, tae);
                     throw new RetryNeededException();
@@ -476,7 +479,7 @@ public class LogReplicationAckReader {
                     try {
                         lock.lock();
                         long entriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
-                        metadataManager.setReplicationStatusTable(remoteClusterId, entriesToSend, lastSyncType);
+                        metadataManager.setReplicationStatusTable(replicationSession, entriesToSend, lastSyncType);
                     } catch (TransactionAbortedException tae) {
                         log.error("Error while attempting to set replication status for " +
                                         "remote cluster {} with lastSyncType {}.",

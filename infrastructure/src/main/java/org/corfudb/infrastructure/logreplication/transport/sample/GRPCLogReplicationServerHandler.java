@@ -4,7 +4,7 @@ import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
+import org.corfudb.infrastructure.logreplication.runtime.ReplicationSinkRouter;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
@@ -27,7 +27,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
     /*
      * Corfu Message Router (internal to Corfu)
      */
-    LogReplicationServerRouter router;
+    ReplicationSinkRouter router;
 
     /*
      * Map of (Remote Cluster Id, Request Id) pair to Stream Observer to send responses back to the client. Used for
@@ -44,7 +44,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
      */
     Map<Pair<UuidMsg, Long>, StreamObserver<ResponseMsg>> replicationStreamObserverMap;
 
-    public GRPCLogReplicationServerHandler(LogReplicationServerRouter router) {
+    public GRPCLogReplicationServerHandler(ReplicationSinkRouter router) {
         this.router = router;
         this.streamObserverMap = new ConcurrentHashMap<>();
         this.replicationStreamObserverMap = new ConcurrentHashMap<>();

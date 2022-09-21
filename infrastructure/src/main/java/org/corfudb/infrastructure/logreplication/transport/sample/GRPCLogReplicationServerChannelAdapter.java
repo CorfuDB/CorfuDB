@@ -4,7 +4,7 @@ import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
+import org.corfudb.infrastructure.logreplication.runtime.ReplicationSinkRouter;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 
@@ -32,7 +32,7 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
 
     private CompletableFuture<Boolean> serverCompletable;
 
-    public GRPCLogReplicationServerChannelAdapter(ServerContext serverContext, LogReplicationServerRouter router) {
+    public GRPCLogReplicationServerChannelAdapter(ServerContext serverContext, ReplicationSinkRouter router) {
         super(serverContext, router);
         this.service = new GRPCLogReplicationServerHandler(router);
         this.port = Integer.parseInt((String) serverContext.getServerConfig().get("<port>"));

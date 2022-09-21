@@ -62,7 +62,7 @@ public class LogReplicationHandler implements IClient, IHandler<LogReplicationCl
     private static Object handleLogReplicationAck(@Nonnull ResponseMsg response,
                                                   @Nonnull ChannelHandlerContext ctx,
                                                   @Nonnull IClientRouter router) {
-        log.debug("Handle log replication ACK");
+        log.debug("Handle log replication ACK {}", response);
         return response.getPayload().getLrEntryAck();
     }
 

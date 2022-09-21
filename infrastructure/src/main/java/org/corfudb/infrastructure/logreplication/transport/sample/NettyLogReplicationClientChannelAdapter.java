@@ -5,8 +5,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
 
+import org.corfudb.infrastructure.logreplication.runtime.ReplicationRouter;
+import org.corfudb.infrastructure.logreplication.runtime.ReplicationSinkClientRouter;
+import org.corfudb.infrastructure.logreplication.runtime.ReplicationSinkRouter;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
+import org.corfudb.infrastructure.logreplication.runtime.ReplicationSourceRouter;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 
@@ -30,12 +33,14 @@ public class NettyLogReplicationClientChannelAdapter extends IClientChannelAdapt
      * Constructor
      *
      * @param remoteClusterDescriptor
-     * @param router
+     * @param sourceRouter not null when the connection initiator is the source
+     * @param sinkRouter not null when the connection initiator is the sink
      */
     public NettyLogReplicationClientChannelAdapter(@NonNull String localClusterId,
                                                    @NonNull ClusterDescriptor remoteClusterDescriptor,
-                                                   @NonNull LogReplicationClientRouter router) {
-        super(localClusterId, remoteClusterDescriptor, router);
+                                                    ReplicationSourceRouter sourceRouter,
+                                                   ReplicationSinkClientRouter sinkRouter ) {
+        super(localClusterId, remoteClusterDescriptor, sourceRouter, sinkRouter);
         this.channels = new ConcurrentHashMap<>();
         this.executorService = Executors.newSingleThreadExecutor();
     }
@@ -46,7 +51,16 @@ public class NettyLogReplicationClientChannelAdapter extends IClientChannelAdapt
             ClusterDescriptor remoteCluster = getRemoteClusterDescriptor();
             for (NodeDescriptor node : remoteCluster.getNodesDescriptors()) {
                 log.info("Create Netty Channel to remote node {}@{}:{}", node.getNodeId(), node.getHost(), node.getPort());
-                CorfuNettyClientChannel channel = new CorfuNettyClientChannel(node, getRouter().getParameters().getNettyEventLoop(), this);
+                CorfuNettyClientChannel channel = null;
+                if (getSourceRouter() != null ) {
+                    log.trace("initializing the channel with existing nettyEventLoop");
+                    channel = new CorfuNettyClientChannel(node,
+                            getSourceRouter().getRuntimeFSM().getSourceManager().getParameters().getNettyEventLoop(),
+                            this);
+                } else {
+                    log.trace("Creating a new netty even loop and initializing the channel");
+                    channel = new CorfuNettyClientChannel(node, null, this);
+                }
                 this.channels.put(node.getNodeId(), channel);
             }
         });
@@ -75,7 +89,9 @@ public class NettyLogReplicationClientChannelAdapter extends IClientChannelAdapt
 
     @Override
     public void onConnectionUp(String nodeId) {
-        executorService.submit(() -> super.onConnectionUp(nodeId));
+        executorService.submit(() -> {
+            super.onConnectionUp(nodeId);
+        });
     }
 
     private String getLeaderEndpoint() {
@@ -88,7 +104,11 @@ public class NettyLogReplicationClientChannelAdapter extends IClientChannelAdapt
     }
 
     public void completeExceptionally(Exception exception) {
-        getRouter().completeAllExceptionally(exception);
+        if (getSourceRouter() != null) {
+            getSourceRouter().completeAllExceptionally(exception);
+        } else {
+            getSinkRouter().completeAllExceptionally(exception);
+        }
     }
 
     @Override

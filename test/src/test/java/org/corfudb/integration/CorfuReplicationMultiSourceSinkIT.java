@@ -107,6 +107,7 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
 
     // Listens to replication status updates on a Sink cluster
     private List<ReplicationStatusListener> replicationStatusListeners = new ArrayList<>();
+    private Table<ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg> configTable;
 
     /*protected ReplicationStatusListener sourceListener1;
     protected ReplicationStatusListener sourceListener2;
@@ -115,10 +116,11 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
     protected ReplicationStatusListener sinkListener2;
     protected ReplicationStatusListener sinkListener3;*/
 
-    protected void setUp(int numSourceClusters, int numSinkClusters) throws Exception {
+    protected void setUp(int numSourceClusters, int numSinkClusters, ExampleSchemas.ClusterUuidMsg topologyType) throws Exception {
         this.numSourceClusters = numSourceClusters;
         this.numSinkClusters = numSinkClusters;
         setupSourceAndSinkCorfu(numSourceClusters, numSinkClusters);
+        initMultiSinkTopology(topologyType);
     }
 
     private void setupSourceAndSinkCorfu(int numSourceClusters, int numSinkClusters) throws Exception {
@@ -194,6 +196,43 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
         }
     }
 
+
+    private void initMultiSinkTopology(ExampleSchemas.ClusterUuidMsg topologyType) throws Exception {
+        for (int i = 0; i < numSourceClusters; i++) {
+            configTable = sourceCorfuStores.get(i).openTable(
+                    DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
+                    ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class,
+                    TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
+            );
+            try (TxnContext txn = sourceCorfuStores.get(i).txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+                writeTopologyTypeToConfig(txn, topologyType);
+                txn.commit();
+            }
+        }
+
+        for (int i = 0; i < numSinkClusters; i++) {
+            configTable = sinkCorfuStores.get(i).openTable(
+                    DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
+                    ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class,
+                    TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
+            );
+            try (TxnContext txn = sinkCorfuStores.get(i).txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+                writeTopologyTypeToConfig(txn, topologyType);
+                txn.commit();
+            }
+        }
+    }
+
+    private void writeTopologyTypeToConfig(TxnContext txn, ExampleSchemas.ClusterUuidMsg topologyType) {
+        if(topologyType.equals(DefaultClusterManager.OP_MULTI_SINK)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_MULTI_SINK,
+                    DefaultClusterManager.OP_MULTI_SINK, DefaultClusterManager.OP_MULTI_SINK);
+        } else if (topologyType.equals(DefaultClusterManager.OP_MULTI_SOURCE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_MULTI_SOURCE,
+                    DefaultClusterManager.OP_MULTI_SOURCE, DefaultClusterManager.OP_MULTI_SOURCE);
+        }
+    }
+
     protected void writeData(CorfuStore corfuStore, String tableName, Table table, int startIndex, int numRecords) {
         for (int i = startIndex; i < (startIndex + numRecords); i++) {
             Sample.StringKey key = Sample.StringKey.newBuilder().setKey(tableName + " key " + i).build();
@@ -244,8 +283,8 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
         // On startup, an initial default replication status is written for each remote cluster
         // (NUM_INITIAL_REPLICATION_STATUS_UPDATES).  Subsequently, the table will be updated on snapshot sync from
         // each Source cluster.
-        int numExpectedUpdates = NUM_INITIAL_REPLICATION_STATUS_UPDATES +
-            calculateSnapshotSyncUpdatesOnSinkStatusTable(numSourceClusters);
+        int numExpectedUpdates = numSourceClusters +
+                calculateSnapshotSyncUpdatesOnSinkStatusTable(numSourceClusters);
         List<CountDownLatch> statusLatches = new ArrayList<>();
         CountDownLatch statusLatch;
         ReplicationStatusListener statusListener;
@@ -264,31 +303,30 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
 
             // Replication Status Listeners
             sinkCorfuStores.get(i).openTable(LogReplicationMetadataManager.NAMESPACE,
-                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE, LogReplicationMetadata.ReplicationStatusKey.class,
-                LogReplicationMetadata.ReplicationStatusVal.class, null,
-                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+                    LogReplicationMetadataManager.REPLICATION_STATUS_TABLE, LogReplicationMetadata.ReplicationStatusKey.class,
+                    LogReplicationMetadata.ReplicationStatusVal.class, null,
+                    TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
             statusLatch = new CountDownLatch(numExpectedUpdates);
             statusLatches.add(statusLatch);
 
             statusListener = new ReplicationStatusListener(statusLatch);
             replicationStatusListeners.add(statusListener);
             sinkCorfuStores.get(i).subscribeListener(statusListener, LogReplicationMetadataManager.NAMESPACE,
-                LR_STATUS_STREAM_TAG);
+                    LR_STATUS_STREAM_TAG);
         }
 
         if (changeRole) {
             Table<ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg>
-                configTable = sinkCorfuStores.get(0).openTable(DefaultClusterManager.CONFIG_NAMESPACE,
+                    configTable = sinkCorfuStores.get(0).openTable(DefaultClusterManager.CONFIG_NAMESPACE,
                     DefaultClusterManager.CONFIG_TABLE_NAME, ExampleSchemas.ClusterUuidMsg.class,
                     ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class,
                     TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class));
             try (TxnContext txn = sinkCorfuStores.get(0).txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
                 txn.putRecord(configTable, DefaultClusterManager.OP_SWITCH, DefaultClusterManager.OP_SWITCH,
-                    DefaultClusterManager.OP_SWITCH);
+                        DefaultClusterManager.OP_SWITCH);
                 txn.commit();
             }
             Assert.assertEquals(1, configTable.count());
-
         } else {
             // Start Log Replication
             startReplicationServers();
@@ -298,17 +336,17 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
         // During snapshot sync, a 'clear' followed by 'update' for each record is received.  So there should be
         // 1 Clear + NUM_RECORDS_IN_TABLE Update records for each table on each Sink cluster.
         List<CorfuStreamEntry.OperationType> expectedOpsList = Arrays.asList(CorfuStreamEntry.OperationType.CLEAR,
-            CorfuStreamEntry.OperationType.UPDATE, CorfuStreamEntry.OperationType.UPDATE,
-            CorfuStreamEntry.OperationType.UPDATE);
+                CorfuStreamEntry.OperationType.UPDATE, CorfuStreamEntry.OperationType.UPDATE,
+                CorfuStreamEntry.OperationType.UPDATE);
         for (int i = 0; i < numSinkClusters; i++) {
             statusLatches.get(i).await();
             snapshotWritesLatches.get(i).await();
 
             for (int j = 0; j < srcTables.size(); j++) {
                 Assert.assertEquals(NUM_RECORDS_IN_TABLE + 1,
-                    dataListeners.get(i).getTableToOpTypeMap().get(tableNames.get(j)).size());
+                        dataListeners.get(i).getTableToOpTypeMap().get(tableNames.get(j)).size());
                 Assert.assertTrue(Objects.equals(expectedOpsList,
-                    dataListeners.get(i).getTableToOpTypeMap().get(tableNames.get(j))));
+                        dataListeners.get(i).getTableToOpTypeMap().get(tableNames.get(j))));
             }
         }
 
@@ -333,6 +371,7 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
             dataListeners.get(i).clearTableToOpTypeMap();
             dataListeners.get(i).setSnapshotSync(false);
         }
+
         log.info("Add a record on table on Sender-1, Table-1");
         writeData(sourceCorfuStores.get(0), tableNames.get(0), srcTables.get(0), NUM_RECORDS_IN_TABLE, 1);
 
@@ -352,10 +391,10 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
                 // 1 Operation received for each table on the Sink cluster
                 Assert.assertEquals(1, dataListeners.get(i).getTableToOpTypeMap().get(tableNames.get(0)).size());
                 Assert.assertEquals(CorfuStreamEntry.OperationType.UPDATE,
-                    dataListeners.get(i).getTableToOpTypeMap().get(tableNames.get(0)).get(0));
+                        dataListeners.get(i).getTableToOpTypeMap().get(tableNames.get(0)).get(0));
                 Assert.assertEquals(1, dataListeners.get(i).getTableToOpTypeMap().get(tableNames.get(1)).size());
                 Assert.assertEquals(CorfuStreamEntry.OperationType.DELETE,
-                    dataListeners.get(i).getTableToOpTypeMap().get(tableNames.get(1)).get(0));
+                        dataListeners.get(i).getTableToOpTypeMap().get(tableNames.get(1)).get(0));
             } else {
                 // 2 operations received for the same table on the Sink cluster
                 Assert.assertEquals(2, dataListeners.get(i).getTableToOpTypeMap().get(tableNames.get(0)).size());
@@ -363,9 +402,9 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
                 // As these operations are applied in the same transaction, their streaming updates can come in any
                 // order(to be fixed).  We can only verify that both UPDATE and DELETE are received.
                 Assert.assertTrue(dataListeners.get(i).getTableToOpTypeMap().get(tableNames.get(0)).contains(
-                    CorfuStreamEntry.OperationType.UPDATE));
+                        CorfuStreamEntry.OperationType.UPDATE));
                 Assert.assertTrue(dataListeners.get(i).getTableToOpTypeMap().get(tableNames.get(0)).contains(
-                    CorfuStreamEntry.OperationType.DELETE));
+                        CorfuStreamEntry.OperationType.DELETE));
             }
         }
     }

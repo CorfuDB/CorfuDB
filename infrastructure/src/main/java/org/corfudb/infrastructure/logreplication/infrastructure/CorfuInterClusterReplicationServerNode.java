@@ -8,10 +8,11 @@ import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerThreadFactory;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
+import org.corfudb.infrastructure.logreplication.runtime.ReplicationSinkRouter;
 
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -29,20 +30,23 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
     private final Map<Class, AbstractServer> serverMap;
 
     @Getter
-    private final LogReplicationServerRouter router;
+    private Map<ReplicationSession, ReplicationSinkRouter> sessionToRouterMap = new HashMap<>();
 
     // This flag makes the closing of the CorfuServer idempotent.
     private final AtomicBoolean close;
 
     private LogReplicationServer logReplicationServer;
 
+    @Getter
     private ScheduledExecutorService logReplicationServerRunner;
 
     // Error code required to detect an ungraceful shutdown.
     private static final int EXIT_ERROR_CODE = 100;
 
+    ReplicationSinkRouter router;
+
     /**
-     * Corfu Server initialization.
+     * Log Replication Server initialization.
      *
      * @param serverContext Initialized Server Context
      * @param logReplicationServer Replication Server which processes incoming requests
@@ -59,15 +63,17 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
             .put(LogReplicationServer.class, logReplicationServer)
             .build();
 
-        this.close = new AtomicBoolean(false);
-        this.router = new LogReplicationServerRouter(new ArrayList<>(serverMap.values()));
+        this.router = new ReplicationSinkRouter(new ArrayList<>(serverMap.values()));
         this.serverContext.setServerRouter(router);
+        this.close = new AtomicBoolean(false);
 
         logReplicationServerRunner = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
             .setNameFormat("replication-server-runner").build());
+    }
 
+    public void setRouterAndStartServer() {
         // Start and listen to the server
-        logReplicationServerRunner.submit(this::startAndListen);
+        logReplicationServerRunner.submit(() -> this.startAndListen());
     }
 
     /**
@@ -75,8 +81,8 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
      */
     private void startAndListen() {
         try {
-            log.info("Starting server transport adapter...");
-            router.getServerAdapter().start().get();
+            log.info("Starting server transport adapter ...");
+            this.router.getServerAdapter().start().get();
         } catch (InterruptedException e) {
             // The server can be interrupted and stopped on a role switch.
             // It should not be treated as fatal

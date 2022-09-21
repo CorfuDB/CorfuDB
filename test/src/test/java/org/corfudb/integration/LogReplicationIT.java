@@ -68,7 +68,7 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 @Slf4j
 public class LogReplicationIT extends AbstractIT implements Observer {
 
-    public static final String nettyConfig = "./test/src/test/resources/transport/nettyConfig.properties";
+    public static final String nettyConfig = "./test/src/test/resources/transport/grpcConfig.properties";
 
     private static final String SOURCE_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
     private static final int WRITER_PORT = DEFAULT_PORT + 1;
@@ -180,6 +180,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private final CountDownLatch blockUntilFSMTransition = new CountDownLatch(1);
 
+    private ReplicationSession replicationSession;
+
     /**
      * Setup Test Environment
      *
@@ -231,7 +233,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         dstTestRuntime.parseConfigurationString(DESTINATION_ENDPOINT);
         dstTestRuntime.connect();
 
-        logReplicationMetadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0, REMOTE_CLUSTER_ID);
+        this.replicationSession =
+                ReplicationSession.getDefaultReplicationSessionForCluster(REMOTE_CLUSTER_ID);
+        logReplicationMetadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0, replicationSession);
         expectedAckTimestamp = new AtomicLong(Long.MAX_VALUE);
         testConfig.clear().setRemoteClusterId(REMOTE_CLUSTER_ID);
     }

@@ -2,6 +2,8 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+
 import java.util.Objects;
 
 /**
@@ -17,12 +19,12 @@ import java.util.Objects;
 public class ReplicationSubscriber {
 
     @Getter
-    private final LogReplicationConfig.ReplicationModel replicationModel;
+    private final LogReplicationMetadata.ReplicationModels replicationModel;
 
     @Getter
     private final String client;
 
-    public ReplicationSubscriber(LogReplicationConfig.ReplicationModel model, String client) {
+    public ReplicationSubscriber(LogReplicationMetadata.ReplicationModels model, String client) {
         this.replicationModel = model;
         this.client = client;
     }

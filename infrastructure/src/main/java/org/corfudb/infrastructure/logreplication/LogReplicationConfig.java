@@ -102,6 +102,7 @@ public class LogReplicationConfig {
      */
     public LogReplicationConfig(Map<ReplicationSubscriber, Set<String>> streamsToReplicateMap, int maxNumMsgPerBatch,
                                 int maxMsgSize, int cacheSize) {
+        log.info("LogReplicationConfig : streamsToReplicateMap {} ", streamsToReplicateMap);
         replicationSubscriberToStreamsMap = streamsToReplicateMap;
         this.maxNumMsgPerBatch = maxNumMsgPerBatch;
         this.maxMsgSize = maxMsgSize;
@@ -127,7 +128,4 @@ public class LogReplicationConfig {
         this.dataStreamToTagsMap = streamingTagsMap;
     }
 
-    public static enum ReplicationModel {
-        SINGLE_SOURCE_SINK
-    }
 }

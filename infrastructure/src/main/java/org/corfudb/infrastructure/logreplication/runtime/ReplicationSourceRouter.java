@@ -5,6 +5,8 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationManager;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent.LogReplicationRuntimeEventType;
@@ -50,12 +52,9 @@ import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
  * Log Replication Server communication.
  */
 @Slf4j
-public class LogReplicationClientRouter implements IClientRouter {
+public class ReplicationSourceRouter extends ReplicationRouter implements IClientRouter {
 
     public static String REMOTE_LEADER = "REMOTE_LEADER";
-
-    @Getter
-    private final LogReplicationRuntimeParameters parameters;
 
     /**
      * The handlers registered to this router.
@@ -100,38 +99,40 @@ public class LogReplicationClientRouter implements IClientRouter {
     public final Map<Long, CompletableFuture> outstandingRequests;
 
     /**
-     * Adapter to the channel implementation
+     * Runtime FSM, to insert connectivity events
      */
-    private IClientChannelAdapter channelAdapter;
+    @Getter
+    private CorfuLogReplicationRuntime runtimeFSM;
 
     /**
-     * Remote Cluster/Site Full Descriptor
+     * Remote cluster's clusterDescriptor
      */
     private final ClusterDescriptor remoteClusterDescriptor;
 
     /**
-     * Remote Cluster/Site unique identifier
+     * The replicationManager
      */
-    private final String remoteClusterId;
+    private final CorfuReplicationManager replicationManager;
 
-    /**
-     * Runtime FSM, to insert connectivity events
-     */
-    private final CorfuLogReplicationRuntime runtimeFSM;
+    private String localClusterId;
+
 
     /**
      * Log Replication Client Constructor
      *
+     * @param remoteCluster the remote source cluster
+     * @param localClusterId local cluster ID
      * @param parameters runtime parameters (including connection settings)
-     * @param runtimeFSM runtime state machine, insert connection related events
+     * @param session replication session between current and remote cluster
      */
-    public LogReplicationClientRouter(LogReplicationRuntimeParameters parameters,
-                                      CorfuLogReplicationRuntime runtimeFSM) {
-        this.remoteClusterDescriptor = parameters.getRemoteClusterDescriptor();
-        this.remoteClusterId = remoteClusterDescriptor.getClusterId();
-        this.parameters = parameters;
+    public ReplicationSourceRouter(ClusterDescriptor remoteCluster, String localClusterId,
+                                   LogReplicationRuntimeParameters parameters, CorfuReplicationManager replicationManager,
+                                   ReplicationSession session) {
+        super(remoteCluster, localClusterId, parameters.getPluginFilePath(), session, true);
         this.timeoutResponse = parameters.getRequestTimeout().toMillis();
-        this.runtimeFSM = runtimeFSM;
+        this.remoteClusterDescriptor = remoteCluster;
+        this.localClusterId = localClusterId;
+        this.replicationManager = replicationManager;
 
         this.handlerMap = new ConcurrentHashMap<>();
         this.clientList = new ArrayList<>();
@@ -163,6 +164,14 @@ public class LogReplicationClientRouter implements IClientRouter {
     }
 
     /**
+     * set runtimeFSM of the router
+     * @param runtimeFSM runtime state machine, insert connection related events
+     */
+    public void setRuntimeFSM(CorfuLogReplicationRuntime runtimeFSM) {
+        this.runtimeFSM = runtimeFSM;
+    }
+
+    /**
      * Send a request message and get a completable future to be fulfilled by the reply.
      *
      * @param payload
@@ -189,10 +198,10 @@ public class LogReplicationClientRouter implements IClientRouter {
             outstandingRequests.put(requestId, cf);
 
             try {
+                LogReplicationRuntimeParameters parameters =  this.runtimeFSM.getSourceManager().getParameters();
                 header.setClientId(getUuidMsg(parameters.getClientId()));
                 header.setRequestId(requestId);
-                header.setClusterId(getUuidMsg(
-                    UUID.fromString(parameters.getLocalClusterId())));
+                header.setClusterId(getUuidMsg(UUID.fromString(this.localClusterId)));
 
                 // If no endpoint is specified, the message is to be sent to the remote leader node.
                 // We should block until a connection to the leader is established.
@@ -203,7 +212,7 @@ public class LogReplicationClientRouter implements IClientRouter {
                     // represents a connection to the leader.
                     try {
                         remoteLeaderConnectionFuture
-                                .get(getParameters().getConnectionTimeout().toMillis(), TimeUnit.MILLISECONDS);
+                                .get(parameters.getConnectionTimeout().toMillis(), TimeUnit.MILLISECONDS);
                     } catch (InterruptedException e) {
                         throw new UnrecoverableCorfuInterruptedError(e);
                     } catch (TimeoutException | ExecutionException te) {
@@ -215,7 +224,7 @@ public class LogReplicationClientRouter implements IClientRouter {
                     if (runtimeFSM.getRemoteLeaderNodeId().isPresent()) {
                         nodeId = runtimeFSM.getRemoteLeaderNodeId().get();
                     } else {
-                        log.error("Leader not found to remote cluster {}", remoteClusterId);
+                        log.error("Leader not found to remote cluster {}", remoteClusterDescriptor.getClusterId());
                         runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
                         throw new ChannelAdapterException(
                                 String.format("Leader not found to remote cluster %s", remoteClusterDescriptor.getClusterId()));
@@ -232,9 +241,10 @@ public class LogReplicationClientRouter implements IClientRouter {
                         nodeId));
                 throw ne;
             } catch (Exception e) {
+                log.info("sendRequestAndGetCompletable removing reqId outstandingRequests {}", requestId);
                 outstandingRequests.remove(requestId);
                 log.error("sendMessageAndGetCompletable: Remove request {} to {} due to exception! Message:{}",
-                        requestId, remoteClusterId, payload.getPayloadCase(), e);
+                        requestId, remoteClusterDescriptor.getClusterId(), payload.getPayloadCase(), e);
                 cf.completeExceptionally(e);
                 return cf;
             }
@@ -247,7 +257,7 @@ public class LogReplicationClientRouter implements IClientRouter {
                 if (e.getCause() instanceof TimeoutException) {
                     outstandingRequests.remove(requestId);
                     log.debug("sendMessageAndGetCompletable: Remove request {} to {} due to timeout! Message:{}",
-                            requestId, remoteClusterId, payload.getPayloadCase());
+                            requestId, remoteClusterDescriptor.getClusterId(), payload.getPayloadCase());
                 }
                 return null;
             });
@@ -302,7 +312,7 @@ public class LogReplicationClientRouter implements IClientRouter {
 
     @Override
     public <T> void completeRequest(long requestID, T completion) {
-        log.trace("Complete request: {}", requestID);
+        log.trace("Complete request: {}...outstandingRequests {}", requestID, outstandingRequests);
         CompletableFuture<T> cf;
         if ((cf = (CompletableFuture<T>) outstandingRequests.remove(requestID)) != null) {
             cf.complete(completion);
@@ -316,8 +326,8 @@ public class LogReplicationClientRouter implements IClientRouter {
         CompletableFuture cf;
         if ((cf = outstandingRequests.remove(requestID)) != null) {
             cf.completeExceptionally(cause);
-            log.debug("completeExceptionally: Remove request {} to {} due to {}.", requestID, remoteClusterId,
-                    cause.getClass().getSimpleName(), cause);
+            log.debug("completeExceptionally: Remove request {} to {} due to {}.", requestID,
+                    remoteClusterDescriptor.getClusterId(), cause.getClass().getSimpleName(), cause);
         } else {
             log.warn("Attempted to exceptionally complete request {}, but request not outstanding!",
                     requestID);
@@ -326,11 +336,11 @@ public class LogReplicationClientRouter implements IClientRouter {
 
     @Override
     public void stop() {
-        log.debug("stop: Shutting down router for {}", remoteClusterId);
+        log.debug("stop: Shutting down router for {}", remoteClusterDescriptor.getClusterId());
         shutdown = true;
         channelAdapter.stop();
         remoteLeaderConnectionFuture = new CompletableFuture<>();
-        remoteLeaderConnectionFuture.completeExceptionally(new NetworkException("Router stopped", remoteClusterId));
+        remoteLeaderConnectionFuture.completeExceptionally(new NetworkException("Router stopped", remoteClusterDescriptor.getClusterId()));
     }
 
     @Override
@@ -398,6 +408,10 @@ public class LogReplicationClientRouter implements IClientRouter {
         }
     }
 
+    public void receive(CorfuMessage.RequestMsg msg) {
+        log.info("recevied request msg {}", msg.getPayload());
+    }
+
     /**
      * When an error occurs in the Channel Adapter, trigger
      * exceptional completeness of all pending requests.
@@ -414,27 +428,6 @@ public class LogReplicationClientRouter implements IClientRouter {
     }
 
     /**
-     * Connect to remote cluster through the specified channel adapter
-     */
-    public void connect() {
-        LogReplicationPluginConfig config = new LogReplicationPluginConfig(parameters.getPluginFilePath());
-        File jar = new File(config.getTransportAdapterJARPath());
-
-        try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
-            // Instantiate Channel Adapter (external implementation of the channel / transport)
-            Class adapterType = Class.forName(config.getTransportClientClassCanonicalName(), true, child);
-            channelAdapter = (IClientChannelAdapter) adapterType.getDeclaredConstructor(String.class, ClusterDescriptor.class, LogReplicationClientRouter.class)
-                    .newInstance(parameters.getLocalClusterId(), remoteClusterDescriptor, this);
-            log.info("Connect asynchronously to remote cluster... ");
-            // When connection is established to the remote leader node, the remoteLeaderConnectionFuture will be completed.
-            channelAdapter.connectAsync();
-        } catch (Exception e) {
-            log.error("Fatal error: Failed to initialize transport adapter {}", config.getTransportClientClassCanonicalName(), e);
-            throw new UnrecoverableCorfuError(e);
-        }
-    }
-
-    /**
      * Verify Message is of valid Log Replication type.
      */
     private boolean isValidMessage(RequestPayloadMsg message) {
@@ -448,8 +441,11 @@ public class LogReplicationClientRouter implements IClientRouter {
      *
      * @param nodeId id of the remote node to which connection was established.
      */
+    @Override
     public synchronized void onConnectionUp(String nodeId) {
         log.info("Connection established to remote node {}", nodeId);
+        replicationManager.startRuntime(session);
+        log.debug("runtimeFSM started for session {}", session);
         runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.ON_CONNECTION_UP, nodeId));
     }
 
@@ -458,8 +454,9 @@ public class LogReplicationClientRouter implements IClientRouter {
      *
      * @param nodeId id of the remote node to which connection came down.
      */
+    @Override
     public synchronized void onConnectionDown(String nodeId) {
-        log.info("Connection lost to remote node {} on cluster {}", nodeId, remoteClusterId);
+        log.info("Connection lost to remote node {} on cluster {}", nodeId, this.session.getRemoteClusterId());
         runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.ON_CONNECTION_DOWN,
                 nodeId));
         // Attempt to reconnect to this endpoint

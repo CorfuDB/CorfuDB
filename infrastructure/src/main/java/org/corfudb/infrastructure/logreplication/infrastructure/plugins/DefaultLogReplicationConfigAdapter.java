@@ -2,6 +2,8 @@ package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.TableRegistry;
 
@@ -21,7 +23,7 @@ import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
  *
  * This implementation retrieves a fixed set of tables, which are used for testing purposes.
  */
-public class DefaultLogReplicationConfigAdapter implements ILogReplicationConfigAdapter {
+public class DefaultLogReplicationConfigAdapter implements ILogReplicationConfigAdapter{
 
     private Map<ReplicationSubscriber, Set<String>> streamsToReplicateMap;
 
@@ -52,7 +54,7 @@ public class DefaultLogReplicationConfigAdapter implements ILogReplicationConfig
 
         streamsToReplicateMap = new HashMap<>();
         streamsToReplicateMap.put(
-            new ReplicationSubscriber(LogReplicationConfig.ReplicationModel.SINGLE_SOURCE_SINK, SAMPLE_CLIENT),
+            new ReplicationSubscriber(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES, SAMPLE_CLIENT),
             streams);
     }
 

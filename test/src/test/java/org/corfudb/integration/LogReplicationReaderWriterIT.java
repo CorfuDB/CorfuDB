@@ -306,7 +306,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         streamsMap.put(replicationSession.getSubscriber(), streams);
         LogReplicationConfig config = new LogReplicationConfig(streamsMap, BATCH_SIZE, MAX_MSG_SIZE);
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt,
-            0, SINK_CLUSTER_ID);
+            0, replicationSession);
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataManager, replicationSession);
 
         if (msgQ.isEmpty()) {
@@ -371,7 +371,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         streamsMap.put(replicationSession.getSubscriber(), streams);
         LogReplicationConfig config = new LogReplicationConfig(streamsMap);
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt,
-            0, SOURCE_CLUSTER_ID);
+            0, replicationSession);
         LogEntryWriter writer = new LogEntryWriter(rt, config, logReplicationMetadataManager, replicationSession);
 
         if (msgQ.isEmpty()) {

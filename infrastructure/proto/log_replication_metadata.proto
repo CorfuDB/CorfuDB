@@ -106,3 +106,20 @@ message ReplicationEvent {
   string eventId = 2;
   ReplicationEventType type = 3;
 }
+
+enum ReplicationModels {
+  //federated GM -> GM
+  REPLICATE_FULL_TABLES = 0;
+  // IDFW GM -> LM
+  MERGE_TABLES_AT_SINK = 1;
+  //policy GM -> LM
+  RECORD_LEVEL_REPLICATION = 2;
+  // LM -> GM; Destination is not corfu
+  MOVE_DATA = 3;
+}
+
+message ReplicationSessionKey {
+  string remoteClusterId = 1;
+  string client = 2;
+  ReplicationModels replicationModel = 3;
+}
