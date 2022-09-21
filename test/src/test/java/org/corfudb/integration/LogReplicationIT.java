@@ -73,11 +73,13 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 @Slf4j
 public class LogReplicationIT extends AbstractIT implements Observer {
 
-    public static final String nettyConfig = "./test/src/test/resources/transport/nettyConfig.properties";
+    public static final String nettyConfig = "./test/src/test/resources/transport/grpcConfig.properties";
 
     private static final String SOURCE_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
     private static final int WRITER_PORT = DEFAULT_PORT + 1;
     private static final String DESTINATION_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
+
+    private static final String SOURCE_CLUSTER_ID = UUID.randomUUID().toString();
     private static final String REMOTE_CLUSTER_ID = UUID.randomUUID().toString();
     private static final int CORFU_PORT = 9000;
     private static final String TABLE_PREFIX = "test";
@@ -187,6 +189,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private final CountDownLatch blockUntilFSMTransition = new CountDownLatch(1);
 
+    private ReplicationSession replicationSession;
+
     /**
      * Setup Test Environment
      *
@@ -233,7 +237,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         srcCorfuStore = new CorfuStore(srcDataRuntime);
         dstCorfuStore = new CorfuStore(dstDataRuntime);
 
-        logReplicationMetadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0, REMOTE_CLUSTER_ID);
+        this.replicationSession =
+                ReplicationSession.getDefaultReplicationSessionForCluster(REMOTE_CLUSTER_ID, SOURCE_CLUSTER_ID);
+        logReplicationMetadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0, replicationSession);
+
         expectedAckTimestamp = new AtomicLong(Long.MAX_VALUE);
         testConfig.clear().setRemoteClusterId(REMOTE_CLUSTER_ID);
     }
@@ -1045,7 +1052,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // simulate negotiation. Return metadata from the sink
         LogReplicationMetadataResponseMsg negotiationResponse = sourceDataSender.getSinkManager()
                 .getLogReplicationMetadataManager()
-                .getMetadataResponse(CorfuMessage.HeaderMsg.newBuilder().build())
+                .getMetadataResponse(CorfuMessage.HeaderMsg.newBuilder().build(), replicationSession)
                 .getPayload().getLrMetadataResponse();
 
         logReplicationSourceManager.getLogReplicationFSM().input(
@@ -1225,7 +1232,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             logReplicationMetadataManager, nettyConfig, function);
 
         ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(REMOTE_CLUSTER_ID);
+            ReplicationSession.getDefaultReplicationSessionForCluster(REMOTE_CLUSTER_ID, SOURCE_CLUSTER_ID);
 
         // Source Manager
         LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(

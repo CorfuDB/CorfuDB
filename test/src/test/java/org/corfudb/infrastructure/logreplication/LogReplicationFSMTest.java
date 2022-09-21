@@ -467,7 +467,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime, null);
         ReplicationSession replicationSession = ReplicationSession.getDefaultReplicationSessionForCluster(
-            TEST_LOCAL_CLUSTER_ID);
+            TEST_LOCAL_CLUSTER_ID, TEST_LOCAL_CLUSTER_ID);
 
         switch(readerImpl) {
             case EMPTY:
@@ -486,7 +486,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                         .streamName(fullyQualifiedStreamName)
                         .batchSize(BATCH_SIZE).build();
 
-                snapshotReader = new TestSnapshotReader(testConfig);
+                snapshotReader = new TestSnapshotReader(testConfig, replicationSession);
                 dataSender = new TestDataSender();
                 break;
             case STREAMS:
@@ -499,7 +499,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         }
 
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, TEST_TOPOLOGY_CONFIG_ID,
-            TEST_LOCAL_CLUSTER_ID);
+                replicationSession);
+
         ackReader = new LogReplicationAckReader(metadataManager, configManager, runtime, replicationSession);
 
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,

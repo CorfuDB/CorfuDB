@@ -6,6 +6,7 @@ import static org.junit.Assert.fail;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -77,6 +78,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
     public static final String TAG_ONE = "tag_one";
 
     public final static String nettyConfig = "src/test/resources/transport/nettyConfig.properties";
+    public final static String grpcConfig = "src/test/resources/transport/grpcConfig.properties";
 
     public String pluginConfigFilePath;
 
@@ -112,6 +114,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     public Table<Sample.StringKey, Sample.IntValue, Sample.Metadata> mapA;
     public Table<Sample.StringKey, Sample.IntValue, Sample.Metadata> mapASink;
+    private Table<ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg> configTable;
 
     public Map<String, Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata>> mapNameToMapSource;
     public Map<String, Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata>> mapNameToMapSink;
@@ -125,6 +128,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         try {
             log.debug("Setup source and sink Corfu's");
             setupSourceAndSinkCorfu();
+            initSingleSourceSinkCluster();
 
             log.debug("Open map on source and sink");
             openMap();
@@ -172,20 +176,34 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     }
 
-    public void testEndToEndSnapshotAndLogEntrySyncUFO(boolean diskBased, boolean checkRemainingEntriesOnSecondLogEntrySync) throws Exception {
-        testEndToEndSnapshotAndLogEntrySyncUFO(1, diskBased, checkRemainingEntriesOnSecondLogEntrySync);
+    public void testEndToEndSnapshotAndLogEntrySyncUFO(boolean diskBased, boolean checkRemainingEntriesOnSecondLogEntrySync, int numSourceClusters) throws Exception {
+        testEndToEndSnapshotAndLogEntrySyncUFO(1, diskBased, checkRemainingEntriesOnSecondLogEntrySync, numSourceClusters);
     }
 
-    public void testEndToEndSnapshotAndLogEntrySyncUFO(int totalNumMaps, boolean diskBased, boolean checkRemainingEntriesOnSecondLogEntrySync) throws Exception {
+    public void initSingleSourceSinkCluster() throws Exception {
+        configTable = corfuStoreSource.openTable(
+                DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
+                ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class,
+                TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
+        );
+        try (TxnContext txn = corfuStoreSource.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_SINGLE_SOURCE_SINK,
+                    DefaultClusterManager.OP_SINGLE_SOURCE_SINK, DefaultClusterManager.OP_SINGLE_SOURCE_SINK);
+            txn.commit();
+        }
+    }
+
+    public void testEndToEndSnapshotAndLogEntrySyncUFO(int totalNumMaps, boolean diskBased, boolean checkRemainingEntriesOnSecondLogEntrySync, int numSourceClusters) throws Exception {
         // For the purpose of this test, Sink should only update status 5 times:
-        // (1) On startup, init the replication status for each Source cluster(3 clusters = 3 updates)
+        // (1) On startup, init the replication status for each Source clusters(3 clusters = 3 updates)
         // (2) When starting snapshot sync apply : is_data_consistent = false
         // (3) When completing snapshot sync apply : is_data_consistent = true
-        final int totalSinkStatusUpdates = 5;
+        final int totalSinkStatusUpdates = numSourceClusters + 2;
 
         try {
             log.info(">> Setup source and sink Corfu's");
             setupSourceAndSinkCorfu();
+            initSingleSourceSinkCluster();
 
             // Two updates are expected onStart of snapshot sync and onEnd.
             CountDownLatch latchSnapshotSyncPlugin = new CountDownLatch(2);
@@ -247,6 +265,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
             // Verify Sink Status Listener received all expected updates (is_data_consistent)
             log.info(">> Wait ... Replication status UPDATE ...");
             statusUpdateLatch.await();
+            log.info("out of statusUpdateLatch");
             assertThat(sinkListener.getAccumulatedStatus().size()).isEqualTo(totalSinkStatusUpdates);
             // Confirm last updates are set to true (corresponding to snapshot sync completed and log entry sync started)
             assertThat(sinkListener.getAccumulatedStatus().get(sinkListener.getAccumulatedStatus().size() - 1)).isTrue();
@@ -324,7 +343,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         assertThat(replicationStatusVal.getRemainingEntriesToSend()).isEqualTo(0);
     }
 
-    private void verifyReplicationStatusFromSource() throws Exception {
+    protected void verifyReplicationStatusFromSource() throws Exception {
         Table<LogReplicationMetadata.ReplicationStatusKey,
             LogReplicationMetadata.ReplicationStatusVal,
             LogReplicationMetadata.ReplicationStatusVal> replicationStatusTable =
@@ -347,29 +366,27 @@ public class LogReplicationAbstractIT extends AbstractIT {
                 .build();
 
         IRetry.build(IntervalRetry.class, () -> {
+            CorfuStoreEntry<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal,
+                    LogReplicationMetadata.ReplicationStatusVal> entry;
             try(TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
-                CorfuStoreEntry<LogReplicationMetadata.ReplicationStatusKey,
-                    LogReplicationMetadata.ReplicationStatusVal,
-                    LogReplicationMetadata.ReplicationStatusVal> entry =
-                    txn.getRecord(replicationStatusTable, key);
-
-                if (entry.getPayload().getSnapshotSyncInfo().getStatus() !=
-                    LogReplicationMetadata.SyncStatus.COMPLETED) {
-                    Sleep.sleepUninterruptibly(Duration.ofMillis(SHORT_SLEEP_TIME));
-                    txn.commit();
-                    throw new RetryNeededException();
-                }
-                assertThat(entry.getPayload().getSnapshotSyncInfo().getStatus())
-                    .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
-                assertThat(entry.getPayload().getSnapshotSyncInfo().getType())
-                    .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
-                assertThat(entry.getPayload().getSnapshotSyncInfo()
-                    .getBaseSnapshot()).isNotEqualTo(Address.NON_ADDRESS);
+                entry = txn.getRecord(replicationStatusTable, key);
                 txn.commit();
+
             } catch (TransactionAbortedException tae) {
                 log.error("Error while attempting to connect to update dummy table in onSnapshotSyncStart.", tae);
                 throw new RetryNeededException();
             }
+//            System.out.println("getStatus() "+ entry.getPayload().getSnapshotSyncInfo().getStatus());
+            if (entry.getPayload().getSnapshotSyncInfo().getStatus() != LogReplicationMetadata.SyncStatus.COMPLETED) {
+                Sleep.sleepUninterruptibly(Duration.ofMillis(SHORT_SLEEP_TIME));
+                throw new RetryNeededException();
+            }
+            assertThat(entry.getPayload().getSnapshotSyncInfo().getStatus())
+                    .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
+            assertThat(entry.getPayload().getSnapshotSyncInfo().getType())
+                    .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
+            assertThat(entry.getPayload().getSnapshotSyncInfo()
+                    .getBaseSnapshot()).isNotEqualTo(Address.NON_ADDRESS);
             return null;
         }).run();
     }
@@ -436,6 +453,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
                     if (this.waitSnapshotStatusComplete && statusVal.getSnapshotSyncInfo().getStatus().equals(LogReplicationMetadata.SyncStatus.COMPLETED)) {
                         countDownLatch.countDown();
                     }
+//                    System.out.println("Status : "+ statusVal.getStatus() +" "+statusVal.getSyncType());
             }));
 
             if (!this.waitSnapshotStatusComplete) {
@@ -714,7 +732,6 @@ public class LogReplicationAbstractIT extends AbstractIT {
         for(Map.Entry<String, Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata>> entry : mapNameToMapSink.entrySet()) {
 
             log.info("Verify Data on Sink's Table {}", entry.getKey());
-
             // Wait until data is fully replicated
             while (entry.getValue().count() != expectedConsecutiveWrites) {
                 // Block until expected number of entries is reached

@@ -14,6 +14,7 @@ import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManag
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.view.AbstractViewTest;
 
 import org.corfudb.runtime.view.TableRegistry;

@@ -15,11 +15,14 @@ import io.netty.handler.ssl.SslHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkServerRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceServerRouter;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
 import org.corfudb.security.tls.SslContextConstructor;
@@ -31,6 +34,7 @@ import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
@@ -46,10 +50,10 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
 
     private CompletableFuture<Boolean> connectionEnded;
 
-    public NettyLogReplicationServerChannelAdapter(
-            @Nonnull ServerContext serverContext,
-            @Nonnull LogReplicationServerRouter router) {
-        super(serverContext, router);
+    public NettyLogReplicationServerChannelAdapter(@Nonnull ServerContext serverContext,
+                                                   Map<ReplicationSession, LogReplicationSourceServerRouter> sourceServerRouter,
+                                                   Map<ReplicationSession, LogReplicationSinkServerRouter> sinkServerrouter) {
+        super(serverContext, sourceServerRouter, sinkServerrouter);
         this.port = Integer.parseInt((String) serverContext.getServerConfig().get("<port>"));
         this.nettyServerChannel = new CorfuNettyServerChannel(this);
     }
@@ -62,9 +66,15 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
     }
 
     @Override
+    public void send(String nodeId, @Nonnull CorfuMessage.RequestMsg msg) {
+
+    }
+
+    @Override
     public CompletableFuture<Boolean> start() {
         startServer().channel().closeFuture().syncUninterruptibly();
         connectionEnded = new CompletableFuture<>();
+        log.info("Server started, listening on {}", port);
         return connectionEnded;
     }
 

@@ -36,7 +36,7 @@ public class MetadataManagerTest extends AbstractViewTest {
     private TestUtils utils;
     private String remoteClusterId = "Remote Cluster";
     private ReplicationSession replicationSession =
-        ReplicationSession.getDefaultReplicationSessionForCluster(remoteClusterId);
+        ReplicationSession.getDefaultReplicationSessionForCluster(remoteClusterId, localClusterId);
 
     @Before
     public void setUp() {
@@ -61,7 +61,7 @@ public class MetadataManagerTest extends AbstractViewTest {
     public void testMetadataAfterLogEntrySync() {
 
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId,
-            localClusterId);
+            replicationSession);
         LogEntryWriter writer = new LogEntryWriter(configManager, metadataManager, replicationSession);
 
         Long numOpaqueEntries = 3L;
@@ -98,7 +98,7 @@ public class MetadataManagerTest extends AbstractViewTest {
     public void testInitTsForSnapshotAndLogEntryProcessed() {
 
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime,
-            topologyConfigId, localClusterId);
+            topologyConfigId, replicationSession);
 
         long lastApppliedSnapshotTimestamp = metadataManager.getLastAppliedSnapshotTimestamp();
         long lastProcessedLogEntryTimestamp = metadataManager.getLastProcessedLogEntryBatchTimestamp();
@@ -119,7 +119,7 @@ public class MetadataManagerTest extends AbstractViewTest {
     public void testConcurrentTopologyChange() throws Exception {
 
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId,
-            localClusterId);
+            replicationSession);
         LogEntryWriter writer = new LogEntryWriter(configManager, metadataManager, replicationSession);
 
         // Create a message with 50 opaque entries

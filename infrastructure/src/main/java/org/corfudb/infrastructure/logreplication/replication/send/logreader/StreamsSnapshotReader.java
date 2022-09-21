@@ -124,6 +124,12 @@ public class StreamsSnapshotReader extends SnapshotReader {
                 .setPreviousTimestamp(preMsgTs)
                 .setSnapshotTimestamp(snapshotTimestamp)
                 .setSnapshotSyncSeqNum(sequence)
+                .setSessionInfo(LogReplication.ReplicationSessionMsg.newBuilder()
+                        .setRemoteClusterId(this.replicationSession.getRemoteClusterId())
+                        .setLocalClusterId(this.replicationSession.getLocalClusterId())
+                        .setClient(this.replicationSession.getSubscriber().getClient())
+                        .setReplicationModel(this.replicationSession.getSubscriber().getReplicationModel())
+                        .build())
                 .build();
 
         LogReplicationEntryMsg txMsg = getLrEntryMsg(unsafeWrap(generatePayload(opaqueEntry)), metadata);

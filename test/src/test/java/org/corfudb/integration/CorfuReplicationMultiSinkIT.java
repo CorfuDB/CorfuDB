@@ -1,6 +1,10 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
+import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -44,7 +48,7 @@ public class CorfuReplicationMultiSinkIT extends CorfuReplicationMultiSourceSink
 
     @Before
     public void setUp() throws Exception {
-        super.setUp(1, MAX_REMOTE_CLUSTERS);
+        super.setUp(1, MAX_REMOTE_CLUSTERS, DefaultClusterManager.OP_MULTI_SINK);
     }
 
     /**

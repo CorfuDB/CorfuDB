@@ -5,6 +5,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.runtime.clients.ClientResponseHandler;
 import org.corfudb.runtime.clients.ClientResponseHandler.Handler;
 import org.corfudb.runtime.clients.IClient;
@@ -38,6 +39,12 @@ public class LogReplicationHandler implements IClient, IHandler<LogReplicationCl
     @Setter
     public ClientResponseHandler responseHandler = createResponseHandlers(this, new ConcurrentHashMap<>());
 
+    private ReplicationSession replicationSession;
+
+    public LogReplicationHandler(ReplicationSession replicationSession) {
+        this.replicationSession = replicationSession;
+    }
+
     /**
      * Used for testing and allows for augmenting default member variables.
      *
@@ -62,7 +69,7 @@ public class LogReplicationHandler implements IClient, IHandler<LogReplicationCl
     private static Object handleLogReplicationAck(@Nonnull ResponseMsg response,
                                                   @Nonnull ChannelHandlerContext ctx,
                                                   @Nonnull IClientRouter router) {
-        log.debug("Handle log replication ACK");
+        log.debug("Handle log replication ACK {}", response);
         return response.getPayload().getLrEntryAck();
     }
 
@@ -92,6 +99,6 @@ public class LogReplicationHandler implements IClient, IHandler<LogReplicationCl
 
     @Override
     public LogReplicationClient getClient(long epoch, UUID clusterID) {
-        return new LogReplicationClient(router, epoch);
+        return new LogReplicationClient(router, epoch, replicationSession);
     }
 }

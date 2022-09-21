@@ -163,7 +163,6 @@ public abstract class SenderBufferManager {
         if (!pendingCompletableFutureForAcks.isEmpty()) {
             ack = (LogReplicationEntryMsg) CompletableFuture.anyOf(pendingCompletableFutureForAcks
                     .values().toArray(new CompletableFuture<?>[pendingCompletableFutureForAcks.size()])).get(timeoutTimer, TimeUnit.MILLISECONDS);
-
             if (ack != null) {
                 updateAck(ack);
                 ackCounter.ifPresent(ac -> ac.addAndGet(pendingCompletableFutureForAcks.size()));

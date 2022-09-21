@@ -166,6 +166,19 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 TableOptions.fromProtoSchema(ClusterUuidMsg.class)
         );
 
+        try (TxnContext txn = sourceCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_SINGLE_SOURCE_SINK,
+                    DefaultClusterManager.OP_SINGLE_SOURCE_SINK, DefaultClusterManager.OP_SINGLE_SOURCE_SINK);
+            txn.commit();
+        }
+        try (TxnContext txn = sinkCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTable, DefaultClusterManager.OP_SINGLE_SOURCE_SINK,
+                    DefaultClusterManager.OP_SINGLE_SOURCE_SINK, DefaultClusterManager.OP_SINGLE_SOURCE_SINK);
+            txn.commit();
+        }
+
+        assertThat(configTable.count()).isOne();
+
         sourceLockTable = sourceCorfuStore.openTable(
                 CORFU_SYSTEM_NAMESPACE,
                 LOCK_TABLE_NAME,
@@ -821,7 +834,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         // (5) Confirm that if sink LR is stopped, in the middle of replication, the status changes to STOPPED
         shutdownCorfuServer(sinkReplicationServer);
-
         while (!sinkStatus.getStatus().equals(LogReplicationMetadata.SyncStatus.STOPPED)) {
             try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
                 sinkStatus = (ReplicationStatusVal) txn.getRecord(REPLICATION_STATUS_TABLE, sinkClusterId).getPayload();

@@ -13,6 +13,7 @@ import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManag
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
@@ -125,6 +126,12 @@ public class StreamsLogEntryReader extends LogEntryReader {
                 .setPreviousTimestamp(preMsgTs)
                 .setSnapshotTimestamp(globalBaseSnapshot)
                 .setSnapshotSyncSeqNum(sequence)
+                .setSessionInfo(LogReplication.ReplicationSessionMsg.newBuilder()
+                        .setRemoteClusterId(this.session.getRemoteClusterId())
+                        .setLocalClusterId(this.session.getLocalClusterId())
+                        .setClient(this.session.getSubscriber().getClient())
+                        .setReplicationModel(this.session.getSubscriber().getReplicationModel())
+                        .build())
                 .build();
 
         LogReplicationEntryMsg txMessage = getLrEntryMsg(unsafeWrap(generatePayload(opaqueEntryList)), metadata);
@@ -175,7 +182,7 @@ public class StreamsLogEntryReader extends LogEntryReader {
             Set<UUID> ignoredTxStreams = txEntryStreamIds.stream().filter(id -> !streamUUIDs.contains(id))
                     .collect(Collectors.toSet());
             txEntryStreamIds.removeAll(ignoredTxStreams);
-            log.debug("TX Stream entry[{}] :: replicate[{}]={}, ignore[{}]={} [valid]", entry.getVersion(),
+            log.trace("TX Stream entry[{}] :: replicate[{}]={}, ignore[{}]={} [valid]", entry.getVersion(),
                     txEntryStreamIds.size(), txEntryStreamIds, ignoredTxStreams.size(), ignoredTxStreams);
             return true;
         }

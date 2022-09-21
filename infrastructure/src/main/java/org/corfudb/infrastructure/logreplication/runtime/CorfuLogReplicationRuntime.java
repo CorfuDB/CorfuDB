@@ -148,7 +148,7 @@ public class CorfuLogReplicationRuntime {
      */
     private final LinkedBlockingQueue<LogReplicationRuntimeEvent> eventQueue = new LinkedBlockingQueue<>();
 
-    private final LogReplicationClientRouter router;
+    private final LogReplicationSourceRouterHelper router;
     private final LogReplicationMetadataManager metadataManager;
 
     @Getter
@@ -163,13 +163,13 @@ public class CorfuLogReplicationRuntime {
      * Default Constructor
      */
     public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters, LogReplicationMetadataManager metadataManager,
-        LogReplicationConfigManager replicationConfigManager, ReplicationSession replicationSession) {
+        LogReplicationConfigManager replicationConfigManager, ReplicationSession replicationSession, LogReplicationSourceRouterHelper router) {
         this.remoteClusterId = replicationSession.getRemoteClusterId();
         this.metadataManager = metadataManager;
-        this.router = new LogReplicationClientRouter(parameters, this);
-        this.router.addClient(new LogReplicationHandler());
+        this.router = router;
+        this.router.addClient(new LogReplicationHandler(replicationSession));
         this.sourceManager = new LogReplicationSourceManager(parameters,
-            new LogReplicationClient(router, remoteClusterId), metadataManager, replicationConfigManager, replicationSession);
+            new LogReplicationClient(this.router, remoteClusterId, replicationSession), metadataManager, replicationConfigManager, replicationSession);
         this.connectedNodes = new HashSet<>();
 
         ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker-"+remoteClusterId)
@@ -188,6 +188,7 @@ public class CorfuLogReplicationRuntime {
         this.state = states.get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY);
 
         log.info("Log Replication Runtime State Machine initialized");
+
     }
 
     /**
@@ -197,7 +198,6 @@ public class CorfuLogReplicationRuntime {
         log.info("Start Log Replication Runtime to remote {}", remoteClusterId);
         // Start Consumer Thread for this state machine (dedicated thread for event consumption)
         communicationFSMConsumer.submit(this::consume);
-        router.connect();
     }
 
     /**
@@ -231,6 +231,7 @@ public class CorfuLogReplicationRuntime {
                 // Not accepting events, in stopped state
                 return;
             }
+
             eventQueue.put(event);
         } catch (InterruptedException ex) {
             log.error("Log Replication interrupted Exception: ", ex);
@@ -251,7 +252,6 @@ public class CorfuLogReplicationRuntime {
 
             //  Block until an event shows up in the queue.
             LogReplicationRuntimeEvent event = eventQueue.take();
-
             try {
                 LogReplicationRuntimeState newState = state.processEvent(event);
                 if (newState != null) {

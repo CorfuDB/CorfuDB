@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;

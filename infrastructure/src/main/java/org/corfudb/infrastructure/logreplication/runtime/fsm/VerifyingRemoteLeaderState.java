@@ -1,8 +1,11 @@
 package org.corfudb.infrastructure.logreplication.runtime.fsm;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceClientRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceRouterHelper;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationLeadershipResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage;
@@ -27,9 +30,10 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
 
     private ThreadPoolExecutor worker;
 
-    private LogReplicationClientRouter router;
+    private LogReplicationSourceRouterHelper router;
 
-    public VerifyingRemoteLeaderState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker, LogReplicationClientRouter router) {
+    public VerifyingRemoteLeaderState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker,
+                                      LogReplicationSourceRouterHelper router) {
         this.fsm = fsm;
         this.worker = worker;
         this.router = router;
@@ -77,8 +81,17 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
         log.debug("onEntry :: Verifying Remote Leader, transition from {}", from.getType());
         log.trace("Submitted tasks to worker :: size={} activeCount={} taskCount={}", worker.getQueue().size(),
                 worker.getActiveCount(), worker.getTaskCount());
-        // Verify Leadership on connected nodes (ignore those for which leadership is pending)
-        this.worker.submit(this::verifyLeadership);
+
+        if (fsm.getRemoteLeaderNodeId().isPresent()) {
+            fsm.input(new LogReplicationRuntimeEvent(
+                    LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_FOUND,
+                    fsm.getRemoteLeaderNodeId().get())
+            );
+            log.debug("Exit :: leadership verification");
+        } else {
+            // Verify Leadership on connected nodes (ignore those for which leadership is pending)
+            this.worker.submit(this::verifyLeadership);
+        }
     }
 
 
@@ -104,10 +117,22 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
                     for (String nodeId : fsm.getConnectedNodes()) {
                         log.debug("Verify leadership status for node {}", nodeId);
                         // Check Leadership
+                        ReplicationSession session = router.getSession();
+                        LogReplication.ReplicationSessionMsg sessionMsg = LogReplication.ReplicationSessionMsg.newBuilder()
+                                .setRemoteClusterId(session.getRemoteClusterId())
+                                .setLocalClusterId(session.getLocalClusterId())
+                                .setClient(session.getSubscriber().getClient())
+                                .setReplicationModel(session.getSubscriber().getReplicationModel())
+                                .build();
+                        log.info("sessions in veryfingLeadership {}", sessionMsg);
                         CorfuMessage.RequestPayloadMsg payload =
                                 CorfuMessage.RequestPayloadMsg.newBuilder().setLrLeadershipQuery(
-                                        LogReplication.LogReplicationLeadershipRequestMsg.newBuilder().build()
+                                        LogReplication.LogReplicationLeadershipRequestMsg
+                                                .newBuilder()
+                                                .setSessionInfo(sessionMsg)
+                                                .build()
                                 ).build();
+                        log.info("payload in veryfingLeadership {}", payload);
                         CompletableFuture<LogReplicationLeadershipResponseMsg> leadershipRequestCf =
                                 router.sendRequestAndGetCompletable(payload, nodeId);
                         pendingLeadershipQueries.put(nodeId, leadershipRequestCf);

@@ -36,7 +36,7 @@ public class CorfuNettyServerChannel extends ChannelInboundHandlerAdapter {
         try {
             RequestMsg message = (RequestMsg) msg;
 
-            log.trace("Received message {}", message.getPayload().getPayloadCase());
+            log.debug("Received message {}", message.getPayload().getPayloadCase());
 
             // Hold ChannelHandlerContexts to send response back
 

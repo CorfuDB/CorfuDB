@@ -6,16 +6,13 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.AbstractServer;
-import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.view.Layout;
 
 import java.io.File;
@@ -26,11 +23,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+
 /**
- * This class represents the Corfu interface to route incoming messages from external adapters when
- * custom communication channels are used.
- *
- * Created by annym on 14/5/20.
+ * This class is shared by all the connection-endpoint routers.
+ * Since there can be only 1 server per endpoint, this class creates the server, sets the server in the routers which is per session,
+ * indirectly starts the server and listens to incoming msgs.
  */
 @Slf4j
 public class LogReplicationServerRouter implements IServerRouter {
@@ -41,7 +38,7 @@ public class LogReplicationServerRouter implements IServerRouter {
     /**
      * This map stores the mapping from message type to netty server handler.
      */
-    private final Map<RequestPayloadMsg.PayloadCase, AbstractServer> handlerMap;
+    private final Map<CorfuMessage.RequestPayloadMsg.PayloadCase, AbstractServer> handlerMap;
 
     /**
      * The epoch of this router. This is managed by the base server implementation.
@@ -50,20 +47,16 @@ public class LogReplicationServerRouter implements IServerRouter {
     @Setter
     private volatile long serverEpoch;
 
-    /** The {@link AbstractServer}s this {@link LogReplicationServerRouter} routes messages for. */
+    /** The {@link AbstractServer}s this {@link LogReplicationSinkServerRouter} routes messages for. */
     final List<AbstractServer> servers;
 
-    /** Construct a new {@link LogReplicationServerRouter}.
-     *
-     * @param servers   A list of {@link AbstractServer}s this router will route
-     *                  messages for.
-     */
-    public LogReplicationServerRouter(List<AbstractServer> servers) {
-        this.serverEpoch = ((BaseServer) servers.get(0)).serverContext.getServerEpoch();
-        this.servers = ImmutableList.copyOf(servers);
-        this.handlerMap = new EnumMap<>(RequestPayloadMsg.PayloadCase.class);
+    public LogReplicationServerRouter(Map<Class, AbstractServer> serverMap, ServerContext serverContext,
+                                      Map<ReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServer,
+                                      Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServer) {
+        this.servers = ImmutableList.copyOf(serverMap.values());
+        this.handlerMap = new EnumMap<>(CorfuMessage.RequestPayloadMsg.PayloadCase.class);
 
-        servers.forEach(server -> {
+        serverMap.values().forEach(server -> {
             try {
                 server.getHandlerMethods().getHandledTypes().forEach(x -> handlerMap.put(x, server));
             } catch (UnsupportedOperationException ex) {
@@ -71,18 +64,26 @@ public class LogReplicationServerRouter implements IServerRouter {
             }
         });
 
-        this.serverAdapter = getAdapter(((BaseServer) servers.get(0)).serverContext);
+        serverAdapter = getAdapter(serverContext, sessionToSourceServer, sessionToSinkServer);
+        if(!sessionToSourceServer.isEmpty()) {
+            sessionToSourceServer.values().forEach(router -> router.setAdapter(serverAdapter));
+        }
+        if (!sessionToSinkServer.isEmpty()) {
+            sessionToSinkServer.values().forEach(router -> router.setAdapter(serverAdapter));
+        }
     }
 
-    private IServerChannelAdapter getAdapter(ServerContext serverContext) {
+    private IServerChannelAdapter getAdapter(ServerContext serverContext,
+                                             Map<ReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServer,
+                                             Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServer) {
 
         LogReplicationPluginConfig config = new LogReplicationPluginConfig(serverContext.getPluginConfigFilePath());
         File jar = new File(config.getTransportAdapterJARPath());
 
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
             Class adapter = Class.forName(config.getTransportServerClassCanonicalName(), true, child);
-            return (IServerChannelAdapter) adapter.getDeclaredConstructor(
-                    ServerContext.class, LogReplicationServerRouter.class).newInstance(serverContext, this);
+            return (IServerChannelAdapter) adapter.getDeclaredConstructor(ServerContext.class, Map.class, Map.class)
+                    .newInstance(serverContext, sessionToSourceServer, sessionToSinkServer);
         } catch (Exception e) {
             log.error("Fatal error: Failed to create serverAdapter", e);
             throw new UnrecoverableCorfuError(e);
@@ -92,7 +93,7 @@ public class LogReplicationServerRouter implements IServerRouter {
     // ============ IServerRouter Methods =============
 
     @Override
-    public void sendResponse(ResponseMsg response, ChannelHandlerContext ctx) {
+    public void sendResponse(CorfuMessage.ResponseMsg response, ChannelHandlerContext ctx) {
         log.trace("Ready to send response {}", response.getPayload().getPayloadCase());
         try {
             serverAdapter.send(response);
@@ -117,60 +118,6 @@ public class LogReplicationServerRouter implements IServerRouter {
 
     }
 
-    // ================================================
-
-    /**
-     * Receive messages from the 'custom' serverAdapter implementation. This message will be forwarded
-     * for processing.
-     *
-     * @param message
-     */
-    public void receive(RequestMsg message) {
-        log.trace("Received message {}", message.getPayload().getPayloadCase());
-
-        AbstractServer handler = handlerMap.get(message.getPayload().getPayloadCase());
-        if (handler == null) {
-            // The message was unregistered, we are dropping it.
-            log.warn("Received unregistered message {}, dropping", message);
-        } else {
-            if (validateEpoch(message.getHeader())) {
-                // Route the message to the handler.
-                if (log.isTraceEnabled()) {
-                    log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(), message);
-                }
-
-                try {
-                    handler.handleMessage(message, null,  this);
-                } catch (Throwable t) {
-                    log.error("channelRead: Handling {} failed due to {}:{}",
-                            message.getPayload().getPayloadCase(),
-                            t.getClass().getSimpleName(),
-                            t.getMessage(),
-                            t);
-                }
-            }
-        }
-    }
-
-    /**
-     * Validate the epoch of a CorfuMsg, and send a WRONG_EPOCH response if
-     * the server is in the wrong epoch. Ignored if the message type is reset (which
-     * is valid in any epoch).
-     *
-     * @param header The incoming header to validate.
-     * @return True, if the epoch is correct, but false otherwise.
-     */
-    private boolean validateEpoch(HeaderMsg header) {
-        long serverEpoch = getServerEpoch();
-        if (!header.getIgnoreEpoch() && header.getEpoch()!= serverEpoch) {
-            log.trace("Incoming message with wrong epoch, got {}, expected {}",
-                    header.getEpoch(), serverEpoch);
-            sendWrongEpochError(header, null);
-            return false;
-        }
-        return true;
-    }
-
     /**
      * {@inheritDoc}
      *
@@ -182,4 +129,6 @@ public class LogReplicationServerRouter implements IServerRouter {
     public void addServer(AbstractServer server) {
         throw new UnsupportedOperationException("No longer supported");
     }
+
+    // ================================================
 }

@@ -98,7 +98,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     public void testSinkClusterReset() throws Exception {
         // (1) Snapshot and Log Entry Sync
         log.debug(">>> (1) Start Snapshot and Log Entry Sync");
-        testEndToEndSnapshotAndLogEntrySyncUFO(false, false);
+        testEndToEndSnapshotAndLogEntrySyncUFO(false, false, 1);
 
         ExecutorService writerService = Executors.newSingleThreadExecutor();
 
@@ -136,7 +136,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
         // (1) Snapshot and Log Entry Sync
         log.debug(">>> (1) Start Snapshot and Log Entry Sync");
-        testEndToEndSnapshotAndLogEntrySyncUFO(false, false);
+        testEndToEndSnapshotAndLogEntrySyncUFO(false, false, 1);
 
         ExecutorService writerService = Executors.newSingleThreadExecutor();
 
@@ -464,6 +464,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             final int totalEntries = 20;
 
             setupSourceAndSinkCorfu();
+            initSingleSourceSinkCluster();
             openMaps();
 
             Set<UUID> tablesToListen = getTablesToListen();

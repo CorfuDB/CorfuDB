@@ -2,11 +2,13 @@ package org.corfudb.infrastructure.logreplication.runtime.fsm;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationNegotiationException;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceClientRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceRouterHelper;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
@@ -35,13 +37,13 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
     private final ThreadPoolExecutor worker;
 
-    private final LogReplicationClientRouter router;
+    private final LogReplicationSourceRouterHelper router;
 
     private final LogReplicationMetadataManager metadataManager;
 
     private final LogReplicationConfigManager tableManagerPlugin;
 
-    public NegotiatingState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker, LogReplicationClientRouter router,
+    public NegotiatingState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker, LogReplicationSourceRouterHelper router,
                             LogReplicationMetadataManager metadataManager, LogReplicationConfigManager tableManagerPlugin) {
         this.fsm = fsm;
         this.metadataManager = metadataManager;
@@ -125,10 +127,20 @@ public class NegotiatingState implements LogReplicationRuntimeState {
         try {
             if(fsm.getRemoteLeaderNodeId().isPresent()) {
                 String remoteLeader = fsm.getRemoteLeaderNodeId().get();
-
+                ReplicationSession session = router.getSession();
+                LogReplication.ReplicationSessionMsg sessionMsg = LogReplication.ReplicationSessionMsg.newBuilder()
+                        .setRemoteClusterId(session.getRemoteClusterId())
+                        .setLocalClusterId(session.getLocalClusterId())
+                        .setClient(session.getSubscriber().getClient())
+                        .setReplicationModel(session.getSubscriber().getReplicationModel())
+                        .build();
                 CorfuMessage.RequestPayloadMsg payload =
                         CorfuMessage.RequestPayloadMsg.newBuilder().setLrMetadataRequest(
-                                LogReplication.LogReplicationMetadataRequestMsg.newBuilder().build()).build();
+                                LogReplication.LogReplicationMetadataRequestMsg
+                                        .newBuilder()
+                                        .setSessionInfo(sessionMsg)
+                                        .build())
+                                .build();
                 CompletableFuture<LogReplicationMetadataResponseMsg> cf = router
                         .sendRequestAndGetCompletable(payload, remoteLeader);
                 LogReplicationMetadataResponseMsg response =

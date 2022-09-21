@@ -19,4 +19,8 @@ service LogReplicationChannel {
     // again using a provided stream. Once the client has finished writing the messages, it waits for the server
     // to read them all and return its response (ack).
     rpc replicate(stream org.corfudb.runtime.RequestMsg) returns (org.corfudb.runtime.ResponseMsg) {}
+
+    // Used when the SINK is the connection initiator. This RPC creates a long living stream, on which the source and
+    // sink exchange negotiation-msg/replication-msg/ACKs
+    rpc subscribeAndStartreplication(stream org.corfudb.runtime.ResponseMsg) returns (stream org.corfudb.runtime.RequestMsg) {}
 }

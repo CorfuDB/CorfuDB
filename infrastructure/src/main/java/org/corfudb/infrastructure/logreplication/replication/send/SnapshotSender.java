@@ -236,6 +236,12 @@ public class SnapshotSender {
                 .setPreviousTimestamp(Address.NON_ADDRESS)
                 .setSnapshotTimestamp(baseSnapshotTimestamp)
                 .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
+                .setSessionInfo(LogReplication.ReplicationSessionMsg.newBuilder()
+                        .setRemoteClusterId(fsm.getReplicationSession().getRemoteClusterId())
+                        .setLocalClusterId(fsm.getReplicationSession().getLocalClusterId())
+                        .setClient(fsm.getReplicationSession().getSubscriber().getClient())
+                        .setReplicationModel(fsm.getReplicationSession().getSubscriber().getReplicationModel())
+                        .build())
                 .build();
         return getLrEntryAckMsg(metadata);
     }
@@ -249,6 +255,12 @@ public class SnapshotSender {
                 .setPreviousTimestamp(Address.NON_ADDRESS)
                 .setSnapshotTimestamp(baseSnapshotTimestamp)
                 .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
+                .setSessionInfo(LogReplication.ReplicationSessionMsg.newBuilder()
+                        .setRemoteClusterId(fsm.getReplicationSession().getRemoteClusterId())
+                        .setLocalClusterId(fsm.getReplicationSession().getLocalClusterId())
+                        .setClient(fsm.getReplicationSession().getSubscriber().getClient())
+                        .setReplicationModel(fsm.getReplicationSession().getSubscriber().getReplicationModel())
+                        .build())
                 .build();
         return getLrEntryAckMsg(metadata);
     }

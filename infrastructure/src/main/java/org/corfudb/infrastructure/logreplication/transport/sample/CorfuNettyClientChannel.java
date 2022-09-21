@@ -87,7 +87,7 @@ public class CorfuNettyClientChannel extends SimpleChannelInboundHandler<Respons
                                    @Nonnull EventLoopGroup eventLoopGroup,
                                    @Nonnull NettyLogReplicationClientChannelAdapter adapter) {
         this.node = node;
-        this.parameters = adapter.getRouter().getParameters();
+        this.parameters = adapter.getSourceRouter().getRuntimeFSM().getSourceManager().getParameters();
         this.adapter = adapter;
         this.eventLoopGroup = eventLoopGroup == null ? getNewEventLoopGroup()
                 : eventLoopGroup;

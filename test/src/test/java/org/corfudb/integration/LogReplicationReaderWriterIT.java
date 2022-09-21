@@ -238,7 +238,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
 
         ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
+            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID, SOURCE_CLUSTER_ID);
 
         StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, configManager, replicationSession);
 
@@ -268,14 +268,12 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     }
 
     public static void writeSnapshotMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
-
+        ReplicationSession replicationSession =
+                ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID, SOURCE_CLUSTER_ID);
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt,
-            0, SINK_CLUSTER_ID);
+            0, replicationSession);
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
-
-        ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
 
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, configManager, logReplicationMetadataManager,
             replicationSession);
@@ -302,9 +300,9 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
 
         ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
-
+            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID, SOURCE_CLUSTER_ID);
         StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, configManager, replicationSession);
+
         reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
 
         LogReplicationEntryMsg entry;
@@ -333,14 +331,12 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     }
 
     public static void writeLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
-
+        ReplicationSession replicationSession =
+                ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID, SOURCE_CLUSTER_ID);
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt,
-            0, SOURCE_CLUSTER_ID);
+            0, replicationSession);
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
-
-        ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
 
         LogEntryWriter writer = new LogEntryWriter(configManager, logReplicationMetadataManager, replicationSession);
 
