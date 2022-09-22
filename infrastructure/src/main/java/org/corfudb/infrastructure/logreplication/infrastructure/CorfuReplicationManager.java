@@ -161,26 +161,6 @@ public class CorfuReplicationManager {
         }
     }
 
-    private void removeClusterInfoFromStatusTable(String clusterId) {
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try {
-                    metadataManagerMap.get(clusterId).removeFromStatusTable(clusterId);
-                } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to remove clusterInfo from LR status tables", tae);
-                    throw new RetryNeededException();
-                }
-
-                log.debug("removeClusterInfoFromStatusTable succeeds, removed clusterID {}", clusterId);
-
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to removeClusterInfoFromStatusTable", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
-        }
-    }
-
     /**
      * Update Log Replication Runtime config id.
      */
@@ -207,7 +187,6 @@ public class CorfuReplicationManager {
 
         // Remove Sinks that are not in the new config
         for (String clusterId : sinksToRemove) {
-            removeClusterInfoFromStatusTable(clusterId);
             for (ReplicationSubscriber subscriber : subscribers) {
                 stopLogReplicationRuntime(new ReplicationSession(clusterId, subscriber));
             }

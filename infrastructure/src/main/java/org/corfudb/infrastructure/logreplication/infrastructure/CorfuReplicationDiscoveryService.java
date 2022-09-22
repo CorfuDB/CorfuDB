@@ -746,7 +746,9 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             for (String remoteClusterId : sinksToRemove) {
                 for (ReplicationSubscriber subscriber :
                     logReplicationConfig.getReplicationSubscriberToStreamsMap().keySet()) {
-                    remoteSessionToMetadataManagerMap.remove(new ReplicationSession(remoteClusterId, subscriber));
+                    ReplicationSession sessionToRemove = new ReplicationSession(remoteClusterId, subscriber);
+                    removeClusterInfoFromStatusTable(sessionToRemove);
+                    remoteSessionToMetadataManagerMap.remove(sessionToRemove);
                 }
             }
             createMetadataManagers(sinksToAdd);
@@ -758,14 +760,34 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             updateTopologyConfigIdOnSink(discoveredTopology.getTopologyConfigId());
         }
 
-        // Update Topology Config Id on MetadataManagers (contains persisted
-        // metadata tables)
+        // Update Topology Config Id on MetadataManagers (contains persisted metadata tables)
         remoteSessionToMetadataManagerMap.values().forEach(metadataManager -> metadataManager.setupTopologyConfigId(
             discoveredTopology.getTopologyConfigId()));
 
         updateLocalTopology(discoveredTopology);
         log.debug("Persisted new topologyConfigId {}, cluster id={}, role={}", topologyDescriptor.getTopologyConfigId(),
             localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
+    }
+
+    private void removeClusterInfoFromStatusTable(ReplicationSession session) {
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    remoteSessionToMetadataManagerMap.get(session).removeFromStatusTable(session.getRemoteClusterId());
+                } catch (TransactionAbortedException tae) {
+                    log.error("Error while attempting to remove clusterInfo from LR status tables", tae);
+                    throw new RetryNeededException();
+                }
+
+                log.debug("removeClusterInfoFromStatusTable succeeds, removed clusterID {}",
+                    session.getRemoteClusterId());
+
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when attempting to removeClusterInfoFromStatusTable", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
     }
 
     /**
