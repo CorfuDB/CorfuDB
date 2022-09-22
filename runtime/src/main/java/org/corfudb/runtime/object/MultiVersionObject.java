@@ -16,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
+import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -49,7 +50,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
     /**
      * Metadata on object versions generated.
      */
-    private final StreamAddressSpace addressSpace;
+    private StreamAddressSpace addressSpace;
 
     /**
      * Current state of the underlying object. We maintain a reference here explicitly
@@ -159,7 +160,9 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
             lockTs = lock.tryConvertToWriteLock(lockTs);
 
             if (lockTs == 0) {
+                long startTime = System.nanoTime();
                 lockTs = lock.writeLock();
+                MicroMeterUtils.time(Duration.ofNanos(System.nanoTime() - startTime), "mvo.lock.wait", STREAM_ID_TAG_NAME, getID().toString());
             }
 
             pessimisticReadCounter.ifPresent(Counter::increment);
@@ -224,35 +227,42 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      * the provided timestamp.
      */
     private Optional<ICorfuSMRSnapshotProxy<T>> getFromCacheUnsafe(@Nonnull VersionedObjectIdentifier voId, long lockTs) {
-        if (isTimestampMaterializedUnsafe(voId.getVersion())) {
-            // Find the latest version materialized for this object that is visible from timestamp.
-            final long streamTs = addressSpace.floor(voId.getVersion());
-            voId.setVersion(streamTs);
+        long startTime = System.nanoTime();
 
-            if (log.isTraceEnabled()) {
-                log.trace("SnapshotProxy[{}] optimistic request at {}", Utils.toReadableId(getID()), streamTs);
+        try {
+            if (isTimestampMaterializedUnsafe(voId.getVersion())) {
+                // Find the latest version materialized for this object that is visible from timestamp.
+                final long streamTs = addressSpace.floor(voId.getVersion());
+                voId.setVersion(streamTs);
+
+                if (log.isTraceEnabled()) {
+                    log.trace("SnapshotProxy[{}] optimistic request at {}", Utils.toReadableId(getID()), streamTs);
+                }
+
+                T versionedObject;
+
+                // The latest visible version for the provided timestamp is equal to what is maintained
+                // by the MVO. In this case, there is no need to query the cache. This check is required
+                // since the MVOCache might have evicted all versions associated with this object, even
+                // though streamTs is the most recent tail for this stream.
+                if (streamTs == currentObjectVersion) {
+                    versionedObject = currentObject;
+                } else {
+                    versionedObject = mvoCache.get(voId).orElseThrow(() -> new TrimmedException(streamTs,
+                            String.format("Trimmed address %s has been evicted from MVOCache", streamTs)));
+                }
+
+                if (lock.validate(lockTs)) {
+                    correctnessLogger.trace(CORRECTNESS_LOG_MSG, streamTs);
+                    return Optional.of(new SnapshotProxy<>(versionedObject, streamTs, upcallTargetMap));
+                }
             }
 
-            T versionedObject;
-
-            // The latest visible version for the provided timestamp is equal to what is maintained
-            // by the MVO. In this case, there is no need to query the cache. This check is required
-            // since the MVOCache might have evicted all versions associated with this object, even
-            // though streamTs is the most recent tail for this stream.
-            if (streamTs == currentObjectVersion) {
-                versionedObject = currentObject;
-            } else {
-                versionedObject = mvoCache.get(voId).orElseThrow(() -> new TrimmedException(streamTs,
-                        String.format("Trimmed address %s has been evicted from MVOCache", streamTs)));
-            }
-
-            if (lock.validate(lockTs)) {
-                correctnessLogger.trace(CORRECTNESS_LOG_MSG, streamTs);
-                return Optional.of(new SnapshotProxy<>(versionedObject, streamTs, upcallTargetMap));
-            }
+            return Optional.empty();
+        } finally {
+            MicroMeterUtils.time(Duration.ofNanos(System.nanoTime() - startTime), "mvo.cache.query");
         }
 
-        return Optional.empty();
     }
 
     /**
@@ -371,7 +381,9 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         log.debug("Reset[{}] MVO", Utils.toReadableId(getID()));
         currentObject.close();
         currentObject = newObjectFn.get();
+        addressSpace = new StreamAddressSpace();
         currentObjectVersion = Address.NON_EXIST;
+        materializedUpTo = Address.NON_EXIST;
         smrStream.reset();
     }
 

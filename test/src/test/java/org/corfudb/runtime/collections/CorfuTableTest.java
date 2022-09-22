@@ -101,10 +101,10 @@ public class CorfuTableTest extends AbstractViewTest {
         corfuTable.insert("k2", "ab");
         corfuTable.insert("k3", "b");
 
-        assertThat(project(corfuTable.getByIndex(StringIndexer.BY_FIRST_LETTER, "a").collect(Collectors.toList())))
+        assertThat(project(corfuTable.getByIndex(StringIndexer.BY_FIRST_LETTER, "a")))
                 .containsExactlyInAnyOrder("ab", "a");
 
-        assertThat(project(corfuTable.getByIndex(StringIndexer.BY_VALUE, "ab").collect(Collectors.toList())))
+        assertThat(project(corfuTable.getByIndex(StringIndexer.BY_VALUE, "ab")))
                 .containsExactlyInAnyOrder("ab");
     }
 
@@ -149,7 +149,7 @@ public class CorfuTableTest extends AbstractViewTest {
         corfuTable.insert("k3", "fox");
 
         final Collection<Map.Entry<String, String>> result =
-                corfuTable.getByIndex(StringMultiIndexer.BY_EACH_WORD, "fox").collect(Collectors.toList());
+                corfuTable.getByIndex(StringMultiIndexer.BY_EACH_WORD, "fox");
         assertThat(project(result)).containsExactlyInAnyOrder("dog fox cat", "fox");
     }
 
@@ -259,7 +259,7 @@ public class CorfuTableTest extends AbstractViewTest {
         corfuTable.insert("k3", "b");
         corfuTable.delete("k2");
 
-        assertThat(project(corfuTable.getByIndex(StringIndexer.BY_FIRST_LETTER, "a").collect(Collectors.toList())))
+        assertThat(project(corfuTable.getByIndex(StringIndexer.BY_FIRST_LETTER, "a")))
                 .containsExactly("a");
     }
 

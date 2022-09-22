@@ -7,6 +7,7 @@ import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
 
 import javax.annotation.Nonnull;
+import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -84,7 +85,7 @@ public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<
     }
 
     @Override
-    public <I> Stream<Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey) {
+    public <I> Collection<Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey) {
         return proxy.access(corfuSmr -> corfuSmr.getByIndex(indexName, indexKey), null);
     }
 

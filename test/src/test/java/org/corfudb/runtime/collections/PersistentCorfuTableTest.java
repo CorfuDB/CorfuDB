@@ -526,10 +526,10 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         rt.getObjectsView().TXBegin();
         List<Map.Entry<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>>>
-                entries = table.getByIndex(() -> "anotherKey", 0).collect(Collectors.toList());
+                entries = new ArrayList<>(table.getByIndex(() -> "anotherKey", 0));
         assertThat(entries).isEmpty();
 
-        entries = table.getByIndex(() -> "uuid", Uuid.getDefaultInstance()).collect(Collectors.toList());
+        entries = new ArrayList<>(table.getByIndex(() -> "uuid", Uuid.getDefaultInstance()));
         assertThat(entries).isEmpty();
         rt.getObjectsView().TXEnd();
     }
@@ -580,14 +580,14 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         rt.getObjectsView().TXBegin();
         List<Map.Entry<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>>>
-                entries = table.getByIndex(() -> "anotherKey", eventTime).collect(Collectors.toList());
+                entries = new ArrayList<>(table.getByIndex(() -> "anotherKey", eventTime));
 
         assertThat(entries).hasSize(1);
         assertThat(entries.get(0).getValue().getPayload().getPayload()).isEqualTo("abc");
         rt.getObjectsView().TXEnd();
 
         rt.getObjectsView().TXBegin();
-        entries = table.getByIndex(() -> "uuid", secondaryKey1).collect(Collectors.toList());
+        entries = new ArrayList<>(table.getByIndex(() -> "uuid", secondaryKey1));
         assertThat(entries).hasSize(1);
         assertThat(entries.get(0).getValue().getPayload().getPayload()).isEqualTo("abc");
         rt.getObjectsView().TXEnd();
@@ -642,13 +642,13 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         // Verify secondary indexes
         rt.getObjectsView().TXBegin();
         List<Map.Entry<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>>>
-                entries = table.getByIndex(() -> "anotherKey", numEntries).collect(Collectors.toList());
+                entries = new ArrayList<>(table.getByIndex(() -> "anotherKey", numEntries));
         assertThat(entries).hasSize(1);
         assertThat(entries.get(0).getKey().getLsb()).isEqualTo(numEntries);
         assertThat(entries.get(0).getKey().getMsb()).isEqualTo(numEntries);
         assertThat(entries.get(0).getValue().getPayload().getAnotherKey()).isEqualTo(numEntries);
 
-        entries = table.getByIndex(() -> "uuid", Uuid.getDefaultInstance()).collect(Collectors.toList());
+        entries = new ArrayList<>(table.getByIndex(() -> "uuid", Uuid.getDefaultInstance()));
         assertThat(entries.size()).isEqualTo(numEntries);
         assertThat(entries.containsAll(initialEntries)).isTrue();
         assertThat(initialEntries.containsAll(entries)).isTrue();
@@ -668,16 +668,16 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         // Verify secondary indexes
         rt.getObjectsView().TXBegin();
-        entries = table.getByIndex(() -> "anotherKey", numEntries).collect(Collectors.toList());
+        entries = new ArrayList<>(table.getByIndex(() -> "anotherKey", numEntries));
         assertThat(entries).hasSize(1);
         assertThat(entries.get(0).getKey().getLsb()).isEqualTo(numEntries);
         assertThat(entries.get(0).getKey().getMsb()).isEqualTo(numEntries);
         assertThat(entries.get(0).getValue().getPayload().getAnotherKey()).isEqualTo(numEntries);
 
-        entries = table.getByIndex(() -> "anotherKey", 1L).collect(Collectors.toList());
+        entries = new ArrayList<>(table.getByIndex(() -> "anotherKey", 1L));
         assertThat(entries).isEmpty();
 
-        entries = table.getByIndex(() -> "uuid", Uuid.getDefaultInstance()).collect(Collectors.toList());
+        entries = new ArrayList<>(table.getByIndex(() -> "uuid", Uuid.getDefaultInstance()));
         assertThat(entries.size()).isEqualTo(expectedEntries.size());
         assertThat(entries.containsAll(expectedEntries)).isTrue();
         assertThat(expectedEntries.containsAll(entries)).isTrue();
@@ -744,9 +744,8 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         // Get by secondary index, retrieve from database all even entries.
         rt.getObjectsView().TXBegin();
-        List<Map.Entry<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>>> entries = table
-                .getByIndex(() -> "non_primitive_field_level_0.key_1_level_1", even)
-                .collect(Collectors.toList());
+        List<Map.Entry<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>>> entries = new ArrayList<>(table
+                .getByIndex(() -> "non_primitive_field_level_0.key_1_level_1", even));
 
         assertThat(entries.size()).isEqualTo(totalRecords / 2);
 
@@ -760,9 +759,8 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         // Get by secondary index from second level (nested), retrieve from database 'upper half'.
         rt.getObjectsView().TXBegin();
-        entries = table
-                .getByIndex(() -> "non_primitive_field_level_0.key_2_level_1.key_1_level_2", "upper half")
-                .collect(Collectors.toList());
+        entries = new ArrayList<>(table
+                .getByIndex(() -> "non_primitive_field_level_0.key_2_level_1.key_1_level_2", "upper half"));
 
         assertThat(entries.size()).isEqualTo(totalRecords / 2);
         long sum = 0;
@@ -808,13 +806,13 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         // Get by secondary index, retrieve from database all Companies that have Department of type 1.
         rt.getObjectsView().TXBegin();
         List<Map.Entry<Uuid, CorfuRecord<Company, ManagedMetadata>>>
-                entries = table.getByIndex(() -> "office.departments", departments.get(0)).collect(Collectors.toList());
+                entries = new ArrayList<>(table.getByIndex(() -> "office.departments", departments.get(0)));
         assertThat(entries.size()).isEqualTo(totalCompanies / 2);
         rt.getObjectsView().TXEnd();
 
         // Get by secondary index, retrieve from database all Companies that have Department of Type 4 (all).
         rt.getObjectsView().TXBegin();
-        entries = table.getByIndex(() -> "office.departments", departments.get(3)).collect(Collectors.toList());
+        entries = new ArrayList<>(table.getByIndex(() -> "office.departments", departments.get(3)));
         assertThat(entries.size()).isEqualTo(totalCompanies);
         rt.getObjectsView().TXEnd();
     }
@@ -957,13 +955,13 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         // Get by secondary index, retrieve from database all even entries.
         rt.getObjectsView().TXBegin();
         List<Map.Entry<Uuid, CorfuRecord<ExampleSchemas.Person, ManagedMetadata>>>
-                entries = table.getByIndex(() -> "phoneNumber.mobile", mobileForEvens).collect(Collectors.toList());
+                entries = new ArrayList<>(table.getByIndex(() -> "phoneNumber.mobile", mobileForEvens));
         assertThat(entries.size()).isEqualTo(people / 2);
         rt.getObjectsView().TXEnd();
 
         // Get by secondary index, retrieve from database all entries with common mobile number.
         rt.getObjectsView().TXBegin();
-        entries = table.getByIndex(() -> "phoneNumber.mobile", mobileCommonBoth).collect(Collectors.toList());
+        entries = new ArrayList<>(table.getByIndex(() -> "phoneNumber.mobile", mobileCommonBoth));
         assertThat(entries.size()).isEqualTo(people);
         rt.getObjectsView().TXEnd();
     }
@@ -1045,16 +1043,15 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         // Get by secondary index, retrieve from database all offices which have an evenPhoneNumber.
         rt.getObjectsView().TXBegin();
-        List<Map.Entry<Uuid, CorfuRecord<ExampleSchemas.Office, ManagedMetadata>>> entries = table
-                .getByIndex(() -> "departments.members.phoneNumbers", evenPhoneNumber)
-                .collect(Collectors.toList());
+        List<Map.Entry<Uuid, CorfuRecord<ExampleSchemas.Office, ManagedMetadata>>> entries = new ArrayList<>(table
+                .getByIndex(() -> "departments.members.phoneNumbers", evenPhoneNumber));
 
         assertThat(entries.size()).isEqualTo(numOffices / 2);
         rt.getObjectsView().TXEnd();
 
         // Get by secondary index, retrieve from database all entries with common mobile number.
         rt.getObjectsView().TXBegin();
-        entries = table.getByIndex(() -> "departments.members.phoneNumbers", commonPhoneNumber).collect(Collectors.toList());
+        entries = new ArrayList<>(table.getByIndex(() -> "departments.members.phoneNumbers", commonPhoneNumber));
         assertThat(entries.size()).isEqualTo(numOffices);
         rt.getObjectsView().TXEnd();
     }
@@ -1117,31 +1114,31 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         // Get by secondary index (default alias), retrieve from database all adults with adultsBaseAge.
         rt.getObjectsView().TXBegin();
         List<Map.Entry<Uuid, CorfuRecord<ExampleSchemas.Adult, ManagedMetadata>>>
-                entries = table.getByIndex(() -> "age", adultBaseAge).collect(Collectors.toList());
+                entries = new ArrayList<>(table.getByIndex(() -> "age", adultBaseAge));
         assertThat(entries.size()).isEqualTo(adultCount / 2);
         rt.getObjectsView().TXEnd();
 
         // Get by secondary index (using fully qualified name), retrieve from database all adults with adultsBaseAge.
         rt.getObjectsView().TXBegin();
-        entries = table.getByIndex(() -> "person.age", adultBaseAge).collect(Collectors.toList());
+        entries = new ArrayList<>(table.getByIndex(() -> "person.age", adultBaseAge));
         assertThat(entries.size()).isEqualTo(adultCount / 2);
         rt.getObjectsView().TXEnd();
 
         // Get by secondary index (custom alias), retrieve from database all adults with kids on age 'kidsBaseAge'.
         rt.getObjectsView().TXBegin();
-        entries = table.getByIndex(() -> "kidsAge", kidsBaseAge).collect(Collectors.toList());
+        entries = new ArrayList<>(table.getByIndex(() -> "kidsAge", kidsBaseAge));
         assertThat(entries.size()).isEqualTo(adultCount / 2);
         rt.getObjectsView().TXEnd();
 
         // Get by secondary index (fully qualified name), retrieve from database all adults with kids on age 'kidsBaseAge'.
         rt.getObjectsView().TXBegin();
-        entries = table.getByIndex(() -> "person.children.child.age", kidsBaseAge).collect(Collectors.toList());
+        entries = new ArrayList<>(table.getByIndex(() -> "person.children.child.age", kidsBaseAge));
         assertThat(entries.size()).isEqualTo(adultCount / 2);
         rt.getObjectsView().TXEnd();
 
         // Get by secondary index (custom alias), retrieve from database all adults with kids on age '2' (non-existent).
         rt.getObjectsView().TXBegin();
-        entries = table.getByIndex(() -> "kidsAge", 2).collect(Collectors.toList());
+        entries = new ArrayList<>(table.getByIndex(() -> "kidsAge", 2));
         assertThat(entries.size()).isZero();
         rt.getObjectsView().TXEnd();
     }
@@ -1227,19 +1224,19 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         // (1) Repeated field followed by oneOf field (e.g., hobby.sport)
         rt.getObjectsView().TXBegin();
         List<Map.Entry<Uuid, CorfuRecord<ExampleSchemas.SportsProfessional, ManagedMetadata>>>
-                entries = table.getByIndex(() -> "basketAsHobby", null).collect(Collectors.toList());
+                entries = new ArrayList<>(table.getByIndex(() -> "basketAsHobby", null));
         assertThat(entries.size()).isEqualTo(2);
         rt.getObjectsView().TXEnd();
 
         // (2) Non-repeated field followed by oneOf field (e.g., profession.sport)
         rt.getObjectsView().TXBegin();
-        entries = table.getByIndex(() -> "baseballPlayers", null).collect(Collectors.toList());
+        entries = new ArrayList<>(table.getByIndex(() -> "baseballPlayers", null));
         assertThat(entries.size()).isEqualTo(2);
         rt.getObjectsView().TXEnd();
 
         // (3) Repeated field followed by repeated field (e.g., training.exercises)
         rt.getObjectsView().TXBegin();
-        entries = table.getByIndex(() -> "exercises", null).collect(Collectors.toList());
+        entries = new ArrayList<>(table.getByIndex(() -> "exercises", null));
         assertThat(entries.size()).isEqualTo(2);
         rt.getObjectsView().TXEnd();
     }

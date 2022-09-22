@@ -9,7 +9,6 @@ import io.micrometer.core.instrument.binder.cache.GuavaCacheMetrics;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
-import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.CorfuRuntime;
 
 import javax.annotation.Nonnull;
@@ -40,9 +39,6 @@ public class MVOCache<T extends ICorfuSMR<T>> {
     @Getter
     private final Cache<VersionedObjectIdentifier, T> objectCache;
 
-    private static final String HIT_RATIO_NAME = "mvo_cache.hit_ratio";
-    private static final String SIZE_NAME = "mvo_cache.size";
-
     public MVOCache(@Nonnull CorfuRuntime corfuRuntime) {
         this.objectCache = CacheBuilder.newBuilder()
                 .maximumSize(corfuRuntime.getParameters().getMaxMvoCacheEntries())
@@ -54,9 +50,6 @@ public class MVOCache<T extends ICorfuSMR<T>> {
 
         MeterRegistryProvider.getInstance()
                 .map(registry -> GuavaCacheMetrics.monitor(registry, objectCache, "mvo_cache"));
-
-        MicroMeterUtils.gauge(HIT_RATIO_NAME, objectCache, cache -> cache.stats().hitRate());
-        MicroMeterUtils.gauge(SIZE_NAME, objectCache, Cache::size);
     }
 
     private void handleEviction(RemovalNotification<VersionedObjectIdentifier, T> notification) {
@@ -67,7 +60,6 @@ public class MVOCache<T extends ICorfuSMR<T>> {
      * Shutdown the MVOCache and perform any necessary cleanup.
      */
     public void shutdown() {
-        MicroMeterUtils.removeGaugesWithNoTags(HIT_RATIO_NAME, SIZE_NAME);
     }
 
     /**
