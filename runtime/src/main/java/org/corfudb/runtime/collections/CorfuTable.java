@@ -233,7 +233,7 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     @Accessor
     public @Nonnull
     <I>
-    Stream<Map.Entry<K, V>> getByIndex(@Nonnull Index.Name indexName, I indexKey) {
+    Collection<Map.Entry<K, V>> getByIndex(@Nonnull Index.Name indexName, I indexKey) {
         String secondaryIndex = indexName.get();
         Map<Object, Map<K, V>> secondaryMap;
         if ((secondaryIndexes.containsKey(secondaryIndex) &&
@@ -243,8 +243,8 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
             Map<K, V> res = secondaryMap.get(indexKey);
 
             return res == null ?
-                    Stream.empty() :
-                    res.entrySet().stream();
+                    Collections.emptySet() :
+                    new HashSet<>(res.entrySet());
         }
 
         // If index is not specified, the lookup by index API must fail.

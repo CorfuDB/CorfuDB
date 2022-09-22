@@ -15,6 +15,8 @@ import org.corfudb.runtime.object.ICorfuSMR;
 
 import javax.annotation.Nonnull;
 import java.util.AbstractMap;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.Spliterator;
@@ -149,15 +151,15 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
      * @param <I>
      * @return
      */
-    public <I> Stream<java.util.Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey) {
+    public <I> Collection<java.util.Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey) {
         final String secondaryIndexName = indexName.get();
         Option<Map<K, V>> optMap = secondaryIndexesWrapper.contains(secondaryIndexName, indexKey);
 
         if (!optMap.isEmpty()) {
-            return StreamSupport.stream(spliterator(optMap.get()), false);
+            return optMap.get().toJavaMap().entrySet();
         }
 
-        return Stream.empty();
+        return Collections.emptySet();
     }
 
     private class TupleIteratorWrapper implements Iterator<java.util.Map.Entry<K, V>> {
