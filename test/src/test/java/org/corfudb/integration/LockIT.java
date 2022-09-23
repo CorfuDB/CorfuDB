@@ -51,8 +51,8 @@ public class LockIT extends AbstractIT implements Observer {
     private final Semaphore blockUntilWaitCondition = new Semaphore(1, true);
 
     private Process corfuServer = null;
-    private final int activeSiteCorfuPort = 9000;
-    private final String corfuEndpoint = DEFAULT_HOST + ":" + activeSiteCorfuPort;
+    private final int sourceSiteCorfuPort = 9000;
+    private final String corfuEndpoint = DEFAULT_HOST + ":" + sourceSiteCorfuPort;
 
     private WaitConditionType waitCondition = WaitConditionType.NONE;
 
@@ -65,7 +65,7 @@ public class LockIT extends AbstractIT implements Observer {
         CorfuRuntime rt = null;
         try {
            // Start Single Corfu Node Cluster
-           corfuServer = runServer(activeSiteCorfuPort, true);
+           corfuServer = runServer(sourceSiteCorfuPort, true);
            rt = initialize();
 
            // Initial acquisition of the semaphore so we can later block until execution conditions are met
@@ -128,8 +128,13 @@ public class LockIT extends AbstractIT implements Observer {
         CorfuRuntime rt = null;
         try {
             // Start Single Corfu Node Cluster
+<<<<<<< HEAD
             corfuServer = runServer(activeSiteCorfuPort, true);
             rt = initialize();
+=======
+            corfuServer = runServer(sourceSiteCorfuPort, true);
+            initialize();
+>>>>>>> replace "active/standby" by "source/sink" (#3348)
 
             // Initial acquisition of the semaphore so we can later block until execution conditions are met
             blockUntilWaitCondition.acquire();
@@ -188,8 +193,13 @@ public class LockIT extends AbstractIT implements Observer {
 
         CorfuRuntime rt = null;
         try {
+<<<<<<< HEAD
             corfuServer = runServer(activeSiteCorfuPort, true);
             rt = initialize();
+=======
+            corfuServer = runServer(sourceSiteCorfuPort, true);
+            initialize();
+>>>>>>> replace "active/standby" by "source/sink" (#3348)
 
             LockDataTypes.LockId lockId = LockDataTypes.LockId.newBuilder()
                     .setLockGroup(LOCK_GROUP)
@@ -288,8 +298,13 @@ public class LockIT extends AbstractIT implements Observer {
 
         CorfuRuntime rt = null;
         try {
+<<<<<<< HEAD
             corfuServer = runServer(activeSiteCorfuPort, true);
             rt = initialize();
+=======
+            corfuServer = runServer(sourceSiteCorfuPort, true);
+            initialize();
+>>>>>>> replace "active/standby" by "source/sink" (#3348)
 
             LockDataTypes.LockId lockId =  LockDataTypes.LockId.newBuilder()
                     .setLockGroup(LOCK_GROUP)
