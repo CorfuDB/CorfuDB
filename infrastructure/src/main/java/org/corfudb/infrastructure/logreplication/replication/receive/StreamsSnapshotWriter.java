@@ -47,7 +47,7 @@ import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MER
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.REGISTRY_TABLE_ID;
 
 /**
- * This class represents the entity responsible of writing streams' snapshots into the standby cluster DB.
+ * This class represents the entity responsible of writing streams' snapshots into the sink cluster DB.
  *
  * Snapshot sync is the process of transferring a snapshot of the DB, for this reason, data is temporarily applied
  * to shadow streams in an effort to avoid inconsistent states. Once all the data is received, the shadow streams
@@ -77,7 +77,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
     @Getter
     private final LogReplicationMetadataManager logReplicationMetadataManager;
 
-    // Represents the actual replicated streams from active. This is a subset of all regular streams in
+    // Represents the actual replicated streams from source. This is a subset of all regular streams in
     // regularToShadowStreamId map
     private final Set<UUID> replicatedStreamIds = new HashSet<>();
 
@@ -107,7 +107,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
      *
      * We create a shadow stream per stream to replicate. A shadow stream aims to accumulate updates
      * temporarily while the (full) snapshot sync completes. Shadow streams aim to avoid inconsistent
-     * states while data is still being transferred from active to standby.
+     * states while data is still being transferred from source to sink.
      *
      * We currently, wait for snapshot sync to complete before applying data in shadow streams
      * to the actual streams, this means that there is still a window of inconsistency as apply is not atomic,
@@ -129,7 +129,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             log.trace("Shadow stream=[{}] for regular stream=[{}] name=({})", shadowStreamId, streamId, streamName);
         }
 
-        log.info("Stream tag map for streaming on Standby/Sink total={}, streams={}", dataStreamToTagsMap.size(),
+        log.info("Stream tag map for streaming on Sink total={}, streams={}", dataStreamToTagsMap.size(),
                 dataStreamToTagsMap);
     }
 

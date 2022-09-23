@@ -220,7 +220,7 @@ public class LogReplicationConfigManager {
     }
 
     /**
-     * Get stream tags to send data change notifications to on the receiver (sink / standby site)
+     * Get stream tags to send data change notifications to on the receiver (sink / sink site)
      *
      * Stream tags will be read from a static configuration file. This file should contain not only
      * the stream tag of interest (namespace, tag), i.e., the stream tag we wish to receive notifications on
