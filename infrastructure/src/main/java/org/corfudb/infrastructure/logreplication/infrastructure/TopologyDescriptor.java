@@ -18,10 +18,10 @@ import java.util.stream.Stream;
 /**
  * This class represents a view of a Multi-Cluster Topology,
  *
- * Ideally, in a given topology, one cluster represents the active cluster (source of data)
- * while n others are standby clusters (backup's). However, because the topology info is provided by an
+ * Ideally, in a given topology, one cluster represents the source cluster (source of data)
+ * while n others are sink clusters (backup's). However, because the topology info is provided by an
  * external adapter which can be specific to the use cases of the user, a topology might be initialized
- * with multiple active clusters and multiple standby clusters.
+ * with multiple source clusters and multiple sink clusters.
  *
  */
 @Slf4j
@@ -32,10 +32,10 @@ public class TopologyDescriptor {
     private final long topologyConfigId;
 
     @Getter
-    private final Map<String, ClusterDescriptor> activeClusters;
+    private final Map<String, ClusterDescriptor> sourceClusters;
 
     @Getter
-    private final Map<String, ClusterDescriptor> standbyClusters;
+    private final Map<String, ClusterDescriptor> sinkClusters;
 
     @Getter
     private final Map<String, ClusterDescriptor> invalidClusters;
@@ -47,16 +47,16 @@ public class TopologyDescriptor {
      */
     public TopologyDescriptor(TopologyConfigurationMsg topologyMessage) {
         this.topologyConfigId = topologyMessage.getTopologyConfigID();
-        this.standbyClusters = new HashMap<>();
-        this.activeClusters = new HashMap<>();
+        this.sinkClusters = new HashMap<>();
+        this.sourceClusters = new HashMap<>();
         this.invalidClusters = new HashMap<>();
 
         for (ClusterConfigurationMsg clusterConfig : topologyMessage.getClustersList()) {
             ClusterDescriptor cluster = new ClusterDescriptor(clusterConfig);
-            if (clusterConfig.getRole() == ClusterRole.ACTIVE) {
-                activeClusters.put(cluster.getClusterId(), cluster);
-            } else if (clusterConfig.getRole() == ClusterRole.STANDBY) {
-                addStandbyCluster(cluster);
+            if (clusterConfig.getRole() == ClusterRole.SOURCE) {
+                sourceClusters.put(cluster.getClusterId(), cluster);
+            } else if (clusterConfig.getRole() == ClusterRole.SINK) {
+                addSinkCluster(cluster);
             } else {
                 invalidClusters.put(cluster.getClusterId(), cluster);
             }
@@ -67,43 +67,43 @@ public class TopologyDescriptor {
      * Constructor
      *
      * @param topologyConfigId topology configuration identifier (epoch)
-     * @param activeCluster active cluster
-     * @param standbyClusters standby cluster's
+     * @param sourceCluster source cluster
+     * @param sinkClusters sink cluster's
      */
-    public TopologyDescriptor(long topologyConfigId, @NonNull ClusterDescriptor activeCluster,
-                              @NonNull List<ClusterDescriptor> standbyClusters) {
-        this(topologyConfigId, Collections.singletonList(activeCluster), standbyClusters);
+    public TopologyDescriptor(long topologyConfigId, @NonNull ClusterDescriptor sourceCluster,
+                              @NonNull List<ClusterDescriptor> sinkClusters) {
+        this(topologyConfigId, Collections.singletonList(sourceCluster), sinkClusters);
     }
 
     /**
      * Constructor
      *
      * @param topologyConfigId topology configuration identifier (epoch)
-     * @param activeClusters active cluster's
-     * @param standbyClusters standby cluster's
+     * @param sourceClusters source cluster's
+     * @param sinkClusters sink cluster's
      */
-    public TopologyDescriptor(long topologyConfigId, @NonNull List<ClusterDescriptor> activeClusters,
-                              @NonNull List<ClusterDescriptor> standbyClusters) {
+    public TopologyDescriptor(long topologyConfigId, @NonNull List<ClusterDescriptor> sourceClusters,
+                              @NonNull List<ClusterDescriptor> sinkClusters) {
         this.topologyConfigId = topologyConfigId;
-        this.activeClusters = new HashMap<>();
-        this.standbyClusters = new HashMap<>();
+        this.sourceClusters = new HashMap<>();
+        this.sinkClusters = new HashMap<>();
         this.invalidClusters = new HashMap<>();
 
-        activeClusters.forEach(activeCluster -> this.activeClusters.put(activeCluster.getClusterId(), activeCluster));
-        standbyClusters.forEach(standbyCluster -> this.standbyClusters.put(standbyCluster.getClusterId(), standbyCluster));
+        sourceClusters.forEach(sourceCluster -> this.sourceClusters.put(sourceCluster.getClusterId(), sourceCluster));
+        sinkClusters.forEach(sinkCluster -> this.sinkClusters.put(sinkCluster.getClusterId(), sinkCluster));
     }
 
     /**
      * Constructor
      *
      * @param topologyConfigId topology configuration identifier (epoch)
-     * @param activeClusters active cluster's
-     * @param standbyClusters standby cluster's
+     * @param sourceClusters source cluster's
+     * @param sinkClusters sink cluster's
      * @param invalidClusters invalid cluster's
      */
-    public TopologyDescriptor(long topologyConfigId, @NonNull List<ClusterDescriptor> activeClusters,
-                              @NonNull List<ClusterDescriptor> standbyClusters, @NonNull List<ClusterDescriptor> invalidClusters) {
-        this(topologyConfigId, activeClusters, standbyClusters);
+    public TopologyDescriptor(long topologyConfigId, @NonNull List<ClusterDescriptor> sourceClusters,
+                              @NonNull List<ClusterDescriptor> sinkClusters, @NonNull List<ClusterDescriptor> invalidClusters) {
+        this(topologyConfigId, sourceClusters, sinkClusters);
         invalidClusters.forEach(invalidCluster -> this.invalidClusters.put(invalidCluster.getClusterId(), invalidCluster));
     }
 
@@ -114,8 +114,8 @@ public class TopologyDescriptor {
      */
     public TopologyConfigurationMsg convertToMessage() {
 
-        List<ClusterConfigurationMsg> clusterConfigurationMsgs = Stream.of(activeClusters.values(),
-                standbyClusters.values(), invalidClusters.values())
+        List<ClusterConfigurationMsg> clusterConfigurationMsgs = Stream.of(sourceClusters.values(),
+                sinkClusters.values(), invalidClusters.values())
                 .flatMap(Collection::stream)
                 .map(ClusterDescriptor::convertToMessage)
                 .collect(Collectors.toList());
@@ -126,24 +126,24 @@ public class TopologyDescriptor {
     }
 
     /**
-     * Add a standby cluster to the current topology
+     * Add a sink cluster to the current topology
      *
-     * @param cluster standby cluster to add
+     * @param cluster sink cluster to add
      */
-    public void addStandbyCluster(ClusterDescriptor cluster) {
-        standbyClusters.put(cluster.getClusterId(), cluster);
+    public void addSinkCluster(ClusterDescriptor cluster) {
+        sinkClusters.put(cluster.getClusterId(), cluster);
     }
 
     /**
-     * Remove a standby cluster from the current topology
+     * Remove a sink cluster from the current topology
      *
-     * @param clusterId unique identifier of the standby cluster to be removed from topology
+     * @param clusterId unique identifier of the sink cluster to be removed from topology
      */
-    public void removeStandbyCluster(String clusterId) {
-        ClusterDescriptor removedCluster = standbyClusters.remove(clusterId);
+    public void removeSinkCluster(String clusterId) {
+        ClusterDescriptor removedCluster = sinkClusters.remove(clusterId);
 
         if (removedCluster == null) {
-            log.warn("Cluster {} never present as a STANDBY cluster.", clusterId);
+            log.warn("Cluster {} never present as a SINK cluster.", clusterId);
         }
     }
 
@@ -154,7 +154,7 @@ public class TopologyDescriptor {
      * @return cluster descriptor to which endpoint belongs to.
      */
     public ClusterDescriptor getClusterDescriptor(String nodeId) {
-        List<ClusterDescriptor> clusters = Stream.of(activeClusters.values(), standbyClusters.values(),
+        List<ClusterDescriptor> clusters = Stream.of(sourceClusters.values(), sinkClusters.values(),
                 invalidClusters.values())
                 .flatMap(Collection::stream)
                 .collect(Collectors.toList());
@@ -173,7 +173,7 @@ public class TopologyDescriptor {
 
     @Override
     public String toString() {
-        return String.format("Topology[id=%s] \n Active Cluster=%s \n Standby Clusters=%s \n Invalid Clusters=%s",
-                topologyConfigId, activeClusters.values(), standbyClusters.values(), invalidClusters.values());
+        return String.format("Topology[id=%s] \n Source Cluster=%s \n Sink Clusters=%s \n Invalid Clusters=%s",
+                topologyConfigId, sourceClusters.values(), sinkClusters.values(), invalidClusters.values());
     }
 }
