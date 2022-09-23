@@ -51,8 +51,8 @@ public class LockIT extends AbstractIT implements Observer {
     private final Semaphore blockUntilWaitCondition = new Semaphore(1, true);
 
     private Process corfuServer = null;
-    private final int activeSiteCorfuPort = 9000;
-    private final String corfuEndpoint = DEFAULT_HOST + ":" + activeSiteCorfuPort;
+    private final int sourceSiteCorfuPort = 9000;
+    private final String corfuEndpoint = DEFAULT_HOST + ":" + sourceSiteCorfuPort;
 
     private WaitConditionType waitCondition = WaitConditionType.NONE;
 
@@ -65,7 +65,7 @@ public class LockIT extends AbstractIT implements Observer {
 
         try {
            // Start Single Corfu Node Cluster
-           corfuServer = runServer(activeSiteCorfuPort, true);
+           corfuServer = runServer(sourceSiteCorfuPort, true);
            initialize();
 
            // Initial acquisition of the semaphore so we can later block until execution conditions are met
@@ -127,7 +127,7 @@ public class LockIT extends AbstractIT implements Observer {
 
         try {
             // Start Single Corfu Node Cluster
-            corfuServer = runServer(activeSiteCorfuPort, true);
+            corfuServer = runServer(sourceSiteCorfuPort, true);
             initialize();
 
             // Initial acquisition of the semaphore so we can later block until execution conditions are met
@@ -186,7 +186,7 @@ public class LockIT extends AbstractIT implements Observer {
         Map<UUID, LockListener> clientIdToLockListener = new HashMap<>();
 
         try {
-            corfuServer = runServer(activeSiteCorfuPort, true);
+            corfuServer = runServer(sourceSiteCorfuPort, true);
             initialize();
 
             LockDataTypes.LockId lockId = LockDataTypes.LockId.newBuilder()
@@ -285,7 +285,7 @@ public class LockIT extends AbstractIT implements Observer {
         Map<UUID, LockListener> clientIdToLockListener = new HashMap<>();
 
         try {
-            corfuServer = runServer(activeSiteCorfuPort, true);
+            corfuServer = runServer(sourceSiteCorfuPort, true);
             initialize();
 
             LockDataTypes.LockId lockId =  LockDataTypes.LockId.newBuilder()

@@ -89,7 +89,7 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
 
     private long lastAckDropped;
 
-    private CorfuStore standbyCorfuStore;
+    private CorfuStore sinkCorfuStore;
 
     private final String destinationClusterID;
 
@@ -112,8 +112,8 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
         this.dropACKLevel = testConfig.getDropAckLevel();
         this.callbackFunction = function;
         this.lastAckDropped = Long.MAX_VALUE;
-        this.standbyCorfuStore = new CorfuStore(runtime);
-        standbyCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
+        this.sinkCorfuStore = new CorfuStore(runtime);
+        sinkCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE,
                 LogReplicationMetadata.ReplicationStatusKey.class,
                 LogReplicationMetadata.ReplicationStatusVal.class,
@@ -153,7 +153,7 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
 
         //check is_data_consistent flag is set to false on snapshot_start
         if (message.getMetadata().getEntryType().equals(LogReplicationEntryType.SNAPSHOT_START)) {
-            checkStatusOnStandby(false);
+            checkStatusOnSink(false);
         }
 
         if (dropAck(ack, message)) {
@@ -312,16 +312,16 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
         return newMessage;
     }
 
-    public void checkStatusOnStandby(boolean expectedDataConsistent) {
+    public void checkStatusOnSink(boolean expectedDataConsistent) {
         if (destinationClusterID == null) {
             return;
         }
-        LogReplicationMetadata.ReplicationStatusKey standbyClusterId = LogReplicationMetadata.ReplicationStatusKey.newBuilder()
+        LogReplicationMetadata.ReplicationStatusKey sinkClusterId = LogReplicationMetadata.ReplicationStatusKey.newBuilder()
                 .setClusterId(destinationClusterID)
                 .build();
-        try (TxnContext txn = standbyCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            LogReplicationMetadata.ReplicationStatusVal standbyStatus = (LogReplicationMetadata.ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, standbyClusterId).getPayload();
-            assertThat(standbyStatus.getDataConsistent()).isEqualTo(expectedDataConsistent);
+        try (TxnContext txn = sinkCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            LogReplicationMetadata.ReplicationStatusVal sinkStatus = (LogReplicationMetadata.ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, sinkClusterId).getPayload();
+            assertThat(sinkStatus.getDataConsistent()).isEqualTo(expectedDataConsistent);
         }
     }
 
