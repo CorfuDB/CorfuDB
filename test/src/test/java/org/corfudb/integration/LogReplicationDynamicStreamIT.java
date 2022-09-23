@@ -58,16 +58,16 @@ public class LogReplicationDynamicStreamIT extends LogReplicationAbstractIT {
 
         // Open replication status table to for verification purpose
         corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,
-                REPLICATION_STATUS_TABLE_NAME,
-                LogReplicationSession.class,
-                ReplicationStatus.class,
+                REPLICATION_STATUS_TABLE,
+                ReplicationStatusKey.class,
+                ReplicationStatusVal.class,
                 null,
                 TableOptions.fromProtoSchema(ReplicationStatus.class));
 
         corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
-                REPLICATION_STATUS_TABLE_NAME,
-                LogReplicationSession.class,
-                ReplicationStatus.class,
+                REPLICATION_STATUS_TABLE,
+                ReplicationStatusKey.class,
+                ReplicationStatusVal.class,
                 null,
                 TableOptions.fromProtoSchema(ReplicationStatus.class));
         initSingleSourceSinkCluster();

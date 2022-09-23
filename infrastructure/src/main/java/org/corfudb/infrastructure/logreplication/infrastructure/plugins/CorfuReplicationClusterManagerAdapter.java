@@ -63,7 +63,8 @@ public interface CorfuReplicationClusterManagerAdapter {
     UUID forceSnapshotSync(LogReplicationSession session) throws LogReplicationDiscoveryServiceException;
 
     /**
-     * Get the local node ID
+     * This API enforce a full snapshot sync on the sink cluster with the clusterId at best effort.
+     * The command can only be executed on the source cluster's node.
      *
      * @return node ID
      */

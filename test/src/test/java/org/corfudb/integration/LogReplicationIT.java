@@ -80,7 +80,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private static final String SOURCE_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
     private static final int WRITER_PORT = DEFAULT_PORT + 1;
     private static final String DESTINATION_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
-
     private static final String REMOTE_CLUSTER_ID = UUID.randomUUID().toString();
     private static final int CORFU_PORT = 9000;
     private static final String TABLE_PREFIX = "test";
@@ -785,13 +784,12 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         log.debug("****** Wait Data on Destination");
         waitData(dstCorfuTables, srcDataForVerification);
 
-        // expectedAckTimestamp was set in 'startLogEntrySync' to the tail of the Log Replication Stream.  Verify
-        // that the metadata table was updated with it after a successful LogEntrySync
         log.debug("****** Verify Data on Destination");
         // Verify Data on Destination
         verifyData(dstCorfuStore, dstCorfuTables, srcDataForVerification);
 
-
+        // expectedAckTimestamp was set in 'startLogEntrySync' to the tail of the Log Replication Stream.  Verify
+        // that the metadata table was updated with it after a successful LogEntrySync
         assertThat(expectedAckTimestamp.get()).isEqualTo(logReplicationMetadataManager.getLastProcessedLogEntryBatchTimestamp());
         verifyPersistedSnapshotMetadata();
 
@@ -948,6 +946,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private void testSnapshotSyncAndLogEntrySync(int numCyclesToDelayApply, boolean delayResponse, int dropAcksLevel) throws Exception {
+        // Setup two separate Corfu Servers: source (source) and destination (sink)
+        setupEnv();
 
         // Open streams in source Corfu
         openStreams(srcCorfuTables, srcCorfuStore, NUM_STREAMS);
@@ -1150,7 +1150,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     // startCrossTx indicates if we start with a transaction across Tables
     private void writeCrossTableTransactions(Set<String> tableNames, boolean startCrossTx) throws Exception {
-        // Setup two separate Corfu Servers: source (primary) and destination (standby)
+        // Setup two separate Corfu Servers: source (primary) and destination (sink)
         setupEnv();
 
         // Open streams in source Corfu
@@ -1288,8 +1288,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Source Manager
         LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(
+
             LogReplicationRuntimeParameters.builder().remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID,
-                LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT)).replicationConfig(configManager.getConfig())
+                LogReplicationClusterInfo.ClusterRole.SOURCE, CORFU_PORT)).replicationConfig(configManager.getConfig())
                 .localCorfuEndpoint(SOURCE_ENDPOINT).build(), logReplicationMetadataManager, sourceDataSender,
             configManager, replicationSession);
 

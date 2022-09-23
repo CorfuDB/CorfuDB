@@ -54,7 +54,6 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
     @SuppressWarnings("checkstyle:magicnumber")
     public void testFilterAndApplyRegistryTableEntries() throws Exception {
         setupSourceAndSinkCorfu();
-        initSingleSourceSinkCluster();
         openLogReplicationStatusTable();
 
         // Initial setup for streams to replicate for both source and sink side
@@ -92,7 +91,6 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
         // Log Entry sync. LR needs to be stopped to open some tables on both Source and Sink with different metadata,
         // otherwise it is possible that registry table entries from Source get replicated before Sink side opens them.
         stopSourceLogReplicator();
-
         // Clear these two map as different set of tables will be verified
         mapNameToMapSource.clear();
         mapNameToMapSink.clear();
@@ -108,7 +106,6 @@ public class LogReplicationSinkWriterIT extends LogReplicationAbstractIT {
         // At this point mapNameToMapSink only has 1 table. This step is also used as a barrier to indicate
         // it's a good point to check records on Sink side
         verifyDataOnSink(NUM_WRITES);
-
         // Verify Sink side record for Table005 is retained on the Registry table, and records for Table007 and
         // Table008 are replicated.
         // Also verify all the table's contents for log entry sync

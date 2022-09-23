@@ -198,7 +198,7 @@ public class SnapshotSender {
                 snapshotSyncTransferComplete(snapshotSyncEventId);
             } catch (Exception e) {
                 log.warn("Caught exception while sending data to sink.", e);
-                snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, forcedSnapshotSync);
+                snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN);
             }
         }
     }

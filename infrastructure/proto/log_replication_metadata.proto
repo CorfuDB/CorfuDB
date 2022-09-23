@@ -37,7 +37,12 @@ message LogReplicationMetadataVal {
 
 /*--------END---------*/
 
-/*------- Log Replication Metadata Table V2 Schema ----------*/
+/*
+ * Replication Status Value
+ * Source Site sets the completionPercent, Sink sets the dataConsistent boolean
+ */
+message ReplicationStatusVal {
+  option (org.corfudb.runtime.table_schema).stream_tag = "lr_status";
 
 message ReplicationMetadata {
   uint64 topologyConfigId = 1;

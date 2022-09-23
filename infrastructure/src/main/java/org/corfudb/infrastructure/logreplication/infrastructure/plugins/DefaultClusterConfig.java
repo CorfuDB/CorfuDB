@@ -32,13 +32,13 @@ public final class DefaultClusterConfig {
     private final String defaultHost = "localhost";
 
     @Getter
-    private final List<String> activeNodeUuids =
+    private final List<String> sourceNodeUuids =
         Arrays.asList("123e4567-e89b-12d3-a456-556642440000",
             "123e4567-e89b-12d3-a456-556642440001",
             "123e4567-e89b-12d3-a456-556642440002");
 
     @Getter
-    private final List<String> standbyNodeUuids =
+    private final List<String> sinkNodeUuids =
         Arrays.asList("123e4567-e89b-12d3-a456-556642440123",
             "123e4567-e89b-12d3-a456-556642440124",
             "123e4567-e89b-12d3-a456-556642440125");
@@ -47,40 +47,40 @@ public final class DefaultClusterConfig {
     private final List<String> backupNodesUuid = Collections.singletonList("923e4567-e89b-12d3-a456-556642440000");
 
     @Getter
-    private final List<String> activeNodeNames = Collections.singletonList(
-        "active_site_node0");
+    private final List<String> sourceNodeNames = Collections.singletonList(
+        "source_site_node0");
 
     @Getter
-    private final List<String> activeIpAddresses = Arrays.asList(defaultHost, defaultHost, defaultHost);
+    private final List<String> sourceIpAddresses = Arrays.asList(defaultHost, defaultHost, defaultHost);
 
     @Getter
-    private final List<String> standbyIpAddresses = Arrays.asList(defaultHost, defaultHost, defaultHost);
+    private final List<String> sinkIpAddresses = Arrays.asList(defaultHost, defaultHost, defaultHost);
 
     @Getter
-    private final List<String> activeClusterIds =
+    private final List<String> sourceClusterIds =
         Arrays.asList("456e4567-e89b-12d3-a456-556642440001",
             "456e4567-e89b-12d3-a456-556642440003",
             "456e4567-e89b-12d3-a456-556642440005");
 
     @Getter
-    private final List<String> activeCorfuPorts = Arrays.asList("9000", "9002", "9004");
+    private final List<String> sourceCorfuPorts = Arrays.asList("9000", "9002", "9004");
 
     @Getter
-    private final List<String> activeLogReplicationPorts =
+    private final List<String> sourceLogReplicationPorts =
         Arrays.asList("9010", "9011", "9012");
 
     @Getter
-    private final List<String> standbyClusterIds = Arrays.asList(
+    private final List<String> sinkClusterIds = Arrays.asList(
         "456e4567-e89b-12d3-a456-556642440002",
         "456e4567-e89b-12d3-a456-556642440004",
         "456e4567-e89b-12d3-a456-556642440006");
 
     @Getter
-    private final List<String> standbyCorfuPorts = Arrays.asList("9001",
+    private final List<String> sinkCorfuPorts = Arrays.asList("9001",
         "9003", "9005");
 
     @Getter
-    private final List<String> standbyLogReplicationPorts =
+    private final List<String> sinkLogReplicationPorts =
         Arrays.asList("9020", "9021", "9022");
 
     @Getter
@@ -101,13 +101,13 @@ public final class DefaultClusterConfig {
             return backupNodesUuid.get(0);
         }
 
-        int index = activeLogReplicationPorts.indexOf(port);
+        int index = sourceLogReplicationPorts.indexOf(port);
         if (index != -1) {
-            return activeNodeUuids.get(index);
+            return sourceNodeUuids.get(index);
         } else {
-            index = standbyLogReplicationPorts.indexOf(port);
+            index = sinkLogReplicationPorts.indexOf(port);
             if (index != -1) {
-                return standbyNodeUuids.get(index);
+                return sinkNodeUuids.get(index);
             }
         }
         return null;

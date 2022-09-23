@@ -89,7 +89,6 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
                                 int expectedStreamingUpdatesPerTable) throws Exception {
         log.debug("Setup Source and Sink Corfu's");
         setupSourceAndSinkCorfu();
-        initSingleSourceSinkCluster();
 
         log.debug("Open map on Source and Sink");
         openMaps(2, false);
@@ -106,11 +105,11 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
 
         // Subscribe to replication status table on Sink (to be sure data
         // change on status are captured)
-        int totalSinkStatusUpdates = 3;
+        int totalSinkStatusUpdates = 2;
         corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME,
-            LogReplicationSession.class,
-            ReplicationStatus.class,
+            LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+            LogReplicationMetadata.ReplicationStatusKey.class,
+            LogReplicationMetadata.ReplicationStatusVal.class,
             null,
             TableOptions.fromProtoSchema(ReplicationStatus.class));
 
@@ -118,7 +117,7 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         ReplicationStatusListener sinkListener =
             new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreSink.subscribeListener(sinkListener, LogReplicationMetadataManager.NAMESPACE,
-                LogReplicationUtils.LR_STATUS_STREAM_TAG);
+            LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         // Calculate the expected total number of streaming updates across all tables
         int totalStreamingUpdates =
@@ -157,10 +156,12 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         protobufDescriptorTxLatch.await();
 
         // Verify that updates were received for all replicated tables with data
-        Assert.assertEquals(mapNameToMapSink.size(), streamingUpdateListener.getTableNameToUpdatesMap().size());
+        Assert.assertEquals(mapNameToMapSink.size(),
+            streamingUpdateListener.getTableNameToUpdatesMap().size());
 
         mapNameToMapSink.keySet().forEach(key ->
-            Assert.assertTrue(streamingUpdateListener.getTableNameToUpdatesMap().containsKey(key)));
+            Assert.assertTrue(streamingUpdateListener.getTableNameToUpdatesMap()
+                .containsKey(key)));
 
         // Verify that the right number of entries are contained in the
         // streaming update.  Also verify that the first entry is a 'clear'
@@ -200,7 +201,6 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
 
         corfuStoreSink.unsubscribeListener(sinkListener);
         corfuStoreSink.unsubscribeListener(streamingUpdateListener);
-        corfuStoreSink.unsubscribeListener(protobufDescriptorTxListener);
         shutDown();
     }
 
@@ -249,7 +249,7 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
                         .ValueFieldTagOne.newBuilder()
                         .setPayload(String.valueOf(i)).build();
                 Sample.Metadata metadata = Sample.Metadata.newBuilder()
-                        .setMetadata("Metadata_" + i).build();
+                    .setMetadata("Metadata_" + i).build();
                 try (TxnContext txn = corfuStoreSource.txn(NAMESPACE)) {
                     txn.putRecord(map, stringKey, value, metadata);
                     txn.commit();
@@ -279,15 +279,15 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         }
     }
 
-    private void startLogReplicatorServersWithCustomMaxTxSize() throws Exception {
+    private void startLogReplicatorServersWithCustomMaxWriteSize() throws Exception {
         sourceReplicationServer =
-            runReplicationServerWithCustomMaxTxSize(sourceReplicationServerPort, sourceSiteCorfuPort,
-                pluginConfigFilePath, MAX_WRITE_SIZE_BYTES, MAX_SNAPSHOT_ENTRIES_APPLIED, transportType);
+            runReplicationServerCustomMaxWriteSize(sourceReplicationServerPort,
+                pluginConfigFilePath, MAX_WRITE_SIZE_BYTES, MAX_SNAPSHOT_ENTRIES_APPLIED);
 
         // Start Log Replication Server on Sink Site
         sinkReplicationServer =
-            runReplicationServerWithCustomMaxTxSize(sinkReplicationServerPort, sinkSiteCorfuPort,
-                pluginConfigFilePath, MAX_WRITE_SIZE_BYTES, MAX_SNAPSHOT_ENTRIES_APPLIED, transportType);
+            runReplicationServerCustomMaxWriteSize(sinkReplicationServerPort,
+                pluginConfigFilePath, MAX_WRITE_SIZE_BYTES, MAX_SNAPSHOT_ENTRIES_APPLIED);
     }
 
     private void shutDown() {

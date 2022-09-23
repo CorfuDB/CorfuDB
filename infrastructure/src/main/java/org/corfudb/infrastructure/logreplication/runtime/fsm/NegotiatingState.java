@@ -76,7 +76,15 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 return null;
             case NEGOTIATION_COMPLETE:
                 log.info("Negotiation complete, result={}", event.getNegotiationResult());
-                ((ReplicatingState)fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING)).setReplicationEvent(event.getNegotiationResult());
+                if (tableManagerPlugin.isUpgraded()) {
+                    // Force a snapshot sync if an upgrade has been identified. This will guarantee that
+                    // changes in the streams to replicate are captured by the destination.
+                    log.info("A forced snapshot sync will be done as Source side LR has been upgraded.");
+                    ((ReplicatingState) fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING))
+                            .setReplicationEvent(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST));
+                } else {
+                    ((ReplicatingState)fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING)).setReplicationEvent(event.getNegotiationResult());
+                }
                 return fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING);
             case NEGOTIATION_FAILED:
                 return this;
@@ -180,9 +188,9 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          * The sink site has a smaller config ID, redo the discovery for this sink site when
          * getting a new notification of the site config change if this sink is in the new config.
          */
-        if (negotiationResponse.getTopologyConfigID() < topologyConfigId) {
+        if (negotiationResponse.getTopologyConfigID() < metadataManager.getTopologyConfigId()) {
             log.error("The source site configID {} is bigger than the sink configID {} ",
-                topologyConfigId, negotiationResponse.getTopologyConfigID());
+                    metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
 
@@ -190,9 +198,9 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          * The sink site has larger config ID, redo the whole discovery for the source site
          * it will be triggered by a notification of the site config change.
          */
-        if (negotiationResponse.getTopologyConfigID() > topologyConfigId) {
-            log.error("The source site configID {} is smaller than the sink configID {} ",
-                topologyConfigId, negotiationResponse.getTopologyConfigID());
+        if (negotiationResponse.getTopologyConfigID() > metadataManager.getTopologyConfigId()) {
+            log.error("The active site configID {} is smaller than the sink configID {} ",
+                    metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
 

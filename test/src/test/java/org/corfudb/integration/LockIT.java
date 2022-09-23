@@ -66,7 +66,7 @@ public class LockIT extends AbstractIT implements Observer {
         try {
            // Start Single Corfu Node Cluster
            corfuServer = runServer(sourceSiteCorfuPort, true);
-           rt = initialize();
+           initialize();
 
            // Initial acquisition of the semaphore so we can later block until execution conditions are met
            blockUntilWaitCondition.acquire();
@@ -129,7 +129,7 @@ public class LockIT extends AbstractIT implements Observer {
         try {
             // Start Single Corfu Node Cluster
             corfuServer = runServer(sourceSiteCorfuPort, true);
-            rt = initialize();
+            initialize();
 
             // Initial acquisition of the semaphore so we can later block until execution conditions are met
             blockUntilWaitCondition.acquire();
@@ -189,7 +189,7 @@ public class LockIT extends AbstractIT implements Observer {
         CorfuRuntime rt = null;
         try {
             corfuServer = runServer(sourceSiteCorfuPort, true);
-            rt = initialize();
+            initialize();
 
             LockDataTypes.LockId lockId = LockDataTypes.LockId.newBuilder()
                     .setLockGroup(LOCK_GROUP)
@@ -289,7 +289,7 @@ public class LockIT extends AbstractIT implements Observer {
         CorfuRuntime rt = null;
         try {
             corfuServer = runServer(sourceSiteCorfuPort, true);
-            rt = initialize();
+            initialize();
 
             LockDataTypes.LockId lockId =  LockDataTypes.LockId.newBuilder()
                     .setLockGroup(LOCK_GROUP)

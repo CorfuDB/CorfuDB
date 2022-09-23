@@ -35,7 +35,8 @@ public abstract class IClientChannelAdapter {
      * Default Constructor
      *
      * @param localClusterId local cluster unique identifier
-     * @param router interface between LR and the transport layer
+     * @param remoteClusterDescriptor descriptor of the remote cluster (sink)
+     * @param router interface to forward
      */
     public IClientChannelAdapter(@Nonnull String localClusterId,
                                  @Nonnull LogReplicationClientServerRouter router) {

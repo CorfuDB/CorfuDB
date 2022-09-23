@@ -201,7 +201,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
-                     metadataManager.setDataConsistentOnSink(isDataConsistent, session);
+                    logReplicationMetadataManager.setDataConsistentOnSink(isDataConsistent);
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to setDataConsistent in SinkManager's init", tae);
                     throw new RetryNeededException();

@@ -98,10 +98,6 @@ public class SourceForwardingDataSender implements DataSender {
 
     private CorfuStore sinkCorfuStore;
 
-    private static final String REPLICATION_STATUS_TABLE = LogReplicationUtils.REPLICATION_STATUS_TABLE_NAME;
-
-    private LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
-
     private LogReplicationIT.TestConfig testConfig;
 
     private int numStartMsgsDropped;
@@ -352,9 +348,15 @@ public class SourceForwardingDataSender implements DataSender {
     }
 
     public void checkStatusOnSink(boolean expectedDataConsistent) {
+        if (destinationClusterID == null) {
+            return;
+        }
+        LogReplicationMetadata.ReplicationStatusKey sinkClusterId = LogReplicationMetadata.ReplicationStatusKey.newBuilder()
+                .setClusterId(destinationClusterID)
+                .build();
         try (TxnContext txn = sinkCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            ReplicationStatus status = (ReplicationStatus) txn.getRecord(REPLICATION_STATUS_TABLE, session).getPayload();
-            assertThat(status.getSinkStatus().getDataConsistent()).isEqualTo(expectedDataConsistent);
+            LogReplicationMetadata.ReplicationStatusVal sinkStatus = (LogReplicationMetadata.ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, sinkClusterId).getPayload();
+            assertThat(sinkStatus.getDataConsistent()).isEqualTo(expectedDataConsistent);
         }
     }
 

@@ -74,10 +74,9 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
 
             log.debug("Start source Log Replicator again ...");
             startSourceLogReplicator();
-            initSingleSourceSinkCluster();
 
             log.debug("Verify Data on Sink ...");
-            verifyDataOnSinkNonUFO(numWrites*2);
+            verifyDataOnSinkNonUFO((numWrites*2));
         } finally {
 
             executorService.shutdownNow();

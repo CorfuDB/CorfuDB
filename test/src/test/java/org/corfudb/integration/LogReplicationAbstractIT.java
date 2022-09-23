@@ -137,7 +137,6 @@ public class LogReplicationAbstractIT extends AbstractIT {
         try {
             log.debug("Setup source and sink Corfu's");
             setupSourceAndSinkCorfu();
-            initSingleSourceSinkCluster();
 
             log.debug("Open map on source and sink");
             openMap();
@@ -161,7 +160,8 @@ public class LogReplicationAbstractIT extends AbstractIT {
             writeToSourceNonUFO(numWrites, numWrites/2);
 
             log.debug("Wait ... Delta log replication in progress ...");
-            verifyDataOnStandbyNonUFO(numWrites + (numWrites / 2));
+
+            verifyDataOnSinkNonUFO(numWrites + (numWrites / 2));
         } finally {
             executorService.shutdownNow();
 
@@ -196,12 +196,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
         // (1) On startup, init the replication status for each Source cluster(3 clusters = 3 updates)
         // (2) When starting snapshot sync apply : is_data_consistent = false
         // (3) When completing snapshot sync apply : is_data_consistent = true
-        final int totalStandbyStatusUpdates = 5;
+        final int totalSinkStatusUpdates = 5;
 
         try {
             log.info(">> Setup source and sink Corfu's");
             setupSourceAndSinkCorfu();
-            initSingleSourceSinkCluster();
 
             // Two updates are expected onStart of snapshot sync and onEnd.
             CountDownLatch latchSnapshotSyncPlugin = new CountDownLatch(2);
@@ -209,13 +208,17 @@ public class LogReplicationAbstractIT extends AbstractIT {
             subscribeToSnapshotSyncPluginTable(snapshotSyncPluginListener);
 
             // Subscribe to replication status table on Sink (to be sure data change on status are captured)
-            corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE, REPLICATION_STATUS_TABLE_NAME,
-                LogReplicationSession.class, ReplicationStatus.class, null,
-                TableOptions.fromProtoSchema(ReplicationStatus.class));
+            corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
+                    REPLICATION_STATUS_TABLE,
+                    LogReplicationMetadata.ReplicationStatusKey.class,
+                    LogReplicationMetadata.ReplicationStatusVal.class,
+                    null,
+                    TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
-            CountDownLatch statusUpdateLatch = new CountDownLatch(totalSinkStatusUpdateTx);
+            CountDownLatch statusUpdateLatch = new CountDownLatch(totalSinkStatusUpdates);
             ReplicationStatusListener sinkListener = new ReplicationStatusListener(statusUpdateLatch, false);
-            corfuStoreSink.subscribeListener(sinkListener, LogReplicationMetadataManager.NAMESPACE, LR_STATUS_STREAM_TAG);
+            corfuStoreSink.subscribeListener(sinkListener, LogReplicationMetadataManager.NAMESPACE,
+                    LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
             log.info(">> Open map(s) on source and sink");
             openMaps(totalNumMaps, diskBased);
@@ -254,12 +257,12 @@ public class LogReplicationAbstractIT extends AbstractIT {
             writeToSource(numWrites, numWrites / 2);
 
             log.info(">> Wait ... Delta log replication in progress ...");
-            verifyDataOnSink(numWrites + (numWrites / 2));
+            verifyDataOnSink((numWrites + (numWrites / 2)));
 
             // Verify Sink Status Listener received all expected updates (is_data_consistent)
             log.info(">> Wait ... Replication status UPDATE ...");
             statusUpdateLatch.await();
-            assertThat(sinkListener.getAccumulatedStatus().size()).isEqualTo(totalSinkStatusUpdateEntries);
+            assertThat(sinkListener.getAccumulatedStatus().size()).isEqualTo(totalSinkStatusUpdates);
             // Confirm last updates are set to true (corresponding to snapshot sync completed and log entry sync started)
             assertThat(sinkListener.getAccumulatedStatus().get(sinkListener.getAccumulatedStatus().size() - 1)).isTrue();
             assertThat(sinkListener.getAccumulatedStatus()).contains(false);
@@ -271,10 +274,6 @@ public class LogReplicationAbstractIT extends AbstractIT {
         } finally {
             executorService.shutdownNow();
 
-            if(!cleanup) {
-                return;
-            }
-
             if (sourceCorfu != null) {
                 sourceCorfu.destroy();
             }
@@ -285,6 +284,10 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
             if (sourceReplicationServer != null) {
                 sourceReplicationServer.destroy();
+            }
+
+            if (sinkReplicationServer != null) {
+                sinkReplicationServer.destroy();
             }
 
             if (sinkReplicationServer != null) {
@@ -327,38 +330,38 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
         CountDownLatch statusUpdateLatch = new CountDownLatch(1);
         ReplicationStatusListener sourceListener = new ReplicationStatusListener(statusUpdateLatch, true);
-        corfuStoreSource.subscribeListener(sourceListener, LogReplicationMetadataManager.NAMESPACE, LR_STATUS_STREAM_TAG);
+        corfuStoreSource.subscribeListener(sourceListener, LogReplicationMetadataManager.NAMESPACE,
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,
-                REPLICATION_STATUS_TABLE_NAME,
-                LogReplicationSession.class,
-                ReplicationStatus.class,
+                REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
                 TableOptions.fromProtoSchema(ReplicationStatus.class));
 
         LogReplicationMetadata.ReplicationStatusKey key =
                 LogReplicationMetadata.ReplicationStatusKey
                         .newBuilder()
-                        .setClusterId(new DefaultClusterConfig().getStandbyClusterIds().get(0))
+                        .setClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
                         .build();
         LogReplicationMetadata.ReplicationStatusVal replicationStatusVal;
 
         ReplicationStatus replicationStatus;
         statusUpdateLatch.await();
-
         try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatus = (ReplicationStatus) txn.getRecord(REPLICATION_STATUS_TABLE_NAME, session).getPayload();
+            replicationStatusVal = (LogReplicationMetadata.ReplicationStatusVal) txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
             txn.commit();
         }
 
         assertThat(replicationStatus.getSourceStatus().getRemainingEntriesToSend()).isEqualTo(0);
     }
 
-    private void verifyReplicationStatusFromActive() throws Exception {
+    private void verifyReplicationStatusFromSource() throws Exception {
         Table<LogReplicationMetadata.ReplicationStatusKey,
             LogReplicationMetadata.ReplicationStatusVal,
             LogReplicationMetadata.ReplicationStatusVal> replicationStatusTable =
-            corfuStoreActive.openTable(
+            corfuStoreSource.openTable(
                     LogReplicationMetadataManager.NAMESPACE,
                     REPLICATION_STATUS_TABLE,
                     LogReplicationMetadata.ReplicationStatusKey.class,
@@ -368,7 +371,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
             );
 
         String clusterId =
-            new DefaultClusterConfig().getStandbyClusterIds().get(0);
+            new DefaultClusterConfig().getSinkClusterIds().get(0);
 
         LogReplicationMetadata.ReplicationStatusKey key =
             LogReplicationMetadata.ReplicationStatusKey
@@ -377,7 +380,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
                 .build();
 
         IRetry.build(IntervalRetry.class, () -> {
-            try(TxnContext txn = corfuStoreActive.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            try(TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
                 CorfuStoreEntry<LogReplicationMetadata.ReplicationStatusKey,
                     LogReplicationMetadata.ReplicationStatusVal,
                     LogReplicationMetadata.ReplicationStatusVal> entry =
@@ -607,13 +610,13 @@ public class LogReplicationAbstractIT extends AbstractIT {
             if (runProcess) {
                 // Start Log Replication Server on Source Site
                 sourceReplicationServer =
-                    runReplicationServer(sourceReplicationServerPort, sourceSiteCorfuPort, pluginConfigFilePath,
-                        lockLeaseDuration, transportType);
+                    runReplicationServer(sourceReplicationServerPort, pluginConfigFilePath,
+                        lockLeaseDuration);
 
                 // Start Log Replication Server on Sink Site
                 sinkReplicationServer =
-                    runReplicationServer(sinkReplicationServerPort, sinkSiteCorfuPort, pluginConfigFilePath,
-                        lockLeaseDuration, transportType);
+                    runReplicationServer(sinkReplicationServerPort, pluginConfigFilePath,
+                        lockLeaseDuration);
             } else {
                 executorService.submit(() -> {
                     CorfuInterClusterReplicationServer.main(new String[]{"-m", "--max-replication-data-message-size=" + MSG_SIZE,  "--plugin=" + pluginConfigFilePath,
@@ -699,13 +702,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
         try {
             if (runProcess) {
                 // Start Log Replication Server on Source Site
-                sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, sourceSiteCorfuPort,
-                    pluginConfigFilePath, lockLeaseDuration, transportType);
+                sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, pluginConfigFilePath, lockLeaseDuration);
             } else {
                 executorService.submit(() -> {
                     CorfuInterClusterReplicationServer.main(new String[]{"-m", "--plugin=" + pluginConfigFilePath,
-                            "--address=localhost", "--corfu-server-connection-port=" + sourceSiteCorfuPort,
-                            String.valueOf(sourceReplicationServerPort)});
+                            "--address=localhost", String.valueOf(sourceReplicationServerPort)});
                 });
             }
         } catch (Exception e) {
@@ -717,13 +718,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
         try {
             if (runProcess) {
                 // Start Log Replication Server on Source Site
-                sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, sinkSiteCorfuPort,
-                    pluginConfigFilePath, lockLeaseDuration, transportType);
+                sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, pluginConfigFilePath, lockLeaseDuration);
             } else {
                 executorService.submit(() -> {
                     CorfuInterClusterReplicationServer.main(new String[]{"-m", "--plugin=" + pluginConfigFilePath,
-                            "--address=localhost", "--corfu-server-connection-port=" + sinkSiteCorfuPort,
-                            String.valueOf(sinkReplicationServerPort)});
+                            "--address=localhost", String.valueOf(sinkReplicationServerPort)});
                 });
             }
         } catch (Exception e) {
@@ -782,7 +781,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         LogReplicationMetadata.ReplicationStatusKey key =
                 LogReplicationMetadata.ReplicationStatusKey
                         .newBuilder()
-                        .setClusterId(new DefaultClusterConfig().getStandbyClusterIds().get(0))
+                        .setClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
                         .build();
 
         ReplicationStatus status = null;
@@ -792,7 +791,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
                 .equals(SyncStatus.COMPLETED)) {
             TimeUnit.SECONDS.sleep(1);
             try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
-                status = (ReplicationStatus) txn.getRecord(REPLICATION_STATUS_TABLE_NAME, session).getPayload();
+                replicationStatusVal = (LogReplicationMetadata.ReplicationStatusVal) txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
                 txn.commit();
             }
         }

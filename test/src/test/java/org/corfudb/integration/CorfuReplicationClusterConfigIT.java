@@ -85,20 +85,20 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     private static final String streamName = "Table001";
     private static final String LOCK_TABLE_NAME = "LOCK";
 
-    private static final long shortInterval = 1L;
-    private static final long mediumInterval = 10L;
-    private static final int firstBatch = 10;
-    private static final int secondBatch = 15;
-    private static final int thirdBatch = 20;
-    private static final int fourthBatch = 25;
-    private static final int largeBatch = 50;
+    private final static long shortInterval = 1L;
+    private final static long mediumInterval = 10L;
+    private final static int firstBatch = 10;
+    private final static int secondBatch = 15;
+    private final static int thirdBatch = 20;
+    private final static int fourthBatch = 25;
+    private final static int largeBatch = 50;
 
-    private static final int sourceClusterCorfuPort = 9000;
-    private static final int sinkClusterCorfuPort = 9001;
-    private static final int backupClusterCorfuPort = 9007;
-    private static final int sourceReplicationServerPort = 9010;
-    private static final int sinkReplicationServerPort = 9020;
-    private static final int backupReplicationServerPort = 9030;
+    private final static int sourceClusterCorfuPort = 9000;
+    private final static int sinkClusterCorfuPort = 9001;
+    private final static int backupClusterCorfuPort = 9007;
+    private final static int sourceReplicationServerPort = 9010;
+    private final static int sinkReplicationServerPort = 9020;
+    private final static int backupReplicationServerPort = 9030;
     private static final String sourceCorfuEndpoint = DEFAULT_HOST + ":" + sourceClusterCorfuPort;
     private static final String sinkCorfuEndpoint = DEFAULT_HOST + ":" + sinkClusterCorfuPort;
     private static final String backupCorfuEndpoint = DEFAULT_HOST + ":" + backupClusterCorfuPort;
@@ -109,12 +109,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     private Process sinkCorfuServer = null;
     private Process sourceReplicationServer = null;
     private Process sinkReplicationServer = null;
-    private Process backupCorfu = null;
-    private Process backupReplicationServer = null;
 
     private CorfuRuntime sourceRuntime;
     private CorfuRuntime sinkRuntime;
-    private CorfuRuntime backupRuntime;
     private Table<StringKey, IntValue, Metadata> mapSource;
     private Table<StringKey, IntValue, Metadata> mapSink;
 
@@ -122,7 +119,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     private CorfuStore sinkCorfuStore;
     private Table<ClusterUuidMsg, ClusterUuidMsg, ClusterUuidMsg> configTable;
     private Table<LockDataTypes.LockId, LockDataTypes.LockData, Message> sourceLockTable;
-    private Table<LockDataTypes.LockId, LockDataTypes.LockData, Message> sinkLockTable;
 
     public Map<String, Table<StringKey, IntValueTag, Metadata>> mapNameToMapSource;
     public Map<String, Table<StringKey, IntValueTag, Metadata>> mapNameToMapSink;
@@ -203,22 +199,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 TableOptions.fromProtoSchema(ClusterUuidMsg.class)
         );
 
-        try (TxnContext txn = sourceCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-            txn.putRecord(configTable, topologyType, topologyType, topologyType);
-            txn.commit();
-        }
-
-        assertThat(configTable.count()).isOne();
-
         sourceLockTable = sourceCorfuStore.openTable(
-                CORFU_SYSTEM_NAMESPACE,
-                LOCK_TABLE_NAME,
-                LockDataTypes.LockId.class,
-                LockDataTypes.LockData.class,
-                null,
-                TableOptions.fromProtoSchema(LockDataTypes.LockData.class));
-
-        sinkLockTable = sinkCorfuStore.openTable(
                 CORFU_SYSTEM_NAMESPACE,
                 LOCK_TABLE_NAME,
                 LockDataTypes.LockId.class,
@@ -242,7 +223,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     }
 
     @After
-    public void tearDown() throws Exception {
+    public void tearDown() throws IOException, InterruptedException {
         if (sourceRuntime != null) {
             sourceRuntime.shutdown();
         }
@@ -251,33 +232,10 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             sinkRuntime.shutdown();
         }
 
-        if (backupRuntime != null) {
-            backupRuntime.shutdown();
-        }
-
-        if (sourceCorfuServer != null) {
-            shutdownCorfuServer(sourceCorfuServer);
-        }
-
-        if (sinkCorfuServer != null) {
-            shutdownCorfuServer(sinkCorfuServer);
-        }
-
-        if (sourceReplicationServer != null) {
-            shutdownCorfuServer(sourceReplicationServer);
-        }
-
-        if (sinkReplicationServer != null) {
-            shutdownCorfuServer(sinkReplicationServer);
-        }
-
-        if (backupCorfu != null) {
-            shutdownCorfuServer(backupCorfu);
-        }
-
-        if (backupReplicationServer != null) {
-            shutdownCorfuServer(backupReplicationServer);
-        }
+        shutdownCorfuServer(sourceCorfuServer);
+        shutdownCorfuServer(sinkCorfuServer);
+        shutdownCorfuServer(sourceReplicationServer);
+        shutdownCorfuServer(sinkReplicationServer);
     }
 
     /**
@@ -294,9 +252,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testNewConfigWithSwitchRole() throws Exception {
-        if(topologyType.equals(TP_SINGLE_SOURCE_SINK_REV_CONNECTION)) {
-            return;
-        }
         // Write 10 entries to source map
         for (int i = 0; i < firstBatch; i++) {
             // Change to default source sink config
@@ -314,10 +269,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 sourceRuntime.getAddressSpaceView().getLogTail(), sinkClusterCorfuPort,
                 sinkRuntime.getAddressSpaceView().getLogTail());
 
-        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, sourceClusterCorfuPort,
-                pluginConfigPath, transportType);
-        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, sinkClusterCorfuPort,
-                pluginConfigPath, transportType);
+        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, nettyPluginPath);
+        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, nettyPluginPath);
         log.info("Replication servers started, and replication is in progress...");
 
         // Wait until data is fully replicated
@@ -358,11 +311,11 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         LogReplicationMetadata.ReplicationStatusKey key =
                 LogReplicationMetadata.ReplicationStatusKey
                         .newBuilder()
-                        .setClusterId(new DefaultClusterConfig().getStandbyClusterIds().get(0))
+                        .setClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
                         .build();
 
         ReplicationStatusVal replicationStatusVal;
-        try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+        try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
             replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
             txn.commit();
         }
@@ -408,29 +361,36 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         sleepUninterruptibly(5);
 
         // Verify Sync Status during the first switchover
-        LogReplicationMetadata.ReplicationStatusKey StandbyKey =
+        LogReplicationMetadata.ReplicationStatusKey sinkKey =
                 LogReplicationMetadata.ReplicationStatusKey
                         .newBuilder()
-                        .setClusterId(new DefaultClusterConfig().getActiveClusterIds().get(0))
+                        .setClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
                         .build();
 
-        ReplicationStatusVal standbyStatusVal;
-        try (TxnContext txn = standbyCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            standbyStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, StandbyKey).getPayload();
+        ReplicationStatusVal sinkStatusVal;
+        try (TxnContext txn = sinkCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            sinkStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, sinkKey).getPayload();
             assertThat(txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload()).isNull();
             txn.commit();
         }
 
-        log.info("ReplicationStatus: RemainingEntriesToSend: {}, SyncType: {}, Status: {}",
-            replicationStatus.getSourceStatus().getRemainingEntriesToSend(),
-            replicationStatus.getSourceStatus().getReplicationInfo().getSyncType(),
-            replicationStatus.getSourceStatus().getReplicationInfo().getStatus());
+        log.info("ReplicationStatusVal: RemainingEntriesToSend: {}, SyncType: {}, Status: {}",
+                sinkStatusVal.getRemainingEntriesToSend(), sinkStatusVal.getSyncType(),
+                sinkStatusVal.getStatus());
 
         log.info("SnapshotSyncInfo: Base: {}, Type: {}, Status: {}, CompletedTime: {}",
-            replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getBaseSnapshot(),
-            replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType(),
-            replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus(),
-            replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getCompletedTime());
+                sinkStatusVal.getSnapshotSyncInfo().getBaseSnapshot(), sinkStatusVal.getSnapshotSyncInfo().getType(),
+                sinkStatusVal.getSnapshotSyncInfo().getStatus(), sinkStatusVal.getSnapshotSyncInfo().getCompletedTime());
+
+        assertThat(sinkStatusVal.getSyncType())
+                .isEqualTo(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
+        assertThat(sinkStatusVal.getStatus())
+                .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
+
+        assertThat(sinkStatusVal.getSnapshotSyncInfo().getType())
+                .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
+        assertThat(sinkStatusVal.getSnapshotSyncInfo().getStatus())
+                .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
 
         // Wait until data is fully replicated again
         waitForReplication(size -> size == thirdBatch, mapSource, thirdBatch);
@@ -439,18 +399,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 thirdBatch, sourceClusterCorfuPort, sourceRuntime.getAddressSpaceView().getLogTail(),
                 sinkClusterCorfuPort, sinkRuntime.getAddressSpaceView().getLogTail());
 
-        TimeUnit.SECONDS.sleep(shortInterval);
-
-        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSyncType())
-                .isEqualTo(SyncType.LOG_ENTRY);
-        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getStatus())
-                .isEqualTo(SyncStatus.ONGOING);
-
-        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
-                .isEqualTo(SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
-        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
-                .isEqualTo(SyncStatus.COMPLETED);
-
+        // Double check after 10 seconds
+        TimeUnit.SECONDS.sleep(mediumInterval);
         assertThat(mapSource.count()).isEqualTo(thirdBatch);
         assertThat(mapSink.count()).isEqualTo(thirdBatch);
 
@@ -461,7 +411,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         }
         assertThat(configTable.count()).isOne();
 
-        // Write 5 more entries to mapSource
+        // Write 5 more entries to mapSink
         for (int i = thirdBatch; i < fourthBatch; i++) {
             try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
                 txn.putRecord(mapSource, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
@@ -484,14 +434,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         assertThat(mapSink.count()).isEqualTo(fourthBatch);
 
         // Verify Sync Status
-        sessionKey = LogReplicationSession.newBuilder()
-            .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
-            .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-            .setSubscriber(LogReplicationConfigManager.getDefaultSubscriber())
-            .build();
-
         try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
+            replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
             txn.commit();
         }
 
@@ -541,10 +485,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         writeToMaps(false, 0, firstBatch);
 
         // Start LR on both source and sink clusters
-        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, sourceClusterCorfuPort,
-                pluginConfigPath, transportType);
-        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, sinkClusterCorfuPort,
-                pluginConfigPath, transportType);
+        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, nettyPluginPath);
+        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, nettyPluginPath);
+
         log.info("Replication servers started, and replication is in progress...");
         sleepUninterruptibly(20);
 
@@ -555,10 +498,10 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         LogReplicationMetadata.ReplicationStatusKey key =
             LogReplicationMetadata.ReplicationStatusKey
                 .newBuilder()
-                .setClusterId(new DefaultClusterConfig().getStandbyClusterIds().get(0))
+                .setClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
                 .build();
         ReplicationStatusVal replicationStatusVal;
-        try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+        try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
             replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
             txn.commit();
         }
@@ -604,10 +547,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         writeToMaps(true, 0, firstBatch);
 
         // Start LR on both source and sink clusters
-        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, sourceClusterCorfuPort,
-                pluginConfigPath, transportType);
-        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, sinkClusterCorfuPort,
-                pluginConfigPath, transportType);
+        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, nettyPluginPath);
+        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, nettyPluginPath);
 
         log.info("Replication servers started, and replication is in progress...");
         sleepUninterruptibly(20);
@@ -616,10 +557,10 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         LogReplicationMetadata.ReplicationStatusKey key =
             LogReplicationMetadata.ReplicationStatusKey
                 .newBuilder()
-                .setClusterId(new DefaultClusterConfig().getStandbyClusterIds().get(0))
+                .setClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
                 .build();
         ReplicationStatusVal replicationStatusVal;
-        try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+        try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
             replicationStatusVal = (ReplicationStatusVal) txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
             txn.commit();
         }
@@ -640,7 +581,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         checkpointAndTrim(false);
 
         // Perform Switchover and verify it succeeds
-        try (TxnContext txn = activeCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+        try (TxnContext txn = sourceCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
             txn.putRecord(configTable, DefaultClusterManager.OP_SWITCH,
                 DefaultClusterManager.OP_SWITCH, DefaultClusterManager.OP_SWITCH);
             txn.commit();
@@ -651,18 +592,12 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Verify snapshot sync completes as expected
         key = LogReplicationMetadata.ReplicationStatusKey
             .newBuilder()
-            .setClusterId(new DefaultClusterConfig().getActiveClusterIds().get(0))
+            .setClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
             .build();
-
-        // Block until snapshot sync completes
-        replicationStatus = null;
-        while (replicationStatus == null || !replicationStatus.getSourceStatus().getReplicationInfo()
-                .getSnapshotSyncInfo().getStatus().equals(SyncStatus.COMPLETED)) {
-            try (TxnContext txn = sinkCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-                replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
-                txn.commit();
-            }
-            sleepUninterruptibly(1);
+        try (TxnContext txn =
+                 sinkCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+            replicationStatusVal = (ReplicationStatusVal) txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+            txn.commit();
         }
 
         assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
@@ -805,8 +740,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         // (1) Start with: source LR stopped & sink LR started
         // No status should be reported, as status is queried on source LR and it is stopped.
-        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, sinkClusterCorfuPort,
-                pluginConfigPath, transportType);
+        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, nettyPluginPath);
 
         // Write 'N' entries to source map (to ensure nothing happens wrt. the status, as LR is not started on source)
         for (int i = 0; i < firstBatch; i++) {
@@ -819,37 +753,34 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         assertThat(mapSource.count()).isEqualTo(firstBatch);
 
         // Verify Sync Status
-        ReplicationStatusKey standbyClusterId = ReplicationStatusKey.newBuilder()
-                        .setClusterId(new DefaultClusterConfig().getStandbyClusterIds().get(0))
+        ReplicationStatusKey sinkClusterId = ReplicationStatusKey.newBuilder()
+                        .setClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
                         .build();
-        ReplicationStatusVal standbyStatus;
+        ReplicationStatusVal sinkStatus;
 
         try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
             // Since LR has never been started, the table should not exist in the registry
             // Note that, in the case of a real client querying the status, this would simply time out
             // because LR is not available and status is only queried on the source site through LR. For the purpose of this
             // test, we query the database directly, so we should simply not find any record.
-            replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
-            assertThat(replicationStatus).isNull();
+            sinkStatus = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, sinkClusterId).getPayload();
+            assertThat(sinkStatus).isNull();
         }
 
         // (2) Now stop sink LR and start source LR
         // The sync status should indicate replication has not started, as there is no way to stablish a connection
         // to the remote/sink site as it is stopped.
         shutdownCorfuServer(sinkReplicationServer);
-        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, sourceClusterCorfuPort,
-                pluginConfigPath, transportType);
+        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, nettyPluginPath);
 
         // Verify Sync Status
-        while (replicationStatus == null) {
+        while (sinkStatus == null) {
             Sleep.sleepUninterruptibly(Duration.ofMillis(waitInMillis));
 
             try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-                replicationStatus =
-                    (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
-                if (replicationStatus != null) {
-                    assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getStatus())
-                        .isEqualTo(SyncStatus.NOT_STARTED);
+                sinkStatus = (ReplicationStatusVal) txn.getRecord(REPLICATION_STATUS_TABLE, sinkClusterId).getPayload();
+                if (sinkStatus != null) {
+                    assertThat(sinkStatus.getStatus()).isEqualTo(LogReplicationMetadata.SyncStatus.NOT_STARTED);
                 }
                 txn.commit();
             }
@@ -859,16 +790,14 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + deltaSeconds));
 
         try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
-            assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getStatus())
-                .isEqualTo(SyncStatus.NOT_STARTED);
+            sinkStatus = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, sinkClusterId).getPayload();
+            assertThat(sinkStatus.getStatus()).isEqualTo(LogReplicationMetadata.SyncStatus.NOT_STARTED);
             txn.commit();
         }
 
         // (3) Next, start sink LR, replication should start. wait until snapshot replication is completed and
         // confirm Log Entry is ONGOING.
-        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, sinkClusterCorfuPort,
-                pluginConfigPath, transportType);
+        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, nettyPluginPath);
         waitForReplication(size -> size == firstBatch, mapSink, firstBatch);
 
         // Verify data on Sink
@@ -880,18 +809,16 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             }
         }
 
-        while (!replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus()
-            .equals(SyncStatus.COMPLETED)) {
+        while (!sinkStatus.getSnapshotSyncInfo().getStatus().equals(LogReplicationMetadata.SyncStatus.COMPLETED)) {
             try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-                replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
+                sinkStatus = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, sinkClusterId).getPayload();
                 txn.commit();
             }
         }
 
         log.info("Snapshot replication status : COMPLETED");
         // Confirm Log entry Sync status is ONGOING
-        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getStatus())
-            .isEqualTo(SyncStatus.ONGOING);
+        assertThat(sinkStatus.getStatus()).isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
 
         // (4) Write noisy streams and check remaining entries
         // Write 'N' entries to source noisy map
@@ -916,23 +843,23 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + deltaSeconds));
 
         try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
+            sinkStatus = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, sinkClusterId).getPayload();
             txn.commit();
         }
 
         // Confirm remaining entries is equal to 0
-        assertThat(replicationStatus.getSourceStatus().getRemainingEntriesToSend()).isEqualTo(0L);
+        assertThat(sinkStatus.getRemainingEntriesToSend()).isEqualTo(0L);
 
         // (5) Confirm that if sink LR is stopped, in the middle of replication, the status changes to STOPPED
         shutdownCorfuServer(sinkReplicationServer);
 
-        while (!replicationStatus.getSourceStatus().getReplicationInfo().getStatus().equals(SyncStatus.STOPPED)) {
+        while (!sinkStatus.getStatus().equals(LogReplicationMetadata.SyncStatus.STOPPED)) {
             try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-                replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
+                sinkStatus = (ReplicationStatusVal) txn.getRecord(REPLICATION_STATUS_TABLE, sinkClusterId).getPayload();
                 txn.commit();
             }
         }
-        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getStatus()).isEqualTo(SyncStatus.STOPPED);
+        assertThat(sinkStatus.getStatus()).isEqualTo(LogReplicationMetadata.SyncStatus.STOPPED);
     }
 
     /**
@@ -963,8 +890,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 sourceRuntime.getAddressSpaceView().getLogTail(), sinkClusterCorfuPort,
                 sinkRuntime.getAddressSpaceView().getLogTail());
 
-        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, sourceClusterCorfuPort, transportType);
-        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, sinkClusterCorfuPort, transportType);
+        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort);
+        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort);
         log.info("Replication servers started, and replication is in progress...");
         TimeUnit.SECONDS.sleep(shortInterval);
 
@@ -1019,8 +946,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 sourceRuntime.getAddressSpaceView().getLogTail(), sinkClusterCorfuPort,
                 sinkRuntime.getAddressSpaceView().getLogTail());
 
-        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, sourceClusterCorfuPort, transportType);
-        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, sinkClusterCorfuPort, transportType);
+        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort);
+        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort);
         log.info("Replication servers started, and replication is in progress...");
 
         // Wait until apply phase
@@ -1082,10 +1009,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 sourceRuntime.getAddressSpaceView().getLogTail(), sinkClusterCorfuPort,
                 sinkRuntime.getAddressSpaceView().getLogTail());
 
-        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, sourceClusterCorfuPort,
-                pluginConfigPath, transportType);
-        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, sinkClusterCorfuPort,
-                pluginConfigPath, transportType);
+        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, nettyPluginPath);
+        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, nettyPluginPath);
         log.info("Replication servers started, and replication is in progress...");
 
         // Wait until data is fully replicated
@@ -1182,10 +1107,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 sourceRuntime.getAddressSpaceView().getLogTail(), sinkClusterCorfuPort,
                 sinkRuntime.getAddressSpaceView().getLogTail());
 
-        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, sourceClusterCorfuPort,
-                pluginConfigPath, transportType);
-        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, sinkClusterCorfuPort,
-                pluginConfigPath, transportType);
+        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, nettyPluginPath);
+        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, nettyPluginPath);
         log.info("Replication servers started, and replication is in progress...");
 
         // Wait until data is fully replicated
@@ -1259,7 +1182,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      * 3. Start log replication: Node 9010 - source, Node 9020 - sink
      * 4. Wait for Snapshot Sync, both maps have size 10
      * 5. Write 5 more entries to source map, to verify Log Entry Sync
-     * 6. Perform a topology update where all sink clusters become invalid
+     * 6. Perform a source-invalid config update with corfu store
      * 7. Write 5 more entries to source map
      * 8. Verify data will not be replicated, since sink is invalid
      * 9. Resume to sink and verify data is fully replicated again.
@@ -1282,10 +1205,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 sourceRuntime.getAddressSpaceView().getLogTail(), sinkClusterCorfuPort,
                 sinkRuntime.getAddressSpaceView().getLogTail());
 
-        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, sourceClusterCorfuPort,
-                pluginConfigPath, transportType);
-        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, sinkClusterCorfuPort,
-                pluginConfigPath, transportType);
+        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, nettyPluginPath);
+        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, nettyPluginPath);
         log.info("Replication servers started, and replication is in progress...");
 
         // Wait until data is fully replicated
@@ -1325,10 +1246,10 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         LogReplicationMetadata.ReplicationStatusKey key =
                 LogReplicationMetadata.ReplicationStatusKey
                         .newBuilder()
-                        .setClusterId(new DefaultClusterConfig().getStandbyClusterIds().get(0))
+                        .setClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
                         .build();
         ReplicationStatusVal replicationStatus;
-        try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+        try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
             replicationStatus = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
             txn.commit();
         }
@@ -1361,10 +1282,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         TimeUnit.SECONDS.sleep(mediumInterval);
         assertThat(mapSource.count()).isEqualTo(thirdBatch);
         assertThat(mapSink.count()).isEqualTo(secondBatch);
-
         // verify that source doesn't have the invalid cluster info in the LR status table
         try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
+            replicationStatus = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
             txn.commit();
         }
         assertThat(replicationStatus).isNull();
@@ -1418,10 +1338,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 sourceRuntime.getAddressSpaceView().getLogTail(), sinkClusterCorfuPort,
                 sinkRuntime.getAddressSpaceView().getLogTail());
 
-        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, sourceClusterCorfuPort,
-                pluginConfigPath, transportType);
-        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, sinkClusterCorfuPort,
-                pluginConfigPath, transportType);
+        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, nettyPluginPath);
+        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, nettyPluginPath);
         log.info("Replication servers started, and replication is in progress...");
 
         // Wait until data is fully replicated
@@ -1437,11 +1355,11 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         LogReplicationMetadata.ReplicationStatusKey key =
                 LogReplicationMetadata.ReplicationStatusKey
                         .newBuilder()
-                        .setClusterId(new DefaultClusterConfig().getStandbyClusterIds().get(0))
+                        .setClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
                         .build();
 
         LogReplicationMetadata.ReplicationStatusVal replicationStatusVal;
-        try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+        try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
             replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
             txn.commit();
         }
@@ -1516,7 +1434,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         // Verify that a forced snapshot sync is finished.
         try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, sessionKey).getPayload();
+            replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
             txn.commit();
         }
 
@@ -1551,10 +1469,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      * 6. Revoke source's lock and wait for 10 sec
      * 7. Write 5 more entries to source map
      * 8. Verify data will not be replicated, since source's lock is released
-     * (when sink is connection starter, verify via logs that the source sends the leadership loss msg, and the
-     *        sink sends a leadership query)
-     * 9. After the SOURCE fsm is stopped, make the SOURCE a leader again
-     * 10.Verify remaining data on SOURCE gets replicated to SINK
      */
     @Test
     public void testSourceLockRelease() throws Exception {
@@ -1579,10 +1493,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Service to leaseDuration/10.  So reducing the lease duration will cause the detection of lease
         // expiry faster, i.e., 1 second instead of 6
         int lockLeaseDuration = 10;
-        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, sourceClusterCorfuPort,
-                pluginConfigPath, lockLeaseDuration, transportType);
-        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, sinkClusterCorfuPort,
-                pluginConfigPath, lockLeaseDuration, transportType);
+        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, nettyPluginPath, lockLeaseDuration);
+        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, nettyPluginPath, lockLeaseDuration);
         log.info("Replication servers started, and replication is in progress...");
 
         // Wait until data is fully replicated
@@ -1624,23 +1536,15 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         CountDownLatch countDownLatch = new CountDownLatch(1);
         ReplicationStopListener listener = new ReplicationStopListener(countDownLatch);
         sourceCorfuStore.subscribeListener(listener, LogReplicationMetadataManager.NAMESPACE,
-            LR_STATUS_STREAM_TAG);
+            LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
-        final String lockGroup = "Log_Replication_Group";
-        final String lockName = "Log_Replication_Lock";
-
-        LockDataTypes.LockId lockId = LockDataTypes.LockId.newBuilder()
-                .setLockGroup(lockGroup)
-                .setLockName(lockName)
-                .build();
-        CorfuStoreEntry lockTableRecord;
+        // Release Source's lock by deleting the lock table
         try (TxnContext txnContext = sourceCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            lockTableRecord = txnContext.getRecord(sourceLockTable, lockId);
+            txnContext.clear(sourceLockTable);
             txnContext.commit();
         }
 
-        // Release Source's lock by deleting the lock table
-        clearLockTable(true);
+        Assert.assertEquals(0, sourceLockTable.count());
         log.info("Source's lock table cleared!");
 
         // Wait till the lock release is asynchronously processed and the replication status on Source changes to
@@ -1661,148 +1565,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // Sink map should still have secondBatch size
         log.info("Sink map should still have {} size", secondBatch);
         assertThat(mapSink.count()).isEqualTo(secondBatch);
-
-        //source acquires lock again.
-        // If SOURCE is connection starter, it will send queryLeadership msg to SINK and
-        // replicate data. Otherwise, the SINK will send queryLeadership after getting a leadershipLoss msg from SOURCE.
-        // The SOURCE will then replicate via the reverseReplicate rpc.
-        try (TxnContext txnContext = sourceCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            LockDataTypes.LockData oldLockData = LockDataTypes.LockData.newBuilder().mergeFrom(lockTableRecord.getPayload()).build();
-            txnContext.putRecord(sourceLockTable, lockId,
-                    LockDataTypes.LockData.newBuilder().mergeFrom(oldLockData)
-                            .setLeaseAcquisitionNumber(oldLockData.getLeaseAcquisitionNumber() + 1)
-                            .setLeaseRenewalNumber(oldLockData.getLeaseRenewalNumber() + 1).build(), null);
-            txnContext.commit();
-        }
-
-        Assert.assertEquals(1, sourceLockTable.count());
-        log.info("Source's lock table has a lock entry");
-
-        // Wait until the third batch is replicated to sink
-        waitForReplication(size -> size == thirdBatch, mapSink, thirdBatch);
-
-        // Sink map should now have the third batch size
-        log.info("Sink map now has {} size", thirdBatch);
-        assertThat(mapSink.count()).isEqualTo(thirdBatch);
-    }
-
-    @Test
-    public void testSinkLockRelease() throws Exception {
-        if (topologyType.equals(TP_SINGLE_SOURCE_SINK)) {
-            return;
-        }
-        // Write 10 entries to source map
-        for (int i = 0; i < firstBatch; i++) {
-            try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
-                txn.putRecord(mapSource, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
-                        IntValue.newBuilder().setValue(i).build(), null);
-                txn.commit();
-            }
-        }
-        assertThat(mapSource.count()).isEqualTo(firstBatch);
-        assertThat(mapSink.count()).isZero();
-        assertThat(sinkLockTable.count()).isZero();
-
-        log.info("Before log replication, append {} entries to source map. Current source corfu" +
-                        "[{}] log tail is {}, sink corfu[{}] log tail is {}", firstBatch, sourceClusterCorfuPort,
-                sourceRuntime.getAddressSpaceView().getLogTail(), sinkClusterCorfuPort,
-                sinkRuntime.getAddressSpaceView().getLogTail());
-
-        // Start the source and sink replication servers with a lockLeaseDuration = 10 seconds.
-        // The default lease duration is 60 seconds.  The duration between lease checks is set by the Discovery
-        // Service to leaseDuration/10.  So reducing the lease duration will cause the detection of lease
-        // expiry faster, i.e., 1 second instead of 6
-        int lockLeaseDuration = 10;
-        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, sourceClusterCorfuPort,
-                pluginConfigPath, lockLeaseDuration, transportType);
-        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, sinkClusterCorfuPort,
-                pluginConfigPath, lockLeaseDuration, transportType);
-        log.info("Replication servers started, and replication is in progress...");
-
-        // Wait until data is fully replicated
-        waitForReplication(size -> size == firstBatch, mapSink, firstBatch);
-        log.info("After full sync, both maps have size {}. Current source corfu[{}] log tail " +
-                        "is {}, sink corfu[{}] log tail is {}", firstBatch, sourceClusterCorfuPort,
-                sourceRuntime.getAddressSpaceView().getLogTail(), sinkClusterCorfuPort,
-                sinkRuntime.getAddressSpaceView().getLogTail());
-
-        // Write 5 entries to source map
-        for (int i = firstBatch; i < secondBatch; i++) {
-            try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
-                txn.putRecord(mapSource, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
-                        IntValue.newBuilder().setValue(i).build(), null);
-                txn.commit();
-            }
-        }
-        assertThat(mapSource.count()).isEqualTo(secondBatch);
-
-        // Wait until data is fully replicated again
-        waitForReplication(size -> size == secondBatch, mapSink, secondBatch);
-        log.info("After delta sync, both maps have size {}. Current source corfu[{}] log tail " +
-                        "is {}, sink corfu[{}] log tail is {}", secondBatch, sourceClusterCorfuPort,
-                sourceRuntime.getAddressSpaceView().getLogTail(), sinkClusterCorfuPort,
-                sinkRuntime.getAddressSpaceView().getLogTail());
-
-        // Verify data
-        for (int i = 0; i < secondBatch; i++) {
-            try (TxnContext tx = sinkCorfuStore.txn(NAMESPACE)) {
-                assertThat(tx.getRecord(mapSink, Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build())
-                        .getPayload().getValue()).isEqualTo(i);
-                tx.commit();
-            }
-        }
-        log.info("Log replication succeeds without config change!");
-
-        // Create a listener on the ReplicationStatus table on the Source cluster, which waits for Replication status
-        // to change to STOPPED
-        CountDownLatch countDownLatch = new CountDownLatch(1);
-        ReplicationStopListener listener = new ReplicationStopListener(countDownLatch);
-        sourceCorfuStore.subscribeListener(listener, LogReplicationMetadataManager.NAMESPACE,
-                LR_STATUS_STREAM_TAG);
-
-        // Release Sink's lock by deleting the lock table
-        clearLockTable(false);
-        log.info("Sink's lock table cleared!");
-
-        // Wait till the lock release is asynchronously processed and the replication status on Source changes to
-        // STOPPED
-        countDownLatch.await();
-
-        // Write more data on the Source
-        for (int i = secondBatch; i < thirdBatch; i++) {
-            try (TxnContext txn = sourceCorfuStore.txn(NAMESPACE)) {
-                txn.putRecord(mapSource, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
-                        IntValue.newBuilder().setValue(i).build(), null);
-                txn.commit();
-            }
-        }
-        assertThat(mapSource.count()).isEqualTo(thirdBatch);
-        log.info("Source map has {} entries now!", thirdBatch);
-
-        // Sink map should still have secondBatch size
-        log.info("Sink map should still have {} size", secondBatch);
-        assertThat(mapSink.count()).isEqualTo(secondBatch);
-    }
-
-    private void clearLockTable(boolean source) {
-        CorfuStore corfuStore = source ? sourceCorfuStore : sinkCorfuStore;
-        Table<LockDataTypes.LockId, LockDataTypes.LockData, Message> lockTable = source ? sourceLockTable : sinkLockTable;
-
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                    txnContext.clear(lockTable);
-                    txnContext.commit();
-                } catch (TransactionAbortedException tae) {
-                    log.debug("TX Aborted while trying to clear the lock table.  Retrying");
-                    throw new RetryNeededException();
-                }
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            fail("Failed to clear the lock table", e);
-        }
-        Assert.assertEquals(0, lockTable.count());
     }
 
     /**
@@ -1865,10 +1627,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 sourceRuntime.getAddressSpaceView().getLogTail(), sinkClusterCorfuPort,
                 sinkRuntime.getAddressSpaceView().getLogTail());
 
-        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, sourceClusterCorfuPort,
-                pluginConfigPath, transportType);
-        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, sinkClusterCorfuPort,
-                pluginConfigPath, transportType);
+        sourceReplicationServer = runReplicationServer(sourceReplicationServerPort, nettyPluginPath);
+        sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, nettyPluginPath);
         log.info("Replication servers started, and replication is in progress...");
 
         // Wait until data is fully replicated
@@ -1927,6 +1687,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                         "is {}, sink corfu[{}] log tail is {}", firstBatch, backupClusterCorfuPort,
                 backupRuntime.getAddressSpaceView().getLogTail(), sinkClusterCorfuPort,
                 sinkRuntime.getAddressSpaceView().getLogTail());
+
+        shutdownCorfuServer(backupCorfu);
+        shutdownCorfuServer(backupReplicationServer);
     }
 
     private void waitForReplication(IntPredicate verifier, Table table, int expected) {
