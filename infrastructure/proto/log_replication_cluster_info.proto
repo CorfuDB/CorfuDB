@@ -29,8 +29,8 @@ message NodeConfigurationMsg {
 
 enum ClusterRole {
   INVALID = 0;
-  ACTIVE = 1;
-  STANDBY = 2;
+  SOURCE = 1;
+  SINK = 2;
   NONE = 3;
 }
 
