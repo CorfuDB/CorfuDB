@@ -1,5 +1,6 @@
 package org.corfudb.runtime.collections;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -78,6 +79,8 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     // The "main" map which contains the primary key-value mappings.
     private final ContextAwareMap<K, V> mainMap;
     private final Set<Index.Spec<K, V, ?>> indexSpec;
+
+    @VisibleForTesting
     private final Map<String, Map<Object, Map<K, V>>> secondaryIndexes;
     private final Map<String, String> secondaryIndexesAliasToPath;
     private final CorfuTable<K, V> optimisticTable;
@@ -199,6 +202,12 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     @Accessor
     public boolean hasSecondaryIndices() {
         return !secondaryIndexes.isEmpty();
+    }
+
+    @VisibleForTesting
+    @Accessor
+    Map<String, Map<Object, Map<K, V>>> getSecondaryIndexes() {
+        return secondaryIndexes;
     }
 
     /** {@inheritDoc} */
@@ -658,6 +667,9 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
                     Map<K, V> slot = secondaryIndex.get(indexKey);
                     if (slot != null) {
                         slot.remove(key, value);
+                        if (slot.isEmpty()) {
+                            secondaryIndex.remove(indexKey);
+                        }
                     }
                 }
             }
