@@ -310,13 +310,13 @@ public class RemoteMonitoringService implements ManagementService {
 
                     }
                     if ( ex != null || taskResult == DetectorTask.NOT_COMPLETED) {
-                        log.info("Reporting issue");
+                        log.trace("Reporting issue");
                         HealthMonitor.reportIssue(new Issue(Component.FAILURE_DETECTOR,
                                 Issue.IssueId.FAILURE_DETECTOR_TASK_FAILED,
                                 "Last failure detector task was not completed"));
                     }
                     else {
-                        log.info("Resolving issue");
+                        log.trace("Resolving issue");
                         HealthMonitor.resolveIssue(new Issue(Component.FAILURE_DETECTOR,
                                 Issue.IssueId.FAILURE_DETECTOR_TASK_FAILED,
                                 "Last failure detector task succeeded"));

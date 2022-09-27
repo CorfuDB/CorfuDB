@@ -38,10 +38,10 @@ public class HealthMonitor {
     }
 
     private void addIssue(Issue issue) {
-        componentHealthStatus.compute(issue.getComponent(), (i, hs) -> {
+        componentHealthStatus.compute(issue.getComponent(), (component, hs) -> {
             HealthStatus healthStatus;
             if (hs == null) {
-                healthStatus = new HealthStatus();
+                healthStatus = new HealthStatus(component);
             } else {
                 healthStatus = hs;
             }
@@ -93,18 +93,6 @@ public class HealthMonitor {
      */
     public static HealthReport generateHealthReport() {
         return instance.map(HealthMonitor::healthReport).orElseThrow(() -> new IllegalStateException(ERR_MSG));
-    }
-
-    private boolean containsIssue(Issue issue) {
-        if (componentHealthStatus.containsKey(issue.getComponent())) {
-            final HealthStatus healthStatus = componentHealthStatus.get(issue.getComponent());
-            return healthStatus.containsIssue(issue);
-        }
-        return false;
-    }
-
-    public static boolean hasIssue(Issue issue) {
-        return instance.map(monitor -> monitor.containsIssue(issue)).orElse(false);
     }
 
     @VisibleForTesting

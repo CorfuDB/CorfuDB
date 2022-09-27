@@ -15,17 +15,20 @@ import java.util.Set;
  */
 @ToString
 public class HealthStatus {
-
+    
     @Getter
     private final Set<Issue> initHealthIssues;
     @Getter
     private final Set<Issue> runtimeHealthIssues;
+    @Getter
+    private final Component component;
 
     private InitStatus initStatus = InitStatus.UNKNOWN;
 
-    public HealthStatus() {
+    public HealthStatus(Component component) {
         this.initHealthIssues = new LinkedHashSet<>();
         this.runtimeHealthIssues = new LinkedHashSet<>();
+        this.component = component;
     }
 
     /**
@@ -35,9 +38,10 @@ public class HealthStatus {
      * @param issue An init issue
      */
     public void addInitHealthIssue(Issue issue) {
-        // If component has been not been previously initialized (UNKNOWN) or
-        // initialized (INITIALIZED), adding init issue will move it to INITIALIZED,
-        // all runtime issues are cleared
+        verifyComponent(issue);
+        if (!issue.isInitIssue()) {
+            throw new IllegalArgumentException("Only issues of type INIT are allowed");
+        }
         if (initStatus == InitStatus.UNKNOWN || initStatus == InitStatus.INITIALIZED) {
             initStatus = InitStatus.NOT_INITIALIZED;
             runtimeHealthIssues.clear();
@@ -50,6 +54,7 @@ public class HealthStatus {
      * @param issue An init issue
      */
     public void resolveInitHealthIssue(Issue issue) {
+        verifyComponent(issue);
         if (initStatus == InitStatus.NOT_INITIALIZED) {
             initStatus = InitStatus.INITIALIZED;
         }
@@ -59,10 +64,13 @@ public class HealthStatus {
     /**
      * Add runtime health issue -- health monitor now expects the component's runtime issue to recover.
      * If component has been not been previously initialized (INITIALIZED), adding the runtime issue will
-     * result in exception.
+     * result in exception. If the runtime issue is already present in the HealthStatus, this is a
+     * NOOP and the previously added issue maintains it's position in the runtimeHealthIssues
+     * LinkedHashSet.
      * @param issue An init issue
      */
     public void addRuntimeHealthIssue(Issue issue) {
+        verifyComponent(issue);
         if (initStatus != InitStatus.INITIALIZED) {
             throw new IllegalStateException("Runtime health issue can only be reported if the component is initialized");
         }
@@ -74,6 +82,7 @@ public class HealthStatus {
      * @param issue An init issue
      */
     public void resolveRuntimeHealthIssue(Issue issue) {
+        verifyComponent(issue);
         runtimeHealthIssues.remove(issue);
     }
 
@@ -85,8 +94,18 @@ public class HealthStatus {
         return runtimeHealthIssues.isEmpty() && initStatus == InitStatus.INITIALIZED;
     }
 
+    private void verifyComponent(Issue issue) {
+        if (issue.getComponent() != this.component) {
+            String msg = String.format("Only the issues belonging to %s are allowed but got: %s", this.component,
+                    issue.getComponent());
+
+            throw new IllegalStateException(msg);
+        }
+    }
     /**
-     * Get the last reported runtime issue
+     * Get the last reported unique runtime issue (If the runtime issue is already present
+     * in the HealthStatus and added again, it is not considered the latest since it's not resolved
+     * yet).
      * @return A possible runtime health issue
      */
     public Optional<Issue> getLatestRuntimeIssue() {

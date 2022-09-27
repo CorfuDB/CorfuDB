@@ -13,6 +13,7 @@ import lombok.NonNull;
 import lombok.ToString;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.corfudb.infrastructure.health.HealthReport.ComponentStatus.DOWN;
@@ -31,18 +32,18 @@ public class HealthReport {
     /**
      * Overall status msgs
      */
-    public static final transient String OVERALL_STATUS_UNKNOWN = "Status is unknown";
-    public static final transient String OVERALL_STATUS_UP = "Healthy";
-    public static final transient String OVERALL_STATUS_DOWN = "Some of the services are not initialized";
-    public static final transient String OVERALL_STATUS_FAILURE = "Some of the services experience runtime health issues";
+    public static final String OVERALL_STATUS_UNKNOWN = "Status is unknown";
+    public static final String OVERALL_STATUS_UP = "Healthy";
+    public static final String OVERALL_STATUS_DOWN = "Some of the services are not initialized";
+    public static final String OVERALL_STATUS_FAILURE = "Some of the services experience runtime health issues";
 
     /**
      * Component status msgs
      */
-    public static final transient String COMPONENT_INITIALIZED = "Initialization successful";
-    public static final transient String COMPONENT_NOT_INITIALIZED = "Service is not initialized";
-    public static final transient String COMPONENT_IS_NOT_RUNNING = "Service is not running";
-    public static final transient String COMPONENT_IS_RUNNING = "Up and running";
+    public static final String COMPONENT_INITIALIZED = "Initialization successful";
+    public static final String COMPONENT_NOT_INITIALIZED = "Service is not initialized";
+    public static final String COMPONENT_IS_NOT_RUNNING = "Service is not running";
+    public static final String COMPONENT_IS_RUNNING = "Up and running";
 
     /**
      * Health status false = not healthy, true = healthy
@@ -58,13 +59,13 @@ public class HealthReport {
     private final String reason = OVERALL_STATUS_UNKNOWN;
 
     /**
-     * Map of component initialization health issues
+     * Set of component initialization health issues
      */
     @NonNull
     @Getter
     private final Set<ComponentReportedHealthStatus> init;
     /**
-     * Map of component runtime health issues
+     * Set of component runtime health issues
      */
     @NonNull
     @Getter
@@ -141,8 +142,9 @@ public class HealthReport {
         return componentHealthStatus.entrySet().stream().map(entry -> {
             final Component component = entry.getKey();
             final HealthStatus healthStatus = entry.getValue();
-            if (healthStatus.getLatestRuntimeIssue().isPresent()) {
-                Issue issue = healthStatus.getLatestRuntimeIssue().get();
+            final Optional<Issue> maybeLatestRuntimeIssue = healthStatus.getLatestRuntimeIssue();
+            if (maybeLatestRuntimeIssue.isPresent()) {
+                Issue issue = maybeLatestRuntimeIssue.get();
                 return new ComponentReportedHealthStatus(component, FAILURE, issue.getDescription());
             } else if (!healthStatus.isRuntimeHealthy()) {
                 return new ComponentReportedHealthStatus(component, DOWN, COMPONENT_IS_NOT_RUNNING);
