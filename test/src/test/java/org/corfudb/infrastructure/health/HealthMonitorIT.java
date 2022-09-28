@@ -11,6 +11,7 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.QuotaExceededException;
+import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
 import org.junit.jupiter.api.Test;
@@ -92,8 +93,20 @@ public class HealthMonitorIT extends AbstractIT {
                 UUID.randomUUID());
     }
 
+    private HealthReport queryCurrentHealthReport(int healthPort) throws InterruptedException {
+        for (int i = 0; i <  RETRIES; i++) {
+            try {
+                return queryCurrentHealthReportHelper(healthPort);
+            }
+            catch (Exception e) {
+                Thread.sleep(WAIT_TIME_MILLIS * 3);
+            }
+        }
+        throw new RetryExhaustedException("Could not get the health report within the provided time");
+    }
+
     @SuppressWarnings("checkstyle:magicnumber")
-    private HealthReport queryCurrentHealthReport(int healthPort) throws IOException {
+    private HealthReport queryCurrentHealthReportHelper(int healthPort) throws IOException {
         URL url = new URL("http://" + ADDRESS + ":" + healthPort + "/health");
         HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
         urlConnection.setRequestMethod("GET");
@@ -148,13 +161,11 @@ public class HealthMonitorIT extends AbstractIT {
                         new ComponentReportedHealthStatus(FAILURE_DETECTOR, DOWN, COMPONENT_IS_NOT_RUNNING),
                         new ComponentReportedHealthStatus(SEQUENCER, DOWN, COMPONENT_IS_NOT_RUNNING)))
                 .build();
-        Thread.sleep(WAIT_TIME_MILLIS * 3);
 
         assertThat(queryCurrentHealthReport(HEALTH_PORT_1)).isEqualTo(expectedHealthReport);
 
         // Bootstrap corfu - services become healthy
         BootstrapUtil.bootstrap(getLayout(CORFU_PORT_1), RETRIES, PARAMETERS.TIMEOUT_SHORT);
-        Thread.sleep(WAIT_TIME_MILLIS * 2);
         expectedHealthReport = builder()
                 .status(UP)
                 .reason(OVERALL_STATUS_UP)
@@ -171,13 +182,16 @@ public class HealthMonitorIT extends AbstractIT {
                         new ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_IS_RUNNING),
                         new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING)))
                 .build();
+        // Give it some time to change state
+        Thread.sleep(WAIT_TIME_MILLIS * 3);
 
         assertThat(queryCurrentHealthReport(HEALTH_PORT_1)).isEqualTo(expectedHealthReport);
 
         // Kill the process and start again - corfu still should be healthy because it's bootstrapped
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
         Process restartedServer = runCorfuServerWithHealthMonitor(CORFU_PORT_1, HEALTH_PORT_1);
-        Thread.sleep(WAIT_TIME_MILLIS * 3);
+        // Give it some time to change state and  bootstrap sequencer
+        Thread.sleep(WAIT_TIME_MILLIS * 10);
         assertThat(queryCurrentHealthReport(HEALTH_PORT_1)).isEqualTo(expectedHealthReport);
         assertThat(shutdownCorfuServer(restartedServer)).isTrue();
     }
@@ -200,7 +214,6 @@ public class HealthMonitorIT extends AbstractIT {
             }
 
         }
-        Thread.sleep(WAIT_TIME_MILLIS * 2);
         HealthReport expectedHealthReport = builder()
                 .status(FAILURE)
                 .reason(OVERALL_STATUS_FAILURE)
@@ -217,19 +230,20 @@ public class HealthMonitorIT extends AbstractIT {
                         new ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_IS_RUNNING),
                         new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING)))
                 .build();
-
+        // Give it some time to notice that quota is exceeded
+        Thread.sleep(WAIT_TIME_MILLIS * 5);
         HealthReport healthReport = queryCurrentHealthReport(HEALTH_PORT_2);
         assertThat(healthReport).isEqualTo(expectedHealthReport);
         assertThat(shutdownCorfuServer(process)).isTrue();
         // Bring corfu again and verify that the issue persists
         Process anotherProcess = runCorfuServerWithHealthMonitorAndExceededQuota(CORFU_PORT_2, HEALTH_PORT_2);
-        Thread.sleep(WAIT_TIME_MILLIS * 2);
+        Thread.sleep(WAIT_TIME_MILLIS * 5);
         healthReport = queryCurrentHealthReport(HEALTH_PORT_2);
         assertThat(healthReport).isEqualTo(expectedHealthReport);
         assertThat(shutdownCorfuServer(anotherProcess)).isTrue();
         // Now bring corfu such that the quota is not exceed
         Process anotherProcessAgain = runCorfuServerWithHealthMonitor(CORFU_PORT_2, HEALTH_PORT_2);
-        Thread.sleep(WAIT_TIME_MILLIS * 2);
+        Thread.sleep(WAIT_TIME_MILLIS * 5);
         healthReport = queryCurrentHealthReport(HEALTH_PORT_2);
         expectedHealthReport = builder()
                 .status(UP)
