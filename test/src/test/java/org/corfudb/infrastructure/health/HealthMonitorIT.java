@@ -93,6 +93,7 @@ public class HealthMonitorIT extends AbstractIT {
                 UUID.randomUUID());
     }
 
+    @SuppressWarnings("checkstyle:magicnumber")
     private HealthReport queryCurrentHealthReport(int healthPort) throws InterruptedException {
         for (int i = 0; i <  RETRIES; i++) {
             try {
