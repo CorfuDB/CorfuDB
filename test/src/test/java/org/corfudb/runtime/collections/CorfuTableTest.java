@@ -106,6 +106,37 @@ public class CorfuTableTest extends AbstractViewTest {
                 .containsExactly("ab");
     }
 
+
+    @Test
+    public void testUnmappingSecondaryIndex() {
+        CorfuTable<String, String>
+                corfuTable = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setArguments(new StringIndexer())
+                .setStreamName("test")
+                .open();
+
+        final int numKeys = 10;
+        final String keyPrefix = "k";
+        final String valPrefix = "v";
+        for (int idx = 0; idx < numKeys; idx++) {
+            getDefaultRuntime().getObjectsView().TXBegin();
+            corfuTable.put(keyPrefix + idx, valPrefix + idx);
+            getDefaultRuntime().getObjectsView().TXEnd();
+        }
+
+        for (int idx = 0; idx < numKeys; idx++) {
+            getDefaultRuntime().getObjectsView().TXBegin();
+            corfuTable.remove(keyPrefix + idx);
+            getDefaultRuntime().getObjectsView().TXEnd();
+        }
+
+        Map<String, Map<Object, Map<String, String>>> indexes = corfuTable.getSecondaryIndexes();
+
+        assertThat(indexes.get(StringIndexer.BY_FIRST_LETTER.get())).isEmpty();
+        assertThat(indexes.get(StringIndexer.BY_VALUE.get())).isEmpty();
+    }
+
     /**
      * Verify that a  lookup by index throws an exception,
      * when the index has never been specified for this CorfuTable.
