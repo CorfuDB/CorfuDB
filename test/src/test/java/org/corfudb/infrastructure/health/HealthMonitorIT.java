@@ -162,7 +162,8 @@ public class HealthMonitorIT extends AbstractIT {
                         new ComponentReportedHealthStatus(FAILURE_DETECTOR, DOWN, COMPONENT_IS_NOT_RUNNING),
                         new ComponentReportedHealthStatus(SEQUENCER, DOWN, COMPONENT_IS_NOT_RUNNING)))
                 .build();
-
+        // Give it some time to start
+        Thread.sleep(WAIT_TIME_MILLIS * 5);
         assertThat(queryCurrentHealthReport(HEALTH_PORT_1)).isEqualTo(expectedHealthReport);
 
         // Bootstrap corfu - services become healthy
