@@ -32,13 +32,12 @@ import static org.corfudb.infrastructure.health.Issue.IssueId.SOME_NODES_ARE_UNR
 
 public class HealthMonitorTest {
 
-
+    static final String FD_TASK_FAILURE_MSG = "Last failure detection task failed";
+    static final String UNRESPONSIVE_MSG = "Current node is in unresponsive list";
 
     @Test
     @SuppressWarnings("checkstyle:magicnumber")
     void testAddInitIssue() {
-        int nums = 10;
-        int expectedIssue = 1;
         HealthMonitor.init();
         HealthMonitor.reportIssue(Issue.createInitIssue(COMPACTOR));
         Map<Component, HealthStatus> healthStatusSnapshot = HealthMonitor.getHealthStatusSnapshot();
@@ -55,11 +54,11 @@ public class HealthMonitorTest {
         assertThat(healthStatusSnapshot.get(ORCHESTRATOR).getInitHealthIssues().stream().findFirst().get())
                 .isEqualTo(new Issue(ORCHESTRATOR, Issue.IssueId.INIT, "Clustering Orchestrator is not initialized"));
 
-        for (int i = 0; i < nums; i++) {
+        for (int i = 0; i < 10; i++) {
             HealthMonitor.reportIssue(Issue.createInitIssue(COMPACTOR));
         }
         healthStatusSnapshot = HealthMonitor.getHealthStatusSnapshot();
-        assertThat(healthStatusSnapshot.get(COMPACTOR).getInitHealthIssues().size()).isEqualTo(expectedIssue);
+        assertThat(healthStatusSnapshot.get(COMPACTOR).getInitHealthIssues().size()).isEqualTo(1);
         HealthMonitor.shutdown();
     }
 
@@ -83,10 +82,10 @@ public class HealthMonitorTest {
     @Test
     @SuppressWarnings("checkstyle:magicnumber")
     void testAddRuntimeIssue() {
-        String compactionMsg = "Last compaction cycle failed";
-        String fdMsg = "Last failure detection task failed";
-        String unresponsiveMsg = "Current node is in unresponsive list";
-        int expectedSize = 2;
+        final String compactionMsg = "Last compaction cycle failed";
+        final String fdMsg = FD_TASK_FAILURE_MSG;
+        String unresponsiveMsg = UNRESPONSIVE_MSG;
+        final int expectedSize = 2;
         HealthMonitor.init();
         // Init status is UNKNOWN this makes it NOT_INITIALIZED, so you can not add runtime issues
         assertThatThrownBy(() -> HealthMonitor.reportIssue(Issue.createIssue(COMPACTOR, COMPACTION_CYCLE_FAILED, compactionMsg)))
@@ -119,8 +118,8 @@ public class HealthMonitorTest {
     @SuppressWarnings("checkstyle:magicnumber")
     void testRemoveRuntimeIssue() {
         String resolved = "Resolved";
-        String fdMsg = "Last failure detection task failed";
-        String unresponsiveMsg = "Current node is in unresponsive list";
+        String fdMsg = FD_TASK_FAILURE_MSG;
+        String unresponsiveMsg = UNRESPONSIVE_MSG;
         HealthMonitor.init();
         HealthMonitor.reportIssue(Issue.createInitIssue(FAILURE_DETECTOR));
         HealthMonitor.resolveIssue(Issue.createInitIssue(FAILURE_DETECTOR));

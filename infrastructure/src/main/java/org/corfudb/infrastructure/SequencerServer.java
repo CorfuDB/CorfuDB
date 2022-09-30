@@ -218,7 +218,7 @@ public class SequencerServer extends AbstractServer {
                         .setNameFormat("sequencer-health")
                         .build());
         HealthMonitor.reportIssue(Issue.createInitIssue(Component.SEQUENCER));
-        healthReportScheduler.scheduleAtFixedRate(reportSequencerHealth(), INIT_DELAY, DELAY_NUM, DELAY_UNITS);
+        healthReportScheduler.scheduleAtFixedRate(this::reportSequencerHealth, INIT_DELAY, DELAY_NUM, DELAY_UNITS);
     }
 
     @Override
@@ -226,35 +226,32 @@ public class SequencerServer extends AbstractServer {
         executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
     }
 
-    private Runnable reportSequencerHealth() {
-        return () -> {
-            Layout layout = serverContext.getCurrentLayout();
-            if (layout == null) {
-                return;
-            }
-            final String localEndpoint = serverContext.getLocalEndpoint();
-            Runnable resolveIssues = () -> {
-                HealthMonitor.resolveIssue(Issue.createInitIssue(Component.SEQUENCER));
-                HealthMonitor.resolveIssue(Issue.createIssue(Component.SEQUENCER,
-                        SEQUENCER_REQUIRES_FULL_BOOTSTRAP, "Sequencer bootstrapped"));
-            };
-            // Only report if it's a primary sequencer
-            if (layout.getPrimarySequencer().equals(localEndpoint)) {
-                if (sequencerEpoch == Layout.INVALID_EPOCH) {
-                    HealthMonitor.reportIssue(Issue.createInitIssue(Component.SEQUENCER));
-                } else if (sequencerEpoch != serverContext.getServerEpoch()) {
-                    Issue issue = Issue.createIssue(Component.SEQUENCER,
-                            SEQUENCER_REQUIRES_FULL_BOOTSTRAP, "Sequencer requires bootstrap");
-                    HealthMonitor.reportIssue(issue);
-                } else {
-                    resolveIssues.run();
-                }
-            }
-            // The sequencer could have issues before but now it's not a primary sequencer
-            else {
+    private void reportSequencerHealth() {
+        Layout layout = serverContext.getCurrentLayout();
+        if (layout == null) {
+            return;
+        }
+        final String localEndpoint = serverContext.getLocalEndpoint();
+        Runnable resolveIssues = () -> {
+            HealthMonitor.resolveIssue(Issue.createInitIssue(Component.SEQUENCER));
+            HealthMonitor.resolveIssue(Issue.createIssue(Component.SEQUENCER,
+                    SEQUENCER_REQUIRES_FULL_BOOTSTRAP, "Sequencer bootstrapped"));
+        };
+        // Only report if it's a primary sequencer
+        if (layout.getPrimarySequencer().equals(localEndpoint)) {
+            if (sequencerEpoch == Layout.INVALID_EPOCH) {
+                HealthMonitor.reportIssue(Issue.createInitIssue(Component.SEQUENCER));
+            } else if (sequencerEpoch != serverContext.getServerEpoch()) {
+                Issue issue = Issue.createIssue(Component.SEQUENCER,
+                        SEQUENCER_REQUIRES_FULL_BOOTSTRAP, "Sequencer requires bootstrap");
+                HealthMonitor.reportIssue(issue);
+            } else {
                 resolveIssues.run();
             }
-        };
+        } else {
+            // The sequencer could have issues before but now it's not a primary sequencer
+            resolveIssues.run();
+        }
 
     }
 

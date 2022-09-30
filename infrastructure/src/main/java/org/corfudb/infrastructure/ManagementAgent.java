@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.google.common.collect.ImmutableList;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NonNull;
@@ -64,6 +63,11 @@ public class ManagementAgent {
      * Interval of executing the CompactionService.
      */
     private static final Duration TRIGGER_INTERVAL = Duration.ofSeconds(10);
+
+    /**
+     * Compactor flag
+     */
+    private static final String COMPACTOR_FLAG = "--compactor-script";
 
     /**
      * To dispatch initialization tasks for recovery and sequencer bootstrap.
@@ -144,7 +148,8 @@ public class ManagementAgent {
 
         this.autoCommitService = new AutoCommitService(serverContext, runtimeSingletonResource);
 
-        if (serverContext.getServerConfig(String.class, "--compactor-script") != null) {
+        final String compactorScript = COMPACTOR_FLAG;
+        if (serverContext.getServerConfig(String.class, compactorScript) != null) {
             HealthMonitor.reportIssue(Issue.createInitIssue(Component.COMPACTOR));
         }
 
@@ -230,7 +235,7 @@ public class ManagementAgent {
             } else {
                 log.info("Auto commit service disabled.");
             }
-            if (serverContext.getServerConfig(String.class, "--compactor-script") != null) {
+            if (serverContext.getServerConfig(String.class, COMPACTOR_FLAG) != null) {
                 compactorService.start(TRIGGER_INTERVAL);
             } else {
                 log.info("Compaction Service disabled");

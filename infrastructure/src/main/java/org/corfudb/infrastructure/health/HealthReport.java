@@ -155,7 +155,7 @@ public class HealthReport {
     }
 
     @AllArgsConstructor
-    public enum ComponentStatus {
+    public static enum ComponentStatus {
 
         @SerializedName("UP")
         UP("UP"),

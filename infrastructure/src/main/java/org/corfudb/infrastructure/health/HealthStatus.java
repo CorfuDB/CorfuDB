@@ -119,7 +119,7 @@ public class HealthStatus {
         return initHealthIssues.contains(issue) || runtimeHealthIssues.contains(issue);
     }
 
-    enum InitStatus {
+    static enum InitStatus {
         UNKNOWN,
         NOT_INITIALIZED,
         INITIALIZED

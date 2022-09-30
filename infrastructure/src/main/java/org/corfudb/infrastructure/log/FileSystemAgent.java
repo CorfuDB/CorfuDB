@@ -33,7 +33,6 @@ import java.util.function.Supplier;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.corfudb.infrastructure.health.Component.LOG_UNIT;
-import static org.corfudb.infrastructure.log.FileSystemAgent.PartitionAgent.*;
 
 @Slf4j
 public final class FileSystemAgent {
@@ -94,8 +93,7 @@ public final class FileSystemAgent {
             } else {
                 HealthMonitor.resolveIssue(issue);
             }
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             log.error("Exception in quota monitor:", e);
         }
 

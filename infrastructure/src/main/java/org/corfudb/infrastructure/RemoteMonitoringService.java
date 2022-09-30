@@ -297,8 +297,7 @@ public class RemoteMonitoringService implements ManagementService {
                     final Layout layout = serverContext.getCurrentLayout();
                     if (!layout.getUnresponsiveServers().isEmpty()) {
                         HealthMonitor.reportIssue(issue);
-                    }
-                    else {
+                    } else {
                         HealthMonitor.resolveIssue(issue);
                     }
                     return task;
@@ -309,7 +308,7 @@ public class RemoteMonitoringService implements ManagementService {
                         log.error("Failure detection task finished with an error", ex);
 
                     }
-                    if ( ex != null || taskResult == DetectorTask.NOT_COMPLETED) {
+                    if (ex != null || taskResult == DetectorTask.NOT_COMPLETED) {
                         log.trace("Reporting issue");
                         HealthMonitor.reportIssue(new Issue(Component.FAILURE_DETECTOR,
                                 Issue.IssueId.FAILURE_DETECTOR_TASK_FAILED,

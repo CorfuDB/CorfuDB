@@ -52,6 +52,7 @@ public class HealthMonitorIT extends AbstractIT {
     private static final int HEALTH_PORT_1 = 8080;
     private static final int HEALTH_PORT_2 = 8081;
     private static final String ADDRESS = "localhost";
+    private static final String COLUMN = ":";
     private static final int RETRIES = 3;
     private static final int WAIT_TIME_MILLIS = 1000;
 
@@ -78,7 +79,7 @@ public class HealthMonitorIT extends AbstractIT {
 
     private Layout getLayout(int port) {
         List<String> servers = new ArrayList<>();
-        String serverAddress = ADDRESS + ":" + port;
+        String serverAddress = ADDRESS + COLUMN + port;
         servers.add(serverAddress);
 
         return new Layout(
@@ -95,7 +96,7 @@ public class HealthMonitorIT extends AbstractIT {
 
     @SuppressWarnings("checkstyle:magicnumber")
     private HealthReport queryCurrentHealthReport(int healthPort) throws InterruptedException {
-        for (int i = 0; i <  RETRIES; i++) {
+        for (int i = 0; i < RETRIES; i++) {
             try {
                 return queryCurrentHealthReportHelper(healthPort);
             }
@@ -108,7 +109,7 @@ public class HealthMonitorIT extends AbstractIT {
 
     @SuppressWarnings("checkstyle:magicnumber")
     private HealthReport queryCurrentHealthReportHelper(int healthPort) throws IOException {
-        URL url = new URL("http://" + ADDRESS + ":" + healthPort + "/health");
+        URL url = new URL("http://" + ADDRESS + COLUMN + healthPort + "/health");
         HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
         urlConnection.setRequestMethod("GET");
         urlConnection.setRequestProperty("Content-Type", "application/json");

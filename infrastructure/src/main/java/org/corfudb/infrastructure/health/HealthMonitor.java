@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentMap;
  * HealthMonitor keeps track of the HealthStatus of each Component.
  */
 @Slf4j
-public class HealthMonitor {
+public final class HealthMonitor {
 
     private final ConcurrentMap<Component, HealthStatus> componentHealthStatus;
 

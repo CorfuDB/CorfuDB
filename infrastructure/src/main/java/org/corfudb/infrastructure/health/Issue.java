@@ -13,7 +13,7 @@ import lombok.ToString;
 @ToString
 public class Issue {
 
-    public enum IssueId {
+    public static enum IssueId {
         INIT,
         SEQUENCER_REQUIRES_FULL_BOOTSTRAP,
         ORCHESTRATOR_TASK_FAILED,

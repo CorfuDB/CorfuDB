@@ -56,7 +56,7 @@ public abstract class GenericIntegrationTest {
 
 
     public HealthReport queryHealthReport(int healthPort) {
-        for (int i = 0; i <  RETRIES; i++) {
+        for (int i = 0; i < RETRIES; i++) {
             try {
                 return queryHealthReportHelper(healthPort);
             }
