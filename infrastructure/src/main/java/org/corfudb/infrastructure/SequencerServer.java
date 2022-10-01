@@ -48,6 +48,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -190,7 +193,7 @@ public class SequencerServer extends AbstractServer {
         Config config = Config.parse(serverContext.getServerConfig());
 
         // Sequencer server is single threaded by current design
-        executor = serverContext.getExecutorService(1, "sequencer-");
+        executor = serverContext.getExecutorService(4, "sequencer-");
 
         globalLogTail = sequencerFactoryHelper.getGlobalLogTail();
         cache = sequencerFactoryHelper.getSequencerServerCache(
@@ -566,6 +569,9 @@ public class SequencerServer extends AbstractServer {
         r.sendResponse(response, ctx);
     }
 
+    private final ReadWriteLock queryLock = new ReentrantReadWriteLock();
+
+
     /**
      * Service an incoming token request.
      */
@@ -581,20 +587,99 @@ public class SequencerServer extends AbstractServer {
         // dispatch request handler according to request type while collecting the timer metrics
         switch (tokenRequest.getRequestType()) {
             case TK_QUERY:
-                handleTokenQuery(req, ctx, r);
+                Lock lock = queryLock.readLock();
+                lock.lock();
+                try {
+                    handleTokenQuery(req, ctx, r);
+                } finally {
+                    lock.unlock();
+                }
                 break;
 
             case TK_RAW:
-                handleRawToken(req, ctx, r);
+                Lock lock2 = queryLock.writeLock();
+                lock2.lock();
+                try {
+                    handleRawToken(req, ctx, r);
+                } finally {
+                    lock2.unlock();
+                }
                 break;
 
             case TK_TX:
-                handleTxToken(req, ctx, r);
+                Lock lock3 = queryLock.writeLock();
+                lock3.lock();
+                try {
+                    handleTxToken(req, ctx, r);
+                } finally {
+                    lock3.unlock();
+                }
                 break;
 
             default:
-                handleAllocation(req, ctx, r);
+                Lock lock4 = queryLock.writeLock();
+                lock4.lock();
+                try {
+                    handleAllocation(req, ctx, r);
+                } finally {
+                    lock4.unlock();
+                }
                 break;
+        }
+    }
+
+    /**
+     * This method handles the request of streams addresses.
+     * <p>
+     * The request of address spaces can be of two types:
+     * - For specific streams (and specific ranges for each stream).
+     * - For all streams (complete range).
+     * <p>
+     * The response contains the requested streams address maps and the global log tail.
+     */
+    @RequestHandler(type = PayloadCase.STREAMS_ADDRESS_REQUEST)
+    private void handleStreamsAddressRequest(@Nonnull RequestMsg req,
+                                             @Nonnull ChannelHandlerContext ctx,
+                                             @Nonnull IServerRouter r) {
+        Lock lock = queryLock.readLock();
+        lock.lock();
+        try {
+            StreamsAddressRequestMsg streamsAddressRequest =
+                    req.getPayload().getStreamsAddressRequest();
+            Map<UUID, StreamAddressSpace> respStreamsAddressMap;
+            StreamsAddressRequestMsg.Type reqType = streamsAddressRequest.getReqType();
+
+            if (reqType == StreamsAddressRequestMsg.Type.STREAMS) {
+                respStreamsAddressMap =
+                        getStreamsAddressesMap(streamsAddressRequest.getStreamRangeList());
+            } else if (reqType == StreamsAddressRequestMsg.Type.ALL_STREAMS) {
+                // Retrieve address space for all streams
+                respStreamsAddressMap = new HashMap<>(streamsAddressMap);
+            } else {
+                throw new IllegalArgumentException("handleStreamsAddressRequest: " +
+                        "Received an " + reqType + "type of streamsAddressRequestMsg.");
+            }
+            if (log.isTraceEnabled()) {
+                log.trace("handleStreamsAddressRequest: return address space for streams [{}]",
+                        respStreamsAddressMap.keySet());
+            }
+            StreamsAddressResponse streamsAddressResponse =
+                    new StreamsAddressResponse(getGlobalLogTail(), respStreamsAddressMap);
+
+            // Note: we reuse the request header as the ignore_cluster_id and
+            // ignore_epoch fields are the same in both cases.
+            ResponseMsg response = getResponseMsg(
+                    getHeaderMsg(req.getHeader()),
+                    getStreamsAddressResponseMsg(
+                            streamsAddressResponse.getLogTail(),
+                            streamsAddressResponse.getEpoch(),
+                            streamsAddressResponse.getAddressMap()
+                    )
+            );
+
+            r.sendResponse(response, ctx);
+        } finally {
+            lock.unlock();
         }
     }
 
@@ -738,55 +823,6 @@ public class SequencerServer extends AbstractServer {
         // ignore_epoch fields are the same in both cases.
         ResponseMsg response = getResponseMsg(
                 getHeaderMsg(req.getHeader()), getTokenResponseMsg(newToken, backPointerMap.build()));
-        r.sendResponse(response, ctx);
-    }
-
-    /**
-     * This method handles the request of streams addresses.
-     * <p>
-     * The request of address spaces can be of two types:
-     * - For specific streams (and specific ranges for each stream).
-     * - For all streams (complete range).
-     * <p>
-     * The response contains the requested streams address maps and the global log tail.
-     */
-    @RequestHandler(type = PayloadCase.STREAMS_ADDRESS_REQUEST)
-    private void handleStreamsAddressRequest(@Nonnull RequestMsg req,
-                                             @Nonnull ChannelHandlerContext ctx,
-                                             @Nonnull IServerRouter r) {
-        StreamsAddressRequestMsg streamsAddressRequest =
-                req.getPayload().getStreamsAddressRequest();
-        Map<UUID, StreamAddressSpace> respStreamsAddressMap;
-        StreamsAddressRequestMsg.Type reqType = streamsAddressRequest.getReqType();
-
-        if (reqType == StreamsAddressRequestMsg.Type.STREAMS) {
-            respStreamsAddressMap =
-                    getStreamsAddressesMap(streamsAddressRequest.getStreamRangeList());
-        } else if (reqType == StreamsAddressRequestMsg.Type.ALL_STREAMS) {
-            // Retrieve address space for all streams
-            respStreamsAddressMap = new HashMap<>(streamsAddressMap);
-        } else {
-            throw new IllegalArgumentException("handleStreamsAddressRequest: " +
-                    "Received an " + reqType + "type of streamsAddressRequestMsg.");
-        }
-        if (log.isTraceEnabled()) {
-            log.trace("handleStreamsAddressRequest: return address space for streams [{}]",
-                    respStreamsAddressMap.keySet());
-        }
-        StreamsAddressResponse streamsAddressResponse =
-                new StreamsAddressResponse(getGlobalLogTail(), respStreamsAddressMap);
-
-        // Note: we reuse the request header as the ignore_cluster_id and
-        // ignore_epoch fields are the same in both cases.
-        ResponseMsg response = getResponseMsg(
-                getHeaderMsg(req.getHeader()),
-                getStreamsAddressResponseMsg(
-                        streamsAddressResponse.getLogTail(),
-                        streamsAddressResponse.getEpoch(),
-                        streamsAddressResponse.getAddressMap()
-                )
-        );
-
         r.sendResponse(response, ctx);
     }
 
