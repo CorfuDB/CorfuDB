@@ -41,13 +41,13 @@ public class CorfuStoreMetrics {
         Optional<MeterRegistry> registryProvider = MeterRegistryProvider.getInstance();
         this.numberBatchReads = registryProvider.map(registry -> DistributionSummary
                 .builder("highestSeqNum.numberBatchReads")
-                .publishPercentiles(0.5, 0.99)
+                .publishPercentiles(0.5, 0.75, 0.99)
                 .description("Number of batches read before finding highest DATA sequence number")
                 .register(registry));
         this.numberReads = registryProvider.map(registry ->
                 DistributionSummary
                         .builder("highestSeqNum.numberReads")
-                        .publishPercentiles(0.5, 0.99)
+                        .publishPercentiles(0.5, 0.75, 0.99)
                         .description("Number of addresses read in batches before finding highest DATA sequence number")
                         .register(registry));
 

@@ -76,7 +76,9 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      * present within the MVOCache. It only indicates that this is the most recent
      * version materialized by the MVO.
      */
-    private volatile long materializedUpTo = Address.NON_EXIST;
+    // private volatile long materializedUpTo = Address.NON_EXIST;
+
+    private volatile long resolvedUpTo = Address.NON_EXIST;
 
     /**
      * The MVOCache used to store and retrieve underlying object versions.
@@ -190,6 +192,8 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                 }
             }
 
+            resolvedUpTo = Long.max(timestamp, resolvedUpTo);
+
             final long streamTs = addressSpace.getTail();
             if (log.isTraceEnabled()) {
                 log.trace("SnapshotProxy[{}] write lock request at {}", Utils.toReadableId(getID()), streamTs);
@@ -208,7 +212,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      * @return True if and only if this timestamp has been materialized.
      */
     private boolean isTimestampMaterializedUnsafe(long timestamp) {
-        if (timestamp == Address.NON_EXIST && materializedUpTo == Address.NON_EXIST) {
+        if (timestamp == Address.NON_EXIST && currentObjectVersion == Address.NON_EXIST) {
             return false;
         }
 
@@ -216,7 +220,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
             throw new TrimmedException(timestamp);
         }
 
-        return timestamp <= materializedUpTo;
+        return timestamp <= resolvedUpTo && addressSpace.size() != 0;
     }
 
     /**
@@ -294,10 +298,10 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                         // entries that consist of multiple continuation entries. These will all share the
                         // globalAddress of the no-op operation. There is no correctness issue by putting
                         // these prematurely in the cache, as optimistic reads will be invalid.
-                        Preconditions.checkState(globalAddress >= materializedUpTo,
-                                "globalAddress %s not >= materialized %s", globalAddress, materializedUpTo);
+                        Preconditions.checkState(globalAddress >= currentObjectVersion,
+                                "globalAddress %s not >= materialized %s", globalAddress, currentObjectVersion);
 
-                        materializedUpTo = globalAddress;
+                        // materializedUpTo = globalAddress;
                         currentObjectVersion = globalAddress;
                     } catch (Exception e) {
                         log.error("Sync[{}] couldn't execute upcall due to {}", Utils.toReadableId(getID()), e);
@@ -383,7 +387,8 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         currentObject = newObjectFn.get();
         addressSpace = new StreamAddressSpace();
         currentObjectVersion = Address.NON_EXIST;
-        materializedUpTo = Address.NON_EXIST;
+        resolvedUpTo = Address.NON_EXIST;
+        // materializedUpTo = Address.NON_EXIST;
         smrStream.reset();
     }
 

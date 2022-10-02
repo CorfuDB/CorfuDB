@@ -160,6 +160,7 @@ public class ObjectsView extends AbstractView {
         long totalTime = System.currentTimeMillis() - context.getStartTime();
         log.trace("TXEnd[{}] time={} ms", context, totalTime);
 
+        long txEndStartTime = System.nanoTime();
         try {
             long commitAddress = TransactionalContext.getCurrentContext().commitTransaction();
             MicroMeterUtils.time(Duration.ofMillis(System.currentTimeMillis() - context.getStartTime()),
@@ -217,6 +218,9 @@ public class ObjectsView extends AbstractView {
             context.abortTransaction(tae);
             throw new UnrecoverableCorfuError("Unexpected exception during commit", e);
         } finally {
+            long txEndEndTime = System.nanoTime();
+            MicroMeterUtils.time(Duration.ofNanos(context.dbNanoTime + (txEndEndTime - txEndStartTime)),
+                    "transaction.db.duration");
             TransactionalContext.removeContext();
         }
     }

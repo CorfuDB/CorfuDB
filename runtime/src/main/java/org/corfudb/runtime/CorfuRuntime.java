@@ -619,6 +619,13 @@ public class CorfuRuntime {
 
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder maxCacheEntries(long maxCacheEntries) {
                 this.maxCacheEntries = maxCacheEntries;
+
+                final long maxCacheSizeThresh = 10000L;
+                final long largeMvoCacheSize = 25000L;
+                if (maxCacheEntries >= maxCacheSizeThresh) {
+                    this.maxMvoCacheEntries = largeMvoCacheSize;
+                }
+
                 return this;
             }
 

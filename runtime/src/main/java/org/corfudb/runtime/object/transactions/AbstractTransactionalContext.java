@@ -140,6 +140,8 @@ public abstract class AbstractTransactionalContext implements
      */
     protected final Map<UUID, Long> knownStreamsPosition = new HashMap<>();
 
+    public long dbNanoTime = 0;
+
     AbstractTransactionalContext(Transaction transaction) {
         transactionID = Utils.genPseudorandomUUID();
         this.transaction = transaction;
@@ -312,29 +314,34 @@ public abstract class AbstractTransactionalContext implements
      * @return the current global tail
      */
     private Token obtainSnapshotTimestamp() {
-        final AbstractTransactionalContext parentCtx = getParentContext();
-        final Token txnBuilderTs = getTransaction().getSnapshot();
-        if (parentCtx != null) {
-            // If we're in a nested transaction, the first read timestamp
-            // needs to come from the root.
-            Token parentTimestamp = parentCtx.getSnapshotTimestamp();
-            log.trace("obtainSnapshotTimestamp: inheriting parent snapshot" +
-                    " SnapshotTimestamp[{}] {}", this, parentTimestamp);
-            return parentTimestamp;
-        } else if (!txnBuilderTs.equals(Token.UNINITIALIZED)) {
-            log.trace("obtainSnapshotTimestamp: using user defined snapshot" +
-                    " SnapshotTimestamp[{}] {}", this, txnBuilderTs);
-            return txnBuilderTs;
-        } else {
-            // Otherwise, fetch a read token from the sequencer the linearize
-            // ourselves against.
-            Token timestamp = getTransaction()
-                    .getRuntime()
-                    .getSequencerView()
-                    .query()
-                    .getToken();
-            log.trace("obtainSnapshotTimestamp: sequencer SnapshotTimestamp[{}] {}", this, timestamp);
-            return timestamp;
+        long startSnapshotTime = System.nanoTime();
+        try {
+            final AbstractTransactionalContext parentCtx = getParentContext();
+            final Token txnBuilderTs = getTransaction().getSnapshot();
+            if (parentCtx != null) {
+                // If we're in a nested transaction, the first read timestamp
+                // needs to come from the root.
+                Token parentTimestamp = parentCtx.getSnapshotTimestamp();
+                log.trace("obtainSnapshotTimestamp: inheriting parent snapshot" +
+                        " SnapshotTimestamp[{}] {}", this, parentTimestamp);
+                return parentTimestamp;
+            } else if (!txnBuilderTs.equals(Token.UNINITIALIZED)) {
+                log.trace("obtainSnapshotTimestamp: using user defined snapshot" +
+                        " SnapshotTimestamp[{}] {}", this, txnBuilderTs);
+                return txnBuilderTs;
+            } else {
+                // Otherwise, fetch a read token from the sequencer the linearize
+                // ourselves against.
+                Token timestamp = getTransaction()
+                        .getRuntime()
+                        .getSequencerView()
+                        .query()
+                        .getToken();
+                log.trace("obtainSnapshotTimestamp: sequencer SnapshotTimestamp[{}] {}", this, timestamp);
+                return timestamp;
+            }
+        } finally {
+            dbNanoTime += (System.nanoTime() - startSnapshotTime);
         }
     }
 
