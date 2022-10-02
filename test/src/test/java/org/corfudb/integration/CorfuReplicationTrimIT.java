@@ -6,6 +6,7 @@ import java.io.File;
 import java.util.Arrays;
 import java.util.Collections;
 import lombok.extern.slf4j.Slf4j;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -28,6 +29,12 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
         } else {
             this.pluginConfigFilePath = nettyConfig;
         }
+    }
+
+    @After
+    public void clean(){
+        stopActiveLogReplicator();
+        stopStandbyLogReplicator();
     }
 
     /**
@@ -58,6 +65,10 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
             // and checkpoint so we enforce a subsequent Snapshot Sync
             log.debug("Stop Active Log Replicator ...");
             stopActiveLogReplicator();
+
+            // print corfu process running
+            System.out.println("debugging msg here");
+            showAllCorfuCommand();
 
             // Checkpoint & Trim on the Standby (so shadow stream get trimmed)
             checkpointAndTrim(false, Collections.singletonList(mapAStandby));

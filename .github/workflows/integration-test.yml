@@ -32,3 +32,4 @@ jobs:
 
       - name: run integration tests
         run: ./mvnw -pl :test clean verify -Pit -DskipTests
+

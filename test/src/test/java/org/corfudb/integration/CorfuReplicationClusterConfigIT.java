@@ -108,6 +108,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
     @Before
     public void setUp() throws Exception {
+        super.setUp();
         activeCorfuServer = runServer(activeClusterCorfuPort, true);
         standbyCorfuServer = runServer(standbyClusterCorfuPort, true);
 
@@ -173,7 +174,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     }
 
     @After
-    public void tearDown() throws IOException, InterruptedException {
+    public void tearDown() throws Exception {
+        super.cleanUp();
         if (activeRuntime != null) {
             activeRuntime.shutdown();
         }

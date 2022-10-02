@@ -78,7 +78,8 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
      * @throws Exception
      */
     @Before
-    public void setupPluginPath() {
+    public void setupPluginPath() throws Exception {
+        super.setUp();
         if(runProcess) {
             File f = new File(nettyConfig);
             this.pluginConfigFilePath = f.getAbsolutePath();
@@ -96,7 +97,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     public void testStandbyClusterReset() throws Exception {
         // (1) Snapshot and Log Entry Sync
         log.debug(">>> (1) Start Snapshot and Log Entry Sync");
-        testEndToEndSnapshotAndLogEntrySyncUFO(false, false);
+        test(1, false, false);
 
         ExecutorService writerService = Executors.newSingleThreadExecutor();
 
@@ -129,12 +130,13 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
      */
     @Test
     public void testActiveClusterReset() throws Exception {
-
+        showAllCorfuCommand();
         final int delta = 5;
 
         // (1) Snapshot and Log Entry Sync
         log.debug(">>> (1) Start Snapshot and Log Entry Sync");
-        testEndToEndSnapshotAndLogEntrySyncUFO(false, false);
+        test(1, false, false);
+        showAllCorfuCommand();
 
         ExecutorService writerService = Executors.newSingleThreadExecutor();
 
@@ -146,14 +148,17 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         // (3) Stop Active Log Replicator Server
         log.debug(">>> (3) Stop Active Node");
         stopActiveLogReplicator();
+        showAllCorfuCommand();
 
         // (4) Sleep Interval so writes keep going through, while active is down
         log.debug(">>> (4) Wait for some time");
         Sleep.sleepUninterruptibly(Duration.ofSeconds(SLEEP_DURATION));
+        showAllCorfuCommand();
 
         // (5) Restart Active Log Replicator
         log.debug(">>> (5) Restart Active Node");
         startActiveLogReplicator();
+        showAllCorfuCommand();
 
         // (6) Verify Data on Standby after Restart
         log.debug(">>> (6) Verify Data on Standby");
@@ -168,7 +173,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
                 TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         // Wait the polling period time before verifying sync status (to make sure it was updated)
-        Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + 1));
+        Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + delta));
 
         long remainingEntriesToSend = verifyReplicationStatus(ReplicationStatusVal.SyncType.LOG_ENTRY,
                 LogReplicationMetadata.SyncStatus.ONGOING, LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
@@ -189,7 +194,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         });
 
         // Wait the polling period time and verify sync status again (to make sure it was not erroneously updated)
-        Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + 1));
+        Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + delta));
 
         // While the TX log is growing, the remaining entries to send can be changing during this time, as it is computed
         // wrt. the tail of the log and this varies depending on how fast we are catching the tail of the log.
@@ -201,7 +206,12 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
         // (9) Stop active LR again, so server restarts from Log Entry Sync, with no actual deltas (as there is no new data)
         // and verify remainingEntriesToSend is still '0'
+        showAllCorfuCommand();
+
         stopActiveLogReplicator();
+        Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + delta));
+        showAllCorfuCommand();
+
         startActiveLogReplicator();
 
         // Wait the polling period time and verify sync status again (to make sure it was not erroneously updated)

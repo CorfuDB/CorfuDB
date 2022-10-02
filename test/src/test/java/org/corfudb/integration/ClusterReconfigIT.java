@@ -66,12 +66,14 @@ public class ClusterReconfigIT extends AbstractIT {
     private final String testStream = "test";
 
     @Before
-    public void loadProperties() {
+    public void loadProperties() throws Exception {
+        super.setUp();
         corfuSingleNodeHost = (String) PROPERTIES.get("corfuSingleNodeHost");
     }
 
     @After
-    public void tearDown() {
+    public void tearDown() throws Exception {
+        super.cleanUp();
         if (runtime != null) {
             runtime.shutdown();
         }
@@ -1097,7 +1099,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         final String streamName = "stream1";
 
-        final int numRetry = 3;
+        final int numRetry = 30;
         final Duration timeout = Duration.ofMinutes(5);
         final Duration pollPeriod = Duration.ofSeconds(5);
 
