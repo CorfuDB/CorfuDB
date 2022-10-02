@@ -660,26 +660,46 @@ public class TableRegistry {
     }
 
     /**
-     * Only clears a table, DOES not delete its file descriptors from metadata.
-     * This is because if the purpose of the delete is to upgrade from an old schema to a new schema
-     * Then we must first purge all SMR entries of the current (old) format from corfu stream.
-     * It is the checkpointer which actually purges via a trim operation.
-     * But to even get to the trim, it must be able to read the table, which it can't do if the table's
-     * metadata (TableRegistry entry) is also removed here.
-     * So what would be nice if we can place a marker indicating that this table is marked
-     * for deletion, so that on the next Re-open we will actually force update the table registry entry.
-     * For now, just force the openTable to always purge the prior entry assuming that the
-     * caller has done the good work of
-     * 1. table.clear() using the old version
-     * 2. running checkpoint and trim
-     * 3. re-open the table with new proto files.
+     * Special method to remove the table metadata from registry without actually touching
+     * the table itself.
      *
      * @param namespace Namespace of the table.
      * @param tableName Name of the table.
+     * @return number of protobuf files also deleted as a result of this table deletion
      */
-    public void deleteTable(String namespace, String tableName) {
-        Table<Message, Message, Message> table = getTable(namespace, tableName);
-        table.clearAll();
+    public int deleteTable(String namespace, String tableName) {
+        String fullName = getFullyQualifiedTableName(namespace, tableName);
+        if (TransactionalContext.isInTransaction()) {
+            throw new IllegalStateException("Cannot run deleteTable "+fullName+"from within another transaction");
+        }
+        if (tableMap.containsKey(fullName)) {
+            final Table<Message, Message, Message> messageTable = tableMap.get(fullName);
+            messageTable.resetTableData(runtime, this.protobufSerializer);
+            tableMap.remove(fullName);
+        }
+        TableName tableNameProt = TableName.newBuilder().setNamespace(namespace).setTableName(tableName).build();
+        runtime.getObjectsView().TXBegin();
+        CorfuRecord<TableDescriptors, TableMetadata> tableEntry = registryTable.get(tableNameProt);
+        if (tableEntry == null) {
+            runtime.getObjectsView().TXEnd();
+            throw new NoSuchElementException("deleteTable can't find "+fullName);
+        }
+        registryTable.delete(tableNameProt);
+        Set<String> protoFilesToDelete = new HashSet<>(tableEntry.getPayload().getFileDescriptorsMap().keySet());
+        // Do a full registry table scan and prune out any protobuf files also required by some other table(s).
+        for (Map.Entry<TableName, CorfuRecord<TableDescriptors, TableMetadata>> entry: registryTable.entrySet()) {
+            protoFilesToDelete.removeIf(protFileToDel ->
+                    entry.getValue().getPayload().containsFileDescriptors(protFileToDel));
+            if (protoFilesToDelete.isEmpty()) {
+                break;
+            }
+        }
+        log.warn("deleteTable: {}. Proto files erased {}", fullName, protoFilesToDelete);
+        // Safe to wipe out these protobuf files from registry since they are not opened by anyone else.
+        protoFilesToDelete.forEach(fileName ->
+                protobufDescriptorTable.delete(ProtobufFileName.newBuilder().setFileName(fileName).build()));
+        runtime.getObjectsView().TXEnd();
+        return protoFilesToDelete.size();
     }
 
     /**
