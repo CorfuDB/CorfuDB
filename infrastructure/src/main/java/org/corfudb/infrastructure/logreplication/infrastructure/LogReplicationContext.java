@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.Getter;
+import lombok.Setter;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 
 /**
@@ -16,6 +17,7 @@ public class LogReplicationContext {
     private LogReplicationConfig config;
 
     @Getter
+    @Setter
     private TopologyDescriptor topology;
 
     @Getter

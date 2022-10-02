@@ -7,13 +7,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Observable;
 import java.util.Observer;
 import java.util.Queue;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
@@ -22,8 +23,8 @@ import com.google.protobuf.ByteString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.common.util.ObservableValue;
-import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.EmptyDataSender;
 import org.corfudb.infrastructure.logreplication.replication.fsm.EmptySnapshotReader;
@@ -467,6 +468,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private void initLogReplicationFSM(ReaderImplementation readerImpl) {
 
         LogEntryReader logEntryReader = new TestLogEntryReader();
+        ReplicationSession replicationSession = ReplicationSession.getDefaultReplicationSessionForCluster(
+            TEST_LOCAL_CLUSTER_ID);
 
         switch(readerImpl) {
             case EMPTY:
@@ -490,9 +493,11 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 break;
             case STREAMS:
                 // Default implementation used for Log Replication (stream-based)
-                LogReplicationConfig logReplicationConfig = new LogReplicationConfig(Collections.singleton(TEST_STREAM_NAME));
+                Map<ReplicationSubscriber, Set<String>> tablesMap = new HashMap<>();
+                tablesMap.put(replicationSession.getSubscriber(), Collections.singleton(TEST_STREAM_NAME));
+                LogReplicationConfig logReplicationConfig = new LogReplicationConfig(tablesMap);
                 snapshotReader = new StreamsSnapshotReader(getNewRuntime(getDefaultNode()).connect(),
-                        logReplicationConfig);
+                    logReplicationConfig, replicationSession);
                 dataSender = new TestDataSender();
                 break;
             default:
@@ -501,14 +506,15 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, TEST_TOPOLOGY_CONFIG_ID,
                 TEST_LOCAL_CLUSTER_ID);
-        LogReplicationConfig config = new LogReplicationConfig(new HashSet<>(Arrays.asList(TEST_STREAM_NAME)));
+        Map<ReplicationSubscriber, Set<String>> tablesMap = new HashMap<>();
+        tablesMap.put(replicationSession.getSubscriber(), Collections.singleton(TEST_STREAM_NAME));
+        LogReplicationConfig config = new LogReplicationConfig(tablesMap);
         LogReplicationConfigManager tableManagerPlugin = new LogReplicationConfigManager(runtime);
-        ackReader = new LogReplicationAckReader(metadataManager, config, runtime, TEST_LOCAL_CLUSTER_ID);
+        ackReader = new LogReplicationAckReader(metadataManager, config, runtime, replicationSession);
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
-                new DefaultReadProcessor(runtime), config, new ClusterDescriptor("Cluster-Local",
-                LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT),
+                new DefaultReadProcessor(runtime), config,
                 Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()),
-                ackReader, tableManagerPlugin);
+                ackReader, tableManagerPlugin, replicationSession);
         ackReader.setLogEntryReader(fsm.getLogEntryReader());
         transitionObservable = fsm.getNumTransitions();
         transitionObservable.addObserver(this);

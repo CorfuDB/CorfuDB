@@ -9,6 +9,7 @@ import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.util.Memory;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.send.IllegalSnapshotEntrySizeException;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -73,11 +74,12 @@ public class StreamsSnapshotReader implements SnapshotReader {
     /**
      * Init runtime and streams to read
      */
-    public StreamsSnapshotReader(CorfuRuntime runtime, LogReplicationConfig config) {
+    public StreamsSnapshotReader(CorfuRuntime runtime, LogReplicationConfig config,
+                                 ReplicationSession replicationSession) {
         this.rt = runtime;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
-        this.streams = config.getStreamsToReplicate();
+        this.streams = config.getReplicationSubscriberToStreamsMap().get(replicationSession.getSubscriber());
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
     }
 

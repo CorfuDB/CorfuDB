@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TableOptions;
@@ -17,8 +19,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public abstract class DefaultAdapterForUpgrade implements ILogReplicationConfigAdapter {
-    public static final String STREAMS_TEST_TABLE =
-            "StreamsToReplicateTestTable";
+    public static final String STREAMS_TEST_TABLE = "StreamsToReplicateTestTable";
     public static final String VERSION_TEST_TABLE = "VersionTestTable";
 
     public static final int MAP_COUNT = 5;
@@ -26,39 +27,36 @@ public abstract class DefaultAdapterForUpgrade implements ILogReplicationConfigA
     public static final String TABLE_PREFIX = "Table00";
     public static final String NAMESPACE = "LR-Test";
     public static final String TAG_ONE = "tag_one";
+    public static final String SAMPLE_CLIENT = "SampleClient";
 
     final int indexOne = 1;
     final int indexTwo = 2;
-    final Set<String> streamsToReplicate = new HashSet<>();
+    final Map<ReplicationSubscriber, Set<String>> streamsToReplicateMap = new HashMap<>();
     String versionString = "version_latest";
     CorfuStore corfuStore;
 
-
-    // Provides the fully qualified names of streams to replicate
-    @Override
-    @SuppressWarnings("checkstyle:printLine")
-    public Set<String> fetchStreamsToReplicate() {
+    protected void init() {
+        Set<String> streams = new HashSet<>();
         if (corfuStore != null) {
             try {
-                corfuStore.openTable(NAMESPACE, STREAMS_TEST_TABLE,
-                        LogReplicationStreams.TableInfo.class,
-                        LogReplicationStreams.Namespace.class, CommonTypes.Uuid.class,
-                        TableOptions.builder().build());
+                corfuStore.openTable(NAMESPACE, STREAMS_TEST_TABLE, LogReplicationStreams.TableInfo.class,
+                    LogReplicationStreams.Namespace.class, CommonTypes.Uuid.class, TableOptions.builder().build());
             } catch (Exception e) {
                 // Just for wrap this up
             }
 
             try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
                 Set<LogReplicationStreams.TableInfo> tables = txn.keySet(STREAMS_TEST_TABLE);
-                tables.forEach(table -> streamsToReplicate.add(table.getName()));
+                tables.forEach(table -> streams.add(table.getName()));
                 txn.commit();
             }
         } else {
             for (int i = 1; i <= MAP_COUNT; i++) {
-                streamsToReplicate.add(NAMESPACE + SEPARATOR + TABLE_PREFIX + i);
+                streams.add(NAMESPACE + SEPARATOR + TABLE_PREFIX + i);
             }
         }
-        return streamsToReplicate;
+        streamsToReplicateMap.put(new ReplicationSubscriber(
+            LogReplicationConfig.ReplicationModel.SINGLE_SOURCE_SINK, SAMPLE_CLIENT), streams);
     }
 
     @Override
@@ -97,5 +95,10 @@ public abstract class DefaultAdapterForUpgrade implements ILogReplicationConfigA
         streamsToTagsMaps.put(CorfuRuntime.getStreamID(NAMESPACE + SEPARATOR + TABLE_PREFIX + indexTwo),
                 Collections.singletonList(streamTagOneDefaultId));
         return streamsToTagsMaps;
+    }
+
+    @Override
+    public Map<ReplicationSubscriber, Set<String>> getSubscriberToStreamsMap() {
+        return streamsToReplicateMap;
     }
 }

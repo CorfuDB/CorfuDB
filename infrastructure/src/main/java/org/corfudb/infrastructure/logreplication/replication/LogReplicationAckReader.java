@@ -4,6 +4,8 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
@@ -36,6 +38,7 @@ public class LogReplicationAckReader {
     private final LogReplicationConfig config;
     private final CorfuRuntime runtime;
     private final String remoteClusterId;
+    private final ReplicationSubscriber replicationSubscriber;
 
     // Log tail when the current snapshot sync started.  We do not need to synchronize access to it because it will not
     // be read(calculateRemainingEntriesToSend) and written(setBaseSnapshot) concurrently.
@@ -62,11 +65,12 @@ public class LogReplicationAckReader {
     private final Lock lock = new ReentrantLock();
 
     public LogReplicationAckReader(LogReplicationMetadataManager metadataManager, LogReplicationConfig config,
-                                    CorfuRuntime runtime, String remoteClusterId) {
+                                   CorfuRuntime runtime, ReplicationSession replicationSession) {
         this.metadataManager = metadataManager;
         this.config = config;
         this.runtime = runtime;
-        this.remoteClusterId = remoteClusterId;
+        this.remoteClusterId = replicationSession.getRemoteClusterId();
+        this.replicationSubscriber = replicationSession.getSubscriber();
     }
 
     public void setAckedTsAndSyncType(long ackedTs, SyncType syncType) {
@@ -171,7 +175,7 @@ public class LogReplicationAckReader {
      */
     private long getMaxReplicatedStreamsTail(Map<UUID, Long> tailMap) {
         long maxTail = Address.NON_ADDRESS;
-        for (String streamName : config.getStreamsToReplicate()) {
+        for (String streamName : config.getReplicationSubscriberToStreamsMap().get(replicationSubscriber)) {
             UUID streamUuid = CorfuRuntime.getStreamID(streamName);
             if (tailMap.containsKey(streamUuid)) {
                 long streamTail = tailMap.get(streamUuid);
@@ -445,7 +449,8 @@ public class LogReplicationAckReader {
     public void startSyncStatusUpdatePeriodicTask() {
         log.info("Start sync status update periodic task");
         lastAckedTsPoller = Executors.newSingleThreadScheduledExecutor(
-                new ThreadFactoryBuilder().setNameFormat("ack-timestamp-reader").build());
+            new ThreadFactoryBuilder().setNameFormat(
+                "ack-timestamp-reader-"+remoteClusterId).build());
         lastAckedTsPoller.scheduleWithFixedDelay(new TsPollingTask(), 0, ACKED_TS_READ_INTERVAL_SECONDS,
                 TimeUnit.SECONDS);
     }

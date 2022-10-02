@@ -5,6 +5,7 @@ import io.netty.buffer.Unpooled;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType;
 import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
@@ -83,7 +84,9 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
     @Getter
     private Phase phase;
 
-    public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager) {
+    public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationConfig config,
+                                 LogReplicationMetadataManager logReplicationMetadataManager,
+                                 ReplicationSession replicationSession) {
         super(rt);
         this.logReplicationMetadataManager = logReplicationMetadataManager;
         this.streamViewMap = new HashMap<>();
@@ -92,7 +95,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         this.snapshotSyncStartMarker = Optional.empty();
         this.dataStreamToTagsMap = config.getDataStreamToTagsMap();
 
-        initializeShadowStreams(config);
+        initializeShadowStreams(config, replicationSession);
 
         // Serialize the clear entry once to access its constant size on each
         // subsequent use
@@ -112,10 +115,10 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
      * In the future, we will support Table Aliasing which will enable atomic flip from shadow to regular streams, avoiding
      * complete inconsistency.
      */
-    private void initializeShadowStreams(LogReplicationConfig config) {
+    private void initializeShadowStreams(LogReplicationConfig config, ReplicationSession replicationSession) {
         // For every stream create a shadow stream which name is unique based
         // on the original stream and a suffix.
-        for (String streamName : config.getStreamsToReplicate()) {
+        for (String streamName : config.getReplicationSubscriberToStreamsMap().get(replicationSession.getSubscriber())) {
             String shadowStreamName = streamName + SHADOW_STREAM_SUFFIX;
             UUID streamId = CorfuRuntime.getStreamID(streamName);
             UUID shadowStreamId = CorfuRuntime.getStreamID(shadowStreamName);

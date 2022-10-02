@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -10,15 +11,10 @@ import java.util.UUID;
  * provider of Log Replication Configuration.
  *
  * Log Replication Configuration encompasses:
- * (1) Streams to replicate
+ * (1) Map of ReplicationSubscriber to Streams to replicate
  * (2) System's version
  */
 public interface ILogReplicationConfigAdapter {
-
-    /**
-     * Returns a set of fully qualified stream names to replicate
-     */
-    Set<String> fetchStreamsToReplicate();
 
     String getVersion();
 
@@ -30,4 +26,6 @@ public interface ILogReplicationConfigAdapter {
      * to the replicated data, therefore, this data must be provided by the plugin externally.
      */
     Map<UUID, List<UUID>> getStreamingConfigOnSink();
+
+    Map<ReplicationSubscriber, Set<String>> getSubscriberToStreamsMap();
 }
