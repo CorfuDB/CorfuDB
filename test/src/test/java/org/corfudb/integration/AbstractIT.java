@@ -26,6 +26,7 @@ import java.lang.reflect.Field;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
@@ -466,9 +467,10 @@ public class AbstractIT extends AbstractCorfuTest {
         public StreamGobbler(InputStream inputStream, String logfile) throws IOException {
             this.inputStream = inputStream;
             this.logfile = logfile;
-            if (Files.notExists(Paths.get(logfile))) {
-                Files.createFile(Paths.get(logfile));
-            }
+            Path path = Paths.get(logfile);
+//            if (Files.notExists(path)) {
+                Files.createFile(path);
+//            }
         }
 
         @Override
