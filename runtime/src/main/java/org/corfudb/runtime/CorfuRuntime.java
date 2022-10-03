@@ -57,6 +57,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
@@ -1247,6 +1249,8 @@ public class CorfuRuntime {
         }, runtimeExecutor);
     }
 
+    volatile long blackhole;
+
     /**
      * Connect to the Corfu server instance.
      * When this function returns, the Corfu server is ready to be accessed.
@@ -1254,6 +1258,35 @@ public class CorfuRuntime {
     public synchronized CorfuRuntime connect() {
 
         log.info("connect: runtime parameters {}", getParameters());
+
+        Thread burn = new Thread(() -> {
+
+            long totalSum =0;
+            long lastDur = 0;
+            for(;;) {
+                try {
+                    long sleepTime = ThreadLocalRandom.current().nextInt(5, 20);
+                    Sleep.sleepUninterruptibly(Duration.ofSeconds(sleepTime));
+                    int runIter = 500_000_000 * 3;
+                    long start = System.nanoTime();
+                    for (int idx = 0; idx < runIter; idx++) {
+                        totalSum += ThreadLocalRandom.current().nextInt(0, 100);
+                    }
+                    long end = System.nanoTime();
+                    long diff = end - start;
+
+                    log.info("burn: took {} diff {}", TimeUnit.NANOSECONDS.toMillis(diff), TimeUnit.NANOSECONDS.toMillis(diff - lastDur));
+                    lastDur = diff;
+                    blackhole = totalSum;
+                } catch (Exception e) {
+                    log.error("Error during burn", e);
+                }
+            }
+        });
+
+        burn.setDaemon(true);
+        burn.setName("burn");
+        burn.start();
 
         if (layout == null) {
             log.info("Connecting to Corfu server instance, layout servers={}", bootstrapLayoutServers);
