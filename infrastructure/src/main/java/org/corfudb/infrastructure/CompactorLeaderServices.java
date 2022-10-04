@@ -210,7 +210,7 @@ public class CompactorLeaderServices {
      * Finish compaction cycle by the leader
      */
     public void finishCompactionCycle() {
-        StatusType finalStatus = null;
+        StatusType finalStatus = StatusType.UNRECOGNIZED;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
                     CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
@@ -247,16 +247,17 @@ public class CompactorLeaderServices {
                     "nodeEndpoint", nodeEndpoint);
         } catch (RuntimeException re) {
             //Do not retry here, the compactor service will trigger this method again
+            // The txn should succeed otherwise the status is FAILED
+            finalStatus = StatusType.FAILED;
             syslog.warn("Exception in finishCompactionCycle: {}. StackTrace={}", re, re.getStackTrace());
         }
         finally {
             Issue compactionCycleIssue =
                     Issue.createIssue(COMPACTOR, COMPACTION_CYCLE_FAILED, "Last compaction cycle failed");
-
-            if (finalStatus == StatusType.FAILED) {
-                HealthMonitor.reportIssue(compactionCycleIssue);
-            } else {
+            if (finalStatus == StatusType.COMPLETED) {
                 HealthMonitor.resolveIssue(compactionCycleIssue);
+            } else {
+                HealthMonitor.reportIssue(compactionCycleIssue);
             }
             deleteInstantKeyIfPresent();
         }
