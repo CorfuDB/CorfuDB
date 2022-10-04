@@ -33,8 +33,8 @@ public class HealthStatus {
 
     /**
      * Add init health issue -- health monitor now expects the component to be initialized.
-     * If component has been not been previously initialized (UNKNOWN) or initialized (INITIALIZED),
-     * adding init issue will move it to INITIALIZED, all runtime issues are cleared.
+     * If the component has not been previously initialized (UNKNOWN) or initialized (INITIALIZED),
+     * adding init issue will move it to NOT_INITIALIZED, all runtime issues are cleared.
      * @param issue An init issue
      */
     public void addInitHealthIssue(Issue issue) {

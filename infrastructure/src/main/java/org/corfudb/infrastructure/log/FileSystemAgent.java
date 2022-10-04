@@ -50,8 +50,8 @@ public final class FileSystemAgent {
 
     private final PartitionAttribute partitionAttribute;
 
-    private static final ScheduledExecutorService scheduler =
-            Executors.newSingleThreadScheduledExecutor();
+    @Getter
+    private final ScheduledExecutorService scheduler;
 
     private FileSystemAgent(FileSystemConfig config) {
         this.config = config;
@@ -72,6 +72,7 @@ public final class FileSystemAgent {
 
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
         logSizeQuota.consume(initialLogSize);
+        scheduler = Executors.newSingleThreadScheduledExecutor();
         scheduler.scheduleWithFixedDelay(
                 this::reportQuotaExceeded, INIT_DELAY, DELAY_NUM, DELAY_UNITS);
         log.info("FileSystemAgent: {} size is {} bytes, limit {}", config.logDir, initialLogSize, logSizeLimit);
@@ -105,6 +106,7 @@ public final class FileSystemAgent {
 
     public static void shutdown() {
         PartitionAgent.shutdown();
+        instance.ifPresent(i -> i.getScheduler().shutdown());
     }
 
     public static ResourceQuota getResourceQuota() {

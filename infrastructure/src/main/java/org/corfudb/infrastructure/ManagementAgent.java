@@ -67,7 +67,7 @@ public class ManagementAgent {
     /**
      * Compactor flag
      */
-    private static final String COMPACTOR_FLAG = "--compactor-script";
+    private static final String COMPACTOR_SCRIPT_PATH_KEY = "--compactor-script";
 
     /**
      * To dispatch initialization tasks for recovery and sequencer bootstrap.
@@ -148,7 +148,7 @@ public class ManagementAgent {
 
         this.autoCommitService = new AutoCommitService(serverContext, runtimeSingletonResource);
 
-        final String compactorScript = COMPACTOR_FLAG;
+        final String compactorScript = COMPACTOR_SCRIPT_PATH_KEY;
         if (serverContext.getServerConfig(String.class, compactorScript) != null) {
             HealthMonitor.reportIssue(Issue.createInitIssue(Component.COMPACTOR));
         }
@@ -235,7 +235,7 @@ public class ManagementAgent {
             } else {
                 log.info("Auto commit service disabled.");
             }
-            if (serverContext.getServerConfig(String.class, COMPACTOR_FLAG) != null) {
+            if (serverContext.getServerConfig(String.class, COMPACTOR_SCRIPT_PATH_KEY) != null) {
                 compactorService.start(TRIGGER_INTERVAL);
             } else {
                 log.info("Compaction Service disabled");

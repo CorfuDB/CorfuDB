@@ -210,6 +210,7 @@ public class CompactorLeaderServices {
      * Finish compaction cycle by the leader
      */
     public void finishCompactionCycle() {
+        StatusType finalStatus = null;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
                     CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
@@ -223,7 +224,7 @@ public class CompactorLeaderServices {
             }
 
             List<TableName> tableNames = new ArrayList<>(txn.keySet(compactorMetadataTables.getCheckpointingStatusTable()));
-            StatusType finalStatus = StatusType.COMPLETED;
+            finalStatus = StatusType.COMPLETED;
             for (TableName table : tableNames) {
                 CheckpointingStatus tableStatus = (CheckpointingStatus) txn.getRecord(
                         CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, table).getPayload();
@@ -244,6 +245,11 @@ public class CompactorLeaderServices {
                     tableNames.size(), finalStatus);
             MicroMeterUtils.time(Duration.ofMillis(totalTimeElapsed), "compaction.total.timer",
                     "nodeEndpoint", nodeEndpoint);
+        } catch (RuntimeException re) {
+            //Do not retry here, the compactor service will trigger this method again
+            syslog.warn("Exception in finishCompactionCycle: {}. StackTrace={}", re, re.getStackTrace());
+        }
+        finally {
             Issue compactionCycleIssue =
                     Issue.createIssue(COMPACTOR, COMPACTION_CYCLE_FAILED, "Last compaction cycle failed");
 
@@ -252,11 +258,8 @@ public class CompactorLeaderServices {
             } else {
                 HealthMonitor.resolveIssue(compactionCycleIssue);
             }
-        } catch (RuntimeException re) {
-            //Do not retry here, the compactor service will trigger this method again
-            syslog.warn("Exception in finishCompactionCycle: {}. StackTrace={}", re, re.getStackTrace());
+            deleteInstantKeyIfPresent();
         }
-        deleteInstantKeyIfPresent();
     }
 
     private void deleteInstantKeyIfPresent() {
