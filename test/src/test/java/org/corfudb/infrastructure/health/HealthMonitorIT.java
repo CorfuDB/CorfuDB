@@ -147,29 +147,12 @@ public class HealthMonitorIT extends AbstractIT {
     @SuppressWarnings("checkstyle:magicnumber")
     void testInitComponentsHealth() throws IOException, InterruptedException {
         Process corfuServer = runCorfuServerWithHealthMonitor(CORFU_PORT_1, HEALTH_PORT_1);
-        HealthReport expectedHealthReport = builder()
-                .status(DOWN)
-                .reason(OVERALL_STATUS_DOWN)
-                .init(ImmutableSet.of(
-                        new ComponentReportedHealthStatus(LOG_UNIT, DOWN, COMPONENT_NOT_INITIALIZED),
-                        new ComponentReportedHealthStatus(LAYOUT_SERVER, DOWN, COMPONENT_NOT_INITIALIZED),
-                        new ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_INITIALIZED),
-                        new ComponentReportedHealthStatus(FAILURE_DETECTOR, DOWN, COMPONENT_NOT_INITIALIZED),
-                        new ComponentReportedHealthStatus(SEQUENCER, DOWN, COMPONENT_NOT_INITIALIZED)))
-                .runtime(ImmutableSet.of(
-                        new ComponentReportedHealthStatus(LOG_UNIT, DOWN, COMPONENT_IS_NOT_RUNNING),
-                        new ComponentReportedHealthStatus(LAYOUT_SERVER, DOWN, COMPONENT_IS_NOT_RUNNING),
-                        new ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_IS_RUNNING),
-                        new ComponentReportedHealthStatus(FAILURE_DETECTOR, DOWN, COMPONENT_IS_NOT_RUNNING),
-                        new ComponentReportedHealthStatus(SEQUENCER, DOWN, COMPONENT_IS_NOT_RUNNING)))
-                .build();
         // Give it some time to start
         Thread.sleep(WAIT_TIME_MILLIS * 5);
-        assertThat(queryCurrentHealthReport(HEALTH_PORT_1)).isEqualTo(expectedHealthReport);
 
         // Bootstrap corfu - services become healthy
         BootstrapUtil.bootstrap(getLayout(CORFU_PORT_1), RETRIES, PARAMETERS.TIMEOUT_SHORT);
-        expectedHealthReport = builder()
+        HealthReport expectedHealthReport = builder()
                 .status(UP)
                 .reason(OVERALL_STATUS_UP)
                 .init(ImmutableSet.of(
