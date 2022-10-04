@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.concurrent.ConcurrentMap;
 
 import org.corfudb.browser.CorfuOfflineBrowserEditor;
 import org.corfudb.browser.CorfuStoreBrowserEditor;
@@ -1084,7 +1085,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runtime = createRuntime(singleNodeEndpoint);
         runtime.shutdown();
 
-        CorfuOfflineBrowserEditor browser = new CorfuOfflineBrowserEditor(logPath + "corfu/");
+        CorfuOfflineBrowserEditor browser = new CorfuOfflineBrowserEditor(logPath);
 
         // New key, value, metadata to add
         final String namespace = "namespace";
@@ -1097,5 +1098,77 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         CorfuDynamicRecord addedRecord = browser.addRecord(namespace,
                 tableName, newKeyString, newValString, newMetadataString);
         Assert.assertNull(addedRecord);
+    }
+
+    /**
+     * Create a table and add data to it.  Verify that the browser tool is able
+     * to read its contents accurately.
+     * @throws IOException
+     * @throws NoSuchMethodException
+     * @throws IllegalAccessException
+     * @throws InvocationTargetException
+     */
+    @Test
+    public void offlineBrowserTest() throws
+            IOException,
+            NoSuchMethodException,
+            IllegalAccessException,
+            InvocationTargetException {
+        final String namespace = "namespace";
+        final String tableName = "table";
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost,
+                corfuStringNodePort);
+
+        // Start a Corfu runtime
+        runtime = createRuntime(singleNodeEndpoint);
+
+        CorfuStore store = new CorfuStore(runtime);
+
+        final Table<SampleSchema.Uuid, SampleSchema.Uuid, SampleSchema.Uuid> table1 = store.openTable(
+                namespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
+
+        final long keyUuid = 1L;
+        final long valueUuid = 3L;
+        final long metadataUuid = 5L;
+
+        SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder()
+                .setMsb(keyUuid)
+                .setLsb(keyUuid)
+                .build();
+        SampleSchema.Uuid uuidVal = SampleSchema.Uuid.newBuilder()
+                .setMsb(valueUuid)
+                .setLsb(valueUuid)
+                .build();
+        SampleSchema.Uuid metadata = SampleSchema.Uuid.newBuilder()
+                .setMsb(metadataUuid)
+                .setLsb(metadataUuid)
+                .build();
+        TxnContext tx = store.txn(namespace);
+        tx.putRecord(table1, uuidKey, uuidVal, metadata);
+        tx.commit();
+        runtime.shutdown();
+
+        final int one = 1;
+        CorfuOfflineBrowserEditor browser = new CorfuOfflineBrowserEditor(logPath);
+
+        // Invoke listTables and verify table count
+        Assert.assertEquals(browser.listTables(namespace), one);
+
+        // Invoke the browser and go through each item
+        ConcurrentMap<CorfuDynamicKey, CorfuDynamicRecord> table = browser.getTableData(namespace, tableName);
+        Assert.assertEquals(browser.printTable(namespace, tableName), one);
+        for(CorfuDynamicRecord obj : table.values()) {
+            Assert.assertEquals(
+                    UnknownFieldSet.newBuilder().build(),
+                    obj.getPayload().getUnknownFields());
+        }
+
+        // Invoke tableInfo and verify size
+        Assert.assertEquals(browser.printTableInfo(namespace, tableName), one);
     }
 }

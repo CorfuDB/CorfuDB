@@ -43,21 +43,23 @@ import static org.corfudb.infrastructure.log.StreamLogFiles.*;
 @SuppressWarnings("checkstyle:printLine")
 public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
     private final Path logDir;
-    // make dynamic protobuf serializer final later
     private DynamicProtobufSerializer dynamicProtobufSerializer;
-    private final String QUOTE = "\"";
-    // concurrent hashmaps registry table and protobufDescriptor tables for materialization
+
+    /**
+     * Creates a CorfuOfflineBrowser linked to an existing log directory.
+     * @param offlineDbDir Path to the database directory.
+     */
     public CorfuOfflineBrowserEditor(String offlineDbDir) {
-        logDir = Paths.get(offlineDbDir + "/corfu/log/");
+        // TODO: recursive log search and exception handling
+        String logPath = "/corfu/log/";
+        logDir = Paths.get(offlineDbDir + logPath);
         buildRegistryProtoDescriptors();
     }
 
     /**
      * Opens all log files one by one, accesses and prints log entry data for each Corfu log file.
      */
-    //@param String namespace, String tableName
     public void buildRegistryProtoDescriptors() {
-        // Add the following lines when the printLogEntryData() method begins...
         CorfuRuntime runtimeWithOnlyProtoSerializer = CorfuRuntime
                 .fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build());
         runtimeWithOnlyProtoSerializer.getSerializers()
@@ -69,7 +71,6 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         File dir = logDir.toFile();
         Collection<File> files = FileUtils.listFiles(dir, extension, true);
 
-        // get the UUIDs of the streams of interest
         String registryTableName = TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME);
         UUID registryTableStreamId = CorfuRuntime.getStreamID(registryTableName);
         UUID registryTableCheckpointStream = CorfuRuntime.getCheckpointStreamIdFromId(registryTableStreamId);
@@ -78,32 +79,26 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         UUID protobufDescriptorStreamId = CorfuRuntime.getStreamID(protobufDescriptorTableName);
         UUID protobufDescriptorCheckpointStream = CorfuRuntime.getCheckpointStreamIdFromId(protobufDescriptorStreamId);
 
-        // temporary lists that store LogEntries in causal order before they are put into the ConcurrentMap
-        List<LogEntryOrdering> registryTableEntries = new ArrayList<>();
-        List<LogEntryOrdering> protobufDescriptorTableEntries = new ArrayList<>();
+        List<LogEntryOrdering> tempRegistryTableEntries = new ArrayList<>();
+        List<LogEntryOrdering> tempProtobufDescriptorTableEntries = new ArrayList<>();
 
-        // temporary cached maps
-        ConcurrentMap cachedRegistryTable = new ConcurrentHashMap();
-        ConcurrentMap cachedProtobufDescriptorTable = new ConcurrentHashMap();
+        ConcurrentMap cachedRegistryTable = new ConcurrentHashMap<>();
+        ConcurrentMap cachedProtobufDescriptorTable = new ConcurrentHashMap<>();
 
         for (File file : files) {
             try (FileChannel fileChannel = FileChannel.open(file.toPath())) {
                 fileChannel.position(0);
                 LogFormat.LogHeader header = parseHeader(null, fileChannel, file.getAbsolutePath());
 
-                // iterate through the file
-                // make sure that fileChannel.size() - fileChannel.position() > 14 to prevent
-                // actualMetaDataSize < METADATA_SIZE, which would create an exception
-                while (fileChannel.size() - fileChannel.position() > 14) {
-
+                while (fileChannel.position() < fileChannel.size() - 14) {
                     LogFormat.Metadata metadata = StreamLogFiles.parseMetadata(null, fileChannel, file.getAbsolutePath());
-                    if (metadata == null) continue;
                     LogEntry entry = StreamLogFiles.parseEntry(null, fileChannel, metadata, file.getAbsolutePath());
-                    if (entry == null) continue;
 
-                    LogData data = StreamLogFiles.getLogData(entry);
-                    processLogData(data, registryTableStreamId, registryTableCheckpointStream, runtimeWithOnlyProtoSerializer, cachedRegistryTable, registryTableEntries);
-                    processLogData(data, protobufDescriptorStreamId, protobufDescriptorCheckpointStream, runtimeWithOnlyProtoSerializer, cachedProtobufDescriptorTable, protobufDescriptorTableEntries);
+                    if (metadata != null && entry != null) {
+                        LogData data = StreamLogFiles.getLogData(entry);
+                        processLogData(data, registryTableStreamId, registryTableCheckpointStream, runtimeWithOnlyProtoSerializer, cachedRegistryTable, tempRegistryTableEntries);
+                        processLogData(data, protobufDescriptorStreamId, protobufDescriptorCheckpointStream, runtimeWithOnlyProtoSerializer, cachedProtobufDescriptorTable, tempProtobufDescriptorTableEntries);
+                    }
                 }
                 System.out.println("Finished processing file: " + file.getAbsolutePath());
 
@@ -126,12 +121,9 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                                List<LogEntryOrdering> tableEntries) {
 
         if (data.containsStream(tableStreamID) || data.containsStream(tableCheckPointStream)) {
-
             if(data.getType() == DataType.DATA) {
-
-                // Decompress and Deserialize data
                 Object modifiedData = data.getPayload(runtimeWithOnlyProtoSerializer);
-                List<SMREntry> smrUpdates = null;
+                List<SMREntry> smrUpdates = new ArrayList<>();
                 long snapshotAddress = 0;
                 if (modifiedData instanceof CheckpointEntry) {
                     snapshotAddress = Long.decode(((CheckpointEntry)modifiedData).getDict().get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS));
@@ -141,18 +133,11 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                     smrUpdates = ((MultiObjectSMREntry) modifiedData).getSMRUpdates(tableStreamID);
                 }
 
-                for (int i = 0; i < smrUpdates.size(); i++) {
-                    LogEntryOrdering entry;
-                    if (modifiedData instanceof CheckpointEntry) {
-                        entry = new LogEntryOrdering(smrUpdates.get(i), snapshotAddress);
-                    } else {
-                        entry = new LogEntryOrdering(smrUpdates.get(i), smrUpdates.get(i).getGlobalAddress());
-                    }
+                for (SMREntry smrUpdate : smrUpdates) {
+                    LogEntryOrdering entry = (modifiedData instanceof CheckpointEntry) ? new LogEntryOrdering(smrUpdate, snapshotAddress) : new LogEntryOrdering(smrUpdate, smrUpdate.getGlobalAddress());
                     tableEntries.add(entry);
-                    if (entry.getOrdering() < tableEntries.get(tableEntries.size() - 1).getOrdering()) {
-                        Collections.sort(tableEntries, new LogEntryComparator());
-                    }
                 }
+                tableEntries.sort(new LogEntryComparator());
 
                 int tableSize = tableEntries.size();
                 for (int i = 0; i < tableSize; ++i) {
@@ -172,12 +157,16 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         Object smrUpdateCorfuRecord = smrUpdateArg[1];
 
         String smrMethod = ((SMREntry) tableEntry.getObj()).getSMRMethod();
-        if (smrMethod.equals("put")) {
-            cachedTable.put(smrUpdateTable, smrUpdateCorfuRecord);
-        } else if (smrMethod.equals("delete")) {
-            cachedTable.remove(smrUpdateTable, smrUpdateCorfuRecord);
-        } else if (smrMethod.equals("clear")) {
-            cachedTable.clear();
+        switch (smrMethod) {
+            case "put":
+                cachedTable.put(smrUpdateTable, smrUpdateCorfuRecord);
+                break;
+            case "delete":
+                cachedTable.remove(smrUpdateTable, smrUpdateCorfuRecord);
+                break;
+            case "clear":
+                cachedTable.clear();
+                break;
         }
     }
 
@@ -198,7 +187,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
     /**
      * Fetches the table from the given namespace
      * @param namespace Namespace of the table
-     * @param tableName Tablename
+     * @param tableName Name of the table
      * @return CorfuTable
      */
     @Override
@@ -206,8 +195,8 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         return null;
     }
 
-    public ConcurrentMap<CorfuDynamicKey, CorfuDynamicRecord> getTableData(String namespace, String tableName) {
-        String genericTableName = TableRegistry.getFullyQualifiedTableName(namespace, tableName);
+    public ConcurrentMap<CorfuDynamicKey, CorfuDynamicRecord> getTableData(String namespace, String tablename) {
+        String genericTableName = TableRegistry.getFullyQualifiedTableName(namespace, tablename);
         UUID genericTableStreamId = CorfuRuntime.getStreamID(genericTableName);
         UUID genericTableCheckpointStream = CorfuRuntime.getCheckpointStreamIdFromId(genericTableStreamId);
 
@@ -227,21 +216,16 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                 fileChannel.position(0);
                 LogFormat.LogHeader header = parseHeader(null, fileChannel, file.getAbsolutePath());
 
-                // iterate through the file
-                // make sure that fileChannel.size() - fileChannel.position() > 14 to prevent
-                // actualMetaDataSize < METADATA_SIZE, which would create an exception
-                while (fileChannel.size() - fileChannel.position() > 14) {
+                while (fileChannel.position() < fileChannel.size() - 14) {
 
                     LogFormat.Metadata metadata = StreamLogFiles.parseMetadata(null, fileChannel, file.getAbsolutePath());
-                    if (metadata == null) continue;
                     LogEntry entry = StreamLogFiles.parseEntry(null, fileChannel, metadata, file.getAbsolutePath());
-                    if (entry == null) continue;
 
-                    // convert the LogEntry to LogData to access getPayload
-                    LogData data = StreamLogFiles.getLogData(entry);
-                    processLogData(data, genericTableStreamId, genericTableCheckpointStream, runtimeWithOnlyProtoSerializer, genericCachedTable, genericTableEntries);
+                    if (metadata != null && entry != null){
+                        LogData data = StreamLogFiles.getLogData(entry);
+                        processLogData(data, genericTableStreamId, genericTableCheckpointStream, runtimeWithOnlyProtoSerializer, genericCachedTable, genericTableEntries);
+                    }
                 }
-
                 System.out.println("Finished processing file: " + file.getAbsolutePath());
 
             } catch (IOException e) {
