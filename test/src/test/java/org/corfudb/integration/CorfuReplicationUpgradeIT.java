@@ -1,6 +1,8 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.LRRollingUpgradeHandler;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultAdapterForUpgradeActive;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
@@ -936,5 +938,47 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         Assert.assertEquals(expectedVersion, actualVersion);
         Assert.assertEquals(isUpgraded, actualUpgradedFlag);
         log.info("Verified version");
+    }
+
+    /**
+     * Code coverage test for the simple LRRollingUpgradeHandler to test if we are able to successfully
+     * 1. Simulate startRollingUpgrade()
+     * 2. verify that rolling upgrade is detected
+     * 3. simulate endRollingUpgrade()
+     * 4. verify that data migration and rolling upgrade end is detected
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testLocalClusterRollingUpgrade() throws Exception {
+        log.info(">> Setup replication for testing during rolling upgrade of active cluster");
+        setupActiveAndStandbyCorfu();
+
+        DefaultAdapterForUpgradeActive defaultAdapterForUpgradeActive = new DefaultAdapterForUpgradeActive(activeRuntime);
+        defaultAdapterForUpgradeActive.startRollingUpgrade(corfuStoreActive);
+        LRRollingUpgradeHandler rollingUpgradeHandler = new LRRollingUpgradeHandler(defaultAdapterForUpgradeActive);
+
+        try (TxnContext txnContext = corfuStoreActive.txn(DefaultAdapterForUpgradeActive.NAMESPACE)) {
+            Assert.assertTrue(rollingUpgradeHandler.isLRUpgradeInProgress(txnContext));
+        }
+
+        defaultAdapterForUpgradeActive.endRollingUpgrade(corfuStoreActive);
+
+        try (TxnContext txnContext = corfuStoreActive.txn(DefaultAdapterForUpgradeActive.NAMESPACE)) {
+            Assert.assertFalse(rollingUpgradeHandler.isLRUpgradeInProgress(txnContext));
+        }
+
+        if (activeCorfu != null) {
+            activeCorfu.destroy();
+        }
+        if (standbyCorfu != null) {
+            standbyCorfu.destroy();
+        }
+        if (activeReplicationServer != null) {
+            activeReplicationServer.destroy();
+        }
+        if (standbyReplicationServer != null) {
+            standbyReplicationServer.destroy();
+        }
     }
 }

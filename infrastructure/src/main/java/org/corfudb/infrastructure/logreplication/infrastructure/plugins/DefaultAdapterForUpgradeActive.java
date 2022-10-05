@@ -9,11 +9,7 @@ import org.corfudb.runtime.collections.CorfuStore;
  */
 public class DefaultAdapterForUpgradeActive extends DefaultAdapterForUpgrade {
 
-    public DefaultAdapterForUpgradeActive() {
-        String ENDPOINT = "localhost:9000";
-        CorfuRuntime runtime =
-            CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
-                    .parseConfigurationString(ENDPOINT).connect();
-        this.corfuStore = new CorfuStore(runtime);
+    public DefaultAdapterForUpgradeActive(CorfuRuntime runtime) {
+        super(runtime);
     }
 }
