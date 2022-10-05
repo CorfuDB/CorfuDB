@@ -33,13 +33,9 @@ import static org.corfudb.infrastructure.health.Component.LOG_UNIT;
 import static org.corfudb.infrastructure.health.Component.ORCHESTRATOR;
 import static org.corfudb.infrastructure.health.Component.SEQUENCER;
 import static org.corfudb.infrastructure.health.HealthReport.COMPONENT_INITIALIZED;
-import static org.corfudb.infrastructure.health.HealthReport.COMPONENT_IS_NOT_RUNNING;
 import static org.corfudb.infrastructure.health.HealthReport.COMPONENT_IS_RUNNING;
-import static org.corfudb.infrastructure.health.HealthReport.COMPONENT_NOT_INITIALIZED;
-import static org.corfudb.infrastructure.health.HealthReport.ComponentStatus.DOWN;
 import static org.corfudb.infrastructure.health.HealthReport.ComponentStatus.FAILURE;
 import static org.corfudb.infrastructure.health.HealthReport.ComponentStatus.UP;
-import static org.corfudb.infrastructure.health.HealthReport.OVERALL_STATUS_DOWN;
 import static org.corfudb.infrastructure.health.HealthReport.OVERALL_STATUS_FAILURE;
 import static org.corfudb.infrastructure.health.HealthReport.OVERALL_STATUS_UP;
 import static org.corfudb.infrastructure.health.HealthReport.builder;
@@ -47,9 +43,9 @@ import static org.corfudb.infrastructure.health.HealthReport.builder;
 @Slf4j
 public class HealthMonitorIT extends AbstractIT {
 
-    private static final int CORFU_PORT_1 = 9000;
+    private static final int CORFU_PORT_1 = 9002;
     private static final int CORFU_PORT_2 = 9001;
-    private static final int HEALTH_PORT_1 = 8080;
+    private static final int HEALTH_PORT_1 = 8082;
     private static final int HEALTH_PORT_2 = 8081;
     private static final String ADDRESS = "localhost";
     private static final String COLUMN = ":";
