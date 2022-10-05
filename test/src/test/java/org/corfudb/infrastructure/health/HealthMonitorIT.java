@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.health;
 
 import com.google.common.collect.ImmutableSet;
-import com.google.gson.Gson;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.health.HealthReport.ComponentReportedHealthStatus;
 import org.corfudb.integration.AbstractIT;
@@ -95,8 +94,7 @@ public class HealthMonitorIT extends AbstractIT {
         for (int i = 0; i < RETRIES; i++) {
             try {
                 return queryCurrentHealthReportHelper(healthPort);
-            }
-            catch (Exception e) {
+            } catch (Exception e) {
                 Thread.sleep(WAIT_TIME_MILLIS * 3);
             }
         }
@@ -127,10 +125,8 @@ public class HealthMonitorIT extends AbstractIT {
         } else {
             throw new IllegalStateException("Unable to connect");
         }
-        Gson gson = new Gson();
 
-        final HealthReport healthReport = gson.fromJson(json, HealthReport.class);
-        return healthReport;
+        return HealthReport.fromJson(json);
     }
 
     private LogData getLogData(TokenResponse token, byte[] payload) {
@@ -183,15 +179,15 @@ public class HealthMonitorIT extends AbstractIT {
     void testQuotaExceededReport() throws IOException, InterruptedException {
         final Process process = runCorfuServerWithHealthMonitorAndExceededQuota(CORFU_PORT_2, HEALTH_PORT_2);
         BootstrapUtil.bootstrap(getLayout(CORFU_PORT_2), RETRIES, PARAMETERS.TIMEOUT_SHORT);
-        final CorfuRuntime defaultRuntime = createRuntime("localhost:" +  CORFU_PORT_2);
+        final String localhost = "localhost:";
+        final CorfuRuntime defaultRuntime = createRuntime(localhost + CORFU_PORT_2);
         while (true) {
             TokenResponse token = defaultRuntime.getSequencerView().next();
             try {
                 CFUtils.getUninterruptibly(defaultRuntime.getLayoutView().getRuntimeLayout()
-                        .getLogUnitClient("localhost:" +  CORFU_PORT_2)
+                        .getLogUnitClient(localhost + CORFU_PORT_2)
                         .write(getLogData(token, "some data".getBytes())), QuotaExceededException.class);
-            }
-            catch (QuotaExceededException qee) {
+            } catch (QuotaExceededException qee) {
                 break;
             }
 

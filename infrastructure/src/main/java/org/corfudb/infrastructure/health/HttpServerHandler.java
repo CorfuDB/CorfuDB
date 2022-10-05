@@ -47,8 +47,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
                             Unpooled.copiedBuffer("Health monitor is not initialized", CharsetUtil.UTF_8));
                     response.headers()
                             .set(CONTENT_TYPE, TEXT_PLAIN);
-                }
-                else{
+                } else{
                     final HealthReport healthReport = HealthMonitor.generateHealthReport();
                     log.debug("Generating health report");
                     response = new DefaultFullHttpResponse(req.protocolVersion(), OK,

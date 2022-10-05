@@ -46,6 +46,11 @@ public class HealthReport {
     public static final String COMPONENT_IS_RUNNING = "Up and running";
 
     /**
+     * GSON serializer
+     */
+    private static final Gson gson = new GsonBuilder().setPrettyPrinting().create();
+
+    /**
      * Health status false = not healthy, true = healthy
      */
     @Builder.Default
@@ -113,8 +118,14 @@ public class HealthReport {
      * @return A json representation of a health report
      */
     public String asJson() {
-        Gson gson = new GsonBuilder().setPrettyPrinting().create();
         return gson.toJson(this);
+    }
+
+    /**
+     * @return A class representation of health report
+     */
+    public static HealthReport fromJson(String healthReport) {
+        return gson.fromJson(healthReport, HealthReport.class);
     }
 
     private static boolean isHealthy(Set<ComponentReportedHealthStatus> componentHealthMap) {

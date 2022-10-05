@@ -114,13 +114,13 @@ public class CorfuServerNode implements AutoCloseable {
                 router,
                 (String) serverContext.getServerConfig().get("--address"),
                 corfuPort);
-        if (serverContext.getServerConfig().get("--health-port") != null) {
-            final int healthApiPort = Integer.parseInt((String) serverContext.getServerConfig().get("--health-port"));
+        String healthReportFlag = "--health-port";
+        if (serverContext.getServerConfig().get(healthReportFlag) != null) {
+            final int healthApiPort = Integer.parseInt((String) serverContext.getServerConfig().get(healthReportFlag));
             if (healthApiPort != corfuPort) {
                 httpServerFuture = bindHttpServer(serverContext.getWorkerGroup(), this::configureBootstrapOptions, serverContext,
                         healthApiPort);
-            }
-            else {
+            } else {
                 log.warn("Port unification is not currently supported. Health server will not be started.");
             }
         }

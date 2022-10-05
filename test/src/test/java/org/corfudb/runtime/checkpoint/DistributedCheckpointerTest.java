@@ -141,7 +141,8 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
     @Before
     public void testSetup() {
         Layout l = setup3NodeCluster();
-
+        HealthMonitor.reportIssue(Issue.createInitIssue(COMPACTOR));
+        HealthMonitor.resolveIssue(Issue.createInitIssue(COMPACTOR));
         runtime0 = getRuntime(l).connect();
         runtime1 = getRuntime(l).connect();
         runtime2 = getRuntime(l).connect();
@@ -391,8 +392,6 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
 
     @Test
     public void compactionHealthReportTest() throws Exception {
-        HealthMonitor.reportIssue(Issue.createInitIssue(COMPACTOR));
-        HealthMonitor.resolveIssue(Issue.createInitIssue(COMPACTOR));
         CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0,
                 corfuStore, livenessValidator);
         compactorLeaderServices1.initCompactionCycle();

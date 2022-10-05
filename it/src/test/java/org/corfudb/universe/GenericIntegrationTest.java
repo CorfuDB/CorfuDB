@@ -59,8 +59,7 @@ public abstract class GenericIntegrationTest {
         for (int i = 0; i < RETRIES; i++) {
             try {
                 return queryHealthReportHelper(healthPort);
-            }
-            catch (Exception e) {
+            } catch (Exception e) {
                 Sleep.sleepUninterruptibly(Duration.ofMillis(WAIT_TIME_MILLIS));
             }
         }
@@ -91,12 +90,10 @@ public abstract class GenericIntegrationTest {
             } else {
                 throw new IllegalStateException("Unable to connect");
             }
-            Gson gson = new Gson();
 
-            final HealthReport healthReport = gson.fromJson(json, HealthReport.class);
-            return healthReport;
+            return HealthReport.fromJson(json);
         }
-        catch (IOException  io) {
+        catch (IOException io) {
             throw new IllegalStateException(io);
         }
     }

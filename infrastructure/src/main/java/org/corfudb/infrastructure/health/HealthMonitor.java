@@ -15,6 +15,8 @@ import java.util.concurrent.ConcurrentMap;
 @Slf4j
 public final class HealthMonitor {
 
+    private static final String ERR_MSG = "Health Monitor is not initialized";
+
     private final ConcurrentMap<Component, HealthStatus> componentHealthStatus;
 
     private static Optional<HealthMonitor> instance = Optional.empty();
@@ -26,8 +28,6 @@ public final class HealthMonitor {
     public static void init() {
         instance = Optional.of(new HealthMonitor());
     }
-
-    private static final String ERR_MSG = "Health Monitor is not initialized";
 
     /**
      * Report the issue that will be reflected in the health report.

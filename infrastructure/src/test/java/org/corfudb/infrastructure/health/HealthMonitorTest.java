@@ -84,7 +84,7 @@ public class HealthMonitorTest {
     void testAddRuntimeIssue() {
         final String compactionMsg = "Last compaction cycle failed";
         final String fdMsg = FD_TASK_FAILURE_MSG;
-        String unresponsiveMsg = UNRESPONSIVE_MSG;
+        final String unresponsiveMsg = UNRESPONSIVE_MSG;
         final int expectedSize = 2;
         HealthMonitor.init();
         // Init status is UNKNOWN this makes it NOT_INITIALIZED, so you can not add runtime issues

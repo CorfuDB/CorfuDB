@@ -20,7 +20,7 @@ public class Issue {
         FAILURE_DETECTOR_TASK_FAILED,
         SOME_NODES_ARE_UNRESPONSIVE,
         COMPACTION_CYCLE_FAILED,
-        QUOTA_EXCEEDED_ERROR,
+        QUOTA_EXCEEDED_ERROR
     }
 
     /**

@@ -46,8 +46,7 @@ public class CorfuStorePerfIT extends  AbstractIT {
             final int count = 100;
             addObjectsToTable(rt, count);
             addProtoToStore(rt, count);
-        }
-        finally {
+        } finally {
             rt.shutdown();
             assertThat(shutdownCorfuServer(server1)).isTrue();
         }

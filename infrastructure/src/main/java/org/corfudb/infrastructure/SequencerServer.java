@@ -41,7 +41,6 @@ import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
