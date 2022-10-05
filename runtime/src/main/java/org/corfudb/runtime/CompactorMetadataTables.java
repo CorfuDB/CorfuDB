@@ -29,7 +29,7 @@ public class CompactorMetadataTables {
 
     public static final StringKey COMPACTION_MANAGER_KEY = StringKey.newBuilder().setKey("CompactionManagerKey").build();
     public static final StringKey MIN_CHECKPOINT = StringKey.newBuilder().setKey("MinCheckpointToken").build();
-    public static final StringKey FREEZE_TOKEN = StringKey.newBuilder().setKey("FreezeTokenNS").build();
+    public static final StringKey FREEZE_TOKEN = StringKey.newBuilder().setKey("freezeTokenNS").build();
     public static final StringKey INSTANT_TIGGER = StringKey.newBuilder().setKey("InstantTrigger").build();
     public static final StringKey INSTANT_TIGGER_WITH_TRIM = StringKey.newBuilder().setKey("InstantTriggerTrim").build();
 

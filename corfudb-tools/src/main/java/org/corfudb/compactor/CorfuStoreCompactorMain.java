@@ -34,6 +34,9 @@ public class CorfuStoreCompactorMain {
     private final UpgradeDescriptorTable upgradeDescriptorTable;
     private final Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable;
 
+    private static final int RETRY_CHECKPOINTING = 5;
+    private static final int RETRY_CHECKPOINTING_SLEEP_SECOND = 10;
+
     public CorfuStoreCompactorMain(String[] args) throws Exception {
         this.config = new CorfuStoreCompactorConfig(args);
 
@@ -102,14 +105,13 @@ public class CorfuStoreCompactorMain {
                 .isClient(false)
                 .build(), corfuStore, compactorMetadataTables);
         try {
-            int retryCheckpointing = 5;
-            for (int i = 0; i < retryCheckpointing; i++) {
+            for (int i = 0; i < RETRY_CHECKPOINTING; i++) {
                 if (distributedCheckpointerHelper.hasCompactionStarted()) {
                     distributedCheckpointer.checkpointTables();
                     break;
                 }
                 log.info("Compaction cycle hasn't started yet...");
-                TimeUnit.SECONDS.sleep(1);
+                TimeUnit.SECONDS.sleep(RETRY_CHECKPOINTING_SLEEP_SECOND);
             }
         } catch (InterruptedException ie) {
             log.error("Sleep interrupted with exception: ", ie);

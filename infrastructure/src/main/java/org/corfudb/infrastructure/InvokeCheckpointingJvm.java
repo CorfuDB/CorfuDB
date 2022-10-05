@@ -42,7 +42,8 @@ public class InvokeCheckpointingJvm implements InvokeCheckpointing {
 
                 ProcessBuilder pb = new ProcessBuilder(compactorScriptPath, "--hostname", hostName, "--port",
                         port, "--compactorConfig", compactorConfigPath, "--startCheckpointing=true");
-                pb.inheritIO();
+                pb.redirectOutput(ProcessBuilder.Redirect.PIPE);
+                pb.redirectError(ProcessBuilder.Redirect.PIPE);
                 this.checkpointerProcess = pb.start();
                 this.isInvoked = true;
                 syslog.info("Triggered compactor jvm");
