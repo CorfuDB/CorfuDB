@@ -7,6 +7,9 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.result.Result;
+import org.corfudb.infrastructure.health.Component;
+import org.corfudb.infrastructure.health.HealthMonitor;
+import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.infrastructure.log.FileSystemAgent;
 import org.corfudb.infrastructure.log.FileSystemAgent.PartitionAgent.PartitionAttribute;
 import org.corfudb.infrastructure.management.ClusterAdvisor;
@@ -41,6 +44,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+
+import static org.corfudb.infrastructure.health.Issue.IssueId.SOME_NODES_ARE_UNRESPONSIVE;
 
 /**
  * Remote Monitoring Service constitutes of failure and healing monitoring and handling.
@@ -215,6 +220,7 @@ public class RemoteMonitoringService implements ManagementService {
                 monitoringInterval.toMillis(),
                 TimeUnit.MILLISECONDS
         );
+        HealthMonitor.resolveIssue(Issue.createInitIssue(Component.FAILURE_DETECTOR));
     }
 
     /**
@@ -284,11 +290,34 @@ public class RemoteMonitoringService implements ManagementService {
                             })
                             //Execute failure detector task using failureDetectorWorker executor
                             .thenCompose(pollReport -> runFailureDetectorTask(pollReport, ourLayout));
+                }).thenApply(task -> {
+                    Issue issue = Issue.createIssue(Component.FAILURE_DETECTOR,
+                            SOME_NODES_ARE_UNRESPONSIVE,
+                            "There are nodes in the unresponsive list");
+                    final Layout layout = serverContext.getCurrentLayout();
+                    if (!layout.getUnresponsiveServers().isEmpty()) {
+                        HealthMonitor.reportIssue(issue);
+                    } else {
+                        HealthMonitor.resolveIssue(issue);
+                    }
+                    return task;
                 })
                 //Print exceptions to log
                 .whenComplete((taskResult, ex) -> {
                     if (ex != null) {
                         log.error("Failure detection task finished with an error", ex);
+
+                    }
+                    if (ex != null || taskResult == DetectorTask.NOT_COMPLETED) {
+                        log.trace("Reporting issue");
+                        HealthMonitor.reportIssue(new Issue(Component.FAILURE_DETECTOR,
+                                Issue.IssueId.FAILURE_DETECTOR_TASK_FAILED,
+                                "Last failure detector task was not completed"));
+                    } else {
+                        log.trace("Resolving issue");
+                        HealthMonitor.resolveIssue(new Issue(Component.FAILURE_DETECTOR,
+                                Issue.IssueId.FAILURE_DETECTOR_TASK_FAILED,
+                                "Last failure detector task succeeded"));
                     }
                 });
     }
@@ -461,6 +490,7 @@ public class RemoteMonitoringService implements ManagementService {
         detectionTasksScheduler.shutdownNow();
         failureDetectorWorker.shutdownNow();
         log.info("Fault detection service shutting down.");
+        HealthMonitor.reportIssue(Issue.createInitIssue(Component.FAILURE_DETECTOR));
     }
 
     public enum DetectorTask {

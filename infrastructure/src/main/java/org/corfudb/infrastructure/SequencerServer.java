@@ -2,6 +2,7 @@ package org.corfudb.infrastructure;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.TextFormat;
 import io.netty.channel.ChannelHandlerContext;
@@ -11,6 +12,9 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.SequencerServerCache.ConflictTxStream;
+import org.corfudb.infrastructure.health.Component;
+import org.corfudb.infrastructure.health.HealthMonitor;
+import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
@@ -46,9 +50,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.corfudb.infrastructure.health.Issue.IssueId.SEQUENCER_REQUIRES_FULL_BOOTSTRAP;
 import static org.corfudb.protocols.CorfuProtocolCommon.getStreamAddressRange;
 import static org.corfudb.protocols.CorfuProtocolCommon.getStreamAddressSpace;
 import static org.corfudb.protocols.CorfuProtocolCommon.getStreamsAddressResponseMsg;
@@ -149,6 +158,12 @@ public class SequencerServer extends AbstractServer {
 
     private final ExecutorService executor;
 
+    private final ScheduledExecutorService healthReportScheduler;
+
+    private static final int INIT_DELAY = 0;
+    private static final int DELAY_NUM = 1;
+    private static final TimeUnit DELAY_UNITS = SECONDS;
+
     /**
      * - {@link SequencerServer::globalLogTail}:
      * global log first available position (initially, 0).
@@ -197,6 +212,13 @@ public class SequencerServer extends AbstractServer {
         );
         streamsAddressMap = sequencerFactoryHelper.getStreamAddressSpaceMap();
         streamTailToGlobalTailMap = sequencerFactoryHelper.getStreamTailToGlobalTailMap();
+        healthReportScheduler = Executors.newSingleThreadScheduledExecutor(
+                new ThreadFactoryBuilder()
+                        .setDaemon(true)
+                        .setNameFormat("sequencer-health")
+                        .build());
+        HealthMonitor.reportIssue(Issue.createInitIssue(Component.SEQUENCER));
+        healthReportScheduler.scheduleAtFixedRate(this::reportSequencerHealth, INIT_DELAY, DELAY_NUM, DELAY_UNITS);
     }
 
     @Override
@@ -209,10 +231,41 @@ public class SequencerServer extends AbstractServer {
         });
     }
 
+    private void reportSequencerHealth() {
+        Layout layout = serverContext.getCurrentLayout();
+        if (layout == null) {
+            return;
+        }
+        final String localEndpoint = serverContext.getLocalEndpoint();
+        Runnable resolveIssues = () -> {
+            HealthMonitor.resolveIssue(Issue.createInitIssue(Component.SEQUENCER));
+            HealthMonitor.resolveIssue(Issue.createIssue(Component.SEQUENCER,
+                    SEQUENCER_REQUIRES_FULL_BOOTSTRAP, "Sequencer bootstrapped"));
+        };
+        // Only report if it's a primary sequencer
+        if (layout.getPrimarySequencer().equals(localEndpoint)) {
+            if (sequencerEpoch == Layout.INVALID_EPOCH) {
+                HealthMonitor.reportIssue(Issue.createInitIssue(Component.SEQUENCER));
+            } else if (sequencerEpoch != serverContext.getServerEpoch()) {
+                Issue issue = Issue.createIssue(Component.SEQUENCER,
+                        SEQUENCER_REQUIRES_FULL_BOOTSTRAP, "Sequencer requires bootstrap");
+                HealthMonitor.reportIssue(issue);
+            } else {
+                resolveIssues.run();
+            }
+        } else {
+            // The sequencer could have issues before but now it's not a primary sequencer
+            resolveIssues.run();
+        }
+
+    }
+
     @Override
     public void shutdown() {
         super.shutdown();
         executor.shutdown();
+        healthReportScheduler.shutdown();
+        HealthMonitor.reportIssue(Issue.createInitIssue(Component.SEQUENCER));
     }
 
     @Override

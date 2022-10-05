@@ -16,6 +16,9 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.health.Component;
+import org.corfudb.infrastructure.health.HealthMonitor;
+import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
@@ -151,6 +154,7 @@ public class ManagementServer extends AbstractServer {
 
         clusterContext = serverInitializer.buildDefaultClusterContext(serverContext);
         managementAgent = serverInitializer.buildManagementAgent(corfuRuntime, serverContext, clusterContext);
+        HealthMonitor.reportIssue(Issue.createInitIssue(Component.ORCHESTRATOR));
         orchestrator = serverInitializer.buildOrchestrator(corfuRuntime, serverContext);
     }
 

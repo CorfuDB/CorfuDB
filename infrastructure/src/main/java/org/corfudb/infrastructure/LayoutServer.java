@@ -4,13 +4,12 @@ package org.corfudb.infrastructure;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.TextFormat;
 import io.netty.channel.ChannelHandlerContext;
-import java.lang.invoke.MethodHandles;
-import java.util.concurrent.ExecutorService;
-import java.util.Optional;
-import javax.annotation.Nonnull;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.health.Component;
+import org.corfudb.infrastructure.health.HealthMonitor;
+import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
@@ -22,6 +21,11 @@ import org.corfudb.runtime.proto.service.Layout.CommitLayoutRequestMsg;
 import org.corfudb.runtime.proto.service.Layout.PrepareLayoutRequestMsg;
 import org.corfudb.runtime.proto.service.Layout.ProposeLayoutRequestMsg;
 import org.corfudb.runtime.view.Layout;
+
+import javax.annotation.Nonnull;
+import java.lang.invoke.MethodHandles;
+import java.util.Optional;
+import java.util.concurrent.ExecutorService;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getLayout;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
@@ -100,9 +104,12 @@ public class LayoutServer extends AbstractServer {
 
         // Set the executor to be single-threaded since all the handlers need to be synchronized
         this.executor = serverContext.getExecutorService(1, "layoutServer-");
-
+        HealthMonitor.reportIssue(Issue.createInitIssue(Component.LAYOUT_SERVER));
         if (serverContext.installSingleNodeLayoutIfAbsent()) {
             setLayoutInHistory(getCurrentLayout());
+        }
+        if (getCurrentLayout() != null) {
+            HealthMonitor.resolveIssue(Issue.createInitIssue(Component.LAYOUT_SERVER));
         }
     }
 
@@ -115,6 +122,7 @@ public class LayoutServer extends AbstractServer {
     public void shutdown() {
         super.shutdown();
         executor.shutdown();
+        HealthMonitor.reportIssue(Issue.createInitIssue(Component.LAYOUT_SERVER));
     }
 
     private boolean isBootstrapped(RequestMsg requestMsg) {
@@ -130,14 +138,14 @@ public class LayoutServer extends AbstractServer {
     /**
      * Handle a layout request message.
      *
-     * @param req              corfu message containing LAYOUT_REQUEST
-     * @param ctx              netty ChannelHandlerContext
-     * @param r                server router
+     * @param req corfu message containing LAYOUT_REQUEST
+     * @param ctx netty ChannelHandlerContext
+     * @param r   server router
      */
     @VisibleForTesting
     @RequestHandler(type = RequestPayloadMsg.PayloadCase.LAYOUT_REQUEST)
     void handleLayoutRequest(@Nonnull RequestMsg req, @Nonnull ChannelHandlerContext ctx,
-                                    @Nonnull IServerRouter r) {
+                             @Nonnull IServerRouter r) {
         if (!isBootstrapped(req)) {
             r.sendNoBootstrapError(req.getHeader(), ctx);
             return;
@@ -170,7 +178,7 @@ public class LayoutServer extends AbstractServer {
     @VisibleForTesting
     @RequestHandler(type = RequestPayloadMsg.PayloadCase.BOOTSTRAP_LAYOUT_REQUEST)
     void handleBootstrapLayoutRequest(@Nonnull RequestMsg req, @Nonnull ChannelHandlerContext ctx,
-                                             @Nonnull IServerRouter r) {
+                                      @Nonnull IServerRouter r) {
         final HeaderMsg requestHeader = req.getHeader();
         HeaderMsg responseHeader;
         ResponseMsg response;
@@ -208,6 +216,7 @@ public class LayoutServer extends AbstractServer {
             responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
             response = getResponseMsg(responseHeader,
                     getBootstrapLayoutResponseMsg(true));
+            HealthMonitor.resolveIssue(Issue.createInitIssue(Component.LAYOUT_SERVER));
         }
 
         r.sendResponse(response, ctx);
@@ -224,7 +233,7 @@ public class LayoutServer extends AbstractServer {
     @VisibleForTesting
     @RequestHandler(type = RequestPayloadMsg.PayloadCase.PREPARE_LAYOUT_REQUEST)
     void handlePrepareLayoutRequest(@Nonnull RequestMsg req, @Nonnull ChannelHandlerContext ctx,
-                                           @Nonnull IServerRouter r) {
+                                    @Nonnull IServerRouter r) {
         final HeaderMsg requestHeader = req.getHeader();
         final PrepareLayoutRequestMsg payload = req.getPayload().getPrepareLayoutRequest();
 
@@ -386,9 +395,9 @@ public class LayoutServer extends AbstractServer {
      * Force layout enables the server to bypass consensus
      * and accept a new layout.
      *
-     * @param req            corfu message containing COMMIT_LAYOUT_REQUEST (forced set to TRUE)
-     * @param ctx            netty ChannelHandlerContext
-     * @param r              server router
+     * @param req corfu message containing COMMIT_LAYOUT_REQUEST (forced set to TRUE)
+     * @param ctx netty ChannelHandlerContext
+     * @param r   server router
      */
     private void forceLayout(@Nonnull RequestMsg req, @Nonnull ChannelHandlerContext ctx,
                              @Nonnull IServerRouter r) {
@@ -433,7 +442,7 @@ public class LayoutServer extends AbstractServer {
     @VisibleForTesting
     @RequestHandler(type = RequestPayloadMsg.PayloadCase.COMMIT_LAYOUT_REQUEST)
     void handleCommitLayoutRequest(@Nonnull RequestMsg req, @Nonnull ChannelHandlerContext ctx,
-                                          @Nonnull IServerRouter r) {
+                                   @Nonnull IServerRouter r) {
         final CommitLayoutRequestMsg payload = req.getPayload().getCommitLayoutRequest();
 
         if (payload.getForced()) {

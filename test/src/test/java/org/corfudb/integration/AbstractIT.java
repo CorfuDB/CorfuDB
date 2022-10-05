@@ -45,13 +45,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class AbstractIT extends AbstractCorfuTest {
     static final String DEFAULT_HOST = "localhost";
     static final int DEFAULT_PORT = 9000;
-
+    static final int DEFAULT_HEALTH_PORT = 8080;
     static final int DEFAULT_LOG_REPLICATION_PORT = 9020;
 
     static final String DEFAULT_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
 
     static final String CORFU_PROJECT_DIR = new File("..").getAbsolutePath() + File.separator;
-    static final String CORFU_LOG_PATH = PARAMETERS.TEST_TEMP_DIR;
+    public static final String CORFU_LOG_PATH = PARAMETERS.TEST_TEMP_DIR;
 
     private static final String KILL_COMMAND = "pkill -9 -P ";
     // FIXME: if jps doesn't exist tear down will fail silently
@@ -226,10 +226,9 @@ public class AbstractIT extends AbstractCorfuTest {
      *
      * @param pid parent process identifier
      * @return list of children process identifiers
-     *
      * @throws IOException
      */
-    private static List<Long> getChildPIDs (long pid) {
+    private static List<Long> getChildPIDs(long pid) {
         List<Long> childPIDs = new ArrayList<>();
         try {
             // Get child pid(s)
@@ -333,14 +332,14 @@ public class AbstractIT extends AbstractCorfuTest {
     }
 
     public Process runReplicationServerCustomMaxWriteSize(int port,
-        String pluginConfigFilePath, int maxWriteSize) throws IOException {
+                                                          String pluginConfigFilePath, int maxWriteSize) throws IOException {
         return new CorfuReplicationServerRunner()
-            .setHost(DEFAULT_HOST)
-            .setPort(port)
-            .setPluginConfigFilePath(pluginConfigFilePath)
-            .setMsg_size(MSG_SIZE)
-            .setMaxWriteSize(maxWriteSize)
-            .runServer();
+                .setHost(DEFAULT_HOST)
+                .setPort(port)
+                .setPluginConfigFilePath(pluginConfigFilePath)
+                .setMsg_size(MSG_SIZE)
+                .setMaxWriteSize(maxWriteSize)
+                .runServer();
     }
 
     public Process runDefaultServer() throws IOException {
@@ -384,7 +383,8 @@ public class AbstractIT extends AbstractCorfuTest {
         StreamingMap<String, Integer> map = rt.getObjectsView()
                 .build()
                 .setStreamName(streamName)
-                .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {
+                })
                 .open();
         return map;
     }
@@ -430,6 +430,7 @@ public class AbstractIT extends AbstractCorfuTest {
 
         private String host = DEFAULT_HOST;
         private int port = DEFAULT_PORT;
+        private int healthPort = -1;
         private String metricsConfigFile = "";
         private boolean single = true;
         private boolean tlsEnabled = false;
@@ -446,6 +447,7 @@ public class AbstractIT extends AbstractCorfuTest {
         /**
          * Create a command line string according to the properties set for a Corfu Server
          * Instance
+         *
          * @return command line including options that captures the properties of Corfu Server instance
          */
         public String getOptionsString() {
@@ -460,6 +462,10 @@ public class AbstractIT extends AbstractCorfuTest {
 
             if (!metricsConfigFile.isEmpty()) {
                 command.append(" --metrics ");
+            }
+
+            if (healthPort != -1) {
+                command.append(" --health-port=").append(healthPort);
             }
 
             if (single) {
@@ -498,7 +504,7 @@ public class AbstractIT extends AbstractCorfuTest {
          * Creates a server with the options set according to the properties of this Corfu server instance
          *
          * @return a {@link Process} running a Corfu server as it is setup through the properties of
-         *         the instance on which this method is called.
+         * the instance on which this method is called.
          * @throws IOException
          */
         public Process runServer() throws IOException {
@@ -511,8 +517,7 @@ public class AbstractIT extends AbstractCorfuTest {
 
             if (!metricsConfigFile.isEmpty()) {
                 addMetricsToProcessBuilder(builder, "corfu_server");
-            }
-            else {
+            } else {
                 builder.command("sh", "-c", "bin/corfu_server " + getOptionsString());
             }
             builder.directory(new File(CORFU_PROJECT_DIR));
@@ -529,8 +534,7 @@ public class AbstractIT extends AbstractCorfuTest {
                 String exportMetricsConfigFile = "export METRICS_CONFIG_FILE=" + configPath + ";";
                 builder.command("sh", "-c", exportMetricsConfigFile + " bin/" + runnable + " "
                         + getOptionsString());
-            }
-            catch (URISyntaxException use) {
+            } catch (URISyntaxException use) {
                 throw new IOException(use);
             }
         }
@@ -564,6 +568,7 @@ public class AbstractIT extends AbstractCorfuTest {
         /**
          * Create a command line string according to the properties set for a Corfu Server
          * Instance
+         *
          * @return command line including options that captures the properties of Corfu Server instance
          */
         public String getOptionsString() {
@@ -600,7 +605,7 @@ public class AbstractIT extends AbstractCorfuTest {
                 }
             }
 
-            if(pluginConfigFilePath != null) {
+            if (pluginConfigFilePath != null) {
                 command.append(" --plugin=").append(pluginConfigFilePath);
             }
 
@@ -621,7 +626,7 @@ public class AbstractIT extends AbstractCorfuTest {
          * Creates a server with the options set according to the properties of this Corfu server instance
          *
          * @return a {@link Process} running a Corfu server as it is setup through the properties of
-         *         the instance on which this method is called.
+         * the instance on which this method is called.
          * @throws IOException
          */
         public Process runServer() throws IOException {
@@ -634,8 +639,7 @@ public class AbstractIT extends AbstractCorfuTest {
 
             if (!metricsConfigFile.isEmpty()) {
                 addMetricsToProcessBuilder(builder, "corfu_replication_server");
-            }
-            else {
+            } else {
                 builder.command("sh", "-c", "bin/corfu_replication_server " + getOptionsString());
             }
 
@@ -653,8 +657,7 @@ public class AbstractIT extends AbstractCorfuTest {
                 String exportMetricsConfigFile = "export METRICS_CONFIG_FILE=" + configPath + ";";
                 builder.command("sh", "-c", exportMetricsConfigFile + " bin/" + runnable + " "
                         + getOptionsString());
-            }
-            catch (URISyntaxException use) {
+            } catch (URISyntaxException use) {
                 throw new IOException(use);
             }
         }

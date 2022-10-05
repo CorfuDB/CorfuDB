@@ -35,14 +35,22 @@ public class CorfuStorePerfIT extends  AbstractIT {
 
     @Test
     public void corfuStorePerfComparisonTest() throws Exception {
-        long maxLogSize = FileUtils.ONE_MB / 2;
-        Process server1 = runServerWithQuota(DEFAULT_PORT, maxLogSize,
-            true);
+        Process server1 = null;
+        CorfuRuntime rt = null;
+        try {
+            long maxLogSize = FileUtils.ONE_MB / 2;
+            server1 = runServerWithQuota(DEFAULT_PORT, maxLogSize,
+                    true);
 
-        CorfuRuntime rt = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
-        final int count = 100;
-        addObjectsToTable(rt, count);
-        addProtoToStore(rt, count);
+            rt = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+            final int count = 100;
+            addObjectsToTable(rt, count);
+            addProtoToStore(rt, count);
+        } finally {
+            rt.shutdown();
+            assertThat(shutdownCorfuServer(server1)).isTrue();
+        }
+
     }
 
     private final static int randomPort = 8000;

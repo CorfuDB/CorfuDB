@@ -36,6 +36,9 @@ public class CorfuServerParams implements NodeParams {
     private final int port = ServerUtil.getRandomOpenPort();
 
     @Default
+    private final int healthPort = ServerUtil.getRandomOpenPort();
+
+    @Default
     @NonNull
     private final Mode mode = Mode.CLUSTER;
 
@@ -98,7 +101,7 @@ public class CorfuServerParams implements NodeParams {
 
     @Override
     public Set<Integer> getPorts() {
-        return ImmutableSet.of(port);
+        return ImmutableSet.of(port, healthPort);
     }
 
     public String getDockerImageNameFullName() {

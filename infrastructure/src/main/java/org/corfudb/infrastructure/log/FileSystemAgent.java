@@ -8,6 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.health.HealthMonitor;
+import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.infrastructure.log.FileSystemAgent.PartitionAgent.PartitionAttribute;
 import org.corfudb.infrastructure.log.StreamLog.PersistenceMode;
 import org.corfudb.runtime.exceptions.LogUnitException;
@@ -25,14 +27,19 @@ import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.corfudb.infrastructure.health.Component.LOG_UNIT;
 
 @Slf4j
 public final class FileSystemAgent {
     private static final String NOT_CONFIGURED_ERR_MSG = "FileSystemAgent not configured";
+    private static final int INIT_DELAY = 0;
+    private static final int DELAY_NUM = 1;
+    private static final TimeUnit DELAY_UNITS = SECONDS;
 
     private static Optional<FileSystemAgent> instance = Optional.empty();
 
@@ -42,6 +49,9 @@ public final class FileSystemAgent {
     private final ResourceQuota logSizeQuota;
 
     private final PartitionAttribute partitionAttribute;
+
+    @Getter
+    private final ScheduledExecutorService scheduler;
 
     private FileSystemAgent(FileSystemConfig config) {
         this.config = config;
@@ -62,7 +72,9 @@ public final class FileSystemAgent {
 
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
         logSizeQuota.consume(initialLogSize);
-
+        scheduler = Executors.newSingleThreadScheduledExecutor();
+        scheduler.scheduleWithFixedDelay(
+                this::reportQuotaExceeded, INIT_DELAY, DELAY_NUM, DELAY_UNITS);
         log.info("FileSystemAgent: {} size is {} bytes, limit {}", config.logDir, initialLogSize, logSizeLimit);
     }
 
@@ -75,12 +87,27 @@ public final class FileSystemAgent {
         return (long) (totalCorfuDataCapacity * config.limitPercentage / 100);
     }
 
+    private void reportQuotaExceeded() {
+        try {
+            Issue issue = Issue.createIssue(LOG_UNIT, Issue.IssueId.QUOTA_EXCEEDED_ERROR, "Quota exceeded");
+            if (!getResourceQuota().hasAvailable()) {
+                HealthMonitor.reportIssue(issue);
+            } else {
+                HealthMonitor.resolveIssue(issue);
+            }
+        } catch (Exception e) {
+            log.error("Exception in quota monitor:", e);
+        }
+
+    }
+
     public static void init(FileSystemConfig config) {
         instance = Optional.of(new FileSystemAgent(config));
     }
 
     public static void shutdown() {
         PartitionAgent.shutdown();
+        instance.ifPresent(i -> i.getScheduler().shutdown());
     }
 
     public static ResourceQuota getResourceQuota() {
@@ -214,7 +241,7 @@ public final class FileSystemAgent {
          * Resets PartitionAttribute's fields every {@link PartitionAttribute#UPDATE_INTERVAL}
          * seconds after the previous set task is completed.
          */
-        private void initializeScheduler(){
+        private void initializeScheduler() {
             scheduledFuture = scheduler.scheduleWithFixedDelay(
                     this::setPartitionAttribute, NO_DELAY, UPDATE_INTERVAL, SECONDS
             );
@@ -238,6 +265,7 @@ public final class FileSystemAgent {
                 );
                 log.info("setPartitionAttribute: fetched PartitionAttribute successfully. " +
                         "{}", partitionAttribute);
+
             } catch (Exception ex) {
                 log.error("setPartitionAttribute: Error while fetching PartitionAttributes.", ex);
             }

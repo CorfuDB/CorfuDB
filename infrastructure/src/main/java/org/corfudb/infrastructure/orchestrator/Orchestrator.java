@@ -7,6 +7,8 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.health.HealthMonitor;
+import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.infrastructure.orchestrator.workflows.AddNodeWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.ForceRemoveWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.HealNodeWorkflow;
@@ -39,6 +41,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+import static org.corfudb.infrastructure.health.Component.ORCHESTRATOR;
+import static org.corfudb.infrastructure.health.Issue.IssueId.ORCHESTRATOR_TASK_FAILED;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.CorfuProtocolWorkflows.getAddNodeRequest;
 import static org.corfudb.protocols.CorfuProtocolWorkflows.getForceRemoveNodeRequest;
@@ -110,13 +114,14 @@ public class Orchestrator {
                                 e);
                     }
                 });
+        HealthMonitor.resolveIssue(Issue.createInitIssue(ORCHESTRATOR));
     }
 
     public void handle(@Nonnull RequestMsg req, @Nonnull ChannelHandlerContext ctx, @Nonnull IServerRouter r) {
         OrchestratorRequestMsg msg = req.getPayload().getOrchestratorRequest();
         IWorkflow workflow;
 
-        switch(msg.getPayloadCase()) {
+        switch (msg.getPayloadCase()) {
             case QUERY:
                 handleQuery(req, ctx, r);
                 break;
@@ -160,9 +165,9 @@ public class Orchestrator {
      * Queries a workflow id and returns true if this orchestrator is still
      * executing the workflow, otherwise return false.
      *
-     * @param req  a message containing the query request
-     * @param ctx  the netty ChannelHandlerContext
-     * @param r    the server router
+     * @param req a message containing the query request
+     * @param ctx the netty ChannelHandlerContext
+     * @param r   the server router
      */
     void handleQuery(@Nonnull RequestMsg req, @Nonnull ChannelHandlerContext ctx, @Nonnull IServerRouter r) {
         final UUID workflowId = getUUID(req.getPayload().getOrchestratorRequest().getQuery().getWorkflowId());
@@ -187,11 +192,11 @@ public class Orchestrator {
      * on reading activeWorkflows and therefore needs to be synchronized to prevent
      * launching multiple workflows for the same endpoint concurrently.
      *
-     * @param workflow  the workflow to execute
-     * @param req       request message containing the create workflow request
-     * @param ctx       netty ChannelHandlerContext
-     * @param r         server router
-     * @param endpoint  the endpoint parameter from the workflow request
+     * @param workflow the workflow to execute
+     * @param req      request message containing the create workflow request
+     * @param ctx      netty ChannelHandlerContext
+     * @param r        server router
+     * @param endpoint the endpoint parameter from the workflow request
      */
     synchronized void dispatch(@Nonnull IWorkflow workflow,
                                @Nonnull RequestMsg req,
@@ -258,14 +263,24 @@ public class Orchestrator {
                     log.error("run: Failed to execute action {} for workflow {}, status {}, ",
                             action.getName(), workflow.getId(),
                             action.getStatus());
+                    String reportMsg = String.format("Failed to execute action %s for workflow %s",
+                            action.getName(), workflow.getName());
+                    HealthMonitor.reportIssue(Issue.createIssue(ORCHESTRATOR,
+                            ORCHESTRATOR_TASK_FAILED, reportMsg));
                     return;
                 }
             }
 
             long workflowEnd = System.currentTimeMillis();
             log.info("run: Completed workflow {} in {} ms", workflow.getId(), workflowEnd - workflowStart);
+            HealthMonitor.resolveIssue(Issue.createIssue(ORCHESTRATOR,
+                    ORCHESTRATOR_TASK_FAILED, "Last workflow completed successfully"));
         } catch (Exception e) {
             log.error("run: Encountered an error while running workflow {}", workflow.getId(), e);
+            String reportMsg = String.format("Encountered an error while running a workflow %s:%n%s",
+                    workflow.getName(), e.getLocalizedMessage());
+            HealthMonitor.reportIssue(Issue.createIssue(ORCHESTRATOR,
+                    ORCHESTRATOR_TASK_FAILED, reportMsg));
         } finally {
             activeWorkflows.remove(workflow.getId());
             log.debug("run: removed {} from {}", workflow.getId(), activeWorkflows);
@@ -287,6 +302,7 @@ public class Orchestrator {
             throw new UnrecoverableCorfuInterruptedError(ie);
         }
         log.info("Orchestrator shutting down.");
+        HealthMonitor.reportIssue(Issue.createInitIssue(ORCHESTRATOR));
     }
 
     /**

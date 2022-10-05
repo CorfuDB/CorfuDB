@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.common.config.ConfigParamsHelper;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.infrastructure.health.HealthMonitor;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
@@ -62,6 +63,7 @@ public class CorfuServer {
                     + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] "
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
                     + "[--metrics]"
+                    + "[--health-port=<health_port>]"
                     + "[--snapshot-batch=<batch-size>] [--lock-lease=<lease-duration>]"
                     + "[-P <prefix>] [-R <retention>] <port>"
                     + "[--compaction-trigger-freq-ms=<compaction_trigger_freq_ms>]"
@@ -186,6 +188,8 @@ public class CorfuServer {
                     + "              Number of threads dedicated for the logunit server [default: 4].\n"
                     + " --metrics                                                                "
                     + "              Enable metrics provider.\n                                  "
+                    + " --health-port=<health_port>                                              "
+                    + "              Enable health api and bind to this port.\n                  "
                     + " --snapshot-batch=<batch-size>                                            "
                     + "              Snapshot (Full) Sync batch size (number of entries)\n       "
                     + " --lrCacheSize=<cache-num-entries>"
@@ -257,6 +261,13 @@ public class CorfuServer {
         }
     }
 
+    public static void configureHealthMonitor(Map<String, Object> opts) {
+        if (opts.get("--health-port") != null) {
+            log.info("Starting health monitor");
+            HealthMonitor.init();
+        }
+    }
+
     private static void startServer(Map<String, Object> opts) {
 
         // Print a nice welcome message.
@@ -297,6 +308,7 @@ public class CorfuServer {
             final ServerContext serverContext = new ServerContext(opts);
             try {
                 configureMetrics(opts, serverContext.getLocalEndpoint());
+                configureHealthMonitor(opts);
                 activeServer = new CorfuServerNode(serverContext);
                 activeServer.startAndListen();
             } catch (Throwable th) {

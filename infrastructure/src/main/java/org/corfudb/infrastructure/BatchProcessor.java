@@ -6,6 +6,9 @@ import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.BatchWriterOperation.Type;
+import org.corfudb.infrastructure.health.Component;
+import org.corfudb.infrastructure.health.HealthMonitor;
+import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.CorfuProtocolLogData;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -16,6 +19,7 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
+import org.corfudb.runtime.view.Layout;
 
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
@@ -74,6 +78,9 @@ public class BatchProcessor implements AutoCloseable {
                         .build());
 
         processorService.submit(this::process);
+        if (sealEpoch != Layout.INVALID_EPOCH) {
+            HealthMonitor.resolveIssue(Issue.createInitIssue(Component.LOG_UNIT));
+        }
     }
 
     private void recordRunnable(Runnable runnable, Optional<Timer> timer) {
@@ -149,7 +156,9 @@ public class BatchProcessor implements AutoCloseable {
                         (currentOp.getRequest().getPayload().getSealRequest().getEpoch() >= sealEpoch)) {
                     log.info("batchWriteProcessor: updating epoch from {} to {}",
                             sealEpoch, currentOp.getRequest().getPayload().getSealRequest().getEpoch());
-
+                    if (sealEpoch == Layout.INVALID_EPOCH) {
+                        HealthMonitor.resolveIssue(Issue.createInitIssue(Component.LOG_UNIT));
+                    }
                     sealEpoch = currentOp.getRequest().getPayload().getSealRequest().getEpoch();
                     res.add(currentOp);
                     lastOp = currentOp;

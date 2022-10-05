@@ -2,6 +2,8 @@ package org.corfudb.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
+import org.corfudb.infrastructure.health.HealthMonitor;
+import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
@@ -20,6 +22,8 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.corfudb.infrastructure.health.Component.COMPACTOR;
+import static org.corfudb.infrastructure.health.Issue.IssueId.COMPACTION_CYCLE_FAILED;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -206,6 +210,7 @@ public class CompactorLeaderServices {
      * Finish compaction cycle by the leader
      */
     public void finishCompactionCycle() {
+        StatusType finalStatus = StatusType.UNRECOGNIZED;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
                     CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
@@ -219,7 +224,7 @@ public class CompactorLeaderServices {
             }
 
             List<TableName> tableNames = new ArrayList<>(txn.keySet(compactorMetadataTables.getCheckpointingStatusTable()));
-            StatusType finalStatus = StatusType.COMPLETED;
+            finalStatus = StatusType.COMPLETED;
             for (TableName table : tableNames) {
                 CheckpointingStatus tableStatus = (CheckpointingStatus) txn.getRecord(
                         CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, table).getPayload();
@@ -242,9 +247,20 @@ public class CompactorLeaderServices {
                     "nodeEndpoint", nodeEndpoint);
         } catch (RuntimeException re) {
             //Do not retry here, the compactor service will trigger this method again
+            // The txn should succeed otherwise the status is FAILED
+            finalStatus = StatusType.FAILED;
             syslog.warn("Exception in finishCompactionCycle: {}. StackTrace={}", re, re.getStackTrace());
         }
-        deleteInstantKeyIfPresent();
+        finally {
+            Issue compactionCycleIssue =
+                    Issue.createIssue(COMPACTOR, COMPACTION_CYCLE_FAILED, "Last compaction cycle failed");
+            if (finalStatus == StatusType.COMPLETED) {
+                HealthMonitor.resolveIssue(compactionCycleIssue);
+            } else {
+                HealthMonitor.reportIssue(compactionCycleIssue);
+            }
+            deleteInstantKeyIfPresent();
+        }
     }
 
     private void deleteInstantKeyIfPresent() {
