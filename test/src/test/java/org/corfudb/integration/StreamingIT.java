@@ -7,18 +7,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.collections.CorfuRecord;
-import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.CorfuStoreEntry;
-import org.corfudb.runtime.collections.CorfuStreamEntries;
-import org.corfudb.runtime.collections.CorfuStreamEntry;
-import org.corfudb.runtime.collections.IsolationLevel;
-import org.corfudb.runtime.collections.PersistentCorfuTable;
-import org.corfudb.runtime.collections.StreamListener;
-import org.corfudb.runtime.collections.Table;
-import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.collections.TableSchema;
-import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.collections.*;
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
@@ -1039,7 +1028,7 @@ public class StreamingIT extends AbstractIT {
 
         // Run X number of checkpoint/trim (on each run, trigger runtimeGC)
         for (int i = 0; i < numCheckpointTrimCycles; i++) {
-            checkpointAndTrim(namespace, Arrays.asList(defaultTableName, randomTableName), false);
+            checkpointAndTrim(runtime, namespace, Arrays.asList(defaultTableName, randomTableName), false);
             runtime.getGarbageCollector().runRuntimeGC();
             long seqNumberAfterTrim = store.getHighestSequence(namespace, defaultTableName);
             assertThat(seqNumberAfterTrim).isEqualTo(seqNumBeforeTrim);
@@ -1437,7 +1426,7 @@ public class StreamingIT extends AbstractIT {
         store = new CorfuStore(runtime);
     }
 
-    private Token checkpointAndTrim(String namespace, List<String> tablesToCheckpoint, boolean partialTrim) {
+    public static Token checkpointAndTrim(CorfuRuntime runtime, String namespace, List<String> tablesToCheckpoint, boolean partialTrim) {
         MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
         tablesToCheckpoint.forEach(tableName -> {
             PersistentCorfuTable<Uuid, CorfuRecord<SampleSchema.EventInfo, SampleSchema.ManagedResources>> corfuTable =

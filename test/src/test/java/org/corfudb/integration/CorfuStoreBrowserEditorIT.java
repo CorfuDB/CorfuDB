@@ -1,6 +1,8 @@
 package org.corfudb.integration;
 
+import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Any;
+import com.google.protobuf.Descriptors;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.UnknownFieldSet;
 
@@ -57,7 +59,6 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
      *  returns a process. */
     private Process runSinglePersistentServer(String host, int port) throws
         IOException {
-//        logPath = "/Users/btharak/DevEnv/customerData/csLogs/";
         logPath = getCorfuServerLogPath(host, port);
         return new AbstractIT.CorfuServerRunner()
             .setHost(host)
@@ -132,49 +133,6 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
                 assertThat(0L).isEqualTo(metadataMap.get(IMetadata.LogUnitMetadataType.EPOCH));
                 assertThat(ts.getSequence()).isEqualTo(metadataMap.get(IMetadata.LogUnitMetadataType.GLOBAL_ADDRESS));
                 assertThat(Thread.currentThread().getId()).isEqualTo(metadataMap.get(IMetadata.LogUnitMetadataType.THREAD_ID)); });
-        } finally {
-            if (corfuServer != null) {
-                shutdownCorfuServer(corfuServer);
-            }
-        }
-    }
-
-    @Test
-    public void testPrintMetadataMapOfflineBrowser() throws IOException, Exception {
-        Process corfuServer = null;
-        try {
-            corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
-            final String namespace = "namespace";
-            final String tableName = "table";
-            final int totalUpdates = 5;
-            List<CorfuStoreMetadata.Timestamp> committedTimestamps = new ArrayList();
-
-            // Start a Corfu runtime & Corfu Store
-            runtime = createRuntime(singleNodeEndpoint);
-            CorfuStore store = new CorfuStore(runtime);
-
-            // Open one table and write couple of updates
-            final Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.ManagedMetadata> tableA = store.openTable(
-                    namespace,
-                    tableName,
-                    SampleSchema.Uuid.class,
-                    SampleSchema.SampleTableAMsg.class,
-                    SampleSchema.ManagedMetadata.class,
-                    TableOptions.builder().build());
-
-            for(int i = 0; i < totalUpdates; i++) {
-                SampleSchema.Uuid key = SampleSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
-                SampleSchema.SampleTableAMsg value = SampleSchema.SampleTableAMsg.newBuilder().setPayload(Integer.toString(i)).build();
-                SampleSchema.ManagedMetadata metadata = SampleSchema.ManagedMetadata.newBuilder().setCreateTime(System.currentTimeMillis())
-                        .setCreateUser("User_" + i).build();
-                try (TxnContext tx = store.txn(namespace)) {
-                    tx.putRecord(tableA, key, value, metadata);
-                    committedTimestamps.add(tx.commit());
-                }
-            }
-
-            CorfuOfflineBrowserEditor browser = new CorfuOfflineBrowserEditor(logPath + "corfu/");
-
         } finally {
             if (corfuServer != null) {
                 shutdownCorfuServer(corfuServer);
@@ -257,12 +215,6 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         Assert.assertEquals(browser.clearTable(namespace, tableName), one);
         // Invoke tableInfo and verify size
         Assert.assertEquals(browser.printTableInfo(namespace, tableName), 0);
-    }
-
-    @Test
-    public void offlineTest() throws IOException, InvocationTargetException, NoSuchMethodException, IllegalAccessException {
-        System.out.println(CORFU_LOG_PATH);
-//        CorfuOfflineBrowserEditor a = new CorfuOfflineBrowserEditor("/Users/adharmadhika/downloads/config/corfu");
     }
 
     /**
@@ -504,13 +456,12 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
             NoSuchMethodException,
             IllegalAccessException,
             InvocationTargetException {
+
         final String namespace = "namespace";
         final String tableName = "table";
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
-        // Start a Corfu runtime
         runtime = createRuntime(singleNodeEndpoint);
-
         CorfuStore store = new CorfuStore(runtime);
 
         final long keyUuid = 10L;
@@ -541,9 +492,16 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         tx.commit();
         runtime.shutdown();
 
+        final int one = 1;
         CorfuOfflineBrowserEditor browser = new CorfuOfflineBrowserEditor(logPath);
-        int tableSize = browser.printTableInfo(namespace, tableName);
-        Assert.assertEquals(1, tableSize);
+        ConcurrentMap<CorfuDynamicKey, CorfuDynamicRecord> tableData = browser.getTableData(namespace, tableName);
+        Assert.assertEquals(tableData.size(), one);
+
+        for (CorfuDynamicKey key: tableData.keySet()) {
+            Assert.assertEquals(key.getKey().toString(), uuidKey.toString());
+            Assert.assertEquals(tableData.get(key).getPayload().toString(), firewallRuleVal.toString());
+            Assert.assertEquals(tableData.get(key).getMetadata().toString(), uuidMeta.toString());
+        }
     }
 
     /**
@@ -649,9 +607,9 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
         CorfuOfflineBrowserEditor browser = new CorfuOfflineBrowserEditor(logPath);
         // Invoke listTables and verify table count
-        final int three = 3;
-        Assert.assertEquals(three, browser.printTable(TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME));
-        Assert.assertEquals(1, browser.printTable(namespace, tableName));
+        final int three = 3, one = 1;
+        Assert.assertEquals(browser.printTableInfo(TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME), three);
+        Assert.assertEquals(browser.printTableInfo(namespace, tableName), one);
     }
 
     /**
@@ -1170,5 +1128,162 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
         // Invoke tableInfo and verify size
         Assert.assertEquals(browser.printTableInfo(namespace, tableName), one);
+    }
+
+    @Test
+    public void readUpdatedTxnOfflineBrowser() throws
+            IOException,
+            NoSuchMethodException,
+            IllegalAccessException,
+            InvocationTargetException {
+
+        final String namespace = "namespace";
+        final String tableName = "table";
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStore store = new CorfuStore(runtime);
+
+        final long keyUuid = 10L;
+        final long valUuid = 50L;
+        final long metaUuid = 100L;
+
+        final Table<SampleSchema.Uuid, SampleSchema.Uuid, SampleSchema.Uuid> table = store.openTable(
+                namespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
+
+        SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder().setLsb(keyUuid).setMsb(keyUuid).build();
+        SampleSchema.Uuid uuidVal = SampleSchema.Uuid.newBuilder().setLsb(valUuid).setMsb(valUuid).build();
+        SampleSchema.Uuid uuidMeta = SampleSchema.Uuid.newBuilder().setLsb(metaUuid).setMsb(metaUuid).build();
+        TxnContext tx = store.txn(namespace);
+        tx.putRecord(table, uuidKey, uuidVal, uuidMeta);
+        tx.commit();
+
+        final long updatedUuid = 50L;
+        SampleSchema.Uuid uuidUpdated = SampleSchema.Uuid.newBuilder().setLsb(updatedUuid).setMsb(updatedUuid).build();
+        TxnContext newtx = store.txn(namespace);
+        newtx.putRecord(table, uuidKey, uuidUpdated, uuidMeta);
+        newtx.commit();
+
+        runtime.shutdown();
+        final int one = 1;
+        CorfuOfflineBrowserEditor browser = new CorfuOfflineBrowserEditor(logPath);
+        ConcurrentMap<CorfuDynamicKey, CorfuDynamicRecord> tableData = browser.getTableData(namespace, tableName);
+        Assert.assertEquals(tableData.size(), one);
+
+        for (CorfuDynamicKey key: tableData.keySet()) {
+            Assert.assertEquals(key.getKey().toString(), uuidKey.toString());
+            Assert.assertEquals(tableData.get(key).getPayload().toString(), uuidUpdated.toString());
+            Assert.assertEquals(tableData.get(key).getMetadata().toString(), uuidMeta.toString());
+        }
+    }
+
+    @Test
+    public void readUpdatedTxnWithTrimOfflineBrowser() throws
+            IOException,
+            NoSuchMethodException,
+            IllegalAccessException,
+            InvocationTargetException {
+
+        final String namespace = "namespace";
+        final String tableName = "table";
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStore store = new CorfuStore(runtime);
+
+        final long keyUuid = 10L;
+        final long valUuid = 50L;
+        final long metaUuid = 100L;
+
+        final Table<SampleSchema.Uuid, SampleSchema.Uuid, SampleSchema.Uuid> table = store.openTable(
+                namespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
+
+        SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder().setLsb(keyUuid).setMsb(keyUuid).build();
+        SampleSchema.Uuid uuidVal = SampleSchema.Uuid.newBuilder().setLsb(valUuid).setMsb(valUuid).build();
+        SampleSchema.Uuid uuidMeta = SampleSchema.Uuid.newBuilder().setLsb(metaUuid).setMsb(metaUuid).build();
+        TxnContext tx = store.txn(namespace);
+        tx.putRecord(table, uuidKey, uuidVal, uuidMeta);
+        tx.commit();
+        StreamingIT.checkpointAndTrim(runtime, namespace, Arrays.asList(tableName), false);
+
+        final long updatedUuid = 50L;
+        SampleSchema.Uuid uuidUpdated = SampleSchema.Uuid.newBuilder().setLsb(updatedUuid).setMsb(updatedUuid).build();
+        TxnContext newtx = store.txn(namespace);
+        newtx.putRecord(table, uuidKey, uuidUpdated, uuidMeta);
+        newtx.commit();
+
+        runtime.shutdown();
+        final int one = 1;
+        CorfuOfflineBrowserEditor browser = new CorfuOfflineBrowserEditor(logPath);
+        ConcurrentMap<CorfuDynamicKey, CorfuDynamicRecord> tableData = browser.getTableData(namespace, tableName);
+        Assert.assertEquals(tableData.size(), one);
+
+        for (CorfuDynamicKey key: tableData.keySet()) {
+            Assert.assertEquals(key.getKey().toString(), uuidKey.toString());
+            Assert.assertEquals(tableData.get(key).getPayload().toString(), uuidUpdated.toString());
+            Assert.assertEquals(tableData.get(key).getMetadata().toString(), uuidMeta.toString());
+        }
+    }
+
+    @Test
+    public void trimStreamTestOffline() throws
+            IOException,
+            NoSuchMethodException,
+            IllegalAccessException,
+            InvocationTargetException {
+
+        final String namespace = "namespace";
+        final String tableName = "table";
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStore store = new CorfuStore(runtime);
+
+        final long keyUuid = 10L;
+        final long ruleIdVal = 50L;
+        final long metaUuid = 100L;
+
+        final Table<SampleSchema.Uuid, SampleSchema.FirewallRule, SampleSchema.Uuid> table = store.openTable(
+                namespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.FirewallRule.class,
+                SampleSchema.Uuid.class,
+                TableOptions.fromProtoSchema(SampleSchema.FirewallRule.class));
+
+        SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder().setLsb(keyUuid).setMsb(keyUuid).build();
+        SampleSchema.FirewallRule firewallRuleVal = SampleSchema.FirewallRule.newBuilder()
+                .setRuleId(ruleIdVal).setRuleName("Test Rule")
+                .setInput(SampleAppliance.Appliance.newBuilder().setEndpoint("localhost"))
+                .setOutput(SampleAppliance.Appliance.newBuilder().setEndpoint("localhost"))
+                .build();
+        SampleSchema.Uuid uuidMeta = SampleSchema.Uuid.newBuilder().setLsb(metaUuid).setMsb(metaUuid).build();
+        TxnContext tx = store.txn(namespace);
+        tx.putRecord(table, uuidKey, firewallRuleVal, uuidMeta);
+        tx.commit();
+
+        StreamingIT.checkpointAndTrim(runtime, namespace, Arrays.asList(tableName), false);
+        runtime.shutdown();
+
+        final int one = 1;
+        CorfuOfflineBrowserEditor browser = new CorfuOfflineBrowserEditor(logPath);
+        ConcurrentMap<CorfuDynamicKey, CorfuDynamicRecord> tableData = browser.getTableData(namespace, tableName);
+        Assert.assertEquals(tableData.size(), one);
+
+        for (CorfuDynamicKey key: tableData.keySet()) {
+            Assert.assertEquals(key.getKey().toString(), uuidKey.toString());
+            Assert.assertEquals(tableData.get(key).getPayload().toString(), firewallRuleVal.toString());
+            Assert.assertEquals(tableData.get(key).getMetadata().toString(), uuidMeta.toString());
+        }
     }
 }

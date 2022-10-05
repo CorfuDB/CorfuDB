@@ -27,6 +27,7 @@ import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -49,10 +50,8 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
      * Creates a CorfuOfflineBrowser linked to an existing log directory.
      * @param offlineDbDir Path to the database directory.
      */
-    public CorfuOfflineBrowserEditor(String offlineDbDir) {
-        // TODO: recursive log search and exception handling
-        String logPath = "/corfu/log/";
-        logDir = Paths.get(offlineDbDir + logPath);
+    public CorfuOfflineBrowserEditor(String offlineDbDir) throws UncheckedIOException {
+        logDir = Paths.get(offlineDbDir);
         buildRegistryProtoDescriptors();
     }
 
@@ -167,6 +166,8 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
             case "clear":
                 cachedTable.clear();
                 break;
+            default:
+                System.out.println("Operation Unknown");
         }
     }
 
