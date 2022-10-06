@@ -5,8 +5,6 @@
 (require 'clojure.pprint)
 (require 'clojure.java.shell)
 (import org.corfudb.runtime.view.Layout)
-(import org.corfudb.runtime.BootstrapUtil)
-(import java.time.Duration)
 (import java.util.UUID)
 (def usage "corfu_bootstrap_cluster, setup the Corfu cluster from nodes that have NOT been previously bootstrapped.
 Usage:
@@ -28,31 +26,30 @@ Options:
 ; Parse the incoming docopt options.
 (def localcmd (.. (new Docopt usage) (parse *args)))
 
-(def retries 3)
-(def timeout (Duration/ofSeconds 3))
-
 (defn bootstrap-cluster [layout-file]
-      (do ; read in the new layout
-        (let [unvalidated-layout (Layout/fromJSONString (str (slurp layout-file)))]
-             (let [new-layout
-                   (if
-                     (nil? (.getClusterId unvalidated-layout))
-                     (new Layout
-                          (.getLayoutServers unvalidated-layout)
-                          (.getSequencers unvalidated-layout)
-                          (.getSegments unvalidated-layout)
-                          (.getUnresponsiveServers unvalidated-layout)
-                          (.getEpoch unvalidated-layout)
-                          (UUID/randomUUID))
-                     unvalidated-layout)]
-                  (do
-                    (doseq [server (.getLayoutServers new-layout)]
+               (do ; read in the new layout
+                 (let [unvalidated-layout (Layout/fromJSONString (str (slurp layout-file)))]
+                   (let [new-layout
+                         (if
+                           (nil? (.getClusterId unvalidated-layout))
+                           (new Layout
+                             (.getLayoutServers unvalidated-layout)
+                             (.getSequencers unvalidated-layout)
+                             (.getSegments unvalidated-layout)
+                             (.getUnresponsiveServers unvalidated-layout)
+                             (.getEpoch unvalidated-layout)
+                             (UUID/randomUUID))
+                           unvalidated-layout)]
+                      (do
+                        (doseq [server (.getLayoutServers new-layout)]
                            (do
                              (println  (format "Installing layout for %s" server))
                              (let [router (get-router server localcmd)]
-                                  (BootstrapUtil/bootstrap new-layout retries timeout))))
-                    (println "New layout installed!"))))))
+                               (.join (.bootstrapLayout (get-layout-client router (.getEpoch new-layout) (.getClusterId new-layout)) new-layout))
+                               (.join (.bootstrapManagement (get-management-client router (.getEpoch new-layout) (.getClusterId new-layout)) new-layout))
+                            )))
+                        (println "New layout installed!"))))))
 
 ; determine whether to read or write
 (cond (.. localcmd (get "--layout")) (bootstrap-cluster (.. localcmd (get "--layout")))
-      :else (println "Unknown arguments."))
+                                       :else (println "Unknown arguments."))
