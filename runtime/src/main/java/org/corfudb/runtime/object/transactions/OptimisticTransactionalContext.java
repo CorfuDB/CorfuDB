@@ -1,11 +1,13 @@
 package org.corfudb.runtime.object.transactions;
 
+import java.time.Duration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
@@ -117,6 +119,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                         .access(accessFunction, version -> updateKnownStreamPosition(proxy.getStreamID(), version));
             }
         } finally {
+            MicroMeterUtils.time(Duration.ofMillis(0), "aggread");
             dbNanoTime += (System.nanoTime() - startAccessTime);
         }
     }
@@ -194,6 +197,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             return addToWriteSet(proxy, updateEntry, conflictObjects);
         } finally {
             dbNanoTime += (System.nanoTime() - startLogUpdateTime);
+            MicroMeterUtils.time(Duration.ofMillis(0), "aggwrite");
         }
     }
 
