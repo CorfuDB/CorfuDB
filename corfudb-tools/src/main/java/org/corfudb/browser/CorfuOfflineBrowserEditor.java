@@ -152,16 +152,19 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
     public void addRecordToConcurrentMap(List<LogEntryOrdering> tableEntries, ConcurrentMap cachedTable) {
         LogEntryOrdering tableEntry = tableEntries.remove(0);
         Object[] smrUpdateArg = ((SMREntry) tableEntry.getObj()).getSMRArguments();
-        Object smrUpdateTable = smrUpdateArg[0];
-        Object smrUpdateCorfuRecord = smrUpdateArg[1];
+        Object smrUpdateTable;
+        Object smrUpdateCorfuRecord;
 
         String smrMethod = ((SMREntry) tableEntry.getObj()).getSMRMethod();
         switch (smrMethod) {
             case "put":
+                smrUpdateCorfuRecord = smrUpdateArg[1];
+                smrUpdateTable = smrUpdateArg[0];
                 cachedTable.put(smrUpdateTable, smrUpdateCorfuRecord);
                 break;
-            case "delete":
-                cachedTable.remove(smrUpdateTable, smrUpdateCorfuRecord);
+            case "remove":
+                smrUpdateTable = smrUpdateArg[0];
+                cachedTable.remove(smrUpdateTable);
                 break;
             case "clear":
                 cachedTable.clear();

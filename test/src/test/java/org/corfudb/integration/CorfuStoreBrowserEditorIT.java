@@ -1130,6 +1130,143 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         Assert.assertEquals(browser.printTableInfo(namespace, tableName), one);
     }
 
+    /**
+     * Create a table and add data to it.  Verify that the browser tool is able
+     * to read its contents accurately. Then delete the data and verify read again.
+     * @throws IOException
+     * @throws NoSuchMethodException
+     * @throws IllegalAccessException
+     * @throws InvocationTargetException
+     */
+    @Test
+    public void writeDeleteTxnOfflineBrowser() throws
+            IOException,
+            NoSuchMethodException,
+            IllegalAccessException,
+            InvocationTargetException {
+        final String namespace = "namespace";
+        final String tableName = "table";
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost,
+                corfuStringNodePort);
+
+        // Start a Corfu runtime
+        runtime = createRuntime(singleNodeEndpoint);
+
+        CorfuStore store = new CorfuStore(runtime);
+
+        final Table<SampleSchema.Uuid, SampleSchema.Uuid, SampleSchema.Uuid> table1 = store.openTable(
+                namespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
+
+        final long keyUuid = 1L;
+        final long valueUuid = 3L;
+        final long metadataUuid = 5L;
+
+        SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder()
+                .setMsb(keyUuid)
+                .setLsb(keyUuid)
+                .build();
+        SampleSchema.Uuid uuidVal = SampleSchema.Uuid.newBuilder()
+                .setMsb(valueUuid)
+                .setLsb(valueUuid)
+                .build();
+        SampleSchema.Uuid metadata = SampleSchema.Uuid.newBuilder()
+                .setMsb(metadataUuid)
+                .setLsb(metadataUuid)
+                .build();
+
+        TxnContext tx1 = store.txn(namespace);
+        tx1.putRecord(table1, uuidKey, uuidVal, metadata);
+        tx1.commit();
+
+        TxnContext tx2 = store.txn(namespace);
+        tx2.delete(table1, uuidKey);
+        tx2.commit();
+
+        runtime.shutdown();
+
+        final int zero = 0;
+        CorfuOfflineBrowserEditor browser = new CorfuOfflineBrowserEditor(logPath);
+
+        // Invoke tableInfo and verify size
+        Assert.assertEquals(browser.printTableInfo(namespace, tableName), zero);
+    }
+
+    /**
+     * Create a table and add data to it.  Verify that the browser tool is able
+     * to read its contents accurately. Then clear the table and verify read again.
+     * @throws IOException
+     * @throws NoSuchMethodException
+     * @throws IllegalAccessException
+     * @throws InvocationTargetException
+     */
+    @Test
+    public void clearTableTxnOfflineBrowser() throws
+            IOException,
+            NoSuchMethodException,
+            IllegalAccessException,
+            InvocationTargetException {
+        final String namespace = "namespace";
+        final String tableName = "table";
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost,
+                corfuStringNodePort);
+
+        // Start a Corfu runtime
+        runtime = createRuntime(singleNodeEndpoint);
+
+        CorfuStore store = new CorfuStore(runtime);
+
+        final Table<SampleSchema.Uuid, SampleSchema.Uuid, SampleSchema.Uuid> table1 = store.openTable(
+                namespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
+
+        final long keyUuid = 1L;
+        final long valueUuid = 3L;
+        final long metadataUuid = 5L;
+
+        SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder()
+                .setMsb(keyUuid)
+                .setLsb(keyUuid)
+                .build();
+        SampleSchema.Uuid uuidVal = SampleSchema.Uuid.newBuilder()
+                .setMsb(valueUuid)
+                .setLsb(valueUuid)
+                .build();
+        SampleSchema.Uuid metadata = SampleSchema.Uuid.newBuilder()
+                .setMsb(metadataUuid)
+                .setLsb(metadataUuid)
+                .build();
+
+        TxnContext tx1 = store.txn(namespace);
+        tx1.putRecord(table1, uuidKey, uuidVal, metadata);
+        tx1.commit();
+
+        final int zero = 0;
+        final int one = 1;
+        CorfuOfflineBrowserEditor browser = new CorfuOfflineBrowserEditor(logPath);
+
+        // Invoke tableInfo and verify size
+        Assert.assertEquals(browser.printTableInfo(namespace, tableName), one);
+
+        // Clear table1
+        TxnContext tx2 = store.txn(namespace);
+        tx2.clear(table1);
+        tx2.commit();
+
+        // Invoke tableInfo and verify size
+        Assert.assertEquals(browser.printTableInfo(namespace, tableName), zero);
+
+        runtime.shutdown();
+    }
+
     @Test
     public void readUpdatedTxnOfflineBrowser() throws
             IOException,
