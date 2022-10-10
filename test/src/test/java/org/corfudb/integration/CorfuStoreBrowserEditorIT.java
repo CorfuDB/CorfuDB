@@ -1,8 +1,6 @@
 package org.corfudb.integration;
 
-import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Any;
-import com.google.protobuf.Descriptors;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.UnknownFieldSet;
 
@@ -74,8 +72,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
     @Before
     public void loadProperties() {
         corfuSingleNodeHost = PROPERTIES.getProperty("corfuSingleNodeHost");
-        corfuStringNodePort = Integer.valueOf(PROPERTIES.getProperty(
-            "corfuSingleNodePort"));
+        corfuStringNodePort = Integer.valueOf(PROPERTIES.getProperty("corfuSingleNodePort"));
         singleNodeEndpoint = String.format(
             "%s:%d",
             corfuSingleNodeHost,
