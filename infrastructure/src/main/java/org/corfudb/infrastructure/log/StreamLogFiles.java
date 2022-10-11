@@ -111,6 +111,8 @@ public class StreamLogFiles implements StreamLog {
 
     private final String logUnitSizeMetricName = "logunit.size";
     private final String logUnitTrimMarkMetricName = "logunit.trimmark";
+
+    private final static String invalidEntry = "Invalid entry";
     /**
      * Prevents corfu from reading and executing maintenance
      * operations (reset log unit and stream log compaction) in parallel
@@ -674,21 +676,21 @@ public class StreamLogFiles implements StreamLog {
             return null;
         }
 
-        if (streamLogFiles != null) {
-            if (streamLogFiles.verify && metadata.getPayloadChecksum() != Checksum.getChecksum(buffer.array())) {
-                String errorMessage = getDataCorruptionErrorMessage(streamLogFiles,
-                        "Checksum mismatch detected while trying to read file",
-                        channel, fileName
-                );
-                throw new DataCorruptionException(errorMessage);
-            }
+        if ((streamLogFiles != null) &&
+                (streamLogFiles.verify) &&
+                (metadata.getPayloadChecksum() != Checksum.getChecksum(buffer.array()))) {
+            String errorMessage = getDataCorruptionErrorMessage(streamLogFiles,
+                    "Checksum mismatch detected while trying to read file",
+                    channel, fileName
+            );
+            throw new DataCorruptionException(errorMessage);
         }
 
         LogEntry entry;
         try {
             entry = LogEntry.parseFrom(buffer.array());
         } catch (InvalidProtocolBufferException e) {
-            String errorMessage = getDataCorruptionErrorMessage(streamLogFiles, "Invalid entry",
+            String errorMessage = getDataCorruptionErrorMessage(streamLogFiles, invalidEntry,
                     channel, fileName
             );
             throw new DataCorruptionException(errorMessage, e);
@@ -761,7 +763,7 @@ public class StreamLogFiles implements StreamLog {
         try {
             return readLogDataFromFile(fileChannel, metaData);
         } catch (InvalidProtocolBufferException e) {
-            String errorMessage = getDataCorruptionErrorMessage("Invalid entry",
+            String errorMessage = getDataCorruptionErrorMessage(invalidEntry,
                     fileChannel, segment.getFileName()
             );
             throw new DataCorruptionException(errorMessage, e);

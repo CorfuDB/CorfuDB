@@ -10,7 +10,6 @@ import java.util.Set;
 import com.google.common.base.Preconditions;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -97,6 +96,36 @@ public class CorfuStoreBrowserEditorMain {
             throw t;
         }
     }
+
+
+    private static String getOfflineDBDir(Map<String, Object> opts) {
+        String path = opts.get("--operation").toString();
+        if (path == "null") { return null; }
+        return path;
+    }
+
+    private static String getHostName(Map<String, Object> opts) {
+        String host = opts.get("--host").toString();
+        if (host == "null") { return null; }
+        return host;
+    }
+
+    private static Integer getPortNumber(Map<String, Object> opts) {
+        final int defaultPort = 9000;
+        try {
+            Integer host = Integer.parseInt(opts.get("--port").toString());
+            return host;
+        } catch (Exception e) { return defaultPort; }
+    }
+
+    private static Boolean isTLSEnabled(Map<String, Object> opts) {
+        final Boolean defaultValue = true;
+        try {
+            Boolean tlsEnabled = Boolean.parseBoolean(opts.get("--tlsEnabled").toString());
+            return tlsEnabled;
+        } catch (Exception e) { return defaultValue; }
+    }
+
     public static int mainMethod(String[] args) {
         CorfuBrowserEditorCommands browser;
         log.info("CorfuBrowser starting...");
@@ -106,12 +135,11 @@ public class CorfuStoreBrowserEditorMain {
                         .withVersion(GitRepositoryState.getRepositoryState().describe)
                         .parse(args);
         String operation = opts.get("--operation").toString();
-        String offlineDbDir = opts.get("--offline-db-dir") != null ? opts.get("--offline-db-dir").toString():null;
-        String host = opts.get("--host") != null ? opts.get("--host").toString():null;
-        final int defaultPort = 9000;
-        Integer port = opts.get("--port") != null ? Integer.parseInt(opts.get("--port").toString()):defaultPort;
-        boolean tlsEnabled = opts.get("--tlsEnabled") != null &&
-                Boolean.parseBoolean(opts.get("--tlsEnabled").toString());
+        String offlineDbDir = getOfflineDBDir(opts);
+        String host = getHostName(opts);
+
+        Integer port = getPortNumber(opts);
+        boolean tlsEnabled = isTLSEnabled(opts);
 
         if (host != null) {
             final int SYSTEM_EXIT_ERROR_CODE = 1;

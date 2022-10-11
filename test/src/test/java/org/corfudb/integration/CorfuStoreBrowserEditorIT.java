@@ -537,8 +537,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
             InvocationTargetException {
         final String namespace = "namespace";
         final String tableName = "table";
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost,
-                corfuStringNodePort);
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
         runtime = createRuntime(singleNodeEndpoint);
@@ -589,7 +588,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
         final String namespace = "namespace";
         final String tableName = "table";
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
         runtime = createRuntime(singleNodeEndpoint);
@@ -624,7 +623,8 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
         CorfuOfflineBrowserEditor browser = new CorfuOfflineBrowserEditor(logPath);
         // Invoke listTables and verify table count
-        final int three = 3, one = 1;
+        final int three = 3;
+        final int one = 1;
         Assert.assertEquals(browser.printTableInfo(TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME), three);
         Assert.assertEquals(browser.printTableInfo(namespace, tableName), one);
     }
@@ -645,8 +645,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
             InvocationTargetException {
         final String namespace = "namespace";
         final String tableName = "table";
-        runSinglePersistentServer(corfuSingleNodeHost,
-                corfuStringNodePort);
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
         runtime = createRuntime(singleNodeEndpoint);
@@ -1091,8 +1090,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
             InvocationTargetException {
         final String namespace = "namespace";
         final String tableName = "table";
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost,
-                corfuStringNodePort);
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
         runtime = createRuntime(singleNodeEndpoint);
@@ -1163,8 +1161,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
             InvocationTargetException {
         final String namespace = "namespace";
         final String tableName = "table";
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost,
-                corfuStringNodePort);
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
         runtime = createRuntime(singleNodeEndpoint);
@@ -1229,8 +1226,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
             InvocationTargetException {
         final String namespace = "namespace";
         final String tableName = "table";
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost,
-                corfuStringNodePort);
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
         runtime = createRuntime(singleNodeEndpoint);
@@ -1293,7 +1289,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
         final String namespace = "namespace";
         final String tableName = "table";
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
@@ -1345,7 +1341,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
         final String namespace = "namespace";
         final String tableName = "table";
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
@@ -1398,7 +1394,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
         final String namespace = "namespace";
         final String tableName = "table";
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);

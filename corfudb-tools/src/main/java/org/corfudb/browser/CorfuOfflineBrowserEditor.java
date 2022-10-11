@@ -6,7 +6,6 @@ import lombok.Getter;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.infrastructure.log.LogFormat;
 import org.corfudb.infrastructure.log.LogFormat.LogEntry;
-import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
@@ -16,7 +15,10 @@ import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
-import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.CorfuDynamicKey;
+import org.corfudb.runtime.collections.CorfuDynamicRecord;
+import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 
@@ -27,12 +29,23 @@ import java.io.UncheckedIOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.UUID;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.EnumMap;
+import java.util.Set;
+
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 
-import static org.corfudb.infrastructure.log.StreamLogFiles.*;
+import static org.corfudb.infrastructure.log.StreamLogFiles.parseHeader;
+import static org.corfudb.infrastructure.log.StreamLogFiles.parseMetadata;
+import static org.corfudb.infrastructure.log.StreamLogFiles.parseEntry;
+import static org.corfudb.infrastructure.log.StreamLogFiles.getLogData;
 
 class CorfuTableDescriptor {
     @Getter
@@ -47,8 +60,7 @@ class CorfuTableDescriptor {
     }
 
     public boolean belongsToStream(LogData data) {
-        if (data.containsStream(streamID) || data.containsStream(checkpointID)) return true;
-        return false;
+        return data.containsStream(streamID) || data.containsStream(checkpointID);
     }
 }
 
@@ -79,7 +91,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                                   CorfuRuntime runtimeSerializer,
                                   List<LogEntryOrdering> tableEntries) {
 
-        if (!table.belongsToStream(data)) return false;
+        if (!table.belongsToStream(data)) { return false; }
 
         if (data.getType() == DataType.HOLE) {
             System.out.println("DEBUG: HOLE Found");
@@ -95,7 +107,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                     get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS));
             MultiSMREntry smrEntries = ((CheckpointEntry) modifiedData).
                     getSmrEntries(false, runtimeSerializer);
-            if (smrEntries != null) smrUpdates = smrEntries.getUpdates();
+            if (smrEntries != null) { smrUpdates = smrEntries.getUpdates(); }
         } else if (modifiedData instanceof MultiObjectSMREntry) {
             smrUpdates = ((MultiObjectSMREntry) modifiedData).getSMRUpdates(table.getStreamID());
         }
@@ -175,11 +187,11 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
 
                 while (fileChannel.position() < fileChannel.size() - 14) {
 
-                    LogFormat.Metadata metadata = StreamLogFiles.parseMetadata(null, fileChannel, file.getAbsolutePath());
-                    LogEntry entry = StreamLogFiles.parseEntry(null, fileChannel, metadata, file.getAbsolutePath());
+                    LogFormat.Metadata metadata = parseMetadata(null, fileChannel, file.getAbsolutePath());
+                    LogEntry entry = parseEntry(null, fileChannel, metadata, file.getAbsolutePath());
 
                     if (metadata != null && entry != null) {
-                        LogData data = StreamLogFiles.getLogData(entry);
+                        LogData data = getLogData(entry);
                         boolean registry = processLogData(data,
                                 registryTableDsc,
                                 serializerCS,
@@ -217,10 +229,10 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
     public int printTable(String namespace, String tableName) {
 
         if (namespace.equals(TableRegistry.CORFU_SYSTEM_NAMESPACE)
-                && tableName.equals(TableRegistry.REGISTRY_TABLE_NAME)) return printTableRegistry();
+                && tableName.equals(TableRegistry.REGISTRY_TABLE_NAME)) { return printTableRegistry(); }
 
         if (namespace.equals(TableRegistry.CORFU_SYSTEM_NAMESPACE)
-                && tableName.equals(TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME)) return printAllProtoDescriptors();
+                && tableName.equals(TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME)) { return printAllProtoDescriptors();}
 
         ConcurrentMap<CorfuDynamicKey, CorfuDynamicRecord> cachedTable = getTableData(namespace, tableName);
         for (CorfuDynamicKey key: cachedTable.keySet()) {
@@ -283,7 +295,6 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
             System.out.println("Namespace: " + tableName.getNamespace());
             numTables++;
         }
-        System.out.println("\n======================\n");
         return numTables;
     }
 
@@ -304,13 +315,11 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
      */
     @Override
     public int printTableInfo(String namespace, String tableName) {
-        System.out.println("\n======================\n");
         CorfuTableDescriptor tableDsc = new CorfuTableDescriptor(namespace, tableName);
         ConcurrentMap<CorfuDynamicKey, CorfuDynamicRecord> table = getTableData(namespace, tableName);
         int tableSize = table.size();
         System.out.println("Table " + tableName + " in namespace " + namespace +
                 " with ID " + tableDsc.getStreamID() + " has " + tableSize + " entries");
-        System.out.println("\n======================\n");
         return tableSize;
     }
 
@@ -321,13 +330,14 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
     public int printAllProtoDescriptors() {
 
         getTableData(TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME);
+        String errMessage = "Unable to print protobuf for key ";
         System.out.println("=========PROTOBUF FILE NAMES===========");
         for (CorfuStoreMetadata.ProtobufFileName protoFileName :
                 dynamicProtobufSerializer.getCachedProtobufDescriptorTable().keySet()) {
             try {
                 System.out.println(JsonFormat.printer().print(protoFileName));
             } catch (InvalidProtocolBufferException e) {
-                System.out.println("Unable to print protobuf for key " + protoFileName + e);
+                System.out.println(errMessage + protoFileName + e);
             }
         }
         System.out.println("=========PROTOBUF FILE DESCRIPTORS ===========");
@@ -340,7 +350,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                                 .get(protoFileName).getPayload())
                 );
             } catch (InvalidProtocolBufferException e) {
-                System.out.println("Unable to print protobuf for key " + protoFileName + e);
+                System.out.println(errMessage + protoFileName + e);
             }
         }
         return dynamicProtobufSerializer.getCachedProtobufDescriptorTable().keySet().size();

@@ -159,7 +159,7 @@ public class DynamicProtobufSerializer implements ISerializer {
     /**
      *
      * @param cachedRegistryTable - pre-constructed cache of the entire RegistryTable
-     * @param cachedProtobufDescriptorTable- pre-constructed cache of the ProtobufDescriptorTable
+     * @param cachedProtobufDescriptorTable pre-constructed cache of the ProtobufDescriptorTable
      */
     public DynamicProtobufSerializer(
             ConcurrentMap<TableName,
@@ -170,7 +170,6 @@ public class DynamicProtobufSerializer implements ISerializer {
         this.cachedRegistryTable = cachedRegistryTable;
         this.cachedProtobufDescriptorTable = cachedProtobufDescriptorTable;
         this.fdProtoMap = new ConcurrentHashMap<>();
-        ;
         this.messagesFdProtoNameMap = new ConcurrentHashMap<>();
         cachedProtobufDescriptorTable.forEach((fdName, fileDescriptorProto) -> {
             populateFileDescriptorProtosInMessage(fileDescriptorProto, fdProtoMap);
@@ -207,7 +206,7 @@ public class DynamicProtobufSerializer implements ISerializer {
      * @param fdProtoMap the destination map to which we extract the types into
      */
     public static void populateFileDescriptorProtosInMessage(
-            CorfuRecord<ProtobufFileDescriptor, TableMetadata>fileDescriptorProto,
+            CorfuRecord<ProtobufFileDescriptor, TableMetadata> fileDescriptorProto,
             ConcurrentMap<String, FileDescriptorProto> fdProtoMap) {
         String protoFileName = fileDescriptorProto.getPayload().getFileDescriptor().getName();
         // Since corfu_options is something within repo, the path gets truncated on insert.

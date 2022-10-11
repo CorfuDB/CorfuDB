@@ -468,9 +468,9 @@ public class AbstractIT extends AbstractCorfuTest {
             this.inputStream = inputStream;
             this.logfile = logfile;
             Path path = Paths.get(logfile);
-//            if (Files.notExists(path)) {
+            if (Files.notExists(path)) {
                 Files.createFile(path);
-//            }
+            }
         }
 
         @Override
