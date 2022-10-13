@@ -1491,8 +1491,8 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
-        final int numRecords = PARAMETERS.NUM_ITERATIONS_MODERATE;
-        final int numTable = 82;
+        final int numRecords = PARAMETERS.NUM_ITERATIONS_VERY_LOW;
+        final int numTable = 8;
         runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 

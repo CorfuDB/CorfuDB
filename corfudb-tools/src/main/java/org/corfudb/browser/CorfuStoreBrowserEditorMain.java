@@ -44,8 +44,6 @@ public class CorfuStoreBrowserEditorMain {
         addRecord
     }
 
-    private static final String nullString = "null";
-
     private static final String USAGE = "Usage: corfu-browser "+
         "--operation=<operation> " +
         "[--host=<host>] [--port=<port>] " +
