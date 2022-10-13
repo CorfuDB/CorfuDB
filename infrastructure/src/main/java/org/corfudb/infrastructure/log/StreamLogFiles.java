@@ -112,7 +112,7 @@ public class StreamLogFiles implements StreamLog {
     private final String logUnitSizeMetricName = "logunit.size";
     private final String logUnitTrimMarkMetricName = "logunit.trimmark";
 
-    private final static String invalidEntry = "Invalid entry";
+    private static final String invalidEntry = "Invalid entry";
     /**
      * Prevents corfu from reading and executing maintenance
      * operations (reset log unit and stream log compaction) in parallel
@@ -676,8 +676,7 @@ public class StreamLogFiles implements StreamLog {
             return null;
         }
 
-        if ((streamLogFiles != null) &&
-                (streamLogFiles.verify) &&
+        if ((streamLogFiles != null) && streamLogFiles.verify &&
                 (metadata.getPayloadChecksum() != Checksum.getChecksum(buffer.array()))) {
             String errorMessage = getDataCorruptionErrorMessage(streamLogFiles,
                     "Checksum mismatch detected while trying to read file",

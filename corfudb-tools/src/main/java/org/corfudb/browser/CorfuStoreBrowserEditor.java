@@ -75,7 +75,6 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
     private final CorfuRuntime runtime;
     private final String diskPath;
     private final DynamicProtobufSerializer dynamicProtobufSerializer;
-    private final String QUOTE = "\"";
 
     /**
      * Creates a CorfuBrowser which connects a runtime to the server.
@@ -169,7 +168,7 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
             // TableDescriptors are an internal type that use Any protobuf.
             // JsonFormat has a known bug where it fails to print Any protobuf payloads
             // So to work around this bug, avoid dumping the TableDescriptor table directly.
-            return printTableRegistry();
+            return printTableRegistry(dynamicProtobufSerializer);
         }
 
         ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
@@ -217,7 +216,7 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         }
     }
 
-    private int printTableRegistry() {
+    public static int printTableRegistry(DynamicProtobufSerializer dynamicProtobufSerializer) {
         for (Map.Entry<TableName, CorfuRecord<TableDescriptors, TableMetadata>> entry :
                 dynamicProtobufSerializer.getCachedRegistryTable().entrySet()) {
             try {
@@ -229,6 +228,7 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
             }
             try {
                 StringBuilder builder = new StringBuilder();
+                String QUOTE = "\"";
                 builder.append("\nkeyType = \"" + entry.getValue().getPayload().getKey().getTypeUrl() + QUOTE);
                 builder.append("\npayloadType = \"" + entry.getValue().getPayload().getValue().getTypeUrl() + QUOTE);
                 builder.append("\nmetadataType = \"" + entry.getValue().getPayload().getMetadata().getTypeUrl() + QUOTE);

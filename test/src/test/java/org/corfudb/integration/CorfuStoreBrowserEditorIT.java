@@ -28,6 +28,10 @@ import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.view.TableRegistry;
 import org.junit.Assert;
 import org.junit.Before;
@@ -389,7 +393,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         final String namespace = "UT-namespace";
         final String tableBaseName = "table";
 
-        final int expectedFiles = 5;
+        final int expectedFiles = 6;
         populateRegistryTable(namespace, tableBaseName);
 
         runtime = createRuntime(singleNodeEndpoint);
@@ -1446,7 +1450,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
         final String namespace = "namespace";
         final String tableName = "table";
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
@@ -1486,7 +1490,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
             IllegalAccessException,
             InvocationTargetException {
 
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         final int numRecords = PARAMETERS.NUM_ITERATIONS_MODERATE;
         final int numTable = 82;

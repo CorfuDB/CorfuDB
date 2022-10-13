@@ -44,6 +44,8 @@ public class CorfuStoreBrowserEditorMain {
         addRecord
     }
 
+    private static final String nullString = "null";
+
     private static final String USAGE = "Usage: corfu-browser "+
         "--operation=<operation> " +
         "[--host=<host>] [--port=<port>] " +
@@ -97,16 +99,27 @@ public class CorfuStoreBrowserEditorMain {
         }
     }
 
+    private static String getOperation(Map<String, Object> opts) {
+        String operation = opts.get("--operation").toString();
+        if (operation.equals(nullString)) {
+            return null;
+        }
+        return operation;
+    }
 
     private static String getOfflineDBDir(Map<String, Object> opts) {
-        String path = opts.get("--operation").toString();
-        if (path == "null") { return null; }
+        String path = opts.get("--offline-db-dir").toString();
+        if (path.equals(nullString)) {
+            return null;
+        }
         return path;
     }
 
     private static String getHostName(Map<String, Object> opts) {
         String host = opts.get("--host").toString();
-        if (host == "null") { return null; }
+        if (host.equals(nullString)) {
+            return null;
+        }
         return host;
     }
 
@@ -115,7 +128,9 @@ public class CorfuStoreBrowserEditorMain {
         try {
             Integer host = Integer.parseInt(opts.get("--port").toString());
             return host;
-        } catch (Exception e) { return defaultPort; }
+        } catch (Exception e) {
+            return defaultPort;
+        }
     }
 
     private static Boolean isTLSEnabled(Map<String, Object> opts) {
@@ -123,7 +138,9 @@ public class CorfuStoreBrowserEditorMain {
         try {
             Boolean tlsEnabled = Boolean.parseBoolean(opts.get("--tlsEnabled").toString());
             return tlsEnabled;
-        } catch (Exception e) { return defaultValue; }
+        } catch (Exception e) {
+            return defaultValue;
+        }
     }
 
     public static int mainMethod(String[] args) {
@@ -134,7 +151,7 @@ public class CorfuStoreBrowserEditorMain {
                 new Docopt(USAGE)
                         .withVersion(GitRepositoryState.getRepositoryState().describe)
                         .parse(args);
-        String operation = opts.get("--operation").toString();
+        String operation = getOperation(opts);
         String offlineDbDir = getOfflineDBDir(opts);
         String host = getHostName(opts);
 

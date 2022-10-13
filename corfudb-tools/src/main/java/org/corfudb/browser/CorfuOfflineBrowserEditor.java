@@ -47,22 +47,10 @@ import static org.corfudb.infrastructure.log.StreamLogFiles.parseMetadata;
 import static org.corfudb.infrastructure.log.StreamLogFiles.parseEntry;
 import static org.corfudb.infrastructure.log.StreamLogFiles.getLogData;
 
-class CorfuTableDescriptor {
-    @Getter
-    private final UUID streamID;
-    @Getter
-    private final UUID checkpointID;
-
-    public CorfuTableDescriptor(String namespace, String tableName) {
-        String name = TableRegistry.getFullyQualifiedTableName(namespace, tableName);
-        streamID = CorfuRuntime.getStreamID(name);
-        checkpointID = CorfuRuntime.getCheckpointStreamIdFromId(streamID);
-    }
-
-    public boolean belongsToStream(LogData data) {
-        return data.containsStream(streamID) || data.containsStream(checkpointID);
-    }
-}
+import static org.corfudb.browser.CorfuStoreBrowserEditor.printTableRegistry;
+import static org.corfudb.browser.CorfuStoreBrowserEditor.printKey;
+import static org.corfudb.browser.CorfuStoreBrowserEditor.printMetadata;
+import static org.corfudb.browser.CorfuStoreBrowserEditor.printPayload;
 
 @SuppressWarnings("checkstyle:printLine")
 public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
@@ -91,7 +79,9 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                                   CorfuRuntime runtimeSerializer,
                                   List<LogEntryOrdering> tableEntries) {
 
-        if (!table.belongsToStream(data)) { return false; }
+        if (!table.belongsToStream(data)) {
+            return false;
+        }
 
         if (data.getType() == DataType.HOLE) {
             System.out.println("DEBUG: HOLE Found");
@@ -107,7 +97,9 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                     get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS));
             MultiSMREntry smrEntries = ((CheckpointEntry) modifiedData).
                     getSmrEntries(false, runtimeSerializer);
-            if (smrEntries != null) { smrUpdates = smrEntries.getUpdates(); }
+            if (smrEntries != null) {
+                smrUpdates = smrEntries.getUpdates();
+            }
         } else if (modifiedData instanceof MultiObjectSMREntry) {
             smrUpdates = ((MultiObjectSMREntry) modifiedData).getSMRUpdates(table.getStreamID());
         }
@@ -229,56 +221,26 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
     public int printTable(String namespace, String tableName) {
 
         if (namespace.equals(TableRegistry.CORFU_SYSTEM_NAMESPACE)
-                && tableName.equals(TableRegistry.REGISTRY_TABLE_NAME)) { return printTableRegistry(); }
+                && tableName.equals(TableRegistry.REGISTRY_TABLE_NAME)) {
+            getTableData(namespace, tableName);
+            return printTableRegistry(dynamicProtobufSerializer);
+        }
 
         if (namespace.equals(TableRegistry.CORFU_SYSTEM_NAMESPACE)
-                && tableName.equals(TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME)) { return printAllProtoDescriptors();}
+                && tableName.equals(TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME)) {
+            getTableData(namespace, tableName);
+            return printAllProtoDescriptors();
+        }
 
         ConcurrentMap<CorfuDynamicKey, CorfuDynamicRecord> cachedTable = getTableData(namespace, tableName);
-        for (CorfuDynamicKey key: cachedTable.keySet()) {
-            System.out.println("Key: ");
-            System.out.println(key.getKey());
-            System.out.println("Value: ");
-            System.out.println(cachedTable.get(key).getPayload());
+        Set<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> entries = cachedTable.entrySet();
+
+        for (Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry : entries) {
+            printKey(entry);
+            printPayload(entry);
+            printMetadata(entry);
         }
         return cachedTable.size();
-    }
-
-    private int printTableRegistry() {
-
-        getTableData(TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME);
-        for (Map.Entry<CorfuStoreMetadata.TableName,
-                CorfuRecord<CorfuStoreMetadata.TableDescriptors, CorfuStoreMetadata.TableMetadata>> entry :
-                dynamicProtobufSerializer.getCachedRegistryTable().entrySet()) {
-            try {
-                StringBuilder builder = new StringBuilder("\nKey:\n").append(JsonFormat.printer().print(entry.getKey()));
-                System.out.println(builder);
-            } catch (Exception e) {
-                System.out.println("Unable to print tableName of this registry table key " + entry.getKey());
-            }
-            try {
-                StringBuilder builder = new StringBuilder();
-                builder.append("\nkeyType = \"" + entry.getValue().getPayload().getKey().getTypeUrl() + "\"");
-                builder.append("\npayloadType = \"" + entry.getValue().getPayload().getValue().getTypeUrl() + "\"");
-                builder.append("\nmetadataType = \"" + entry.getValue().getPayload().getMetadata().getTypeUrl() + "\"");
-                builder.append("\nProtobuf Source Files: \"" +
-                        entry.getValue().getPayload().getFileDescriptorsMap().keySet()
-                );
-                System.out.println(builder);
-            } catch (Exception e) {
-                System.out.println("Unable to extract payload fields from registry table key " + entry.getKey());
-            }
-
-            try {
-                StringBuilder builder = new StringBuilder("\nMetadata:\n")
-                        .append(JsonFormat.printer().print(entry.getValue().getMetadata()));
-                System.out.println(builder);
-            } catch (Exception e) {
-                System.out.println("Unable to print metadata section of registry table");
-            }
-        }
-
-        return dynamicProtobufSerializer.getCachedRegistryTable().size();
     }
 
     /**
@@ -420,43 +382,62 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
     public List<CorfuStoreMetadata.TableName> listTablesForTag(@Nonnull String streamTag) {
         return null;
     }
+
+    /**
+     * Wrapper class for LogEntry objects with an address
+     */
+    class LogEntryOrdering {
+        org.corfudb.protocols.logprotocol.LogEntry obj;
+        long ordering; //address is stored here
+
+        public LogEntryOrdering(org.corfudb.protocols.logprotocol.LogEntry obj, long ordering) {
+            this.obj = obj;
+            this.ordering = ordering;
+        }
+
+        public org.corfudb.protocols.logprotocol.LogEntry getObj() {
+            return obj;
+        }
+
+        public void setObj(org.corfudb.protocols.logprotocol.LogEntry obj) {
+            this.obj = obj;
+        }
+
+        public long getOrdering() {
+            return ordering;
+        }
+
+        public void setOrdering(long ordering) {
+            this.ordering = ordering;
+        }
+    }
+
+    /**
+     * Comparator class for LogEntry objects
+     */
+    class LogEntryComparator implements Comparator<LogEntryOrdering> {
+        @Override
+        public int compare(LogEntryOrdering a, LogEntryOrdering b) {
+            return Long.compare(a.getOrdering(), b.getOrdering());
+        }
+    }
+
+    class CorfuTableDescriptor {
+        @Getter
+        private final UUID streamID;
+        @Getter
+        private final UUID checkpointID;
+
+        public CorfuTableDescriptor(String namespace, String tableName) {
+            String name = TableRegistry.getFullyQualifiedTableName(namespace, tableName);
+            streamID = CorfuRuntime.getStreamID(name);
+            checkpointID = CorfuRuntime.getCheckpointStreamIdFromId(streamID);
+        }
+
+        public boolean belongsToStream(LogData data) {
+            return data.containsStream(streamID) || data.containsStream(checkpointID);
+        }
+    }
 }
 
-/**
- * Wrapper class for LogEntry objects with an address
- */
-class LogEntryOrdering {
-    org.corfudb.protocols.logprotocol.LogEntry obj;
-    long ordering; //address is stored here
 
-    public LogEntryOrdering(org.corfudb.protocols.logprotocol.LogEntry obj, long ordering) {
-        this.obj = obj;
-        this.ordering = ordering;
-    }
-
-    public org.corfudb.protocols.logprotocol.LogEntry getObj() {
-        return obj;
-    }
-
-    public void setObj(org.corfudb.protocols.logprotocol.LogEntry obj) {
-        this.obj = obj;
-    }
-
-    public long getOrdering() {
-        return ordering;
-    }
-
-    public void setOrdering(long ordering) {
-        this.ordering = ordering;
-    }
-}
-
-/**
- * Comparator class for LogEntry objects
- */
-class LogEntryComparator implements Comparator<LogEntryOrdering> {
-    @Override
-    public int compare(LogEntryOrdering a, LogEntryOrdering b) {
-        return Long.compare(a.getOrdering(), b.getOrdering());
-    }
-}
