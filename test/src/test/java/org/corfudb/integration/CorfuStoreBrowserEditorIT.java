@@ -1482,7 +1482,6 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         Assert.assertEquals(tableData.size(), numRecords);
     }
 
-
     @Test
     public void createMultipleStreamAndEntriesOfflineBrowser() throws
             IOException,

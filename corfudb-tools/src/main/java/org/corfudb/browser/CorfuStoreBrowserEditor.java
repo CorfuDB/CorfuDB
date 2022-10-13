@@ -228,10 +228,10 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
             }
             try {
                 StringBuilder builder = new StringBuilder();
-                String QUOTE = "\"";
-                builder.append("\nkeyType = \"" + entry.getValue().getPayload().getKey().getTypeUrl() + QUOTE);
-                builder.append("\npayloadType = \"" + entry.getValue().getPayload().getValue().getTypeUrl() + QUOTE);
-                builder.append("\nmetadataType = \"" + entry.getValue().getPayload().getMetadata().getTypeUrl() + QUOTE);
+                String separator = "\"";
+                builder.append("\nkeyType = \"" + entry.getValue().getPayload().getKey().getTypeUrl() + separator);
+                builder.append("\npayloadType = \"" + entry.getValue().getPayload().getValue().getTypeUrl() + separator);
+                builder.append("\nmetadataType = \"" + entry.getValue().getPayload().getMetadata().getTypeUrl() + separator);
                 builder.append("\nProtobuf Source Files: \"" +
                         entry.getValue().getPayload().getFileDescriptorsMap().keySet()
                 );

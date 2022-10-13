@@ -461,7 +461,7 @@ public class StreamLogFiles implements StreamLog {
                 .DataType.typeMap.get((byte) entry.getDataType().getNumber()),
                 Unpooled.wrappedBuffer(entryData.array()), ldCodecType);
 
-        logData.setBackpointerMap(getUUIDLongMap(entry.getBackpointersMap()));
+        logData.setBackpointerMap(getUuidLongMap(entry.getBackpointersMap()));
         logData.setGlobalAddress(entry.getGlobalAddress());
         logData.setEpoch(entry.getEpoch());
 
@@ -676,8 +676,8 @@ public class StreamLogFiles implements StreamLog {
             return null;
         }
 
-        if ((streamLogFiles != null) && streamLogFiles.verify &&
-                (metadata.getPayloadChecksum() != Checksum.getChecksum(buffer.array()))) {
+        if (streamLogFiles != null && streamLogFiles.verify &&
+                metadata.getPayloadChecksum() != Checksum.getChecksum(buffer.array())) {
             String errorMessage = getDataCorruptionErrorMessage(streamLogFiles,
                     "Checksum mismatch detected while trying to read file",
                     channel, fileName
@@ -875,7 +875,7 @@ public class StreamLogFiles implements StreamLog {
     }
 
     @SuppressWarnings("checkstyle:abbreviationaswordinname")  // Due to deprecation
-    public static Map<UUID, Long> getUUIDLongMap(Map<String, Long> stringLongMap) {
+    public static Map<UUID, Long> getUuidLongMap(Map<String, Long> stringLongMap) {
         Map<UUID, Long> uuidLongMap = new HashMap<>();
 
         for (Map.Entry<String, Long> entry : stringLongMap.entrySet()) {

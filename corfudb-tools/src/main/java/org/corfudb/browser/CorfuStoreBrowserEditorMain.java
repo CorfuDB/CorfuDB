@@ -100,27 +100,30 @@ public class CorfuStoreBrowserEditorMain {
     }
 
     private static String getOperation(Map<String, Object> opts) {
-        String operation = opts.get("--operation").toString();
-        if (operation.equals(nullString)) {
-            return null;
+        try {
+            String operation = opts.get("--operation").toString();
+            return operation;
+        } catch (Exception e) {
+            return "";
         }
-        return operation;
     }
 
     private static String getOfflineDBDir(Map<String, Object> opts) {
-        String path = opts.get("--offline-db-dir").toString();
-        if (path.equals(nullString)) {
+        try {
+            String path = opts.get("--offline-db-dir").toString();
+            return path;
+        } catch (Exception e) {
             return null;
         }
-        return path;
     }
 
     private static String getHostName(Map<String, Object> opts) {
-        String host = opts.get("--host").toString();
-        if (host.equals(nullString)) {
+        try {
+            String host = opts.get("--host").toString();
+            return host;
+        } catch (Exception e) {
             return null;
         }
-        return host;
     }
 
     private static Integer getPortNumber(Map<String, Object> opts) {
@@ -134,7 +137,7 @@ public class CorfuStoreBrowserEditorMain {
     }
 
     private static Boolean isTLSEnabled(Map<String, Object> opts) {
-        final Boolean defaultValue = true;
+        final Boolean defaultValue = false;
         try {
             Boolean tlsEnabled = Boolean.parseBoolean(opts.get("--tlsEnabled").toString());
             return tlsEnabled;
