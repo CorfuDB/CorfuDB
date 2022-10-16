@@ -101,7 +101,6 @@ public class CorfuStore {
         long startTime = System.currentTimeMillis();
         Table table =
                 runtime.getTableRegistry().openTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
-        corfuStoreMetrics.recordTableCount();
         log.info("openTable {}${} took {}ms", namespace, tableName, (System.currentTimeMillis() - startTime));
         return table;
     }

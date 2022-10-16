@@ -16,8 +16,6 @@ public class CorfuStoreMetrics {
     private final Optional<DistributionSummary> numberReads;
     private final TimingHistogram highestSequenceNumberDuration;
 
-    private final Optional<Counter> openTableCounter;
-
     public void recordBatchReads(int numBatches) {
         numberBatchReads.ifPresent(counter -> counter.record(numBatches));
     }
@@ -26,9 +24,6 @@ public class CorfuStoreMetrics {
         numberReads.ifPresent(counter -> counter.record(reads));
     }
 
-    public void recordTableCount() {
-        openTableCounter.ifPresent(Counter::increment);
-    }
 
     public void recordHighestSequenceNumberDuration(Optional<Timer.Sample> startTime) {
         highestSequenceNumberDuration.update(startTime);
@@ -51,8 +46,6 @@ public class CorfuStoreMetrics {
                         .description("Number of addresses read in batches before finding highest DATA sequence number")
                         .register(registry));
 
-        this.openTableCounter = MicroMeterUtils.counter("open_tables.count");
-
         this.highestSequenceNumberDuration = new TimingHistogram("highestSequenceNumberDuration", "CorfuStore");
     }
 
@@ -69,7 +62,6 @@ public class CorfuStoreMetrics {
         json.addProperty("numberReads_count", numberReads.map(DistributionSummary::count).orElse(0L));
         json.addProperty("numberReads_max", numberReads.map(DistributionSummary::max).orElse(0.0));
         json.addProperty("numberReads_mean", numberReads.map(DistributionSummary::mean).orElse(0.0));
-        json.addProperty("openTableCounter", openTableCounter.map(Counter::count).orElse(0.0));
         json.add("highestSequenceNumberDuration", highestSequenceNumberDuration.asJsonObject());
         return json;
     }

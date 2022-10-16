@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
+import io.micrometer.core.instrument.Counter;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
@@ -18,6 +19,7 @@ import org.corfudb.util.serializer.ISerializer;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.time.Duration;
+import java.time.temporal.TemporalUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -132,7 +134,11 @@ public class Table<K extends Message, V extends Message, M extends Message> {
         } else {
             this.guidGenerator = null;
         }
+
+        this.tableScanned = MicroMeterUtils.counter("scannedkvs.count");
+
     }
+    private final Optional<Counter> tableScanned;
 
     /**
      * Fetch the value for a key.
@@ -394,6 +400,9 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                     .collect(Collectors.toList())).join();
             MicroMeterUtils.time(Duration.ofNanos(System.nanoTime() - startTime), "table.scan",
                     "tableName", getFullyQualifiedTableName());
+
+            MicroMeterUtils.time(Duration.ofNanos(1), "agg.scan");
+            this.tableScanned.get().increment(corfuTable.size());
             return res;
         }
     }
