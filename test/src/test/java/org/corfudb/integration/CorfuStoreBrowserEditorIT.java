@@ -385,6 +385,11 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 
+    /**
+     * Test Corfu Offline Browser protobuf descriptor table
+     *
+     * @throws Exception
+     */
     @Test
     public void testListAllProtoOffline() throws Exception {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost,
@@ -471,6 +476,14 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runtime.shutdown();
     }
 
+    /**
+     * Create a table and add nested protobufs as data to it. Verify that the
+     * offline browser tool is able to read the contents accurately.
+     * @throws IOException
+     * @throws NoSuchMethodException
+     * @throws IllegalAccessException
+     * @throws InvocationTargetException
+     */
     @Test
     public void nestedProtoTestOfflineBrowser() throws
             IOException,
@@ -583,6 +596,14 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         Assert.assertEquals(1, browser.printTableInfo(namespace, tableName));
     }
 
+    /**
+     * Create a table and add data to it.  Verify that the offline browser is able
+     * to read the system TableRegistry contents accurately.
+     * @throws IOException
+     * @throws NoSuchMethodException
+     * @throws IllegalAccessException
+     * @throws InvocationTargetException
+     */
     @Test
     public void browserRegistryTableTestOffline() throws
             IOException,
@@ -609,7 +630,6 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
         final long keyUuid = 1L;
         final long valueUuid = 3L;
-        final long metadataUuid = 5L;
 
         SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder()
                 .setMsb(keyUuid)
@@ -1056,6 +1076,13 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         Assert.assertNull(addedRecord);
     }
 
+    /**
+     * Open an offlineBrowser and test for adding an entry.
+     * @throws IOException
+     * @throws NoSuchMethodException
+     * @throws IllegalAccessException
+     * @throws InvocationTargetException
+     */
     @Test
     public void addRecordOfflineBrowserTest() throws IOException {
 
@@ -1284,6 +1311,15 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runtime.shutdown();
     }
 
+    /**
+     * Create a table and add data to it and update it.
+     * Verify that the offline browser is able to
+     * read its contents accurately.
+     * @throws IOException
+     * @throws NoSuchMethodException
+     * @throws IllegalAccessException
+     * @throws InvocationTargetException
+     */
     @Test
     public void readUpdatedTxnOfflineBrowser() throws
             IOException,
@@ -1336,6 +1372,15 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         }
     }
 
+    /**
+     * Create a table and add data to it and update it.
+     * Trim the table and verify that the offline browser
+     * is able to read its contents accurately.
+     * @throws IOException
+     * @throws NoSuchMethodException
+     * @throws IllegalAccessException
+     * @throws InvocationTargetException
+     */
     @Test
     public void readUpdatedTxnWithTrimOfflineBrowser() throws
             IOException,
@@ -1389,6 +1434,15 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         }
     }
 
+    /**
+     * Create a table and add data to it.
+     * Trim the table and verify that the offline browser
+     * is able to read its contents accurately.
+     * @throws IOException
+     * @throws NoSuchMethodException
+     * @throws IllegalAccessException
+     * @throws InvocationTargetException
+     */
     @Test
     public void trimStreamTestOffline() throws
             IOException,
@@ -1441,6 +1495,15 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         }
     }
 
+    /**
+     * Create a table and add multiple entries to it.
+     * Verify that the offline browser
+     * is able to read its contents accurately.
+     * @throws IOException
+     * @throws NoSuchMethodException
+     * @throws IllegalAccessException
+     * @throws InvocationTargetException
+     */
     @Test
     public void createMultipleEntriesOfflineBrowser() throws
             IOException,
@@ -1482,6 +1545,15 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         Assert.assertEquals(tableData.size(), numRecords);
     }
 
+    /**
+     * Create a multiple tables and add multiple
+     * entries to them. Verify that the offline browser
+     * is able to read its contents accurately.
+     * @throws IOException
+     * @throws NoSuchMethodException
+     * @throws IllegalAccessException
+     * @throws InvocationTargetException
+     */
     @Test
     public void createMultipleStreamAndEntriesOfflineBrowser() throws
             IOException,
@@ -1528,3 +1600,4 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         }
     }
 }
+
