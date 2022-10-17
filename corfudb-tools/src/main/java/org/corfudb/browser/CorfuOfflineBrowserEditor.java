@@ -28,14 +28,7 @@ import java.io.UncheckedIOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.UUID;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.EnumMap;
-import java.util.Set;
+import java.util.*;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -73,44 +66,6 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                 TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME);
     }
 
-    public boolean processLogData(LogData data,
-                                  CorfuTableDescriptor table,
-                                  CorfuRuntime runtimeSerializer,
-                                  List<LogEntryOrdering> tableEntries) {
-
-        if (!table.belongsToStream(data)) {
-            return false;
-        }
-
-        if (data.getType() == DataType.HOLE) {
-            System.out.println("DEBUG: HOLE Found");
-            return true;
-        }
-
-        Object modifiedData = data.getPayload(runtimeSerializer);
-        List<SMREntry> smrUpdates = new ArrayList<>();
-        long snapshotAddress = 0;
-        if (modifiedData instanceof CheckpointEntry) {
-            snapshotAddress = Long.decode(((CheckpointEntry)modifiedData).
-                    getDict().
-                    get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS));
-            MultiSMREntry smrEntries = ((CheckpointEntry) modifiedData).
-                    getSmrEntries(false, runtimeSerializer);
-            if (smrEntries != null) {
-                smrUpdates = smrEntries.getUpdates();
-            }
-        } else if (modifiedData instanceof MultiObjectSMREntry) {
-            smrUpdates = ((MultiObjectSMREntry) modifiedData).getSMRUpdates(table.getStreamID());
-        }
-
-        for (SMREntry smrUpdate : smrUpdates) {
-            LogEntryOrdering entry = (modifiedData instanceof CheckpointEntry) ?
-                    new LogEntryOrdering(smrUpdate, snapshotAddress) :
-                    new LogEntryOrdering(smrUpdate, smrUpdate.getGlobalAddress());
-            tableEntries.add(entry);
-        }
-        return true;
-    }
 
     public void addRecordsToConcurrentMap(List<LogEntryOrdering> tableEntries, ConcurrentMap cachedTable) {
 
@@ -143,28 +98,11 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
     }
 
     /**
-     * Fetches the table from the given namespace
-     * @param namespace
-     * @param tableName
-     * @return ConcurrentMap
+     * Creates a CorfuOfflineBrowser linked to an existing log directory.
+     * @param tableDsc list of table Descriptors.
+     * @param tableData list of table Descriptors.
      */
-    public ConcurrentMap getTableData(String namespace, String tableName) {
-
-        CorfuTableDescriptor table = new CorfuTableDescriptor(namespace, tableName);
-
-        ConcurrentMap cachedRegistryTable = new ConcurrentHashMap<>();
-        ConcurrentMap cachedProtobufDescriptorTable = new ConcurrentHashMap<>();
-        ConcurrentMap cachedTable = new ConcurrentHashMap<>();
-
-        List<LogEntryOrdering> registryTableEntries = new ArrayList<>();
-        List<LogEntryOrdering> protobufDescriptorTableEntries = new ArrayList<>();
-        List<LogEntryOrdering> tableEntries = new ArrayList<>();
-
-        CorfuRuntime serializerCS = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build());
-        serializerCS.getSerializers().registerSerializer(DynamicProtobufSerializer.createProtobufSerializer());
-
-        CorfuRuntime serializerTable = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build());
-        serializerTable.getSerializers().registerSerializer(DynamicProtobufSerializer.createProtobufSerializer());
+    private void parseLogs(List<CorfuTableDescriptor> tableDsc, List<List<LogData>> tableData) {
 
         String[] extension = {"log"};
         File dir = logDir.toFile();
@@ -183,20 +121,11 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
 
                     if (metadata != null && entry != null) {
                         LogData data = getLogData(entry);
-                        boolean registry = processLogData(data,
-                                registryTableDsc,
-                                serializerCS,
-                                registryTableEntries);
-                        boolean protobuf = processLogData(data,
-                                protobufDescTableDsc,
-                                serializerCS,
-                                protobufDescriptorTableEntries);
-                        if (registry || protobuf) {
-                            addRecordsToConcurrentMap(registryTableEntries, cachedRegistryTable);
-                            addRecordsToConcurrentMap(protobufDescriptorTableEntries, cachedProtobufDescriptorTable);
-                            updateSerializer(serializerTable, cachedRegistryTable, cachedProtobufDescriptorTable);
+                        for (int index = 0; index < tableDsc.size(); ++index) {
+                            if (tableDsc.get(index).belongsToStream(data) && data.getType() != DataType.HOLE) {
+                                tableData.get(index).add(data);
+                            }
                         }
-                        processLogData(data, table, serializerTable, tableEntries);
                     }
                 }
                 System.out.println("Finished processing file: " + file.getAbsolutePath());
@@ -205,8 +134,78 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                 throw new IllegalStateException("Invalid header: " + file.getAbsolutePath(), e);
             }
         }
+    }
 
+    private void processLogData(List<LogData> data,
+                                  CorfuTableDescriptor table,
+                                  CorfuRuntime runtimeSerializer,
+                                  List<LogEntryOrdering> tableEntries) {
+
+        for (int index = 0; index < data.size(); ++index) {
+
+            Object modifiedData = data.get(index).getPayload(runtimeSerializer);
+            List<SMREntry> smrUpdates = new ArrayList<>();
+            long snapshotAddress = 0;
+            if (modifiedData instanceof CheckpointEntry) {
+                snapshotAddress = Long.decode(((CheckpointEntry)modifiedData).
+                        getDict().
+                        get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS));
+                MultiSMREntry smrEntries = ((CheckpointEntry) modifiedData).
+                        getSmrEntries(false, runtimeSerializer);
+                if (smrEntries != null) {
+                    smrUpdates = smrEntries.getUpdates();
+                }
+            } else if (modifiedData instanceof MultiObjectSMREntry) {
+                smrUpdates = ((MultiObjectSMREntry) modifiedData).getSMRUpdates(table.getStreamID());
+            }
+
+            for (SMREntry smrUpdate : smrUpdates) {
+                LogEntryOrdering entry = (modifiedData instanceof CheckpointEntry) ?
+                        new LogEntryOrdering(smrUpdate, snapshotAddress) :
+                        new LogEntryOrdering(smrUpdate, smrUpdate.getGlobalAddress());
+                tableEntries.add(entry);
+            }
+        }
+    }
+
+    /**
+     * Fetches the table from the given namespace
+     * @param namespace
+     * @param tableName
+     * @return ConcurrentMap
+     */
+    public ConcurrentMap getTableData(String namespace, String tableName) {
+
+        CorfuTableDescriptor table = new CorfuTableDescriptor(namespace, tableName);
+        List<CorfuTableDescriptor> tableDsc =  Arrays.asList(registryTableDsc, protobufDescTableDsc, table);
+
+        List<LogData> registryTableEntries = new ArrayList<>();
+        List<LogData> protobufDescriptorTableEntries = new ArrayList<>();
+        List<LogData> dataEntries = new ArrayList<>();
+        List<List<LogData>> tableData = Arrays.asList(registryTableEntries, protobufDescriptorTableEntries, dataEntries);
+
+        parseLogs(tableDsc, tableData);
+
+        CorfuRuntime serializer = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build());
+        serializer.getSerializers().registerSerializer(DynamicProtobufSerializer.createProtobufSerializer());
+
+        List<LogEntryOrdering> registryEntries = new ArrayList<>();
+        ConcurrentMap registryTable = new ConcurrentHashMap<>();
+        processLogData(registryTableEntries, registryTableDsc, serializer, registryEntries);
+        addRecordsToConcurrentMap(registryEntries, registryTable);
+
+        List<LogEntryOrdering> protoBufEntries = new ArrayList<>();
+        ConcurrentMap protobufDescriptorTable = new ConcurrentHashMap<>();
+        processLogData(protobufDescriptorTableEntries, protobufDescTableDsc, serializer, protoBufEntries);
+        addRecordsToConcurrentMap(protoBufEntries, protobufDescriptorTable);
+
+        updateSerializer(serializer, registryTable, protobufDescriptorTable);
+
+        List<LogEntryOrdering> tableEntries = new ArrayList<>();
+        ConcurrentMap cachedTable = new ConcurrentHashMap<>();
+        processLogData(dataEntries, table, serializer, tableEntries);
         addRecordsToConcurrentMap(tableEntries, cachedTable);
+
         return cachedTable;
     }
 
