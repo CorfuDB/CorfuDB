@@ -28,11 +28,19 @@ import java.io.UncheckedIOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.*;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
+import java.util.UUID;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.EnumMap;
+import java.util.Set;
+import java.util.Arrays;
 
 import static org.corfudb.infrastructure.log.StreamLogFiles.parseHeader;
 import static org.corfudb.infrastructure.log.StreamLogFiles.parseMetadata;
@@ -98,9 +106,9 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
     }
 
     /**
-     * Creates a CorfuOfflineBrowser linked to an existing log directory.
+     * Parses the log files and builds log entries for required tables.
      * @param tableDsc list of table Descriptors.
-     * @param tableData list of table Descriptors.
+     * @param tableData list of table entries for list of table Descriptors.
      */
     private void parseLogs(List<CorfuTableDescriptor> tableDsc, List<List<LogData>> tableData) {
 
@@ -136,6 +144,13 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         }
     }
 
+    /**
+     * Processes the LogData, deserialize and extracts SMR entries.
+     * @param data LogData.
+     * @param table the Table Descriptor.
+     * @param runtimeSerializer runtime serializer to deserialize logData.
+     * @param tableEntries SMR and Checkpoint updates.
+     */
     private void processLogData(List<LogData> data,
                                   CorfuTableDescriptor table,
                                   CorfuRuntime runtimeSerializer,
@@ -169,7 +184,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
     }
 
     /**
-     * Fetches the table from the given namespace
+     * Builds the given table.
      * @param namespace
      * @param tableName
      * @return ConcurrentMap
@@ -177,7 +192,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
     public ConcurrentMap getTableData(String namespace, String tableName) {
 
         CorfuTableDescriptor table = new CorfuTableDescriptor(namespace, tableName);
-        List<CorfuTableDescriptor> tableDsc =  Arrays.asList(registryTableDsc, protobufDescTableDsc, table);
+        List<CorfuTableDescriptor> tableDsc = Arrays.asList(registryTableDsc, protobufDescTableDsc, table);
 
         List<LogData> registryTableEntries = new ArrayList<>();
         List<LogData> protobufDescriptorTableEntries = new ArrayList<>();
@@ -200,6 +215,13 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         addRecordsToConcurrentMap(protoBufEntries, protobufDescriptorTable);
 
         updateSerializer(serializer, registryTable, protobufDescriptorTable);
+        if (registryTableDsc.belongsToStream(namespace, tableName)) {
+            return registryTable;
+        }
+
+        if (protobufDescTableDsc.belongsToStream(namespace, tableName)) {
+            return protobufDescriptorTable;
+        }
 
         List<LogEntryOrdering> tableEntries = new ArrayList<>();
         ConcurrentMap cachedTable = new ConcurrentHashMap<>();
@@ -211,8 +233,8 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
 
     /**
      * Prints the payload and metadata in the given table
-     * @param namespace - the namespace where the table belongs
-     * @param tableName - table name without the namespace
+     * @param namespace
+     * @param tableName
      * @return - number of entries in the table
      */
     @Override
@@ -243,7 +265,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
 
     /**
      * List all tables in CorfuStore
-     * @param namespace - the namespace where the table belongs
+     * @param namespace
      * @return - number of tables in this namespace
      */
     @Override
@@ -425,8 +447,12 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         private final UUID streamID;
         @Getter
         private final UUID checkpointID;
+        private final String namespace;
+        private final String tableName;
 
         public CorfuTableDescriptor(String namespace, String tableName) {
+            this.namespace = namespace;
+            this.tableName = tableName;
             String name = TableRegistry.getFullyQualifiedTableName(namespace, tableName);
             streamID = CorfuRuntime.getStreamID(name);
             checkpointID = CorfuRuntime.getCheckpointStreamIdFromId(streamID);
@@ -434,6 +460,10 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
 
         public boolean belongsToStream(LogData data) {
             return data.containsStream(streamID) || data.containsStream(checkpointID);
+        }
+
+        public boolean belongsToStream(String namespace, String tableName) {
+            return this.namespace.equals(namespace) && this.tableName.equals(tableName);
         }
     }
 }
