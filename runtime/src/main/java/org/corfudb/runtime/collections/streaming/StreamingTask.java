@@ -33,7 +33,7 @@ import java.util.stream.Collectors;
 
 /**
  * This class represents a Streaming task that is managed by {@link StreamPollingScheduler}. It binds a stream listener
- * {@link StreamListener} to a {@link DeltaStream}, ever time it's scheduled to sync, it will read data for a specific
+ * {@link StreamListener} to a {@link DeltaStream}, every time it's scheduled to sync, it will read data for a specific
  * stream tag, transform it and propagate it to the listener.
  *
  * @param <K> - type of the protobuf KeySchema defined while the table was created.

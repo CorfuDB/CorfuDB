@@ -1,6 +1,7 @@
 package org.corfudb.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_STATUS_TABLE;
 import static org.junit.Assert.fail;
 
 
@@ -13,9 +14,12 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.StringJoiner;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -31,6 +35,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.ExampleSchemas;
@@ -42,6 +47,7 @@ import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
+import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
@@ -90,7 +96,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     public final String streamA = "Table001";
 
-    public final int numWrites = 5000;
+    public final int numWrites = 2000;
     public final int lockLeaseDuration = 10;
 
     public final int activeSiteCorfuPort = 9000;
@@ -105,8 +111,9 @@ public class LogReplicationAbstractIT extends AbstractIT {
     public CorfuRuntime activeRuntime;
     public CorfuRuntime standbyRuntime;
 
-    public CorfuTable<String, Integer> mapA;
-    public CorfuTable<String, Integer> mapAStandby;
+
+    public Table<Sample.StringKey, Sample.IntValue, Sample.Metadata> mapA;
+    public Table<Sample.StringKey, Sample.IntValue, Sample.Metadata> mapAStandby;
 
     public Map<String, Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata>> mapNameToMapActive;
     public Map<String, Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata>> mapNameToMapStandby;
@@ -129,10 +136,10 @@ public class LogReplicationAbstractIT extends AbstractIT {
             writeToActiveNonUFO(0, numWrites);
 
             // Confirm data does exist on Active Cluster
-            assertThat(mapA.size()).isEqualTo(numWrites);
+            assertThat(mapA.count()).isEqualTo(numWrites);
 
             // Confirm data does not exist on Standby Cluster
-            assertThat(mapAStandby.size()).isEqualTo(0);
+            assertThat(mapAStandby.count()).isEqualTo(0);
 
             startLogReplicatorServers();
 
@@ -187,7 +194,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
             // Subscribe to replication status table on Standby (to be sure data change on status are captured)
             corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
-                    LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                    REPLICATION_STATUS_TABLE,
                     LogReplicationMetadata.ReplicationStatusKey.class,
                     LogReplicationMetadata.ReplicationStatusVal.class,
                     null,
@@ -295,7 +302,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
                 LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         corfuStoreActive.openTable(LogReplicationMetadataManager.NAMESPACE,
-                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                REPLICATION_STATUS_TABLE,
                 LogReplicationMetadata.ReplicationStatusKey.class,
                 LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
@@ -320,7 +327,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
     private void verifyReplicationStatusFromActive() throws Exception {
         Table<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, LogReplicationMetadata.ReplicationStatusVal>
                 replicationStatusTable = corfuStoreActive.openTable(LogReplicationMetadataManager.NAMESPACE,
-                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                REPLICATION_STATUS_TABLE,
                 LogReplicationMetadata.ReplicationStatusKey.class,
                 LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
@@ -368,7 +375,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
     class SnapshotSyncPluginListener implements StreamListener {
 
         @Getter
-        List<String> updates = new ArrayList<>();
+        Set<String> updates = new HashSet<>();
 
         private final CountDownLatch countDownLatch;
 
@@ -479,34 +486,48 @@ public class LogReplicationAbstractIT extends AbstractIT {
         }
     }
 
-    public void openMap() {
-        // Write to StreamA on Active Site
-        mapA = activeRuntime.getObjectsView()
-                .build()
-                .setStreamName(streamA)
-                .setStreamTags(ObjectsView.getLogReplicatorStreamId())
-                .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {
-                })
-                .open();
+    public void openMap() throws Exception {
+        // Write to StreamA on Source side
+        mapA = corfuStoreActive.openTable(
+                NAMESPACE,
+                streamA,
+                Sample.StringKey.class,
+                Sample.IntValue.class,
+                Sample.Metadata.class,
+                TableOptions.builder().schemaOptions(
+                                CorfuOptions.SchemaOptions.newBuilder()
+                                        .setIsFederated(true)
+                                        .addStreamTag(ObjectsView.LOG_REPLICATOR_STREAM_INFO.getTagName())
+                                        .build())
+                        .build()
+        );
 
-        mapAStandby = standbyRuntime.getObjectsView()
-                .build()
-                .setStreamName(streamA)
-                .setStreamTags(ObjectsView.getLogReplicatorStreamId())
-                .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {
-                })
-                .open();
+        mapAStandby = corfuStoreStandby.openTable(
+                NAMESPACE,
+                streamA,
+                Sample.StringKey.class,
+                Sample.IntValue.class,
+                Sample.Metadata.class,
+                TableOptions.builder().schemaOptions(
+                                CorfuOptions.SchemaOptions.newBuilder()
+                                        .setIsFederated(true)
+                                        .addStreamTag(ObjectsView.LOG_REPLICATOR_STREAM_INFO.getTagName())
+                                        .build())
+                        .build()
+        );
 
-        assertThat(mapA.size()).isEqualTo(0);
-        assertThat(mapAStandby.size()).isEqualTo(0);
+        assertThat(mapA.count()).isEqualTo(0);
+        assertThat(mapAStandby.count()).isEqualTo(0);
     }
 
     public void writeToActiveNonUFO(int startIndex, int totalEntries) {
         int maxIndex = totalEntries + startIndex;
         for (int i = startIndex; i < maxIndex; i++) {
-            activeRuntime.getObjectsView().TXBegin();
-            mapA.put(String.valueOf(i), i);
-            activeRuntime.getObjectsView().TXEnd();
+            try (TxnContext txn = corfuStoreActive.txn(NAMESPACE)) {
+                txn.putRecord(mapA, Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build(),
+                        Sample.IntValue.newBuilder().setValue(i).build(), null);
+                txn.commit();
+            }
         }
     }
 
@@ -656,45 +677,24 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     public void verifyDataOnStandbyNonUFO(int expectedConsecutiveWrites) {
         // Wait until data is fully replicated
-        while (mapAStandby.size() != expectedConsecutiveWrites) {
+        while (mapAStandby.count() != expectedConsecutiveWrites) {
             // Block until expected number of entries is reached
+            log.trace("Map size: {}, expect size: {}",
+                    mapAStandby.count(), expectedConsecutiveWrites);
         }
 
         log.debug("Number updates on Standby :: " + expectedConsecutiveWrites);
 
         // Verify data is present in Standby Site
-        assertThat(mapAStandby.size()).isEqualTo(expectedConsecutiveWrites);
+        assertThat(mapAStandby.count()).isEqualTo(expectedConsecutiveWrites);
 
         for (int i = 0; i < (expectedConsecutiveWrites); i++) {
-            assertThat(mapAStandby.containsKey(String.valueOf(i)));
+            try (TxnContext tx = corfuStoreStandby.txn(NAMESPACE)) {
+                assertThat(tx.getRecord(mapAStandby, Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build())
+                        .getPayload().getValue()).isEqualTo(i);
+                tx.commit();
+            }
         }
-    }
-
-    /**
-     * Checkpoint and Trim Data Logs
-     *
-     * @param active true, checkpoint/trim on active cluster
-     *               false, checkpoint/trim on standby cluster
-     * @param tables additional tables (asides CorfuStore to be checkpointed)
-     */
-    public void checkpointAndTrim(boolean active, List<CorfuTable> tables) {
-        CorfuRuntime cpRuntime;
-
-        if (active) {
-            cpRuntime = new CorfuRuntime(activeEndpoint).connect();
-        } else {
-            cpRuntime = new CorfuRuntime(standbyEndpoint).connect();
-        }
-
-        // Checkpoint specified tables
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        Token trimMark = null;
-        if (tables.size() != 0) {
-            mcw.addAllMaps(tables);
-            trimMark = mcw.appendCheckpoints(cpRuntime, "author");
-        }
-
-        checkpointAndTrimCorfuStore(cpRuntime, trimMark);
     }
 
     public void verifyDataOnStandby(int expectedConsecutiveWrites) {
@@ -722,6 +722,36 @@ public class LogReplicationAbstractIT extends AbstractIT {
         }
     }
 
+    public void verifyInLogEntrySyncState() throws InterruptedException {
+        LogReplicationMetadata.ReplicationStatusKey key =
+                LogReplicationMetadata.ReplicationStatusKey
+                        .newBuilder()
+                        .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                        .build();
+
+        LogReplicationMetadata.ReplicationStatusVal replicationStatusVal = null;
+
+        while (replicationStatusVal == null || !replicationStatusVal.getSyncType().equals(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY)
+                || !replicationStatusVal.getSnapshotSyncInfo().getStatus().equals(LogReplicationMetadata.SyncStatus.COMPLETED)) {
+            TimeUnit.SECONDS.sleep(1);
+            try (TxnContext txn = corfuStoreActive.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                replicationStatusVal = (LogReplicationMetadata.ReplicationStatusVal) txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+                txn.commit();
+            }
+        }
+
+        // Snapshot sync should have completed and log entry sync is ongoing
+        assertThat(replicationStatusVal.getSyncType())
+                .isEqualTo(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
+        assertThat(replicationStatusVal.getStatus())
+                .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
+
+        assertThat(replicationStatusVal.getSnapshotSyncInfo().getType())
+                .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
+        assertThat(replicationStatusVal.getSnapshotSyncInfo().getStatus())
+                .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
+    }
+
     /**
      * Checkpoint and Trim Data Logs
      *
@@ -740,7 +770,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         checkpointAndTrimCorfuStore(cpRuntime);
     }
 
-    public void checkpointAndTrimCorfuStore(CorfuRuntime cpRuntime) {
+    public static Token checkpointAndTrimCorfuStore(CorfuRuntime cpRuntime) {
         // Open Table Registry
         TableRegistry tableRegistry = cpRuntime.getTableRegistry();
         CorfuTable<CorfuStoreMetadata.TableName, CorfuRecord<CorfuStoreMetadata.TableDescriptors,
@@ -809,57 +839,45 @@ public class LogReplicationAbstractIT extends AbstractIT {
         cpRuntime.getAddressSpaceView().invalidateClientCache();
         cpRuntime.getAddressSpaceView().invalidateServerCaches();
         cpRuntime.getAddressSpaceView().gc();
+
+        return trimMark;
     }
 
-    public void checkpointAndTrimCorfuStore(CorfuRuntime cpRuntime, Token trimMark) {
-        // Open Table Registry
-        TableRegistry tableRegistry = cpRuntime.getTableRegistry();
-        CorfuTable<CorfuStoreMetadata.TableName, CorfuRecord<CorfuStoreMetadata.TableDescriptors,
-                CorfuStoreMetadata.TableMetadata>> tableRegistryCT = tableRegistry.getRegistryTable();
+    /**
+     * Stream Listener used for testing streaming on standby site. This listener decreases a latch
+     * until all expected updates are received/
+     */
+    public static class StreamingStandbyListener implements StreamListener {
 
-        // Save the regular serializer first..
-        ISerializer protoBufSerializer = cpRuntime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
+        private final CountDownLatch updatesLatch;
+        public List<CorfuStreamEntry> messages = new ArrayList<>();
+        private final Set<UUID> tablesToListenTo;
 
-        // Must register dynamicProtoBufSerializer *AFTER* the getTableRegistry() call to ensure that
-        // the serializer does not go back to the regular ProtoBufSerializer
-        ISerializer dynamicProtoBufSerializer = new DynamicProtobufSerializer(cpRuntime);
-        cpRuntime.getSerializers().registerSerializer(dynamicProtoBufSerializer);
-
-        // First checkpoint the TableRegistry system table
-        MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
-
-        for (CorfuStoreMetadata.TableName tableName : tableRegistry.listTables(null)) {
-            String fullTableName = TableRegistry.getFullyQualifiedTableName(
-                    tableName.getNamespace(), tableName.getTableName()
-            );
-            SMRObject.Builder<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> corfuTableBuilder = cpRuntime.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
-                    .setStreamName(fullTableName)
-                    .setSerializer(dynamicProtoBufSerializer);
-
-            mcw = new MultiCheckpointWriter<>();
-            mcw.addMap(corfuTableBuilder.open());
-            Token token = mcw.appendCheckpoints(cpRuntime, "checkpointer");
-            trimMark = trimMark == null ? token : Token.min(trimMark, token);
+        public StreamingStandbyListener(CountDownLatch updatesLatch, Set<UUID> tablesToListenTo) {
+            this.updatesLatch = updatesLatch;
+            this.tablesToListenTo = tablesToListenTo;
         }
 
-        // Finally checkpoint the TableRegistry system table itself..
-        mcw.addMap(tableRegistryCT);
-        Token token = mcw.appendCheckpoints(cpRuntime, "checkpointer");
-        trimMark = Token.min(trimMark, token);
+        @Override
+        public synchronized void onNext(CorfuStreamEntries results) {
+            log.info("StreamingStandbyListener:: onNext {} with entry size {}", results, results.getEntries().size());
 
-        cpRuntime.getAddressSpaceView().prefixTrim(trimMark);
-        cpRuntime.getAddressSpaceView().gc();
+            results.getEntries().forEach((schema, entries) -> {
+                if (tablesToListenTo.contains(CorfuRuntime.getStreamID(NAMESPACE + "$" + schema.getTableName()))) {
+                    messages.addAll(entries);
+                    entries.forEach(e -> {
+                        if (e.getOperation() == CorfuStreamEntry.OperationType.CLEAR) {
+                            System.out.println("Clear operation for :: " + schema.getTableName() + " on address :: " + results.getTimestamp().getSequence() + " key :: " + e.getKey());
+                        }
+                        updatesLatch.countDown();
+                    });
+                }
+            });
+        }
 
-        // Lastly restore the regular protoBuf serializer and undo the dynamic protoBuf serializer
-        // otherwise the test cannot continue beyond this point.
-        cpRuntime.getSerializers().registerSerializer(protoBufSerializer);
-
-        // Trim
-        log.debug("**** Trim Log @address=" + trimMark);
-        cpRuntime.getAddressSpaceView().prefixTrim(trimMark);
-        cpRuntime.getAddressSpaceView().invalidateClientCache();
-        cpRuntime.getAddressSpaceView().invalidateServerCaches();
-        cpRuntime.getAddressSpaceView().gc();
+        @Override
+        public void onError(Throwable throwable) {
+            log.error("ERROR :: unsubscribed listener");
+        }
     }
 }

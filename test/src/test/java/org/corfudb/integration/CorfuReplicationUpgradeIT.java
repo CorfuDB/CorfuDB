@@ -1,13 +1,10 @@
 package org.corfudb.integration;
 
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.CorfuStreamEntries;
-import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
@@ -15,7 +12,7 @@ import org.corfudb.utils.CommonTypes;
 import org.corfudb.utils.LogReplicationStreams;
 import org.junit.Assert;
 import org.junit.Test;
-import java.util.ArrayList;
+
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -25,9 +22,7 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager.LOG_REPLICATION_PLUGIN_VERSION_TABLE;
-import static org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager.LOG_REPLICATION_STREAMS_NAME_TABLE;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
-import static org.junit.Assert.fail;
 
 @Slf4j
 public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
@@ -37,44 +32,29 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
     private static final int NUM_WRITES = 500;
 
     private static final String STREAMS_TEST_TABLE =
-        "StreamsToReplicateTestTable";
+            "StreamsToReplicateTestTable";
 
     private static final String VERSION_TEST_TABLE = "VersionTestTable";
 
     private static final String TEST_PLUGIN_CONFIG_PATH_ACTIVE =
-        "./test/src/test/resources/transport/nettyConfigUpgradeActive.properties";
+            "./test/src/test/resources/transport/nettyConfigUpgradeActive.properties";
 
     private static final String TEST_PLUGIN_CONFIG_PATH_STANDBY =
-        "./test/src/test/resources/transport/nettyConfigUpgradeStandby.properties";
+            "./test/src/test/resources/transport/nettyConfigUpgradeStandby.properties";
 
     private static final String SEPARATOR = "$";
     private static final String VERSION_STRING = "test_version";
     private static final String VERSION_KEY = "VERSION";
     private static final String UPGRADE_VERSION_STRING = "new_version";
 
-    private static final String REGISTRY_TABLE_NAME =
-        "CorfuSystem$RegistryTable";
-    private static final String PROTOBUF_DESCRIPTOR_TABLE_NAME =
-        "CorfuSystem$ProtobufDescriptorTable";
-
-    private void openConfigTables() throws Exception {
+    private void openVersionTables() throws Exception {
         corfuStoreActive.openTable(CORFU_SYSTEM_NAMESPACE,
-            LOG_REPLICATION_STREAMS_NAME_TABLE,
-            LogReplicationStreams.TableInfo.class,
-            LogReplicationStreams.Namespace.class, CommonTypes.Uuid.class, TableOptions.builder().build());
-
-        corfuStoreActive.openTable(CORFU_SYSTEM_NAMESPACE,
-            LOG_REPLICATION_PLUGIN_VERSION_TABLE, LogReplicationStreams.VersionString.class,
-            LogReplicationStreams.Version.class, CommonTypes.Uuid.class, TableOptions.builder().build());
+                LOG_REPLICATION_PLUGIN_VERSION_TABLE, LogReplicationStreams.VersionString.class,
+                LogReplicationStreams.Version.class, CommonTypes.Uuid.class, TableOptions.builder().build());
 
         corfuStoreStandby.openTable(CORFU_SYSTEM_NAMESPACE,
-            LOG_REPLICATION_STREAMS_NAME_TABLE,
-            LogReplicationStreams.TableInfo.class,
-            LogReplicationStreams.Namespace.class, CommonTypes.Uuid.class, TableOptions.builder().build());
-
-        corfuStoreStandby.openTable(CORFU_SYSTEM_NAMESPACE,
-            LOG_REPLICATION_PLUGIN_VERSION_TABLE, LogReplicationStreams.VersionString.class,
-            LogReplicationStreams.Version.class, CommonTypes.Uuid.class, TableOptions.builder().build());
+                LOG_REPLICATION_PLUGIN_VERSION_TABLE, LogReplicationStreams.VersionString.class,
+                LogReplicationStreams.Version.class, CommonTypes.Uuid.class, TableOptions.builder().build());
     }
 
     @Test
@@ -106,23 +86,17 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Subscribe to replication status table on Standby (to be sure data change on status are captured)
         corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
-            LogReplicationMetadata.ReplicationStatusKey.class,
-            LogReplicationMetadata.ReplicationStatusVal.class,
-            null,
-            TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class,
+                null,
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         CountDownLatch statusUpdateLatch = new CountDownLatch(2);
         ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
-        Set<String> streamsToReplicate = new HashSet<>();
-        for (int i = 1; i <= FIVE; i++) {
-            streamsToReplicate.add(TABLE_PREFIX + i);
-        }
-        setupStreamsToReplicateTable(streamsToReplicate, true, false);
-        setupStreamsToReplicateTable(streamsToReplicate, false, false);
         setupVersionTable(corfuStoreActive, false);
         setupVersionTable(corfuStoreStandby, false);
 
@@ -149,10 +123,8 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         log.info(">> Upgrading the standby site ...");
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_STANDBY;
         upgradeSite(false, corfuStoreStandby);
-        verifyConfig(corfuStoreStandby, UPGRADE_VERSION_STRING, true,
-            streamsToReplicate);
-        verifyConfig(corfuStoreActive, VERSION_STRING, false,
-            streamsToReplicate);
+        verifyVersion(corfuStoreStandby, UPGRADE_VERSION_STRING, true);
+        verifyVersion(corfuStoreActive, VERSION_STRING, false);
 
         // Verify that subsequent log entry sync is successful
         log.info("Write more data on the active");
@@ -208,23 +180,17 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Subscribe to replication status table on Standby (to be sure data change on status are captured)
         corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
-            LogReplicationMetadata.ReplicationStatusKey.class,
-            LogReplicationMetadata.ReplicationStatusVal.class,
-            null,
-            TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class,
+                null,
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         CountDownLatch statusUpdateLatch = new CountDownLatch(2);
         ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
-        Set<String> streamsToReplicate = new HashSet<>();
-        for (int i = 1; i <= FIVE; i++) {
-            streamsToReplicate.add(TABLE_PREFIX + i);
-        }
-        setupStreamsToReplicateTable(streamsToReplicate, true, false);
-        setupStreamsToReplicateTable(streamsToReplicate, false, false);
         setupVersionTable(corfuStoreActive, false);
         setupVersionTable(corfuStoreStandby, false);
 
@@ -253,10 +219,8 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         log.info(">> Upgrading the standby site ...");
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_STANDBY;
         upgradeSite(false, corfuStoreStandby);
-        verifyConfig(corfuStoreStandby, UPGRADE_VERSION_STRING,
-            true, streamsToReplicate);
-        verifyConfig(corfuStoreActive, VERSION_STRING, false,
-            streamsToReplicate);
+        verifyVersion(corfuStoreStandby, UPGRADE_VERSION_STRING, true);
+        verifyVersion(corfuStoreActive, VERSION_STRING, false);
 
         latchSnapshotSyncPlugin = new CountDownLatch(2);
         snapshotSyncPluginListener = new SnapshotSyncPluginListener(latchSnapshotSyncPlugin);
@@ -265,7 +229,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         statusUpdateLatch = new CountDownLatch(2);
         standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         // Trigger a snapshot sync by stopping the active LR and running a CP+trim
         stopActiveLogReplicator();
@@ -312,16 +276,16 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Subscribe to replication status table on Standby (to be sure data change on status are captured)
         corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
-            LogReplicationMetadata.ReplicationStatusKey.class,
-            LogReplicationMetadata.ReplicationStatusVal.class,
-            null,
-            TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class,
+                null,
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         CountDownLatch statusUpdateLatch = new CountDownLatch(2);
         ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         log.info(">> Open map(s) on active and standby");
         openMaps(FIVE, false);
@@ -340,12 +304,6 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             assertThat(map.count()).isEqualTo(0);
         }
 
-        Set<String> streamsToReplicate = new HashSet<>();
-        for (int i = 1; i <= FIVE; i++) {
-            streamsToReplicate.add(TABLE_PREFIX + i);
-        }
-        setupStreamsToReplicateTable(streamsToReplicate, true, false);
-        setupStreamsToReplicateTable(streamsToReplicate, false, false);
         setupVersionTable(corfuStoreActive, false);
         setupVersionTable(corfuStoreStandby, false);
 
@@ -374,10 +332,8 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         log.info(">> Upgrading the standby site ...");
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_STANDBY;
         upgradeSite(false, corfuStoreStandby);
-        verifyConfig(corfuStoreStandby, UPGRADE_VERSION_STRING,
-            true, streamsToReplicate);
-        verifyConfig(corfuStoreActive, VERSION_STRING, false,
-            streamsToReplicate);
+        verifyVersion(corfuStoreStandby, UPGRADE_VERSION_STRING, true);
+        verifyVersion(corfuStoreActive, VERSION_STRING, false);
         log.info(">> Plugin config verified after standby upgrade");
 
         // Upgrading the active site will force a snapshot sync
@@ -388,16 +344,14 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         statusUpdateLatch = new CountDownLatch(2);
         standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         // Upgrade the active site
         log.info(">> Upgrading the active site ...");
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_ACTIVE;
         upgradeSite(true, corfuStoreActive);
-        verifyConfig(corfuStoreActive, UPGRADE_VERSION_STRING,
-            true, streamsToReplicate);
-        verifyConfig(corfuStoreStandby, UPGRADE_VERSION_STRING,
-            true, streamsToReplicate);
+        verifyVersion(corfuStoreActive, UPGRADE_VERSION_STRING, true);
+        verifyVersion(corfuStoreStandby, UPGRADE_VERSION_STRING, true);
 
         // Verify that snapshot sync was triggered by checking the number of
         // updates to the ReplicationStatus table on the standby.
@@ -440,8 +394,6 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             streamsToReplicateActive.add(TABLE_PREFIX + i);
         }
 
-        setupStreamsToReplicateTable(streamsToReplicateActive, true, false);
-        setupStreamsToReplicateTable(streamsToReplicateActive, false, false);
         setupVersionTable(corfuStoreActive, false);
         setupVersionTable(corfuStoreStandby, false);
 
@@ -452,16 +404,16 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Subscribe to replication status table on Standby (to be sure data change on status are captured)
         corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
-            LogReplicationMetadata.ReplicationStatusKey.class,
-            LogReplicationMetadata.ReplicationStatusVal.class,
-            null,
-            TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class,
+                null,
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         CountDownLatch statusUpdateLatch = new CountDownLatch(2);
         ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         log.info(">> Open map(s) on active and standby");
         openMaps(2, false);
@@ -503,26 +455,24 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         for (int i = 2; i <= 3; i++) {
             streamsToReplicateStandby.add(TABLE_PREFIX + i);
         }
-        upgradeSiteWithNewConfig(false, streamsToReplicateStandby);
-        verifyConfig(corfuStoreStandby, UPGRADE_VERSION_STRING,
-            true, streamsToReplicateStandby);
-        verifyConfig(corfuStoreActive, VERSION_STRING,
-            false, streamsToReplicateActive);
+        upgradeSite(false, corfuStoreStandby);
+        verifyVersion(corfuStoreStandby, UPGRADE_VERSION_STRING, true);
+        verifyVersion(corfuStoreActive, VERSION_STRING, false);
 
         List<String> activeOnlyStreams = streamsToReplicateActive.stream()
-            .filter(s -> !streamsToReplicateStandby.contains(s))
-            .collect(Collectors.toList());
+                .filter(s -> !streamsToReplicateStandby.contains(s))
+                .collect(Collectors.toList());
 
         List<String> standbyOnlyStreams = streamsToReplicateStandby.stream()
-            .filter(s -> !streamsToReplicateActive.contains(s))
-            .collect(Collectors.toList());
+                .filter(s -> !streamsToReplicateActive.contains(s))
+                .collect(Collectors.toList());
 
         List<String> commonStreams = streamsToReplicateActive.stream()
-            .filter(s -> streamsToReplicateStandby.contains(s))
-            .collect(Collectors.toList());
+                .filter(streamsToReplicateStandby::contains)
+                .collect(Collectors.toList());
 
         // Open maps corresponding to the new streams in the upgraded config
-        openMapsAfterUpgrade(standbyOnlyStreams);
+        openMapsAfterUpgrade(activeOnlyStreams, standbyOnlyStreams);
 
         // Write to activeOnlyStreams
         writeDataOnActive(activeOnlyStreams, NUM_WRITES, NUM_WRITES / 2);
@@ -551,8 +501,6 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         for (int i = 1; i <= 2; i++) {
             streamsToReplicateActive.add(TABLE_PREFIX + i);
         }
-        setupStreamsToReplicateTable(streamsToReplicateActive, true, false);
-        setupStreamsToReplicateTable(streamsToReplicateActive, false, false);
         setupVersionTable(corfuStoreActive, false);
         setupVersionTable(corfuStoreStandby, false);
 
@@ -563,16 +511,16 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Subscribe to replication status table on Standby (to be sure data change on status are captured)
         corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
-            LogReplicationMetadata.ReplicationStatusKey.class,
-            LogReplicationMetadata.ReplicationStatusVal.class,
-            null,
-            TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class,
+                null,
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         CountDownLatch statusUpdateLatch = new CountDownLatch(2);
         ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         log.info(">> Open map(s) on active and standby");
         openMaps(2, false);
@@ -619,11 +567,9 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             streamsToReplicateStandby.add(TABLE_PREFIX + i);
         }
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_STANDBY;
-        upgradeSiteWithNewConfig(false, streamsToReplicateStandby);
-        verifyConfig(corfuStoreStandby, UPGRADE_VERSION_STRING, true,
-            streamsToReplicateStandby);
-        verifyConfig(corfuStoreActive, VERSION_STRING, false,
-            streamsToReplicateActive);
+        upgradeSite(false, corfuStoreStandby);
+        verifyVersion(corfuStoreStandby, UPGRADE_VERSION_STRING, true);
+        verifyVersion(corfuStoreActive, VERSION_STRING, false);
 
         latchSnapshotSyncPlugin = new CountDownLatch(2);
         snapshotSyncPluginListener = new SnapshotSyncPluginListener(latchSnapshotSyncPlugin);
@@ -632,24 +578,24 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         statusUpdateLatch = new CountDownLatch(2);
         standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         stopActiveLogReplicator();
 
         List<String> activeOnlyStreams = streamsToReplicateActive.stream()
-            .filter(s -> !streamsToReplicateStandby.contains(s))
-            .collect(Collectors.toList());
+                .filter(s -> !streamsToReplicateStandby.contains(s))
+                .collect(Collectors.toList());
 
         List<String> standbyOnlyStreams = streamsToReplicateStandby.stream()
-            .filter(s -> !streamsToReplicateActive.contains(s))
-            .collect(Collectors.toList());
+                .filter(s -> !streamsToReplicateActive.contains(s))
+                .collect(Collectors.toList());
 
         List<String> commonStreams = streamsToReplicateActive.stream()
-            .filter(s -> streamsToReplicateStandby.contains(s))
-            .collect(Collectors.toList());
+                .filter(streamsToReplicateStandby::contains)
+                .collect(Collectors.toList());
 
         // Open maps corresponding to the new streams in the upgraded config
-        openMapsAfterUpgrade(standbyOnlyStreams);
+        openMapsAfterUpgrade(activeOnlyStreams, standbyOnlyStreams);
 
         // Write data on activeOnly streams
         writeDataOnActive(activeOnlyStreams, NUM_WRITES, NUM_WRITES / 2);
@@ -673,7 +619,6 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         Assert.assertTrue(standbyListener.getAccumulatedStatus().get(1));
         Assert.assertFalse(standbyListener.getAccumulatedStatus().get(0));
 
-        // No new data for active-only streams
         verifyDataOnStandby(activeOnlyStreams, NUM_WRITES);
 
         // No new data for standby-only streams
@@ -697,8 +642,6 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             streamsToReplicateActive.add(TABLE_PREFIX + i);
         }
 
-        setupStreamsToReplicateTable(streamsToReplicateActive, true, false);
-        setupStreamsToReplicateTable(streamsToReplicateActive, false, false);
         setupVersionTable(corfuStoreActive, false);
         setupVersionTable(corfuStoreStandby, false);
 
@@ -761,11 +704,9 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             streamsToReplicateStandby.add(TABLE_PREFIX + i);
         }
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_STANDBY;
-        upgradeSiteWithNewConfig(false, streamsToReplicateStandby);
-        verifyConfig(corfuStoreStandby, UPGRADE_VERSION_STRING, true,
-            streamsToReplicateStandby);
-        verifyConfig(corfuStoreActive, VERSION_STRING, false,
-            streamsToReplicateActive);
+        upgradeSite(false, corfuStoreStandby);
+        verifyVersion(corfuStoreStandby, UPGRADE_VERSION_STRING, true);
+        verifyVersion(corfuStoreActive, VERSION_STRING, false);
 
         List<String> activeOnlyStreams = streamsToReplicateActive.stream()
                 .filter(s -> !streamsToReplicateStandby.contains(s))
@@ -776,11 +717,11 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
                 .collect(Collectors.toList());
 
         List<String> commonStreams = streamsToReplicateActive.stream()
-                .filter(s -> streamsToReplicateStandby.contains(s))
+                .filter(streamsToReplicateStandby::contains)
                 .collect(Collectors.toList());
 
         // Open maps corresponding to the new streams in the upgraded config
-        openMapsAfterUpgrade(standbyOnlyStreams);
+        openMapsAfterUpgrade(activeOnlyStreams, standbyOnlyStreams);
 
         // Write to activeOnlyStreams
         writeDataOnActive(activeOnlyStreams, NUM_WRITES, NUM_WRITES / 2);
@@ -810,11 +751,10 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Now upgrade the active site
         pluginConfigFilePath = TEST_PLUGIN_CONFIG_PATH_ACTIVE;
-        upgradeSiteWithNewConfig(true, streamsToReplicateStandby);
-        verifyConfig(corfuStoreStandby, UPGRADE_VERSION_STRING, true,
-            streamsToReplicateStandby);
-        verifyConfig(corfuStoreActive, UPGRADE_VERSION_STRING, true,
-            streamsToReplicateStandby);
+        openMapsAfterUpgradeActive(activeOnlyStreams, standbyOnlyStreams);
+        upgradeSite(true, corfuStoreActive);
+        verifyVersion(corfuStoreStandby, UPGRADE_VERSION_STRING, true);
+        verifyVersion(corfuStoreActive, UPGRADE_VERSION_STRING, true);
 
         // Verify that snapshot sync was triggered by checking the number of
         // updates to the ReplicationStatus table on the standby.
@@ -830,50 +770,10 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         // and no data is lost for the common streams
         verifyDataOnStandby(commonStreams, NUM_WRITES + NUM_WRITES / 2);
         verifyDataOnStandby(standbyOnlyStreams, NUM_WRITES);
-
         verifyDataOnStandby(activeOnlyStreams, NUM_WRITES);
 
         corfuStoreStandby.unsubscribeListener(snapshotSyncPluginListener);
         corfuStoreStandby.unsubscribeListener(standbyListener);
-    }
-
-    private void setupStreamsToReplicateTable(Set<String> streamsToReplicate,
-        boolean active, boolean clear) throws Exception {
-
-        CorfuStore corfuStore;
-        Table<LogReplicationStreams.TableInfo, LogReplicationStreams.Namespace,
-            CommonTypes.Uuid> streamsNameTable;
-        if (active) {
-            corfuStore = corfuStoreActive;
-        } else {
-            corfuStore = corfuStoreStandby;
-        }
-
-        if (clear) {
-            corfuStore.deleteTable(NAMESPACE, STREAMS_TEST_TABLE);
-        }
-
-        streamsNameTable = corfuStore.openTable(NAMESPACE, STREAMS_TEST_TABLE,
-            LogReplicationStreams.TableInfo.class,
-            LogReplicationStreams.Namespace.class, CommonTypes.Uuid.class,
-            TableOptions.builder().build());
-
-        try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-            for (String stream : streamsToReplicate) {
-                LogReplicationStreams.TableInfo tableInfo =
-                    LogReplicationStreams.TableInfo.newBuilder().setName(NAMESPACE + SEPARATOR + stream).build();
-                LogReplicationStreams.Namespace namespace =
-                    LogReplicationStreams.Namespace.newBuilder().setName(NAMESPACE).build();
-                txn.putRecord(streamsNameTable, tableInfo, namespace, null);
-            }
-            txn.commit();
-        }
-    }
-
-    private void upgradeSiteWithNewConfig(boolean active,
-                                          Set<String> streamsToReplicate) throws Exception {
-        setupStreamsToReplicateTable(streamsToReplicate, active, true);
-        upgradeSite(active, active ? corfuStoreActive : corfuStoreStandby);
     }
 
     private void upgradeSite(boolean active, CorfuStore corfuStore) throws Exception {
@@ -895,25 +795,25 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
     }
 
     private void setupVersionTable(CorfuStore corfuStore, boolean upgrade)
-        throws Exception {
+            throws Exception {
 
         String versionString = VERSION_STRING;
         if (upgrade) {
             versionString = UPGRADE_VERSION_STRING;
         }
         Table<LogReplicationStreams.VersionString,
-            LogReplicationStreams.Version, CommonTypes.Uuid>
-            pluginVersionTable = corfuStore.openTable(NAMESPACE,
-            VERSION_TEST_TABLE, LogReplicationStreams.VersionString.class,
-            LogReplicationStreams.Version.class, CommonTypes.Uuid.class,
-            TableOptions.builder().build());
+                LogReplicationStreams.Version, CommonTypes.Uuid>
+                pluginVersionTable = corfuStore.openTable(NAMESPACE,
+                VERSION_TEST_TABLE, LogReplicationStreams.VersionString.class,
+                LogReplicationStreams.Version.class, CommonTypes.Uuid.class,
+                TableOptions.builder().build());
 
         LogReplicationStreams.VersionString versionStringKey =
-            LogReplicationStreams.VersionString.newBuilder()
-            .setName(VERSION_KEY).build();
+                LogReplicationStreams.VersionString.newBuilder()
+                        .setName(VERSION_KEY).build();
 
         LogReplicationStreams.Version version = LogReplicationStreams.Version.newBuilder()
-            .setVersion(versionString).build();
+                .setVersion(versionString).build();
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
             log.info("Putting version {}", version);
             txn.putRecord(pluginVersionTable, versionStringKey, version, null);
@@ -921,22 +821,52 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         }
     }
 
-    private void openMapsAfterUpgrade(List<String> tableNames) throws Exception {
-        for (String tableName : tableNames) {
+    private void openMapsAfterUpgrade(List<String> activeOnlyStreams, List<String> standbyOnlyStreams) throws Exception {
+        for (String tableName : activeOnlyStreams) {
+            Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapStandby = corfuStoreStandby.openTable(
+                    NAMESPACE, tableName, Sample.StringKey.class,
+                    Sample.IntValueTag.class, Sample.Metadata.class,
+                    TableOptions.fromProtoSchema(Sample.IntValue.class,
+                            TableOptions.builder().persistentDataPath(null).build()));
+
+            mapNameToMapStandby.put(tableName, mapStandby);
+        }
+        for (String tableName : standbyOnlyStreams) {
             Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapActive = corfuStoreActive.openTable(
-                NAMESPACE, tableName, Sample.StringKey.class,
-                Sample.IntValueTag.class, Sample.Metadata.class,
-                TableOptions.fromProtoSchema(Sample.IntValueTag.class,
-                    TableOptions.builder().persistentDataPath(null).build()));
+                    NAMESPACE, tableName, Sample.StringKey.class,
+                    Sample.IntValueTag.class, Sample.Metadata.class,
+                    TableOptions.fromProtoSchema(Sample.IntValue.class,
+                            TableOptions.builder().persistentDataPath(null).build()));
 
             Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapStandby = corfuStoreStandby.openTable(
-                NAMESPACE, tableName, Sample.StringKey.class,
-                Sample.IntValueTag.class, Sample.Metadata.class,
-                TableOptions.fromProtoSchema(Sample.IntValueTag.class,
-                    TableOptions.builder().persistentDataPath(null).build()));
+                    NAMESPACE, tableName, Sample.StringKey.class,
+                    Sample.IntValueTag.class, Sample.Metadata.class,
+                    TableOptions.fromProtoSchema(Sample.IntValueTag.class,
+                            TableOptions.builder().persistentDataPath(null).build()));
 
             mapNameToMapActive.put(tableName, mapActive);
             mapNameToMapStandby.put(tableName, mapStandby);
+        }
+    }
+
+    private void openMapsAfterUpgradeActive(List<String> activeOnlyStreams, List<String> standbyOnlyStreams) throws Exception {
+        for (String tableName : activeOnlyStreams) {
+            Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapActive = corfuStoreActive.openTable(
+                    NAMESPACE, tableName, Sample.StringKey.class,
+                    Sample.IntValueTag.class, Sample.Metadata.class,
+                    TableOptions.fromProtoSchema(Sample.IntValue.class,
+                            TableOptions.builder().persistentDataPath(null).build()));
+
+            mapNameToMapActive.put(tableName, mapActive);
+        }
+        for (String tableName : standbyOnlyStreams) {
+            Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapActive = corfuStoreActive.openTable(
+                    NAMESPACE, tableName, Sample.StringKey.class,
+                    Sample.IntValueTag.class, Sample.Metadata.class,
+                    TableOptions.fromProtoSchema(Sample.IntValueTag.class,
+                            TableOptions.builder().persistentDataPath(null).build()));
+
+            mapNameToMapActive.put(tableName, mapActive);
         }
     }
 
@@ -945,7 +875,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         int totalWrites = start + NUM_WRITES;
         for (String tableName : tableNames) {
             Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> table =
-                mapNameToMapActive.get(tableName);
+                    mapNameToMapActive.get(tableName);
 
             for (int i = start; i < totalWrites; i++) {
                 Sample.StringKey stringKey = Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build();
@@ -963,7 +893,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
     private void verifyDataOnStandby(List<String> tableNames, int expectedNumWrites) {
         for (String tableName : tableNames) {
             Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> table =
-                mapNameToMapStandby.get(tableName);
+                    mapNameToMapStandby.get(tableName);
             while (table.count() != expectedNumWrites) {
                 // block until expected entries get replicated to Standby
                 log.trace("Current table size: {}, expected entries: {}", table.count(), expectedNumWrites);
@@ -973,19 +903,18 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
             for (int i = 0; i < expectedNumWrites; i++) {
                 try (TxnContext tx = corfuStoreStandby.txn(table.getNamespace())) {
                     assertThat(tx.getRecord(table,
-                        Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build()).getPayload()).isNotNull();
+                            Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build()).getPayload()).isNotNull();
                     tx.commit();
                 }
             }
         }
     }
 
-    private void verifyConfig(CorfuStore corfuStore, String expectedVersion,
-        boolean isUpgraded, Set<String> expectedStreamsToReplicate) throws Exception {
-        openConfigTables();
+    private void verifyVersion(CorfuStore corfuStore, String expectedVersion, boolean isUpgraded) throws Exception {
+        openVersionTables();
         LogReplicationStreams.VersionString versionStringKey =
-            LogReplicationStreams.VersionString.newBuilder()
-                .setName(VERSION_KEY).build();
+                LogReplicationStreams.VersionString.newBuilder()
+                        .setName(VERSION_KEY).build();
 
         String actualVersion = "";
         boolean actualUpgradedFlag = false;
@@ -993,11 +922,11 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         while (!Objects.equals(expectedVersion, actualVersion)) {
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                 if (txn.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE,
-                    versionStringKey) != null && txn.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE,
-                    versionStringKey).getPayload() != null) {
+                        versionStringKey) != null && txn.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE,
+                        versionStringKey).getPayload() != null) {
                     LogReplicationStreams.Version version = (LogReplicationStreams.Version)
-                        txn.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE,
-                            versionStringKey).getPayload();
+                            txn.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE,
+                                    versionStringKey).getPayload();
                     actualVersion = version.getVersion();
                     actualUpgradedFlag = version.getIsUpgraded();
                 }
@@ -1007,80 +936,5 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         Assert.assertEquals(expectedVersion, actualVersion);
         Assert.assertEquals(isUpgraded, actualUpgradedFlag);
         log.info("Verified version");
-
-        Set<String> expectedTableNamesFormatted = new HashSet<>();
-        for (String stream : expectedStreamsToReplicate) {
-            expectedTableNamesFormatted.add(prependNamespace(stream));
-        }
-
-        Set<String> actualStreams = new HashSet<>();
-        while(!Objects.equals(actualStreams, expectedTableNamesFormatted)) {
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                actualStreams = new HashSet<>();
-                Set<LogReplicationStreams.TableInfo> tables =
-                    txn.keySet(LOG_REPLICATION_STREAMS_NAME_TABLE);
-                for (LogReplicationStreams.TableInfo table : tables) {
-                    if (Objects.equals(table.getName(), REGISTRY_TABLE_NAME) ||
-                        Objects.equals(table.getName(),
-                            PROTOBUF_DESCRIPTOR_TABLE_NAME)) {
-                        continue;
-                    }
-                    log.info("Table Name {}", table.getName());
-                    actualStreams.add(table.getName());
-                }
-                txn.commit();
-            }
-        }
-        Assert.assertTrue(Objects.equals(expectedTableNamesFormatted, actualStreams));
-    }
-
-    private String prependNamespace(String tableName) {
-        return NAMESPACE + SEPARATOR + tableName;
-    }
-
-    private class PluginVersionListener implements StreamListener {
-        @Getter
-        List<String> updates = new ArrayList<>();
-
-        private final CountDownLatch countDownLatch;
-
-        public PluginVersionListener(CountDownLatch countdownLatch) {
-            this.countDownLatch = countdownLatch;
-        }
-
-        @Override
-        public void onNext(CorfuStreamEntries results) {
-            results.getEntries().forEach((schema, entries) -> entries.forEach(e ->
-                updates.add(((LogReplicationStreams.Version)e.getPayload()).getVersion())));
-            countDownLatch.countDown();
-        }
-
-        @Override
-        public void onError(Throwable throwable) {
-            fail("onError for PluginVersionListener");
-        }
-    }
-
-    private class StreamsToReplicateListener implements StreamListener {
-        @Getter
-        List<String> updates = new ArrayList<>();
-
-        private final CountDownLatch countDownLatch;
-
-        public StreamsToReplicateListener(CountDownLatch countdownLatch) {
-            this.countDownLatch = countdownLatch;
-        }
-
-        @Override
-        public void onNext(CorfuStreamEntries results) {
-            results.getEntries().forEach((schema, entries) -> entries.forEach(e ->
-                updates.add(((LogReplicationStreams.TableInfo)e.getPayload()).getName())));
-            countDownLatch.countDown();
-        }
-
-        @Override
-        public void onError(Throwable throwable) {
-            fail("onError for StreamsToReplicateListener");
-        }
     }
 }

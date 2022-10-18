@@ -13,7 +13,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
-import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -21,6 +20,7 @@ import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.test.SampleSchema.SampleTableAMsg;
 import org.corfudb.test.SampleSchema.ValueFieldTagOne;
 import org.corfudb.test.SampleSchema.ValueFieldTagOneAndTwo;
 import org.corfudb.util.Sleep;
@@ -31,6 +31,7 @@ import java.io.File;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -464,7 +465,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             setupActiveAndStandbyCorfu();
             openMaps();
 
-            Set<UUID> tablesToListen = new DefaultLogReplicationConfigAdapter().getStreamingConfigOnSink().keySet();
+            Set<UUID> tablesToListen = getTablesToListen();
 
             // Start Listener on the 'stream_tag' of interest, on standby site + tables to listen (which accounts
             // for the notification for 'clear' table)
@@ -521,7 +522,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             // Attach new listener for deltas (the same listener could be used) but simplifying the use of the latch
             CountDownLatch streamingStandbyDeltaCompletion = new CountDownLatch(totalEntries*2);
             StreamingStandbyListener listenerDeltas = new StreamingStandbyListener(streamingStandbyDeltaCompletion,
-                    new DefaultLogReplicationConfigAdapter().getStreamingConfigOnSink().keySet());
+                    tablesToListen);
             corfuStoreStandby.subscribeListener(listenerDeltas, NAMESPACE, DefaultLogReplicationConfigAdapter.TAG_ONE);
 
             // Add Delta's for Log Entry Sync
@@ -652,11 +653,15 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         }
     }
 
+    /**
+     * Helper method for opening tables with is_federated flag to be true, which will be used to verify the registry
+     * table entries are correctly replicated.
+     */
     private void openTable(CorfuStore corfuStore, String tableName) throws Exception {
         corfuStore.openTable(
                 NAMESPACE, tableName,
                 Sample.StringKey.class, Sample.IntValueTag.class, Sample.Metadata.class,
-                TableOptions.builder().build()
+                TableOptions.fromProtoSchema(SampleTableAMsg.class)
         );
     }
 
@@ -743,41 +748,13 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         }
     }
 
-    /**
-     * Stream Listener used for testing streaming on standby site. This listener decreases a latch
-     * until all expected updates are received/
-     */
-    public static class StreamingStandbyListener implements StreamListener {
-
-        private final CountDownLatch updatesLatch;
-        public List<CorfuStreamEntry> messages = new ArrayList<>();
-        private final Set<UUID> tablesToListenTo;
-
-        public StreamingStandbyListener(CountDownLatch updatesLatch, Set<UUID> tablesToListenTo) {
-            this.updatesLatch = updatesLatch;
-            this.tablesToListenTo = tablesToListenTo;
-        }
-
-        @Override
-        public synchronized void onNext(CorfuStreamEntries results) {
-            log.info("StreamingStandbyListener:: onNext {} with entry size {}", results, results.getEntries().size());
-
-            results.getEntries().forEach((schema, entries) -> {
-                if (tablesToListenTo.contains(CorfuRuntime.getStreamID(NAMESPACE + "$" + schema.getTableName()))) {
-                    messages.addAll(entries);
-                    entries.forEach(e -> {
-                        if (e.getOperation() == CorfuStreamEntry.OperationType.CLEAR) {
-                            System.out.println("Clear operation for :: " + schema.getTableName() + " on address :: " + results.getTimestamp().getSequence() + " key :: " + e.getKey());
-                        }
-                        updatesLatch.countDown();
-                    });
-                }
-            });
-        }
-
-        @Override
-        public void onError(Throwable throwable) {
-            log.error("ERROR :: unsubscribed listener");
-        }
+    private Set<UUID> getTablesToListen() {
+        String SEPARATOR = "$";
+        int indexOne = 1;
+        int indexTwo = 2;
+        Set<UUID> tablesToListen = new HashSet<>();
+        tablesToListen.add(CorfuRuntime.getStreamID(NAMESPACE + SEPARATOR + TABLE_PREFIX + indexOne));
+        tablesToListen.add(CorfuRuntime.getStreamID(NAMESPACE + SEPARATOR + TABLE_PREFIX + indexTwo));
+        return tablesToListen;
     }
 }

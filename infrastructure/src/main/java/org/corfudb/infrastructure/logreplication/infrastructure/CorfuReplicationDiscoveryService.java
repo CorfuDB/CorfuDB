@@ -43,10 +43,8 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -425,20 +423,12 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             replicationConfigManager =
                 new LogReplicationConfigManager(runtime, serverContext.getPluginConfigFilePath());
 
-            Set<String> streamsToReplicate = replicationConfigManager.getStreamsToReplicate();
-
-            Map<UUID, List<UUID>> streamingConfigSink = replicationConfigManager.getStreamingConfigOnSink();
-
-            Set<UUID> mergeOnlyStreams = LogReplicationConfigManager.getMergeOnlyStreamIdList();
-
-            log.info("Merge-only stream IDs :: {}", mergeOnlyStreams);
-
-            return new LogReplicationConfig(streamsToReplicate,
-                    streamingConfigSink,
-                    mergeOnlyStreams,
+            return new LogReplicationConfig(
+                    replicationConfigManager,
                     serverContext.getLogReplicationMaxNumMsgPerBatch(),
                     serverContext.getLogReplicationMaxDataMessageSize(),
-                    serverContext.getLogReplicationCacheMaxSize());
+                    serverContext.getLogReplicationCacheMaxSize()
+            );
         } catch (Throwable t) {
             log.error("Exception when fetching the Replication Config", t);
             throw t;

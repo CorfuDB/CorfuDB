@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.protocols.service.CorfuProtocolLogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
@@ -14,12 +14,11 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType;
 
 import javax.annotation.concurrent.NotThreadSafe;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import static org.corfudb.protocols.service.CorfuProtocolLogReplication.extractOpaqueEntries;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.REGISTRY_TABLE_ID;
 
 
 /**
@@ -27,21 +26,14 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.extractO
  */
 @NotThreadSafe
 @Slf4j
-public class LogEntryWriter {
-    private final LogReplicationMetadataManager logReplicationMetadataManager;
-    private final HashMap<UUID, String> streamMap; //the set of streams that log entry writer will work on.
+public class LogEntryWriter extends SinkWriter {
     private long srcGlobalSnapshot; //the source snapshot that the transaction logs are based
     private long lastMsgTs; //the timestamp of the last message processed.
-    private Map<UUID, List<UUID>> dataStreamToTagsMap;
 
     public LogEntryWriter(LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager) {
-        this.logReplicationMetadataManager = logReplicationMetadataManager;
+        super(config, logReplicationMetadataManager);
         this.srcGlobalSnapshot = Address.NON_ADDRESS;
         this.lastMsgTs = Address.NON_ADDRESS;
-        this.streamMap = new HashMap<>();
-        this.dataStreamToTagsMap = config.getDataStreamToTagsMap();
-
-        config.getStreamsToReplicate().stream().forEach(stream -> streamMap.put(CorfuRuntime.getStreamID(stream), stream));
     }
 
     /**
@@ -64,11 +56,11 @@ public class LogEntryWriter {
      * @return true when the msg is appended to the log
      */
     private boolean processMsg(LogReplicationEntryMsg txMessage) {
-        List<OpaqueEntry> opaqueEntryList = extractOpaqueEntries(txMessage);
+        List<OpaqueEntry> opaqueEntryList = CorfuProtocolLogReplication.extractOpaqueEntries(txMessage);
 
         try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
-
-            Map<LogReplicationMetadataType, Long> metadataMap = logReplicationMetadataManager.queryMetadata(txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED,
+            Map<LogReplicationMetadataType, Long> metadataMap = logReplicationMetadataManager.queryMetadata(
+                    txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED,
                     LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED, LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED);
             long persistedTopologyConfigId = metadataMap.get(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
             long persistedSnapshotStart = metadataMap.get(LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
@@ -98,13 +90,27 @@ public class LogEntryWriter {
 
             for (OpaqueEntry opaqueEntry : newOpaqueEntryList) {
                 for (UUID streamId : opaqueEntry.getEntries().keySet()) {
-                    if (!streamMap.containsKey(streamId)) {
-                        log.warn("Skip applying log entries for stream {} as it is noisy. LR could be undergoing a rolling upgrade", streamId);
+                    if (ignoreEntriesForStream(streamId)) {
+                        log.warn("Skip applying log entries for stream {} as it is noisy. Source and Sink are likely " +
+                                "to be operating in different versions", streamId);
                         continue;
                     }
-                    for (SMREntry smrEntry : opaqueEntry.getEntries().get(streamId)) {
-                        // If stream tags exist for the current stream, it means its intended for streaming on the Sink (receiver)
-                        txnContext.logUpdate(streamId, smrEntry, dataStreamToTagsMap.get(streamId));
+                    List<SMREntry> smrEntries = opaqueEntry.getEntries().get(streamId);
+                    if (streamId.equals(REGISTRY_TABLE_ID)) {
+                        // Preprocess registry table entries to add their serialization info.
+                        smrEntries = filterRegistryTableEntries(smrEntries);
+                        log.info("{} entries for registry table found during log entry sync.", smrEntries.size());
+                        for (SMREntry smrEntry : smrEntries) {
+                            // If stream tags exist for the current stream, it means it is intended for streaming on the Sink (receiver)
+                            txnContext.logUpdate(streamId, smrEntry, config.getDataStreamToTagsMap().get(streamId));
+                        }
+                        // Update the config after handling registry table entries
+                        config.syncWithRegistry();
+                    } else {
+                        for (SMREntry smrEntry : smrEntries) {
+                            // If stream tags exist for the current stream, it means its intended for streaming on the Sink (receiver)
+                            txnContext.logUpdate(streamId, smrEntry, config.getDataStreamToTagsMap().get(streamId));
+                        }
                     }
                 }
             }
@@ -164,6 +170,9 @@ public class LogEntryWriter {
      * @param ackTimestamp
      */
     public void reset(long snapshot, long ackTimestamp) {
+        // Sync with registry table when LogEntryWriter is reset, which will happen when Snapshot sync is completed, and
+        // when LogReplicationSinkManager is initialized and reset.
+        config.syncWithRegistry();
         srcGlobalSnapshot = snapshot;
         lastMsgTs = ackTimestamp;
     }

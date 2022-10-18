@@ -44,6 +44,8 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEnt
 /**
  *  Default snapshot reader implementation
  *
+ *  The streams to replicate are read from registry table and will be refreshed at the start of a snapshot sync.
+ *
  *  This implementation provides reads at the stream level (no coalesced state).
  *  It generates TxMessages which will be transmitted by the DataSender (provided by the application).
  */
@@ -54,10 +56,11 @@ public class StreamsSnapshotReader implements SnapshotReader {
      */
     private final int maxDataSizePerMsg;
     private final Optional<DistributionSummary> messageSizeDistributionSummary;
+    private final CorfuRuntime rt;
+    private final LogReplicationConfig config;
     private long snapshotTimestamp;
     private Set<String> streams;
     private PriorityQueue<String> streamsToSend;
-    private CorfuRuntime rt;
     private long preMsgTs;
     private long currentMsgTs;
     private OpaqueStreamIterator currentStreamInfo;
@@ -75,6 +78,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
      */
     public StreamsSnapshotReader(CorfuRuntime runtime, LogReplicationConfig config) {
         this.rt = runtime;
+        this.config = config;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
         this.streams = config.getStreamsToReplicate();
@@ -264,6 +268,8 @@ public class StreamsSnapshotReader implements SnapshotReader {
 
     @Override
     public void reset(long ts) {
+        config.syncWithRegistry(ts);
+        streams = config.getStreamsToReplicate();
         streamsToSend = new PriorityQueue<>(streams);
         preMsgTs = Address.NON_ADDRESS;
         currentMsgTs = Address.NON_ADDRESS;
