@@ -171,14 +171,25 @@ public abstract class AbstractTransactionalContext implements
     }
 
     protected void updateKnownStreamPosition(@NonNull ICorfuSMRProxyInternal<?> proxy, long position) {
+        final boolean isMonotonicObject = proxy.getUnderlyingObject().isMonotonicObject();
         Long val = knownStreamsPosition.get(proxy.getStreamID());
 
         if (val != null) {
-            Preconditions.checkState(val <= position,
-                    "new stream position %s has decreased from %s", position, val);
+            if (isMonotonicObject) {
+                Preconditions.checkState(val <= position,
+                        "new stream position %s has decreased from %s", position, val);
+            } else {
+                // This precondition is not valid for monotonic objects since multiple accesses
+                // performed by a transaction may not always see the same stream position.
+                // This can occur if another thread performs accesses at a later snapshot and
+                // interleaves with this transaction.
+                Preconditions.checkState(val == position,
+                        "inconsistent stream positions %s and %s", val, position);
+                return;
+            }
         }
 
-        hasAccessedMonotonicObject = true;
+        hasAccessedMonotonicObject = hasAccessedMonotonicObject || isMonotonicObject;
         knownStreamsPosition.put(proxy.getStreamID(), position);
     }
 

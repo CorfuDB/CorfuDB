@@ -53,7 +53,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     // gets block on parallel stream, because the pool is exhausted with threads that are trying to acquire the VLO
     // look, which creates a circular dependency. In other words, a deadlock.
 
-    protected static final ForkJoinPool pool = new ForkJoinPool(Math.max(Runtime.getRuntime().availableProcessors() - 1, 1),
+    protected static final ForkJoinPool pool = new ForkJoinPool(Math.max(Runtime.getRuntime().availableProcessors() / 2, 1),
             pool -> {
                 final ForkJoinWorkerThread worker = ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(pool);
                 worker.setName("Table-Forkjoin-pool-" + worker.getPoolIndex());
