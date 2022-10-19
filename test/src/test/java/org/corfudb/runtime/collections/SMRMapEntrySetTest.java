@@ -37,7 +37,6 @@ public class SMRMapEntrySetTest extends AbstractTransactionsTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("mapsettest")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
                 .open();
 
@@ -70,7 +69,6 @@ public class SMRMapEntrySetTest extends AbstractTransactionsTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("mapsettest")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
                 .open();
 

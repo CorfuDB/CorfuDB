@@ -33,7 +33,6 @@ public class AbstractObjectTest extends AbstractViewTest {
                             .build()
                             .setStreamName(name)     // stream name
                             .setType(tClass)        // object class backed by this stream
-                            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                             .open();                // instantiate the object!
         }
         else {
@@ -70,7 +69,6 @@ public class AbstractObjectTest extends AbstractViewTest {
                     .build()
                     .setStreamName(name)     // stream name
                     .setTypeToken(tType)    // a TypeToken of the specified class
-                    .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                     .open();                // instantiate the object!
         } else {
             return r.getObjectsView()

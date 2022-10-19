@@ -54,7 +54,6 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .build()
                 .setStreamName("stream2")
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         assertThat(sv.remaining()).isEmpty();
@@ -180,7 +179,6 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .setTypeToken(new TypeToken<PersistentCorfuTable<CustomConflictObject, String>>() {
                 })
                 .setStreamName("test")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         t(1, this::OptimisticTXBegin);
@@ -228,7 +226,6 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .getObjectsView().build()
                 .setStreamID(streamID)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
         // Add rule to force a read on the assigned token before actually writing to that position
         TestRule testRule = new TestRule()
@@ -268,8 +265,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         ICorfuTable<String, String> map = rtSlowWriter
                 .getObjectsView().build()
                 .setStreamID(streamID)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {}).
-                setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
         int[] retry = new int[1];
@@ -351,7 +347,6 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<CustomConflictObject, String>>() {
                 })
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
@@ -399,7 +394,6 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<CustomSameHashConflictObject, String>>() {
                 })
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
@@ -454,7 +448,6 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<CustomHashConflictObject, String>>() {
                 })
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
@@ -501,7 +494,6 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<IHashAlwaysConflictObject, String>>() {
                 })
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
@@ -553,7 +545,6 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<IHashConflictObject, String>>() {
                 })
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
@@ -603,7 +594,6 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<ExtendedIHashObject, String>>() {
                 })
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
@@ -935,7 +925,6 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .setStreamName("test-1")
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
                 })
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         ICorfuTable<String, String> m2 = rt.getObjectsView()
@@ -943,7 +932,6 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .setStreamName("test-2")
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
                 })
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         t1(() -> rt.getObjectsView().TXBegin());
@@ -1070,7 +1058,6 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
             .build()
             .setStreamID(streamId1)
             .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
             .setStreamTags(streamTag1, streamTag2)
             .open();
 
@@ -1079,7 +1066,6 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
             .build()
             .setStreamID(streamId2)
             .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
             .setStreamTags(streamTag2, streamTag3)
             .open();
 
@@ -1088,7 +1074,6 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
             .build()
             .setStreamID(streamId3)
             .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
             .open();
 
         t1(() -> rt.getObjectsView().TXBegin());

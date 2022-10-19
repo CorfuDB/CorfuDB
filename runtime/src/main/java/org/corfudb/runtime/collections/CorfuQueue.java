@@ -59,7 +59,6 @@ public class CorfuQueue {
         corfuTable = runtime.getObjectsView().build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuRecordId, ByteString>>() {})
                 .setStreamName(streamName)
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setSerializer(serializer)
                 .open();
 

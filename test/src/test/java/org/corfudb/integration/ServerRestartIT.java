@@ -527,7 +527,6 @@ public class ServerRestartIT extends AbstractIT {
         return corfuRuntime.getObjectsView().build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .setArguments(indexer)
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
     }

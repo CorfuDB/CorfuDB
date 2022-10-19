@@ -47,7 +47,6 @@ public class ObjectsViewTest extends AbstractViewTest {
                 .setStreamName(mapA)
                 .setStreamTags(CorfuRuntime.getStreamID(streamA))
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         // TODO: fix so this does not require mapCopy.
@@ -58,7 +57,6 @@ public class ObjectsViewTest extends AbstractViewTest {
                 .setStreamName(mapA)
                 .setStreamTags(CorfuRuntime.getStreamID(streamA))
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         map.insert("initial", "value");
@@ -127,7 +125,6 @@ public class ObjectsViewTest extends AbstractViewTest {
                 .build()
                 .setStreamName("mapa")
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         r1.getObjectsView().TXBegin();
@@ -147,7 +144,6 @@ public class ObjectsViewTest extends AbstractViewTest {
         ICorfuTable<String, String> smrMap = r.getObjectsView().build()
                 .setStreamName("map a")
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         IStreamView streamB = r.getStreamsView().get(CorfuRuntime.getStreamID("b"));
@@ -175,13 +171,11 @@ public class ObjectsViewTest extends AbstractViewTest {
         ICorfuTable<String, String> smrMap = r.getObjectsView().build()
                 .setStreamName("map a")
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         ICorfuTable<String, String> smrMapB = r.getObjectsView().build()
                 .setStreamName("map b")
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         smrMap.insert("a", "b");

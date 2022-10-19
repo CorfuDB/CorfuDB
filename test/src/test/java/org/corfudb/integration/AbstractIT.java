@@ -392,7 +392,6 @@ public class AbstractIT extends AbstractCorfuTest {
                                                                      @NonNull String streamName) {
         return rt.getObjectsView()
                 .build()
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName(streamName)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<K, V>>() {})
                 .open();
@@ -404,7 +403,6 @@ public class AbstractIT extends AbstractCorfuTest {
         // Serializer should be registered with the runtime separately
         return rt.getObjectsView()
                 .build()
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName(streamName)
                 .setSerializer(serializer)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<K, V>>() {})

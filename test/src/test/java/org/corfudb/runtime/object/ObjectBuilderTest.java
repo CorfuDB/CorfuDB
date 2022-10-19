@@ -54,7 +54,6 @@ public class ObjectBuilderTest {
             SMRObject.builder()
                     .runtime(rt)
                     .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                    .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                     .open();
         }).isInstanceOf(NullPointerException.class)
           .hasMessageStartingWith("streamID is marked non-null but is null");

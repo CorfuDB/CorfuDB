@@ -67,7 +67,6 @@ public class HelloCorfu {
                 .build()
                 .setStreamName("A")     // stream name
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, Integer>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();                // instantiate the object!
 
         /**

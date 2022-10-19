@@ -83,7 +83,6 @@ public class State {
                     .setStreamID(uuid)
                     .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                     .setArguments(new StringIndexer())
-                    .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                     .open();
 
             maps.put(uuid, map);

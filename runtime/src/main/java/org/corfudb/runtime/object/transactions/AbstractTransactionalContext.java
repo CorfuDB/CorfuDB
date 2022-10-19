@@ -171,7 +171,7 @@ public abstract class AbstractTransactionalContext implements
     }
 
     protected void updateKnownStreamPosition(@NonNull ICorfuSMRProxyInternal<?> proxy, long position) {
-        final boolean isMonotonicObject = proxy.getUnderlyingObject().isMonotonicObject();
+        final boolean isMonotonicObject = proxy.isMonotonic();
         Long val = knownStreamsPosition.get(proxy.getStreamID());
 
         if (val != null) {

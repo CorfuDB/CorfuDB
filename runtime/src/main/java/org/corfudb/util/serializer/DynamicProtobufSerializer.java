@@ -128,7 +128,6 @@ public class DynamicProtobufSerializer implements ISerializer {
                    getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
                        REGISTRY_TABLE_NAME))
                 .setSerializer(protobufSerializer)
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
 
@@ -146,7 +145,6 @@ public class DynamicProtobufSerializer implements ISerializer {
                 .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
                         PROTOBUF_DESCRIPTOR_TABLE_NAME))
                 .setSerializer(protobufSerializer)
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
 

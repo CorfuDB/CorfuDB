@@ -133,7 +133,6 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
                     .setStreamName(name)
                     .setStreamTags(ObjectsView.getLogReplicatorStreamId())
                     .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
-                    .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                     .setSerializer(serializer)
                     .open();
             tables.put(name, table);

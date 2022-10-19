@@ -60,7 +60,6 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
@@ -79,7 +78,6 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
@@ -90,7 +88,6 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
@@ -109,7 +106,6 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
         for (int i=0; i < ONE_THOUSAND; i++) {
@@ -123,7 +119,6 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
         for (int i=0; i < ONE_THOUSAND; i++) {
@@ -150,7 +145,6 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
@@ -227,7 +221,6 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 

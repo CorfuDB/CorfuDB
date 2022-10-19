@@ -108,7 +108,6 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
                 .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {
                 })
                 .setStreamName(TEST_STREAM)
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         final int key = 0xBEEF;
@@ -135,7 +134,6 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {
                 })
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName(TEST_STREAM)
                 .open();
 

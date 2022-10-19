@@ -237,7 +237,6 @@ public class Table<K extends Message, V extends Message, M extends Message> {
             // PersistentCorfuTable
             builder = runtime.getObjectsView().build()
                     .setTypeToken(new TypeToken<PersistentCorfuTable<K, CorfuRecord<V, M>>>() {})
-                    .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                     .setArguments(new ProtobufIndexer(
                             tableParameters.getValueSchema(),
                             tableParameters.getSchemaOptions()));

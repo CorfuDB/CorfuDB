@@ -30,7 +30,6 @@ public class CompileProxyTest extends AbstractViewTest {
                                     .getObjectsView().build()
                                     .setStreamName("my stream")
                                     .setTypeToken(new TypeToken<PersistentCorfuTable<String,String>>() {})
-                                    .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                                     .open();
 
         getDefaultRuntime().getObjectsView().TXBegin();
@@ -61,7 +60,6 @@ public class CompileProxyTest extends AbstractViewTest {
         ICorfuTable<String, String> map = rt.getObjectsView().build()
                 .setStreamName(streamName)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String,String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
         // Note: because we trimmed and no CP covers these changes we throw a trimmedException, is this right? we would never recover from this...
         assertThatThrownBy(() -> {
@@ -301,7 +299,6 @@ public class CompileProxyTest extends AbstractViewTest {
                 .setStreamName("my stream")
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
                 })
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
         int concurrency = PARAMETERS.CONCURRENCY_LOTS;
 

@@ -948,7 +948,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         PersistentCorfuTable<String, String>
                 corfuTable = corfuRuntime.getObjectsView().build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 

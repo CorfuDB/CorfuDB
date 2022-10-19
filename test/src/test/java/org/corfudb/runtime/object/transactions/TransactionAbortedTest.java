@@ -42,7 +42,6 @@ public class TransactionAbortedTest extends AbstractTransactionContextTest {
         ICorfuTable<String, String> map = runtime.getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName(this.getClass().getSimpleName())
                 .open();
         final String key = "key";

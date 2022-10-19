@@ -64,7 +64,6 @@ public class CorfuStorePerfIT extends AbstractIT {
             .build()
             .setStreamName("s1")
             .setTypeToken(new TypeToken<PersistentCorfuTable<UUID, Event>>() {})
-            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
             .open();
 
         Event event;

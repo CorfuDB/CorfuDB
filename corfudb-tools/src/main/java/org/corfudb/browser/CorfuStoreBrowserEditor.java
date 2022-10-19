@@ -136,7 +136,6 @@ public class CorfuStoreBrowserEditor {
             SMRObject.Builder<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> corfuTableBuilder =
                     runtime.getObjectsView().build()
                             .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
-                            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                             .setStreamName(fullTableName)
                             .setSerializer(dynamicProtobufSerializer);
             return corfuTableBuilder.open();

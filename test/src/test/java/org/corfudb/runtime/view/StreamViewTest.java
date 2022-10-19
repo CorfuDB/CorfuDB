@@ -411,7 +411,6 @@ public class StreamViewTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> table = r.getObjectsView()
                 .build()
                 .setStreamName(stream)
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
@@ -432,7 +431,6 @@ public class StreamViewTest extends AbstractViewTest {
                 .build()
                 .setStreamName(stream)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .option(ObjectOpenOption.NO_CACHE)
                 .open();
 
@@ -491,7 +489,6 @@ public class StreamViewTest extends AbstractViewTest {
         final PersistentCorfuTable<String, String> instance1 = localRuntime.getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("txTestMap")
                 .setStreamTags(tagId)
                 .open();
@@ -553,7 +550,6 @@ public class StreamViewTest extends AbstractViewTest {
                 .build()
                 .setStreamName(stream)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         CorfuRuntime producer = getNewRuntime(getDefaultNode()).connect();
@@ -658,7 +654,6 @@ public class StreamViewTest extends AbstractViewTest {
                 .build()
                 .setStreamName(streamName)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         // Insert NUM_UPDATES to stream

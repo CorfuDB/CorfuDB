@@ -164,6 +164,11 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
     }
 
     @Override
+    public boolean isMonotonic() {
+        return true;
+    }
+
+    @Override
     public ISerializer getSerializer() {
         return serializer;
     }

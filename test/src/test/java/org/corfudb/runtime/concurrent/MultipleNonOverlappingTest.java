@@ -245,7 +245,6 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
                 .getObjectsView()
                 .build()
                 .setStreamName(name)     // stream name
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT) // use PersistentCorfuTable
                 .setType(tClass)        // object class backed by this stream\
                 .open();                // instantiate the object!
     }

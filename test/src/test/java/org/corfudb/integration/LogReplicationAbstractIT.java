@@ -477,7 +477,6 @@ public class LogReplicationAbstractIT extends AbstractIT {
                 .setStreamName(streamA)
                 .setStreamTags(ObjectsView.getLogReplicatorStreamId())
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, Integer>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         mapAStandby = standbyRuntime.getObjectsView()
@@ -485,7 +484,6 @@ public class LogReplicationAbstractIT extends AbstractIT {
                 .setStreamName(streamA)
                 .setStreamTags(ObjectsView.getLogReplicatorStreamId())
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, Integer>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         assertThat(mapA.size()).isZero();

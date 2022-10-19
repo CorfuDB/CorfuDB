@@ -78,7 +78,6 @@ public class LargeWriteIT extends AbstractIT {
         PersistentCorfuTable<String, byte[]> map = runtime.getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, byte[]>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName(tableName)
                 .serializer(Serializers.JAVA)
                 .open();

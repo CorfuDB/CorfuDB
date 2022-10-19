@@ -34,7 +34,6 @@ public class MapsAsMQsTest extends AbstractTransactionsTest {
                 .getObjectsView()
                 .build()
                 .setStreamName(tableName1)
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
                 .open();
 

@@ -445,4 +445,9 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
 
         throw tae;
     }
+
+    @Override
+    public boolean isMonotonic() {
+        return underlyingObject.isMonotonicObject();
+    }
 }

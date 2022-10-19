@@ -5,7 +5,6 @@ import java.util.UUID;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.SMRObject;
-import org.corfudb.runtime.view.SMRObject.VersioningMechanism;
 import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.serializer.ISerializer;
 
@@ -16,6 +15,8 @@ import org.corfudb.util.serializer.ISerializer;
  */
 public class CorfuCompileWrapperBuilder {
 
+    static final String PERSISTENT_CORFU_TABLE_CLASS_NAME = "org.corfudb.runtime.collections.PersistentCorfuTable";
+    static final String IMMUTABLE_CORFU_TABLE_CLASS_NAME = "org.corfudb.runtime.collections.ImmutableCorfuTable";
 
     /**
      * Returns a wrapper for the underlying SMR Object
@@ -35,13 +36,12 @@ public class CorfuCompileWrapperBuilder {
     private static <T extends ICorfuSMR<T>> T getWrapper(Class<T> type, CorfuRuntime rt,
                                                          UUID streamID, Object[] args,
                                                          ISerializer serializer,
-                                                         Set<UUID> streamTags,
-                                                         VersioningMechanism versioningMechanism) throws Exception {
+                                                         Set<UUID> streamTags) throws Exception {
 
-        if (versioningMechanism == VersioningMechanism.PERSISTENT) {
+        if (type.getName().equals(PERSISTENT_CORFU_TABLE_CLASS_NAME)) {
             // TODO: make general - This should get cleaned up
             Class<T> immutableClass = (Class<T>)
-                    Class.forName("org.corfudb.runtime.collections.ImmutableCorfuTable");
+                    Class.forName(IMMUTABLE_CORFU_TABLE_CLASS_NAME);
 
             Class<ICorfuSMR<T>> wrapperClass = (Class<ICorfuSMR<T>>) Class.forName(type.getName());
 
@@ -77,7 +77,6 @@ public class CorfuCompileWrapperBuilder {
                 smrObject.getStreamID(),
                 smrObject.getArguments(),
                 smrObject.getSerializer(),
-                smrObject.getStreamTags(),
-                smrObject.getVersioningMechanism());
+                smrObject.getStreamTags());
     }
 }

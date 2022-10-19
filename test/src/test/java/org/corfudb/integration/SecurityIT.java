@@ -132,7 +132,6 @@ public class SecurityIT extends AbstractIT {
                 .getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, Object>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("volbeat")
                 .open();
 

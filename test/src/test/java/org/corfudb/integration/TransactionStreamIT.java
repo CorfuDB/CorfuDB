@@ -129,7 +129,6 @@ public class TransactionStreamIT extends AbstractIT {
                         .setStreamName(String.valueOf(idx))
                         .setStreamTags(txnStreamTag)
                         .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {})
-                        .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                         .open();
                 for (int i = 1; i <= numWritesPerThread; i++) {
                     producersRt.getObjectsView().TXBegin();
@@ -155,7 +154,6 @@ public class TransactionStreamIT extends AbstractIT {
                     .build()
                     .setStreamName(String.valueOf(x))
                     .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {})
-                    .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                     .open();
             assertThat(map.size()).isEqualTo(numWritesPerThread);
         }

@@ -28,7 +28,6 @@ public class ViewsGarbageCollectorTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> table = rt.getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("table1")
                 .open();
 

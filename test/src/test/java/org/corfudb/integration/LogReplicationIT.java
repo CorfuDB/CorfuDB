@@ -251,7 +251,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                     .setStreamName(name)
                     .setStreamTags(ObjectsView.getLogReplicatorStreamId())
                     .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
-                    .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                     .setSerializer(Serializers.PRIMITIVE)
                     .open();
             tables.put(name, table);

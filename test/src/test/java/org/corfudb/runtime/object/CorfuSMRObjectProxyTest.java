@@ -108,7 +108,6 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .setSerializer(customSerializer)
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         test.insert("a", "b");
@@ -133,14 +132,12 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .setSerializer(customSerializer)
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         ICorfuTable<String, String> test2 = r.getObjectsView().build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .setSerializer(Serializers.getDefaultSerializer())
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         ObjectsView.ObjectID mapId = new ObjectsView.

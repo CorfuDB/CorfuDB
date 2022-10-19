@@ -78,7 +78,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> table = r.getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("Map1")
                 .open();
 
@@ -772,7 +771,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>() {})
                 .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
                         TableRegistry.REGISTRY_TABLE_NAME))
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setSerializer(serializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
@@ -782,7 +780,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>() {})
                 .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
                         TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME))
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setSerializer(serializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
@@ -832,7 +829,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>() {})
                 .setStreamName(getFullyQualifiedTableName(namespace, streamName))
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setSerializer(serializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
@@ -899,7 +895,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 .build()
                 .setStreamName(streamName)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, Long>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setSerializer(serializer)
                 .open();
     }
@@ -910,7 +905,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 .build()
                 .setStreamName(streamName)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setSerializer(serializer)
                 .open();
     }
@@ -1178,7 +1172,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 .build()
                 .setStreamName(streamA)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, Long>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setSerializer(serializer)
                 .open();
 
@@ -1235,7 +1228,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 .build()
                 .setStreamName(streamA)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, Long>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setSerializer(serializer)
                 .open();
 

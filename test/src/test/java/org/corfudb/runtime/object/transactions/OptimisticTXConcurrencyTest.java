@@ -156,7 +156,6 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
 
         ICorfuTable<UUID, String> mapTest = getRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<UUID, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamID(streamID)
                 .open();
         mapTest.clear();

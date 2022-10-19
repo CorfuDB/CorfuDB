@@ -194,7 +194,6 @@ public class CorfuQueueTest extends AbstractViewTest {
                 .build()
                 .setStreamName("test")
                 .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuQueue.CorfuRecordId, ByteString>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setSerializer(Serializers.QUEUE_SERIALIZER)
                 .open();
 
@@ -236,7 +235,6 @@ public class CorfuQueueTest extends AbstractViewTest {
                 .build()
                 .setStreamName("stream1")
                 .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuQueue.CorfuRecordId, ByteString>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setSerializer(Serializers.QUEUE_SERIALIZER)
                 .open();
 
@@ -245,7 +243,6 @@ public class CorfuQueueTest extends AbstractViewTest {
                 .build()
                 .setStreamName("stream2")
                 .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuQueue.CorfuRecordId, ByteString>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setSerializer(Serializers.QUEUE_SERIALIZER)
                 .open();
 

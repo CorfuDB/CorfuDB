@@ -65,7 +65,6 @@ public class CorfuTableTest extends AbstractViewTest {
         PersistentCorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setArguments(new StringIndexer())
                 .setStreamName("test")
                 .open();
@@ -92,7 +91,6 @@ public class CorfuTableTest extends AbstractViewTest {
         PersistentCorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
                     .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                    .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                     .setArguments(new StringIndexer())
                     .setStreamName("test")
                     .open();
@@ -149,7 +147,6 @@ public class CorfuTableTest extends AbstractViewTest {
         PersistentCorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
@@ -170,7 +167,6 @@ public class CorfuTableTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setArguments(new StringMultiIndexer())
                 .setStreamName("test-map")
                 .open();
@@ -190,7 +186,6 @@ public class CorfuTableTest extends AbstractViewTest {
         PersistentCorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setArguments(new StringIndexer())
                 .setStreamName("test")
                 .open();
@@ -214,7 +209,6 @@ public class CorfuTableTest extends AbstractViewTest {
         PersistentCorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setArguments(new StringIndexer.FailingIndex())
                 .setStreamName("failing-index")
                 .open();
@@ -257,7 +251,6 @@ public class CorfuTableTest extends AbstractViewTest {
         PersistentCorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
@@ -280,7 +273,6 @@ public class CorfuTableTest extends AbstractViewTest {
         PersistentCorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setArguments(new StringIndexer())
                 .setStreamName("test")
                 .open();
@@ -323,7 +315,6 @@ public class CorfuTableTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamID(streamID)
                 .open();
 
@@ -369,7 +360,6 @@ public class CorfuTableTest extends AbstractViewTest {
         PersistentCorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 

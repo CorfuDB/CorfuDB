@@ -47,7 +47,6 @@ public class CheckpointTest extends AbstractObjectTest {
                 .build()
                 .setStreamName(tableName)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, Long>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setSerializer(serializer)
                 .open();
     }
@@ -606,14 +605,12 @@ public class CheckpointTest extends AbstractObjectTest {
         PersistentCorfuTable<String, String> testTable = getDefaultRuntime().getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
         PersistentCorfuTable<String, String> testTable2 = getDefaultRuntime().getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test2")
                 .open();
 
@@ -676,7 +673,6 @@ public class CheckpointTest extends AbstractObjectTest {
             PersistentCorfuTable<String, Long> testTable = rt.getObjectsView()
                     .build()
                     .setTypeToken(new TypeToken<PersistentCorfuTable<String, Long>>() {})
-                    .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                     .setStreamName(streamName)
                     .open();
 

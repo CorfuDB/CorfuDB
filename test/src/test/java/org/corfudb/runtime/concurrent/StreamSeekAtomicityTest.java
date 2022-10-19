@@ -35,7 +35,6 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
         PersistentCorfuTable<Long, Long> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName(tableName)
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
                 .open();
 
@@ -108,7 +107,6 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
         PersistentCorfuTable<Long, Long> testTable1 = getRuntime().getObjectsView()
                 .build()
                 .setStreamName(tableName1)
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
                 .open();
 
@@ -116,7 +114,6 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
         PersistentCorfuTable<Long, Long> testTable2 = getRuntime().getObjectsView()
                 .build()
                 .setStreamName(tableName2)
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
                 .open();
 
@@ -192,7 +189,6 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
         PersistentCorfuTable<Long, Long> testTable1 = getRuntime().getObjectsView()
                 .build()
                 .setStreamName(tableName1)
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
                 .open();
 
@@ -200,7 +196,6 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
         PersistentCorfuTable<Long, Long> testTable2 = getRuntime().getObjectsView()
                 .build()
                 .setStreamName(tableName2)
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
                 .open();
 

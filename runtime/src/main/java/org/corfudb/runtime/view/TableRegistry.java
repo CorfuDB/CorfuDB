@@ -136,7 +136,6 @@ public class TableRegistry {
             .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, REGISTRY_TABLE_NAME))
             .setSerializer(this.protobufSerializer)
             .setStreamTags(LOG_REPLICATOR_STREAM_INFO.getStreamId())
-            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
             .open();
 
         this.protobufDescriptorTable = this.runtime.getObjectsView().build()
@@ -145,7 +144,6 @@ public class TableRegistry {
             .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, PROTOBUF_DESCRIPTOR_TABLE_NAME))
             .setSerializer(this.protobufSerializer)
             .setStreamTags(LOG_REPLICATOR_STREAM_INFO.getStreamId())
-            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
             .open();
 
         // Register the table schemas to schema table.

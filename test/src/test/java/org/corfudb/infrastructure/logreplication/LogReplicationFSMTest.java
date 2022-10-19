@@ -417,7 +417,6 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 .build()
                 .setStreamName(TEST_STREAM_NAME)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         for(int i=0; i<NUM_ENTRIES; i++) {
@@ -452,7 +451,6 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 .build()
                 .setStreamName(TEST_STREAM_NAME)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         for (int i=0; i<LARGE_NUM_ENTRIES; i++) {

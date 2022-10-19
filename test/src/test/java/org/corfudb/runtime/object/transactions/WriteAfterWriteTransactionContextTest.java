@@ -84,7 +84,6 @@ public class WriteAfterWriteTransactionContextTest extends AbstractTransactionCo
             Object obj = getRuntime().getObjectsView().build()
                 .setStreamName(streamName)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamTags(getRuntime().getStreamID(txnStreamName))
                 .open();
             testMap = (ICorfuTable<String, String>) obj;

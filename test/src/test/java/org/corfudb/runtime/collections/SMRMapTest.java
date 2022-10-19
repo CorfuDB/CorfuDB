@@ -48,7 +48,6 @@ public class SMRMapTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
@@ -68,7 +67,6 @@ public class SMRMapTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setSerializer(Serializers.PRIMITIVE)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Double>>() {})
                 .open();
@@ -93,7 +91,6 @@ public class SMRMapTest extends AbstractViewTest {
         ICorfuSMR testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamID(id)
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
@@ -106,7 +103,6 @@ public class SMRMapTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
@@ -127,7 +123,6 @@ public class SMRMapTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test 1")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
         testTable.clear();
@@ -135,7 +130,6 @@ public class SMRMapTest extends AbstractViewTest {
         PersistentCorfuTable<String, PersistentCorfuTable<String, String>> testTable2 = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test 2")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, PersistentCorfuTable<String, String>>>() {})
                 .open();
         testTable2.insert("a", testTable);
@@ -160,7 +154,6 @@ public class SMRMapTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamID(UUID.randomUUID())
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
@@ -207,7 +200,6 @@ public class SMRMapTest extends AbstractViewTest {
                 .mapToObj(i -> getRuntime().getObjectsView()
                         .build()
                         .setStreamID(UUID.randomUUID())
-                        .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                         .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
                         })
                         .option(ObjectOpenOption.NO_CACHE)
@@ -239,58 +231,12 @@ public class SMRMapTest extends AbstractViewTest {
         calculateRequestsPerSecond("RPS", num_records * num_threads, startTime);
     }
 
-    /*
-    @Test
-    @SuppressWarnings("unchecked")
-    @Ignore // PersistentCorfuTable does not implement compute
-    public void readSetDiffFromWriteSet() throws Exception {
-        CorfuTable<String, String> testTable = getRuntime().getObjectsView()
-                .build()
-                .setStreamName("test1")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .open();
-
-        CorfuTable<String, String> testTable2 = getRuntime().getObjectsView()
-                .build()
-                .setStreamName("test2")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .open();
-
-        testTable.insert("a", "b");
-        testTable2.insert("a", "c");
-
-        Semaphore s1 = new Semaphore(0);
-        Semaphore s2 = new Semaphore(0);
-        scheduleConcurrently(1, threadNumber -> {
-            s1.tryAcquire(PARAMETERS.TIMEOUT_NORMAL.toMillis(),
-                    TimeUnit.MILLISECONDS);
-            getRuntime().getObjectsView().TXBegin();
-            testTable2.insert("a", "d");
-            getRuntime().getObjectsView().TXEnd();
-            s2.release();
-        });
-
-        scheduleConcurrently(1, threadNumber -> {
-            getRuntime().getObjectsView().TXBegin();
-            // PersistentCorfuTable does not implement compute
-            testTable.compute("b", (k, v) -> testTable2.get("a"));
-            s1.release();
-            s2.tryAcquire(PARAMETERS.TIMEOUT_NORMAL.toMillis(),
-                    TimeUnit.MILLISECONDS);
-            assertThatThrownBy(() -> getRuntime().getObjectsView().TXEnd())
-                    .isInstanceOf(TransactionAbortedException.class);
-        });
-        executeScheduled(PARAMETERS.CONCURRENCY_TWO, PARAMETERS.TIMEOUT_NORMAL);
-    }
-    */
-
    @Test
     @SuppressWarnings("unchecked")
     public void canUpdateSingleObjectTransactionally() throws Exception {
        PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                .build()
                .setStreamName("test")
-               .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                .open();
 
@@ -313,7 +259,6 @@ public class SMRMapTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
@@ -341,7 +286,6 @@ public class SMRMapTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
@@ -366,7 +310,6 @@ public class SMRMapTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
@@ -400,7 +343,6 @@ public class SMRMapTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
@@ -422,7 +364,6 @@ public class SMRMapTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
@@ -448,7 +389,6 @@ public class SMRMapTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("A")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
@@ -465,7 +405,6 @@ public class SMRMapTest extends AbstractViewTest {
             PersistentCorfuTable<String, String> testTable2 = getRuntime().getObjectsView()
                     .build()
                     .setStreamName("A")
-                    .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                     .setSerializer(Serializers.getDefaultSerializer())
                     .option(ObjectOpenOption.NO_CACHE)
                     .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
@@ -486,7 +425,6 @@ public class SMRMapTest extends AbstractViewTest {
         PersistentCorfuTable<String, TestObject> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("A")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, TestObject>>() {})
                 .open();
 
@@ -501,7 +439,6 @@ public class SMRMapTest extends AbstractViewTest {
         PersistentCorfuTable<String, TestObject> testTable = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("A")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, TestObject>>() {})
                 .open();
 
@@ -535,7 +472,6 @@ public class SMRMapTest extends AbstractViewTest {
                         .mapToObj(i -> getRuntime().getObjectsView()
                                 .build()
                                 .setStreamID(mapStream)
-                                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
                                 })
                                 .option(ObjectOpenOption.NO_CACHE)
@@ -617,7 +553,6 @@ public class SMRMapTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamID(stream)
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .open();
 
@@ -632,7 +567,6 @@ public class SMRMapTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> testTable2 = getRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .setStreamID(stream)
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .option(ObjectOpenOption.NO_CACHE)
                 .open();
         // Do a get to prompt the sync

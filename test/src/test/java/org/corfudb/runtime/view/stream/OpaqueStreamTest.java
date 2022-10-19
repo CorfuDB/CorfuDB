@@ -45,7 +45,6 @@ public class OpaqueStreamTest extends AbstractViewTest {
                 .build()
                 .setStreamID(streamId)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setSerializer(customSerializer)
                 .open() ;
 
@@ -91,7 +90,6 @@ public class OpaqueStreamTest extends AbstractViewTest {
                 .build()
                 .setStreamID(streamId)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setSerializer(customSerializer)
                 .open() ;
 
@@ -126,7 +124,6 @@ public class OpaqueStreamTest extends AbstractViewTest {
                 .build()
                 .setStreamID(streamId)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setSerializer(customSerializer)
                 .open();
 
@@ -162,7 +159,6 @@ public class OpaqueStreamTest extends AbstractViewTest {
                 .build()
                 .setStreamID(streamId)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open() ;
 
         assertThatThrownBy(() -> table2.size()).isInstanceOf(SerializerException.class);

@@ -126,7 +126,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .setStreamName(streamName)
                 .setStreamTags(ObjectsView.getLogReplicatorStreamId())
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, Integer>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         mapStandby = standbyRuntime.getObjectsView()
@@ -134,7 +133,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .setStreamName(streamName)
                 .setStreamTags(ObjectsView.getLogReplicatorStreamId())
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, Integer>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         assertThat(mapActive.size()).isZero();
@@ -766,7 +764,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .setStreamTags(ObjectsView.getLogReplicatorStreamId())
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, Integer>>() {
                 })
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
         for (int i = 0; i < firstBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
@@ -1486,7 +1483,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .build()
                 .setStreamName(streamName)
                 .setStreamTags(ObjectsView.getLogReplicatorStreamId())
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, Integer>>() {
                 })
                 .open();

@@ -75,7 +75,6 @@ public class BatchedWriteTransaction extends BaseCorfuAppUtils {
                 .build()
                 .setStreamName("A")     // stream name
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, Integer>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();                // instantiate the object!
 
         // populate map: sequentially
@@ -110,7 +109,6 @@ public class BatchedWriteTransaction extends BaseCorfuAppUtils {
                             .build()
                             .setStreamName("C" + m)
                             .setTypeToken(new TypeToken<PersistentCorfuTable<String, Integer>>() {})
-                            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                             .open()
             );
         }

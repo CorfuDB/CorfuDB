@@ -41,7 +41,6 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
                             .build()
                             .setStreamName("nonidepmpotentmaptest")    // stream name
                             .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {}) // object TokenType class
-                            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                             .open() ;
 
             assertThat(mymap.get("world1"))
@@ -80,7 +79,6 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
                         .build()
                             .setStreamName("nonidepmpotentmaptest")    // stream name
                             .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {}) // object TokenType class
-                            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                         .open();
 
             // start a transaction and then hand over to thread 1
@@ -149,7 +147,6 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
                             .build()
                             .setStreamName("nonidepmpotentmaptest")    // stream name
                             .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {}) // object TokenType class
-                            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                             .open() ;
 
             assertThat(mymap.get("world1"))
@@ -190,7 +187,6 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
                             .build()
                             .setStreamName("nonidepmpotentmaptest")    // stream name
                             .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {}) // object TokenType class
-                            .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                             .open();
 
                     // start a transaction and then hand over to thread 1

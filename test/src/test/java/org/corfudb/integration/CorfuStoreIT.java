@@ -178,7 +178,6 @@ public class CorfuStoreIT extends AbstractIT {
                 .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
                         TableRegistry.REGISTRY_TABLE_NAME))
                 .setSerializer(dynamicProtobufSerializer)
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
         PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord> descriptorTable = runtime.getObjectsView().build()
@@ -187,7 +186,6 @@ public class CorfuStoreIT extends AbstractIT {
                 .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
                         TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME))
                 .setSerializer(dynamicProtobufSerializer)
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
 
@@ -272,7 +270,6 @@ public class CorfuStoreIT extends AbstractIT {
             SMRObject.Builder<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> corfuTableBuilder = runtimeC.getObjectsView()
                     .build()
                     .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
-                    .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                     .setStreamName(fullTableName)
                     .setSerializer(dynamicProtobufSerializer);
 
@@ -285,7 +282,6 @@ public class CorfuStoreIT extends AbstractIT {
                         persistedCacheLocation, options,
                         dynamicProtobufSerializer, runtimeC);
                 corfuTableBuilder.setArguments(mapSupplier, ICorfuVersionPolicy.MONOTONIC)
-                        .setVersioningMechanism(SMRObject.VersioningMechanism.VERSION_LOCKED)
                         .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {});
             }
 

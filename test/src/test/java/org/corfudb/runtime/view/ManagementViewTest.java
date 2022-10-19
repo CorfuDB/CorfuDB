@@ -552,7 +552,6 @@ public class ManagementViewTest extends AbstractViewTest {
                     .build()
                     .setStreamName(name)     // stream name
                     .setTypeToken(tType)    // a TypeToken of the specified class
-                    .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                     .open();                // instantiate the object!
         } else {
             return getCorfuRuntime().getObjectsView()
@@ -1609,7 +1608,6 @@ public class ManagementViewTest extends AbstractViewTest {
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
                 })
                 .setStreamName("test")
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .open();
 
         writeRandomEntryToTable(table);

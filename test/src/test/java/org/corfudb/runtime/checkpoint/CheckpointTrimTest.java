@@ -36,7 +36,6 @@ public class CheckpointTrimTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> testTable = getDefaultRuntime().getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
@@ -57,7 +56,6 @@ public class CheckpointTrimTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> newTestTable = getDefaultRuntime().getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .option(ObjectOpenOption.NO_CACHE)
                 .setStreamName("test")
                 .open();
@@ -76,7 +74,6 @@ public class CheckpointTrimTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> table = getDefaultRuntime().getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
@@ -136,7 +133,6 @@ public class CheckpointTrimTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> testTable = getDefaultRuntime().getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
@@ -162,7 +158,6 @@ public class CheckpointTrimTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> newTestMap = getDefaultRuntime().getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .option(ObjectOpenOption.NO_CACHE)
                 .setStreamName("test")
                 .open();
@@ -195,7 +190,6 @@ public class CheckpointTrimTest extends AbstractViewTest {
         final PersistentCorfuTable<Integer, Integer> table = getDefaultRuntime().getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName(tableName)
                 .open();
 
@@ -212,7 +206,6 @@ public class CheckpointTrimTest extends AbstractViewTest {
         PersistentCorfuTable<Integer, Integer> newTable = newRuntime.getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName(tableName)
                 .open();
 
@@ -245,7 +238,6 @@ public class CheckpointTrimTest extends AbstractViewTest {
         final PersistentCorfuTable<Integer, Integer> table = getDefaultRuntime().getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName(tableName)
                 .open();
 
@@ -291,7 +283,6 @@ public class CheckpointTrimTest extends AbstractViewTest {
         final PersistentCorfuTable<String, String> table = getDefaultRuntime().getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName(tableName)
                 .open();
 
@@ -329,7 +320,6 @@ public class CheckpointTrimTest extends AbstractViewTest {
         final PersistentCorfuTable<Integer, Integer> table = getDefaultRuntime().getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName(tableName)
                 .open();
 
@@ -396,7 +386,6 @@ public class CheckpointTrimTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> testTable = getDefaultRuntime().getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
@@ -409,7 +398,6 @@ public class CheckpointTrimTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> newTestTable = getDefaultRuntime().getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .option(ObjectOpenOption.NO_CACHE)
                 .setStreamName("test")
                 .open();
@@ -453,7 +441,6 @@ public class CheckpointTrimTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> testMap = getDefaultRuntime().getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
-                .setVersioningMechanism(SMRObject.VersioningMechanism.PERSISTENT)
                 .setStreamName("test")
                 .open();
 
