@@ -2,7 +2,6 @@ package org.corfudb.runtime.object;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import io.micrometer.core.instrument.Counter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -23,6 +22,13 @@ import java.util.UUID;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.Supplier;
 
+/**
+ * Provides the necessary synchronization primitives for allowing safe access to the SMR
+ * object in a multi-threaded context. SMR objects should be immutable and persistent.
+ * @param <T> The type of the underlying SMR object.
+ *
+ * Created by jielu, munshedm, and zfrenette.
+ */
 @Slf4j
 public class MultiVersionObject<T extends ICorfuSMR<T>> {
 
@@ -60,24 +66,24 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
     private volatile T currentObject;
 
     /**
-     * The version corresponding to currentObject. This value is always in sync
-     * with currentObject, even after a resetUnsafe operation.
-     */
-    private volatile long currentObjectVersion = Address.NON_EXIST;
-
-    /**
-     * All versions up to (and including) materializedUpTo have *had* their versions
-     * materialized in the MVOCache. Unlike currentObjectVersion, this value is
-     * monotonically increasing, and is not reset by resetUnsafe. Since this timestamp
-     * corresponds to a materialized version of this stream, it is safe against potential
-     * sequencer regressions.
+     * All versions up to (and including) materializedUpTo have had their versions
+     * materialized in the MVOCache. This value is always in sync with currentObject,
+     * even after a resetUnsafe operation. Since this timestamp corresponds to a
+     * materialized version of this stream, it is safe against potential sequencer
+     * regressions.
      *
      * Note: There is no guarantee that the materializedUpTo version is always
      * present within the MVOCache. It only indicates that this is the most recent
      * version materialized by the MVO.
      */
-    // private volatile long materializedUpTo = Address.NON_EXIST;
+    private volatile long materializedUpTo = Address.NON_EXIST;
 
+    /**
+     * Used for optimization purposes, this value is similar to materializedUpTo.
+     * However, this timestamp is not safe against sequencer regressions.
+     *
+     * TODO: revert optimization or address sequencer regression consistency issue
+     */
     private volatile long resolvedUpTo = Address.NON_EXIST;
 
     /**
@@ -95,9 +101,6 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
     private static final String CORRECTNESS_LOG_MSG = "Version, {}";
 
     private static final String STREAM_ID_TAG_NAME = "streamId";
-
-    private final Optional<Counter> optimisticReadCounter;
-    private final Optional<Counter> pessimisticReadCounter;
 
     /**
      * Create a new MultiVersionObject.
@@ -120,12 +123,6 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         this.trimRetry = corfuRuntime.getParameters().getTrimRetry();
         this.mvoCache.registerMVO(getID(),this);
         wrapperObject.closeWrapper();
-
-        this.optimisticReadCounter = MicroMeterUtils.counter(
-                "mvo.read.optimistic", STREAM_ID_TAG_NAME, getID().toString());
-
-        this.pessimisticReadCounter = MicroMeterUtils.counter(
-                "mvo.read.pessimistic", STREAM_ID_TAG_NAME, getID().toString());
     }
 
     /**
@@ -142,7 +139,6 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                 Optional<ICorfuSMRSnapshotProxy<T>> snapshot = getFromCacheUnsafe(voId, lockTs);
                 if (snapshot.isPresent()) {
                     // Lock was validated within getFromCacheUnsafe.
-                    optimisticReadCounter.ifPresent(Counter::increment);
                     return snapshot.get();
                 }
             } catch (Exception e) {
@@ -164,10 +160,9 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
             if (lockTs == 0) {
                 long startTime = System.nanoTime();
                 lockTs = lock.writeLock();
-                MicroMeterUtils.time(Duration.ofNanos(System.nanoTime() - startTime), "mvo.lock.wait", STREAM_ID_TAG_NAME, getID().toString());
+                MicroMeterUtils.time(Duration.ofNanos(System.nanoTime() - startTime),
+                        "mvo.lock.wait", STREAM_ID_TAG_NAME, getID().toString());
             }
-
-            pessimisticReadCounter.ifPresent(Counter::increment);
 
             // Check if our timestamp has since been materialized by another thread.
             Optional<ICorfuSMRSnapshotProxy<T>> snapshot = getFromCacheUnsafe(voId, lockTs);
@@ -212,7 +207,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      * @return True if and only if this timestamp has been materialized.
      */
     private boolean isTimestampMaterializedUnsafe(long timestamp) {
-        if (timestamp == Address.NON_EXIST && currentObjectVersion == Address.NON_EXIST) {
+        if (timestamp == Address.NON_EXIST && materializedUpTo == Address.NON_EXIST) {
             return false;
         }
 
@@ -249,7 +244,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                 // by the MVO. In this case, there is no need to query the cache. This check is required
                 // since the MVOCache might have evicted all versions associated with this object, even
                 // though streamTs is the most recent tail for this stream.
-                if (streamTs == currentObjectVersion) {
+                if (streamTs == materializedUpTo) {
                     versionedObject = currentObject;
                 } else {
                     versionedObject = mvoCache.get(voId).orElseThrow(() -> new TrimmedException(streamTs,
@@ -298,11 +293,10 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                         // entries that consist of multiple continuation entries. These will all share the
                         // globalAddress of the no-op operation. There is no correctness issue by putting
                         // these prematurely in the cache, as optimistic reads will be invalid.
-                        Preconditions.checkState(globalAddress >= currentObjectVersion,
-                                "globalAddress %s not >= materialized %s", globalAddress, currentObjectVersion);
+                        Preconditions.checkState(globalAddress >= materializedUpTo,
+                                "globalAddress %s not >= materialized %s", globalAddress, materializedUpTo);
 
-                        // materializedUpTo = globalAddress;
-                        currentObjectVersion = globalAddress;
+                        materializedUpTo = globalAddress;
                     } catch (Exception e) {
                         log.error("Sync[{}] couldn't execute upcall due to {}", Utils.toReadableId(getID()), e);
                         throw new UnrecoverableCorfuError(e);
@@ -386,9 +380,8 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         currentObject.close();
         currentObject = newObjectFn.get();
         addressSpace = new StreamAddressSpace();
-        currentObjectVersion = Address.NON_EXIST;
+        materializedUpTo = Address.NON_EXIST;
         resolvedUpTo = Address.NON_EXIST;
-        // materializedUpTo = Address.NON_EXIST;
         smrStream.reset();
     }
 

@@ -24,17 +24,32 @@ import java.util.Spliterators;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
+/**
+ * A thin immutable and persistent wrapper around VAVR's map implementation.
+ * Keys must be unique and each key is mapped to exactly one value. Null keys
+ * and values are not permitted.
+ * @param <K> The type of the primary key.
+ * @param <V> The type of the values to be mapped.
+ *
+ * Created by jielu, munshedm, and zfrenette.
+ */
 @Slf4j
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 // TODO: don't need to implement ICorfuSMR?
 public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<K, V>> {
 
     // The "main" map which contains the primary key-value mappings.
-    private Map<K, V> mainMap;
+    private final Map<K, V> mainMap;
 
     // Data structures for secondary indexes.
-    private SecondaryIndexesWrapper<K, V> secondaryIndexesWrapper;
+    private final SecondaryIndexesWrapper<K, V> secondaryIndexesWrapper;
 
+    /**
+     * Get a type token for this particular type of ImmutableCorfuTable.
+     * @param <K> The key type.
+     * @param <V> The value type.
+     * @return A type token to pass to the builder.
+     */
     public static <K, V> TypeToken<ImmutableCorfuTable<K, V>> getTableType() {
         return new TypeToken<ImmutableCorfuTable<K, V>>() {};
     }
@@ -55,19 +70,21 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
     }
 
     /**
-     *
-     * @param key
-     * @return
+     * Get the value associated with the provided key.
+     * @param key The key used to perform the query.
+     * @return The value associated with the provided key. or null
+     * if no such mapping exists.
      */
     public V get(@Nonnull K key) {
         return mainMap.get(key).getOrNull();
     }
 
     /**
-     *
-     * @param key
-     * @param value
-     * @return
+     * Insert a key-value pair, overwriting any previous mapping. This method updates
+     * secondary indexes if applicable.
+     * @param key   The key to insert.
+     * @param value The value to insert.
+     * @return An ImmutableCorfuTable containing the new key-value mapping.
      */
     public ImmutableCorfuTable<K, V> put(@Nonnull K key, @Nonnull V value) {
         SecondaryIndexesWrapper<K, V> newSecondaryIndexesWrapper = secondaryIndexesWrapper;
@@ -84,9 +101,10 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
     }
 
     /**
-     *
-     * @param key
-     * @return
+     * Delete a key-value pair, updating secondary indexes if applicable.
+     * @param key The key to remove.
+     * @return An ImmutableCorfuTable where the mapping given from the
+     * provided key is removed.
      */
     public ImmutableCorfuTable<K, V> remove(@Nonnull K key) {
         SecondaryIndexesWrapper<K, V> newSecondaryIndexesWrapper = secondaryIndexesWrapper;
@@ -101,25 +119,25 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
     }
 
     /**
-     *
-     * @return
+     * Compute the size of this ImmutableCorfuTable.
+     * @return The number of key-value pairs in this ImmutableCorfuTable.
      */
     public int size() {
         return mainMap.size();
     }
 
     /**
-     *
-     * @param key
-     * @return
+     * Returns true if a mapping for the specified key exists.
+     * @param key The key whose presence is to be tested.
+     * @return True if and only if a mapping for the provided key exists.
      */
     public boolean containsKey(@Nonnull K key) {
         return mainMap.containsKey(key);
     }
 
     /**
-     *
-     * @return
+     * Removes all of the key-value pair mappings.
+     * @return An ImmutableCorfuTable with all key-value mappings removed.
      */
     public ImmutableCorfuTable<K, V> clear() {
         return new ImmutableCorfuTable<>(
@@ -129,33 +147,35 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
     }
 
     /**
-     *
-     * @return
+     * Returns a set of all keys present.
+     * @return A set containing all keys present in this ImmutableCorfuTable.
      */
     public java.util.Set<K> keySet() {
+        // TODO: Can this call to toJavaSet() be avoided?
         return mainMap.keySet().toJavaSet();
     }
 
     /**
-     *
-     * @return
+     * Returns the key-value mappings through the Java stream interface.
+     * @return A stream containing all key-value mappings in this ImmutableCorfuTable.
      */
     public Stream<java.util.Map.Entry<K, V>> entryStream() {
         return StreamSupport.stream(spliterator(mainMap), true);
     }
 
     /**
-     *
-     * @param indexName
-     * @param indexKey
-     * @param <I>
-     * @return
+     * Get a mapping using the specified index function.
+     * @param indexName Name of the secondary index to query.
+     * @param indexKey The index key used to query the secondary index
+     * @param <I> The type of the index key.
+     * @return A collection of map entries satisfying this index query.
      */
     public <I> Collection<java.util.Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey) {
         final String secondaryIndexName = indexName.get();
         Option<Map<K, V>> optMap = secondaryIndexesWrapper.contains(secondaryIndexName, indexKey);
 
         if (!optMap.isEmpty()) {
+            // TODO: Can this call to toJavaMap() be avoided?
             return optMap.get().toJavaMap().entrySet();
         }
 
@@ -273,12 +293,14 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
                     final String indexName = index.getName().get();
                     Map<Object, Map<K, V>> secondaryIndex = unmappedSecondaryIndexes.get(indexName).get();
                     for (Object indexKey : index.getMultiValueIndexFunction().apply(key, value)) {
-                        final Option<Map<K, V>> optSlot = secondaryIndex.get(indexKey);
-                        if (!optSlot.isEmpty()) {
-                            // TODO: VAVR does not have a removeIf - Simplify?
-                            final Option<V> optValue = optSlot.get().get(key);
-                            if (!optValue.isEmpty() && value.equals(optValue.get())) {
-                                secondaryIndex = secondaryIndex.put(indexKey, optSlot.get().remove(key));
+                        Map<K, V> slot = secondaryIndex.get(indexKey).get();
+                        final Option<V> optValue = slot.get(key);
+                        if (!optValue.isEmpty() && value.equals(optValue.get())) {
+                            slot = slot.remove(key);
+                            if (slot.isEmpty()) {
+                                secondaryIndex = secondaryIndex.remove(indexKey);
+                            } else {
+                                secondaryIndex = secondaryIndex.put(indexKey, slot);
                             }
                         }
                     }
@@ -290,10 +312,6 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
             } catch (Exception ex) {
                 log.error("Received an exception while computing the index. " +
                         "This is most likely an issue with the client's indexing function.", ex);
-
-                // The index might be corrupt, and the only way to ensure safety is to disable
-                // indexing for this table.
-                invalidateIndexes();
 
                 // In case of both a transactional and non-transactional operation, the client
                 // is going to receive UnrecoverableCorfuError along with the appropriate cause.
@@ -322,21 +340,10 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
                 log.error("Received an exception while computing the index. " +
                         "This is most likely an issue with the client's indexing function.", ex);
 
-                // The index might be corrupt, and the only way to ensure safety is to disable
-                // indexing for this table.
-                invalidateIndexes();
-
                 // In case of both a transactional and non-transactional operation, the client
                 // is going to receive UnrecoverableCorfuError along with the appropriate cause.
                 throw ex;
             }
-        }
-
-        // TODO: Needed? Can corruption still occur?
-        private void invalidateIndexes() {
-            indexSpec = HashSet.empty();
-            secondaryIndexes = HashMap.empty();
-            secondaryIndexesAliasToPath = HashMap.empty();
         }
     }
 }
