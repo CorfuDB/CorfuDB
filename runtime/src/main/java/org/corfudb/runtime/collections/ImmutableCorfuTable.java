@@ -10,6 +10,7 @@ import io.vavr.control.Option;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.collections.Index.Spec;
 import org.corfudb.runtime.object.ICorfuExecutionContext;
 import org.corfudb.runtime.object.ICorfuSMR;
 
@@ -225,9 +226,12 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
     public static class IndexMapping<K, V> {
         //secondary index mapping from the mapping function -> values
         private final Map<Object, Map<K, V>> mapping;
+        private final Spec<K, V, ?> index;
 
-        public IndexMapping<K, V> cleanUp(Iterable<?> staleValues, K key, V value) {
+        public IndexMapping<K, V> cleanUp(K key, V value) {
             Map<Object, Map<K, V>> updatedMapping = mapping;
+
+            Iterable<?> staleValues = index.getMultiValueIndexFunction().apply(key, value);
 
             for (Object indexKey: staleValues) {
                 if (!updatedMapping.containsKey(indexKey)) {
@@ -268,9 +272,9 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
         private SecondaryIndexesWrapper(@Nonnull final Index.Registry<K, V> indices) {
             this();
 
-            indices.forEach(index -> {
+            indices.forEach((Spec<K, V, ?> index) -> {
                 indexSpec = indexSpec.add(index);
-                secondaryIndexes = secondaryIndexes.put(index.getName().get(), new IndexMapping<>());
+                secondaryIndexes = secondaryIndexes.put(index.getName().get(), new IndexMapping<>(HashMap.empty(), index));
                 secondaryIndexesAliasToPath = secondaryIndexesAliasToPath
                         .put(index.getAlias().get(), index.getName().get());
             });
@@ -318,11 +322,8 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
             try {
                 Map<String, IndexMapping<K, V>> unmappedSecondaryIndexes = secondaryIndexes;
                 // Map entry into secondary indexes
-                for (Index.Spec<K, V, ?> index : indexSpec) {
-                    String indexName = index.getName().get();
-                    Iterable<?> staleValues = index.getMultiValueIndexFunction().apply(key, value);
-                    IndexMapping<K, V> secondaryIndex = unmappedSecondaryIndexes.get(indexName).get();
-                    IndexMapping<K, V> updatedSecondaryIndex = secondaryIndex.cleanUp(staleValues, key, value);
+                for (IndexMapping<K, V> secondaryIndex : secondaryIndexes) {
+                    IndexMapping<K, V> updatedSecondaryIndex = secondaryIndex.cleanUp(key, value);
 
                     unmappedSecondaryIndexes = unmappedSecondaryIndexes.put(indexName, updatedSecondaryIndex);
                 }
