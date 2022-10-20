@@ -35,9 +35,9 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -78,7 +78,6 @@ public class CompactorServiceTest extends AbstractViewTest {
     private static final String STREAM_KEY_PREFIX = "StreamKey";
     private static final long CHECKPOINT_TRIGGER_FREQ_MS = TimeUnit.MINUTES.toMillis(5);
     private static final int ITEM_SIZE = 10000;
-    private static final int NUM_RECORDS = 100;
 
     private static final Double logSizeLimitPercentageFull = 100.0;
     private static final Double logSizeLimitPercentageLow = 0.0002;
@@ -340,17 +339,27 @@ public class CompactorServiceTest extends AbstractViewTest {
         return null;
     }
 
-    private void populateStream(String streamName, int numRecords) {
+    private void exhaustQuota(String streamName) throws QuotaExceededException {
         CorfuStore localCorfuStore = new CorfuStore(runtime2);
-        for (int i = 0; i < numRecords; i++) {
+        int offset = 0;
+
+        while (true) {
             try (TxnContext txn = localCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                 byte[] array = new byte[ITEM_SIZE];
                 new Random().nextBytes(array);
                 txn.putRecord(openedStreams.get(streamName),
-                        StringKey.newBuilder().setKey(STREAM_KEY_PREFIX + i).build(),
+                        StringKey.newBuilder().setKey(STREAM_KEY_PREFIX + offset).build(),
                         StringKey.newBuilder().setKey(new String(array, StandardCharsets.UTF_16)).build(),
                         null);
                 txn.commit();
+                offset++;
+            } catch (RuntimeException ex) {
+                if (ex.getCause() instanceof QuotaExceededException) {
+                    // Quota has been exhausted - Unwrap and rethrow the exception to the caller.
+                    throw (QuotaExceededException) ex.getCause();
+                }
+
+                fail("Unexpected exception: " + ex.toString());
             }
         }
     }
@@ -533,10 +542,10 @@ public class CompactorServiceTest extends AbstractViewTest {
         when(dynamicTriggerPolicy0.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(true).thenReturn(false);
         compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
+        // Write entries to the stream until the quota has been exhausted.
+        // If no exception is thrown, then the test will timeout and fail.
         openStream(STREAM_NAME_PREFIX);
-        Exception ex = assertThrows(RuntimeException.class,
-                () -> populateStream(STREAM_NAME_PREFIX, NUM_RECORDS));
-        assertThat(ex.getCause().getClass()).isEqualTo(QuotaExceededException.class);
+        assertThrows(QuotaExceededException.class, () -> exhaustQuota(STREAM_NAME_PREFIX));
 
         try {
             while (!pollForFinishCheckpointing()) {
