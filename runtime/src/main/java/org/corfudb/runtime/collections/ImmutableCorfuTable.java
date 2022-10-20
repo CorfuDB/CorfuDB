@@ -107,13 +107,10 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
      * provided key is removed.
      */
     public ImmutableCorfuTable<K, V> remove(@Nonnull K key) {
-        SecondaryIndexesWrapper<K, V> newSecondaryIndexesWrapper = secondaryIndexesWrapper;
-        if (!secondaryIndexesWrapper.isEmpty()) {
-            V prev = get(key);
-            if (prev != null) {
-                newSecondaryIndexesWrapper = newSecondaryIndexesWrapper.unmapSecondaryIndexes(key, prev);
-            }
-        }
+        SecondaryIndexesWrapper<K, V> newSecondaryIndexesWrapper = mainMap
+                    .get(key)
+                    .map(prev -> secondaryIndexesWrapper.unmapSecondaryIndexes(key, prev))
+                    .getOrElse(secondaryIndexesWrapper);
 
         return new ImmutableCorfuTable<>(mainMap.remove(key), newSecondaryIndexesWrapper);
     }
@@ -224,10 +221,42 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
         }
     }
 
+    @AllArgsConstructor
+    public static class IndexMapping<K, V> {
+        //secondary index mapping from the mapping function -> values
+        private final Map<Object, Map<K, V>> mapping;
+
+        public IndexMapping<K, V> cleanUp(Iterable<?> staleValues, K key, V value) {
+            Map<Object, Map<K, V>> updatedMapping = mapping;
+
+            for (Object indexKey: staleValues) {
+                if (!updatedMapping.containsKey(indexKey)) {
+                    return this;
+                }
+
+                Map<K, V> slot = updatedMapping.get(indexKey).get();
+                boolean valuePresented = slot.get(key).contains(value);
+                if (valuePresented) {
+                    slot = slot.remove(key);
+                }
+
+                //update mapping index
+                updatedMapping = updatedMapping.put(indexKey, slot);
+
+                //clean up empty slot
+                if (slot.isEmpty()) {
+                    updatedMapping = updatedMapping.remove(indexKey);
+                }
+            }
+
+            return new IndexMapping<>(updatedMapping);
+        }
+    }
+
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
     private static class SecondaryIndexesWrapper<K, V> {
         private Set<Index.Spec<K, V, ?>> indexSpec;
-        private Map<String, Map<Object, Map<K, V>>> secondaryIndexes;
+        private Map<String, IndexMapping<K, V>> secondaryIndexes;
         private Map<String, String> secondaryIndexesAliasToPath;
 
         private SecondaryIndexesWrapper() {
@@ -241,7 +270,7 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
 
             indices.forEach(index -> {
                 indexSpec = indexSpec.add(index);
-                secondaryIndexes = secondaryIndexes.put(index.getName().get(), HashMap.empty());
+                secondaryIndexes = secondaryIndexes.put(index.getName().get(), new IndexMapping<>());
                 secondaryIndexesAliasToPath = secondaryIndexesAliasToPath
                         .put(index.getAlias().get(), index.getName().get());
             });
@@ -287,25 +316,15 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
 
         private SecondaryIndexesWrapper<K, V> unmapSecondaryIndexes(@Nonnull K key, @Nonnull V value) {
             try {
-                Map<String, Map<Object, Map<K, V>>> unmappedSecondaryIndexes = secondaryIndexes;
+                Map<String, IndexMapping<K, V>> unmappedSecondaryIndexes = secondaryIndexes;
                 // Map entry into secondary indexes
                 for (Index.Spec<K, V, ?> index : indexSpec) {
-                    final String indexName = index.getName().get();
-                    Map<Object, Map<K, V>> secondaryIndex = unmappedSecondaryIndexes.get(indexName).get();
-                    for (Object indexKey : index.getMultiValueIndexFunction().apply(key, value)) {
-                        Map<K, V> slot = secondaryIndex.get(indexKey).get();
-                        final Option<V> optValue = slot.get(key);
-                        if (!optValue.isEmpty() && value.equals(optValue.get())) {
-                            slot = slot.remove(key);
-                            if (slot.isEmpty()) {
-                                secondaryIndex = secondaryIndex.remove(indexKey);
-                            } else {
-                                secondaryIndex = secondaryIndex.put(indexKey, slot);
-                            }
-                        }
-                    }
+                    String indexName = index.getName().get();
+                    Iterable<?> staleValues = index.getMultiValueIndexFunction().apply(key, value);
+                    IndexMapping<K, V> secondaryIndex = unmappedSecondaryIndexes.get(indexName).get();
+                    IndexMapping<K, V> updatedSecondaryIndex = secondaryIndex.cleanUp(staleValues, key, value);
 
-                    unmappedSecondaryIndexes = unmappedSecondaryIndexes.put(indexName, secondaryIndex);
+                    unmappedSecondaryIndexes = unmappedSecondaryIndexes.put(indexName, updatedSecondaryIndex);
                 }
 
                 return new SecondaryIndexesWrapper<>(indexSpec, unmappedSecondaryIndexes, secondaryIndexesAliasToPath);
