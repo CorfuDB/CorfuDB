@@ -18,6 +18,7 @@ import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
 /**
@@ -137,5 +138,33 @@ public class BootstrapUtil {
             }
         }
         log.info("Successfully Bootstrapped layout:{} .", layout);
+    }
+
+    public static void bootstrapWithRouterMap(Map<String, NettyClientRouter> routerMap, Layout layout, int retries,
+                                              @NonNull Duration retryDuration) {
+        for (String server : routerMap.keySet()) {
+            int retry = retries;
+            try (NettyClientRouter router = routerMap.get(server)) {
+                while (retry-- > 0) {
+                    try {
+                        log.info("Attempting to bootstrap node: {} with layout:{}", server, layout);
+                        bootstrapLayoutServer(router, layout);
+                        bootstrapManagementServer(router, layout);
+                        break;
+                    } catch (AlreadyBootstrappedException abe) {
+                        log.warn("Node already bootstrapped. Skipping.");
+                        break;
+                    } catch (Exception e) {
+                        log.error("Bootstrapping node: {} failed with exception:", server, e);
+                        if (retry == 0) {
+                            throw new RetryExhaustedException("Bootstrapping node: retry exhausted");
+                        }
+                        log.warn("Retrying bootstrap {} times in {}ms.", retry, retryDuration.toMillis());
+                        Sleep.sleepUninterruptibly(retryDuration);
+                    }
+                }
+            }
+            log.info("Successfully Bootstrapped layout:{} from the router map.", layout);
+        }
     }
 }

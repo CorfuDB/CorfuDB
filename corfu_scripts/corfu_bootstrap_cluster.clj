@@ -44,13 +44,15 @@ Options:
                           (UUID/randomUUID))
                      unvalidated-layout)]
                   (do
-                    (doseq [server (.getLayoutServers new-layout)]
-                           (do
-                             (println  (format "Installing layout for %s" server))
-                             (let [router (get-router server localcmd)]
-                                  (BootstrapUtil/bootstrap new-layout retries timeout))))
+                    (let [router-map (create-router-map new-layout)]
+                         (BootstrapUtil/bootstrapWithRouterMap router-map new-layout retries timeout))
                     (println "New layout installed successfully!"))))))
 
+(defn configure-router [server]
+      [server (get-router server localcmd)])
+
+(defn create-router-map [layout]
+      (into (sorted-map) (map configure-router (.getLayoutServers new-layout))))
 ; determine whether to read or write
 (cond (.. localcmd (get "--layout")) (bootstrap-cluster (.. localcmd (get "--layout")))
       :else (println "Unknown arguments."))
