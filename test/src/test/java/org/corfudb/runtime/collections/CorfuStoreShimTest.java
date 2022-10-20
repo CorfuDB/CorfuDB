@@ -18,6 +18,7 @@ import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.exceptions.StaleRevisionUpdateException;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.proto.RpcCommon;
@@ -29,10 +30,13 @@ import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.test.SampleSchema;
+import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.IntervalRetry;
+import org.corfudb.util.retry.RetryNeededException;
+import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
 
-import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -41,6 +45,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Random;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -373,6 +378,113 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         });
         executeScheduled(numThreads, PARAMETERS.TIMEOUT_LONG);
+    }
+
+    /**
+     * CorfuStore uses WriteAfterWrite Transactions which detect conflicts only on concurrent writes.  For example,
+     * TX1: reads key K (may also perform other operations on other keys and/or tables)
+     * TX2: updates key K concurrently.
+     * When TX1 commits, it will not hit a TransacationAbortedException.  To consider K for conflict resolution, TX1
+     * must touch() it if no other updates are made to it.
+     *
+     * This test runs the above 2 transactions concurrently for 100 iterations and verifies that
+     * TransactionAbortedException gets thrown at least once if the key is touched.
+     * Additionally, it verifies that the exception is not thrown if the key is not touched.
+     * @throws Exception
+     */
+    @Test
+    public void testTouchReqdForReadTxWriteTxConflict() throws Exception {
+        final int numIterations = 100;
+        Assert.assertFalse(runReadAndWriteTxConcurrently(true, numIterations));
+        Assert.assertTrue(runReadAndWriteTxConcurrently(false, numIterations));
+    }
+
+    private boolean runReadAndWriteTxConcurrently(boolean touch, int numIterations) throws Exception {
+        final String namespace = "test_namespace";
+        final String tableName1 = "EventInfo1";
+        final String tableName2 = "EventInfo2";
+        final int numThreads = 2;
+        final int numRecords = 3;
+
+        // Java allows only final variables in a lambda expression.  Use AtomicBoolean so that it can be modified from
+        // the lambda expression.
+        AtomicBoolean success = new AtomicBoolean(true);
+
+        CorfuRuntime corfuRuntime = getDefaultRuntime();
+        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
+
+        // Open 2 tables with the same schema
+        Table<SampleSchema.Uuid, SampleSchema.EventInfo, Message> table1 = corfuStore.openTable(namespace, tableName1,
+            SampleSchema.Uuid.class, SampleSchema.EventInfo.class, null, TableOptions.builder().build());
+
+        Table<SampleSchema.Uuid, SampleSchema.EventInfo, Message> table2 = corfuStore.openTable(namespace, tableName2,
+            SampleSchema.Uuid.class, SampleSchema.EventInfo.class, null, TableOptions.builder().build());
+
+        // Construct the conflict key
+        SampleSchema.Uuid conflictKey = SampleSchema.Uuid.newBuilder().setLsb(0).setMsb(0).build();
+
+        // In each iteration, write 3 records in table1.  Then start 2 transactions concurrently.  TX1 reads the
+        // conflict key from table1, touches it(touch == true) and writes it to table2.  TX2 updates the conflict key
+        // in table1.
+        // The expected behavior is that TX1 should hit a TransactionAbortedException in at least 1 iteration if the
+        // conflict key is touched.
+        for (int i = 0; i < numIterations; i++) {
+            // Write sample records in table1
+            for (int j = 0; j < numRecords; j++) {
+                SampleSchema.Uuid key = SampleSchema.Uuid.newBuilder().setLsb(j).setMsb(j).build();
+                SampleSchema.EventInfo value = SampleSchema.EventInfo.newBuilder().setName("test" + j).build();
+                try (TxnContext txnContext = corfuStore.txn(namespace)) {
+                    txnContext.putRecord(table1, key, value, null);
+                    txnContext.commit();
+                }
+            }
+
+            // TX1
+            scheduleConcurrently(f -> {
+                try (TxnContext txnContext = corfuStore.txn(namespace)) {
+                    SampleSchema.EventInfo value =
+                        (SampleSchema.EventInfo) txnContext.getRecord(tableName1, conflictKey).getPayload();
+                    if (touch) {
+                        txnContext.touch(tableName1, conflictKey);
+                    }
+                    txnContext.putRecord(table2, conflictKey, value, null);
+                    txnContext.commit();
+                } catch (TransactionAbortedException tae) {
+                    success.set(false);
+                }
+            });
+
+            // TX2 updates the conflict key
+            int index = i;
+            SampleSchema.EventInfo newVal = SampleSchema.EventInfo.newBuilder().setName("test_new" + index).build();
+            scheduleConcurrently(f -> {
+                try {
+                    IRetry.build(IntervalRetry.class, () -> {
+                        try (TxnContext txnContext = corfuStore.txn(namespace)) {
+                            txnContext.putRecord(table1, conflictKey, newVal, null);
+                            txnContext.commit();
+                        } catch (TransactionAbortedException tae) {
+                            throw new RetryNeededException();
+                        }
+                        return null;
+                    }).run();
+                } catch (Exception e) {
+                    log.error("Could not update the conflict key", e);
+                }
+            });
+
+            executeScheduled(numThreads, PARAMETERS.TIMEOUT_NORMAL);
+
+            // Verify that the write in TX2 was successful
+            try (TxnContext txnContext = corfuStore.txn(namespace)) {
+                Assert.assertEquals(newVal, txnContext.getRecord(tableName1, conflictKey).getPayload());
+            }
+
+            // Clear the tables after each iteration
+            table1.clearAll();
+            table2.clearAll();
+        }
+        return success.get();
     }
 
     /**
