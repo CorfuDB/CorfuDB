@@ -198,8 +198,12 @@ public class LogReplicationMetadataManager {
         return queryMetadata(LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER);
     }
 
-    public long getLastProcessedLogEntryTimestamp() {
-        return queryMetadata(LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED);
+    public long getLastProcessedLogEntryBatchTimestamp() {
+        return queryMetadata(LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED);
+    }
+
+    public long getLastAppliedLogEntryTimestamp() {
+        return queryMetadata(LogReplicationMetadataType.LAST_LOG_ENTRY_APPLIED);
     }
 
     public ResponseMsg getMetadataResponse(HeaderMsg header) {
@@ -210,7 +214,7 @@ public class LogReplicationMetadataManager {
                 .setSnapshotStart(getLastStartedSnapshotTimestamp())
                 .setSnapshotTransferred(getLastTransferredSnapshotTimestamp())
                 .setSnapshotApplied(getLastAppliedSnapshotTimestamp())
-                .setLastLogEntryTimestamp(getLastProcessedLogEntryTimestamp()).build();
+                .setLastLogEntryTimestamp(getLastProcessedLogEntryBatchTimestamp()).build();
         CorfuMessage.ResponsePayloadMsg payload = CorfuMessage.ResponsePayloadMsg.newBuilder()
                 .setLrMetadataResponse(metadataMsg).build();
         return getResponseMsg(header, payload);
@@ -227,6 +231,11 @@ public class LogReplicationMetadataManager {
     private void appendUpdate(TxnContext txn, LogReplicationMetadataType keyType, LogReplicationMetadataVal value) {
         LogReplicationMetadataKey key = LogReplicationMetadataKey.newBuilder().setKey(keyType.getVal()).build();
         txn.putRecord(metadataTable, key, value, null);
+    }
+
+    public void touch(TxnContext txn, LogReplicationMetadataType keyType) {
+        LogReplicationMetadataKey key = LogReplicationMetadataKey.newBuilder().setKey(keyType.getVal()).build();
+        txn.touch(metadataTableName, key);
     }
 
     public void setupTopologyConfigId(long topologyConfigId) {
@@ -317,7 +326,7 @@ public class LogReplicationMetadataManager {
             appendUpdate(txn, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED, Address.NON_ADDRESS);
             appendUpdate(txn, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED, Address.NON_ADDRESS);
             appendUpdate(txn, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER, Address.NON_ADDRESS);
-            appendUpdate(txn, LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED, Address.NON_ADDRESS);
+            appendUpdate(txn, LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED, Address.NON_ADDRESS);
 
             txn.commit();
 
@@ -385,7 +394,7 @@ public class LogReplicationMetadataManager {
             // Update the topologyConfigId to fence all other transactions that update the metadata at the same time
             appendUpdate(txn, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
             appendUpdate(txn, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED, ts);
-            appendUpdate(txn, LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED, ts);
+            appendUpdate(txn, LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED, ts);
 
             // Set 'isDataConsistent' flag on replication status table atomically with snapshot sync completed
             // information, to prevent any inconsistency between flag and state of snapshot sync completion in
@@ -722,9 +731,11 @@ public class LogReplicationMetadataManager {
                 case LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER:
                    builder.append(getLastSnapshotTransferredSequenceNumber());
                    break;
-                case LAST_LOG_ENTRY_PROCESSED:
-                   builder.append(getLastProcessedLogEntryTimestamp());
+                case LAST_LOG_ENTRY_BATCH_PROCESSED:
+                   builder.append(getLastProcessedLogEntryBatchTimestamp());
                    break;
+                case LAST_LOG_ENTRY_APPLIED:
+                    builder.append(getLastAppliedLogEntryTimestamp());
                 default:
                     // error
             }
@@ -834,11 +845,12 @@ public class LogReplicationMetadataManager {
         LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER("lastSnapshotTransferredSeqNumber"),
         CURRENT_SNAPSHOT_CYCLE_ID("currentSnapshotCycleId"),
         CURRENT_CYCLE_MIN_SHADOW_STREAM_TS("minShadowStreamTimestamp"),
-        LAST_LOG_ENTRY_PROCESSED("lastLogEntryProcessed"),
+        LAST_LOG_ENTRY_BATCH_PROCESSED("lastLogEntryProcessed"),
         REMAINING_REPLICATION_PERCENT("replicationStatus"),
         DATA_CONSISTENT_ON_STANDBY("dataConsistentOnStandby"),
         SNAPSHOT_SYNC_TYPE("snapshotSyncType"),
-        SNAPSHOT_SYNC_COMPLETE_TIME("snapshotSyncCompleteTime");
+        SNAPSHOT_SYNC_COMPLETE_TIME("snapshotSyncCompleteTime"),
+        LAST_LOG_ENTRY_APPLIED("lastLongEntryApplied");
 
         @Getter
         String val;

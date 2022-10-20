@@ -226,7 +226,7 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
                     .setSnapshotStart(baseSnapshotTimestamp)
                     .setSnapshotTransferred(destinationLogReplicationManager.getLogReplicationMetadataManager().getLastTransferredSnapshotTimestamp())
                     .setSnapshotApplied(destinationLogReplicationManager.getLogReplicationMetadataManager().getLastAppliedSnapshotTimestamp())
-                    .setLastLogEntryTimestamp(destinationLogReplicationManager.getLogReplicationMetadataManager().getLastProcessedLogEntryTimestamp())
+                    .setLastLogEntryTimestamp(destinationLogReplicationManager.getLogReplicationMetadataManager().getLastProcessedLogEntryBatchTimestamp())
                     .build();
         }
 
@@ -301,10 +301,10 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
                 .build();
 
         assertThat(destinationLogReplicationManager.getLogReplicationMetadataManager()
-                .getLastProcessedLogEntryTimestamp())
+                .getLastProcessedLogEntryBatchTimestamp())
                 .isGreaterThanOrEqualTo(newMessage.getMetadata().getPreviousTimestamp());
         assertThat(destinationLogReplicationManager.getLogReplicationMetadataManager()
-                .getLastProcessedLogEntryTimestamp())
+                .getLastProcessedLogEntryBatchTimestamp())
                 .isLessThan(newMessage.getMetadata().getTimestamp());
 
         lastAckDropped = Long.MAX_VALUE;

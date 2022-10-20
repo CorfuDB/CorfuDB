@@ -469,8 +469,12 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             // Start Listener on the 'stream_tag' of interest, on standby site + tables to listen (which accounts
             // for the notification for 'clear' table)
             CountDownLatch streamingStandbySnapshotCompletion = new CountDownLatch(totalEntries*2 + tablesToListen.size());
+
+            // Countdown latch for the number of expected transactions to be received on the listener.  All updates
+            // in a table are applied in a single transaction so the expected number = numTablesToListen
+            CountDownLatch snapshotSyncNumTxLatch = new CountDownLatch(tablesToListen.size());
             StreamingStandbyListener listener = new StreamingStandbyListener(streamingStandbySnapshotCompletion,
-                    tablesToListen);
+                snapshotSyncNumTxLatch, tablesToListen);
             corfuStoreStandby.subscribeListener(listener, NAMESPACE, DefaultLogReplicationConfigAdapter.TAG_ONE);
 
             // Add Data for Snapshot Sync (before LR is started)
@@ -512,6 +516,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
             log.info("** Wait for data change notifications (snapshot)");
             streamingStandbySnapshotCompletion.await();
+            snapshotSyncNumTxLatch.await();
             assertThat(listener.messages.size()).isEqualTo(totalEntries*2 + tablesToListen.size());
 
             // Verify both extra and local table are opened on Standby
@@ -520,8 +525,14 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
             // Attach new listener for deltas (the same listener could be used) but simplifying the use of the latch
             CountDownLatch streamingStandbyDeltaCompletion = new CountDownLatch(totalEntries*2);
+
+            // The number of expected transactions to be received on the listener during delta sync.  The total
+            // number of transactions = numTablesToListen * entries written in each table.  In this test,
+            // 'totalEntries' are written to each table.
+            CountDownLatch logEntrySyncNumTxLatch = new CountDownLatch(totalEntries*tablesToListen.size());
+
             StreamingStandbyListener listenerDeltas = new StreamingStandbyListener(streamingStandbyDeltaCompletion,
-                    new DefaultLogReplicationConfigAdapter().getStreamingConfigOnSink().keySet());
+                logEntrySyncNumTxLatch, new DefaultLogReplicationConfigAdapter().getStreamingConfigOnSink().keySet());
             corfuStoreStandby.subscribeListener(listenerDeltas, NAMESPACE, DefaultLogReplicationConfigAdapter.TAG_ONE);
 
             // Add Delta's for Log Entry Sync
@@ -538,6 +549,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             // Block until all updates are received
             log.info("** Wait for data change notifications (delta)");
             streamingStandbyDeltaCompletion.await();
+            logEntrySyncNumTxLatch.await();
             assertThat(listenerDeltas.messages.size()).isEqualTo(totalEntries*2);
 
             // Add a delta to a 'mergeOnly' stream and confirm it is replicated. RegistryTable is a 'mergeOnly' stream
@@ -750,25 +762,26 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     public static class StreamingStandbyListener implements StreamListener {
 
         private final CountDownLatch updatesLatch;
+        private final CountDownLatch numTxLatch;
         public List<CorfuStreamEntry> messages = new ArrayList<>();
         private final Set<UUID> tablesToListenTo;
 
-        public StreamingStandbyListener(CountDownLatch updatesLatch, Set<UUID> tablesToListenTo) {
+        public StreamingStandbyListener(CountDownLatch updatesLatch, CountDownLatch numTxLatch,
+                                        Set<UUID> tablesToListenTo) {
             this.updatesLatch = updatesLatch;
             this.tablesToListenTo = tablesToListenTo;
+            this.numTxLatch = numTxLatch;
         }
 
         @Override
         public synchronized void onNext(CorfuStreamEntries results) {
             log.info("StreamingStandbyListener:: onNext {} with entry size {}", results, results.getEntries().size());
+            numTxLatch.countDown();
 
             results.getEntries().forEach((schema, entries) -> {
                 if (tablesToListenTo.contains(CorfuRuntime.getStreamID(NAMESPACE + "$" + schema.getTableName()))) {
                     messages.addAll(entries);
                     entries.forEach(e -> {
-                        if (e.getOperation() == CorfuStreamEntry.OperationType.CLEAR) {
-                            System.out.println("Clear operation for :: " + schema.getTableName() + " on address :: " + results.getTimestamp().getSequence() + " key :: " + e.getKey());
-                        }
                         updatesLatch.countDown();
                     });
                 }
