@@ -3,24 +3,24 @@ package org.corfudb.runtime.collections;
 import com.google.common.reflect.TypeToken;
 import io.vavr.Tuple2;
 import io.vavr.collection.HashMap;
-import io.vavr.collection.HashSet;
 import io.vavr.collection.Map;
-import io.vavr.collection.Set;
+import io.vavr.collection.Traversable;
 import io.vavr.control.Option;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.object.ICorfuExecutionContext;
 import org.corfudb.runtime.object.ICorfuSMR;
 
 import javax.annotation.Nonnull;
 import java.util.AbstractMap;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.Spliterator;
 import java.util.Spliterators;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -87,16 +87,11 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
      * @return An ImmutableCorfuTable containing the new key-value mapping.
      */
     public ImmutableCorfuTable<K, V> put(@Nonnull K key, @Nonnull V value) {
-        SecondaryIndexesWrapper<K, V> newSecondaryIndexesWrapper = secondaryIndexesWrapper;
-        if (!secondaryIndexesWrapper.isEmpty()) {
-            V prev = get(key);
-            if (prev != null) {
-                newSecondaryIndexesWrapper = newSecondaryIndexesWrapper.unmapSecondaryIndexes(key, prev);
-            }
+        SecondaryIndexesWrapper<K, V> newSecondaryIndexesWrapper = mainMap.get(key)
+                .map(prev -> secondaryIndexesWrapper.unmapSecondaryIndexes(key, prev))
+                .getOrElse(secondaryIndexesWrapper);
 
-            newSecondaryIndexesWrapper = newSecondaryIndexesWrapper.mapSecondaryIndexes(key, value);
-        }
-
+        newSecondaryIndexesWrapper = newSecondaryIndexesWrapper.mapSecondaryIndexes(key, value);
         return new ImmutableCorfuTable<>(mainMap.put(key, value), newSecondaryIndexesWrapper);
     }
 
@@ -107,13 +102,10 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
      * provided key is removed.
      */
     public ImmutableCorfuTable<K, V> remove(@Nonnull K key) {
-        SecondaryIndexesWrapper<K, V> newSecondaryIndexesWrapper = secondaryIndexesWrapper;
-        if (!secondaryIndexesWrapper.isEmpty()) {
-            V prev = get(key);
-            if (prev != null) {
-                newSecondaryIndexesWrapper = newSecondaryIndexesWrapper.unmapSecondaryIndexes(key, prev);
-            }
-        }
+        SecondaryIndexesWrapper<K, V> newSecondaryIndexesWrapper = mainMap
+                .get(key)
+                .map(prev -> secondaryIndexesWrapper.unmapSecondaryIndexes(key, prev))
+                .getOrElse(secondaryIndexesWrapper);
 
         return new ImmutableCorfuTable<>(mainMap.remove(key), newSecondaryIndexesWrapper);
     }
@@ -151,7 +143,6 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
      * @return A set containing all keys present in this ImmutableCorfuTable.
      */
     public java.util.Set<K> keySet() {
-        // TODO: Can this call to toJavaSet() be avoided?
         return mainMap.keySet().toJavaSet();
     }
 
@@ -168,18 +159,37 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
      * @param indexName Name of the secondary index to query.
      * @param indexKey The index key used to query the secondary index
      * @param <I> The type of the index key.
-     * @return A collection of map entries satisfying this index query.
+     * @return An Iterable of map entries satisfying this index query.
      */
-    public <I> Collection<java.util.Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey) {
-        final String secondaryIndexName = indexName.get();
-        Option<Map<K, V>> optMap = secondaryIndexesWrapper.contains(secondaryIndexName, indexKey);
+    public <I> Iterable<java.util.Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey) {
+        return secondaryIndexesWrapper.contains(indexName.get(), indexKey)
+                .<Iterable<java.util.Map.Entry<K, V>>>map(IterableWrapper::new)
+                .getOrElse(Collections.emptySet());
+    }
 
-        if (!optMap.isEmpty()) {
-            // TODO: Can this call to toJavaMap() be avoided?
-            return optMap.get().toJavaMap().entrySet();
+    private class IterableWrapper implements Iterable<java.util.Map.Entry<K, V>> {
+
+        final Traversable<Tuple2<K, V>> traversable;
+
+        public IterableWrapper(@Nonnull Traversable<Tuple2<K, V>> traversable) {
+            this.traversable = traversable;
         }
 
-        return Collections.emptySet();
+        @Override
+        public void forEach(Consumer<? super java.util.Map.Entry<K, V>> action) {
+            traversable.forEach(tuple2 ->
+                    action.accept(new AbstractMap.SimpleEntry<>(tuple2._1, tuple2._2)));
+        }
+
+        @Override
+        public Iterator<java.util.Map.Entry<K, V>> iterator() {
+            return new TupleIteratorWrapper(traversable.iterator());
+        }
+
+        @Override
+        public Spliterator<java.util.Map.Entry<K, V>> spliterator() {
+            return ImmutableCorfuTable.this.spliterator(traversable);
+        }
     }
 
     private class TupleIteratorWrapper implements Iterator<java.util.Map.Entry<K, V>> {
@@ -205,46 +215,90 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
         }
     }
 
-    private Spliterator<java.util.Map.Entry<K, V>> spliterator(@Nonnull Map<K, V> map){
+    private Spliterator<java.util.Map.Entry<K, V>> spliterator(@Nonnull Traversable<Tuple2<K, V>> traversable){
         int characteristics = Spliterator.IMMUTABLE;
-        if (map.isDistinct()) {
+        if (traversable.isDistinct()) {
             characteristics |= Spliterator.DISTINCT;
         }
-        if (map.isOrdered()) {
+        if (traversable.isOrdered()) {
             characteristics |= (Spliterator.SORTED | Spliterator.ORDERED);
         }
-        if (map.isSequential()) {
+        if (traversable.isSequential()) {
             characteristics |= Spliterator.ORDERED;
         }
-        if (map.hasDefiniteSize()) {
+        if (traversable.hasDefiniteSize()) {
             characteristics |= (Spliterator.SIZED | Spliterator.SUBSIZED);
-            return Spliterators.spliterator(new TupleIteratorWrapper(map.iterator()), map.length(), characteristics);
+            return Spliterators.spliterator(new TupleIteratorWrapper(traversable.iterator()), traversable.length(), characteristics);
         } else {
-            return Spliterators.spliteratorUnknownSize(new TupleIteratorWrapper(map.iterator()), characteristics);
+            return Spliterators.spliteratorUnknownSize(new TupleIteratorWrapper(traversable.iterator()), characteristics);
+        }
+    }
+
+    @AllArgsConstructor
+    @Getter
+    private static class IndexMapping<K, V> {
+        // Secondary index mapping from the mapping function -> values
+        private final Map<Object, Map<K, V>> mapping;
+        private final Index.Spec<K, V, ?> index;
+
+        public IndexMapping<K, V> cleanUp(@Nonnull K key, @Nonnull V value) {
+            Map<Object, Map<K, V>> updatedMapping = mapping;
+
+            Iterable<?> mappedValues = index.getMultiValueIndexFunction().apply(key, value);
+
+            for (Object indexKey: mappedValues) {
+                Map<K, V> slot = updatedMapping.get(indexKey).get();
+                boolean valuePresented = slot.get(key).contains(value);
+                if (valuePresented) {
+                    slot = slot.remove(key);
+                }
+
+                // Update mapping index
+                updatedMapping = updatedMapping.put(indexKey, slot);
+
+                // Clean up empty slot
+                if (slot.isEmpty()) {
+                    updatedMapping = updatedMapping.remove(indexKey);
+                }
+            }
+
+            return new IndexMapping<>(updatedMapping, index);
+        }
+
+        public IndexMapping<K, V> update(@Nonnull K key, @Nonnull V value) {
+            Map<Object, Map<K, V>> updatedMapping = mapping;
+
+            Iterable<?> mappedValues = index.getMultiValueIndexFunction().apply(key, value);
+            for (Object indexKey: mappedValues) {
+                final Map<K, V> slot = updatedMapping.getOrElse(indexKey, HashMap.empty()).put(key, value);
+                updatedMapping = updatedMapping.put(indexKey, slot);
+            }
+
+            return new IndexMapping<>(updatedMapping, index);
         }
     }
 
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
     private static class SecondaryIndexesWrapper<K, V> {
-        private Set<Index.Spec<K, V, ?>> indexSpec;
-        private Map<String, Map<Object, Map<K, V>>> secondaryIndexes;
-        private Map<String, String> secondaryIndexesAliasToPath;
+        private final Map<String, IndexMapping<K, V>> secondaryIndexes;
+        private final Map<String, String> secondaryIndexesAliasToPath;
 
         private SecondaryIndexesWrapper() {
-            indexSpec = HashSet.empty();
-            secondaryIndexes = HashMap.empty();
-            secondaryIndexesAliasToPath = HashMap.empty();
+            this.secondaryIndexes = HashMap.empty();
+            this.secondaryIndexesAliasToPath = HashMap.empty();
         }
 
         private SecondaryIndexesWrapper(@Nonnull final Index.Registry<K, V> indices) {
-            this();
+            Map<String, IndexMapping<K, V>> indexes = HashMap.empty();
+            Map<String, String> indexesAliasToPath = HashMap.empty();
 
-            indices.forEach(index -> {
-                indexSpec = indexSpec.add(index);
-                secondaryIndexes = secondaryIndexes.put(index.getName().get(), HashMap.empty());
-                secondaryIndexesAliasToPath = secondaryIndexesAliasToPath
-                        .put(index.getAlias().get(), index.getName().get());
-            });
+            for (Index.Spec<K, V, ?> index : indices) {
+                indexes = indexes.put(index.getName().get(), new IndexMapping<>(HashMap.empty(), index));
+                indexesAliasToPath = indexesAliasToPath.put(index.getAlias().get(), index.getName().get());
+            }
+
+            this.secondaryIndexes = indexes;
+            this.secondaryIndexesAliasToPath = indexesAliasToPath;
 
             if (!isEmpty()) {
                 log.info(
@@ -256,13 +310,13 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
 
         private <I> Option<Map<K, V>> contains(@Nonnull final String index, I indexKey) {
             if (secondaryIndexes.containsKey(index)) {
-                return secondaryIndexes.get(index).get().get(indexKey);
+                return secondaryIndexes.get(index).get().getMapping().get(indexKey);
             }
 
             if (secondaryIndexesAliasToPath.containsKey(index)) {
                 final String path = secondaryIndexesAliasToPath.get(index).get();
                 if (secondaryIndexes.containsKey(path)) {
-                    return secondaryIndexes.get(path).get().get(indexKey);
+                    return secondaryIndexes.get(path).get().getMapping().get(indexKey);
                 }
             }
 
@@ -277,38 +331,26 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
         }
 
         private SecondaryIndexesWrapper<K, V> clear() {
-            Map<String, Map<Object, Map<K, V>>> clearedIndexes = HashMap.empty();
-            for (Tuple2<String, ?> index : secondaryIndexes.iterator()) {
-                clearedIndexes = clearedIndexes.put(index._1(), HashMap.empty());
+            Map<String, IndexMapping<K, V>> clearedIndexes = HashMap.empty();
+            for (Tuple2<String, IndexMapping<K, V>> index : secondaryIndexes.iterator()) {
+                clearedIndexes = clearedIndexes.put(index._1(),
+                        new IndexMapping<>(HashMap.empty(), index._2().getIndex()));
             }
 
-            return new SecondaryIndexesWrapper<>(indexSpec, clearedIndexes, secondaryIndexesAliasToPath);
+            return new SecondaryIndexesWrapper<>(clearedIndexes, secondaryIndexesAliasToPath);
         }
 
         private SecondaryIndexesWrapper<K, V> unmapSecondaryIndexes(@Nonnull K key, @Nonnull V value) {
             try {
-                Map<String, Map<Object, Map<K, V>>> unmappedSecondaryIndexes = secondaryIndexes;
-                // Map entry into secondary indexes
-                for (Index.Spec<K, V, ?> index : indexSpec) {
-                    final String indexName = index.getName().get();
-                    Map<Object, Map<K, V>> secondaryIndex = unmappedSecondaryIndexes.get(indexName).get();
-                    for (Object indexKey : index.getMultiValueIndexFunction().apply(key, value)) {
-                        Map<K, V> slot = secondaryIndex.get(indexKey).get();
-                        final Option<V> optValue = slot.get(key);
-                        if (!optValue.isEmpty() && value.equals(optValue.get())) {
-                            slot = slot.remove(key);
-                            if (slot.isEmpty()) {
-                                secondaryIndex = secondaryIndex.remove(indexKey);
-                            } else {
-                                secondaryIndex = secondaryIndex.put(indexKey, slot);
-                            }
-                        }
-                    }
+                Map<String, IndexMapping<K, V>> unmappedSecondaryIndexes = secondaryIndexes;
 
-                    unmappedSecondaryIndexes = unmappedSecondaryIndexes.put(indexName, secondaryIndex);
+                for (Tuple2<String, IndexMapping<K, V>> secondaryIndex : secondaryIndexes) {
+                    final IndexMapping<K, V> currentMapping = secondaryIndex._2();
+                    final String indexName = currentMapping.getIndex().getName().get();
+                    unmappedSecondaryIndexes = unmappedSecondaryIndexes.put(indexName, currentMapping.cleanUp(key, value));
                 }
 
-                return new SecondaryIndexesWrapper<>(indexSpec, unmappedSecondaryIndexes, secondaryIndexesAliasToPath);
+                return new SecondaryIndexesWrapper<>(unmappedSecondaryIndexes, secondaryIndexesAliasToPath);
             } catch (Exception ex) {
                 log.error("Received an exception while computing the index. " +
                         "This is most likely an issue with the client's indexing function.", ex);
@@ -321,21 +363,16 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
 
         private SecondaryIndexesWrapper<K, V> mapSecondaryIndexes(@Nonnull K key, @Nonnull V value) {
             try {
-                Map<String, Map<Object, Map<K, V>>> mappedSecondaryIndexes = secondaryIndexes;
+                Map<String, IndexMapping<K, V>> mappedSecondaryIndexes = secondaryIndexes;
 
                 // Map entry into secondary indexes
-                for (Index.Spec<K, V, ?> index : indexSpec) {
-                    final String indexName = index.getName().get();
-                    Map<Object, Map<K, V>> secondaryIndex = mappedSecondaryIndexes.get(indexName).get();
-                    for (Object indexKey : index.getMultiValueIndexFunction().apply(key, value)) {
-                        final Map<K, V> slot = secondaryIndex.getOrElse(indexKey, HashMap.empty()).put(key, value);
-                        secondaryIndex = secondaryIndex.put(indexKey, slot);
-                    }
-
-                    mappedSecondaryIndexes = mappedSecondaryIndexes.put(indexName, secondaryIndex);
+                for (Tuple2<String, IndexMapping<K, V>> secondaryIndexTuple : secondaryIndexes) {
+                    final IndexMapping<K, V> updatedSecondaryIndex = secondaryIndexTuple._2().update(key, value);
+                    final String indexName = secondaryIndexTuple._2().getIndex().getName().get();
+                    mappedSecondaryIndexes = mappedSecondaryIndexes.put(indexName, updatedSecondaryIndex);
                 }
 
-                return new SecondaryIndexesWrapper<>(indexSpec, mappedSecondaryIndexes, secondaryIndexesAliasToPath);
+                return new SecondaryIndexesWrapper<>(mappedSecondaryIndexes, secondaryIndexesAliasToPath);
             } catch (Exception ex) {
                 log.error("Received an exception while computing the index. " +
                         "This is most likely an issue with the client's indexing function.", ex);

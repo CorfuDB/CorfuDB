@@ -35,6 +35,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 /**
  * Wrapper over the CorfuTable.
@@ -478,7 +479,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     <I>
     List<CorfuStoreEntry<K, V, M>> getByIndex(@Nonnull final String indexName,
                                               @Nonnull final I indexKey) {
-        return corfuTable.getByIndex(() -> indexName, indexKey).stream()
+        return StreamSupport.stream(corfuTable.getByIndex(() -> indexName, indexKey).spliterator(), false)
                 .map(entry -> new CorfuStoreEntry<>(entry.getKey(),
                         entry.getValue().getPayload(),
                         entry.getValue().getMetadata()))

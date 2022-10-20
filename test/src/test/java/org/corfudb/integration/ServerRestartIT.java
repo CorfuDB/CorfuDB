@@ -27,6 +27,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -48,6 +49,8 @@ import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
 import org.junit.Before;
 import org.junit.Test;
+
+import javax.annotation.Nonnull;
 
 /**
  * Tests the recovery of the Corfu instance.
@@ -531,6 +534,11 @@ public class ServerRestartIT extends AbstractIT {
                 .open();
     }
 
+    private <T> Collection<T> toCollection(@Nonnull Iterable<T> iterable) {
+        return StreamSupport.stream(iterable.spliterator(), false)
+                .collect(Collectors.toList());
+    }
+
     /**
      * Data generation. First 1000 entries are written to the table.
      * The log is then check-pointed and trimmed. The server is then restarted.
@@ -559,9 +567,9 @@ public class ServerRestartIT extends AbstractIT {
         mcw.addMap(corfuTable1);
         Token trimMark = mcw.appendCheckpoints(runtime1, "author");
         Collection<Map.Entry<String, String>> c1a =
-                corfuTable1.getByIndex(StringIndexer.BY_FIRST_LETTER, "9");
+                toCollection(corfuTable1.getByIndex(StringIndexer.BY_FIRST_LETTER, "9"));
         Collection<Map.Entry<String, String>> c1b =
-                corfuTable1.getByIndex(StringIndexer.BY_VALUE, "9");
+                toCollection(corfuTable1.getByIndex(StringIndexer.BY_VALUE, "9"));
         runtime1.getAddressSpaceView().prefixTrim(trimMark);
         runtime1.getAddressSpaceView().invalidateClientCache();
         runtime1.getAddressSpaceView().invalidateServerCaches();
@@ -575,7 +583,7 @@ public class ServerRestartIT extends AbstractIT {
         CorfuRuntime runtime2 = createRuntimeWithCache();
         PersistentCorfuTable<String, String> corfuTable2 = createTable(runtime2, new StringIndexer());
         Collection<Map.Entry<String, String>> c2 =
-                corfuTable2.getByIndex(StringIndexer.BY_FIRST_LETTER, "9");
+                toCollection(corfuTable2.getByIndex(StringIndexer.BY_FIRST_LETTER, "9"));
         assertThat(c1a).hasSameSizeAs(c2);
         assertThat(c1a.containsAll(c2)).isTrue();
 
@@ -583,7 +591,7 @@ public class ServerRestartIT extends AbstractIT {
         CorfuRuntime runtime3 = createDefaultRuntime();
         PersistentCorfuTable<String, String> corfuTable3 = createTable(runtime3, new StringIndexer());
         Collection<Map.Entry<String, String>> c3 =
-                corfuTable3.getByIndex(StringIndexer.BY_VALUE, "9");
+                toCollection(corfuTable3.getByIndex(StringIndexer.BY_VALUE, "9"));
         assertThat(c1b).hasSameSizeAs(c3);
         assertThat(c1b.containsAll(c3)).isTrue();
 
@@ -632,7 +640,7 @@ public class ServerRestartIT extends AbstractIT {
         multiCheckpointWriter.addMap(corfuTable1);
         Token trimMark = multiCheckpointWriter.appendCheckpoints(runtime1, "Sam.Behnam");
         Collection<Map.Entry<String, String>> resultInitial =
-                corfuTable1.getByIndex(StringMultiIndexer.BY_EACH_WORD, "tag666");
+                toCollection(corfuTable1.getByIndex(StringMultiIndexer.BY_EACH_WORD, "tag666"));
         runtime1.getAddressSpaceView().prefixTrim(trimMark);
         runtime1.getAddressSpaceView().invalidateClientCache();
         runtime1.getAddressSpaceView().invalidateServerCaches();
@@ -646,7 +654,7 @@ public class ServerRestartIT extends AbstractIT {
         CorfuRuntime runtime2 = createRuntimeWithCache();
         PersistentCorfuTable<String, String> corfuTable2 = createTable(runtime2, new StringMultiIndexer());
         Collection<Map.Entry<String, String>> resultAfterRestart =
-                corfuTable2.getByIndex(StringMultiIndexer.BY_EACH_WORD, "tag666");
+                toCollection(corfuTable2.getByIndex(StringMultiIndexer.BY_EACH_WORD, "tag666"));
         assertThat(resultAfterRestart).hasSameSizeAs(resultInitial);
         assertThat(resultAfterRestart.containsAll(resultInitial)).isTrue();
 
@@ -654,7 +662,7 @@ public class ServerRestartIT extends AbstractIT {
         CorfuRuntime runtime3 = createDefaultRuntime();
         PersistentCorfuTable<String, String> corfuTable3 = createTable(runtime3, new StringMultiIndexer());
         Collection<Map.Entry<String, String>> resultDisabledCacheAndFasLoader =
-                corfuTable3.getByIndex(StringMultiIndexer.BY_EACH_WORD, "tag666");
+                toCollection(corfuTable3.getByIndex(StringMultiIndexer.BY_EACH_WORD, "tag666"));
         assertThat(resultDisabledCacheAndFasLoader).hasSameSizeAs(resultInitial);
         assertThat(resultDisabledCacheAndFasLoader.containsAll(resultInitial)).isTrue();
 

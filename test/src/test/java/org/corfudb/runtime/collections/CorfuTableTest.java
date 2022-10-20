@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import org.assertj.core.api.Assertions;
 import org.assertj.core.data.MapEntry;
@@ -28,12 +29,15 @@ import org.corfudb.runtime.view.SMRObject;
 import org.junit.Ignore;
 import org.junit.Test;
 
+import javax.annotation.Nonnull;
+
 public class CorfuTableTest extends AbstractViewTest {
 
     private static final int ITERATIONS = 20;
 
-    Collection<String> project(Collection<Map.Entry<String, String>> entries) {
-        return entries.stream().map(Map.Entry::getValue).collect(Collectors.toCollection(ArrayList::new));
+    private Collection<String> project(Iterable<Map.Entry<String, String>> entries) {
+        return StreamSupport.stream(entries.spliterator(), false)
+                .map(Map.Entry::getValue).collect(Collectors.toCollection(ArrayList::new));
     }
 
     @Test
@@ -175,9 +179,9 @@ public class CorfuTableTest extends AbstractViewTest {
         corfuTable.insert("k2", "dog bat");
         corfuTable.insert("k3", "fox");
 
-        final Collection<Map.Entry<String, String>> result =
-                corfuTable.getByIndex(StringMultiIndexer.BY_EACH_WORD, "fox");
-        assertThat(project(result)).containsExactlyInAnyOrder("dog fox cat", "fox");
+        final Collection<String> result =
+                project(corfuTable.getByIndex(StringMultiIndexer.BY_EACH_WORD, "fox"));
+        assertThat(result).containsExactlyInAnyOrder("dog fox cat", "fox");
     }
 
     @Test

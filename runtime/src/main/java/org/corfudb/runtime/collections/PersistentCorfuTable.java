@@ -85,7 +85,7 @@ public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<
     }
 
     @Override
-    public <I> Collection<Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey) {
+    public <I> Iterable<Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey) {
         return proxy.access(corfuSmr -> corfuSmr.getByIndex(indexName, indexKey), null);
     }
 
