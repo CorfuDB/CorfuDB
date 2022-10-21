@@ -54,6 +54,11 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
     private final Supplier<T> newObjectFn;
 
     /**
+     * A fixed instance of a new instance of this object.
+     */
+    private final T newInstanceObject;
+
+    /**
      * Metadata on object versions generated.
      */
     private StreamAddressSpace addressSpace;
@@ -76,15 +81,15 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      * present within the MVOCache. It only indicates that this is the most recent
      * version materialized by the MVO.
      */
-    private volatile long materializedUpTo = Address.NON_EXIST;
+    private volatile long materializedUpTo = Address.NON_ADDRESS;
 
     /**
      * Used for optimization purposes, this value is similar to materializedUpTo.
      * However, this timestamp is not safe against sequencer regressions.
      *
-     * TODO: revert optimization or address sequencer regression consistency issue
+     * This should eventually be made epoch aware.
      */
-    private volatile long resolvedUpTo = Address.NON_EXIST;
+    private volatile long resolvedUpTo = Address.NON_ADDRESS;
 
     /**
      * The MVOCache used to store and retrieve underlying object versions.
@@ -117,8 +122,9 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         this.upcallTargetMap = wrapperObject.getSMRUpcallMap();
         this.newObjectFn = newObjectFn;
         this.addressSpace = new StreamAddressSpace();
-        this.currentObject = this.newObjectFn.get();
 
+        this.newInstanceObject = newObjectFn.get();
+        this.currentObject = newObjectFn.get();
         this.mvoCache = corfuRuntime.getObjectsView().getMvoCache();
         this.trimRetry = corfuRuntime.getParameters().getTrimRetry();
         this.mvoCache.registerMVO(getID(),this);
@@ -132,6 +138,14 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      * @return A snapshot proxy containing the most recent state of the object for the provided timestamp.
      */
     public ICorfuSMRSnapshotProxy<T> getSnapshotProxy(long timestamp) {
+        // A timestamp of Address.NON_EXIST is currently only returned for a stream tail
+        // query of a non-transactional access - The instance will always be without updates.
+        // A timestamp of Address.NON_ADDRESS corresponds to a global tail that sees no
+        // updates. In both cases, we can serve the snapshot immediately.
+        if (timestamp == Address.NON_EXIST || timestamp == Address.NON_ADDRESS) {
+            return new SnapshotProxy<>(newInstanceObject, timestamp, upcallTargetMap);
+        }
+
         final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), timestamp);
         long lockTs = lock.tryOptimisticRead();
         if (lockTs != 0) {
@@ -207,7 +221,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      * @return True if and only if this timestamp has been materialized.
      */
     private boolean isTimestampMaterializedUnsafe(long timestamp) {
-        if (timestamp == Address.NON_EXIST && materializedUpTo == Address.NON_EXIST) {
+        if (materializedUpTo == Address.NON_ADDRESS) {
             return false;
         }
 
@@ -296,7 +310,11 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                         Preconditions.checkState(globalAddress >= materializedUpTo,
                                 "globalAddress %s not >= materialized %s", globalAddress, materializedUpTo);
 
+                        Preconditions.checkState(globalAddress >= resolvedUpTo,
+                                "globalAddress %s not >= resolved %s", globalAddress, resolvedUpTo);
+
                         materializedUpTo = globalAddress;
+                        resolvedUpTo = globalAddress;
                     } catch (Exception e) {
                         log.error("Sync[{}] couldn't execute upcall due to {}", Utils.toReadableId(getID()), e);
                         throw new UnrecoverableCorfuError(e);
@@ -380,8 +398,8 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
         currentObject.close();
         currentObject = newObjectFn.get();
         addressSpace = new StreamAddressSpace();
-        materializedUpTo = Address.NON_EXIST;
-        resolvedUpTo = Address.NON_EXIST;
+        materializedUpTo = Address.NON_ADDRESS;
+        resolvedUpTo = Address.NON_ADDRESS;
         smrStream.reset();
     }
 

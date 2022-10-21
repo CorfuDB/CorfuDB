@@ -80,12 +80,6 @@ public interface ICorfuSMR<T>
     }
 
     /**
-     *
-     */
-    default void reset() {
-    }
-
-    /**
      * {@inheritDoc}
      */
     @Override
