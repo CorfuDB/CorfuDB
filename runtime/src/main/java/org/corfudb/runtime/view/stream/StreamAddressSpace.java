@@ -35,23 +35,34 @@ final public class StreamAddressSpace {
     // Holds the complete map of addresses for this stream.
     private Roaring64NavigableMap bitmap;
 
+    // True if caching should be used in internal StreamAddressSpace data structures.
+    // Note: this parameter is not serialized, nor used to determine equality.
+    private final boolean enableCaching;
+
     /**
      * This constructor is required to facilitate deserialization, keep it private.
      * The internal bitmap container shouldn't be exposed to external consumers.
      * @param trimMark Stream's trim mark
      * @param bitmap Stream's bitmap
+     * @param enableCaching True if and only if caching is enabled in the stream's bitmap
      */
-    private StreamAddressSpace(long trimMark, Roaring64NavigableMap bitmap) {
+    private StreamAddressSpace(long trimMark, Roaring64NavigableMap bitmap, boolean enableCaching) {
         this.trimMark = trimMark;
         this.bitmap = bitmap;
+        this.enableCaching = enableCaching;
     }
 
     public StreamAddressSpace() {
-        this(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf());
+        // Note: caching of internal bitmap structures is disabled by default here.
+        this(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(), false);
+    }
+
+    public StreamAddressSpace(boolean enableCaching) {
+        this(Address.NON_ADDRESS, new Roaring64NavigableMap(false, enableCaching), enableCaching);
     }
 
     public StreamAddressSpace(long trimMark, Set<Long> addresses) {
-        this(trimMark, Roaring64NavigableMap.bitmapOf(Longs.toArray(addresses)));
+        this(trimMark, Roaring64NavigableMap.bitmapOf(Longs.toArray(addresses)), true);
     }
 
     public StreamAddressSpace(Set<Long> addresses) {
@@ -193,7 +204,8 @@ final public class StreamAddressSpace {
             return;
         }
 
-        Roaring64NavigableMap trimmedBitmap = new Roaring64NavigableMap();
+        // Keep the same caching parameters as the parent Roaring64NavigableMap.
+        Roaring64NavigableMap trimmedBitmap = new Roaring64NavigableMap(false, enableCaching);
         LongIterator iterator = this.bitmap.getReverseLongIterator();
         while (iterator.hasNext()) {
             long current = iterator.next();
@@ -229,7 +241,8 @@ final public class StreamAddressSpace {
      * @return Bitmap with addresses in this range.
      */
     public StreamAddressSpace getAddressesInRange(StreamAddressRange range) {
-        Roaring64NavigableMap addressesInRange = new Roaring64NavigableMap();
+        // Keep the same caching parameters as the parent Roaring64NavigableMap.
+        Roaring64NavigableMap addressesInRange = new Roaring64NavigableMap(false, enableCaching);
 
         if (range.getStart() <= range.getEnd()) {
             throw new IllegalArgumentException("Invalid range (" + range.getEnd() + ", " + range.getStart() + "]");
@@ -252,7 +265,7 @@ final public class StreamAddressSpace {
                     range.getStart(), addressesInRange.getLongCardinality());
         }
 
-        return new StreamAddressSpace(this.trimMark, addressesInRange);
+        return new StreamAddressSpace(this.trimMark, addressesInRange, enableCaching);
     }
 
     public void setTrimMark(long trimMark) {
@@ -283,11 +296,29 @@ final public class StreamAddressSpace {
     }
 
     /**
+     * Given an address, computes the largest address A in the bitmap,
+     * such that A is less than or equal to the given address.
+     * @param address The address to perform the floor query on.
+     * @return The largest address in the bitmap that is less than or
+     * equal to the given address.
+     */
+    public long floor(long address) {
+        final long rank = bitmap.rankLong(address);
+
+        if (rank == 0) {
+            return Address.NON_ADDRESS;
+        }
+
+        return bitmap.select(rank - 1);
+    }
+
+    /**
      * Creates a copy of this object
      * @return a new copy of StreamBitmap
      */
     public StreamAddressSpace copy() {
-        StreamAddressSpace copy = new StreamAddressSpace();
+        // Keep the same caching parameters as the parent Roaring64NavigableMap.
+        StreamAddressSpace copy = new StreamAddressSpace(enableCaching);
         copy.trimMark = this.trimMark;
         this.bitmap.forEach(copy::addAddress);
         return copy;
@@ -313,7 +344,7 @@ final public class StreamAddressSpace {
         long trimMark = in.readLong();
         Roaring64NavigableMap map = new Roaring64NavigableMap();
         map.deserialize(in);
-        return new StreamAddressSpace(trimMark, map);
+        return new StreamAddressSpace(trimMark, map, true);
     }
 
     /**

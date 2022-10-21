@@ -754,7 +754,7 @@ public class SequencerServer extends AbstractServer {
             // (to keep track of all updates to this stream)
             streamsAddressMap.compute(uuid, (streamId, addressMap) -> {
                 if (addressMap == null) {
-                    addressMap = new StreamAddressSpace();
+                    addressMap = new StreamAddressSpace(true);
                 }
 
                 for (long i = globalLogTail; i < newTail; i++) {
