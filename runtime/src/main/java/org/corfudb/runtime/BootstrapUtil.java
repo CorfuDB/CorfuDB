@@ -140,7 +140,16 @@ public class BootstrapUtil {
         log.info("Successfully Bootstrapped layout:{} .", layout);
     }
 
-    public static void bootstrapWithRouterMap(Map<String, NettyClientRouter> routerMap, Layout layout, int retries,
+    /**
+     * Bootstrap the given layout for all the nodes in the router map with the configured
+     * routers. This implementation ignores the AlreadyBootstrappedException.
+     * @param routerMap A configured router map
+     * @param layout A layout to bootstrap
+     * @param retries Num retries
+     * @param retryDuration Duration between retries
+     */
+    public static void bootstrapWithRouterMap(Map<String, NettyClientRouter> routerMap,
+                                              Layout layout, int retries,
                                               @NonNull Duration retryDuration) {
         for (String server : routerMap.keySet()) {
             int retry = retries;
