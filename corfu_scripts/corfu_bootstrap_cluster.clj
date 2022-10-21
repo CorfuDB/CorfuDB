@@ -33,7 +33,7 @@ Options:
       [server (get-router server localcmd)])
 
 (defn create-router-map [layout]
-      (into (sorted-map) (map configure-router (.getLayoutServers new-layout))))
+      (into (sorted-map) (map configure-router (.getLayoutServers layout))))
 
 (defn bootstrap-cluster [layout-file]
       (do ; read in the new layout
