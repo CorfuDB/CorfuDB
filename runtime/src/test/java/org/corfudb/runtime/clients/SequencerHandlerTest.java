@@ -95,7 +95,7 @@ public class SequencerHandlerTest {
         Map<UUID, StreamAddressSpace> defaultMap = new HashMap<>();
         int numIter = 10;
         for (int i = 0; i < numIter; i++) {
-            defaultMap.put(UUID.randomUUID(), new StreamAddressSpace());
+            defaultMap.put(UUID.randomUUID(), new StreamAddressSpace(true));
         }
         return defaultMap;
     }

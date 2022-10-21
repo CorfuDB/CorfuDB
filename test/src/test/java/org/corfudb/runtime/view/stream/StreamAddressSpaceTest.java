@@ -6,8 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.LongStream;
@@ -288,6 +290,83 @@ public class StreamAddressSpaceTest {
         assertThat(obj1.getAddressesInRange(range5).contains(5)).isFalse();
         assertThat(obj1.getAddressesInRange(range5).contains(7)).isTrue();
         assertThat(obj1.getAddressesInRange(range5).getTrimMark()).isEqualTo(5L);
+    }
+
+    @Test
+    public void testFloorNonExist() {
+        StreamAddressSpace sas = new StreamAddressSpace();
+
+        // Validate non-existing floor queries on an empty address space
+        assertThat(sas.floor(0L)).isEqualTo(Address.NON_ADDRESS);
+        assertThat(sas.floor(5L)).isEqualTo(Address.NON_ADDRESS);
+
+        // Validate non-existing floor queries on a non-empty address space
+        Arrays.asList(6L, 7L, 8L, 9L, 10L).forEach(sas::addAddress);
+        assertThat(sas.floor(0L)).isEqualTo(Address.NON_ADDRESS);
+        assertThat(sas.floor(5L)).isEqualTo(Address.NON_ADDRESS);
+    }
+
+    @Test
+    public void testFloorExist() {
+        StreamAddressSpace sas = new StreamAddressSpace();
+        List<Long> addresses = Arrays.asList(6L, 7L, 8L, 9L, 10L);
+
+        addresses.stream().filter(x -> x % 2 == 0).forEach(sas::addAddress);
+
+        // Validate floor queries in the presence of gaps
+        addresses.forEach(x -> {
+            if (x % 2 == 0) {
+                assertThat(sas.floor(x)).isEqualTo(x);
+            } else {
+                assertThat(sas.floor(x)).isEqualTo(x - 1L);
+            }
+        });
+
+        // Validate floor queries for larger addresses than the largest in the address space
+        final Long largest = addresses.get(addresses.size() - 1);
+        assertThat(sas.floor(largest + 1L)).isEqualTo(largest);
+        assertThat(sas.floor(10L * largest)).isEqualTo(largest);
+
+        // Add address 2L * largest and revalidate the above queries.
+        sas.addAddress(2L * largest);
+        assertThat(sas.floor(largest + 1L)).isEqualTo(largest);
+        assertThat(sas.floor(10L * largest)).isEqualTo(2L * largest);
+    }
+
+    @Test
+    public void testFloorWithTrim() {
+        StreamAddressSpace sas = new StreamAddressSpace();
+        Arrays.asList(6L, 7L, 8L, 9L, 10L, 15L, 17L).forEach(sas::addAddress);
+
+        // Trim up to an address existing in the address space and validate floor queries
+        sas.trim(8L);
+        assertThat(sas.floor(6L)).isEqualTo(Address.NON_ADDRESS);
+        assertThat(sas.floor(8L)).isEqualTo(Address.NON_ADDRESS);
+        assertThat(sas.floor(9L)).isEqualTo(9L);
+        assertThat(sas.floor(12L)).isEqualTo(10L);
+        assertThat(sas.floor(14L)).isEqualTo(10L);
+        assertThat(sas.floor(15L)).isEqualTo(15L);
+        assertThat(sas.floor(20L)).isEqualTo(17L);
+
+        // Now trim up to an address not present in the address space, and revalidate the above
+        sas.trim(12L);
+        assertThat(sas.floor(6L)).isEqualTo(Address.NON_ADDRESS);
+        assertThat(sas.floor(8L)).isEqualTo(Address.NON_ADDRESS);
+        assertThat(sas.floor(9L)).isEqualTo(Address.NON_ADDRESS);
+        assertThat(sas.floor(12L)).isEqualTo(Address.NON_ADDRESS);
+        assertThat(sas.floor(14L)).isEqualTo(Address.NON_ADDRESS);
+        assertThat(sas.floor(15L)).isEqualTo(15L);
+        assertThat(sas.floor(20L)).isEqualTo(17L);
+
+        // Now trim the remaining address space and revalidate the above
+        sas.trim(30L);
+        assertThat(sas.floor(6L)).isEqualTo(Address.NON_ADDRESS);
+        assertThat(sas.floor(8L)).isEqualTo(Address.NON_ADDRESS);
+        assertThat(sas.floor(9L)).isEqualTo(Address.NON_ADDRESS);
+        assertThat(sas.floor(12L)).isEqualTo(Address.NON_ADDRESS);
+        assertThat(sas.floor(14L)).isEqualTo(Address.NON_ADDRESS);
+        assertThat(sas.floor(15L)).isEqualTo(Address.NON_ADDRESS);
+        assertThat(sas.floor(20L)).isEqualTo(Address.NON_ADDRESS);
     }
 
     @Test

@@ -249,7 +249,7 @@ public class UtilsTest {
   }
 
   private StreamAddressSpace getRandomStreamSpace(long max) {
-    StreamAddressSpace streamA = new StreamAddressSpace();
+    StreamAddressSpace streamA = new StreamAddressSpace(true);
     LongStream.range(0, max)
             .forEach(address -> streamA.addAddress(((address & 0x1) == 1) ? 0 : address));
     return streamA;
