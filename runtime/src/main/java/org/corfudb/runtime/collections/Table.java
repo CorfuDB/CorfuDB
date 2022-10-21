@@ -139,6 +139,14 @@ public class Table<K extends Message, V extends Message, M extends Message> {
         } else {
             this.guidGenerator = null;
         }
+
+        MicroMeterUtils.gauge("table.size", this.corfuTable, t -> {
+                    if (t != null) {
+                        return t.size();
+                    }
+                    return 0;
+                },
+                "tableName", getFullyQualifiedTableName());
     }
 
     public Table(@Nonnull final TableParameters<K, V, M> tableParameters,
@@ -209,15 +217,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
         if (tableObject == null) {
             throw new NoSuchElementException("resetTableData: No object cache entry for "+ fullyQualifiedTableName);
         }
-        this.corfuTable = runtime.getObjectsView().build()
-                .setTypeToken(CorfuTable.<K, CorfuRecord<V, M>>getTableType())
-                .setStreamName(this.fullyQualifiedTableName)
-                .setSerializer(serializer)
-                .setArguments(new ProtobufIndexer(tableParameters.getValueSchema(),
-                                tableParameters.getSchemaOptions()),
-                        streamingMapSupplier, versionPolicy)
-                .setStreamTags(streamTags)
-                .open();
+        this.corfuTable = null;
     }
 
     /**
