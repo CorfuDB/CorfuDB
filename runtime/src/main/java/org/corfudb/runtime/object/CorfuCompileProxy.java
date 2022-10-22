@@ -447,7 +447,13 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     }
 
     @Override
-    public boolean isMonotonic() {
+    public boolean isMonotonicObject() {
         return underlyingObject.isMonotonicObject();
+    }
+
+    @Override
+    public boolean isMonotonicStreamAccess() {
+        // Object version is always in sync with the stream access
+        return isMonotonicObject();
     }
 }

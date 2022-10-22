@@ -171,11 +171,10 @@ public abstract class AbstractTransactionalContext implements
     }
 
     protected void updateKnownStreamPosition(@NonNull ICorfuSMRProxyInternal<?> proxy, long position) {
-        final boolean isMonotonicObject = proxy.isMonotonic();
         Long val = knownStreamsPosition.get(proxy.getStreamID());
 
         if (val != null) {
-            if (isMonotonicObject) {
+            if (proxy.isMonotonicStreamAccess()) {
                 Preconditions.checkState(val <= position,
                         "new stream position %s has decreased from %s", position, val);
             } else {
@@ -189,7 +188,7 @@ public abstract class AbstractTransactionalContext implements
             }
         }
 
-        hasAccessedMonotonicObject = hasAccessedMonotonicObject || isMonotonicObject;
+        hasAccessedMonotonicObject = hasAccessedMonotonicObject || proxy.isMonotonicObject();
         knownStreamsPosition.put(proxy.getStreamID(), position);
     }
 

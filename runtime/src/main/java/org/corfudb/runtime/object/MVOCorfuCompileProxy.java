@@ -164,11 +164,6 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
     }
 
     @Override
-    public boolean isMonotonic() {
-        return true;
-    }
-
-    @Override
     public ISerializer getSerializer() {
         return serializer;
     }
@@ -228,5 +223,15 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
         context.abortTransaction(tae);
 
         throw tae;
+    }
+
+    @Override
+    public boolean isMonotonicObject() {
+        return false;
+    }
+
+    @Override
+    public boolean isMonotonicStreamAccess() {
+        return true;
     }
 }
