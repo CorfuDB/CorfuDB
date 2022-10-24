@@ -232,12 +232,12 @@ public class CorfuRuntime {
         /*
          * The maximum number of entries in the AddressSpaceView cache.
          */
-        long maxCacheEntries = 5000;
+        long maxCacheEntries = 2500;
 
         /*
          * The maximum number of entries in the MVOCache.
          */
-        long maxMvoCacheEntries = 5000;
+        long maxMvoCacheEntries = 2500;
 
         /*
          * The max in-memory size of the cache in bytes
@@ -257,10 +257,6 @@ public class CorfuRuntime {
          */
         long cacheExpiryTime = Long.MAX_VALUE;
 
-        /*
-         * Sets expireAfterAccess and expireAfterWrite for the MVOCache in seconds.
-         */
-        long mvoCacheExpiryTime = 300;
         // endregion
 
         // region Stream Parameters
@@ -423,12 +419,11 @@ public class CorfuRuntime {
             private Duration holeFillTimeout = Duration.ofSeconds(10);
             private boolean cacheEntryMetricsDisabled = true;
             private boolean cacheDisabled = false;
-            private long maxCacheEntries=5000;
-            private long maxMvoCacheEntries = 5000;
+            private long maxCacheEntries = 2500;
+            private long maxMvoCacheEntries = 2500;
             private long maxCacheWeight;
             private int cacheConcurrencyLevel = 0;
             private long cacheExpiryTime = Long.MAX_VALUE;
-            private long mvoCacheExpiryTime = 300;
             private boolean holeFillingDisabled = false;
             private int writeRetry = 5;
             private int trimRetry = 2;
@@ -636,13 +631,6 @@ public class CorfuRuntime {
 
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder maxCacheEntries(long maxCacheEntries) {
                 this.maxCacheEntries = maxCacheEntries;
-
-                final long maxCacheSizeThresh = 10000L;
-                final long largeMvoCacheSize = 25000L;
-                if (maxCacheEntries >= maxCacheSizeThresh) {
-                    this.maxMvoCacheEntries = largeMvoCacheSize;
-                }
-
                 return this;
             }
 
@@ -663,11 +651,6 @@ public class CorfuRuntime {
 
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder cacheExpiryTime(long cacheExpiryTime) {
                 this.cacheExpiryTime = cacheExpiryTime;
-                return this;
-            }
-
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder mvoCacheExpiryTime(long cacheExpiryTime) {
-                this.mvoCacheExpiryTime = cacheExpiryTime;
                 return this;
             }
 
@@ -806,7 +789,6 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setMaxCacheWeight(maxCacheWeight);
                 corfuRuntimeParameters.setCacheConcurrencyLevel(cacheConcurrencyLevel);
                 corfuRuntimeParameters.setCacheExpiryTime(cacheExpiryTime);
-                corfuRuntimeParameters.setMvoCacheExpiryTime(mvoCacheExpiryTime);
                 corfuRuntimeParameters.setHoleFillingDisabled(holeFillingDisabled);
                 corfuRuntimeParameters.setWriteRetry(writeRetry);
                 corfuRuntimeParameters.setTrimRetry(trimRetry);

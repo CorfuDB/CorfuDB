@@ -4,23 +4,17 @@ import com.google.common.reflect.TypeToken;
 import io.vavr.Tuple2;
 import io.vavr.collection.HashMap;
 import io.vavr.collection.Map;
-import io.vavr.collection.Traversable;
 import io.vavr.control.Option;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.collections.vavr.TupleIterableWrapper;
 import org.corfudb.runtime.object.ICorfuExecutionContext;
 import org.corfudb.runtime.object.ICorfuSMR;
 
 import javax.annotation.Nonnull;
-import java.util.AbstractMap;
 import java.util.Collections;
-import java.util.Iterator;
-import java.util.NoSuchElementException;
-import java.util.Spliterator;
-import java.util.Spliterators;
-import java.util.function.Consumer;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -151,7 +145,7 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
      * @return A stream containing all key-value mappings in this ImmutableCorfuTable.
      */
     public Stream<java.util.Map.Entry<K, V>> entryStream() {
-        return StreamSupport.stream(spliterator(mainMap), true);
+        return StreamSupport.stream(TupleIterableWrapper.spliterator(mainMap), true);
     }
 
     /**
@@ -163,75 +157,8 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
      */
     public <I> Iterable<java.util.Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey) {
         return secondaryIndexesWrapper.contains(indexName.get(), indexKey)
-                .<Iterable<java.util.Map.Entry<K, V>>>map(IterableWrapper::new)
+                .<Iterable<java.util.Map.Entry<K, V>>>map(TupleIterableWrapper::new)
                 .getOrElse(Collections.emptySet());
-    }
-
-    private class IterableWrapper implements Iterable<java.util.Map.Entry<K, V>> {
-
-        final Traversable<Tuple2<K, V>> traversable;
-
-        public IterableWrapper(@Nonnull Traversable<Tuple2<K, V>> traversable) {
-            this.traversable = traversable;
-        }
-
-        @Override
-        public void forEach(Consumer<? super java.util.Map.Entry<K, V>> action) {
-            traversable.forEach(tuple2 ->
-                    action.accept(new AbstractMap.SimpleEntry<>(tuple2._1, tuple2._2)));
-        }
-
-        @Override
-        public Iterator<java.util.Map.Entry<K, V>> iterator() {
-            return new TupleIteratorWrapper(traversable.iterator());
-        }
-
-        @Override
-        public Spliterator<java.util.Map.Entry<K, V>> spliterator() {
-            return ImmutableCorfuTable.this.spliterator(traversable);
-        }
-    }
-
-    private class TupleIteratorWrapper implements Iterator<java.util.Map.Entry<K, V>> {
-
-        final io.vavr.collection.Iterator<Tuple2<K, V>> iterator;
-
-        public TupleIteratorWrapper(@Nonnull io.vavr.collection.Iterator<Tuple2<K, V>> iterator) {
-            this.iterator = iterator;
-        }
-
-        @Override
-        public boolean hasNext() {
-            return iterator.hasNext();
-        }
-
-        @Override
-        public java.util.Map.Entry<K, V> next() {
-            if (hasNext()) {
-                Tuple2<K, V> tuple2 = iterator.next();
-                return new AbstractMap.SimpleEntry<>(tuple2._1, tuple2._2);
-            }
-            throw new NoSuchElementException();
-        }
-    }
-
-    private Spliterator<java.util.Map.Entry<K, V>> spliterator(@Nonnull Traversable<Tuple2<K, V>> traversable){
-        int characteristics = Spliterator.IMMUTABLE;
-        if (traversable.isDistinct()) {
-            characteristics |= Spliterator.DISTINCT;
-        }
-        if (traversable.isOrdered()) {
-            characteristics |= (Spliterator.SORTED | Spliterator.ORDERED);
-        }
-        if (traversable.isSequential()) {
-            characteristics |= Spliterator.ORDERED;
-        }
-        if (traversable.hasDefiniteSize()) {
-            characteristics |= (Spliterator.SIZED | Spliterator.SUBSIZED);
-            return Spliterators.spliterator(new TupleIteratorWrapper(traversable.iterator()), traversable.length(), characteristics);
-        } else {
-            return Spliterators.spliteratorUnknownSize(new TupleIteratorWrapper(traversable.iterator()), characteristics);
-        }
     }
 
     @AllArgsConstructor

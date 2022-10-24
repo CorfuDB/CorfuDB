@@ -16,7 +16,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -42,8 +41,6 @@ public class MVOCache<T extends ICorfuSMR<T>> {
     public MVOCache(@Nonnull CorfuRuntime corfuRuntime) {
         this.objectCache = CacheBuilder.newBuilder()
                 .maximumSize(corfuRuntime.getParameters().getMaxMvoCacheEntries())
-                .expireAfterAccess(corfuRuntime.getParameters().getMvoCacheExpiryTime(), TimeUnit.SECONDS)
-                .expireAfterWrite(corfuRuntime.getParameters().getMvoCacheExpiryTime(), TimeUnit.SECONDS)
                 .removalListener(this::handleEviction)
                 .recordStats()
                 .build();
