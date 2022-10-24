@@ -247,18 +247,20 @@ public class ImmutableCorfuTable<K, V> implements ICorfuSMR<ImmutableCorfuTable<
             Iterable<?> mappedValues = index.getMultiValueIndexFunction().apply(key, value);
 
             for (Object indexKey: mappedValues) {
-                Map<K, V> slot = updatedMapping.get(indexKey).get();
-                boolean valuePresented = slot.get(key).contains(value);
-                if (valuePresented) {
-                    slot = slot.remove(key);
-                }
+                Map<K, V> slot = updatedMapping.get(indexKey).getOrNull();
+                if (slot != null) {
+                    boolean valuePresented = slot.get(key).contains(value);
+                    if (valuePresented) {
+                        slot = slot.remove(key);
+                    }
 
-                // Update mapping index
-                updatedMapping = updatedMapping.put(indexKey, slot);
+                    // Update mapping index
+                    updatedMapping = updatedMapping.put(indexKey, slot);
 
-                // Clean up empty slot
-                if (slot.isEmpty()) {
-                    updatedMapping = updatedMapping.remove(indexKey);
+                    // Clean up empty slot
+                    if (slot.isEmpty()) {
+                        updatedMapping = updatedMapping.remove(indexKey);
+                    }
                 }
             }
 
