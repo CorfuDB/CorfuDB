@@ -4,6 +4,9 @@ import java.util.Map;
 
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.view.SMRObject;
 
 /**
  * Consider again the code from {@link org.corfudb.samples::HeloCorfu.java}:
@@ -96,10 +99,10 @@ public class SimpleAtomicTransaction extends BaseCorfuAppUtils {
          * We will instantiate a stream by giving it a name "A",
          * and then instantiate an object by specifying its class
          */
-        Map<String, Integer> map = getCorfuRuntime().getObjectsView()
+        ICorfuTable<String, Integer> map = getCorfuRuntime().getObjectsView()
                 .build()
                 .setStreamName("A")     // stream name
-                .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {})
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, Integer>>() {})
                 .open();                // instantiate the object!
 
         /**
@@ -111,10 +114,10 @@ public class SimpleAtomicTransaction extends BaseCorfuAppUtils {
         Integer previous = map.get("a");
         if (previous == null) {
             System.out.println("This is the first time we were run!");
-            map.put("a", 1);
+            map.insert("a", 1);
         }
         else {
-            map.put("a", ++previous);
+            map.insert("a", ++previous);
             System.out.println("This is the " + previous + " time we were run!");
         }
         getCorfuRuntime().getObjectsView().TXEnd();

@@ -1,6 +1,12 @@
 package org.corfudb.integration;
 
-import com.google.common.reflect.TypeToken;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
@@ -11,23 +17,14 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.collections.StreamingMap;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Utils;
 import org.junit.Test;
-
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 
 /**
@@ -42,17 +39,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @Slf4j
 public class StreamAddressDiscoveryIT extends AbstractIT {
-    private final TypeToken<CorfuTable<Integer, String>> typeToken = new TypeToken<CorfuTable<Integer, String>>() {
-    };
-
-    private final TypeToken<CorfuTable<String, String>> typeTokenStr = new TypeToken<CorfuTable<String, String>>() {
-    };
 
     private final String cpAuthor = "checkpointer-test";
 
     private CorfuRuntime createDefaultRuntimeUsingAddressMaps() {
-        CorfuRuntime runtime = createRuntime(DEFAULT_ENDPOINT)
-                .setCacheDisabled(false);
+        CorfuRuntime runtime = createDefaultRuntime().setCacheDisabled(false);
         runtime.getParameters().setStreamBatchSize(PARAMETERS.NUM_ITERATIONS_LOW);
         return runtime;
     }
@@ -63,12 +54,8 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
     private long readFromNewRuntime(CorfuRuntime rt, String streamName, int expectedSize) {
         try {
-            CorfuTable<Integer, String> table = rt.getObjectsView().build()
-                    .setTypeToken(typeToken)
-                    .setStreamName(streamName)
-                    .open();
-
-            long startTime = System.currentTimeMillis();
+            PersistentCorfuTable<Integer, String> table = createCorfuTable(rt, streamName);
+            final long startTime = System.currentTimeMillis();
             assertThat(table.size()).isEqualTo(expectedSize);
             return System.currentTimeMillis() - startTime;
         } finally {
@@ -108,23 +95,15 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
         try {
             // Write 10K entries on S1 & S2
-            CorfuTable<Integer, String> table1 = runtime.getObjectsView().build()
-                    .setTypeToken(typeToken)
-                    .setStreamName(stream1Name)
-                    .open();
-
+            PersistentCorfuTable<Integer, String> table1 = createCorfuTable(runtime, stream1Name);
             for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LARGE; i++) {
-                table1.put(i, String.valueOf(i));
+                table1.insert(i, String.valueOf(i));
             }
 
             // Write 10K entries on S2
-            CorfuTable<Integer, String> table2 = runtime.getObjectsView().build()
-                    .setTypeToken(typeToken)
-                    .setStreamName(stream2Name)
-                    .open();
-
+            PersistentCorfuTable<Integer, String> table2 = createCorfuTable(runtime, stream2Name);
             for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LARGE; i++) {
-                table2.put(i, String.valueOf(i));
+                table2.insert(i, String.valueOf(i));
             }
 
             // Force a hole for S1
@@ -135,14 +114,12 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // Write 100 more entries for S1
             for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
-                table1.put(i, String.valueOf(i));
+                table1.insert(i, String.valueOf(i));
             }
 
             // Read S1 from new runtime (retrieving address map)
-            long totalTimeAddressMaps = readFromNewRuntimeUsingAddressMaps(stream1Name,
-                    PARAMETERS.NUM_ITERATIONS_LARGE);
-            log.debug("**** Total time new runtime to sync 'Stream 1' (address maps): "
-                    + totalTimeAddressMaps);
+            long totalTimeAddressMaps = readFromNewRuntimeUsingAddressMaps(stream1Name, PARAMETERS.NUM_ITERATIONS_LARGE);
+            log.debug("**** Total time new runtime to sync 'Stream 1' (address maps): " + totalTimeAddressMaps);
         } finally {
             shutdownCorfuServer(server);
         }
@@ -173,62 +150,50 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         CorfuRuntime rt = createDefaultRuntime();
 
         try {
-            final int sizeMap1 = 4;
-            final int sizeMap2 = 6;
+            final int tableSize1 = 4;
+            final int tableSize2 = 6;
 
-            StreamingMap<String, String> map1 = defaultRT.getObjectsView().build()
-                    .setTypeToken(typeTokenStr)
-                    .setStreamName("stream1")
-                    .open();
-
-            StreamingMap<String, String> map2 = defaultRT.getObjectsView().build()
-                    .setTypeToken(typeTokenStr)
-                    .setStreamName("stream2")
-                    .open();
+            PersistentCorfuTable<String, String> table1 = createCorfuTable(defaultRT, "stream1");
+            PersistentCorfuTable<String, String> table2 = createCorfuTable(defaultRT, "stream2");
 
             // Writes as described in the comments
-            transactionalWrite(defaultRT, map1, "0", "0");
-            transactionalWrite(defaultRT, map2, "1", "1");
-            transactionalWrite(defaultRT, map1, "2", "2");
-            transactionalWrite(defaultRT, map2, "3", "3");
-            transactionalWrite(defaultRT, map2, "4", "4");
-            transactionalWrite(defaultRT, map1, "5", "5");
+            transactionalWrite(defaultRT, table1, "0", "0");
+            transactionalWrite(defaultRT, table2, "1", "1");
+            transactionalWrite(defaultRT, table1, "2", "2");
+            transactionalWrite(defaultRT, table2, "3", "3");
+            transactionalWrite(defaultRT, table2, "4", "4");
+            transactionalWrite(defaultRT, table1, "5", "5");
 
             // Checkpoint S1
-            MultiCheckpointWriter<StreamingMap<String, String>> mcw1 = new MultiCheckpointWriter<>();
-            mcw1.addMap(map1);
+            MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw1 = new MultiCheckpointWriter<>();
+            mcw1.addMap(table1);
             Token minCheckpointAddress = mcw1.appendCheckpoints(defaultRT, "author");
 
-            transactionalWrite(defaultRT, map1, "9", "9");
-            transactionalWrite(defaultRT, map2, "10", "10");
-            transactionalWrite(defaultRT, map2, "11", "11");
+            transactionalWrite(defaultRT, table1, "9", "9");
+            transactionalWrite(defaultRT, table2, "10", "10");
+            transactionalWrite(defaultRT, table2, "11", "11");
 
             // Checkpoint S2
-            MultiCheckpointWriter<StreamingMap<String, String>> mcw2 = new MultiCheckpointWriter<>();
-            mcw2.addMap(map2);
+            MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw2 = new MultiCheckpointWriter<>();
+            mcw2.addMap(table2);
             Token maxCheckpointAddress = mcw2.appendCheckpoints(defaultRT, "author");
 
-            transactionalWrite(defaultRT, map2, "15", "15");
+            transactionalWrite(defaultRT, table2, "15", "15");
 
-            assertThat(map1).hasSize(sizeMap1);
-            assertThat(map2).hasSize(sizeMap2);
+            assertThat(table1.size()).isEqualTo(tableSize1);
+            assertThat(table2.size()).isEqualTo(tableSize2);
 
             // Trim on the lower address (@5)
             defaultRT.getAddressSpaceView().prefixTrim(minCheckpointAddress);
 
             // New runtime read s1, read s2 (from checkpoint)
-            Map<String, String> map1rt = rt.getObjectsView().build()
-                    .setTypeToken(typeTokenStr)
-                    .setStreamName("stream1")
-                    .open();
+            PersistentCorfuTable<String, String> table1rt = createCorfuTable(rt, "stream1");
+            PersistentCorfuTable<String, String> table2rt = createCorfuTable(rt, "stream2");
 
-            Map<String, String> map2rt = rt.getObjectsView().build()
-                    .setTypeToken(typeTokenStr)
-                    .setStreamName("stream2")
-                    .open();
-
-            assertThat(map1rt.size()).isEqualTo(sizeMap1);
-            assertThat(map2rt.size()).isEqualTo(sizeMap2);
+            assertThat(table1rt.size()).isEqualTo(tableSize1);
+            assertThat(table2rt.size()).isEqualTo(tableSize2);
+        } catch (Exception e) {
+            fail("Exception thrown", e);
         } finally {
             defaultRT.shutdown();
             rt.shutdown();
@@ -236,9 +201,9 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         }
     }
 
-    private void transactionalWrite(CorfuRuntime rt, Map<String, String> map, String key, String value) {
+    private void transactionalWrite(CorfuRuntime rt, PersistentCorfuTable<String, String> map, String key, String value) {
         rt.getObjectsView().TXBuild().type(TransactionType.OPTIMISTIC).build().begin();
-        map.put(key, value);
+        map.insert(key, value);
         rt.getObjectsView().TXEnd();
     }
 
@@ -276,48 +241,42 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             final long snapshotAddress = 9L;
             final int sizeAtSnapshot = 6;
 
-            StreamingMap<String, String> map1 = writeRuntime.getObjectsView().build()
-                    .setTypeToken(typeTokenStr)
-                    .setStreamName("stream1")
-                    .open();
-
-            for(int i=0; i<batchWrite; i++) {
-                transactionalWrite(writeRuntime, map1, String.valueOf(i), String.valueOf(i));
+            PersistentCorfuTable<String, String> table1 = createCorfuTable(writeRuntime, "stream1");
+            for (int i = 0; i < batchWrite; i++) {
+                transactionalWrite(writeRuntime, table1, String.valueOf(i), String.valueOf(i));
             }
 
             // Checkpoint 1
-            MultiCheckpointWriter<StreamingMap<String, String>> mcw1 = new MultiCheckpointWriter<>();
-            mcw1.addMap(map1);
+            MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw1 = new MultiCheckpointWriter<>();
+            mcw1.addMap(table1);
             Token minCheckpointAddress = mcw1.appendCheckpoints(writeRuntime, "author");
 
-            for(int i=batchWrite; i<batchWrite + batchWrite; i++) {
-                transactionalWrite(writeRuntime, map1, String.valueOf(i), String.valueOf(i));
+            for (int i = batchWrite; i < 2 * batchWrite; i++) {
+                transactionalWrite(writeRuntime, table1, String.valueOf(i), String.valueOf(i));
             }
 
             // Checkpoint 2
-            MultiCheckpointWriter<StreamingMap<String, String>> mcw2 = new MultiCheckpointWriter<>();
-            mcw2.addMap(map1);
+            MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw2 = new MultiCheckpointWriter<>();
+            mcw2.addMap(table1);
             Token maxCheckpointAddress = mcw2.appendCheckpoints(writeRuntime, "author");
 
-            assertThat(map1).hasSize(batchWrite+batchWrite);
+            assertThat(table1.size()).isEqualTo(2 * batchWrite);
 
             // Trim below lower checkpoint
             writeRuntime.getAddressSpaceView().prefixTrim(new Token(minCheckpointAddress.getEpoch(), trimAddress));
 
             // New runtime
-            Map<String, String> map1rt = readRuntime.getObjectsView().build()
-                    .setTypeToken(typeTokenStr)
-                    .setStreamName("stream1")
-                    .open();
+            PersistentCorfuTable<String, String> table1rt = createCorfuTable(readRuntime, "stream1");
 
             // Start snapshot transaction between both snapshots
             readRuntime.getObjectsView().TXBuild().type(TransactionType.SNAPSHOT)
                     .snapshot(new Token(maxCheckpointAddress.getEpoch(), snapshotAddress))
                     .build()
                     .begin();
-            assertThat(map1rt).hasSize(sizeAtSnapshot);
-            readRuntime.getObjectsView()
-                    .TXEnd();
+            assertThat(table1.size()).isEqualTo(sizeAtSnapshot);
+            readRuntime.getObjectsView().TXEnd();
+        } catch (Exception e) {
+            fail("Exception thrown", e);
         } finally {
             writeRuntime.shutdown();
             readRuntime.shutdown();
@@ -346,8 +305,8 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
         final int insertions = 10;
         final int insertionsB = 2;
-        final String stream1 = "mapA";
-        final String stream2 = "mapB";
+        final String stream1 = "tableA";
+        final String stream2 = "tableB";
         final int snapshotAddress = 7;
 
         // Run Corfu Server
@@ -357,38 +316,34 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             runtime = createDefaultRuntime();
             runtimes.add(runtime);
 
-            // Open mapA (S1) and mapB (S2)
-            StreamingMap<String, Integer> mapA = createMap(runtime, stream1);
-            StreamingMap<String, Integer> mapB = createMap(runtime, stream2);
+            // Open tableA (S1) and tableB (S2)
+            PersistentCorfuTable<String, Integer> tableA = createCorfuTable(runtime, stream1);
+            PersistentCorfuTable<String, Integer> tableB = createCorfuTable(runtime, stream2);
 
-            // Write 8 entries to mapA
+            // Write 8 entries to tableA
             for (int i = 0; i < insertions - insertionsB; i++) {
-                mapA.put(String.valueOf(i), i);
+                tableA.insert(String.valueOf(i), i);
             }
 
-            // Write 2 entries to mapB
+            // Write 2 entries to tableB
             for (int i = 0; i < insertionsB; i++) {
-                mapB.put(String.valueOf(i), i);
+                tableB.insert(String.valueOf(i), i);
             }
 
             // Write 10 more entries to streamA (emulating writes that came in between the time a snapshot was taken
             // for a checkpoint and actual checkpoint entries were written)
             for (int i = insertions; i < insertions * 2; i++) {
-                mapA.put(String.valueOf(i), i);
+                tableA.insert(String.valueOf(i), i);
             }
 
-            // Start checkpoint with snapshot time 9 for mapA
-            CheckpointWriter<StreamingMap<String, Integer>> cpw = new CheckpointWriter<>(
-                    runtime, CorfuRuntime.getStreamID(stream1),
-                    cpAuthor, mapA
-            );
+            // Start checkpoint with snapshot time 9 for tableA
+            CheckpointWriter<PersistentCorfuTable<String, Integer>> cpw =
+                    new CheckpointWriter<>(runtime, CorfuRuntime.getStreamID(stream1), "checkpointer-test", tableA);
             Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress), Optional.empty());
 
-            // Start checkpoint with snapshot time 9 for mapB
-            CheckpointWriter<StreamingMap<String, Integer>> cpwB = new CheckpointWriter<>(
-                    runtime, CorfuRuntime.getStreamID(stream2),
-                    cpAuthor, mapB
-            );
+            // Start checkpoint with snapshot time 9 for tableB
+            CheckpointWriter<PersistentCorfuTable<String, Integer>> cpwB =
+                    new CheckpointWriter<>(runtime, CorfuRuntime.getStreamID(stream2), "checkpointer-test", tableB);
             cpwB.appendCheckpoint(new Token(0, snapshotAddress), Optional.empty());
 
             // Trim the log
@@ -402,7 +357,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             server = runDefaultServer();
 
             // Start new runtime
-            CorfuRuntime runtimeRestart = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+            CorfuRuntime runtimeRestart = createRuntimeWithCache();
             runtimes.add(runtimeRestart);
 
             // Fetch Address Space for the given stream S1
@@ -427,20 +382,18 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             assertThat(addressSpaceB.getTrimMark()).isEqualTo(snapshotAddress);
             assertThat(addressSpaceB.size()).isEqualTo(insertionsB);
 
-            // Open mapB after restart (verify it loads from checkpoint)
-            Map<String, Integer> mapBRestart = createMap(runtimeRestart, stream2);
-            assertThat(mapBRestart).hasSize(insertionsB);
+            // Open tableB after restart (verify it loads from checkpoint)
+            PersistentCorfuTable<String, Integer> tableBRestart = createCorfuTable(runtimeRestart, stream2);
+            assertThat(tableBRestart.size()).isEqualTo(insertionsB);
 
-            // Open mapA after restart (verify it loads from checkpoint)
-            Map<String, Integer> mapARestart = createMap(runtimeRestart, stream1);
-            assertThat(mapARestart).hasSize(insertions*2 - insertionsB);
-
+            // Open tableA after restart (verify it loads from checkpoint)
+            PersistentCorfuTable<String, Integer> tableARestart = createCorfuTable(runtimeRestart, stream1);
+            assertThat(tableARestart.size()).isEqualTo(insertions*2 - insertionsB);
         } finally {
             runtimes.forEach(CorfuRuntime::shutdown);
             shutdownCorfuServer(server);
         }
     }
-
 
     /**
      *
@@ -464,8 +417,8 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         List<CorfuRuntime> runtimes = new ArrayList<>();
 
         final int insertions = 10;
-        final String streamNameA = "mapA";
-        final String streamNameB = "mapB";
+        final String streamNameA = "tableA";
+        final String streamNameB = "tableB";
         final int snapshotAddress = 8;
         final long checkpointStartRecord = 21L;
 
@@ -476,16 +429,16 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             runtime = createDefaultRuntime();
             runtimes.add(runtime);
 
-            // Open mapA
-            StreamingMap<String, Integer> mapA = createMap(runtime, streamNameA);
-            StreamingMap<String, Integer> mapB = createMap(runtime, streamNameB);
+            // Open tableA and tableB
+            PersistentCorfuTable<String, Integer> tableA = createCorfuTable(runtime, streamNameA);
+            PersistentCorfuTable<String, Integer> tableB = createCorfuTable(runtime, streamNameB);
 
-            // Write 9 entries to mapA
+            // Write 9 entries to tableA
             for (int i = 0; i < insertions - 1; i++) {
-                mapA.put(String.valueOf(i), i);
+                tableA.insert(String.valueOf(i), i);
             }
 
-            mapB.put("a", 0);
+            tableB.insert("a", 0);
 
             // Force a hole for streamA
             Token token = runtime.getSequencerView().next(CorfuRuntime.getStreamID(streamNameA)).getToken();
@@ -501,14 +454,13 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Write 10 more entries to streamA (emulating writes that came in between the time a snapshot was taken
             // for a checkpoint and actual checkpoint entries were written)
             for (int i = insertions; i < insertions * 2; i++) {
-                mapA.put(String.valueOf(i), i);
+                tableA.insert(String.valueOf(i), i);
             }
 
             // Start checkpoint with snapshot time (right before the hole) - Ignore the fact the entry from streamB is lost
             // we're interested in verifying the behaviour of streamA with end address != trim address.
-            CheckpointWriter<StreamingMap<String, Integer>> cpw = new CheckpointWriter<>(
-                    runtime, CorfuRuntime.getStreamID(streamNameA),
-                    "checkpoint-test", mapA);
+            CheckpointWriter<PersistentCorfuTable<String, Integer>> cpw =
+                    new CheckpointWriter<>(runtime, CorfuRuntime.getStreamID(streamNameA), "checkpoint-test", tableA);
             Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress), Optional.empty());
 
             // Trim the log
@@ -522,7 +474,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             server = runDefaultServer();
 
             // Start NEW runtime
-            CorfuRuntime runtimeRestart = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+            CorfuRuntime runtimeRestart = createRuntimeWithCache();
             runtimes.add(runtimeRestart);
 
             // Verify checkpoint START_LOG_ADDRESS
@@ -541,15 +493,14 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             assertThat(addressSpaceA.getTrimMark()).isEqualTo(snapshotAddress);
             assertThat(addressSpaceA.size()).isEqualTo(insertions);
 
-            // Open mapA after restart (verify it loads from checkpoint)
-            Map<String, Integer> mapARestart = createMap(runtimeRestart, streamNameA);
-            assertThat(mapARestart).hasSize(insertions * 2 - 1);
+            // Open tableA after restart (verify it loads from checkpoint)
+            PersistentCorfuTable<String, Integer> tableARestart = createCorfuTable(runtimeRestart, streamNameA);
+            assertThat(tableARestart.size()).isEqualTo(insertions * 2 - 1);
         } finally {
             runtimes.forEach(CorfuRuntime::shutdown);
             shutdownCorfuServer(server);
         }
     }
-
 
     /**
      *
@@ -574,8 +525,8 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         List<CorfuRuntime> runtimes = new ArrayList<>();
 
         final int insertions = 10;
-        final String streamNameA = "mapA";
-        final String streamNameB = "mapB";
+        final String streamNameA = "tableA";
+        final String streamNameB = "tableB";
         final int snapshotAddress = 10;
 
         // Run Corfu Server
@@ -585,13 +536,13 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             runtime = createDefaultRuntime();
             runtimes.add(runtime);
 
-            // Open mapA
-            StreamingMap<String, Integer> mapA = createMap(runtime, streamNameA);
-            StreamingMap<String, Integer> mapB = createMap(runtime, streamNameB);
+            // Open tableA and tableB
+            PersistentCorfuTable<String, Integer> tableA = createCorfuTable(runtime, streamNameA);
+            PersistentCorfuTable<String, Integer> tableB = createCorfuTable(runtime, streamNameB);
 
-            // Write 9 entries to mapA
+            // Write 10 entries to tableA
             for (int i = 0; i < insertions; i++) {
-                mapA.put(String.valueOf(i), i);
+                tableA.insert(String.valueOf(i), i);
             }
 
             // Force a hole for streamB
@@ -601,14 +552,14 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
                     .getLogUnitClient("tcp://localhost:9000")
                     .write(hole);
 
-            // Write 10 entries to stream B
+            // Write 10 entries to streamB
             for (int i = 0; i < insertions; i++) {
-                mapB.put(String.valueOf(i), i);
+                tableB.insert(String.valueOf(i), i);
             }
 
             // Checkpoint A with snapshot @ 9
-            CheckpointWriter<StreamingMap<String, Integer>> cpw = new CheckpointWriter<>(
-                    runtime, CorfuRuntime.getStreamID(streamNameA), cpAuthor, mapA);
+            CheckpointWriter<PersistentCorfuTable<String, Integer>> cpw =
+                    new CheckpointWriter<>(runtime, CorfuRuntime.getStreamID(streamNameA), "checkpointer-test", tableA);
             Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress - 1), Optional.empty());
 
             // Trim the log
@@ -617,9 +568,9 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             runtime.getAddressSpaceView().invalidateServerCaches();
             runtime.getAddressSpaceView().invalidateClientCache();
 
-            // Before restarting the server instantiate new runtime and open map to validate it
+            // Before restarting the server instantiate new runtime and open table to validate it
             // is correctly built from checkpoint.
-            CorfuRuntime rt2 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+            CorfuRuntime rt2 = createRuntimeWithCache();
             runtimes.add(rt2);
 
             // Fetch Address Space for the given stream
@@ -632,20 +583,20 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             assertThat(addressSpaceB.getTrimMark()).isEqualTo(Address.NON_EXIST);
             assertThat(addressSpaceB.size()).isEqualTo(insertions);
 
-            // Open mapB new runtime
-            Map<String, Integer> mapBNewRuntime = createMap(rt2, streamNameB);
-            assertThat(mapBNewRuntime).hasSize(insertions);
+            // Open tableB new runtime
+            PersistentCorfuTable<String, Integer> tableBNewRuntime = createCorfuTable(rt2, streamNameB);
+            assertThat(tableBNewRuntime.size()).isEqualTo(insertions);
 
-            // Open mapA new runtime
-            Map<String, Integer> mapANewRuntime = createMap(rt2, streamNameA);
-            assertThat(mapANewRuntime).hasSize(insertions);
+            // Open tableA new runtime
+            PersistentCorfuTable<String, Integer> tableANewRuntime = createCorfuTable(rt2, streamNameA);
+            assertThat(tableANewRuntime.size()).isEqualTo(insertions);
 
             // Restart the server
             assertThat(shutdownCorfuServer(server)).isTrue();
             server = runDefaultServer();
 
             // Start NEW runtime
-            CorfuRuntime runtimeRestart = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+            CorfuRuntime runtimeRestart = createRuntimeWithCache();
             runtimes.add(runtimeRestart);
 
             // Fetch Address Space for the given stream
@@ -658,13 +609,13 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             assertThat(addressSpaceB.getTrimMark()).isEqualTo(Address.NON_EXIST);
             assertThat(addressSpaceB.size()).isEqualTo(insertions);
 
-            // Open mapB after restart
-            Map<String, Integer> mapBRestart = createMap(runtimeRestart, streamNameB);
-            assertThat(mapBRestart).hasSize(insertions);
+            // Open tableB after restart
+            PersistentCorfuTable<String, Integer> tableBRestart = createCorfuTable(runtimeRestart, streamNameB);
+            assertThat(tableBRestart.size()).isEqualTo(insertions);
 
-            // Open mapA after restart
-            Map<String, Integer> mapARestart = createMap(runtimeRestart, streamNameA);
-            assertThat(mapARestart).hasSize(insertions);
+            // Open tableA after restart
+            PersistentCorfuTable<String, Integer> tableARestart = createCorfuTable(runtimeRestart, streamNameA);
+            assertThat(tableARestart.size()).isEqualTo(insertions);
         } finally {
             runtimes.forEach(CorfuRuntime::shutdown);
             shutdownCorfuServer(server);
@@ -692,12 +643,12 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Instantiate streamA and streamB as maps
             final String streamA = "streamA";
             final String streamB = "streamB";
-            StreamingMap<String, Integer> mA = createMap(runtime, streamA);
-            StreamingMap<String, Integer> mB = createMap(runtime, streamB);
+            PersistentCorfuTable<String, Integer> mA = createCorfuTable(runtime, streamA);
+            PersistentCorfuTable<String, Integer> mB = createCorfuTable(runtime, streamB);
 
             // Write 10 Entries to streamA
             for (int i = 0; i < numEntries; i++) {
-                mA.put(String.valueOf(i), i);
+                mA.insert(String.valueOf(i), i);
             }
 
             // Force a hole as the last update to streamA
@@ -713,21 +664,21 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // Write 10 Entries to streamB
             for (int i = 0; i < numEntries; i++) {
-                mB.put(String.valueOf(i), i);
+                mB.insert(String.valueOf(i), i);
             }
 
             // Start a CheckpointWriter for streamA
-            CheckpointWriter<StreamingMap<String, Integer>> cpwA = new CheckpointWriter<>(
-                    runtime, CorfuRuntime.getStreamID(streamA), cpAuthor, mA);
+            CheckpointWriter<PersistentCorfuTable<String, Integer>> cpwA =
+                    new CheckpointWriter<>(runtime, CorfuRuntime.getStreamID(streamA), "checkpointer-Test", mA);
             Token cpTokenA = cpwA.appendCheckpoint();
 
             // Start a CheckpointWriter for streamB
-            CheckpointWriter<StreamingMap<String, Integer>> cpwB = new CheckpointWriter<>(
-                    runtime, CorfuRuntime.getStreamID(streamB), cpAuthor, mB);
+            CheckpointWriter<PersistentCorfuTable<String, Integer>> cpwB =
+                    new CheckpointWriter<>(runtime, CorfuRuntime.getStreamID(streamB), "checkpointer-Test", mB);
             cpwB.appendCheckpoint();
 
             // Add an update to streamA after checkpoint
-            mA.put(String.valueOf(numEntries), numEntries);
+            mA.insert(String.valueOf(numEntries), numEntries);
 
             // Trim the log at B's CPToken
             runtime.getAddressSpaceView().prefixTrim(cpTokenA);
@@ -742,8 +693,8 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
                     .flushCache();
 
             // Instantiate streamA from new Runtime, so stream is rebuilt
-            CorfuRuntime rt2 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
-            Map<String, Integer> mA2 = createMap(rt2, streamA);
+            CorfuRuntime rt2 = createRuntimeWithCache();
+            PersistentCorfuTable<String, Integer> mA2 = createCorfuTable(rt2, streamA);
 
             // By accessing the map, we ensure we are able to load from the checkpoint.
             try {
@@ -785,14 +736,13 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         CorfuRuntime rtRestart = null;
 
         try {
-            // Instantiate streamA as map
+            // Instantiate streamA
             final String streamA = "streamA";
-            StreamingMap<String, Integer> map = createMap(runtime, streamA);
+            PersistentCorfuTable<String, Integer> table = createCorfuTable(runtime, streamA);
 
             // Start a CheckpointWriter for streamA (empty)
-            CheckpointWriter<StreamingMap<String, Integer>> cpwA = new CheckpointWriter<>(
-                    runtime, CorfuRuntime.getStreamID(streamA),
-                    cpAuthor, map);
+            CheckpointWriter<PersistentCorfuTable<String, Integer>> cpwA =
+                    new CheckpointWriter<>(runtime, CorfuRuntime.getStreamID(streamA), "checkpointer-Test", table);
             Token cpToken = cpwA.appendCheckpoint();
 
             // Verify Checkpoint Token
@@ -821,12 +771,11 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             server = runDefaultServer();
 
             // Start a new runtime
-            rtRestart = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+            rtRestart = createRuntimeWithCache();
 
             // Instantiate streamA as map after restart (verify it can load from empty checkpoint)
-            Map<String, Integer> mapRestart = createMap(rtRestart, streamA);
-            assertThat(mapRestart).hasSize(0);
-
+            PersistentCorfuTable<String, Integer> tableRestart = createCorfuTable(rtRestart, streamA);
+            assertThat(tableRestart.size()).isZero();
         } finally {
             shutdownCorfuServer(server);
 
@@ -884,15 +833,13 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         Process server_2 = runServer(n1Port, false);
         Process server_3 = runServer(n2Port, false);
 
-        runtime = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+        runtime = createRuntimeWithCache();
 
-        runtime.getManagementView().addNode(getConnectionString(n1Port), workflowNumRetry,
-                timeout, pollPeriod);
+        runtime.getManagementView().addNode(getConnectionString(n1Port), workflowNumRetry, timeout, pollPeriod);
         runtime.invalidateLayout();
         assertThat(runtime.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
 
-        runtime.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry,
-                timeout, pollPeriod);
+        runtime.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry, timeout, pollPeriod);
         runtime.invalidateLayout();
         assertThat(runtime.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN3);
 
@@ -900,9 +847,9 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         int extraEntry = 0;
 
         try {
-            // Instantiate streamA as map
+            // Instantiate streamA
             final String streamA = "streamA";
-            StreamingMap<String, Integer> mA = createMap(runtime, streamA);
+            PersistentCorfuTable<String, Integer> mA = createCorfuTable(runtime, streamA);
 
             UUID streamID = CorfuRuntime.getStreamID(streamA);
             UUID checkpointId = CorfuRuntime.getCheckpointStreamIdFromId(streamID);
@@ -910,14 +857,13 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             if (readerHole) {
                 // Generate hole from a reader
                 runtime.getSequencerView().next(streamID).getToken();
-                assertThat(mA.size()).isEqualTo(0);
+                assertThat(mA.size()).isZero();
                 extraEntry = 1;
             }
 
             // Start a CheckpointWriter for streamA
-            CheckpointWriter<StreamingMap<String, Integer>> cpwA = new CheckpointWriter<>(
-                    runtime, CorfuRuntime.getStreamID(streamA),
-                    cpAuthor, mA);
+            CheckpointWriter<PersistentCorfuTable<String, Integer>> cpwA =
+                    new CheckpointWriter<>(runtime, CorfuRuntime.getStreamID(streamA), "checkpointer-Test", mA);
             Token cpTokenA = cpwA.appendCheckpoint();
 
             // Verify Address Maps from Log Unit and Sequencer Tails (first node)

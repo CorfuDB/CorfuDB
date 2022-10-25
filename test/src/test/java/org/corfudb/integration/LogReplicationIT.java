@@ -21,9 +21,13 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.proto.service.CorfuMessage;
+
+
+
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
@@ -113,8 +117,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private SourceForwardingDataSender sourceDataSender;
 
     // List of all opened maps backed by Corfu on Source and Destination
-    private HashMap<String, CorfuTable<Long, Long>> srcCorfuTables = new HashMap<>();
-    private HashMap<String, CorfuTable<Long, Long>> dstCorfuTables = new HashMap<>();
+    private HashMap<String, PersistentCorfuTable<Long, Long>> srcCorfuTables = new HashMap<>();
+    private HashMap<String, PersistentCorfuTable<Long, Long>> dstCorfuTables = new HashMap<>();
 
     // The in-memory data for corfu tables for verification.
     private HashMap<String, HashMap<Long, Long>> srcDataForVerification = new HashMap<>();
@@ -200,33 +204,13 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 .setSingle(true)
                 .runServer();
 
-        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
-                .builder()
-                .build();
+        srcDataRuntime = createRuntimeWithCache(SOURCE_ENDPOINT);
+        srcTestRuntime = createRuntimeWithCache(SOURCE_ENDPOINT);
+        readerRuntime = createRuntimeWithCache(SOURCE_ENDPOINT);
 
-        srcDataRuntime = CorfuRuntime.fromParameters(params);
-        srcDataRuntime.parseConfigurationString(SOURCE_ENDPOINT);
-        srcDataRuntime.connect();
-
-        srcTestRuntime = CorfuRuntime.fromParameters(params);
-        srcTestRuntime.parseConfigurationString(SOURCE_ENDPOINT);
-        srcTestRuntime.connect();
-
-        readerRuntime = CorfuRuntime.fromParameters(params);
-        readerRuntime.parseConfigurationString(SOURCE_ENDPOINT);
-        readerRuntime.connect();
-
-        writerRuntime = CorfuRuntime.fromParameters(params);
-        writerRuntime.parseConfigurationString(DESTINATION_ENDPOINT);
-        writerRuntime.connect();
-
-        dstDataRuntime = CorfuRuntime.fromParameters(params);
-        dstDataRuntime.parseConfigurationString(DESTINATION_ENDPOINT);
-        dstDataRuntime.connect();
-
-        dstTestRuntime = CorfuRuntime.fromParameters(params);
-        dstTestRuntime.parseConfigurationString(DESTINATION_ENDPOINT);
-        dstTestRuntime.connect();
+        writerRuntime = createRuntimeWithCache(DESTINATION_ENDPOINT);
+        dstDataRuntime = createRuntimeWithCache(DESTINATION_ENDPOINT);
+        dstTestRuntime = createRuntimeWithCache(DESTINATION_ENDPOINT);
 
         logReplicationMetadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0, REMOTE_CLUSTER_ID);
         expectedAckTimestamp = new AtomicLong(Long.MAX_VALUE);
@@ -258,16 +242,15 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * @param rt corfu runtime
      * @param numStreams number of streams to open
      */
-    private void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt, int numStreams) {
+    private void openStreams(HashMap<String, PersistentCorfuTable<Long, Long>> tables, CorfuRuntime rt, int numStreams) {
         for (int i = 0; i < numStreams; i++) {
             String name = TABLE_PREFIX + i;
 
-            CorfuTable<Long, Long> table = rt.getObjectsView()
+            PersistentCorfuTable<Long, Long> table = rt.getObjectsView()
                     .build()
                     .setStreamName(name)
                     .setStreamTags(ObjectsView.getLogReplicatorStreamId())
-                    .setTypeToken(new TypeToken<CorfuTable<Long, Long>>() {
-                    })
+                    .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
                     .setSerializer(Serializers.PRIMITIVE)
                     .open();
             tables.put(name, table);
@@ -278,7 +261,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * Generate Transactional data on 'tables' and push the data for
      * further verification into an in-memory copy 'tablesForVerification'.
      */
-    private void generateTXData(HashMap<String, CorfuTable<Long, Long>> tables,
+    private void generateTXData(HashMap<String, PersistentCorfuTable<Long, Long>> tables,
                       HashMap<String, HashMap<Long, Long>> hashMap,
                       int numKeys, CorfuRuntime rt, long startValue) {
         for (String streamName : tables.keySet()) {
@@ -290,7 +273,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * Generate Transactional data across several 'tablesCrossTxs' and push the data for
      * further verification into an in-memory copy 'tablesForVerification'.
      */
-    private void generateTransactionsCrossTables(HashMap<String, CorfuTable<Long, Long>> tables,
+    private void generateTransactionsCrossTables(HashMap<String, PersistentCorfuTable<Long, Long>> tables,
                                                  Set<String> tablesCrossTxs,
                                                  HashMap<String, HashMap<Long, Long>> tablesForVerification,
                                                  int numKeys, CorfuRuntime rt, long startValue) {
@@ -300,7 +283,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             for (String name : tablesCrossTxs) {
                 tablesForVerification.putIfAbsent(name, new HashMap<>());
                 long key = i + startValue;
-                tables.get(name).put(key, key);
+                tables.get(name).insert(key, key);
                 tablesForVerification.get(name).put(key, key);
 
                 // delete keys randomly
@@ -320,10 +303,11 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
 
-    private void verifyTables(HashMap<String, CorfuTable<Long, Long>> tables0, HashMap<String, CorfuTable<Long, Long>> tables1) {
+    private void verifyTables(HashMap<String, PersistentCorfuTable<Long, Long>> tables0,
+                              HashMap<String, PersistentCorfuTable<Long, Long>> tables1) {
             for (String name : tables0.keySet()) {
-                CorfuTable<Long, Long> table = tables0.get(name);
-                CorfuTable<Long, Long> mapKeys = tables1.get(name);
+                PersistentCorfuTable<Long, Long> table = tables0.get(name);
+                PersistentCorfuTable<Long, Long> mapKeys = tables1.get(name);
 
                 assertThat(mapKeys.keySet().containsAll(table.keySet())).isTrue();
                 assertThat(table.keySet().containsAll(mapKeys.keySet())).isTrue();
@@ -340,9 +324,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * @param tables
      * @param hashMap
      */
-    private void waitData(HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap) {
+    private void waitData(HashMap<String, PersistentCorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap) {
         for (String name : hashMap.keySet()) {
-            CorfuTable<Long, Long> table = tables.get(name);
+            PersistentCorfuTable<Long, Long> table = tables.get(name);
             HashMap<Long, Long> mapKeys = hashMap.get(name);
             while (table.size() < mapKeys.size()) {
                 //
@@ -350,9 +334,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         }
     }
 
-    private void verifyData(HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap) {
+    private void verifyData(HashMap<String, PersistentCorfuTable<Long, Long>> tables,
+                            HashMap<String, HashMap<Long, Long>> hashMap) {
         for (String name : hashMap.keySet()) {
-            CorfuTable<Long, Long> table = tables.get(name);
+            PersistentCorfuTable<Long, Long> table = tables.get(name);
             HashMap<Long, Long> mapKeys = hashMap.get(name);
 
             log.debug("Table[" + name + "]: " + table.keySet().size() + " keys; Expected "
@@ -368,9 +353,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         }
     }
 
-    private void verifyNoData(HashMap<String, CorfuTable<Long, Long>> tables) {
-        for (CorfuTable table : tables.values()) {
-            assertThat(table.keySet().isEmpty());
+    private void verifyNoData(HashMap<String, PersistentCorfuTable<Long, Long>> tables) {
+        for (PersistentCorfuTable<Long, Long> table : tables.values()) {
+            assertThat(table.keySet()).isEmpty();
         }
     }
 

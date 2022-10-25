@@ -3,13 +3,7 @@ package org.corfudb.runtime;
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
-import org.corfudb.runtime.collections.CorfuDynamicKey;
-import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.collections.OpaqueCorfuDynamicRecord;
-import org.corfudb.runtime.collections.PersistedStreamingMap;
-import org.corfudb.runtime.collections.StreamingMap;
-import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.collections.*;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.view.ObjectOpenOption;
@@ -57,12 +51,12 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
         log.info("{}: Finished checkpointing tables", checkpointerBuilder.clientName);
     }
 
-    private CheckpointWriter<StreamingMap> getCheckpointWriter(TableName tableName,
-                                                               KeyDynamicProtobufSerializer keyDynamicProtobufSerializer) {
+    private CheckpointWriter<ICorfuTable<?,?>> getCheckpointWriter(TableName tableName,
+                                                              KeyDynamicProtobufSerializer keyDynamicProtobufSerializer) {
         UUID streamId = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(tableName));
         CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> corfuTable = openTable(tableName, keyDynamicProtobufSerializer,
                 checkpointerBuilder.cpRuntime.get());
-        CheckpointWriter<StreamingMap> cpw =
+        CheckpointWriter<ICorfuTable<?,?>> cpw =
                 new CheckpointWriter(checkpointerBuilder.corfuRuntime, streamId, "ServerCheckpointer", corfuTable);
         ISerializer serializer = ((CorfuCompileProxy) corfuTable.getCorfuSMRProxy())
                 .getSerializer();

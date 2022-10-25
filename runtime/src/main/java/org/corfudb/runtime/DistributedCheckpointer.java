@@ -7,7 +7,7 @@ import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.StreamingMap;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -130,7 +130,7 @@ public abstract class DistributedCheckpointer {
     }
 
     public boolean tryCheckpointTable(@NonNull TableName tableName, @NonNull Function<TableName,
-            CheckpointWriter<StreamingMap>> checkpointWriterFn) {
+            CheckpointWriter<ICorfuTable<?,?>>> checkpointWriterFn) {
         try {
             if (!tryLockTableToCheckpoint(compactorMetadataTables, tableName)) {
                 // Failure to get a lock is treated as success
@@ -160,7 +160,7 @@ public abstract class DistributedCheckpointer {
     }
 
     private CheckpointingStatus appendCheckpoint(TableName tableName,
-                                                 Function<TableName, CheckpointWriter<StreamingMap>> checkpointWriterFn) {
+                                                 Function<TableName, CheckpointWriter<ICorfuTable<?,?>>> checkpointWriterFn) {
         long tableCkptStartTime = System.currentTimeMillis();
         log.info("{} Starting checkpoint: {}${}", clientName,
                 tableName.getNamespace(), tableName.getTableName());
@@ -169,7 +169,7 @@ public abstract class DistributedCheckpointer {
         StatusType returnStatus = StatusType.FAILED;
         for (int retry = 0; retry < MAX_RETRIES; retry++) {
             try {
-                CheckpointWriter<StreamingMap> cpw = checkpointWriterFn.apply(tableName);
+                CheckpointWriter<ICorfuTable<?,?>> cpw = checkpointWriterFn.apply(tableName);
                 cpw.appendCheckpoint(Optional.of(livenessUpdater));
                 returnStatus = StatusType.COMPLETED;
                 break;

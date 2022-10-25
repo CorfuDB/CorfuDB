@@ -399,9 +399,6 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
         try {
             T ret = (T) ReflectionUtils
                     .findMatchingConstructor(type.getDeclaredConstructors(), args);
-            if (ret instanceof ICorfuSMRProxyWrapper) {
-                ((ICorfuSMRProxyWrapper<T>) ret).setProxy$CORFUSMR(this);
-            }
             return ret;
         } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
             throw new RuntimeException(e);
@@ -447,5 +444,16 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
         context.abortTransaction(tae);
 
         throw tae;
+    }
+
+    @Override
+    public boolean isMonotonicObject() {
+        return underlyingObject.isMonotonicObject();
+    }
+
+    @Override
+    public boolean isMonotonicStreamAccess() {
+        // Object version is always in sync with the stream access
+        return isMonotonicObject();
     }
 }

@@ -6,8 +6,8 @@ import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
@@ -124,15 +124,15 @@ public class TransactionStreamIT extends AbstractIT {
         for (int x = 1; x <= numWriters; x++) {
             final int idx = x;
             producers.submit(() -> {
-                CorfuTable<Integer, Integer> map = producersRt.getObjectsView()
+                PersistentCorfuTable<Integer, Integer> map = producersRt.getObjectsView()
                         .build()
                         .setStreamName(String.valueOf(idx))
                         .setStreamTags(txnStreamTag)
-                        .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {})
+                        .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {})
                         .open();
                 for (int i = 1; i <= numWritesPerThread; i++) {
                     producersRt.getObjectsView().TXBegin();
-                    map.put(i, i);
+                    map.insert(i, i);
                     producersRt.getObjectsView().TXEnd();
                 }
             });
@@ -150,10 +150,10 @@ public class TransactionStreamIT extends AbstractIT {
         for (int x = 1; x <= numWriters; x++) {
             assertThat(counters.get(CorfuRuntime.getStreamID(String.valueOf(x)))).isEqualTo(sumOfWritesPerTable);
 
-            CorfuTable<Integer, Integer> map = producersRt.getObjectsView()
+            PersistentCorfuTable<Integer, Integer> map = producersRt.getObjectsView()
                     .build()
                     .setStreamName(String.valueOf(x))
-                    .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {})
+                    .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {})
                     .open();
             assertThat(map.size()).isEqualTo(numWritesPerThread);
         }

@@ -1,12 +1,14 @@
 package org.corfudb.runtime.collections;
 
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Predicate;
+import org.corfudb.runtime.object.ICorfuSMR;
 
-public interface ICorfuTable<K, V>
-        extends StreamingMap<K, V> {
+import javax.annotation.Nonnull;
+import java.util.Collection;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Stream;
+
+public interface ICorfuTable<K, V> {
 
     /** Insert a key-value pair into a map, overwriting any previous mapping.
      *
@@ -28,23 +30,26 @@ public interface ICorfuTable<K, V>
     void delete(K key);
 
     /**
-     * Returns a filtered {@link List} view of the values contained in this map.
-     * This method has a memory/CPU advantage over the map iterators as no deep copy
-     * is actually performed.
+     * Get a mapping using the specified index function.
      *
-     * @param valuePredicate java predicate (function to evaluate)
-     * @return a view of the values contained in this map meeting the predicate condition.
+     * @param indexName Name of the secondary index to query.
+     * @param indexKey  The index key used to query the secondary index
+     * @return An Iterable of Map.Entry<K, V>
      */
-    List<V> scanAndFilter(Predicate<? super V> valuePredicate);
+    <I> Iterable<Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey);
 
-    /**
-     * Returns a {@link Collection} filtered by entries (keys and/or values).
-     * This method has a memory/CPU advantage over the map iterators as no deep copy
-     * is actually performed.
-     *
-     * @param entryPredicate java predicate (function to evaluate)
-     * @return a view of the entries contained in this map meeting the predicate condition.
-     */
-    Collection<Entry<K, V>> scanAndFilterByEntry(
-            Predicate<? super Map.Entry<K, V>> entryPredicate);
+    V get(Object key);
+
+    Set<K> keySet();
+
+    Stream<Map.Entry<K, V>> entryStream();
+
+    boolean containsKey(Object key);
+
+    int size();
+
+    boolean isEmpty();
+
+    void clear();
+
 }

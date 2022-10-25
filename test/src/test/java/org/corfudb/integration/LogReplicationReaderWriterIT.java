@@ -16,11 +16,12 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ISerializer;
@@ -76,9 +77,9 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     // Connect with server2 to verify data
     private CorfuRuntime dstDataRuntime = null;
 
-    private final HashMap<String, CorfuTable<Long, Long>> srcTables = new HashMap<>();
-    private final HashMap<String, CorfuTable<Long, Long>> dstTables = new HashMap<>();
-    private final HashMap<String, CorfuTable<Long, Long>> shadowTables = new HashMap<>();
+    private final HashMap<String, PersistentCorfuTable<Long, Long>> srcTables = new HashMap<>();
+    private final HashMap<String, PersistentCorfuTable<Long, Long>> dstTables = new HashMap<>();
+    private final HashMap<String, PersistentCorfuTable<Long, Long>> shadowTables = new HashMap<>();
 
     private CorfuRuntime srcTestRuntime;
 
@@ -103,68 +104,47 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
                 .setSingle(true)
                 .runServer();
 
-        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
-                .builder()
-                .build();
+        srcDataRuntime = createRuntimeWithCache();
+        srcTestRuntime = createRuntimeWithCache();
+        readerRuntime = createRuntimeWithCache();
 
-        srcDataRuntime = CorfuRuntime.fromParameters(params);
-        srcDataRuntime.parseConfigurationString(DEFAULT_ENDPOINT);
-        srcDataRuntime.connect();
-
-        srcTestRuntime = CorfuRuntime.fromParameters(params);
-        srcTestRuntime.parseConfigurationString(DEFAULT_ENDPOINT);
-        srcTestRuntime.connect();
-
-        readerRuntime = CorfuRuntime.fromParameters(params);
-        readerRuntime.parseConfigurationString(DEFAULT_ENDPOINT);
-        readerRuntime.connect();
-
-        writerRuntime = CorfuRuntime.fromParameters(params);
-        writerRuntime.parseConfigurationString(WRITER_ENDPOINT);
-        writerRuntime.connect();
-
-        dstDataRuntime = CorfuRuntime.fromParameters(params);
-        dstDataRuntime.parseConfigurationString(WRITER_ENDPOINT);
-        dstDataRuntime.connect();
-
-        dstTestRuntime = CorfuRuntime.fromParameters(params);
-        dstTestRuntime.parseConfigurationString(WRITER_ENDPOINT);
-        dstTestRuntime.connect();
+        writerRuntime = createRuntimeWithCache(WRITER_ENDPOINT);
+        dstDataRuntime = createRuntimeWithCache(WRITER_ENDPOINT);
+        dstTestRuntime = createRuntimeWithCache(WRITER_ENDPOINT);
     }
 
-    public static void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt) {
+    public static void openStreams(HashMap<String, PersistentCorfuTable<Long, Long>> tables, CorfuRuntime rt) {
         openStreams(tables, rt, NUM_STREAMS, Serializers.PRIMITIVE, false);
     }
 
-    public static void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt, int num_streams) {
+    public static void openStreams(HashMap<String, PersistentCorfuTable<Long, Long>> tables, CorfuRuntime rt, int num_streams) {
         openStreams(tables, rt, num_streams, Serializers.PRIMITIVE);
     }
 
-    public static void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt, int num_streams,
-                                   ISerializer serializer, boolean shadow) {
+    public static void openStreams(HashMap<String, PersistentCorfuTable<Long, Long>> tables, CorfuRuntime rt,
+                                   int num_streams, ISerializer serializer, boolean shadow) {
         for (int i = 0; i < num_streams; i++) {
             String name = "test" + i;
             if (shadow) {
                 name = name + "_shadow";
             }
-            CorfuTable<Long, Long> table = rt.getObjectsView()
+            PersistentCorfuTable<Long, Long> table = rt.getObjectsView()
                     .build()
                     .setStreamName(name)
                     .setStreamTags(ObjectsView.getLogReplicatorStreamId())
-                    .setTypeToken(new TypeToken<CorfuTable<Long, Long>>() {
-                    })
+                    .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
                     .setSerializer(serializer)
                     .open();
             tables.put(name, table);
         }
     }
 
-    public static void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt, int num_streams,
+    public static void openStreams(HashMap<String, PersistentCorfuTable<Long, Long>> tables, CorfuRuntime rt, int num_streams,
                                                  ISerializer serializer) {
         openStreams(tables, rt, num_streams, serializer, false);
     }
 
-    public static void generateData(HashMap<String, CorfuTable<Long, Long>> tables,
+    public static void generateData(HashMap<String, PersistentCorfuTable<Long, Long>> tables,
                       HashMap<String, HashMap<Long, Long>> hashMap,
                       int numKeys, CorfuRuntime rt, long startVal) {
         for (int i = 0; i < numKeys; i++) {
@@ -172,7 +152,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
                 hashMap.putIfAbsent(name, new HashMap<>());
                 long key = i + startVal;
                 rt.getObjectsView().TXBegin();
-                tables.get(name).put(key, key);
+                tables.get(name).insert(key, key);
                 rt.getObjectsView().TXEnd();
                 log.trace("tail " + rt.getAddressSpaceView().getLogTail() + " seq " + rt.getSequencerView().query().getSequence());
                 hashMap.get(name).put(key, key);
@@ -181,7 +161,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     }
 
     // Generate data with transactions and the same time push the data to the hashtable
-    public static void generateTransactions(HashMap<String, CorfuTable<Long, Long>> tables,
+    public static void generateTransactions(HashMap<String, PersistentCorfuTable<Long, Long>> tables,
                       HashMap<String, HashMap<Long, Long>> hashMap,
                       int numT, CorfuRuntime rt, long startVal) {
         int j = 0;
@@ -190,7 +170,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
             for (String name : tables.keySet()) {
                 hashMap.putIfAbsent(name, new HashMap<>());
                 long key = j + startVal;
-                tables.get(name).put(key, key);
+                tables.get(name).insert(key, key);
                 log.trace("tail " + rt.getAddressSpaceView().getLogTail() + " seq " + rt.getSequencerView().query().getSequence());
                 hashMap.get(name).put(key, key);
                 j++;
@@ -200,10 +180,11 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         log.debug("Generate transactions num " + numT);
     }
 
-    public static void verifyData(String tag, HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap) {
+    public static void verifyData(String tag, HashMap<String, PersistentCorfuTable<Long, Long>> tables,
+                                  HashMap<String, HashMap<Long, Long>> hashMap) {
         log.debug("\n" + tag);
         for (String name : hashMap.keySet()) {
-            CorfuTable<Long, Long> table = tables.get(name);
+            PersistentCorfuTable<Long, Long> table = tables.get(name);
             HashMap<Long, Long> mapKeys = hashMap.get(name);
             log.debug("table " + name + " key size " + table.keySet().size() +
                     " hashMap size " + mapKeys.size());
@@ -218,11 +199,12 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         }
     }
 
-    public static void verifyTable(String tag, HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, CorfuTable<Long, Long>> hashMap) {
+    public static void verifyTable(String tag, HashMap<String, PersistentCorfuTable<Long, Long>> tables,
+                                   HashMap<String, PersistentCorfuTable<Long, Long>> hashMap) {
         log.debug("\n" + tag);
         for (String name : hashMap.keySet()) {
-            CorfuTable<Long, Long> table = tables.get(name);
-            CorfuTable<Long, Long> mapKeys = hashMap.get(name);
+            PersistentCorfuTable<Long, Long> table = tables.get(name);
+            PersistentCorfuTable<Long, Long> mapKeys = hashMap.get(name);
             log.debug("table " + name + " key size " + table.keySet().size() +
                     " hashMap size " + mapKeys.size());
 
@@ -381,9 +363,9 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     /**
      * enforce checkpoint entries at the streams.
      */
-    public static Token ckStreamsAndTrim(CorfuRuntime rt, HashMap<String, CorfuTable<Long, Long>> tables) {
-        MultiCheckpointWriter<CorfuTable<Long, Long>> mcw1 = new MultiCheckpointWriter<>();
-        for (CorfuTable<Long, Long> map : tables.values()) {
+    public static Token ckStreamsAndTrim(CorfuRuntime rt, HashMap<String, PersistentCorfuTable<Long, Long>> tables) {
+        MultiCheckpointWriter<PersistentCorfuTable<Long, Long>> mcw1 = new MultiCheckpointWriter<>();
+        for (PersistentCorfuTable<Long, Long> map : tables.values()) {
             mcw1.addMap(map);
         }
 
@@ -469,14 +451,8 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         trimAlone(srcDataRuntime.getAddressSpaceView().getLogTail() - offset, srcDataRuntime);
 
         try {
-            CorfuTable<Long, Long> testTable = srcTestRuntime.getObjectsView()
-                    .build()
-                    .setStreamName("test0")
-                    .setTypeToken(new TypeToken<CorfuTable<Long, Long>>() {
-                    })
-                    .setSerializer(Serializers.PRIMITIVE)
-                    .open();
-            testTable.size();
+            PersistentCorfuTable<Long, Long> table = createCorfuTable(srcTestRuntime, "test0", Serializers.PRIMITIVE);
+            table.size();
         } catch (Exception e) {
             log.debug("caught a exception " + e);
             assertThat(e).isInstanceOf(TrimmedException.class);
@@ -622,7 +598,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         openStreams(srcTables, srcDataRuntime, NUM_STREAMS, serializer);
         generateTransactions(srcTables, srcHashMap, NUM_TRANSACTIONS, srcDataRuntime, NUM_TRANSACTIONS);
 
-        HashMap<String, CorfuTable<Long, Long>> singleTables = new HashMap<>();
+        HashMap<String, PersistentCorfuTable<Long, Long>> singleTables = new HashMap<>();
         singleTables.putIfAbsent("test0", srcTables.get("test0"));
         generateTransactions(singleTables, srcHashMap, NUM_TRANSACTIONS, srcDataRuntime, NUM_TRANSACTIONS);
 
@@ -708,4 +684,3 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         cleanUp();
     }
 }
-
