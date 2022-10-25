@@ -1,9 +1,10 @@
 package org.corfudb.infrastructure.logreplication;
 
-import com.google.common.annotations.VisibleForTesting;
 import lombok.Data;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryService;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.TableRegistry;
 
@@ -59,11 +60,20 @@ public class LogReplicationConfig {
             PROTOBUF_TABLE_ID
     ));
 
+    // Suite of utility methods for updating the configuration
+    private LogReplicationConfigManager configManager;
+
     // Unique identifiers for all streams to be replicated across sites
     private Set<String> streamsToReplicate;
 
+    // Mapping from stream ids to their fully qualified names.
+    private Map<UUID, String> streamsIdToNameMap;
+
     // Streaming tags on Sink (map data stream id to list of tags associated to it)
     private Map<UUID, List<UUID>> dataStreamToTagsMap = new HashMap<>();
+
+    // Set of streams to drop on Sink if federated flag differs from Source during cluster upgrades.
+    private Set<UUID> replicatedStreamsToDrop;
 
     // Snapshot Sync Batch Size(number of messages)
     private int maxNumMsgPerBatch;
@@ -80,42 +90,40 @@ public class LogReplicationConfig {
     private int maxDataSizePerMsg;
 
     /**
-     * Constructor
-     *
-     * @param streamsToReplicate Unique identifiers for all streams to be replicated across sites.
+     * Constructor exposed to {@link CorfuReplicationDiscoveryService}
      */
-    @VisibleForTesting
-    public LogReplicationConfig(Set<String> streamsToReplicate) {
-        this(streamsToReplicate, DEFAULT_MAX_NUM_MSG_PER_BATCH, MAX_DATA_MSG_SIZE_SUPPORTED, MAX_CACHE_NUM_ENTRIES);
-    }
-
-    /**
-     * Constructor
-     *
-     * @param streamsToReplicate Unique identifiers for all streams to be replicated across sites.
-     * @param maxNumMsgPerBatch snapshot sync batch size (number of entries per batch)
-     */
-    public LogReplicationConfig(Set<String> streamsToReplicate, int maxNumMsgPerBatch, int maxMsgSize, int cacheSize) {
-        this.streamsToReplicate = streamsToReplicate;
+    public LogReplicationConfig(LogReplicationConfigManager configManager,
+                                int maxNumMsgPerBatch, int maxMsgSize, int cacheSize) {
+        this.configManager = configManager;
         this.maxNumMsgPerBatch = maxNumMsgPerBatch;
         this.maxMsgSize = maxMsgSize;
         this.maxCacheSize = cacheSize;
         this.maxDataSizePerMsg = maxMsgSize * DATA_FRACTION_PER_MSG / 100;
+        syncWithRegistry();
     }
 
     /**
-     * Constructor
-     *
-     * @param streamsToReplicate Unique identifiers for all streams to be replicated across sites.
-     * @param maxNumMsgPerBatch snapshot sync batch size (number of entries per batch)
+     * Provide the ability to sync LogReplicationConfig with the latest registry table.
      */
-    public LogReplicationConfig(Set<String> streamsToReplicate, int maxNumMsgPerBatch, int maxMsgSize) {
-        this(streamsToReplicate, maxNumMsgPerBatch, maxMsgSize, MAX_CACHE_NUM_ENTRIES);
+    public void syncWithRegistry() {
+        if (configManager.loadRegistryTableEntries()) {
+            update();
+            log.info("Synced with registry table. Streams to replicate total = {}, streams names = {}",
+                    streamsToReplicate.size(), streamsToReplicate);
+        } else {
+            log.trace("Registry table address space did not change, using last fetched config.");
+        }
     }
 
-    public LogReplicationConfig(Set<String> streamsToReplicate, Map<UUID, List<UUID>> streamingTagsMap,
-                                int maxNumMsgPerBatch, int maxMsgSize, int cacheSize) {
-        this(streamsToReplicate, maxNumMsgPerBatch, maxMsgSize, cacheSize);
-        this.dataStreamToTagsMap = streamingTagsMap;
+    /**
+     * Update LogReplicationConfig fields. This method should be invoked after successfully refreshing the in-memory
+     * registry table entries in {@link LogReplicationConfigManager}.
+     */
+    private void update() {
+        this.streamsToReplicate = configManager.getStreamsToReplicate();
+        this.dataStreamToTagsMap = configManager.getStreamToTagsMap();
+        this.replicatedStreamsToDrop = configManager.getStreamsToDrop();
+        this.streamsIdToNameMap = new HashMap<>();
+        streamsToReplicate.forEach(stream -> streamsIdToNameMap.put(CorfuRuntime.getStreamID(stream), stream));
     }
 }
