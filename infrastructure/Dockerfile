@@ -1,4 +1,5 @@
-FROM openjdk:8-jdk-alpine3.8
+ARG BASE_IMAGE=openjdk:8-jdk-alpine3.8
+FROM $BASE_IMAGE
 
 ARG CORFU_JAR
 ARG CMDLETS_JAR
