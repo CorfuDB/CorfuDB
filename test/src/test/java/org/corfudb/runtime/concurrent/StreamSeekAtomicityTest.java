@@ -1,13 +1,14 @@
 package org.corfudb.runtime.concurrent;
 
+import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
+import org.corfudb.runtime.view.SMRObject;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -29,8 +30,14 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
      */
     @Test
     public void ckCommitAtomicity() throws Exception {
-        String mapName1 = "testMapA";
-        Map<Long, Long> testMap1 = instantiateCorfuObject(CorfuTable.class, mapName1);
+        // Note: PersistentCorfuTable and MVO do not perform rollbacks
+        final String tableName = "testTableA";
+        PersistentCorfuTable<Long, Long> testTable = getRuntime().getObjectsView()
+                .build()
+                .setStreamName(tableName)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
+                .open();
+
         CountDownLatch l1 = new CountDownLatch(2);
         AtomicBoolean commitDone = new AtomicBoolean(false);
         final int NTHREADS = 3;
@@ -46,7 +53,7 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
                 l1.await();
 
                 // generate optimistic mutation
-                testMap1.put(1L, (long)txCnt);
+                testTable.insert(1L, (long)txCnt);
 
                 // wait for it to be undon
                 TXEnd();
@@ -54,13 +61,13 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
             // signal done
             commitDone.set(true);
 
-            Assert.assertEquals((long)(txCnt-1), (long) testMap1.get(1L));
+            Assert.assertEquals((long)(txCnt-1), (long) testTable.get(1L));
         });
 
         // thread that keeps affecting optimistic-rollback of the above thread
         scheduleConcurrently(t -> {
             TXBegin();
-            testMap1.get(1L);
+            testTable.get(1L);
 
             // signal that transaction has started and obtained a snapshot
             l1.countDown();
@@ -68,7 +75,7 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
             // keep accessing the snapshot, causing optimistic rollback
 
             while (!commitDone.get()){
-                testMap1.get(1L);
+                testTable.get(1L);
             }
         });
 
@@ -79,7 +86,7 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
 
             // keep updating the in-memory proxy from the log
             while (!commitDone.get() ){
-                testMap1.get(1L);
+                testTable.get(1L);
             }
         });
 
@@ -95,10 +102,20 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
      */
     @Test
     public void ckCommitAtomicity2() throws Exception {
-        String mapName1 = "testMapA";
-        Map<Long, Long> testMap1 = instantiateCorfuObject(CorfuTable.class, mapName1);
-        String mapName2 = "testMapB";
-        Map<Long, Long> testMap2 = instantiateCorfuObject(CorfuTable.class, mapName2);
+        // Note: PersistentCorfuTable and MVO do not perform rollbacks
+        final String tableName1 = "testTableA";
+        PersistentCorfuTable<Long, Long> testTable1 = getRuntime().getObjectsView()
+                .build()
+                .setStreamName(tableName1)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
+                .open();
+
+        final String tableName2 = "testTableB";
+        PersistentCorfuTable<Long, Long> testTable2 = getRuntime().getObjectsView()
+                .build()
+                .setStreamName(tableName2)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
+                .open();
 
         CountDownLatch l1 = new CountDownLatch(2);
         AtomicBoolean commitDone = new AtomicBoolean(false);
@@ -115,9 +132,9 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
                 l1.await();
 
                 // generate optimistic mutation
-                testMap1.put(1L, (long)txCnt);
+                testTable1.insert(1L, (long)txCnt);
                 if (txCnt % 2 == 0)
-                    testMap2.put(1L, (long)txCnt);
+                    testTable2.insert(1L, (long)txCnt);
 
                 // wait for it to be undon
                 TXEnd();
@@ -125,14 +142,14 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
             // signal done
             commitDone.set(true);
 
-            Assert.assertEquals((long)(txCnt-1), (long) testMap1.get(1L));
-            Assert.assertEquals((long)( (txCnt-1) % 2 == 0 ? (txCnt-1) : txCnt-2), (long) testMap2.get(1L));
+            Assert.assertEquals((long)(txCnt-1), (long) testTable1.get(1L));
+            Assert.assertEquals((long)( (txCnt-1) % 2 == 0 ? (txCnt-1) : txCnt-2), (long) testTable2.get(1L));
         });
 
         // thread that keeps affecting optimistic-rollback of the above thread
         scheduleConcurrently(t -> {
             TXBegin();
-            testMap1.get(1L);
+            testTable1.get(1L);
 
             // signal that transaction has started and obtained a snapshot
             l1.countDown();
@@ -140,8 +157,8 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
             // keep accessing the snapshot, causing optimistic rollback
 
             while (!commitDone.get()){
-                testMap1.get(1L);
-                testMap2.get(1L);
+                testTable1.get(1L);
+                testTable2.get(1L);
             }
         });
 
@@ -152,8 +169,8 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
 
             // keep updating the in-memory proxy from the log
             while (!commitDone.get() ){
-                testMap1.get(1L);
-                testMap2.get(1L);
+                testTable1.get(1L);
+                testTable2.get(1L);
             }
         });
 
@@ -167,10 +184,20 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
      */
     @Test
     public void ckCommitAtomicity3() throws Exception {
-        String mapName1 = "testMapA";
-        Map<Long, Long> testMap1 = instantiateCorfuObject(CorfuTable.class, mapName1);
-        String mapName2 = "testMapB";
-        Map<Long, Long> testMap2 = instantiateCorfuObject(CorfuTable.class, mapName2);
+        // Note: PersistentCorfuTable and MVO do not perform rollbacks
+        final String tableName1 = "testTableA";
+        PersistentCorfuTable<Long, Long> testTable1 = getRuntime().getObjectsView()
+                .build()
+                .setStreamName(tableName1)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
+                .open();
+
+        final String tableName2 = "testTableB";
+        PersistentCorfuTable<Long, Long> testTable2 = getRuntime().getObjectsView()
+                .build()
+                .setStreamName(tableName2)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<Long, Long>>() {})
+                .open();
 
         CountDownLatch l1 = new CountDownLatch(2);
         AtomicBoolean commitDone = new AtomicBoolean(false);
@@ -187,9 +214,9 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
                 l1.await();
 
                 // generate optimistic mutation
-                testMap1.put(1L, (long)txCnt);
+                testTable1.insert(1L, (long)txCnt);
                 if (txCnt % 2 == 0)
-                    testMap2.put(1L, (long)txCnt);
+                    testTable2.insert(1L, (long)txCnt);
 
                 // wait for it to be undon
                 TXEnd();
@@ -197,8 +224,8 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
             // signal done
             commitDone.set(true);
 
-            Assert.assertEquals((long)(txCnt-1), (long) testMap1.get(1L));
-            Assert.assertEquals((long)( (txCnt-1) % 2 == 0 ? (txCnt-1) : txCnt-2), (long) testMap2.get(1L));
+            Assert.assertEquals((long)(txCnt-1), (long) testTable1.get(1L));
+            Assert.assertEquals((long)( (txCnt-1) % 2 == 0 ? (txCnt-1) : txCnt-2), (long) testTable2.get(1L));
         });
 
         // thread that keeps affecting optimistic-rollback of the above thread
@@ -206,7 +233,7 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
             long specialVal = numIterations + 1;
 
             TXBegin();
-            testMap1.get(1L);
+            testTable1.get(1L);
 
             // signal that transaction has started and obtained a snapshot
             l1.countDown();
@@ -214,8 +241,8 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
             // keep accessing the snapshot, causing optimistic rollback
 
             while (!commitDone.get()){
-                testMap1.put(1L, specialVal);
-                testMap2.put(1L, specialVal);
+                testTable1.insert(1L, specialVal);
+                testTable2.insert(1L, specialVal);
             }
         });
 
@@ -226,8 +253,8 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
 
             // keep updating the in-memory proxy from the log
             while (!commitDone.get() ){
-                testMap1.get(1L);
-                testMap2.get(1L);
+                testTable1.get(1L);
+                testTable2.get(1L);
             }
         });
 

@@ -1,7 +1,5 @@
 package org.corfudb.integration;
 
-
-import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -14,8 +12,8 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.IsolationLevel;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -82,8 +80,6 @@ public class StreamingIT extends AbstractIT {
         processes.add(p);
         return p;
     }
-
-
 
     /**
      * Load properties for a single node corfu server before each test
@@ -419,14 +415,16 @@ public class StreamingIT extends AbstractIT {
         public void onNext(CorfuStreamEntries results) {
             results.getEntries().forEach((k, v) -> {
                 v.forEach(entry -> {
-                    final CorfuStoreEntry<K, V, M> previousRecord =
-                            getPreviousRecord(namespace, tableName, entry, results.getTimestamp().getEpoch(),
-                                    results.getTimestamp().getSequence());
-                    SampleTableAMsg prevMsg = (SampleTableAMsg) previousRecord.getPayload();
                     if (recordCount > 0) {
-                        assertThat(prevMsg.getPayload()).isEqualTo("val"+(recordCount - 1));
-                    } else {
-                        assertThat(previousRecord.getPayload()).isNull();
+                        final CorfuStoreEntry<K, V, M> previousRecord =
+                                getPreviousRecord(namespace, tableName, entry, results.getTimestamp().getEpoch(),
+                                        results.getTimestamp().getSequence());
+                        SampleTableAMsg prevMsg = (SampleTableAMsg) previousRecord.getPayload();
+                        if (recordCount > 0) {
+                            assertThat(prevMsg.getPayload()).isEqualTo("val"+(recordCount - 1));
+                        } else {
+                            assertThat(previousRecord.getPayload()).isNull();
+                        }
                     }
                 });
             });
@@ -1440,13 +1438,11 @@ public class StreamingIT extends AbstractIT {
     }
 
     private Token checkpointAndTrim(String namespace, List<String> tablesToCheckpoint, boolean partialTrim) {
-        MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
+        MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
         tablesToCheckpoint.forEach(tableName -> {
-            CorfuTable<Uuid, CorfuRecord<SampleSchema.EventInfo, SampleSchema.ManagedResources>> corfuTable = runtime.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<Uuid, CorfuRecord<SampleSchema.EventInfo, SampleSchema.ManagedResources>>>() {
-                    })
-                    .setStreamName(TableRegistry.getFullyQualifiedTableName(namespace, tableName))
-                    .open();
+            PersistentCorfuTable<Uuid, CorfuRecord<SampleSchema.EventInfo, SampleSchema.ManagedResources>> corfuTable =
+                    createCorfuTable(runtime, TableRegistry.getFullyQualifiedTableName(namespace, tableName));
+
             mcw.addMap(corfuTable);
         });
 

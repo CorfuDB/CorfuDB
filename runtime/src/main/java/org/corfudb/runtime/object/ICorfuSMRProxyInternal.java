@@ -25,6 +25,10 @@ public interface ICorfuSMRProxyInternal<T extends ICorfuSMR<T>> extends ICorfuSM
      */
     VersionLockedObject<T> getUnderlyingObject();
 
+    boolean isMonotonicObject();
+
+    boolean isMonotonicStreamAccess();
+
     /**
      * Get the serializer used for serializing arguments in the
      * proxy.

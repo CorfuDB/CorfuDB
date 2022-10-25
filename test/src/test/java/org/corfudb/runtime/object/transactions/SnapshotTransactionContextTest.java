@@ -1,7 +1,5 @@
 package org.corfudb.runtime.object.transactions;
 
-import com.google.common.reflect.TypeToken;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.junit.Test;
 
 /**
@@ -63,45 +61,5 @@ public class SnapshotTransactionContextTest extends AbstractTransactionContextTe
         t2(() -> get("k"))
                 .assertResult().isEqualTo("v3");
         t2(this::TXEnd);
-    }
-
-    /* Test if we can have implicit nested transaction for SnapshotTransactions. */
-    @Test
-    public void testSnapshotTxNestedImplicitTx() {
-        CorfuTable<String, Integer> map = (CorfuTable<String, Integer>)
-                instantiateCorfuObject(
-                        new TypeToken<CorfuTable<String, Integer>>() {
-                        },
-                        "A"
-                );
-        t(0, () -> map.put("a", 1));
-        t(0, () -> map.put("b", 1));
-        t(0, this::SnapshotTXBegin);
-        t(0, () -> map.forEach((k,v) ->{
-            return;
-        }));
-        t(0, () -> TXEnd());
-    }
-
-    /* Test if we can have explicit nested transaction for SnapshotTransactions. */
-    @Test
-    public void testSnapshotTxNestedExplicitTx() {
-        CorfuTable<String, Integer> map = (CorfuTable<String, Integer>)
-                instantiateCorfuObject(
-                        new TypeToken<CorfuTable<String, Integer>>() {
-                        },
-                        "A"
-                );
-        t(0, () -> map.put("a", 1));
-        t(0, () -> map.put("b", 1));
-        t(0, this::SnapshotTXBegin);
-
-        t(0, this::TXBegin);
-        t(0, () -> map.forEach((k,v) ->{
-            return;
-        }));
-        t(0, this::TXEnd);
-        t(0, this::TXEnd);
-
     }
 }

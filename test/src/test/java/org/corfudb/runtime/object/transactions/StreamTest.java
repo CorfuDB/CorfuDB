@@ -11,9 +11,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.ICorfuTable;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StringIndexer;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AppendException;
@@ -81,7 +80,7 @@ public class StreamTest extends AbstractTransactionsTest {
 
     @Test
     public void testTxnOverwriteRetry() throws Exception {
-        CorfuTable<String, String> map = instantiateCorfuObject(CorfuTable.class, "A");
+        ICorfuTable<String, String> map = instantiateCorfuObject(PersistentCorfuTable.class, "A");
         final Token trimMark = getTrimMark(getRuntime(), getRuntime().getParameters().getWriteRetry() - 1);
         final String key = "key";
         final String val = "val";
@@ -89,7 +88,7 @@ public class StreamTest extends AbstractTransactionsTest {
                 .getLogUnitClient(getDefaultConfigurationString());
         lu.prefixTrim(trimMark).get();
         TXBegin();
-        map.put(key, val);
+        map.insert(key, val);
 
         assertThatThrownBy(() ->TXEnd())
                 .isInstanceOf(TransactionAbortedException.class);
@@ -98,14 +97,14 @@ public class StreamTest extends AbstractTransactionsTest {
     @Test
     public void sequencerTrimTest() {
 
-        CorfuTable<String, String> map = instantiateCorfuObject(CorfuTable.class, "A");
+        ICorfuTable<String, String> map = instantiateCorfuObject(PersistentCorfuTable.class, "A");
         final int numEntries = 10;
         TXBegin();
         map.get("a");
         t2(() -> {
             TXBegin();
             for (int x = 0; x < numEntries; x++) {
-                map.put(Integer.toString(x), Integer.toString(x));
+                map.insert(Integer.toString(x), Integer.toString(x));
             }
             TXEnd();
         });
@@ -114,7 +113,7 @@ public class StreamTest extends AbstractTransactionsTest {
         getRuntime().getAddressSpaceView().prefixTrim(token);
 
         for (int x = 0; x < numEntries; x++) {
-            map.put(Integer.toString(x), Integer.toString(x));
+            map.insert(Integer.toString(x), Integer.toString(x));
         }
 
         boolean abortException = false;
@@ -132,18 +131,19 @@ public class StreamTest extends AbstractTransactionsTest {
     @Test
     public void sequencerOverflowTest() {
 
-        CorfuTable<String, String> map = instantiateCorfuObject(CorfuTable.class, "A");
+        ICorfuTable<String, String> map = instantiateCorfuObject(PersistentCorfuTable.class, "A");
         final int numEntries = 2000;
         boolean abortException = false;
 
         try {
             TXBegin();
-            map.put("0", "0");
+            map.insert("0", "0");
+            map.get("0"); // populate the txn conflict set
 
             t1(() -> {
                 for (int x = 0; x < numEntries; x++) {
                     TXBegin();
-                    map.put(Integer.toString(x), Integer.toString(x));
+                    map.insert(Integer.toString(x), Integer.toString(x));
                     TXEnd();
                 }
             });
@@ -163,17 +163,17 @@ public class StreamTest extends AbstractTransactionsTest {
         /**
          * Instantiate three streams with three SMRmap objects
          */
-        map1 = instantiateCorfuObject(CorfuTable.class, "A"); map1.clear();
-        map2 = instantiateCorfuObject(CorfuTable.class, "B"); map2.clear();
-        map3 = instantiateCorfuObject(CorfuTable.class, "foo"); map3.clear();
+        map1 = instantiateCorfuObject(PersistentCorfuTable.class, "A"); map1.clear();
+        map2 = instantiateCorfuObject(PersistentCorfuTable.class, "B"); map2.clear();
+        map3 = instantiateCorfuObject(PersistentCorfuTable.class, "foo"); map3.clear();
 
 
         // generate multi-stream entries
         WWTXBegin();
         for (int i = 0; i < smallNumber; i++) {
-            map1.put("m1" + i, i);
-            map2.put("m2" + i, i);
-            map3.put("m3" + i, i);
+            map1.insert("m1" + i, i);
+            map2.insert("m2" + i, i);
+            map3.insert("m3" + i, i);
         }
         TXEnd();
 
@@ -185,7 +185,7 @@ public class StreamTest extends AbstractTransactionsTest {
                 WWTXBegin();
             });
 
-        t(concurrency, () -> { WWTXBegin(); map2.put("foo", 0); TXEnd(); });
+        t(concurrency, () -> { WWTXBegin(); map2.insert("foo", 0); TXEnd(); });
 
         // now, thread 0..concurrency-1 have to go back in
         // the stream of map3 to its snapshot-position
@@ -193,7 +193,7 @@ public class StreamTest extends AbstractTransactionsTest {
             final int threadNum = j;
             t(threadNum, () -> {
                 try {
-                    map3.put("bar" + threadNum, 0);
+                    map3.insert("bar" + threadNum, 0);
                     TXEnd();
                 } catch (NullPointerException ne) {
                     throw new RuntimeException();
@@ -209,17 +209,17 @@ public class StreamTest extends AbstractTransactionsTest {
         /**
          * Instantiate three streams with three SMRmap objects
          */
-        map1 = instantiateCorfuObject(CorfuTable.class, "A");
-        map2 = instantiateCorfuObject(CorfuTable.class, "B");
-        map3 = instantiateCorfuObject(CorfuTable.class, "foo");
+        map1 = instantiateCorfuObject(PersistentCorfuTable.class, "A");
+        map2 = instantiateCorfuObject(PersistentCorfuTable.class, "B");
+        map3 = instantiateCorfuObject(PersistentCorfuTable.class, "foo");
 
         // populate maps
         for (int i = 0; i < NUM_BATCHES; i++) {
             WWTXBegin();
             for (int j = 0; j < BATCH_SZ; j++) {
-                map1.put("m1" + (i * BATCH_SZ + j), i);
-                map2.put("m2" + (i * BATCH_SZ + j), i);
-                map3.put("m3" + (i * BATCH_SZ + j), i);
+                map1.insert("m1" + (i * BATCH_SZ + j), i);
+                map2.insert("m2" + (i * BATCH_SZ + j), i);
+                map3.insert("m3" + (i * BATCH_SZ + j), i);
             }
             TXEnd();
         }
@@ -258,9 +258,9 @@ public class StreamTest extends AbstractTransactionsTest {
                     // perform random put()'s with probability '1 - readPercent/100'
                     if (rand.nextInt(MAX_PERCENT) >= readPercent) {
                         if (rand.nextInt(2) == 1)
-                            map2.put("m2" + rand.nextInt(numTasks), accumulator);
+                            map2.insert("m2" + rand.nextInt(numTasks), accumulator);
                         else
-                            map3.put("m3" + rand.nextInt(numTasks), accumulator);
+                            map3.insert("m3" + rand.nextInt(numTasks), accumulator);
                     }
                 });
             }
@@ -301,34 +301,12 @@ public class StreamTest extends AbstractTransactionsTest {
      */
     @Test (expected = TransactionAbortedException.class)
     public void checkTransactionAbortIfLookupByIndexWhenIndexNotSpecified() {
-        CorfuTable<String, String> map = instantiateCorfuObject(CorfuTable.class, "Test");
+        ICorfuTable<String, String> map = instantiateCorfuObject(PersistentCorfuTable.class, "Test");
 
         try {
             TXBegin();
-            map.put("ak", "av");
+            map.insert("ak", "av");
             map.getByIndex(StringIndexer.BY_FIRST_LETTER, "a");
-            TXEnd();
-        } catch (TransactionAbortedException tae) {
-            assertThat(tae.getAbortCause()).isEqualTo(AbortCause.UNDEFINED);
-            assertThat(tae.getCause().getClass()).isEqualTo(IllegalArgumentException.class);
-            throw tae;
-        }
-    }
-
-    /**
-     * Verify that a transaction is aborted if we attempt to lookup by index and filter,
-     * when the index has never been specified for this CorfuTable.
-     */
-    @Test (expected = TransactionAbortedException.class)
-    public void checkTransactionAbortIfLookupByIndexAndFilterWhenIndexNotSpecified() {
-        CorfuTable<String, String> map = instantiateCorfuObject(CorfuTable.class, "Test");
-
-        try {
-            TXBegin();
-            map.put("ab", "cccc");
-            map.put("ac", "bbbb");
-            map.put("ad", "bcbc");
-            map.getByIndexAndFilter(StringIndexer.BY_FIRST_LETTER, p -> p.getValue().contains("c"),"a");
             TXEnd();
         } catch (TransactionAbortedException tae) {
             assertThat(tae.getAbortCause()).isEqualTo(AbortCause.UNDEFINED);

@@ -138,7 +138,7 @@ final public class StreamAddressSpace {
      * Get the first address in this bitmap.
      * @return first address in the bitmap if its not empty, otherwise returns the trim mark
      */
-    private long getFirst() {
+    public long getFirst() {
         if (bitmap.isEmpty()) {
             return trimMark;
         }
@@ -342,7 +342,7 @@ final public class StreamAddressSpace {
      */
     public static StreamAddressSpace deserialize(DataInputStream in) throws IOException {
         long trimMark = in.readLong();
-        Roaring64NavigableMap map = new Roaring64NavigableMap();
+        Roaring64NavigableMap map = new Roaring64NavigableMap(false, false);
         map.deserialize(in);
         return new StreamAddressSpace(trimMark, map, true);
     }

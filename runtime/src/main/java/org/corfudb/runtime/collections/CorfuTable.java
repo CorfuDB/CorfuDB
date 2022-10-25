@@ -218,7 +218,6 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     }
 
     /** {@inheritDoc} */
-    @Override
     @Accessor
     public boolean containsValue(Object value) {
         return mainMap.containsValue(value);
@@ -243,7 +242,7 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     @Accessor
     public @Nonnull
     <I>
-    Collection<Entry<K, V>> getByIndex(@Nonnull Index.Name indexName, I indexKey) {
+    Collection<Map.Entry<K, V>> getByIndex(@Nonnull Index.Name indexName, I indexKey) {
         String secondaryIndex = indexName.get();
         Map<Object, Map<K, V>> secondaryMap;
         if ((secondaryIndexes.containsKey(secondaryIndex) &&
@@ -274,10 +273,10 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     public @Nonnull
     <I>
     Collection<Map.Entry<K, V>> getByIndexAndFilter(@Nonnull Index.Name indexName,
-                                                    @Nonnull Predicate<? super Entry<K, V>>
+                                                    @Nonnull Predicate<? super Map.Entry<K, V>>
                                                             entryPredicate,
                                                     I indexKey) {
-        Stream<Entry<K, V>> entryStream;
+        Stream<Map.Entry<K, V>> entryStream;
         String secondaryIndex = indexName.get();
         Map<Object, Map<K, V>> secondaryMap;
 
@@ -299,7 +298,6 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     }
 
     /** {@inheritDoc} */
-    @Override
     @MutatorAccessor(name = "put", undoFunction = "undoPut", undoRecordFunction = "undoPutRecord")
     public V put(@ConflictParameter K key, V value) {
         V previous = mainMap.put(key, value);
@@ -382,18 +380,16 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     }
 
     /** {@inheritDoc} */
-    @Override
     @Accessor
     public List<V> scanAndFilter(Predicate<? super V> valuePredicate) {
-        try (Stream<Entry<K, V>> entries = mainMap.unsafeEntryStream()) {
+        try (Stream<Map.Entry<K, V>> entries = mainMap.unsafeEntryStream()) {
             return pool.submit(() -> entries
-                    .map(Entry::getValue).filter(valuePredicate)
+                    .map(Map.Entry::getValue).filter(valuePredicate)
                     .collect(Collectors.toCollection(ArrayList::new))).join();
         }
     }
 
     /** {@inheritDoc} */
-    @Override
     @Accessor
     public Collection<Map.Entry<K, V>> scanAndFilterByEntry(
             Predicate<? super Map.Entry<K, V>> entryPredicate) {
@@ -405,7 +401,6 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     }
 
     /** {@inheritDoc} */
-    @Override
     @MutatorAccessor(name = "remove", undoFunction = "undoRemove",
             undoRecordFunction = "undoRemoveRecord")
     @SuppressWarnings("unchecked")
@@ -444,7 +439,6 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     }
 
     /** {@inheritDoc} */
-    @Override
     @Mutator(name = "putAll",
             undoFunction = "undoPutAll",
             undoRecordFunction = "undoPutAllRecord",
@@ -481,7 +475,6 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     }
 
     /** {@inheritDoc} */
-    @Override
     @Accessor
     public @Nonnull Collection<V> values() {
         return ImmutableList.copyOf(mainMap.values());
@@ -491,9 +484,8 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
      * Makes a shallow copy of the map (i.e. all map entries), but not the
      * key/values (i.e only the mappings are copied).
      **/
-    @Override
     @Accessor
-    public @Nonnull Set<Entry<K, V>> entrySet() {
+    public @Nonnull Set<Map.Entry<K, V>> entrySet() {
         return ImmutableListSetWrapper.fromMap(mainMap);
     }
 
@@ -505,27 +497,24 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
      * @return stream of entries
      */
     @Accessor
-    public @Nonnull Stream<Entry<K, V>> entryStream() {
+    public @Nonnull Stream<Map.Entry<K, V>> entryStream() {
         return mainMap.entryStream();
     }
 
 
     /** {@inheritDoc} */
-    @Override
     @Accessor
     public V getOrDefault(Object key, V defaultValue) {
         return mainMap.getOrDefault(key, defaultValue);
     }
 
     /** {@inheritDoc} */
-    @Override
     @Accessor
     public void forEach(BiConsumer<? super K, ? super V> action) {
         mainMap.forEach(action);
     }
 
     /** {@inheritDoc} */
-    @Override
     @TransactionalMethod
     public void replaceAll(BiFunction<? super K, ? super V, ? extends V> function) {
         Objects.requireNonNull(function);
@@ -553,7 +542,6 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     }
 
     /** {@inheritDoc} */
-    @Override
     @TransactionalMethod
     public V putIfAbsent(K key, V value) {
         V v = get(key);
@@ -565,7 +553,6 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     }
 
     /** {@inheritDoc} */
-    @Override
     @TransactionalMethod
     public boolean remove(Object key, Object value) {
         Object curValue = get(key);
@@ -578,7 +565,6 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     }
 
     /** {@inheritDoc} */
-    @Override
     @TransactionalMethod
     public V replace(K key, V value) {
         V curValue;
@@ -589,7 +575,6 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     }
 
     /** {@inheritDoc} */
-    @Override
     @TransactionalMethod
     public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
 
@@ -607,7 +592,6 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     }
 
     /** {@inheritDoc} */
-    @Override
     @TransactionalMethod
     public V computeIfPresent(K key, BiFunction<? super K, ? super V, ? extends V>
             remappingFunction) {
@@ -628,7 +612,6 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     }
 
     /** {@inheritDoc} */
-    @Override
     @TransactionalMethod
     public V merge(K key, V value, BiFunction<? super V, ? super V, ? extends V>
             remappingFunction) {

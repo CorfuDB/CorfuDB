@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
 
 import java.util.ArrayList;
-import java.util.Map;
 
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -22,7 +21,7 @@ public class UndoTest extends AbstractTransactionsTest {
     @Test
     public void ckCorrectUndo()
             throws Exception {
-        Map<String, String> testMap = getRuntime()
+        CorfuTable<String, String> testMap = getRuntime()
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
@@ -66,7 +65,7 @@ public class UndoTest extends AbstractTransactionsTest {
     @Test
     public void canRollbackWithoutUndo()
             throws Exception {
-        Map<String, String> testMap = getRuntime()
+        CorfuTable<String, String> testMap = getRuntime()
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
@@ -126,7 +125,7 @@ public class UndoTest extends AbstractTransactionsTest {
     @Test
     public void canUndoAfterNoUndo()
             throws Exception {
-        Map<Integer, String> testMap = getRuntime()
+        CorfuTable<Integer, String> testMap = getRuntime()
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
@@ -208,7 +207,7 @@ public class UndoTest extends AbstractTransactionsTest {
     @Test
     public void ckRollbackToRightPlace()
             throws Exception {
-        Map<Integer, String> testMap = getRuntime()
+        CorfuTable<Integer, String> testMap = getRuntime()
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
@@ -231,7 +230,7 @@ public class UndoTest extends AbstractTransactionsTest {
         // another update to the entry is committed while TXs are pending on
         // both t1 and t2
         WWTXBegin();
-        testMap.putIfAbsent(specialKey, specialValue);
+        testMap.put(specialKey, specialValue);
         TXEnd();
 
         // t2 starts a transaction. snapshot should include the second
@@ -270,7 +269,7 @@ public class UndoTest extends AbstractTransactionsTest {
     @Test
     public void ckMultiStreamRollback()
             throws Exception {
-        ArrayList<Map> maps = new ArrayList<>();
+        ArrayList<CorfuTable> maps = new ArrayList<>();
 
         final int nmaps = 3;
         for (int i = 0; i < nmaps; i++)
@@ -305,7 +304,7 @@ public class UndoTest extends AbstractTransactionsTest {
 
         // t1 should undo everything by t2 and by t3
         t(t1, () -> {
-            for (Map m : maps) {
+            for (CorfuTable m : maps) {
                 assertThat(m.get(specialKey))
                         .isEqualTo(normalValue);
                 assertThat(m.get(specialKey+1))
@@ -316,12 +315,12 @@ public class UndoTest extends AbstractTransactionsTest {
         // now, t2 optimistically modifying everything, but
         // not yet committing
         t(t2, () -> {
-                    for (Map m : maps)
+                    for (CorfuTable m : maps)
                         m.put(specialKey, specialValue2);
                 } );
 
         // main thread, t2's work should be committed
-        for (Map m : maps) {
+        for (CorfuTable m : maps) {
             assertThat(m.get(specialKey))
                     .isEqualTo(specialValue);
             assertThat(m.get(specialKey + 1))
@@ -341,7 +340,7 @@ public class UndoTest extends AbstractTransactionsTest {
         });
 
         // back to main thread, t2's work should be committed
-        for (Map m : maps) {
+        for (CorfuTable m : maps) {
             assertThat(m.get(specialKey))
                     .isEqualTo(specialValue);
             assertThat(m.get(specialKey + 1))
@@ -369,7 +368,7 @@ public class UndoTest extends AbstractTransactionsTest {
     @Test
     public void ckMultiStreamRollback2()
             throws Exception {
-        ArrayList<Map> maps = new ArrayList<>();
+        ArrayList<CorfuTable> maps = new ArrayList<>();
 
         final int nmaps = 3;
         for (int i = 0; i < nmaps; i++)
@@ -404,13 +403,13 @@ public class UndoTest extends AbstractTransactionsTest {
         // now, t2 optimistically modifying everything, but
         // not yet committing
         t(t2, () -> {
-            for (Map m : maps)
+            for (CorfuTable m : maps)
                 m.put(specialKey, specialValue2);
         } );
 
         // t1 should undo everything by t2 and by t3
         t(t1, () -> {
-            for (Map m : maps) {
+            for (CorfuTable m : maps) {
                 assertThat(m.get(specialKey))
                         .isEqualTo(normalValue);
                 assertThat(m.get(specialKey+1))
@@ -419,7 +418,7 @@ public class UndoTest extends AbstractTransactionsTest {
         });
 
         // main thread, t2's work should be committed
-        for (Map m : maps) {
+        for (CorfuTable m : maps) {
             assertThat(m.get(specialKey))
                     .isEqualTo(specialValue);
             assertThat(m.get(specialKey + 1))
@@ -428,15 +427,15 @@ public class UndoTest extends AbstractTransactionsTest {
 
     }
 
-    protected void crossStream(ArrayList<Map> maps, String value) {
+    protected void crossStream(ArrayList<CorfuTable> maps, String value) {
         // put a transaction across all streams
         WWTXBegin();
-        for (Map m : maps)
+        for (CorfuTable m : maps)
             m.put(specialKey, value);
         TXEnd();
 
         // put separate updates on all streams before t1 starts
-        for (Map m : maps)
+        for (CorfuTable m : maps)
             m.put(specialKey + 1, value);
     }
 

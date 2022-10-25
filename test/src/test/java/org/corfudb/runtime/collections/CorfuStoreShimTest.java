@@ -27,6 +27,7 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.test.SampleSchema;
@@ -46,6 +47,7 @@ import java.util.NoSuchElementException;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -237,7 +239,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         // By some future bug should the table disappear from the object cache ensure that
         // the method still fails gracefully with a NoSuchElementException
-        ObjectsView.ObjectID oid = new ObjectsView.ObjectID(table.getStreamUUID(), CorfuTable.class);
+        ObjectsView.ObjectID oid = new ObjectsView.ObjectID(table.getStreamUUID(), PersistentCorfuTable.class);
         corfuRuntime.getObjectsView().getObjectCache().remove(oid);
         assertThatThrownBy(() -> shimStore.freeTableData(someNamespace, tableName))
                 .isExactlyInstanceOf(NoSuchElementException.class);
@@ -943,19 +945,18 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         assertThat(TransactionalContext.isInTransaction()).isFalse();
 
         // ----- check nested transactions NOT started by CorfuStore isn't messed up by CorfuStore txn -----
-        CorfuTable<String, String>
+        PersistentCorfuTable<String, String>
                 corfuTable = corfuRuntime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                })
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .setStreamName("test")
                 .open();
 
         corfuRuntime.getObjectsView()
                 .TXBuild()
                 .type(TransactionType.WRITE_AFTER_WRITE).build().begin();
-        corfuTable.put("k1", "a"); // Load non-CorfuStore data
-        corfuTable.put("k2", "ab");
-        corfuTable.put("k3", "b");
+        corfuTable.insert("k1", "a"); // Load non-CorfuStore data
+        corfuTable.insert("k2", "ab");
+        corfuTable.insert("k3", "b");
         CorfuStoreEntry<UuidMsg, ManagedMetadata, ManagedMetadata> entry;
         try (ManagedTxnContext nestedTxn = shimStore.txn(someNamespace)) {
             nestedTxn.putRecord(tableName, key, ManagedMetadata.newBuilder().setLastModifiedUser("secondUser").build());
@@ -1246,7 +1247,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                     TableOptions.builder().build());
         }
 
-        final CorfuTable<ProtobufFileName,
+        final PersistentCorfuTable<ProtobufFileName,
                 CorfuRecord<ProtobufFileDescriptor,
                         CorfuStoreMetadata.TableMetadata>> descriptorTable =
                 shimStore.getRuntime().getTableRegistry().getProtobufDescriptorTable();
@@ -1264,8 +1265,9 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                 .setNamespace(someNamespace)
                 .setTableName(tableNamePrefix + "0")
                 .build();
+
         Collection<CorfuRecord<ProtobufFileDescriptor, CorfuStoreMetadata.TableMetadata>> records =
-                corfuRuntime.getTableRegistry().getProtobufDescriptorTable().values();
+                corfuRuntime.getTableRegistry().getProtobufDescriptorTable().entryStream().map(Map.Entry::getValue).collect(Collectors.toList());
 
         shimStore.openTable(
                 someNamespace,
@@ -1282,10 +1284,19 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         // verify the second registration is omitted.
         final int numProtoFilesAfterChange =
                 corfuRuntime.getTableRegistry().getProtobufDescriptorTable().size();
-        final Collection<CorfuRecord<ProtobufFileDescriptor, CorfuStoreMetadata.TableMetadata>>
-                recordsAfterChange = corfuRuntime.getTableRegistry().getProtobufDescriptorTable().values();
-        records = corfuRuntime.getTableRegistry().getProtobufDescriptorTable().values(); // refresh descriptor table
-        assertThat(numProtoFiles).isEqualTo(numProtoFilesAfterChange - 1); // we added new protofile logdata
+
+        final Collection<CorfuRecord<ProtobufFileDescriptor, CorfuStoreMetadata.TableMetadata>> recordsAfterChange =
+                corfuRuntime.getTableRegistry().getProtobufDescriptorTable().entryStream().map(Map.Entry::getValue).collect(Collectors.toList());
+
+        // Refresh descriptor table
+        records = corfuRuntime.getTableRegistry()
+                .getProtobufDescriptorTable()
+                .entryStream()
+                .map(Map.Entry::getValue)
+                .collect(Collectors.toList());
+
+        // We added new protofile logdata
+        assertThat(numProtoFiles).isEqualTo(numProtoFilesAfterChange - 1);
         assertThat(records).containsExactlyElementsOf(recordsAfterChange);
     }
 
