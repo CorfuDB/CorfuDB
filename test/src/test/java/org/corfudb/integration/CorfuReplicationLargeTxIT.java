@@ -2,7 +2,6 @@ package org.corfudb.integration;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultLogReplicationConfigAdapter;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
@@ -117,9 +116,7 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
             new CountDownLatch(totalStreamingUpdates);
         StreamingUpdateListener streamingUpdateListener =
             new StreamingUpdateListener(streamingUpdatesLatch);
-        corfuStoreStandby.subscribeListener(streamingUpdateListener,
-            DefaultLogReplicationConfigAdapter.NAMESPACE,
-            DefaultLogReplicationConfigAdapter.TAG_ONE);
+        corfuStoreStandby.subscribeListener(streamingUpdateListener, NAMESPACE, TAG_ONE);
 
         startLogReplicatorServersWithCustomMaxWriteSize(maxWriteSize);
 

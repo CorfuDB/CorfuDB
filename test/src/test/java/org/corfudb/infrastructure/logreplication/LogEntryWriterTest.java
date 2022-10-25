@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.collections.TxnContext;
@@ -36,10 +37,16 @@ public class LogEntryWriterTest extends AbstractViewTest {
     @Before
     public void setUp() {
         corfuRuntime = getDefaultRuntime();
+        // Initialize TableRegistry and register ProtobufSerializer
+        corfuRuntime.getTableRegistry();
         LogReplicationConfig replicationConfig = Mockito.mock(LogReplicationConfig.class);
         metadataManager = Mockito.mock(LogReplicationMetadataManager.class);
         initMocksForMetadataManager();
-        logEntryWriter = new LogEntryWriter(corfuRuntime, replicationConfig, metadataManager);
+        // Mocking steps for initializing LogEntryWriter.
+        LogReplicationConfigManager mockConfigManager = Mockito.mock(LogReplicationConfigManager.class);
+        Mockito.doReturn(mockConfigManager).when(replicationConfig).getConfigManager();
+        Mockito.doReturn(corfuRuntime).when(mockConfigManager).getConfigRuntime();
+        logEntryWriter = new LogEntryWriter(replicationConfig, metadataManager);
         numOpaqueEntries = 3;
         topologyConfigId = 5;
         utils = new TestUtils();

@@ -1,12 +1,15 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import io.micrometer.core.instrument.LongTaskTimer;
 import io.micrometer.core.instrument.Tag;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.infrastructure.AbstractServer;
+import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.LogReplicationServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
@@ -44,10 +47,8 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -343,8 +344,12 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         logReplicationServerHandler.setActive(localClusterDescriptor.getRole().equals(ClusterRole.ACTIVE));
         logReplicationServerHandler.setStandby(localClusterDescriptor.getRole().equals(ClusterRole.STANDBY));
 
-        interClusterReplicationService = new CorfuInterClusterReplicationServerNode(serverContext,
-            logReplicationServerHandler, logReplicationConfig);
+        interClusterReplicationService = new CorfuInterClusterReplicationServerNode(
+                serverContext,
+                ImmutableMap.<Class, AbstractServer>builder()
+                        .put(BaseServer.class, new BaseServer(serverContext))
+                        .put(LogReplicationServer.class, logReplicationServerHandler)
+                        .build());
 
         replicationContext = new LogReplicationContext(logReplicationConfig, topologyDescriptor, localCorfuEndpoint);
 
@@ -423,15 +428,12 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             replicationConfigManager =
                 new LogReplicationConfigManager(runtime, serverContext.getPluginConfigFilePath());
 
-            Set<String> streamsToReplicate = replicationConfigManager.getStreamsToReplicate();
-
-            Map<UUID, List<UUID>> streamingConfigSink = replicationConfigManager.getStreamingConfigOnSink();
-
-            return new LogReplicationConfig(streamsToReplicate,
-                    streamingConfigSink,
+            return new LogReplicationConfig(
+                    replicationConfigManager,
                     serverContext.getLogReplicationMaxNumMsgPerBatch(),
                     serverContext.getLogReplicationMaxDataMessageSize(),
-                    serverContext.getLogReplicationCacheMaxSize());
+                    serverContext.getLogReplicationCacheMaxSize()
+            );
         } catch (Throwable t) {
             log.error("Exception when fetching the Replication Config", t);
             throw t;
