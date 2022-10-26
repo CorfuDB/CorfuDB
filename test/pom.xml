@@ -83,8 +83,8 @@
                             <includeStdTypes>true</includeStdTypes>
                             <addProtoSources>inputs</addProtoSources>
                             <includeDirectories>
-                                <includeDirectory>../runtime/proto</includeDirectory>
-                                <includeDirectory>src/test/resources/proto</includeDirectory>
+                                <include>../runtime/proto</include>
+                                <include>src/test/resources/proto</include>
                             </includeDirectories>
                             <inputDirectories>
                                 <include>../runtime/proto</include>
