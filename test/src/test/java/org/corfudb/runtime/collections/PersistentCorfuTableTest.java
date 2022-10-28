@@ -402,6 +402,10 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         rt.getObjectsView().TXEnd();
     }
 
+    /**
+     * Verify that a transaction does not observe uncommitted changes by another
+     * parallel transaction.
+     */
     @Test
     public void testUncommittedChangesIsolationBetweenParallelTxns() throws Exception {
         addSingleServer(SERVERS.PORT_0);
@@ -417,7 +421,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         TestSchema.Uuid payload1 = TestSchema.Uuid.newBuilder().setLsb(1).setMsb(1).build();
         TestSchema.Uuid payload2 = TestSchema.Uuid.newBuilder().setLsb(2).setMsb(2).build();
         TestSchema.Uuid metadata1 = TestSchema.Uuid.newBuilder().setLsb(1).setMsb(1).build();
-        CorfuRecord value1 = new CorfuRecord(payload1, metadata1);
+        CorfuRecord<TestSchema.Uuid, TestSchema.Uuid> value1 = new CorfuRecord<>(payload1, metadata1);
 
         // put(k1, v1)
         rt.getObjectsView().TXBegin();
@@ -426,6 +430,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         assertThat(corfuTable.get(key1).getPayload().getLsb()).isEqualTo(payload1.getLsb());
 
         CountDownLatch readLatch = new CountDownLatch(1);
+        CountDownLatch writeLatch = new CountDownLatch(1);
         AtomicLong readerResult = new AtomicLong();
         AtomicLong writerResult = new AtomicLong();
 
@@ -437,20 +442,32 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
+
             // Changes made by writeThread should be isolated.
             readerResult.set(corfuTable.get(key1).getPayload().getLsb());
+
+            // Read is done. Signal the writerThread to commit
+            writeLatch.countDown();
             rt.getObjectsView().TXEnd();
         });
 
         // put(k1, v2) to overwrite the previous put, but do not commit
         Thread writerThread = new Thread(() -> {
             rt.getObjectsView().TXBegin();
-            CorfuRecord value2 = new CorfuRecord(payload2, metadata1);
+            CorfuRecord<TestSchema.Uuid, TestSchema.Uuid> value2 = new CorfuRecord<>(payload2, metadata1);
             corfuTable.insert(key1, value2);
             writerResult.set(corfuTable.get(key1).getPayload().getLsb());
 
             // Signals the readerThread to read
             readLatch.countDown();
+
+            try {
+                // Unblocked until the readThread has read the table.
+                // Without this, the readThread might read this change as a committed transaction.
+                writeLatch.await();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
             rt.getObjectsView().TXEnd();
         });
 
