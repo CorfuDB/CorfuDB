@@ -4,7 +4,6 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
 import lombok.Getter;
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang.ObjectUtils;
 import org.corfudb.infrastructure.log.LogFormat;
 import org.corfudb.infrastructure.log.LogFormat.LogEntry;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
@@ -38,7 +37,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.Set;
 import java.util.Arrays;
@@ -136,8 +134,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
             snapshotAddress = Long.decode(((CheckpointEntry)modifiedData).
                     getDict().
                     get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS));
-            MultiSMREntry smrEntries = ((CheckpointEntry) modifiedData).
-                    getSmrEntries(false, runtimeSerializer);
+            MultiSMREntry smrEntries = ((CheckpointEntry) modifiedData).getSmrEntries();
             if (smrEntries != null) {
                 smrUpdates = smrEntries.getUpdates();
             }
@@ -432,7 +429,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         }
 
         public void insert(Object key, Object value, long address) {
-            if ((table.containsKey(key)) && (((OrderedObject) table.get(key)).getOrder() > address)) {
+            if (table.containsKey(key) && ((OrderedObject) table.get(key)).getOrder() > address) {
                 return;
             }
             table.put(key, new OrderedObject(value, address));
@@ -444,11 +441,11 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
 
         public ConcurrentMap getTrimmedTable() {
 
-            ConcurrentMap trimmedTable = new ConcurrentHashMap<>();;
+            ConcurrentMap trimmedTable = new ConcurrentHashMap<>();
             Set<Map.Entry<Object, OrderedObject>> entries = table.entrySet();
             for (Map.Entry<Object, OrderedObject> entry: entries) {
                 OrderedObject value = entry.getValue();
-                if ((value.getOrder() > clearTableTxn) && (value.getUpdate() != null)) {
+                if (value.getOrder() > clearTableTxn && value.getUpdate() != null) {
                     trimmedTable.put(entry.getKey(), value.getUpdate());
                 }
             }

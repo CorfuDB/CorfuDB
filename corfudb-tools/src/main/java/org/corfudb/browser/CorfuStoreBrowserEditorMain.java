@@ -106,19 +106,24 @@ public class CorfuStoreBrowserEditorMain {
         }
     }
 
-    private static String getOfflineDBDir(Map<String, Object> opts) {
+    /* If host parameter found, OnlineBrowser mode
+       No host param, looks for offline-db-dir param
+     */
+    private static String getHostName(Map<String, Object> opts) {
         try {
-            String path = opts.get("--offline-db-dir").toString();
-            return path;
+            String host = opts.get("--host").toString();
+            return host;
         } catch (Exception e) {
             return null;
         }
     }
 
-    private static String getHostName(Map<String, Object> opts) {
+    /* If directory parameter found, OfflineBrowser mode
+     */
+    private static String getOfflineDBDir(Map<String, Object> opts) {
         try {
-            String host = opts.get("--host").toString();
-            return host;
+            String path = opts.get("--offline-db-dir").toString();
+            return path;
         } catch (Exception e) {
             return null;
         }
