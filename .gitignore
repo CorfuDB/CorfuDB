@@ -227,3 +227,6 @@ test/.jqwik-database
 .flattened-pom.xml
 /*/.flattened-pom.xml
 tags
+
+# Docker
+.ci/lib/
