@@ -17,6 +17,8 @@ import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.ObjectOpenOption;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.test.TestSchema;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
@@ -475,6 +477,41 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         assertThat(readerResult.get()).isEqualTo(payload1.getLsb());
         assertThat(writerResult.get()).isEqualTo(payload2.getLsb());
+    }
+
+    /**
+     * For MVO instances, the ObjectOpenOption.NO_CACHE should ensure that the instance
+     * is not saved in ObjectsView.objectCache
+     */
+    @Test
+    public void testNoCacheOption() {
+        addSingleServer(SERVERS.PORT_0);
+        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(LARGE_CACHE_SIZE)
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+        setupSerializer();
+
+        UUID streamA = UUID.randomUUID();
+        UUID streamB = UUID.randomUUID();
+
+        rt.getObjectsView()
+                .build()
+                .setStreamID(streamA)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .option(ObjectOpenOption.CACHE)
+                .open();
+
+        rt.getObjectsView()
+                .build()
+                .setStreamID(streamB)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .option(ObjectOpenOption.NO_CACHE)
+                .open();
+
+        assertThat(rt.getObjectsView().getObjectCache()).containsOnlyKeys(
+                new ObjectsView.ObjectID(streamA, PersistentCorfuTable.class));
     }
 
     // PersistentCorfuTable SecondaryIndexes Tests - Adapted From CorfuTableTest & CorfuStoreSecondaryIndexTest

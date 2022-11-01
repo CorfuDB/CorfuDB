@@ -14,8 +14,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import javax.annotation.Nonnull;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 
 /**
@@ -25,12 +23,6 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 public class MVOCache<T extends ICorfuSMR<T>> {
-
-    /**
-     * A registry to keep track of all opened MVOs.
-     */
-    @Getter
-    private final ConcurrentHashMap<UUID, MultiVersionObject<T>> allMVOs = new ConcurrentHashMap<>();
 
     /**
      * A collection of strong references to all versioned objects and their state.
@@ -83,15 +75,6 @@ public class MVOCache<T extends ICorfuSMR<T>> {
         }
 
         objectCache.put(voId, object);
-    }
-
-    /**
-     * Register an MVO with this MVOCache.
-     * @param objectId The stream id of the provided MVO.
-     * @param mvo      The actual MVO being registered.
-     */
-    public void registerMVO(@Nonnull UUID objectId, @Nonnull MultiVersionObject<T> mvo) {
-        allMVOs.putIfAbsent(objectId, mvo);
     }
 
     @VisibleForTesting

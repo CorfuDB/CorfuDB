@@ -21,7 +21,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.MVOCache;
-import org.corfudb.runtime.object.MultiVersionObject;
+import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.Transaction;
 import org.corfudb.runtime.object.transactions.Transaction.TransactionBuilder;
@@ -233,12 +233,12 @@ public class ObjectsView extends AbstractView {
             if (((ICorfuSMR) obj).getCorfuSMRProxy() instanceof CorfuCompileProxy) {
                 ((CorfuCompileProxy) ((ICorfuSMR) obj).
                         getCorfuSMRProxy()).getUnderlyingObject().gc(trimMark);
+            } else {
+                // MVOCorfuCompileProxy
+                ((MVOCorfuCompileProxy) ((ICorfuSMR) obj).
+                        getCorfuSMRProxy()).getUnderlyingMVO().gc(trimMark);
             }
         }
-
-        mvoCache.getAllMVOs().forEach((uuid, mvo) -> {
-            ((MultiVersionObject) mvo).gc(trimMark);
-        });
     }
 
     @Data
