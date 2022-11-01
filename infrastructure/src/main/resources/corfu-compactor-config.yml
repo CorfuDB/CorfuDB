@@ -1,0 +1,26 @@
+GCParameters:
+  UseConcMarkSweepGC: yes
+  PrintGCDetails: yes
+  PrintGCTimeStamps: yes
+  PrintGCDateStamps: yes
+  Logpath: /var/log/corfu/compactor-gc.log
+  UseGCLogFileRotation: yes
+  NumberOfGCLogFiles: 10
+  GCLogFileSize: 1M
+
+ConfigFiles:
+  CompactorLogPath: /usr/share/corfu/conf/compactor-logback.prod.xml
+  TempDir: /image/corfu-tools/temp
+  ClassPath: /usr/share/corfu/lib/corfudb-tools*jar
+  HeapDumpPath: /image/core/compactor_oom.hprof
+
+CorfuPaths:
+  CorfuMemLogPrefix: /dev/shm/corfu.jvm.gc.
+  CorfuDiskLogDir: /var/log/corfu/jvm
+
+Security:
+  Keystore: /certs/keystore.jks
+  KsPassword: /password/password
+  Truststore: /certs/truststore.jks
+  TruststorePassword: /password/password
+
