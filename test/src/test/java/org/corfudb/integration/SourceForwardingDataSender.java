@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * This is an implementation of the DataSender (data path layer) used for testing purposes.
- *
+ * <p>
  * It emulates the channel by directly forwarding messages to the destination log replication sink manager
  * (for processing).
  */
@@ -41,16 +41,16 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
     private final static int DROP_INCREMENT = 4;
 
     // Runtime to remote/destination Corfu Server
-    private CorfuRuntime runtime;
+    private final CorfuRuntime runtime;
 
     // Manager in remote/destination site, to emulate the channel, we instantiate the destination receiver
-    private LogReplicationSinkManager destinationLogReplicationManager;
+    private final LogReplicationSinkManager destinationLogReplicationManager;
 
     // Destination DataSender
-    private AckDataSender destinationDataSender;
+    private final AckDataSender destinationDataSender;
 
     // Destination DataControl
-    private DefaultDataControl destinationDataControl;
+    private final DefaultDataControl destinationDataControl;
 
     private int errorCount = 0;
 
@@ -80,12 +80,12 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
     private int countDelayedApplyCycles = 0;
     private boolean timeoutMetadataResponse = false;
 
-    private LogReplicationIT.TransitionSource callbackFunction;
+    private final LogReplicationIT.TransitionSource callbackFunction;
 
     @Getter
     private ObservableValue errors = new ObservableValue(errorCount);
 
-    private ObservableValue<LogReplicationMetadataResponseMsg> metadataResponseObservable;
+    private final ObservableValue<LogReplicationMetadataResponseMsg> metadataResponseObservable;
 
     private long lastAckDropped;
 

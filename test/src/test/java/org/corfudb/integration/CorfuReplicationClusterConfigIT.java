@@ -18,6 +18,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.ExampleSchemas.ClusterUuidMsg;
 import org.corfudb.runtime.MultiCheckpointWriter;
@@ -30,8 +31,8 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.view.ObjectsView;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
@@ -113,7 +114,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         activeCorfuServer = runServer(activeClusterCorfuPort, true);
         standbyCorfuServer = runServer(standbyClusterCorfuPort, true);
 
-        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
+        CorfuRuntimeParameters params = CorfuRuntimeParameters
                 .builder()
                 .build();
 
@@ -664,7 +665,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             );
 
             PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord> corfuTable =
-                    createCorfuTable(cpRuntime, fullTableName, dynamicProtoBufSerializer);
+                    createCorfuTableUnsafe(cpRuntime, fullTableName, dynamicProtoBufSerializer);
 
             log.info("Checkpointing - {}", fullTableName);
             mcw = new MultiCheckpointWriter<>();
@@ -692,6 +693,10 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         cpRuntime.getAddressSpaceView().invalidateClientCache();
         cpRuntime.getAddressSpaceView().invalidateServerCaches();
         cpRuntime.getAddressSpaceView().gc();
+
+        for (ICorfuSMR<PersistentCorfuTable<?, ?>> table : mcw.getTables()) {
+            table.close();
+        }
     }
 
     /**
@@ -788,43 +793,43 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // (4) Write noisy streams and check remaining entries
         // Write 'N' entries to active noisy map
         long txTail = activeRuntime.getSequencerView().query(ObjectsView.getLogReplicatorStreamId());
-        PersistentCorfuTable<String, Integer> noisyMap = activeRuntime.getObjectsView()
+        try(PersistentCorfuTable<String, Integer> noisyMap = activeRuntime.getObjectsView()
                 .build()
                 .setStreamName(streamName+"noisy")
                 .setStreamTags(ObjectsView.getLogReplicatorStreamId())
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, Integer>>() {
-                })
-                .open();
-        for (int i = 0; i < firstBatch; i++) {
-            activeRuntime.getObjectsView().TXBegin();
-            noisyMap.insert(String.valueOf(i), i);
-            activeRuntime.getObjectsView().TXEnd();
-        }
-        assertThat(noisyMap.size()).isEqualTo(firstBatch);
-        long newTxTail = activeRuntime.getSequencerView().query(ObjectsView.getLogReplicatorStreamId());
-        assertThat(newTxTail-txTail).isGreaterThanOrEqualTo(firstBatch);
+                .setTypeToken(PersistentCorfuTable.<String, Integer>getTableType())
+                .open()) {
+            for (int i = 0; i < firstBatch; i++) {
+                activeRuntime.getObjectsView().TXBegin();
+                noisyMap.insert(String.valueOf(i), i);
+                activeRuntime.getObjectsView().TXEnd();
+            }
+            assertThat(noisyMap.size()).isEqualTo(firstBatch);
+            long newTxTail = activeRuntime.getSequencerView().query(ObjectsView.getLogReplicatorStreamId());
+            assertThat(newTxTail - txTail).isGreaterThanOrEqualTo(firstBatch);
 
-        // Wait the polling period time and verify sync status again (to make sure it was not erroneously updated)
-        Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + deltaSeconds));
+            // Wait the polling period time and verify sync status again (to make sure it was not erroneously updated)
+            Sleep.sleepUninterruptibly(Duration.ofSeconds(LogReplicationAckReader.ACKED_TS_READ_INTERVAL_SECONDS + deltaSeconds));
 
-        try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            standbyStatus = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, standbyClusterId).getPayload();
-            txn.commit();
-        }
-
-        // Confirm remaining entries is equal to 0
-        assertThat(standbyStatus.getRemainingEntriesToSend()).isEqualTo(0L);
-
-        // (5) Confirm that if standby LR is stopped, in the middle of replication, the status changes to STOPPED
-        shutdownCorfuServer(standbyReplicationServer);
-
-        while (!standbyStatus.getStatus().equals(LogReplicationMetadata.SyncStatus.STOPPED)) {
             try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
                 standbyStatus = (ReplicationStatusVal) txn.getRecord(REPLICATION_STATUS_TABLE, standbyClusterId).getPayload();
                 txn.commit();
             }
+
+            // Confirm remaining entries is equal to 0
+            assertThat(standbyStatus.getRemainingEntriesToSend()).isEqualTo(0L);
+
+            // (5) Confirm that if standby LR is stopped, in the middle of replication, the status changes to STOPPED
+            shutdownCorfuServer(standbyReplicationServer);
+
+            while (!standbyStatus.getStatus().equals(LogReplicationMetadata.SyncStatus.STOPPED)) {
+                try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                    standbyStatus = (ReplicationStatusVal) txn.getRecord(REPLICATION_STATUS_TABLE, standbyClusterId).getPayload();
+                    txn.commit();
+                }
+            }
+            assertThat(standbyStatus.getStatus()).isEqualTo(LogReplicationMetadata.SyncStatus.STOPPED);
         }
-        assertThat(standbyStatus.getStatus()).isEqualTo(LogReplicationMetadata.SyncStatus.STOPPED);
     }
 
     /**
@@ -1539,7 +1544,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         Process backupCorfu = runServer(backupClusterCorfuPort, true);
         Process backupReplicationServer = runReplicationServer(backupReplicationServerPort, nettyPluginPath);
 
-        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
+        CorfuRuntimeParameters params = CorfuRuntimeParameters
                 .builder()
                 .build();
         CorfuRuntime backupRuntime = CorfuRuntime.fromParameters(params);
@@ -1637,6 +1642,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 backupRuntime.getAddressSpaceView().getLogTail(), standbyClusterCorfuPort,
                 standbyRuntime.getAddressSpaceView().getLogTail());
 
+        backupRuntime.shutdown();
         shutdownCorfuServer(backupCorfu);
         shutdownCorfuServer(backupReplicationServer);
     }

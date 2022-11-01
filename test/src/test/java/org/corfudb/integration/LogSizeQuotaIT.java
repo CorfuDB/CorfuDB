@@ -70,68 +70,71 @@ public class LogSizeQuotaIT extends AbstractIT {
         CorfuRuntime rt = createRuntime(DEFAULT_ENDPOINT);
 
         // Create a table
-        PersistentCorfuTable<String, String> table = createCorfuTable(rt, "s1");
-        table.insert("k1", "v1");
-        table.insert("k2", "v2");
+        createCorfuTableStr(rt, "s1", table -> {
+            table.insert("k1", "v1");
+            table.insert("k2", "v2");
 
-        // Create a stream and keep writing data till the quota is exhausted
-        // quota is exhausted
-        UUID streamId = UUID.randomUUID();
-        IStreamView sv = rt.getStreamsView().get(streamId);
+            // Create a stream and keep writing data till the quota is exhausted
+            // quota is exhausted
+            UUID streamId = UUID.randomUUID();
+            IStreamView sv = rt.getStreamsView().get(streamId);
 
-        exhaustQuota(sv);
+            exhaustQuota(sv);
 
-        // Verify that transactions will fail after the quota is exceeded
-        boolean txnAborted = false;
-        try {
-            rt.getObjectsView().TXBegin();
-            table.insert("largeEntry", "Val");
-            rt.getObjectsView().TXEnd();
-        } catch (TransactionAbortedException tae) {
-            assertThat(tae.getAbortCause()).isEqualTo(AbortCause.QUOTA_EXCEEDED);
-            txnAborted = true;
-        }
+            // Verify that transactions will fail after the quota is exceeded
+            boolean txnAborted = false;
+            try {
+                rt.getObjectsView().TXBegin();
+                table.insert("largeEntry", "Val");
+                rt.getObjectsView().TXEnd();
+            } catch (TransactionAbortedException tae) {
+                assertThat(tae.getAbortCause()).isEqualTo(AbortCause.QUOTA_EXCEEDED);
+                txnAborted = true;
+            }
 
-        assertThat(txnAborted).isTrue();
+            assertThat(txnAborted).isTrue();
 
-        // bump up the sequencer counter to create multiple empty segments
-        final int emptySlots = StreamLogFiles.RECORDS_PER_LOG_FILE;
-        for (int x = 0; x < emptySlots; x++) {
-            rt.getSequencerView().next();
-        }
+            // bump up the sequencer counter to create multiple empty segments
+            final int emptySlots = StreamLogFiles.RECORDS_PER_LOG_FILE;
+            for (int x = 0; x < emptySlots; x++) {
+                rt.getSequencerView().next();
+            }
 
-        // Create a privileged client to checkpoint and compact
-        CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder paramsBuilder =
-                CorfuRuntime.CorfuRuntimeParameters.builder().priorityLevel(PriorityLevel.HIGH);
+            // Create a privileged client to checkpoint and compact
+            CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder paramsBuilder =
+                    CorfuRuntime.CorfuRuntimeParameters.builder().priorityLevel(PriorityLevel.HIGH);
 
-        CorfuRuntime privilegedRt = createRuntime(DEFAULT_ENDPOINT, paramsBuilder);
-        privilegedRt.parseConfigurationString(DEFAULT_ENDPOINT);
-        privilegedRt.connect();
+            CorfuRuntime privilegedRt = createRuntime(DEFAULT_ENDPOINT, paramsBuilder);
+            privilegedRt.parseConfigurationString(DEFAULT_ENDPOINT);
+            privilegedRt.connect();
 
-        PersistentCorfuTable<String, String> table2 = createCorfuTable(privilegedRt, "s1");
+            createCorfuTableStr(privilegedRt, "s1", table2 -> {
+                // Verify that a high priority client can write to a table
+                table2.insert("k4", "v4");
 
-        // Verify that a high priority client can write to a table
-        table2.insert("k4", "v4");
+                // Verify that the high priority client can checkpoint/trim
+                MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();
+                mcw.addMap(table2);
+                Token token = mcw.appendCheckpoints(privilegedRt, "privilegedWriter");
+                privilegedRt.getAddressSpaceView().prefixTrim(token);
+                privilegedRt.getAddressSpaceView().gc();
 
-        // Verify that the high priority client can checkpoint/trim
-        MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();
-        mcw.addMap(table2);
-        Token token = mcw.appendCheckpoints(privilegedRt, "privilegedWriter");
-        privilegedRt.getAddressSpaceView().prefixTrim(token);
-        privilegedRt.getAddressSpaceView().gc();
+                // Now verify that the original client (i.e. has a normal priority) is
+                // able to write after some of the quota has been freed
+                table.insert("k3", "v3");
 
-        // Now verify that the original client (i.e. has a normal priority) is
-        // able to write after some of the quota has been freed
-        table.insert("k3", "v3");
+                // Now verify that all those changes can be observed from a new client
+                CorfuRuntime rt3 = createRuntime(DEFAULT_ENDPOINT);
+                createCorfuTableStr(rt3, "s1", table3 -> {
+                    assertThat(table3.get("k1")).isEqualTo("v1");
+                    assertThat(table3.get("k2")).isEqualTo("v2");
+                    assertThat(table3.get("k3")).isEqualTo("v3");
+                    assertThat(table3.get("k4")).isEqualTo("v4");
+                });
+            });
+        });
 
-        // Now verify that all those changes can be observed from a new client
-        CorfuRuntime rt3 = createRuntime(DEFAULT_ENDPOINT);
-        PersistentCorfuTable<String, String> table3 = createCorfuTable(rt3, "s1");
-
-        assertThat(table3.get("k1")).isEqualTo("v1");
-        assertThat(table3.get("k2")).isEqualTo("v2");
-        assertThat(table3.get("k3")).isEqualTo("v3");
-        assertThat(table3.get("k4")).isEqualTo("v4");
+        shutdownCorfuServer(server_1);
     }
 
     @Test

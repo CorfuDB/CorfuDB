@@ -42,7 +42,7 @@ public class LargeWriteIT extends AbstractIT {
                 .maxWriteSize(maxWriteSize)
                 .codecType(Codec.Type.NONE);
 
-        runtime = createRuntime(DEFAULT_ENDPOINT, paramsBuilder);
+        CorfuRuntime runtime = createRuntime(DEFAULT_ENDPOINT, paramsBuilder);
         final int bufSize = maxWriteSize * 2;
 
         // Attempt to write a payload that is greater than the configured limit.
@@ -72,7 +72,7 @@ public class LargeWriteIT extends AbstractIT {
                 .maxWriteSize(maxWriteSize)
                 .codecType(Codec.Type.NONE);
 
-        runtime = createRuntime(DEFAULT_ENDPOINT, paramsBuilder);
+        CorfuRuntime runtime = createRuntime(DEFAULT_ENDPOINT, paramsBuilder);
         byte[] largePayload = new byte[maxWriteSize * 2];
 
         PersistentCorfuTable<String, byte[]> map = runtime.getObjectsView()

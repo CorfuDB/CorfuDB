@@ -21,6 +21,7 @@ import org.corfudb.infrastructure.logreplication.replication.send.LogReplication
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
@@ -30,12 +31,7 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.service.CorfuMessage;
-
-
-
-import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.Utils;
 import org.junit.Test;
 
@@ -58,7 +54,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
-import static org.corfudb.integration.LogReplicationAbstractIT.checkpointAndTrimCorfuStore;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 
 /**
@@ -75,7 +70,7 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
  * reaches the destination after initiating log replication.
  */
 @Slf4j
-public class LogReplicationIT extends AbstractIT implements Observer {
+public class LogReplicationIT extends LogReplicationAbstractIT implements Observer {
 
     public static final String nettyConfig = "./test/src/test/resources/transport/nettyConfig.properties";
 
@@ -195,11 +190,11 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     /**
      * Setup Test Environment
-     *
+     * <p>
      * - Two independent Corfu Servers (source and destination)
      * - CorfuRuntime's to each Corfu Server
      *
-     * @throws IOException
+     * @throws IOException error
      */
     private void setupEnv() throws IOException {
         // Source Corfu Server (data will be written to this server)
@@ -216,25 +211,29 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 .setSingle(true)
                 .runServer();
 
-        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
+        CorfuRuntimeParameters params = CorfuRuntimeParameters
                 .builder()
                 .build();
 
         srcDataRuntime = CorfuRuntime.fromParameters(params);
         srcDataRuntime.parseConfigurationString(SOURCE_ENDPOINT);
         srcDataRuntime.connect();
+        managed(srcDataRuntime);
 
         srcTestRuntime = CorfuRuntime.fromParameters(params);
         srcTestRuntime.parseConfigurationString(SOURCE_ENDPOINT);
         srcTestRuntime.connect();
+        managed(srcTestRuntime);
 
         dstDataRuntime = CorfuRuntime.fromParameters(params);
         dstDataRuntime.parseConfigurationString(DESTINATION_ENDPOINT);
         dstDataRuntime.connect();
+        managed(dstDataRuntime);
 
         dstTestRuntime = CorfuRuntime.fromParameters(params);
         dstTestRuntime.parseConfigurationString(DESTINATION_ENDPOINT);
         dstTestRuntime.connect();
+        managed(dstTestRuntime);
 
         srcCorfuStore = new CorfuStore(srcDataRuntime);
         dstCorfuStore = new CorfuStore(dstDataRuntime);

@@ -23,6 +23,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
@@ -60,7 +61,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         setupNodes();
         final int oneMb = 1_000_000;
 
-        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
+        CorfuRuntimeParameters params = CorfuRuntimeParameters
                 .builder()
                 .maxCacheWeight(oneMb)
                 .maxCacheEntries(oneMb)
@@ -70,8 +71,10 @@ public class AddressSpaceViewTest extends AbstractViewTest {
                 .parseConfigurationString(getDefaultConfigurationString())
                 .connect();
 
-        assertThatThrownBy(() -> rt.getAddressSpaceView())
+        assertThatThrownBy(rt::getAddressSpaceView)
                 .isInstanceOf(UnsupportedOperationException.class);
+
+        rt.shutdown();
     }
 
     @Test
@@ -79,7 +82,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         setupNodes();
         final int oneMb = 1_000_000;
 
-        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
+        CorfuRuntimeParameters params = CorfuRuntimeParameters
                 .builder()
                 .maxCacheEntries(oneMb)
                 .build();
@@ -112,6 +115,9 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         assertThat(ldRead).isNotNull();
         ILogData ldCache = addressSpaceView.getReadCache().getIfPresent(cpAddress);
         assertThat(ldCache).isNull();
+
+        rt.shutdown();
+        checkpointRt.shutdown();
     }
 
     @Test

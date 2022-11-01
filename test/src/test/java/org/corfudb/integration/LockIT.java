@@ -414,7 +414,8 @@ public class LockIT extends AbstractIT implements Observer {
         CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
                 .builder()
                 .build();
-        runtime = CorfuRuntime.fromParameters(params).parseConfigurationString(corfuEndpoint).connect();
+        CorfuRuntime runtime = CorfuRuntime.fromParameters(params).parseConfigurationString(corfuEndpoint).connect();
+        managed(runtime);
 
         LockState.setDurationBetweenLeaseRenewals(LOCK_TIME_CONSTANT);
         LockState.setMaxTimeForNotificationListenerProcessing(LOCK_TIME_CONSTANT);
@@ -424,10 +425,6 @@ public class LockIT extends AbstractIT implements Observer {
     }
 
     private void shutdown() {
-        if (runtime != null) {
-            runtime.shutdown();
-        }
-
         if (corfuServer != null) {
             corfuServer.destroy();
         }

@@ -332,7 +332,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
      * Validate that no data is written into the Standby's Transaction Log during replication
      * of 5K objects.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testStandbyTransactionLogging() throws Exception {
@@ -357,7 +357,6 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     private Future<Boolean> subscribeTransactionStream() {
 
         ExecutorService consumer = Executors.newSingleThreadExecutor();
-        List<CorfuRuntime> consumerRts = new ArrayList<>();
 
         // A thread that starts and consumes transaction updates via the Transaction Stream.
         return consumer.submit(() -> {
@@ -367,8 +366,6 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
                     .build())
                     .parseConfigurationString(standbyEndpoint)
                     .connect();
-
-            consumerRts.add(consumerRt);
 
             IStreamView txStream = consumerRt.getStreamsView().get(ObjectsView.getLogReplicatorStreamId());
 
@@ -387,6 +384,8 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
             System.out.println("Total Transaction Stream updates, count=" + counter);
             log.info("Total Tx Stream updates = {}", counter);
+
+            consumerRt.shutdown();
 
             // We should have Txn Stream Updates
             return counter != 0;

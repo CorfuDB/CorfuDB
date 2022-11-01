@@ -2,8 +2,10 @@ package org.corfudb.integration;
 
 import com.google.common.collect.Iterables;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuRecord;
@@ -17,6 +19,7 @@ import org.corfudb.runtime.collections.StreamListenerResumeOrFullSync;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.test.SampleSchema.ManagedResources;
 import org.corfudb.test.SampleSchema.EventInfo;
@@ -269,7 +272,7 @@ public class StreamingPatternsIT extends AbstractIT {
     @Test
     public void testDefaultPortionOfResumeOrDefaultPolicy() throws Exception {
         // Run a corfu server & initialize CorfuStore
-        initializeCorfu();
+        CorfuRuntime runtime = initializeCorfu();
 
         // Record initial timestamp, to subscribe from the start of the log
         Timestamp startLog = Timestamp.newBuilder().setEpoch(0L).setSequence(-1L).build();
@@ -301,7 +304,7 @@ public class StreamingPatternsIT extends AbstractIT {
         List<String> tablesToCheckpoint = Arrays.asList(defaultTableName);
         tablesToCheckpoint.forEach(tableName -> {
             PersistentCorfuTable<Uuid, CorfuRecord<EventInfo, ManagedResources>> corfuTable =
-                    createCorfuTable(runtime, TableRegistry.getFullyQualifiedTableName(namespace, tableName));
+                    createCorfuTableUnsafe(runtime, TableRegistry.getFullyQualifiedTableName(namespace, tableName));
 
             mcw.addMap(corfuTable);
         });
@@ -336,6 +339,10 @@ public class StreamingPatternsIT extends AbstractIT {
         updateDefaultTable(numUpdates, numUpdates);
         TimeUnit.MILLISECONDS.sleep(sleepTime);
         assertThat(defaultStreamListener.getUpdates()).hasSize(numUpdates*2 - deltaToError);
+
+        for (ICorfuSMR<PersistentCorfuTable<?, ?>> table : mcw.getTables()) {
+            table.close();
+        }
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
@@ -404,7 +411,7 @@ public class StreamingPatternsIT extends AbstractIT {
     @SuppressWarnings("checkstyle:magicnumber")
     public void testFullSyncPortionOfResumeOrFullSyncPolicy() throws Exception {
         // Run a corfu server & initialize CorfuStore
-        initializeCorfu();
+        CorfuRuntime runtime = initializeCorfu();
 
         // Record initial timestamp, to subscribe from the start of the log
         Timestamp startLog = Timestamp.newBuilder().setEpoch(0L).setSequence(-1L).build();
@@ -440,7 +447,7 @@ public class StreamingPatternsIT extends AbstractIT {
         List<String> tablesToCheckpoint = Arrays.asList(defaultTableName);
         tablesToCheckpoint.forEach(tableName -> {
             PersistentCorfuTable<Uuid, CorfuRecord<EventInfo, ManagedResources>> corfuTable =
-                    createCorfuTable(runtime, TableRegistry.getFullyQualifiedTableName(namespace, tableName));
+                    createCorfuTableUnsafe(runtime, TableRegistry.getFullyQualifiedTableName(namespace, tableName));
 
             mcw.addMap(corfuTable);
         });
@@ -474,6 +481,10 @@ public class StreamingPatternsIT extends AbstractIT {
         assertThat(defaultStreamListener.getUpdates()).hasSize(numUpdates);
         assertThat(defaultStreamListener.getFullSyncBuffer().size()).isEqualTo(numUpdates*2);
 
+        for (ICorfuSMR<PersistentCorfuTable<?, ?>> table : mcw.getTables()) {
+            table.close();
+        }
+
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 
@@ -484,7 +495,7 @@ public class StreamingPatternsIT extends AbstractIT {
     @Test
     public void testFullSyncFailureOfResumeOrFullSyncPolicy() throws Exception {
         // Run a corfu server & initialize CorfuStore
-        initializeCorfu();
+        CorfuRuntime runtime = initializeCorfu();
 
         // Record initial timestamp, to subscribe from the start of the log
         Timestamp startLog = Timestamp.newBuilder().setEpoch(0L).setSequence(-1L).build();
@@ -518,7 +529,7 @@ public class StreamingPatternsIT extends AbstractIT {
         List<String> tablesToCheckpoint = Arrays.asList(defaultTableName);
         tablesToCheckpoint.forEach(tableName -> {
             PersistentCorfuTable<Uuid, CorfuRecord<EventInfo, ManagedResources>> corfuTable =
-                    createCorfuTable(runtime, TableRegistry.getFullyQualifiedTableName(namespace, tableName));
+                    createCorfuTableUnsafe(runtime, TableRegistry.getFullyQualifiedTableName(namespace, tableName));
 
             mcw.addMap(corfuTable);
         });
@@ -540,6 +551,11 @@ public class StreamingPatternsIT extends AbstractIT {
         // Confirm reset did not occur as a failure on full Sync happened and listener is not able to re-subscribe
         assertThat(defaultStreamListener.getUpdates()).isNotEmpty();
         assertThat(defaultStreamListener.getFullSyncBuffer().size()).isZero();
+
+        for (ICorfuSMR<PersistentCorfuTable<?, ?>> table : mcw.getTables()) {
+            table.close();
+        }
+
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 
@@ -582,12 +598,13 @@ public class StreamingPatternsIT extends AbstractIT {
     /**
      * A helper method to initialize a Corfu Server, Corfu Runtime and Corfu Store instance.
      *
-     * @throws Exception
+     * @throws Exception error
      */
-    private void initializeCorfu() throws Exception {
+    private CorfuRuntime initializeCorfu() throws Exception {
         corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         store = new CorfuStore(runtime);
+        return runtime;
     }
 
     /**

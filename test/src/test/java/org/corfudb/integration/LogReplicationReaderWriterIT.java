@@ -19,6 +19,7 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuRecord;
@@ -107,17 +108,19 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
                 .setSingle(true)
                 .runServer();
 
-        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
+        CorfuRuntimeParameters params = CorfuRuntimeParameters
                 .builder()
                 .build();
 
         srcDataRuntime = CorfuRuntime.fromParameters(params);
         srcDataRuntime.parseConfigurationString(DEFAULT_ENDPOINT);
         srcDataRuntime.connect();
+        managed(srcDataRuntime);
 
         dstDataRuntime = CorfuRuntime.fromParameters(params);
         dstDataRuntime.parseConfigurationString(WRITER_ENDPOINT);
         dstDataRuntime.connect();
+        managed(dstDataRuntime);
 
         srcCorfuStore = new CorfuStore(srcDataRuntime);
         dstCorfuStore = new CorfuStore(dstDataRuntime);
@@ -363,7 +366,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         MultiCheckpointWriter<CorfuTable<StringKey, CorfuRecord<IntValue, Metadata>>> mcw1 = new MultiCheckpointWriter<>();
         for (Table<StringKey, IntValue, Metadata> map : tables.values()) {
             CorfuTable<StringKey, CorfuRecord<IntValue, Metadata>> table = rt.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<StringKey, CorfuRecord<IntValue, Metadata>>>() {})
+                    .setTypeToken(CorfuTable.<StringKey, CorfuRecord<IntValue, Metadata>>getTableType())
                     .setStreamName(map.getFullyQualifiedTableName())
                     .open();
             mcw1.addMap(table);
@@ -478,14 +481,15 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
         ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(1);
         scheduledExecutorService.submit(this::trimAloneDelay);
-        Exception result = null;
+        Exception result;
 
-        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
+        CorfuRuntimeParameters params = CorfuRuntimeParameters
                 .builder()
                 .build();
         CorfuRuntime srcReaderRuntime = CorfuRuntime.fromParameters(params);
         srcReaderRuntime.parseConfigurationString(DEFAULT_ENDPOINT);
         srcReaderRuntime.connect();
+        managed(srcReaderRuntime);
 
         try {
             readLogEntryMsgs(msgQ, srcReaderRuntime, true);
@@ -495,16 +499,6 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
             assertThat(result.getCause()).isInstanceOf(TrimmedException.class);
             log.debug("msgQ size " + msgQ.size());
             log.debug("caught an exception " + e + " tail " + tail);
-        }
-
-        tearDownEnv();
-        cleanUp();
-    }
-
-    private void tearDownEnv() {
-        if (srcDataRuntime != null) {
-            srcDataRuntime.shutdown();
-            dstDataRuntime.shutdown();
         }
     }
 
@@ -556,17 +550,18 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
                 .cacheEntries(false)
                 .build();
 
-        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
+        CorfuRuntimeParameters params = CorfuRuntimeParameters
                 .builder()
                 .build();
         CorfuRuntime srcReaderRuntime = CorfuRuntime.fromParameters(params);
         srcReaderRuntime.parseConfigurationString(DEFAULT_ENDPOINT);
         srcReaderRuntime.connect();
-
+        managed(srcReaderRuntime);
 
         CorfuRuntime dstWriterRuntime = CorfuRuntime.fromParameters(params);
         dstWriterRuntime.parseConfigurationString(WRITER_ENDPOINT);
         dstWriterRuntime.connect();
+        managed(dstWriterRuntime);
 
         for (String name : srcHashMap.keySet()) {
             IStreamView srcSV = srcReaderRuntime.getStreamsView().getUnsafe(CorfuRuntime.getStreamID(name), options);
@@ -621,17 +616,19 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         generateTransactions(srcTables, srcHashMap, NUM_TRANSACTIONS, srcCorfuStore, NUM_TRANSACTIONS);
 
         //read snapshot from srcServer and put msgs into Queue
-        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
+        CorfuRuntimeParameters params = CorfuRuntimeParameters
                 .builder()
                 .build();
         CorfuRuntime srcReaderRuntime = CorfuRuntime.fromParameters(params);
         srcReaderRuntime.parseConfigurationString(DEFAULT_ENDPOINT);
         srcReaderRuntime.connect();
+        managed(srcReaderRuntime);
         readLogEntryMsgs(msgQ, srcReaderRuntime, false);
 
         CorfuRuntime dstWriterRuntime = CorfuRuntime.fromParameters(params);
         dstWriterRuntime.parseConfigurationString(WRITER_ENDPOINT);
         dstWriterRuntime.connect();
+        managed(dstWriterRuntime);
         //play messages at dst server
         writeLogEntryMsgs(msgQ, srcHashMap.keySet(), dstWriterRuntime);
 
@@ -640,19 +637,17 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
         dstDataRuntime.getSerializers().registerSerializer(serializer);
         verifyData("after log writing at dst", dstTables, srcHashMap, dstCorfuStore);
-
-        cleanUp();
     }
     
     /**
      * This test verifies that the Log Entry Reader sets the last processed entry
      * as NULL whenever all entries written to the TX stream are of no interest for
      * the replication process (streams present are not intended for replication)
-     *
+     * <p>
      * If the lastProcessedEntry is not NULL, this ensures that LogEntryReader will not loop
      * forever on the last observed entry.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testLogEntryReaderWhenTxStreamNoStreamsToReplicate() throws Exception {
@@ -664,8 +659,6 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
         // Confirm we get out of Log Entry Reader when there are streams of no interest in the Tx Stream
         readLogEntryMsgs(msgQ, srcDataRuntime, false);
-
-        cleanUp();
     }
 }
 

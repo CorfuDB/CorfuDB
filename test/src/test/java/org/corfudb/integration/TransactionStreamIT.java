@@ -124,16 +124,17 @@ public class TransactionStreamIT extends AbstractIT {
         for (int x = 1; x <= numWriters; x++) {
             final int idx = x;
             producers.submit(() -> {
-                PersistentCorfuTable<Integer, Integer> map = producersRt.getObjectsView()
+                try(PersistentCorfuTable<Integer, Integer> map = producersRt.getObjectsView()
                         .build()
                         .setStreamName(String.valueOf(idx))
                         .setStreamTags(txnStreamTag)
                         .setTypeToken(new TypeToken<PersistentCorfuTable<Integer, Integer>>() {})
-                        .open();
-                for (int i = 1; i <= numWritesPerThread; i++) {
-                    producersRt.getObjectsView().TXBegin();
-                    map.insert(i, i);
-                    producersRt.getObjectsView().TXEnd();
+                        .open()) {
+                    for (int i = 1; i <= numWritesPerThread; i++) {
+                        producersRt.getObjectsView().TXBegin();
+                        map.insert(i, i);
+                        producersRt.getObjectsView().TXEnd();
+                    }
                 }
             });
         }

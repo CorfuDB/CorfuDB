@@ -20,6 +20,7 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.StreamingException;
+import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.test.SampleSchema;
@@ -220,7 +221,7 @@ public class StreamingIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime.
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -339,7 +340,7 @@ public class StreamingIT extends AbstractIT {
     /**
      * Verify that empty string tags are not supported for subscribers.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testStreamingSingleTableEmptyTag() throws Exception {
@@ -347,7 +348,7 @@ public class StreamingIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime.
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -434,12 +435,12 @@ public class StreamingIT extends AbstractIT {
 
         /**
          *  Fetch the previous value of a record from the table using the sequence - 1 snapshot
-         * @param namespace
-         * @param tableName
-         * @param entry
-         * @param epoch
-         * @param sequence
-         * @return
+         * @param namespace namespace
+         * @param tableName table name
+         * @param entry entry
+         * @param epoch epoch
+         * @param sequence sequence
+         * @return corfu store entry
          */
         public CorfuStoreEntry<K, V, M> getPreviousRecord(String namespace, String tableName,
                                                           CorfuStreamEntry entry,
@@ -462,7 +463,7 @@ public class StreamingIT extends AbstractIT {
          * shutting down. Some exceptions can be handled by restarting the stream (TrimmedException) while
          * some errors (SystemUnavailableError) are unrecoverable.
          *
-         * @param throwable
+         * @param throwable error
          */
         @Override
         public void onError(Throwable throwable) {
@@ -472,13 +473,13 @@ public class StreamingIT extends AbstractIT {
 
     /** Verify the same listener cannot be used across different subscribers
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testStreamingPrevValue() throws Exception {
         // Run a corfu server and start runtime
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
         String ns = "test_namespace";
         String tn = "tableA";
@@ -521,7 +522,7 @@ public class StreamingIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime.
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -643,7 +644,7 @@ public class StreamingIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime.
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -717,7 +718,7 @@ public class StreamingIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime.
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
         // Record the initial timestamp.
@@ -784,7 +785,7 @@ public class StreamingIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime.
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
         // Record the initial timestamp.
@@ -897,7 +898,7 @@ public class StreamingIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime.
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -964,7 +965,7 @@ public class StreamingIT extends AbstractIT {
     @Test
     public void testFullSyncDeltaSyncPattern() throws Exception {
         // Run a corfu server & initialize CorfuStore
-        initializeCorfu();
+        CorfuRuntime runtime = initializeCorfu();
 
         final int numUpdates = 10;
         final int indexDefault= 0;
@@ -1013,7 +1014,7 @@ public class StreamingIT extends AbstractIT {
     @Test
     public void testStreamingConsecutiveCheckpoints() throws Exception {
         // Run a corfu server & initialize CorfuStore
-        initializeCorfu();
+        CorfuRuntime runtime = initializeCorfu();
 
         // Record the initial timestamp.
         Timestamp initTs = Timestamp.newBuilder().setEpoch(0L).setSequence(Address.NON_ADDRESS).build();
@@ -1039,7 +1040,7 @@ public class StreamingIT extends AbstractIT {
 
         // Run X number of checkpoint/trim (on each run, trigger runtimeGC)
         for (int i = 0; i < numCheckpointTrimCycles; i++) {
-            checkpointAndTrim(namespace, Arrays.asList(defaultTableName, randomTableName), false);
+            checkpointAndTrim(runtime, namespace, Arrays.asList(defaultTableName, randomTableName), false);
             runtime.getGarbageCollector().runRuntimeGC();
             long seqNumberAfterTrim = store.getHighestSequence(namespace, defaultTableName);
             assertThat(seqNumberAfterTrim).isEqualTo(seqNumBeforeTrim);
@@ -1097,19 +1098,18 @@ public class StreamingIT extends AbstractIT {
             assertThat(((Uuid)entries.get(0).getMetadata()).getMsb()).isEqualTo(index);
         }
 
-        runtime.shutdown();
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 
     /**
      * Test subscribe streaming API for which only streams tags are specified.
-     *
+     * <p>
      * (1) Test the case where tables with a common tag are opened in advance and by subscribing to the tag,
      * updates for all tables are received.
-     *
+     * <p>
      * (2) Test the case where tables have been registered on a different store, and we attempt to
      * subscribe without opening the tables (this should fail, as key, value & metadata schemas are required).
-     *
+     * <p>
      * (3) Test the case where partial tables belonging to a tag have been opened by the time of subscription (should still fail).
      */
     @Test
@@ -1252,7 +1252,7 @@ public class StreamingIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime.
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -1314,7 +1314,7 @@ public class StreamingIT extends AbstractIT {
     /**
      * Validate re-generation of DCNs/stream updates when using the touch API
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testRegenarationOfStreamingUpdates() throws Exception {
@@ -1322,7 +1322,7 @@ public class StreamingIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime.
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
         final String namespace = "test_namespace";
@@ -1431,17 +1431,18 @@ public class StreamingIT extends AbstractIT {
         }
     }
 
-    private void initializeCorfu() throws Exception {
+    private CorfuRuntime initializeCorfu() throws Exception {
         corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         store = new CorfuStore(runtime);
+        return runtime;
     }
 
-    private Token checkpointAndTrim(String namespace, List<String> tablesToCheckpoint, boolean partialTrim) {
+    private Token checkpointAndTrim(CorfuRuntime runtime, String namespace, List<String> tablesToCheckpoint, boolean partialTrim) {
         MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
         tablesToCheckpoint.forEach(tableName -> {
             PersistentCorfuTable<Uuid, CorfuRecord<SampleSchema.EventInfo, SampleSchema.ManagedResources>> corfuTable =
-                    createCorfuTable(runtime, TableRegistry.getFullyQualifiedTableName(namespace, tableName));
+                    createCorfuTableUnsafe(runtime, TableRegistry.getFullyQualifiedTableName(namespace, tableName));
 
             mcw.addMap(corfuTable);
         });
@@ -1455,7 +1456,7 @@ public class StreamingIT extends AbstractIT {
         Token trimPoint = mcw.appendCheckpoints(rt, "StreamingIT");
         if (partialTrim) {
             final int trimOffset = 5;
-            Long sequenceModified = trimPoint.getSequence() - trimOffset;
+            long sequenceModified = trimPoint.getSequence() - trimOffset;
             Token partialTrimMark = Token.of(trimPoint.getEpoch(), sequenceModified);
             rt.getAddressSpaceView().prefixTrim(partialTrimMark);
         } else {
@@ -1463,6 +1464,11 @@ public class StreamingIT extends AbstractIT {
         }
         rt.getAddressSpaceView().gc();
         rt.getObjectsView().getObjectCache().clear();
+
+        for (ICorfuSMR<PersistentCorfuTable<?, ?>> table : mcw.getTables()) {
+            table.close();
+        }
+
         return trimPoint;
     }
 }

@@ -22,6 +22,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -46,6 +47,7 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
@@ -748,7 +750,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
      * @param active true, checkpoint/trim on active cluster
      *               false, checkpoint/trim on standby cluster
      */
-    public void checkpointAndTrim(boolean active) {
+    public void checkpointAndTrim(boolean active) throws Exception {
         CorfuRuntime cpRuntime;
 
         if (active) {
@@ -760,7 +762,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         checkpointAndTrimCorfuStore(cpRuntime);
     }
 
-    public static Token checkpointAndTrimCorfuStore(CorfuRuntime cpRuntime) {
+    public Token checkpointAndTrimCorfuStore(CorfuRuntime cpRuntime) throws Exception {
         // Open Table Registry
         TableRegistry tableRegistry = cpRuntime.getTableRegistry();
         PersistentCorfuTable<CorfuStoreMetadata.TableName, CorfuRecord<CorfuStoreMetadata.TableDescriptors,
@@ -780,8 +782,8 @@ public class LogReplicationAbstractIT extends AbstractIT {
         cpRuntime.getSerializers().registerSerializer(dynamicProtoBufSerializer);
 
         // First checkpoint the TableRegistry system table
-        MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
-        Token trimMark = null;
+        final AtomicReference<MultiCheckpointWriter<PersistentCorfuTable<?, ?>>> mcw = new AtomicReference<>(new MultiCheckpointWriter<>());
+        final AtomicReference<Token> trimMark = new AtomicReference<>();
 
         for (CorfuStoreMetadata.TableName tableName : tableRegistry.listTables(null)) {
             // ProtobufDescriptor table is an internal table which must not
@@ -793,14 +795,18 @@ public class LogReplicationAbstractIT extends AbstractIT {
                     tableName.getNamespace(), tableName.getTableName()
             );
 
-            PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord> corfuTable =
-                    createCorfuTable(cpRuntime, fullTableName, dynamicProtoBufSerializer);
+            this.<CorfuDynamicKey, CorfuDynamicRecord>createCorfuTable(cpRuntime, fullTableName, dynamicProtoBufSerializer, corfuTable ->{
+                MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcwLocal = new MultiCheckpointWriter<>();
+                mcwLocal.addMap(corfuTable);
+                mcw.set(mcwLocal);
 
-            mcw = new MultiCheckpointWriter<>();
-            mcw.addMap(corfuTable);
-
-            Token token = mcw.appendCheckpoints(cpRuntime, "checkpointer");
-            trimMark = trimMark == null ? token : Token.min(trimMark, token);
+                Token token = mcwLocal.appendCheckpoints(cpRuntime, "checkpointer");
+                if (trimMark.get() == null) {
+                    trimMark.set(token);
+                } else {
+                    trimMark.set(Token.min(trimMark.get(), token));
+                }
+            });
         }
 
         // Finally checkpoint the ProtobufDescriptor and TableRegistry system
@@ -808,28 +814,31 @@ public class LogReplicationAbstractIT extends AbstractIT {
         // Restore the regular protoBuf serializer and undo the dynamic
         // protoBuf serializer
         // otherwise the test cannot continue beyond this point.
-        log.info("Now checkpointing the ProtobufDescriptor and Registry " +
-            "Tables");
+        log.info("Now checkpointing the ProtobufDescriptor and Registry Tables");
         cpRuntime.getSerializers().registerSerializer(protoBufSerializer);
-        mcw.addMap(protobufDescriptorTable);
-        Token token1 = mcw.appendCheckpoints(cpRuntime, "checkpointer");
+        mcw.get().addMap(protobufDescriptorTable);
+        Token token1 = mcw.get().appendCheckpoints(cpRuntime, "checkpointer");
         
-        mcw.addMap(tableRegistryCT);
-        Token token2 = mcw.appendCheckpoints(cpRuntime, "checkpointer");
+        mcw.get().addMap(tableRegistryCT);
+        Token token2 = mcw.get().appendCheckpoints(cpRuntime, "checkpointer");
         Token minToken = Token.min(token1, token2);
-        trimMark = trimMark != null ? Token.min(trimMark, minToken) : minToken;
+        if(trimMark.get() != null) {
+            trimMark.set(Token.min(trimMark.get(), minToken));
+        } else {
+            trimMark.set(minToken);
+        }
 
-        cpRuntime.getAddressSpaceView().prefixTrim(trimMark);
+        cpRuntime.getAddressSpaceView().prefixTrim(trimMark.get());
         cpRuntime.getAddressSpaceView().gc();
 
         // Trim
         log.debug("**** Trim Log @address=" + trimMark);
-        cpRuntime.getAddressSpaceView().prefixTrim(trimMark);
+        cpRuntime.getAddressSpaceView().prefixTrim(trimMark.get());
         cpRuntime.getAddressSpaceView().invalidateClientCache();
         cpRuntime.getAddressSpaceView().invalidateServerCaches();
         cpRuntime.getAddressSpaceView().gc();
 
-        return trimMark;
+        return trimMark.get();
     }
 
     /**

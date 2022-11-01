@@ -19,6 +19,7 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.test.TestSchema;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
+import org.junit.After;
 import org.junit.Test;
 
 import javax.annotation.Nonnull;
@@ -44,7 +45,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class PersistentCorfuTableTest extends AbstractViewTest {
 
     PersistentCorfuTable<TestSchema.Uuid, CorfuRecord<TestSchema.Uuid, TestSchema.Uuid>> corfuTable;
-    CorfuRuntime rt;
+    private CorfuRuntime rt;
 
     private static final long SMALL_CACHE_SIZE = 3;
     private static final long MEDIUM_CACHE_SIZE = 100;
@@ -104,6 +105,13 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                 TestSchema.Uuid.class,
                 null
         );
+    }
+
+    @After
+    public void cleanUp() {
+        if (rt != null) {
+            rt.shutdown();
+        }
     }
 
     @SneakyThrows
