@@ -378,7 +378,7 @@ public class CorfuStoreIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // PHASE 1 - Start a Corfu runtime & a CorfuStore instance
-        final CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         // Creating Corfu Store using a connected corfu client.
         CorfuStore corfuStore = new CorfuStore(runtime);
@@ -417,37 +417,38 @@ public class CorfuStoreIT extends AbstractIT {
         corfuStore.deleteTable(nsxManager, tableName);
 
         MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
-        this.<Uuid, CorfuRecord<SampleSchema.EventInfo, ManagedResources>>createCorfuTable(runtime, table.getFullyQualifiedTableName(), corfuTable -> {
-            mcw.addMap(corfuTable);
-            mcw.addMap(runtime.getTableRegistry().getRegistryTable());
-            mcw.addMap(runtime.getTableRegistry().getProtobufDescriptorTable());
-            Token trimPoint = mcw.appendCheckpoints(runtime, "checkpointer");
-            runtime.getAddressSpaceView().prefixTrim(trimPoint);
-            runtime.getAddressSpaceView().gc();
-            runtime.getObjectsView().getObjectCache().clear();
-            runtime.shutdown();
-            CorfuRuntime runtime2 = createRuntime(singleNodeEndpoint);
+        PersistentCorfuTable<Uuid, CorfuRecord<SampleSchema.EventInfo, ManagedResources>> corfuTable =
+                createCorfuTableUnsafe(runtime, table.getFullyQualifiedTableName());
 
-            CorfuStore corfuStore2 = new CorfuStore(runtime2);
+        mcw.addMap(corfuTable);
+        mcw.addMap(runtime.getTableRegistry().getRegistryTable());
+        mcw.addMap(runtime.getTableRegistry().getProtobufDescriptorTable());
+        Token trimPoint = mcw.appendCheckpoints(runtime, "checkpointer");
+        runtime.getAddressSpaceView().prefixTrim(trimPoint);
+        runtime.getAddressSpaceView().gc();
+        runtime.getObjectsView().getObjectCache().clear();
+        runtime.shutdown();
+        runtime = createRuntime(singleNodeEndpoint);
 
-            // Re-Create & Register the table.
-            // This is required to initialize the table for the current corfu client.
-            Table<SampleSchema.EventInfo, SampleSchema.EventInfo, ManagedResources> tableV2 = corfuStore.openTable(
-                    nsxManager,
-                    tableName,
-                    SampleSchema.EventInfo.class, // Instead of using UUid using EventInfo as the key itself!
-                    SampleSchema.EventInfo.class,
-                    ManagedResources.class,
-                    // TableOptions includes option to choose - Memory/Disk based corfu table.
-                    TableOptions.builder().build());
+        corfuStore = new CorfuStore(runtime);
 
-            TxnContext newTx = corfuStore2.txn(nsxManager);
-            newTx.putRecord(tableV2, value, value,
-                    ManagedResources.newBuilder().setCreateUser("CreateUser").build());
-            newTx.commit();
+        // Re-Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        Table<SampleSchema.EventInfo, SampleSchema.EventInfo, ManagedResources> tableV2 = corfuStore.openTable(
+                nsxManager,
+                tableName,
+                SampleSchema.EventInfo.class, // Instead of using UUid using EventInfo as the key itself!
+                SampleSchema.EventInfo.class,
+                ManagedResources.class,
+                // TableOptions includes option to choose - Memory/Disk based corfu table.
+                TableOptions.builder().build());
 
-            assertThat(shutdownCorfuServer(corfuServer)).isTrue();
-        });
+        tx = corfuStore.txn(nsxManager);
+        tx.putRecord(tableV2, value, value,
+                ManagedResources.newBuilder().setCreateUser("CreateUser").build());
+        tx.commit();
+
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 
     /**
