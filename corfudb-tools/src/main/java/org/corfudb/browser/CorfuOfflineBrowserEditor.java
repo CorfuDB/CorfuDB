@@ -428,6 +428,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         private long clearTableTxn;
 
         public void insert(Object key, Object value, long address) {
+            return;
         }
 
         public ConcurrentMap getTrimmedTable() {
