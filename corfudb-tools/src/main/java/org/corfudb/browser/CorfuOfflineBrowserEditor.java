@@ -3,6 +3,7 @@ package org.corfudb.browser;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
 import lombok.Getter;
+import lombok.Setter;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.infrastructure.log.LogFormat;
 import org.corfudb.infrastructure.log.LogFormat.LogEntry;
@@ -54,8 +55,10 @@ import static org.corfudb.browser.CorfuStoreBrowserEditor.printPayload;
 @SuppressWarnings("checkstyle:printLine")
 public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
     private final Path logDir;
-    private CorfuRuntime runtimeSerializer;
+    private final CorfuRuntime runtimeSerializer;
     private DynamicProtobufSerializer dynamicProtobufSerializer;
+    private final RegistryTable registryTable;
+    private final ProtoBufTable protoBufTable;
 
     private final CorfuTableDescriptor registryTableDsc;
 
@@ -73,6 +76,8 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
                 TableRegistry.REGISTRY_TABLE_NAME);
         protobufDescTableDsc = new CorfuTableDescriptor(TableRegistry.CORFU_SYSTEM_NAMESPACE,
                 TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME);
+        registryTable = new RegistryTable();
+        protoBufTable = new ProtoBufTable();
         runtimeSerializer = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build());
         runtimeSerializer.getSerializers().registerSerializer(DynamicProtobufSerializer.createProtobufSerializer());
         buildRegistryTableProtobufTable();
@@ -84,12 +89,10 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
     private void buildRegistryTableProtobufTable() {
 
         List<CorfuTableDescriptor> tableDsc = Arrays.asList(registryTableDsc, protobufDescTableDsc);
-        CachedTable registryTable = new CachedTable();
-        CachedTable protobufDescriptorTable = new CachedTable();
-        List<CachedTable> tables = Arrays.asList(registryTable, protobufDescriptorTable);
+        List<CachedTable> tables = Arrays.asList(registryTable, protoBufTable);
 
         parseLogsFiles(tableDsc, tables);
-        updateSerializer(runtimeSerializer, registryTable.getTrimmedTable(), protobufDescriptorTable.getTrimmedTable());
+        updateSerializer(runtimeSerializer, registryTable.getTrimmedTable(), protoBufTable.getTrimmedTable());
     }
 
     /**
@@ -204,7 +207,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
     public ConcurrentMap getTableData(String namespace, String tableName) {
 
         CorfuTableDescriptor tableDsc = new CorfuTableDescriptor(namespace, tableName);
-        CachedTable table = new CachedTable();
+        Table table = new Table();
 
         parseLogsFiles(Arrays.asList(tableDsc), Arrays.asList(table));
         return table.getTrimmedTable();
@@ -420,32 +423,105 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
     }
 
     class CachedTable {
-        private ConcurrentMap table;
+        @Setter
+        @Getter
         private long clearTableTxn;
 
-        public CachedTable() {
-            this.table = new ConcurrentHashMap<>();
-            this.clearTableTxn = -1;
+        public void insert(Object key, Object value, long address) {
         }
 
-        public void insert(Object key, Object value, long address) {
-            if (table.containsKey(key) && ((OrderedObject) table.get(key)).getOrder() > address) {
-                return;
-            }
-            table.put(key, new OrderedObject(value, address));
+        public ConcurrentMap getTrimmedTable() {
+            return new ConcurrentHashMap();
         }
 
         public void clear(long address) {
             clearTableTxn = Math.max(address, clearTableTxn);
         }
+    }
+
+    class RegistryTable extends CachedTable {
+        private ConcurrentMap<CorfuStoreMetadata.TableName, OrderedObject> table;
+
+        public RegistryTable() {
+            this.table = new ConcurrentHashMap<>();
+            setClearTableTxn(-1);
+        }
+
+        public void insert(Object key, Object value, long address) {
+            CorfuStoreMetadata.TableName newKey = (CorfuStoreMetadata.TableName) key;
+            if (table.containsKey(newKey) && (table.get(newKey)).getOrder() > address) {
+                return;
+            }
+            table.put(newKey, new OrderedObject(value, address));
+        }
 
         public ConcurrentMap getTrimmedTable() {
 
             ConcurrentMap trimmedTable = new ConcurrentHashMap<>();
-            Set<Map.Entry<Object, OrderedObject>> entries = table.entrySet();
-            for (Map.Entry<Object, OrderedObject> entry: entries) {
+            Set<Map.Entry<CorfuStoreMetadata.TableName, OrderedObject>> entries = table.entrySet();
+            for (Map.Entry<CorfuStoreMetadata.TableName, OrderedObject> entry : entries) {
                 OrderedObject value = entry.getValue();
-                if (value.getOrder() > clearTableTxn && value.getUpdate() != null) {
+                if (value.getOrder() > getClearTableTxn() && value.getUpdate() != null) {
+                    trimmedTable.put(entry.getKey(), value.getUpdate());
+                }
+            }
+            return trimmedTable;
+        }
+    }
+
+    class ProtoBufTable extends CachedTable {
+        private ConcurrentMap<CorfuStoreMetadata.ProtobufFileName, OrderedObject> table;
+
+        public ProtoBufTable() {
+            this.table = new ConcurrentHashMap<>();
+            setClearTableTxn(-1);
+        }
+
+        public void insert(Object key, Object value, long address) {
+            CorfuStoreMetadata.ProtobufFileName newKey = (CorfuStoreMetadata.ProtobufFileName) key;
+            if (table.containsKey(newKey) && (table.get(newKey)).getOrder() > address) {
+                return;
+            }
+            table.put(newKey, new OrderedObject(value, address));
+        }
+
+        public ConcurrentMap getTrimmedTable() {
+
+            ConcurrentMap trimmedTable = new ConcurrentHashMap<>();
+            Set<Map.Entry<CorfuStoreMetadata.ProtobufFileName, OrderedObject>> entries = table.entrySet();
+            for (Map.Entry<CorfuStoreMetadata.ProtobufFileName, OrderedObject> entry : entries) {
+                OrderedObject value = entry.getValue();
+                if (value.getOrder() > getClearTableTxn() && value.getUpdate() != null) {
+                    trimmedTable.put(entry.getKey(), value.getUpdate());
+                }
+            }
+            return trimmedTable;
+        }
+    }
+
+    class Table extends CachedTable {
+        private ConcurrentMap<CorfuDynamicKey, OrderedObject> table;
+
+        public Table() {
+            this.table = new ConcurrentHashMap<>();
+            setClearTableTxn(-1);
+        }
+
+        public void insert(Object key, Object value, long address) {
+            CorfuDynamicKey newKey = (CorfuDynamicKey) key;
+            if (table.containsKey(newKey) && (table.get(newKey)).getOrder() > address) {
+                return;
+            }
+            table.put(newKey, new OrderedObject(value, address));
+        }
+
+        public ConcurrentMap getTrimmedTable() {
+
+            ConcurrentMap trimmedTable = new ConcurrentHashMap<>();
+            Set<Map.Entry<CorfuDynamicKey, OrderedObject>> entries = table.entrySet();
+            for (Map.Entry<CorfuDynamicKey, OrderedObject> entry : entries) {
+                OrderedObject value = entry.getValue();
+                if (value.getOrder() > getClearTableTxn() && value.getUpdate() != null) {
                     trimmedTable.put(entry.getKey(), value.getUpdate());
                 }
             }
