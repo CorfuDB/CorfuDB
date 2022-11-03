@@ -1,5 +1,6 @@
-on: pull_request
 name: Compatibility Test
+
+on: pull_request
 
 jobs:
   compatibility_test:

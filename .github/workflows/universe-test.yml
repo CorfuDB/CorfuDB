@@ -1,5 +1,6 @@
-on: pull_request
 name: Universe Test
+
+on: pull_request
 
 jobs:
   universe_test:

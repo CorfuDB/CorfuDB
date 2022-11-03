@@ -1,5 +1,6 @@
-on: pull_request
 name: Injection Framework Test
+
+on: pull_request
 
 jobs:
   injection_framework_test:
