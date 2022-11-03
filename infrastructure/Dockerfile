@@ -17,6 +17,8 @@ COPY target/bin /usr/share/corfu/bin
 COPY target/corfu_scripts /usr/share/corfu/corfu_scripts
 COPY target/scripts /usr/share/corfu/scripts
 COPY target/logback.prod.xml /usr/share/corfu/conf/logback.prod.xml
+COPY target/corfu-compactor-config.yml /usr/share/corfu/conf/corfu-compactor-config.yml
+COPY target/compactor-logback.prod.xml /usr/share/corfu/conf/compactor-logback.prod.xml
 
 # For integration testing purposes
 COPY target/${CORFU_JAR} /app/corfu.jar
@@ -43,4 +45,7 @@ ENV JAVA_OPTS -verbose:gc \
 CMD java -cp *.jar \
     ${JAVA_OPTS} \
     -Dlogback.configurationFile=/usr/share/corfu/conf/logback.prod.xml \
-    org.corfudb.infrastructure.CorfuServer
+    org.corfudb.infrastructure.CorfuServer \
+    --compactor-script /usr/share/corfu/scripts/compactor_runner.py \
+    --compactor-config=/usr/share/corfu/conf/corfu-compactor-config.yml \
+    --compaction-trigger-freq-ms=900000
