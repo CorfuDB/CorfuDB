@@ -20,6 +20,8 @@ cp -r ./bin ./infrastructure/target/
 cp -r ./corfu_scripts ./infrastructure/target/
 cp -r ./scripts ./infrastructure/target/
 cp -r ./infrastructure/src/main/resources/logback.prod.xml ./infrastructure/target/
+cp -r ./infrastructure/src/main/resources/compactor-logback.prod.xml ./infrastructure/target/
+cp -r ./infrastructure/src/main/resources/corfu-compactor-config.yml ./infrastructure/target/
 
 CORFU_VERSION=$(./mvnw -q -Dexec.executable=echo -Dexec.args='${project.version}' --non-recursive exec:exec)
 
