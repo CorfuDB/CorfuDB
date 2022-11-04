@@ -256,11 +256,11 @@ public class CorfuReplicationManager {
      * The notification of adding/removing Sinks with/without topology configId change.
      *
      * @param newConfig should have the same topologyConfigId as the current config
-     * @param sinksToAdd the new sink clusters to be added
-     * @param sinksToRemove sink clusters which are not found in the new topology
+     * @param remoteClustersToAdd the new sink clusters to be added
+     * @param remoteClustersToRemove sink clusters which are not found in the new topology
      * @param intersection Sink clusters found in both old and new topologies
      */
-    public void processSinkChange(TopologyDescriptor newConfig, Set<String> sinksToAdd, Set<String> sinksToRemove,
+    public void processSinkChange(TopologyDescriptor newConfig, Set<String> remoteClustersToAdd, Set<String> remoteClustersToRemove,
                                   Set<String> intersection, Map<String, ClusterDescriptor> connectionEndsIdToDescriptor,
                                   Map<String, Set<ReplicationSession>> remoteIdToReplicationSession,
                                   CorfuInterClusterReplicationServerNode interClusterServerNode) {
@@ -272,7 +272,7 @@ public class CorfuReplicationManager {
         Set<ReplicationSubscriber> subscribers = context.getConfig().getReplicationSubscriberToStreamsMap().keySet();
 
         // Remove Sinks that are not in the new config
-        for (String clusterId : sinksToRemove) {
+        for (String clusterId : remoteClustersToRemove) {
             for (ReplicationSubscriber subscriber : subscribers) {
                 stopLogReplicationRuntime(new ReplicationSession(clusterId, subscriber));
             }
@@ -280,7 +280,7 @@ public class CorfuReplicationManager {
 
         // Start the newly added Sinks
         Set<ClusterDescriptor> newConnectionToStart = new HashSet<>();
-        for (String clusterId : sinksToAdd) {
+        for (String clusterId : remoteClustersToAdd) {
             // When the cluster is the connection initiator to the newly added sink, collect the remoteSinks to start connections
             if(connectionEndsIdToDescriptor.containsKey(clusterId)) {
                 newConnectionToStart.add(connectionEndsIdToDescriptor.get(clusterId));

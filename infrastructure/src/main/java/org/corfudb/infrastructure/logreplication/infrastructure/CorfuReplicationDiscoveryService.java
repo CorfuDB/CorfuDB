@@ -817,28 +817,27 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     private void onSinkClusterAddRemove(TopologyDescriptor discoveredTopology) {
         log.debug("Sink Cluster has been added or removed {}", topologyDescriptor.getRemoteSinkClusters());
 
-        // We only need to process new sinks if the local cluster role is SOURCE
-        if (localClusterDescriptor.getRole() == ClusterRole.SOURCE &&
+        // We only need to process new sinks, so find if any remote sink has been added/removed
+        Set<String> receivedSinks = discoveredTopology.getRemoteSinkClusters().keySet();
+        Set<String> currentSinks = topologyDescriptor.getRemoteSinkClusters().keySet();
+        Set<String> remoteClustersToRemove = Sets.difference(currentSinks, receivedSinks);
+        Set<String> remoteClustersToAdd = Sets.difference(receivedSinks, currentSinks);
+
+        if ((!remoteClustersToRemove.isEmpty() || !remoteClustersToAdd.isEmpty()) &&
             replicationManager != null && isLeader.get()) {
-            Set<String> receivedSinks = discoveredTopology.getRemoteSinkClusters().keySet();
-            Set<String> currentSinks = topologyDescriptor.getRemoteSinkClusters().keySet();
 
             Set<String> intersection = Sets.intersection(currentSinks, receivedSinks);
 
-            Set<String> sinksToRemove = Sets.difference(currentSinks, receivedSinks);
-
-            Set<String> sinksToAdd = Sets.difference(receivedSinks, currentSinks);
-
-            for (String remoteClusterId : sinksToRemove) {
+            for (String remoteClusterId : remoteClustersToRemove) {
                 for(ReplicationSession session : remoteClusterIdToReplicationSession.get(remoteClusterId)) {
                     remoteSessionToMetadataManagerMap.remove(session);
                 }
                 remoteClusterIdToReplicationSession.remove(remoteClusterId);
             }
-            createMetadataManagers(sinksToAdd);
-            initReplicationStatusForRemoteClusters(sinksToAdd,true);
+            createMetadataManagers(remoteClustersToAdd);
+            initReplicationStatusForRemoteClusters(remoteClustersToAdd,true);
             replicationContext.setTopology(discoveredTopology);
-            replicationManager.processSinkChange(discoveredTopology, sinksToAdd, sinksToRemove, intersection,
+            replicationManager.processSinkChange(discoveredTopology, remoteClustersToAdd, remoteClustersToRemove, intersection,
                     fetchConnectionEndpoints(), remoteClusterIdToReplicationSession, interClusterServerNode);
         } else {
             // Update the topology config id on the Sink components

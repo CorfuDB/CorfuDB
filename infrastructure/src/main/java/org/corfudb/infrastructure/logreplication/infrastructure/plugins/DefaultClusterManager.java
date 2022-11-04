@@ -63,6 +63,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
     public static final ClusterUuidMsg OP_SINGLE_SOURCE_SINK = ClusterUuidMsg.newBuilder().setLsb(7L).setMsb(7L).build();
     public static final ClusterUuidMsg OP_MULTI_SINK = ClusterUuidMsg.newBuilder().setLsb(8L).setMsb(8L).build();
     public static final ClusterUuidMsg OP_MULTI_SOURCE = ClusterUuidMsg.newBuilder().setLsb(9L).setMsb(9L).build();
+    public static final ClusterUuidMsg OP_BIDIR_ORPH_SINK = ClusterUuidMsg.newBuilder().setLsb(10L).setMsb(10L).build();
 
     @Getter
     private long configId;
@@ -388,6 +389,52 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         }
     }
 
+    private void createBiDirectionalButOrphanedSink() {
+        if(topologyConfig == null) {
+            topologyConfig = readConfig();
+        }
+
+        ClusterConfigurationMsg localCluster = findLocalCluster();
+        log.info("localNodeId: {}", localCluster);
+
+        synchronized (this) {
+            if(localCluster.getId().equals(topology.getSourceClusterIds().get(0))) {
+
+                this.remoteSourcesToReplicationModels.putIfAbsent(topologyConfig.getClustersList().stream()
+                        .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSourceClusterIds().get(1)))
+                        .findFirst().get(), new HashSet<LogReplicationMetadata.ReplicationModels>(){{
+                            //replication model chosen at random here
+                            add(LogReplicationMetadata.ReplicationModels.MOVE_DATA);
+                }});
+
+                this.remoteSinkToReplicationModels.putIfAbsent(topologyConfig.getClustersList().stream()
+                        .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSinkClusterIds().get(0)))
+                        .findFirst().get(), new HashSet<LogReplicationMetadata.ReplicationModels>(){{
+                            add(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES);
+                }});
+
+                this.connectionEndPoints.add(topologyConfig.getClustersList().stream()
+                        .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSinkClusterIds().get(0)))
+                        .findFirst().get());
+
+            } else {
+                // have only sink
+                this.remoteSourcesToReplicationModels.putIfAbsent(topologyConfig.getClustersList().stream()
+                        .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSourceClusterIds().get(0)))
+                        .findFirst().get(), new HashSet<LogReplicationMetadata.ReplicationModels>(){{
+                            add(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES);
+                }});
+            }
+
+            topologyBucketsIinitialized = true;
+            topologyBucketsCustomized = true;
+
+            notify();
+        }
+
+    }
+
+
     /**
      * Create a new topology config, which changes one of the sink as the source,
      * and source as sink. Data should flow in the reverse direction.
@@ -707,6 +754,8 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
                     clusterManager.createSingleSourceMultiSinkTopologyBuckets();
                 } else if (entry.getKey().equals(OP_MULTI_SOURCE)) {
                     clusterManager.createMultiSourceSingleSinkTopologyBuckets();
+                } else if (entry.getKey().equals(OP_BIDIR_ORPH_SINK)) {
+                    clusterManager.createBiDirectionalButOrphanedSink();
                 }
             } else {
                 log.info("onNext :: operation={}, key={}, payload={}, metadata={}", entry.getOperation().name(),

@@ -121,5 +121,6 @@ enum ReplicationModels {
 message ReplicationSessionKey {
   string remoteClusterId = 1;
   string client = 2;
+  // TODO: shama to remove this once we have the tag.
   ReplicationModels replicationModel = 3;
 }

@@ -38,7 +38,6 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
         Set<LogReplicationMetadata.ReplicationModels> modelsInConfig =
             subscriberToStreamsMap.keySet().stream().map(key -> key.getReplicationModel()).collect(Collectors.toSet());
         // TODO: this will be un-commented as we use the replication Models. Currently, we use only 1 out of the four replication models.
-//        Assert.assertTrue(modelsInConfig.containsAll(Arrays.asList(LogReplicationConfig.ReplicationModel.values())));
         Assert.assertTrue(modelsInConfig.size() == 1 && modelsInConfig.contains(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES));
 
         // Verify that all streams returned by the default config adapter are present in the constructed config
