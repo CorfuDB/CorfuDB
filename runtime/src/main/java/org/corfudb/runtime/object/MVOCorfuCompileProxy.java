@@ -16,6 +16,7 @@ import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.ReflectionUtils;
+import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.lang.reflect.InvocationTargetException;
@@ -88,16 +89,8 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
         log.debug("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
 
         // Perform underlying access
-        R result = null;
-        try {
-            ICorfuSMRSnapshotProxy<T> snapshotProxy = underlyingMVO.getSnapshotProxy(timestamp);
-            result = snapshotProxy.access(accessMethod, v -> {});
-        } catch (NullPointerException npe) {
-            // TODO: wrap and throw ObjectEvictedException
-            log.error("Object has been evicted!", npe);
-        }
-
-        return result;
+        ICorfuSMRSnapshotProxy<T> snapshotProxy = underlyingMVO.getSnapshotProxy(timestamp);
+        return snapshotProxy.access(accessMethod, v -> {});
     }
 
     @Override
@@ -163,16 +156,6 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
         return null;
     }
 
-    @Override
-    public ISerializer getSerializer() {
-        return serializer;
-    }
-
-    @Override
-    public Set<UUID> getStreamTags() {
-        return streamTags;
-    }
-
     private T getNewInstance() {
         try {
             T ret = (T) ReflectionUtils
@@ -181,6 +164,11 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
         } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Override
+    public String toString() {
+        return type.getSimpleName() + "[" + Utils.toReadableId(streamID) + "]";
     }
 
     private void abortTransaction(Exception e) {
