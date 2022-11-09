@@ -1,5 +1,6 @@
 package org.corfudb.runtime.collections;
 
+import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Descriptors;
 import com.google.protobuf.Message;
 import lombok.SneakyThrows;
@@ -39,6 +40,7 @@ import java.util.stream.LongStream;
 import java.util.stream.StreamSupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 
 @SuppressWarnings("checkstyle:magicnumber")
 public class PersistentCorfuTableTest extends AbstractViewTest {
@@ -50,7 +52,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
     private static final long MEDIUM_CACHE_SIZE = 100;
     private static final long LARGE_CACHE_SIZE = 50_000;
 
-    private static final long MVO_AUTO_SYNC_PERIOD_SECONDS = 1;
+    private static final String INTERRUPTED_ERROR_MSG = "Unexpected InterruptedException";
 
     private static final String someNamespace = "some-namespace";
     private static final String someTable = "some-table";
@@ -334,8 +336,8 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         // Verify the MVOCache has exactly 2 versions
         Set<VersionedObjectIdentifier> voIds = rt.getObjectsView().getMvoCache().keySet();
         assertThat(voIds).containsExactlyInAnyOrder(
-                new VersionedObjectIdentifier(corfuTable.getCorfuStreamID(), 0),
-                new VersionedObjectIdentifier(corfuTable.getCorfuStreamID(), 1));
+                new VersionedObjectIdentifier(corfuTable.getCorfuStreamID(), -1L),
+                new VersionedObjectIdentifier(corfuTable.getCorfuStreamID(), 0L));
     }
 
     @Test
@@ -1245,5 +1247,83 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         entries = toList(table.getByIndex(() -> "exercises", null));
         assertThat(entries.size()).isEqualTo(2);
         rt.getObjectsView().TXEnd();
+    }
+
+    /**
+     * Test that a table without any updates can be served when a concurrent
+     * transaction syncs the stream forward before this first transaction has
+     * a chance to request a snapshot proxy.
+     */
+    @Test
+    public void testTableNoUpdateInterleave() {
+        PersistentCorfuTable<String, String>
+                table1 = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setStreamName("t1")
+                .open();
+
+        PersistentCorfuTable<String, String>
+                table2 = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setStreamName("t2")
+                .open();
+
+        // Perform some writes to a second table in order to move the global tail.
+        final int smallNum = 5;
+        for (int i = 0; i < smallNum; i++) {
+            getDefaultRuntime().getObjectsView().TXBegin();
+            table2.insert(Integer.toString(i), Integer.toString(i));
+            getDefaultRuntime().getObjectsView().TXEnd();
+        }
+
+        CountDownLatch latch1 = new CountDownLatch(1);
+        CountDownLatch latch2 = new CountDownLatch(1);
+
+        Thread t2 = new Thread(() -> {
+            // Wait until the main thread has acquired a transaction timestamp.
+            try {
+                latch2.await();
+            } catch (InterruptedException ex) {
+                fail(INTERRUPTED_ERROR_MSG, ex);
+            }
+
+            // Move the stream tail for this object.
+            getDefaultRuntime().getObjectsView().TXBegin();
+            table1.insert("foo", "bar");
+            getDefaultRuntime().getObjectsView().TXEnd();
+
+            // Perform an access to sync the underlying MVO to the update from above.
+            getDefaultRuntime().getObjectsView().TXBegin();
+            assertThat(table1.size()).isNotZero();
+            getDefaultRuntime().getObjectsView().TXEnd();
+
+            // Notify the main thread so that it can request a snapshot proxy. The main
+            // thread should not see the update above, and should not get a TrimmedException.
+            latch1.countDown();
+        });
+
+        t2.start();
+
+        getDefaultRuntime().getObjectsView().TXBegin();
+
+        // Acquire a transaction timestamp and wait until the second thread has
+        // finished moving the object forward in time.
+        assertThat(table2.size()).isNotZero();
+        latch2.countDown();
+        try {
+            latch1.await();
+        } catch (InterruptedException ex) {
+            fail(INTERRUPTED_ERROR_MSG, ex);
+        }
+
+        // Validate that we do not see any updates. A TrimmedException should not be thrown either.
+        assertThat(table1.size()).isZero();
+        getDefaultRuntime().getObjectsView().TXEnd();
+
+        try {
+            t2.join();
+        } catch (InterruptedException ex) {
+            fail(INTERRUPTED_ERROR_MSG, ex);
+        }
     }
 }

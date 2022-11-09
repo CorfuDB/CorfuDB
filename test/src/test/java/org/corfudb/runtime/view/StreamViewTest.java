@@ -2,6 +2,8 @@ package org.corfudb.runtime.view;
 
 import com.google.common.collect.Iterables;
 import com.google.common.reflect.TypeToken;
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -11,6 +13,7 @@ import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -539,9 +542,11 @@ public class StreamViewTest extends AbstractViewTest {
     @Test
     public void testNextUpTo() {
         final int numWrites = 10;
+        final String smrMethod = "put";
+        final String key = "key";
+        final String value = "value";
 
-        byte[] testPayload = "hello world".getBytes();
-
+        SMREntry expectedPayload = new SMREntry(smrMethod, new Object[]{key, value}, Serializers.PRIMITIVE);
         String stream = "stream1";
         UUID id1 = CorfuRuntime.getStreamID(stream);
         r.getParameters().setMaxMvoCacheEntries(MVO_CACHE_SIZE);
@@ -559,7 +564,7 @@ public class StreamViewTest extends AbstractViewTest {
         IStreamView svConsumer = consumer.getStreamsView().get(id1);
 
         for (int x = 0; x < numWrites; x++) {
-            svProducer.append(testPayload);
+            svProducer.append(new SMREntry(smrMethod, new Object[]{key, value}, Serializers.PRIMITIVE));
         }
 
         // Emulate the extra Token the Checkpointer requests before appending a checkpoint
@@ -567,8 +572,8 @@ public class StreamViewTest extends AbstractViewTest {
         // producer.getAddressSpaceView().write(new Token(0, numWrites), LogData.getHole(numWrites));
 
         // Get two entries before checkpointing (so we don't load from checkpoint on next access)
-        assertThat(svConsumer.nextUpTo(numWrites).getPayload(consumer)).isEqualTo(testPayload);
-        assertThat(svConsumer.nextUpTo(numWrites).getPayload(consumer)).isEqualTo(testPayload);
+        validateSmrEntry((SMREntry) svConsumer.nextUpTo(numWrites).getPayload(consumer), expectedPayload);
+        validateSmrEntry((SMREntry) svConsumer.nextUpTo(numWrites).getPayload(consumer), expectedPayload);
 
         MultiCheckpointWriter<PersistentCorfuTable<String, String>> checkpointWriter = new MultiCheckpointWriter<>();
         checkpointWriter.addMap(table);
@@ -577,13 +582,21 @@ public class StreamViewTest extends AbstractViewTest {
         // Consume Until Tail
         long tail = consumer.getSequencerView().query(id1);
 
-        ILogData data;
-        while (svConsumer.hasNext()) {
-            data = svConsumer.nextUpTo(tail);
-            if (data != null) {
-                assertThat(data.getPayload(consumer)).isEqualTo(testPayload);
-            }
+        for (int idx = 0; idx < numWrites - 2; idx++) {
+            assertThat(svConsumer.hasNext()).isTrue();
+            validateSmrEntry((SMREntry) svConsumer.nextUpTo(tail).getPayload(consumer), expectedPayload);
         }
+
+        assertThat(svConsumer.hasNext()).isTrue();
+        ILogData cpHole = svConsumer.nextUpTo(tail);
+        assertThat(cpHole.getType()).isEqualTo(DataType.HOLE);
+        assertThat(cpHole.getBackpointerMap()).containsOnlyKeys(id1);
+        assertThat(svConsumer.next()).isNull();
+    }
+
+    private void validateSmrEntry(SMREntry e1, SMREntry e2) {
+        assertThat(e1.getSMRMethod()).isEqualTo(e2.getSMRMethod());
+        assertThat(e1.getSMRArguments()).isEqualTo(e2.getSMRArguments());
     }
 
     /**

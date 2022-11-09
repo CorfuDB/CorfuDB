@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.BiConsumer;
@@ -40,11 +41,11 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.WriteSizeException;
+import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOption;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.AddressMapStreamView;
@@ -71,6 +72,53 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         // This module *really* needs separate & independent runtimes.
         r = getDefaultRuntime().connect(); // side-effect of using AbstractViewTest::getRouterFunction
         r = getNewRuntime(getDefaultNode()).setCacheDisabled(true).connect();
+    }
+
+    /**
+     * This test validates that object versions corresponding to checkpoints
+     * are populated into the MVOCache.
+     */
+    @Test
+    public void testEmptyCheckpointCache() {
+        final String tableName = "table1";
+        final String table2Name = "table2";
+
+        PersistentCorfuTable<String, Long> tableFirstRuntime = instantiateTable(tableName, getRuntime());
+        PersistentCorfuTable<String, Long> tableSecondRuntime = instantiateTable(tableName, r);
+
+        PersistentCorfuTable<String, Long> table2FirstRuntime = instantiateTable(table2Name, getRuntime());
+        PersistentCorfuTable<String, Long> table2SecondRuntime = instantiateTable(table2Name, r);
+
+        /// [Write-T2:0]
+        getRuntime().getObjectsView().TXBegin();
+        table2FirstRuntime.insert("foo", 1L);
+        getRuntime().getObjectsView().TXEnd();
+
+        getRuntime().getObjectsView().TXBegin();
+        tableFirstRuntime.size();
+        getRuntime().getObjectsView().TXEnd();
+
+        /// [Hole-T:1, Start-T:2, End-T:3, Hole-T2:4, Start-T2:5, Cont-T2:6, End-T2:7]
+        MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
+        mcw.addMap(tableSecondRuntime);
+        mcw.addMap(table2SecondRuntime);
+        mcw.appendCheckpoints(r, "Author");
+
+        // [Write-T:8]
+        getRuntime().getObjectsView().TXBegin();
+        tableFirstRuntime.insert("bar", 2L);
+        getRuntime().getObjectsView().TXEnd();
+
+        getRuntime().getObjectsView().TXBegin();
+        tableFirstRuntime.size();
+        getRuntime().getObjectsView().TXEnd();
+
+        // Only [:-1] and [:1] are present in the cache.
+        Set<VersionedObjectIdentifier> cache = getRuntime().getObjectsView().getMvoCache().keySet();
+        assertThat(cache).containsExactlyInAnyOrder(
+                new VersionedObjectIdentifier(tableFirstRuntime.getCorfuStreamID(), -1L),
+                new VersionedObjectIdentifier(tableFirstRuntime.getCorfuStreamID(), 1L)
+        );
     }
 
     @Test
@@ -892,6 +940,16 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     private PersistentCorfuTable<String, Long> instantiateTable(String streamName) {
         r.getSerializers().registerSerializer(serializer);
         return r.getObjectsView()
+                .build()
+                .setStreamName(streamName)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, Long>>() {})
+                .setSerializer(serializer)
+                .open();
+    }
+
+    private PersistentCorfuTable<String, Long> instantiateTable(String streamName, CorfuRuntime rt) {
+        rt.getSerializers().registerSerializer(serializer);
+        return rt.getObjectsView()
                 .build()
                 .setStreamName(streamName)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, Long>>() {})
