@@ -2,7 +2,9 @@ package org.corfudb.runtime.view;
 
 import com.google.common.collect.Iterables;
 import com.google.common.reflect.TypeToken;
+import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
@@ -577,13 +579,16 @@ public class StreamViewTest extends AbstractViewTest {
         // Consume Until Tail
         long tail = consumer.getSequencerView().query(id1);
 
-        ILogData data;
-        while (svConsumer.hasNext()) {
-            data = svConsumer.nextUpTo(tail);
-            if (data != null) {
-                assertThat(data.getPayload(consumer)).isEqualTo(testPayload);
-            }
+        for (int idx = 0; idx < numWrites - 2; idx++) {
+            assertThat(svConsumer.hasNext()).isTrue();
+            assertThat(svConsumer.nextUpTo(tail).getPayload(consumer)).isEqualTo(testPayload);
         }
+
+        assertThat(svConsumer.hasNext()).isTrue();
+        ILogData cpHole = svConsumer.nextUpTo(tail);
+        assertThat(cpHole.getType()).isEqualTo(DataType.HOLE);
+        assertThat(cpHole.getBackpointerMap()).containsOnlyKeys(id1);
+        assertThat(svConsumer.next()).isNull();
     }
 
     /**

@@ -132,6 +132,14 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
         if (entry != null) {
             // Update the pointer.
             updatePointer(entry);
+
+            // If we see a hole that doesn't have a backpointer that belongs to this
+            // stream then it can be skipped. Otherwise, holes that do belong to this
+            // stream (i.e., written by the checkpointer) will be returned and not skipped.
+            // Higher layers can interpret this hole as a no-op
+            if (entry.isHole() && entry.getBackpointerMap().isEmpty()) {
+                return nextUpTo(maxGlobal);
+            }
         }
 
         // Return the entry.
