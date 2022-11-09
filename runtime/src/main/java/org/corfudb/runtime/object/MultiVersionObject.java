@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -61,7 +62,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
     /**
      * Metadata on object versions generated.
      */
-    private StreamAddressSpace addressSpace;
+    private volatile StreamAddressSpace addressSpace;
 
     /**
      * Current state of the underlying object. We maintain a reference here explicitly
@@ -221,12 +222,15 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      * @return True if and only if this timestamp has been materialized.
      */
     private boolean isTimestampMaterializedUnsafe(long timestamp) {
-        if (materializedUpTo == Address.NON_ADDRESS) {
-            return false;
-        }
-
         if (timestamp < addressSpace.getFirst()) {
-            throw new TrimmedException(timestamp);
+            // Special handling here for tables without updates, since we cannot insert
+            // Address.NON_ADDRESS into the StreamAddressSpace metadata.
+            if (addressSpace.getTrimMark() == Address.NON_ADDRESS) {
+                return true;
+            }
+            // TODO(Zach): Clean up exception logging
+            throw new TrimmedException(timestamp, String.format("Trimmed address: %s. Trim mark: %s. StreamAddressSpace: %s.",
+                    timestamp, addressSpace.getTrimMark(), Arrays.toString(addressSpace.toArray())));
         }
 
         return timestamp <= resolvedUpTo && addressSpace.size() != 0;
@@ -261,8 +265,10 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                 if (streamTs == materializedUpTo) {
                     versionedObject = currentObject;
                 } else {
+                    // TODO(Zach): Clean up exception logging
                     versionedObject = mvoCache.get(voId).orElseThrow(() -> new TrimmedException(streamTs,
-                            String.format("Trimmed address %s has been evicted from MVOCache", streamTs)));
+                            String.format("Trimmed address %s has been evicted from MVOCache. Trim mark: %s. StreamAddressSpace: %s.",
+                                    streamTs, addressSpace.getTrimMark(), Arrays.toString(addressSpace.toArray()))));
                 }
 
                 if (lock.validate(lockTs)) {
@@ -295,24 +301,25 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                     try {
                         // Apply all updates in a MultiSMREntry, which is treated as one version.
                         final long globalAddress = addressUpdates.getGlobalAddress();
-                        addressUpdates.getSmrEntryList().forEach(this::applyUpdateUnsafe);
-
-                        final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), globalAddress);
-
-                        // Populate the new version in the MVOCache and update version metadata.
-                        mvoCache.put(voId, currentObject);
-                        addressSpace.addAddress(globalAddress);
 
                         // The globalAddress can be equal to materializedUpTo when processing checkpoint
                         // entries that consist of multiple continuation entries. These will all share the
-                        // globalAddress of the no-op operation. There is no correctness issue by putting
-                        // these prematurely in the cache, as optimistic reads will be invalid.
+                        // globalAddress of the no-op operation. There is no correctness issue by prematurely
+                        // updating version information, as optimistic reads will be invalid.
                         Preconditions.checkState(globalAddress >= materializedUpTo,
                                 "globalAddress %s not >= materialized %s", globalAddress, materializedUpTo);
 
                         Preconditions.checkState(globalAddress >= resolvedUpTo,
                                 "globalAddress %s not >= resolved %s", globalAddress, resolvedUpTo);
 
+                        // If we observe a new version, place the previous one into the MVOCache.
+                        if (globalAddress > materializedUpTo) {
+                            final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), materializedUpTo);
+                            mvoCache.put(voId, currentObject);
+                        }
+
+                        addressUpdates.getSmrEntryList().forEach(this::applyUpdateUnsafe);
+                        addressSpace.addAddress(globalAddress);
                         materializedUpTo = globalAddress;
                         resolvedUpTo = globalAddress;
                     } catch (Exception e) {
