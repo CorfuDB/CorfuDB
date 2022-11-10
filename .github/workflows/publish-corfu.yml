@@ -42,7 +42,9 @@ jobs:
         continue-on-error: true
 
       - name: Prepare Corfu
-        run: .ci/infrastructure-docker-build.sh docker
+        run: |
+          .ci/infrastructure-docker-build.sh docker
+          .ci/generator-docker-build.sh
         shell: bash
 
       - name: Publish corfu artifacts
