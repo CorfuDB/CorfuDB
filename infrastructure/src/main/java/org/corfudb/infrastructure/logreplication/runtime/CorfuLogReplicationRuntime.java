@@ -315,6 +315,8 @@ public class CorfuLogReplicationRuntime {
      * Stop Log Replication, regardless of current state.
      */
     public void stop() {
+        log.info("Shutting down Router");
+        router.stop();
         input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS));
     }
 }
