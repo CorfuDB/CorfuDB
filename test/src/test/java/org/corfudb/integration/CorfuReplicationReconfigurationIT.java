@@ -23,10 +23,12 @@ import org.corfudb.test.SampleSchema.SampleTableAMsg;
 import org.corfudb.test.SampleSchema.ValueFieldTagOne;
 import org.corfudb.test.SampleSchema.ValueFieldTagOneAndTwo;
 import org.corfudb.util.Sleep;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
+import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -769,5 +771,21 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         tablesToListen.add(CorfuRuntime.getStreamID(NAMESPACE + SEPARATOR + TABLE_PREFIX + indexOne));
         tablesToListen.add(CorfuRuntime.getStreamID(NAMESPACE + SEPARATOR + TABLE_PREFIX + indexTwo));
         return tablesToListen;
+    }
+
+    @After
+    public void tearDown() throws IOException, InterruptedException {
+        if (activeRuntime != null) {
+            activeRuntime.shutdown();
+        }
+
+        if (standbyRuntime != null) {
+            standbyRuntime.shutdown();
+        }
+
+        shutdownCorfuServer(activeCorfu);
+        shutdownCorfuServer(standbyCorfu);
+        shutdownCorfuServer(activeReplicationServer);
+        shutdownCorfuServer(standbyReplicationServer);
     }
 }

@@ -13,9 +13,11 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.test.SampleSchema;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -321,5 +323,21 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         public void onError(Throwable throwable) {
             log.error("Error in stream listener", throwable);
         }
+    }
+
+    @After
+    public void tearDown() throws IOException, InterruptedException {
+        if (activeRuntime != null) {
+            activeRuntime.shutdown();
+        }
+
+        if (standbyRuntime != null) {
+            standbyRuntime.shutdown();
+        }
+
+        shutdownCorfuServer(activeCorfu);
+        shutdownCorfuServer(standbyCorfu);
+        shutdownCorfuServer(activeReplicationServer);
+        shutdownCorfuServer(standbyReplicationServer);
     }
 }

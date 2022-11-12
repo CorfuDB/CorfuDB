@@ -3,7 +3,9 @@ package org.corfudb.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.File;
+import java.io.IOException;
 import lombok.extern.slf4j.Slf4j;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -223,5 +225,21 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
                 standbyReplicationServer.destroy();
             }
         }
+    }
+
+    @After
+    public void tearDown() throws IOException, InterruptedException {
+        if (activeRuntime != null) {
+            activeRuntime.shutdown();
+        }
+
+        if (standbyRuntime != null) {
+            standbyRuntime.shutdown();
+        }
+
+        shutdownCorfuServer(activeCorfu);
+        shutdownCorfuServer(standbyCorfu);
+        shutdownCorfuServer(activeReplicationServer);
+        shutdownCorfuServer(standbyReplicationServer);
     }
 }

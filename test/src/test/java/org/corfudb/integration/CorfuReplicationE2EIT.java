@@ -1,11 +1,13 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
+import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -78,5 +80,21 @@ public class CorfuReplicationE2EIT extends LogReplicationAbstractIT {
         log.debug("Using plugin :: {}", pluginConfigFilePath);
         final int totalNumMaps = 3;
         testEndToEndSnapshotAndLogEntrySyncUFO(totalNumMaps, true, true);
+    }
+
+    @After
+    public void tearDown() throws IOException, InterruptedException {
+        if (activeRuntime != null) {
+            activeRuntime.shutdown();
+        }
+
+        if (standbyRuntime != null) {
+            standbyRuntime.shutdown();
+        }
+
+        shutdownCorfuServer(activeCorfu);
+        shutdownCorfuServer(standbyCorfu);
+        shutdownCorfuServer(activeReplicationServer);
+        shutdownCorfuServer(standbyReplicationServer);
     }
 }

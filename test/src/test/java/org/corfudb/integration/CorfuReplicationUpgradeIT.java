@@ -10,9 +10,11 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.utils.CommonTypes;
 import org.corfudb.utils.LogReplicationStreams;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -936,5 +938,21 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         Assert.assertEquals(expectedVersion, actualVersion);
         Assert.assertEquals(isUpgraded, actualUpgradedFlag);
         log.info("Verified version");
+    }
+
+    @After
+    public void tearDown() throws IOException, InterruptedException {
+        if (activeRuntime != null) {
+            activeRuntime.shutdown();
+        }
+
+        if (standbyRuntime != null) {
+            standbyRuntime.shutdown();
+        }
+
+        shutdownCorfuServer(activeCorfu);
+        shutdownCorfuServer(standbyCorfu);
+        shutdownCorfuServer(activeReplicationServer);
+        shutdownCorfuServer(standbyReplicationServer);
     }
 }
