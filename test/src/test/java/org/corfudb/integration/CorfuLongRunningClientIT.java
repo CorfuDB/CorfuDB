@@ -52,7 +52,7 @@ public class CorfuLongRunningClientIT extends AbstractIT {
      * Test the case where a long running client attempts to access (sync) the
      * object from multiple threads, and all accesses are non-transactional.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testMultiThreadedLongRunningClientNonTxAccess() throws Exception {
@@ -91,7 +91,7 @@ public class CorfuLongRunningClientIT extends AbstractIT {
      * Test the case where a long running client attempts to access (sync) the
      * object from multiple threads, and all accesses are transactional.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testMultiThreadedLongRunningClientTxAccess() throws Exception {
@@ -132,7 +132,7 @@ public class CorfuLongRunningClientIT extends AbstractIT {
      * Test the case where a long running client attempts to access (sync) the
      * object from multiple threads, and accesses are transactional and non-transactional.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testMultiThreadedLongRunningClientMixedTxNonTxAccess() throws Exception {
@@ -197,7 +197,7 @@ public class CorfuLongRunningClientIT extends AbstractIT {
      * (7) Trim at the second checkpoint cycle @6, this will guarantee that the long running client won't be able
      *     to observe Client's 2 update (address 5) unless it loads from a checkpoint.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     private void testLongRunningClient() throws Exception {
 
@@ -215,10 +215,10 @@ public class CorfuLongRunningClientIT extends AbstractIT {
             cpClient = createRuntimeWithCache(DEFAULT_HOST + ":" + DEFAULT_PORT);
 
             // Open Table for Client 1
-            tableAClient1 = createCorfuTable(client1, streamName);
+            tableAClient1 = createCorfuTableUnsafe(client1, streamName);
 
             // Open Table for Client CP
-            tableAClientCP = createCorfuTable(cpClient, streamName);
+            tableAClientCP = createCorfuTableUnsafe(cpClient, streamName);
 
             // Write Client 1
             tableAClient1.insert("KeyClient1", 1);
@@ -228,7 +228,7 @@ public class CorfuLongRunningClientIT extends AbstractIT {
 
             // Write Client 2
             // Open Map for Client 2
-            tableAClient2 = createCorfuTable(client2, streamName);
+            tableAClient2 = createCorfuTableUnsafe(client2, streamName);
             tableAClient2.insert("KeyClient2", 2);
             assertThat(tableAClient2.size()).isEqualTo(2);
 

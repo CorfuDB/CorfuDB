@@ -132,6 +132,8 @@ public class ObjectsViewTest extends AbstractViewTest {
 
         // Try to start a new nested transaction with a different runtime
         assertThatThrownBy(() -> r2.getObjectsView().TXBegin()).isInstanceOf(IllegalStateException.class);
+        r1.shutdown();
+        r2.shutdown();
     }
 
     @Test

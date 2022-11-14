@@ -1,20 +1,17 @@
 package org.corfudb.infrastructure.logreplication;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-
-import com.google.common.reflect.TypeToken;
-import java.io.IOException;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.Serializers;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 @Slf4j
 public class LogReplicationTest {
 
-    private String endpoint;
+    private final String endpoint;
 
     private final int ITERATIONS = 10;
 
@@ -29,13 +26,12 @@ public class LogReplicationTest {
 
     /**
      * Setup Test Environment
-     *
+     * <p>
      * - Two independent Corfu Servers (source and destination)
      * - CorfuRuntime's to each Corfu Server
      *
-     * @throws IOException
      */
-    private void setupEnv() throws IOException {
+    private void setupEnv() {
 
         CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters.builder()
 //                .trustStore("/config/cluster-manager/cluster-manager/public/truststore.jks")
@@ -59,24 +55,21 @@ public class LogReplicationTest {
                 .build()
                 .setStreamName("Table001")
                 .setStreamTags(ObjectsView.getLogReplicatorStreamId())
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                })
+                .setTypeToken(CorfuTable.<String, String>getTableType())
                 .setSerializer(Serializers.PRIMITIVE)
                 .open();
         table2 = runtime.getObjectsView()
                 .build()
                 .setStreamName("Table002")
                 .setStreamTags(ObjectsView.getLogReplicatorStreamId())
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                })
+                .setTypeToken(CorfuTable.<String, String>getTableType())
                 .setSerializer(Serializers.PRIMITIVE)
                 .open();
         table3 = runtime.getObjectsView()
                 .build()
                 .setStreamName("Table003")
                 .setStreamTags(ObjectsView.getLogReplicatorStreamId())
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                })
+                .setTypeToken(CorfuTable.<String, String>getTableType())
                 .setSerializer(Serializers.PRIMITIVE)
                 .open();
     }

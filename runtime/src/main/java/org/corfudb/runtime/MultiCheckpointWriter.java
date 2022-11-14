@@ -21,7 +21,7 @@ import java.util.UUID;
 @Slf4j
 public class MultiCheckpointWriter<T extends ICorfuTable<?, ?>> {
     @Getter
-    private List<ICorfuSMR<T>> tables = new ArrayList<>();
+    private final List<ICorfuSMR<T>> tables = new ArrayList<>();
 
     /** Add a table to the list of tables to be checkpointed by this class. */
     @SuppressWarnings("unchecked")

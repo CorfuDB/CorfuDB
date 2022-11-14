@@ -8,6 +8,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
@@ -133,6 +134,7 @@ public class StreamViewTest extends AbstractViewTest {
 
         String streamTag = "tx_stream";
         UUID streamTagId = CorfuRuntime.getStreamID(streamTag);
+        CorfuRuntime runtime = getRuntime();
         IStreamView txStream = runtime.getStreamsView().get(streamTagId,
             options);
         final int firstIter = 50;
@@ -377,6 +379,7 @@ public class StreamViewTest extends AbstractViewTest {
         sv.append(testPayload);
 
         // Trim the entry
+        CorfuRuntime runtime = getRuntime();
         Token token = new Token(runtime.getLayoutView().getLayout().getEpoch(), 0);
         runtime.getAddressSpaceView().prefixTrim(token);
         runtime.getAddressSpaceView().gc();
@@ -482,7 +485,7 @@ public class StreamViewTest extends AbstractViewTest {
     public void txLogTrim() {
         final String streamTag = "tx_stream_tag";
         final UUID tagId = CorfuRuntime.getStreamID(streamTag);
-        final CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
+        final CorfuRuntimeParameters params = CorfuRuntimeParameters
                 .builder()
                 .maxMvoCacheEntries(MVO_CACHE_SIZE)
                 .build();
@@ -537,6 +540,8 @@ public class StreamViewTest extends AbstractViewTest {
         // Ensure that we can recover.
         txStream.seek(localRuntime.getSequencerView().query().getSequence());
         txStream.remaining();
+
+        localRuntime.shutdown();
     }
 
     @Test

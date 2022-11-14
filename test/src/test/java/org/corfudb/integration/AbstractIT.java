@@ -1,6 +1,5 @@
 package org.corfudb.integration;
 
-import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
@@ -9,11 +8,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ISerializer;
 import org.junit.After;
 import org.junit.Before;
@@ -32,6 +31,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -42,7 +42,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Integration tests.
- * Created by zlokhandwala on 4/28/17.
  */
 @Slf4j
 public class AbstractIT extends AbstractCorfuTest {
@@ -60,7 +59,7 @@ public class AbstractIT extends AbstractCorfuTest {
 
     private static final String KILL_COMMAND = "pkill -9 -P ";
     // FIXME: if jps doesn't exist tear down will fail silently
-    private static final String FORCE_KILL_ALL_CORFU_COMMAND = "jps | grep -e CorfuServer -e CorfuInterClusterReplicationServer|awk '{print $1}'| xargs kill -9";
+    private static final String FORCE_KILL_ALL_CORFU_COMMAND = "jps | grep -e CorfuServer -e CorfuInterClusterReplicationServer | awk '{print $1}' | xargs kill -9";
 
     private static final int SHUTDOWN_RETRIES = 10;
     private static final long SHUTDOWN_RETRY_WAIT = 500;
@@ -70,7 +69,7 @@ public class AbstractIT extends AbstractCorfuTest {
     // We set it as 128KB to make multiple messages during the tests.
     private static final int MSG_SIZE = 131072;
 
-    public CorfuRuntime runtime;
+    private final ConcurrentLinkedQueue<CorfuRuntime> runtimes = new ConcurrentLinkedQueue<>();
 
     public static final Properties PROPERTIES = new Properties();
 
@@ -92,11 +91,10 @@ public class AbstractIT extends AbstractCorfuTest {
     /**
      * Cleans up the corfu log directory before running any test.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Before
     public void setUp() throws Exception {
-        runtime = null;
         forceShutdownAllCorfuServers();
         FileUtils.cleanDirectory(new File(CORFU_LOG_PATH));
     }
@@ -104,13 +102,18 @@ public class AbstractIT extends AbstractCorfuTest {
     /**
      * Cleans up all Corfu instances after the tests.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @After
     public void cleanUp() throws Exception {
         forceShutdownAllCorfuServers();
-        if (runtime != null) {
-            runtime.shutdown();
+        while (!runtimes.isEmpty()){
+            CorfuRuntime rt = runtimes.poll();
+            try {
+                rt.shutdown();
+            } catch (Throwable th){
+                log.warn("Error closing a runtime", th);
+            }
         }
     }
 
@@ -121,8 +124,8 @@ public class AbstractIT extends AbstractCorfuTest {
     /**
      * Shuts down all corfu instances running on the node.
      *
-     * @throws IOException
-     * @throws InterruptedException
+     * @throws IOException error
+     * @throws InterruptedException error
      */
     public static void forceShutdownAllCorfuServers() throws IOException, InterruptedException {
         ProcessBuilder builder = new ProcessBuilder();
@@ -134,10 +137,10 @@ public class AbstractIT extends AbstractCorfuTest {
     /**
      * Shuts down all corfu instances.
      *
-     * @param corfuServerProcess
-     * @return
-     * @throws IOException
-     * @throws InterruptedException
+     * @param corfuServerProcess coru server process
+     * @return status
+     * @throws IOException error
+     * @throws InterruptedException error
      */
     public static boolean shutdownCorfuServer(Process corfuServerProcess) throws IOException, InterruptedException {
         int retries = SHUTDOWN_RETRIES;
@@ -160,7 +163,7 @@ public class AbstractIT extends AbstractCorfuTest {
 
             if (corfuServerProcess.isAlive()) {
                 retries--;
-                Thread.sleep(SHUTDOWN_RETRY_WAIT);
+                TimeUnit.MILLISECONDS.sleep(SHUTDOWN_RETRY_WAIT);
             } else {
                 return true;
             }
@@ -173,7 +176,7 @@ public class AbstractIT extends AbstractCorfuTest {
         try {
             runtimeLayout.getBaseClient(endpoint).restart().get();
         } catch (ExecutionException | InterruptedException e) {
-            log.error("Error: {}", e);
+            log.error("Error:", e);
         }
 
         // The shutdown and restart can take an unknown amount of time and there is a chance that
@@ -229,7 +232,7 @@ public class AbstractIT extends AbstractCorfuTest {
      *
      * @param pid parent process identifier
      * @return list of children process identifiers
-     * @throws IOException
+     * @throws IOException error
      */
     private static List<Long> getChildPIDs(long pid) {
         List<Long> childPIDs = new ArrayList<>();
@@ -284,8 +287,8 @@ public class AbstractIT extends AbstractCorfuTest {
     /**
      * Creates a message of specified size in bytes.
      *
-     * @param msgSize
-     * @return
+     * @param msgSize messageSize
+     * @return a message
      */
     public static String createStringOfSize(int msgSize) {
         StringBuilder sb = new StringBuilder(msgSize);
@@ -295,8 +298,18 @@ public class AbstractIT extends AbstractCorfuTest {
         return sb.toString();
     }
 
-    public static CorfuRuntime createDefaultRuntime() {
-        return createRuntime(DEFAULT_ENDPOINT);
+    public CorfuRuntime createDefaultRuntime() {
+        CorfuRuntime rt = createRuntime(DEFAULT_ENDPOINT);
+        managed(rt);
+        return rt;
+    }
+
+    /**
+     * Make corfu runtime managed and shutdown after a test finishes
+     * @param runtime corfu runtime
+     */
+    void managed(CorfuRuntime runtime) {
+        runtimes.add(runtime);
     }
 
     public Process runServer(int port, boolean single) throws IOException {
@@ -362,56 +375,79 @@ public class AbstractIT extends AbstractCorfuTest {
                 .runServer();
     }
 
-    public static CorfuRuntime createRuntime(String endpoint) {
-        return createRuntime(endpoint, true, CorfuRuntime.CorfuRuntimeParameters.builder());
+    public CorfuRuntime createRuntime(String endpoint) {
+        return createRuntime(endpoint, true, CorfuRuntimeParameters.builder());
     }
 
-    public static CorfuRuntime createRuntime(String endpoint, CorfuRuntimeParametersBuilder parametersBuilder) {
+    public CorfuRuntime createRuntime(String endpoint, CorfuRuntimeParametersBuilder parametersBuilder) {
         return createRuntime(endpoint, true, parametersBuilder);
     }
 
-    public static CorfuRuntime createRuntimeWithCache() {
+    public CorfuRuntime createRuntimeWithCache() {
         return createRuntimeWithCache(DEFAULT_ENDPOINT);
     }
 
-    public static CorfuRuntime createRuntimeWithCache(String endpoint) {
-        return createRuntime(endpoint, false, CorfuRuntime.CorfuRuntimeParameters.builder());
+    public CorfuRuntime createRuntimeWithCache(String endpoint) {
+        return createRuntime(endpoint, false, CorfuRuntimeParameters.builder());
     }
 
-    private static CorfuRuntime createRuntime(String endpoint, boolean cacheDisabled,
+    private CorfuRuntime createRuntime(String endpoint, boolean cacheDisabled,
                                               CorfuRuntimeParametersBuilder parametersBuilder) {
-        return CorfuRuntime.fromParameters(
-                parametersBuilder.maxMvoCacheEntries(DEFAULT_MVO_CACHE_SIZE)
-                        .cacheDisabled(cacheDisabled)
-                        .build())
+        CorfuRuntime rt = CorfuRuntime.fromParameters(
+                        parametersBuilder.maxMvoCacheEntries(DEFAULT_MVO_CACHE_SIZE)
+                                .cacheDisabled(cacheDisabled)
+                                .build())
                 .parseConfigurationString(endpoint)
                 .connect();
+        managed(rt);
+
+        return rt;
     }
 
-    public static <K, V> PersistentCorfuTable<K, V> createCorfuTable(@NonNull CorfuRuntime rt,
-                                                                     @NonNull String streamName) {
+    public void createCorfuTableStr(
+            @NonNull CorfuRuntime rt, @NonNull String streamName,
+            ThrowableConsumer<PersistentCorfuTable<String, String>> action) throws Exception {
+        createCorfuTable(rt, streamName, action);
+    }
+
+    public <K, V> void createCorfuTable(
+            @NonNull CorfuRuntime rt, @NonNull String streamName,
+            ThrowableConsumer<PersistentCorfuTable<K, V>> action) throws Exception {
+
+        try (PersistentCorfuTable<K, V> table = createCorfuTableUnsafe(rt, streamName)) {
+            action.accept(table);
+        }
+    }
+
+    public <K, V> PersistentCorfuTable<K, V> createCorfuTableUnsafe(CorfuRuntime rt, String streamName) {
         return rt.getObjectsView()
                 .build()
                 .setStreamName(streamName)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<K, V>>() {})
+                .setTypeToken(PersistentCorfuTable.<K, V>getTableType())
                 .open();
     }
 
-    public static <K, V> PersistentCorfuTable<K, V> createCorfuTable(@NonNull CorfuRuntime rt,
-                                                                     @NonNull String streamName,
-                                                                     @NonNull ISerializer serializer) {
+    public <K, V> void createCorfuTable(
+            @NonNull CorfuRuntime rt, @NonNull String streamName, @NonNull ISerializer serializer,
+            ThrowableConsumer<PersistentCorfuTable<K, V>> action) throws Exception {
         // Serializer should be registered with the runtime separately
+        try (PersistentCorfuTable<K, V> table = createCorfuTableUnsafe(rt, streamName, serializer)) {
+            action.accept(table);
+        }
+    }
+
+    public <K, V> PersistentCorfuTable<K, V> createCorfuTableUnsafe(CorfuRuntime rt, String streamName, ISerializer serializer) {
         return rt.getObjectsView()
                 .build()
                 .setStreamName(streamName)
                 .setSerializer(serializer)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<K, V>>() {})
+                .setTypeToken(PersistentCorfuTable.<K, V>getTableType())
                 .open();
     }
 
     public static class StreamGobbler implements Runnable {
-        private InputStream inputStream;
-        private String logfile;
+        private final InputStream inputStream;
+        private final String logfile;
 
         public StreamGobbler(InputStream inputStream, String logfile) throws IOException {
             this.inputStream = inputStream;
@@ -431,7 +467,7 @@ public class AbstractIT extends AbstractCorfuTest {
                                     Files.write(Paths.get(logfile), "\n".getBytes(),
                                             StandardOpenOption.APPEND);
                                 } catch (Exception e) {
-                                    log.error("StreamGobbler: Error, {}", e);
+                                    log.error("StreamGobbler: Error", e);
                                 }
                             }
                     );
@@ -525,7 +561,7 @@ public class AbstractIT extends AbstractCorfuTest {
          *
          * @return a {@link Process} running a Corfu server as it is setup through the properties of
          * the instance on which this method is called.
-         * @throws IOException
+         * @throws IOException error
          */
         public Process runServer() throws IOException {
             final String serverConsoleLogPath = CORFU_LOG_PATH + File.separator + host + "_" + port + "_consolelog";
@@ -647,7 +683,7 @@ public class AbstractIT extends AbstractCorfuTest {
          *
          * @return a {@link Process} running a Corfu server as it is setup through the properties of
          * the instance on which this method is called.
-         * @throws IOException
+         * @throws IOException error
          */
         public Process runServer() throws IOException {
             final String serverConsoleLogPath = CORFU_LOG_PATH + File.separator + host + "_" + port + "_consolelog";
@@ -681,5 +717,9 @@ public class AbstractIT extends AbstractCorfuTest {
                 throw new IOException(use);
             }
         }
+    }
+
+    public interface ThrowableConsumer<T> {
+        void accept(T t) throws Exception;
     }
 }

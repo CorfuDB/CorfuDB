@@ -139,14 +139,14 @@ public class CmdletIT extends AbstractIT {
     /**
      * Testing corfu_stream append and read.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testCorfuStreamCmdlet() throws Exception {
 
         corfuServerProcess = new CorfuServerRunner().setPort(PORT).runServer();
         final String streamA = "streamA";
-        runtime = createRuntime(ENDPOINT);
+        CorfuRuntime runtime = createRuntime(ENDPOINT);
         IStreamView streamViewA = runtime.getStreamsView().get(CorfuRuntime.getStreamID(streamA));
 
         String payload1 = "Hello";
@@ -176,7 +176,7 @@ public class CmdletIT extends AbstractIT {
 
         corfuServerProcess = new CorfuServerRunner().setPort(PORT).runServer();
         final String streamA = "streamA";
-        runtime = createRuntime(ENDPOINT);
+        CorfuRuntime runtime = createRuntime(ENDPOINT);
 
         String commandNextToken = CORFU_PROJECT_DIR + "bin/corfu_sequencer -i " + streamA + " -c " + ENDPOINT + " next-token 3";
         runCmdletGetOutput(commandNextToken);
@@ -270,7 +270,7 @@ public class CmdletIT extends AbstractIT {
 
         assertThat(runCmdletGetOutput(command).contains(expectedOutput)).isTrue();
 
-        runtime = createRuntime(ENDPOINT);
+        CorfuRuntime runtime = createRuntime(ENDPOINT);
         IStreamView streamViewA = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
         assertThat(streamViewA.hasNext())
                 .isFalse();

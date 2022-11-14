@@ -92,7 +92,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
             List<CorfuStoreMetadata.Timestamp> committedTimestamps = new ArrayList();
 
             // Start a Corfu runtime & Corfu Store
-            runtime = createRuntime(singleNodeEndpoint);
+            CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
             CorfuStore store = new CorfuStore(runtime);
 
             // Open one table and write couple of updates
@@ -136,10 +136,10 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
     /**
      * Create a table and add data to it.  Verify that the browser tool is able
      * to read its contents accurately.
-     * @throws IOException
-     * @throws NoSuchMethodException
-     * @throws IllegalAccessException
-     * @throws InvocationTargetException
+     * @throws IOException error
+     * @throws NoSuchMethodException error
+     * @throws IllegalAccessException error
+     * @throws InvocationTargetException error
      */
     @Test
     public void browserTest() throws
@@ -153,7 +153,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
             corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -224,7 +224,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         final long ruleIdVal = 50L;
         final long metaUuid = 100L;
 
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
         final Table<SampleSchema.Uuid, SampleSchema.FirewallRule, SampleSchema.Uuid> table = store.openTable(
                 namespace,
@@ -291,7 +291,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
             });
         });
 
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
 
         // (1) List Stream Tags
@@ -324,7 +324,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
 
     private Map<String, List<String>> populateRegistryTable(String namespace, String tableBaseName) throws Exception {
         // Start a Corfu runtime & CorfuStore
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
         Map<String, List<String>> tableNameToTags = new HashMap<>();
@@ -355,7 +355,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
     /**
      * Test Corfu Browser protobuf descriptor table
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testListAllProtos() throws Exception {
@@ -368,7 +368,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         final int expectedFiles = 5;
         populateRegistryTable(namespace, tableBaseName);
 
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
         assertThat(browser.printAllProtoDescriptors()).isEqualTo(expectedFiles);
 
@@ -396,7 +396,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -463,7 +463,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
                 corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -522,7 +522,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
                 corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -577,7 +577,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -666,7 +666,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -722,7 +722,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -806,7 +806,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -909,7 +909,7 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
 
         CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
 

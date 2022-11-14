@@ -110,7 +110,7 @@ public class SecurityIT extends AbstractIT {
      * {@link CorfuRuntime}'s API and then asserts that operations on a CorfuTable is executed
      * as Expected.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testServerRuntimeTlsEnabledMethod() throws Exception {
@@ -118,7 +118,7 @@ public class SecurityIT extends AbstractIT {
         final Process corfuServer = runSinglePersistentServerTls();
 
         // Start a Corfu runtime
-        runtime = new CorfuRuntime(singleNodeEndpoint)
+        CorfuRuntime runtime = new CorfuRuntime(singleNodeEndpoint)
                 .enableTls(runtimePathToKeyStore,
                         runtimePathToKeyStorePassword,
                         runtimePathToTrustStore,
@@ -128,31 +128,32 @@ public class SecurityIT extends AbstractIT {
                 .connect();
 
         // Create CorfuTable
-        PersistentCorfuTable<String, Object> testTable = runtime
+        try(PersistentCorfuTable<String, Object> testTable = runtime
                 .getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, Object>>() {})
+                .setTypeToken(PersistentCorfuTable.<String, Object>getTableType())
                 .setStreamName("volbeat")
-                .open();
+                .open()) {
 
-        // CorfuTable stats before usage
-        final int initialSize = testTable.size();
+            // CorfuTable stats before usage
+            final int initialSize = testTable.size();
 
-        // Put key values in CorfuTable
-        final int count = 100;
-        final int entrySize = 1000;
-        for (int i = 0; i < count; i++) {
-            testTable.insert(String.valueOf(i), new byte[entrySize]);
+            // Put key values in CorfuTable
+            final int count = 100;
+            final int entrySize = 1000;
+            for (int i = 0; i < count; i++) {
+                testTable.insert(String.valueOf(i), new byte[entrySize]);
+            }
+
+            // Assert that put operation was successful
+            final int sizeAfterPuts = testTable.size();
+            assertThat(sizeAfterPuts).isGreaterThanOrEqualTo(initialSize);
+            log.info("Initial Table Size: {} - FinalTable Size:{}", initialSize, sizeAfterPuts);
+
+            // Assert that table has correct size (i.e. count) and and server is shutdown
+            assertThat(testTable.size()).isEqualTo(count);
+            assertThat(shutdownCorfuServer(corfuServer)).isTrue();
         }
-
-        // Assert that put operation was successful
-        final int sizeAfterPuts = testTable.size();
-        assertThat(sizeAfterPuts).isGreaterThanOrEqualTo(initialSize);
-        log.info("Initial Table Size: {} - FinalTable Size:{}", initialSize, sizeAfterPuts);
-
-        // Assert that table has correct size (i.e. count) and and server is shutdown
-        assertThat(testTable.size()).isEqualTo(count);
-        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 
     /**
@@ -161,7 +162,7 @@ public class SecurityIT extends AbstractIT {
      * {@link CorfuRuntimeParameters} and then asserts that
      * operations on a CorfuTable is executed as Expected.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testServerRuntimeTlsEnabledByParameter() throws Exception {
@@ -179,29 +180,29 @@ public class SecurityIT extends AbstractIT {
                 .tsPasswordFile(runtimePathToTrustStorePassword)
                 .systemDownHandler(getShutdownHandler(corfuServer));
 
-        runtime = createRuntime(DEFAULT_ENDPOINT, paramsBuilder);
+        CorfuRuntime runtime = createRuntime(DEFAULT_ENDPOINT, paramsBuilder);
 
         // Create CorfuTable
-        PersistentCorfuTable<String, Object> testTable = createCorfuTable(runtime, "volbeat");
+        this.<String, Object>createCorfuTable(runtime, "volbeat", testTable -> {
+            // CorfuTable stats before usage
+            final int initialSize = testTable.size();
 
-        // CorfuTable stats before usage
-        final int initialSize = testTable.size();
+            // Put key values in CorfuTable
+            final int count = 100;
+            final int entrySize = 1000;
+            for (int i = 0; i < count; i++) {
+                testTable.insert(String.valueOf(i), new byte[entrySize]);
+            }
 
-        // Put key values in CorfuTable
-        final int count = 100;
-        final int entrySize = 1000;
-        for (int i = 0; i < count; i++) {
-            testTable.insert(String.valueOf(i), new byte[entrySize]);
-        }
+            // Assert that put operation was successful
+            final int sizeAfterPuts = testTable.size();
+            assertThat(sizeAfterPuts).isGreaterThanOrEqualTo(initialSize);
+            log.info("Initial Table Size: {} - FinalTable Size:{}", initialSize, sizeAfterPuts);
 
-        // Assert that put operation was successful
-        final int sizeAfterPuts = testTable.size();
-        assertThat(sizeAfterPuts).isGreaterThanOrEqualTo(initialSize);
-        log.info("Initial Table Size: {} - FinalTable Size:{}", initialSize, sizeAfterPuts);
-
-        // Assert that table has correct size (i.e. count) and and server is shutdown
-        assertThat(testTable.size()).isEqualTo(count);
-        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+            // Assert that table has correct size (i.e. count) and and server is shutdown
+            assertThat(testTable.size()).isEqualTo(count);
+            assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+        });
     }
 
     private Runnable getShutdownHandler(Process corfuServer) {

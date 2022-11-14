@@ -112,7 +112,8 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
             cacheBuilder.concurrencyLevel(concurrencyLevel);
         }
 
-        readCache = cacheBuilder.expireAfterAccess(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
+        readCache = cacheBuilder
+                .expireAfterAccess(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
                 .expireAfterWrite(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
                 .removalListener(this::handleEviction)
                 .recordStats()

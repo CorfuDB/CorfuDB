@@ -98,7 +98,7 @@ public class ServerRestartIT extends AbstractIT {
     /**
      * Randomized tests with mixed client and server failovers.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testRandomizedRecovery() throws Exception {
@@ -137,7 +137,7 @@ public class ServerRestartIT extends AbstractIT {
             Future<Boolean> future = executorService.submit(() -> {
                 CorfuRuntime runtime = createDefaultRuntime();
                 runtimeList.add(runtime);
-                smrMapList.add(createCorfuTable(runtime, Integer.toString(ii)));
+                smrMapList.add(createCorfuTableUnsafe(runtime, Integer.toString(ii)));
                 return true;
             });
             future.get(PARAMETERS.TIMEOUT_LONG.toMillis(), TimeUnit.MILLISECONDS);
@@ -166,7 +166,7 @@ public class ServerRestartIT extends AbstractIT {
                         Future<Boolean> future = executorService.submit(() -> {
                             CorfuRuntime runtime = createDefaultRuntime();
                             runtimeList.add(runtime);
-                            smrMapList.add(createCorfuTable(runtime, Integer.toString(jj)));
+                            smrMapList.add(createCorfuTableUnsafe(runtime, Integer.toString(jj)));
                             return true;
                         });
                         future.get(PARAMETERS.TIMEOUT_LONG.toMillis(), TimeUnit.MILLISECONDS);
@@ -237,7 +237,7 @@ public class ServerRestartIT extends AbstractIT {
     /**
      * Test server failure and recovery on a transaction-based client (non-nested transactions).
      *
-     * @throws Exception
+     * @throws Exception error
      */
     // TODO(Zach): PersistentCorfuTable does not have a compute method
     /*
@@ -447,9 +447,9 @@ public class ServerRestartIT extends AbstractIT {
         UUID streamNameA = CorfuRuntime.getStreamID("mapA");
         UUID streamNameB = CorfuRuntime.getStreamID("mapB");
 
-        runtime = createDefaultRuntime();
-        PersistentCorfuTable<String, Integer> mapA = createCorfuTable(runtime, "mapA");
-        PersistentCorfuTable<String, Integer> mapB = createCorfuTable(runtime, "mapB");
+        CorfuRuntime runtime = createDefaultRuntime();
+        PersistentCorfuTable<String, Integer> mapA = createCorfuTableUnsafe(runtime, "mapA");
+        PersistentCorfuTable<String, Integer> mapB = createCorfuTableUnsafe(runtime, "mapB");
 
         for (int i = 0; i < insertions; i++) {
             mapA.insert(Integer.toString(i), i);
@@ -484,14 +484,14 @@ public class ServerRestartIT extends AbstractIT {
      * If a tokenResponse is received in the previous epoch,
      * a write should discard the tokenResponse and throw an exception.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void discardTokenReceivedInPreviousEpoch() throws Exception {
         final int timeToWaitInSeconds = 3;
 
         Process corfuServerProcess = runCorfuServer();
-        runtime = createDefaultRuntime();
+        CorfuRuntime runtime = createDefaultRuntime();
 
         // wait for this server long enough to start (by requesting token service)
         TokenResponse firsttr = runtime.getSequencerView().next();
@@ -511,7 +511,7 @@ public class ServerRestartIT extends AbstractIT {
         byte[] testPayload = "hello world".getBytes();
 
         // Should succeed. internally, it will refresh the token.
-        CompletableFuture cf = CFUtils.within(CompletableFuture.supplyAsync(() -> {
+        CompletableFuture<Boolean> cf = CFUtils.within(CompletableFuture.supplyAsync(() -> {
             runtime.getAddressSpaceView().write(mockTr, testPayload);
             return true;
         }), Duration.ofSeconds(timeToWaitInSeconds));
@@ -546,7 +546,7 @@ public class ServerRestartIT extends AbstractIT {
      * reconstruct the indices.
      * Finally we assert the reconstructed indices.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testCorfuTableIndexReconstruction() throws Exception {
@@ -611,7 +611,7 @@ public class ServerRestartIT extends AbstractIT {
      * 4) Starts a client with cache and fast loading and verify multi index
      * 5) Starts a client without cache and fast loading and verify multi index
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testCorfuTableMultiIndexReconstruction() throws Exception {
@@ -680,7 +680,7 @@ public class ServerRestartIT extends AbstractIT {
      *
      * It also verifies that behaviour is kept the same after the node is restarted and both checkpoints
      * still exist.
-     *
+     * <p>
      * 1. Write 25 entries to stream A.
      * 2. Start a checkpoint (CP2) at snapshot 15, complete it.
      * 3. Start a checkpoint (CP1) at snapshot 10, complete it.
@@ -688,7 +688,7 @@ public class ServerRestartIT extends AbstractIT {
      * 5. New runtime instantiate stream A (do a mutation to force to load from checkpoint).
      * 6. Restart the server
      * 7. Instantiate map again.
-     *
+     * <p>
      * It is expected in all cases that maps are successfully rebuilt, all entries present
      * and no TrimmedException is thrown on access.
      */

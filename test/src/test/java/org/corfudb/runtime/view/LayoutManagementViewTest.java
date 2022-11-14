@@ -68,7 +68,7 @@ public class LayoutManagementViewTest extends AbstractViewTest {
         expectedLayout.setSequencers(Arrays.asList(SERVERS.ENDPOINT_0, SERVERS.ENDPOINT_1));
 
         // Remove the primary sequencer node.
-        for (int x = 0; x < runtime.getParameters().getInvalidateRetry(); x++) {
+        for (int x = 0; x < getRuntime().getParameters().getInvalidateRetry(); x++) {
             try {
                 rt.getLayoutManagementView().removeNode(layout, getEndpoint(SERVERS.PORT_2));
                 rt.invalidateLayout();

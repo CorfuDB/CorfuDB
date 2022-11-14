@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.object.ICorfuExecutionContext;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
@@ -23,6 +24,10 @@ public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<
             .put("clear", (obj, args) -> obj.clear())
             .put("remove", (obj, args) -> obj.remove((K) args[0]))
             .build();
+
+    public static <K, V> TypeToken<PersistentCorfuTable<K, V>> getTableType() {
+        return new TypeToken<PersistentCorfuTable<K, V>>() {};
+    }
 
     @Override
     public <R> void setProxy$CORFUSMR(ICorfuSMRProxy<R> proxy) {

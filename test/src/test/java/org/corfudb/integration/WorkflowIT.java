@@ -17,6 +17,7 @@ import org.junit.Test;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * This integration test verifies the behaviour of the add node workflow. In particular, a single node
@@ -50,91 +51,94 @@ public class WorkflowIT extends AbstractIT {
         final int numIter = 11_000;
 
         // Start node one and populate it with data
-        Process server_1 = runServer(n1Port, true);
+        final Process server_1 = runServer(n1Port, true);
 
         // start a second node
         final int n2Port = 9001;
-        Process server_2 = runServer(n2Port, false);
+        final Process server_2 = runServer(n2Port, false);
 
         // start a third node
         final int n3Port = 9002;
-        Process server_3 = runServer(n3Port, false);
+        final Process server_3 = runServer(n3Port, false);
 
-        runtime = createRuntime(getConnectionString(n1Port));
-        PersistentCorfuTable<String, String> table = createCorfuTable(runtime, streamName);
+        CorfuRuntime runtime = createRuntime(getConnectionString(n1Port));
+        createCorfuTableStr(runtime, streamName, table -> {
+            for (int x = 0; x < numIter; x++) {
+                table.insert(String.valueOf(x), String.valueOf(x));
+            }
 
-        for (int x = 0; x < numIter; x++) {
-            table.insert(String.valueOf(x), String.valueOf(x));
-        }
+            runtime.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry,
+                    timeout, pollPeriod);
 
-        runtime.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry,
-                timeout, pollPeriod);
+            // Wait for servers
+            final int clusterSizeN2 = 2;
+            waitForLayoutChange(layout -> layout.getAllServers().size() == clusterSizeN2
+                    && layout.getSegments().size() == 1, runtime);
 
-        // Wait for servers
-        final int clusterSizeN2 = 2;
-        waitForLayoutChange(layout -> layout.getAllServers().size() == clusterSizeN2
-                && layout.getSegments().size() == 1, runtime);
+            MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();
+            mcw.addMap(table);
 
-        MultiCheckpointWriter<PersistentCorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();
-        mcw.addMap(table);
+            Token prefix = mcw.appendCheckpoints(runtime, "checkpointer");
 
-        Token prefix = mcw.appendCheckpoints(runtime, "checkpointer");
+            runtime.getAddressSpaceView().prefixTrim(prefix);
+            runtime.getAddressSpaceView().invalidateClientCache();
+            runtime.getAddressSpaceView().invalidateServerCaches();
+            runtime.getAddressSpaceView().gc();
 
-        runtime.getAddressSpaceView().prefixTrim(prefix);
-        runtime.getAddressSpaceView().invalidateClientCache();
-        runtime.getAddressSpaceView().invalidateServerCaches();
-        runtime.getAddressSpaceView().gc();
+            // Add a third node after compaction
+            runtime.getManagementView().addNode(getConnectionString(n3Port), workflowNumRetry,
+                    timeout, pollPeriod);
 
-        // Add a third node after compaction
-        runtime.getManagementView().addNode(getConnectionString(n3Port), workflowNumRetry,
-                timeout, pollPeriod);
+            // Verify that the third node has been added and data can be read back
+            final int clusterSizeN3 = 3;
+            waitForLayoutChange(layout -> layout.getAllServers().size() == clusterSizeN3
+                    && layout.getSegments().size() == 1, runtime);
 
-        // Verify that the third node has been added and data can be read back
-        final int clusterSizeN3 = 3;
-        waitForLayoutChange(layout -> layout.getAllServers().size() == clusterSizeN3
-                && layout.getSegments().size() == 1, runtime);
-
-        // Remove node 2
-        runtime.getManagementView().removeNode(getConnectionString(n2Port), workflowNumRetry,
-                timeout, pollPeriod);
-        runtime.invalidateLayout();
-        assertThat(runtime.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
+            // Remove node 2
+            runtime.getManagementView().removeNode(getConnectionString(n2Port), workflowNumRetry,
+                    timeout, pollPeriod);
+            runtime.invalidateLayout();
+            assertThat(runtime.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
 
 
-        // Remove node 2 again and verify that the epoch doesn't change
-        runtime.getManagementView().removeNode(getConnectionString(n2Port), workflowNumRetry,
-                timeout, pollPeriod);
-        shutdownCorfuServer(server_2);
+            // Remove node 2 again and verify that the epoch doesn't change
+            runtime.getManagementView().removeNode(getConnectionString(n2Port), workflowNumRetry,
+                    timeout, pollPeriod);
+            shutdownCorfuServer(server_2);
 
-        // Verify that the layout epoch hasn't changed after the second remove and that
-        // the sequencers/layouts/segments nodes include the first and third node
-        waitForLayoutChange(layout ->
-                layout.getAllServers().size() == 2
-                        && !layout.getAllServers().contains(getConnectionString(n2Port)), runtime);
+            // Verify that the layout epoch hasn't changed after the second remove and that
+            // the sequencers/layouts/segments nodes include the first and third node
+            waitForLayoutChange(layout ->
+                    layout.getAllServers().size() == 2
+                            && !layout.getAllServers().contains(getConnectionString(n2Port)), runtime);
 
-        // Force remove node 3
-        runtime.getManagementView().forceRemoveNode(getConnectionString(n3Port), workflowNumRetry,
-                timeout, pollPeriod);
-        shutdownCorfuServer(server_3);
+            // Force remove node 3
+            runtime.getManagementView().forceRemoveNode(getConnectionString(n3Port), workflowNumRetry,
+                    timeout, pollPeriod);
+            shutdownCorfuServer(server_3);
 
-        runtime.invalidateLayout();
-        assertThat(runtime.getLayoutView().getLayout().getAllServers().size()).isEqualTo(1);
+            runtime.invalidateLayout();
+            assertThat(runtime.getLayoutView().getLayout().getAllServers().size()).isEqualTo(1);
 
-        server_2 = runServer(n2Port, false);
-        // Re-add node 2
-        runtime.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry,
-                timeout, pollPeriod);
+            Process server_2_latest = runServer(n2Port, false);
+            // Re-add node 2
+            runtime.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry,
+                    timeout, pollPeriod);
 
-        waitForLayoutChange(layout -> layout.getAllServers().size() == clusterSizeN2
-                && layout.getSegments().size() == 1, runtime);
+            waitForLayoutChange(layout -> layout.getAllServers().size() == clusterSizeN2
+                    && layout.getSegments().size() == 1, runtime);
 
-        for (int x = 0; x < numIter; x++) {
-            String v = table.get(String.valueOf(x));
-            assertThat(v).isEqualTo(String.valueOf(x));
-        }
+            for (int x = 0; x < numIter; x++) {
+                String v = table.get(String.valueOf(x));
+                assertThat(v).isEqualTo(String.valueOf(x));
+            }
+
+            shutdownCorfuServer(server_2_latest);
+        });
 
         shutdownCorfuServer(server_1);
         shutdownCorfuServer(server_2);
+        shutdownCorfuServer(server_3);
     }
 
     /**
@@ -156,43 +160,43 @@ public class WorkflowIT extends AbstractIT {
         Process p1 = runServer(n1Port, false);
         Process p2 = runServer(n2Port, false);
 
-        runtime = createRuntimeWithCache(getConnectionString(n0Port));
-        PersistentCorfuTable<String, String> table = createCorfuTable(runtime, "table1");
+        CorfuRuntime runtime = createRuntimeWithCache(getConnectionString(n0Port));
+        createCorfuTableStr(runtime, "table1", table -> {
+            final int iter = 1000;
+            for (int x = 0; x < iter; x++) {
+                table.insert(String.valueOf(x), String.valueOf(x));
+            }
 
-        final int iter = 1000;
-        for (int x = 0; x < iter; x++) {
-            table.insert(String.valueOf(x), String.valueOf(x));
-        }
+            runtime.getManagementView().addNode(getConnectionString(n1Port), workflowNumRetry,
+                    timeout, pollPeriod);
+            runtime.invalidateLayout();
 
-        runtime.getManagementView().addNode(getConnectionString(n1Port), workflowNumRetry,
-                timeout, pollPeriod);
-        runtime.invalidateLayout();
+            assertThat(runtime.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
 
-        assertThat(runtime.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
+            runtime.getManagementView().forceRemoveNode(getConnectionString(n1Port), workflowNumRetry,
+                    timeout, pollPeriod);
+            runtime.invalidateLayout();
 
-        runtime.getManagementView().forceRemoveNode(getConnectionString(n1Port), workflowNumRetry,
-                timeout, pollPeriod);
-        runtime.invalidateLayout();
+            assertThat(runtime.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN1);
 
-        assertThat(runtime.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN1);
+            runtime.getManagementView().addNode(getConnectionString(n1Port), workflowNumRetry,
+                    timeout, pollPeriod);
 
-        runtime.getManagementView().addNode(getConnectionString(n1Port), workflowNumRetry,
-                timeout, pollPeriod);
+            runtime.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry,
+                    timeout, pollPeriod);
 
-        runtime.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry,
-                timeout, pollPeriod);
+            runtime.invalidateLayout();
+            assertThat(runtime.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN3);
 
-        runtime.invalidateLayout();
-        assertThat(runtime.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN3);
+            runtime.getManagementView().removeNode(getConnectionString(n1Port), workflowNumRetry,
+                    timeout, pollPeriod);
+            runtime.invalidateLayout();
+            assertThat(runtime.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
 
-        runtime.getManagementView().removeNode(getConnectionString(n1Port), workflowNumRetry,
-                timeout, pollPeriod);
-        runtime.invalidateLayout();
-        assertThat(runtime.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
-
-        for (int x = 0; x < iter; x++) {
-            assertThat(table.get(String.valueOf(x))).isEqualTo(String.valueOf(x));
-        }
+            for (int x = 0; x < iter; x++) {
+                assertThat(table.get(String.valueOf(x))).isEqualTo(String.valueOf(x));
+            }
+        });
 
         shutdownCorfuServer(p0);
         shutdownCorfuServer(p1);
@@ -214,38 +218,38 @@ public class WorkflowIT extends AbstractIT {
         Process p1 = runServer(n1Port, false);
         Process p2 = runServer(n2Port, false);
 
-        runtime = createRuntimeWithCache(getConnectionString(n0Port));
-        PersistentCorfuTable<String, String> table = createCorfuTable(runtime, "table1");
+        CorfuRuntime runtime = createRuntimeWithCache(getConnectionString(n0Port));
+        createCorfuTableStr(runtime, "table1", table -> {
+            final int iter = 100;
+            for (int x = 0; x < iter; x++) {
+                table.insert(String.valueOf(x), String.valueOf(x));
+            }
 
-        final int iter = 100;
-        for (int x = 0; x < iter; x++) {
-            table.insert(String.valueOf(x), String.valueOf(x));
-        }
+            runtime.getManagementView().addNode(getConnectionString(n1Port), workflowNumRetry,
+                    timeout, pollPeriod);
 
-        runtime.getManagementView().addNode(getConnectionString(n1Port), workflowNumRetry,
-                timeout, pollPeriod);
+            runtime.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry,
+                    timeout, pollPeriod);
 
-        runtime.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry,
-                timeout, pollPeriod);
+            runtime.invalidateLayout();
+            assertThat(runtime.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN3);
 
-        runtime.invalidateLayout();
-        assertThat(runtime.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN3);
+            // Kill two nodes from a three node cluster
+            shutdownCorfuServer(p1);
+            shutdownCorfuServer(p2);
 
-        // Kill two nodes from a three node cluster
-        shutdownCorfuServer(p1);
-        shutdownCorfuServer(p2);
+            // Force remove the "failed" node
+            runtime.getManagementView().forceRemoveNode(getConnectionString(n1Port), workflowNumRetry,
+                    timeout, pollPeriod);
+            runtime.getManagementView().forceRemoveNode(getConnectionString(n2Port), workflowNumRetry,
+                    timeout, pollPeriod);
+            runtime.invalidateLayout();
+            assertThat(runtime.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN1);
 
-        // Force remove the "failed" node
-        runtime.getManagementView().forceRemoveNode(getConnectionString(n1Port), workflowNumRetry,
-                timeout, pollPeriod);
-        runtime.getManagementView().forceRemoveNode(getConnectionString(n2Port), workflowNumRetry,
-                timeout, pollPeriod);
-        runtime.invalidateLayout();
-        assertThat(runtime.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN1);
-
-        for (int x = 0; x < iter; x++) {
-            assertThat(table.get(String.valueOf(x))).isEqualTo(String.valueOf(x));
-        }
+            for (int x = 0; x < iter; x++) {
+                assertThat(table.get(String.valueOf(x))).isEqualTo(String.valueOf(x));
+            }
+        });
 
         shutdownCorfuServer(p0);
     }
@@ -271,72 +275,72 @@ public class WorkflowIT extends AbstractIT {
         Node n1 = harness.deployUnbootstrappedNode(PORT_1);
         Node n2 = harness.deployUnbootstrappedNode(PORT_2);
 
-        runtime = harness.createRuntimeForNode(n0);
+        CorfuRuntime runtime = harness.createRuntimeForNode(n0);
         runtime.getParameters().setMaxMvoCacheEntries(DEFAULT_MVO_CACHE_SIZE);
 
         final String streamName = "test";
         final int entriesCount = 1_000;
-        PersistentCorfuTable<String, Integer> table = createCorfuTable(runtime, streamName);
-
-        // Write 1_000 entries.
-        for (int i = 0; i < entriesCount; i++) {
-            table.insert(Integer.toString(i), i);
-        }
-
-        // Checkpoint and trim the entries.
-        MultiCheckpointWriter<PersistentCorfuTable<String, Integer>> mcw = new MultiCheckpointWriter<>();
-        mcw.addMap(table);
-        Token prefixTrimAddress = mcw.appendCheckpoints(runtime, "author");
-        runtime.getAddressSpaceView().prefixTrim(prefixTrimAddress);
-        runtime.getAddressSpaceView().invalidateServerCaches();
-        runtime.getAddressSpaceView().invalidateClientCache();
-        runtime.getAddressSpaceView().gc();
-
-        // +1 because of extra NO_OP entry added by checkpointer
-        assertThat(runtime.getAddressSpaceView().getTrimMark().getSequence()).isEqualTo(entriesCount+1);
-
-        // 2 Checkpoint entries for the start and end.
-        // 1000 entries being checkpointed = 20 checkpoint entries due to batch size of 50.
-        final int checkpointEntriesCount = 22;
-
-        // Write another batch of 1_000 entries.
-        for (int i = 0; i < entriesCount; i++) {
-            table.insert(Integer.toString(i), i);
-        }
-        final long streamTail = entriesCount + checkpointEntriesCount + entriesCount - 1;
-
-        // Add 2 new nodes.
-        final int retries = 3;
-        final Duration timeout = PARAMETERS.TIMEOUT_LONG;
-        final Duration pollPeriod = PARAMETERS.TIMEOUT_VERY_SHORT;
-        runtime.getManagementView().addNode("localhost:9001", retries, timeout, pollPeriod);
-        runtime.getManagementView().addNode("localhost:9002", retries, timeout, pollPeriod);
-
-        runtime.invalidateLayout();
-        Layout layoutAfterAdds = runtime.getLayoutView().getLayout();
-        assertThat(layoutAfterAdds.getSegments().stream()
-                .allMatch(s -> s.getAllLogServers().size() == numNodes)).isTrue();
-
-        run(n0.shutdown);
-
-        // +1 because of extra NO_OP entry added by checkpointer
-        assertThat(runtime.getAddressSpaceView().getTrimMark().getSequence()).isEqualTo(entriesCount+1);
-
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
-            if (runtime.getLayoutView().getLayout().getEpoch() > layoutAfterAdds.getEpoch()) {
-                break;
+        this.<String, Integer>createCorfuTable(runtime, streamName, table -> {
+            // Write 1_000 entries.
+            for (int i = 0; i < entriesCount; i++) {
+                table.insert(Integer.toString(i), i);
             }
-            runtime.invalidateLayout();
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
-        }
 
-        // Assert that the new nodes should have the correct trimMark.
-        assertThat(runtime.getLayoutView().getRuntimeLayout().getLogUnitClient("localhost:9001").getTrimMark().get())
-                .isEqualTo(prefixTrimAddress.getSequence() + 1);
-        assertThat(runtime.getLayoutView().getRuntimeLayout().getLogUnitClient("localhost:9002").getTrimMark().get())
-                .isEqualTo(prefixTrimAddress.getSequence() + 1);
-        assertThat(runtime.getAddressSpaceView().getAllTails().getStreamTails().get(CorfuRuntime.getStreamID(streamName)))
-                .isEqualTo(streamTail+1);
+            // Checkpoint and trim the entries.
+            MultiCheckpointWriter<PersistentCorfuTable<String, Integer>> mcw = new MultiCheckpointWriter<>();
+            mcw.addMap(table);
+            Token prefixTrimAddress = mcw.appendCheckpoints(runtime, "author");
+            runtime.getAddressSpaceView().prefixTrim(prefixTrimAddress);
+            runtime.getAddressSpaceView().invalidateServerCaches();
+            runtime.getAddressSpaceView().invalidateClientCache();
+            runtime.getAddressSpaceView().gc();
+
+            // +1 because of extra NO_OP entry added by checkpointer
+            assertThat(runtime.getAddressSpaceView().getTrimMark().getSequence()).isEqualTo(entriesCount+1);
+
+            // 2 Checkpoint entries for the start and end.
+            // 1000 entries being checkpointed = 20 checkpoint entries due to batch size of 50.
+            final int checkpointEntriesCount = 22;
+
+            // Write another batch of 1_000 entries.
+            for (int i = 0; i < entriesCount; i++) {
+                table.insert(Integer.toString(i), i);
+            }
+            final long streamTail = entriesCount + checkpointEntriesCount + entriesCount - 1;
+
+            // Add 2 new nodes.
+            final int retries = 3;
+            final Duration timeout = PARAMETERS.TIMEOUT_LONG;
+            final Duration pollPeriod = PARAMETERS.TIMEOUT_VERY_SHORT;
+            runtime.getManagementView().addNode("localhost:9001", retries, timeout, pollPeriod);
+            runtime.getManagementView().addNode("localhost:9002", retries, timeout, pollPeriod);
+
+            runtime.invalidateLayout();
+            Layout layoutAfterAdds = runtime.getLayoutView().getLayout();
+            assertThat(layoutAfterAdds.getSegments().stream()
+                    .allMatch(s -> s.getAllLogServers().size() == numNodes)).isTrue();
+
+            run(n0.shutdown);
+
+            // +1 because of extra NO_OP entry added by checkpointer
+            assertThat(runtime.getAddressSpaceView().getTrimMark().getSequence()).isEqualTo(entriesCount+1);
+
+            for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+                if (runtime.getLayoutView().getLayout().getEpoch() > layoutAfterAdds.getEpoch()) {
+                    break;
+                }
+                runtime.invalidateLayout();
+                TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
+            }
+
+            // Assert that the new nodes should have the correct trimMark.
+            assertThat(runtime.getLayoutView().getRuntimeLayout().getLogUnitClient("localhost:9001").getTrimMark().get())
+                    .isEqualTo(prefixTrimAddress.getSequence() + 1);
+            assertThat(runtime.getLayoutView().getRuntimeLayout().getLogUnitClient("localhost:9002").getTrimMark().get())
+                    .isEqualTo(prefixTrimAddress.getSequence() + 1);
+            assertThat(runtime.getAddressSpaceView().getAllTails().getStreamTails().get(CorfuRuntime.getStreamID(streamName)))
+                    .isEqualTo(streamTail+1);
+        });
 
         // Shutdown two nodes
         run(n1.shutdown, n2.shutdown);
@@ -346,16 +350,16 @@ public class WorkflowIT extends AbstractIT {
      * This test checks that data is not lost if the runtime GC is triggered right after the stream
      * has synced back to a version that falls in the space of trimmed addresses.
      * To this end, we verify that after GC syncing to the most recent version of the stream does not end in data loss.
-     *
+     * <p>
      * The steps performed in this test are the following:
-     *
+     * <p>
      * 1. Create a table.
      * 2. Within a transaction write (numDataEntries - 2) entries to table.
      * 3. Checkpoint table.
      * 4. Write 2 more entries to table.
-     *
+     * <p>
      * Log should look like this:
-     *
+     * <p>
      * [         'table' Stream        ]            [ 'table' ]
      * +-------------------------------------------------------+
      * | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12  |
@@ -363,10 +367,10 @@ public class WorkflowIT extends AbstractIT {
      *                                 [ checkpoint ]       ^
      *                                                     Global
      *                                                     Pointer
-     *
+     * <p>
      *  5. Initiate a snapshot transaction in a version that moves the pointer to the space of addresses to trim.
      *     We initiate a snapshot transaction to version 1.
-     *
+     * <p>
      * [         'table' Stream        ]            [ 'table' ]
      * +-------------------------------------------------------+
      * | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12  |
@@ -374,7 +378,7 @@ public class WorkflowIT extends AbstractIT {
      *       ^                         [ checkpoint ]
      *      Global
      *      Pointer
-     *
+     * <p>
      *  6. Trim the log. On the server side, addresses 0-7 will be trimmed.
      *  7. Trigger runtime GC.
      *  8. Assert that after running GC we are not losing data.
@@ -387,60 +391,59 @@ public class WorkflowIT extends AbstractIT {
     public void testRuntimeGCForActiveTransactionsInTrimRangeSingleThread() throws Exception {
         // Run single node server and create runtime
         runDefaultServer();
-        runtime = createDefaultRuntime();
+        CorfuRuntime runtime = createDefaultRuntime();
 
         final int numDataEntries = 10;
 
         // (1)
-        PersistentCorfuTable<Integer, String> table = createCorfuTable(runtime, "test");
+        this.<Integer, String>createCorfuTable(runtime, "test", table -> {
+            // (2)
+            for (int i = 0; i < numDataEntries - 2; i++) {
+                runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
+                table.insert(i, String.valueOf(i));
+                runtime.getObjectsView().TXEnd();
+            }
 
-        // (2)
-        for (int i = 0; i < numDataEntries - 2; i++) {
-            runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
-            table.insert(i, String.valueOf(i));
+            // (3)
+            MultiCheckpointWriter<PersistentCorfuTable<Integer, String>> mcw = new MultiCheckpointWriter<>();
+            mcw.addMap(table);
+            Token prefixTrim = mcw.appendCheckpoints(runtime, "author");
+
+            // (4)
+            for (int i = numDataEntries - 2; i < numDataEntries; i++) {
+                runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
+                table.insert(i, String.valueOf(i));
+                runtime.getObjectsView().TXEnd();
+            }
+
+            // (5)
+            // Force the global pointer to move back to the space of addresses to be trimmed.
+            runtime.getObjectsView().TXBuild().type(TransactionType.SNAPSHOT)
+                    .snapshot(new Token(0,1))
+                    .build()
+                    .begin();
+            table.get(0);
             runtime.getObjectsView().TXEnd();
-        }
 
-        // (3)
-        MultiCheckpointWriter<PersistentCorfuTable<Integer, String>> mcw = new MultiCheckpointWriter<>();
-        mcw.addMap(table);
-        Token prefixTrim = mcw.appendCheckpoints(runtime, "author");
+            // (6)
+            runtime.getAddressSpaceView().prefixTrim(prefixTrim);
 
-        // (4)
-        for (int i = numDataEntries - 2; i < numDataEntries; i++) {
-            runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
-            table.insert(i, String.valueOf(i));
-            runtime.getObjectsView().TXEnd();
-        }
+            // (7)
+            runtime.getGarbageCollector().runRuntimeGC();
 
-        // (5)
-        // Force the global pointer to move back to the space of addresses to be trimmed.
-        runtime.getObjectsView().TXBuild().type(TransactionType.SNAPSHOT)
-                .snapshot(new Token(0,1))
-                .build()
-                .begin();
-        table.get(0);
-        runtime.getObjectsView().TXEnd();
+            // (8)
+            assertThat(table.size()).isEqualTo(numDataEntries);
+            for(int i = 0; i < numDataEntries; i++) {
+                assertThat(table.get(i)).isEqualTo(String.valueOf(i));
+            }
 
-        // (6)
-        runtime.getAddressSpaceView().prefixTrim(prefixTrim);
+            // (9)
+            runtime.getGarbageCollector().runRuntimeGC();
 
-        // (7)
-        runtime.getGarbageCollector().runRuntimeGC();
-
-        // (8)
-        assertThat(table.size()).isEqualTo(numDataEntries);
-        for(int i = 0; i < numDataEntries; i++) {
-            assertThat(table.get(i)).isEqualTo(String.valueOf(i));
-        }
-
-        // (9)
-        runtime.getGarbageCollector().runRuntimeGC();
-
-        // (10)
-        // TODO: snapshots transactions after trim/gc only fail if client caches are enabled and we
-        // invalidate the server's cache. This needs further research as it should be aborted in all cases
-        // use of cache or not, with no need to invalidate manually.
+            // (10)
+            // TODO: snapshots transactions after trim/gc only fail if client caches are enabled and we
+            // invalidate the server's cache. This needs further research as it should be aborted in all cases
+            // use of cache or not, with no need to invalidate manually.
 //        assertThatThrownBy(() -> {
 //            corfuRuntime.getObjectsView().TXBuild().type(TransactionType.SNAPSHOT)
 //                .snapshot(new Token(0,1))
@@ -451,44 +454,45 @@ public class WorkflowIT extends AbstractIT {
 //                .isInstanceOf(TransactionAbortedException.class)
 //                .hasCauseInstanceOf(TrimmedException.class);
 
-        // (11)
-        assertThat(table.size()).isEqualTo(numDataEntries);
-        for(int i = 0; i < numDataEntries; i++) {
-            assertThat(table.get(i)).isEqualTo(String.valueOf(i));
-        }
+            // (11)
+            assertThat(table.size()).isEqualTo(numDataEntries);
+            for(int i = 0; i < numDataEntries; i++) {
+                assertThat(table.get(i)).isEqualTo(String.valueOf(i));
+            }
+        });
     }
 
     /**
      * This test ensures that any ongoing transaction which snapshot is positioned
      * in the space of trimmed addresses does not incur in data loss. Steps of this test:
-     *
+     * <p>
      * 1. Create a table
      * 2. On T0 (thread 0, main thread) write one entry into the table. Await.
-     *
+     * <p>
      *    ['table']
      *     +---+
      *     | 0 |
      *     +---+
-     *
+     * <p>
      * 3. Start T1 (Thread 1). Begin write_after_write transaction, write one entry to set the tx snapshot to @0. Await.
      *    Note: this is not reflected in the log as the tx has not ended.
      * 4. On T0 write (numElements - 2) entries.
-     *
+     * <p>
      * [         'table' Stream        ]
      * +-------------------------------+
      * | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
      * +-------------------------------+
-     *
+     * <p>
      * 5. On T0 checkpoint.
-     *
+     * <p>
      * [         'table' Stream        ]
      * +--------------------------------------------+
      * | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
      * +--------------------------------------------+
      *                                 [ checkpoint ]
-     *
+     * <p>
      * 6. On T0 add 3 more entries to the log, log should look like this: (await)
-     *
+     * <p>
      *
      * [         'table' Stream        ]            [    'table'   ]
      * +-----------------------------------------------------------+
@@ -497,7 +501,7 @@ public class WorkflowIT extends AbstractIT {
      *                                 [ checkpoint ]            ^
      *                                                         Global
      *                                                         Pointer
-     *
+     * <p>
      * 7. On T1, do an access on table, to force globalPointer to move to snapshot position @0
      * 8. On T0, prefixTrim @7
      * 9. On T0, trigger runtimeGC
@@ -505,94 +509,94 @@ public class WorkflowIT extends AbstractIT {
      * 11. Initiate a snapshot transaction in the space of trimmed addresses, should be aborted.
      * 12. Attempt to access table, we should not have any data loss.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testRuntimeGCForActiveTransactionsInTrimRangeMultiThread() throws Exception {
         // Run single node server and create runtime
         runDefaultServer();
-        runtime = createDefaultRuntime();
+        CorfuRuntime runtime = createDefaultRuntime();
 
-        int initKey = 0;
         final int numDataEntries = 10;
 
         // (1)
-        PersistentCorfuTable<Integer, String> table = createCorfuTable(runtime, "test");
+        this.<Integer, String>createCorfuTable(runtime, "test", table -> {
+            int initKey = 0;
 
-        // (2)
-        runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
-        table.insert(initKey, String.valueOf(initKey));
-        runtime.getObjectsView().TXEnd();
-
-        initKey++;
-
-        CountDownLatch countDownLatch1 = new CountDownLatch(1);
-        CountDownLatch countDownLatch2 = new CountDownLatch(1);
-        CountDownLatch countDownLatch3 = new CountDownLatch(1);
-
-        Thread t = new Thread(() -> {
-            // (3)
+            // (2)
             runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
-            table.insert(numDataEntries, String.valueOf(numDataEntries));
-                    countDownLatch1.countDown();
-            try {
-                countDownLatch2.await();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+            table.insert(initKey, String.valueOf(initKey));
+            runtime.getObjectsView().TXEnd();
+
+            initKey++;
+
+            CountDownLatch countDownLatch1 = new CountDownLatch(1);
+            CountDownLatch countDownLatch2 = new CountDownLatch(1);
+            CountDownLatch countDownLatch3 = new CountDownLatch(1);
+
+            Thread t = new Thread(() -> {
+                // (3)
+                runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
+                table.insert(numDataEntries, String.valueOf(numDataEntries));
+                countDownLatch1.countDown();
+                try {
+                    countDownLatch2.await();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
+                // TODO(Anny): when debugging found that on this access the VLO is reset, not sure if this is
+                // efficient or there is a bug, further look into this...
+                // (7)
+                table.get(0);
+                runtime.getObjectsView().TXEnd();
+                countDownLatch3.countDown();
+            });
+            t.start();
+
+            countDownLatch1.await();
+
+            // (4)
+            for (int i = initKey; i < numDataEntries - 2; i++) {
+                runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
+                table.insert(i, String.valueOf(i));
+                runtime.getObjectsView().TXEnd();
             }
 
-            // TODO(Anny): when debugging found that on this access the VLO is reset, not sure if this is
-            // efficient or there is a bug, further look into this...
-            // (7)
-            table.get(0);
-            runtime.getObjectsView().TXEnd();
-            countDownLatch3.countDown();
-        });
-        t.start();
+            // (5)
+            MultiCheckpointWriter<PersistentCorfuTable<Integer, String>> mcw = new MultiCheckpointWriter<>();
+            mcw.addMap(table);
+            Token prefixTrim = mcw.appendCheckpoints(runtime, "author");
 
-        countDownLatch1.await();
+            // (6)
+            for (int i = numDataEntries - 2; i < numDataEntries; i++) {
+                runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
+                table.insert(i, String.valueOf(i));
+                runtime.getObjectsView().TXEnd();
+            }
 
-        // (4)
-        for (int i = initKey; i < numDataEntries - 2; i++) {
-            runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
-            table.insert(i, String.valueOf(i));
-            runtime.getObjectsView().TXEnd();
-        }
+            countDownLatch2.countDown();
+            countDownLatch3.await();
 
-        // (5)
-        MultiCheckpointWriter<PersistentCorfuTable<Integer, String>> mcw = new MultiCheckpointWriter<>();
-        mcw.addMap(table);
-        Token prefixTrim = mcw.appendCheckpoints(runtime, "author");
+            // (8)
+            runtime.getAddressSpaceView().prefixTrim(prefixTrim);
 
-        // (6)
-        for (int i = numDataEntries - 2; i < numDataEntries; i++) {
-            runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
-            table.insert(i, String.valueOf(i));
-            runtime.getObjectsView().TXEnd();
-        }
+            // (9) Note: run it twice so we enforce the trim at stream layer which is deferred in one cycle
+            runtime.getGarbageCollector().runRuntimeGC();
+            runtime.getGarbageCollector().runRuntimeGC();
 
-        countDownLatch2.countDown();
-        countDownLatch3.await();
+            // (10)
+            assertThat(table.size()).isEqualTo(numDataEntries + 1);
+            for(int i = 0; i <= numDataEntries; i++) {
+                assertThat(table.get(i)).isEqualTo(String.valueOf(i));
+            }
 
-        // (8)
-        runtime.getAddressSpaceView().prefixTrim(prefixTrim);
+            t.join();
 
-        // (9) Note: run it twice so we enforce the trim at stream layer which is deferred in one cycle
-        runtime.getGarbageCollector().runRuntimeGC();
-        runtime.getGarbageCollector().runRuntimeGC();
-
-        // (10)
-        assertThat(table.size()).isEqualTo(numDataEntries + 1);
-        for(int i = 0; i <= numDataEntries; i++) {
-            assertThat(table.get(i)).isEqualTo(String.valueOf(i));
-        }
-
-        t.join();
-
-        // (11)
-        // TODO: snapshots transactions after trim/gc only fail if client caches are enabled and we
-        // invalidate the server's cache. This needs further research as it should be aborted in all cases
-        // use of cache or not, with no need to invalidate manually.
+            // (11)
+            // TODO: snapshots transactions after trim/gc only fail if client caches are enabled and we
+            // invalidate the server's cache. This needs further research as it should be aborted in all cases
+            // use of cache or not, with no need to invalidate manually.
 //        assertThatThrownBy(() -> {
 //            final int snapshotTxAddress = 4;
 //            corfuRuntime.getObjectsView().TXBuild().type(TransactionType.SNAPSHOT)
@@ -602,31 +606,32 @@ public class WorkflowIT extends AbstractIT {
 //            corfuRuntime.getObjectsView().TXEnd();
 //        }).isInstanceOf(TransactionAbortedException.class).hasCauseInstanceOf((TrimmedException.class));
 
-        // (12)
-        assertThat(table.size()).isEqualTo(numDataEntries + 1);
-        for(int i = 0; i <= numDataEntries; i++) {
-            assertThat(table.get(i)).isEqualTo(String.valueOf(i));
-        }
+            // (12)
+            assertThat(table.size()).isEqualTo(numDataEntries + 1);
+            for(int i = 0; i <= numDataEntries; i++) {
+                assertThat(table.get(i)).isEqualTo(String.valueOf(i));
+            }
+        });
     }
 
     /**
      *
      * This test checks that post-trim initiated transactions which access streams that have all their
      * updates in the checkpoint space, are able to successfully complete before and after runtimeGC.
-     *
+     * <p>
      *
      * The steps of this test are the following:
-     *
+     * <p>
      * 1. Open 'table' backed by stream 'test'
      * 2. Add 5 entries to 'table'
      * 3. Checkpoint 'table'
-     *
+     * <p>
      * [  'table' Stream   ]
      * +-------------------------------+
      * | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
      * +-------------------------------+
      *                     [ checkpoint]
-     *
+     * <p>
      * 4. Trim the log.
      * 5. Initiate snapshot transaction @(0, 2) should complete succesfully as runtimeGC has not been triggered and
      * this has been resolved locally.
@@ -637,63 +642,62 @@ public class WorkflowIT extends AbstractIT {
      * 9. Run snapshot transaction after runtime GC, this should fail as entries have been cleared from address space.
      * 10. Perform a non-transactional read on 'table'.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
     public void testRuntimeGCWithStreamWithNoUpdatesAfterCheckpoint() throws Exception {
         // Run single node server and create runtime
         runDefaultServer();
-        runtime = createRuntimeWithCache();
+        CorfuRuntime runtime = createRuntimeWithCache();
 
         final int numDataEntries = 5;
 
         // (1) Open table backed by stream 'test'
-        PersistentCorfuTable<Integer, String> table = createCorfuTable(runtime, "test");
+        this.<Integer, String>createCorfuTable(runtime, "test", table -> {
+            // (2) Add 5 entries
+            for (int i = 0; i < numDataEntries; i++) {
+                runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
+                table.insert(i, String.valueOf(i));
+                runtime.getObjectsView().TXEnd();
+            }
 
-        // (2) Add 5 entries
-        for (int i = 0; i < numDataEntries; i++) {
-            runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
-            table.insert(i, String.valueOf(i));
+            // (3) Checkpoint 'table'
+            MultiCheckpointWriter<PersistentCorfuTable<Integer, String>> mcw = new MultiCheckpointWriter<>();
+            mcw.addMap(table);
+            Token prefixTrim = mcw.appendCheckpoints(runtime, "author");
+
+            // (4) Trim
+            runtime.getAddressSpaceView().prefixTrim(prefixTrim);
+
+            // (5) Initiate Snapshot Transaction (before runtime GC) should complete as data is kept locally
+            runtime.getObjectsView().TXBuild().type(TransactionType.SNAPSHOT)
+                    .snapshot(new Token(0,2))
+                    .build()
+                    .begin();
+            table.get(0);
             runtime.getObjectsView().TXEnd();
-        }
 
-        // (3) Checkpoint 'table'
-        MultiCheckpointWriter<PersistentCorfuTable<Integer, String>> mcw = new MultiCheckpointWriter<>();
-        mcw.addMap(table);
-        Token prefixTrim = mcw.appendCheckpoints(runtime, "author");
+            // (5) Start optimistic transaction @snapshot(0, 7), read all 5 entries (before runtime GC)
+            for(int i = 0; i < numDataEntries; i++) {
+                runtime.getObjectsView().TXBuild().type(TransactionType.OPTIMISTIC).build().begin();
+                assertThat(table.get(i)).isEqualTo(String.valueOf(i));
+                runtime.getObjectsView().TXEnd();
+            }
 
-        // (4) Trim
-        runtime.getAddressSpaceView().prefixTrim(prefixTrim);
+            // (7) Run GC
+            runtime.getGarbageCollector().runRuntimeGC();
 
-        // (5) Initiate Snapshot Transaction (before runtime GC) should complete as data is kept locally
-        runtime.getObjectsView().TXBuild().type(TransactionType.SNAPSHOT)
-                .snapshot(new Token(0,2))
-                .build()
-                .begin();
-        table.get(0);
-        runtime.getObjectsView().TXEnd();
+            // (8) Start optimistic transaction @snapshot(0, 7), read all 5 entries (after runtime GC)
+            for(int i = 0; i < numDataEntries; i++) {
+                runtime.getObjectsView().TXBuild().type(TransactionType.OPTIMISTIC).build().begin();
+                assertThat(table.get(i)).isEqualTo(String.valueOf(i));
+                runtime.getObjectsView().TXEnd();
+            }
 
-        // (5) Start optimistic transaction @snapshot(0, 7), read all 5 entries (before runtime GC)
-        for(int i = 0; i < numDataEntries; i++) {
-            runtime.getObjectsView().TXBuild().type(TransactionType.OPTIMISTIC).build().begin();
-            assertThat(table.get(i)).isEqualTo(String.valueOf(i));
-            runtime.getObjectsView().TXEnd();
-        }
-
-        // (7) Run GC
-        runtime.getGarbageCollector().runRuntimeGC();
-
-        // (8) Start optimistic transaction @snapshot(0, 7), read all 5 entries (after runtime GC)
-        for(int i = 0; i < numDataEntries; i++) {
-            runtime.getObjectsView().TXBuild().type(TransactionType.OPTIMISTIC).build().begin();
-            assertThat(table.get(i)).isEqualTo(String.valueOf(i));
-            runtime.getObjectsView().TXEnd();
-        }
-        
-        // (9) Snapshot in trimmed addresses (after runtimeGC), should fail as address space has been GC
-        // TODO: snapshots transactions after trim/gc only fail if client caches are enabled and we
-        // invalidate the server's cache. This needs further research as it should be aborted in all cases
-        // use of cache or not, with no need to invalidate manually.
+            // (9) Snapshot in trimmed addresses (after runtimeGC), should fail as address space has been GC
+            // TODO: snapshots transactions after trim/gc only fail if client caches are enabled and we
+            // invalidate the server's cache. This needs further research as it should be aborted in all cases
+            // use of cache or not, with no need to invalidate manually.
 //        assertThatThrownBy(() -> {
 //            corfuRuntime.getObjectsView().TXBuild().type(TransactionType.SNAPSHOT)
 //                    .snapshot(new Token(0, 2))
@@ -703,7 +707,8 @@ public class WorkflowIT extends AbstractIT {
 //            corfuRuntime.getObjectsView().TXEnd();
 //        }).isInstanceOf(TransactionAbortedException.class).hasCauseInstanceOf(TrimmedException.class);
 
-        // (10) Normal read
-        assertThat(table.get(0)).isEqualTo(String.valueOf(0));
+            // (10) Normal read
+            assertThat(table.get(0)).isEqualTo(String.valueOf(0));
+        });
     }
 }
