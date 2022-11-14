@@ -25,13 +25,14 @@ import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.ObjectsView;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
@@ -39,6 +40,7 @@ import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.corfudb.utils.lock.LockDataTypes;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -47,10 +49,12 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.IntPredicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 
@@ -61,28 +65,27 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @Slf4j
 @SuppressWarnings("checkstyle:magicnumber")
 public class CorfuReplicationClusterConfigIT extends AbstractIT {
-    public final static String nettyPluginPath = "src/test/resources/transport/nettyConfig.properties";
-    private final static String streamName = "Table001";
+    public static final String nettyPluginPath = "src/test/resources/transport/nettyConfig.properties";
+    private static final String streamName = "Table001";
     private static final String LOCK_TABLE_NAME = "LOCK";
 
-    private final static long shortInterval = 1L;
-    private final static long mediumInterval = 10L;
-    private final static long lockInterval = 6L;
-    private final static int firstBatch = 10;
-    private final static int secondBatch = 15;
-    private final static int thirdBatch = 20;
-    private final static int fourthBatch = 25;
-    private final static int largeBatch = 50;
+    private static final long shortInterval = 1L;
+    private static final long mediumInterval = 10L;
+    private static final int firstBatch = 10;
+    private static final int secondBatch = 15;
+    private static final int thirdBatch = 20;
+    private static final int fourthBatch = 25;
+    private static final int largeBatch = 50;
 
-    private final static int activeClusterCorfuPort = 9000;
-    private final static int standbyClusterCorfuPort = 9001;
-    private final static int backupClusterCorfuPort = 9002;
-    private final static int activeReplicationServerPort = 9010;
-    private final static int standbyReplicationServerPort = 9020;
-    private final static int backupReplicationServerPort = 9030;
-    private final static String activeCorfuEndpoint = DEFAULT_HOST + ":" + activeClusterCorfuPort;
-    private final static String standbyCorfuEndpoint = DEFAULT_HOST + ":" + standbyClusterCorfuPort;
-    private final static String backupCorfuEndpoint = DEFAULT_HOST + ":" + backupClusterCorfuPort;
+    private static final int activeClusterCorfuPort = 9000;
+    private static final int standbyClusterCorfuPort = 9001;
+    private static final int backupClusterCorfuPort = 9002;
+    private static final int activeReplicationServerPort = 9010;
+    private static final int standbyReplicationServerPort = 9020;
+    private static final int backupReplicationServerPort = 9030;
+    private static final String activeCorfuEndpoint = DEFAULT_HOST + ":" + activeClusterCorfuPort;
+    private static final String standbyCorfuEndpoint = DEFAULT_HOST + ":" + standbyClusterCorfuPort;
+    private static final String backupCorfuEndpoint = DEFAULT_HOST + ":" + backupClusterCorfuPort;
 
     private static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
 
@@ -1450,8 +1453,13 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 activeRuntime.getAddressSpaceView().getLogTail(), standbyClusterCorfuPort,
                 standbyRuntime.getAddressSpaceView().getLogTail());
 
-        activeReplicationServer = runReplicationServer(activeReplicationServerPort, nettyPluginPath);
-        standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, nettyPluginPath);
+        // Start the active and standby replication servers with a lockLeaseDuration = 10 seconds.
+        // The default lease duration is 60 seconds.  The duration between lease checks is set by the Discovery
+        // Service to leaseDuration/10.  So reducing the lease duration will cause the detection of lease
+        // expiry faster, i.e., 1 second instead of 6
+        int lockLeaseDuration = 10;
+        activeReplicationServer = runReplicationServer(activeReplicationServerPort, nettyPluginPath, lockLeaseDuration);
+        standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, nettyPluginPath, lockLeaseDuration);
         log.info("Replication servers started, and replication is in progress...");
 
         // Wait until data is fully replicated
@@ -1488,21 +1496,27 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         }
         log.info("Log replication succeeds without config change!");
 
-        // Release Active's lock
+        // Create a listener on the ReplicationStatus table on the Active cluster, which waits for Replication status
+        // to change to STOPPED
+        CountDownLatch countDownLatch = new CountDownLatch(1);
+        ReplicationStopListener listener = new ReplicationStopListener(countDownLatch);
+        activeCorfuStore.subscribeListener(listener, LogReplicationMetadataManager.NAMESPACE,
+            LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+
+        // Release Active's lock by deleting the lock table
         try (TxnContext txnContext = activeCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             txnContext.clear(activeLockTable);
             txnContext.commit();
         }
 
-        log.info("Active's lock is released!");
-        TimeUnit.SECONDS.sleep(lockInterval);
+        Assert.assertEquals(0, activeLockTable.count());
+        log.info("Active's lock table cleared!");
 
-        // Release Active's lock again
-        try (TxnContext txnContext = activeCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            txnContext.clear(activeLockTable);
-            txnContext.commit();
-        }
+        // Wait till the lock release is asynchronously processed and the replication status on Active changes to
+        // STOPPED
+        countDownLatch.await();
 
+        // Write more data on the Active
         for (int i = secondBatch; i < thirdBatch; i++) {
             try (TxnContext txn = activeCorfuStore.txn(NAMESPACE)) {
                 txn.putRecord(mapActive, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
@@ -1674,6 +1688,34 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         try (TxnContext txn = corfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
             txn.putRecord(configTable, op, op, op);
             txn.commit();
+        }
+    }
+
+    // StreamListener on the ReplicationStatus table which updates the latch when ReplicationStatus reaches STOPPED
+    private class ReplicationStopListener implements StreamListener {
+
+        private CountDownLatch countDownLatch;
+
+        ReplicationStopListener(CountDownLatch countDownLatch) {
+            this.countDownLatch = countDownLatch;
+        }
+
+        @Override
+        public void onNext(CorfuStreamEntries results) {
+            results.getEntries().forEach((schema, entries) -> entries.forEach(e -> {
+                LogReplicationMetadata.ReplicationStatusVal statusVal =
+                    (LogReplicationMetadata.ReplicationStatusVal)e.getPayload();
+                if (statusVal.getStatus().equals(LogReplicationMetadata.SyncStatus.STOPPED)) {
+                    countDownLatch.countDown();
+                }
+            }));
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            String errorMsg = "Error in ReplicationStopListener: ";
+            log.error(errorMsg, throwable);
+            fail(errorMsg + throwable.toString());
         }
     }
 }
