@@ -3,6 +3,7 @@
 set -e
 
 PROFILE=$1
+BASE_IMAGE=$2
 if [ -z "$PROFILE" ]; then
   echo "Please provide a profile name: 'docker' or 'compatibility'"
   exit 1
@@ -33,6 +34,10 @@ CMD_LINE+="--network=host "
 CMD_LINE+="--build-arg CORFU_JAR=infrastructure-${CORFU_VERSION}-shaded.jar "
 CMD_LINE+="--build-arg CMDLETS_JAR=cmdlets-${CORFU_VERSION}-shaded.jar "
 CMD_LINE+="--build-arg CORFU_TOOLS_JAR=corfudb-tools-${CORFU_VERSION}-shaded.jar "
+
+if [ -n "$BASE_IMAGE" ]; then
+  CMD_LINE+="--build-arg BASE_IMAGE=$BASE_IMAGE "
+fi
 
 if [ "$PROFILE" = "docker" ]; then
   CMD_LINE+="-t corfudb/corfu-server:${CORFU_VERSION} -t corfudb-universe/corfu-server:${CORFU_VERSION}"
