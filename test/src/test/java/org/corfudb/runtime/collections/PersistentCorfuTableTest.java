@@ -482,7 +482,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
     /**
      * For MVO instances, the ObjectOpenOption.NO_CACHE should ensure that the instance
-     * is not saved in ObjectsView.objectCache
+     * is not saved in ObjectsView.objectCache or MVOCache.objectCache
      */
     @Test
     public void testNoCacheOption() {
