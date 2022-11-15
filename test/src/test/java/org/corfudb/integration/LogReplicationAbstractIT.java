@@ -316,7 +316,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
         statusUpdateLatch.await();
         try (TxnContext txn = corfuStoreActive.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatusVal = (LogReplicationMetadata.ReplicationStatusVal) txn.getRecord("LogReplicationStatus", key).getPayload();
+            replicationStatusVal = (LogReplicationMetadata.ReplicationStatusVal) txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
             txn.commit();
         }
 
@@ -417,7 +417,10 @@ public class LogReplicationAbstractIT extends AbstractIT {
                         countDownLatch.countDown();
                     }
             }));
-            countDownLatch.countDown();
+
+            if (!this.waitSnapshotStatusComplete) {
+                countDownLatch.countDown();
+            }
         }
 
         @Override
@@ -813,7 +816,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         cpRuntime.getSerializers().registerSerializer(protoBufSerializer);
         mcw.addMap(protobufDescriptorTable);
         Token token1 = mcw.appendCheckpoints(cpRuntime, "checkpointer");
-        
+
         mcw.addMap(tableRegistryCT);
         Token token2 = mcw.appendCheckpoints(cpRuntime, "checkpointer");
         Token minToken = Token.min(token1, token2);
