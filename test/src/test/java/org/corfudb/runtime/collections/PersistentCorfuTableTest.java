@@ -148,7 +148,8 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                 args,
                 runtime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE),
                 new HashSet<UUID>(),
-                table
+                table,
+                ObjectOpenOption.CACHE
                 ));
 
         return table;
@@ -496,22 +497,36 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         UUID streamA = UUID.randomUUID();
         UUID streamB = UUID.randomUUID();
 
-        rt.getObjectsView()
+        PersistentCorfuTable<String, String> tableA = rt.getObjectsView()
                 .build()
                 .setStreamID(streamA)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .option(ObjectOpenOption.CACHE)
                 .open();
 
-        rt.getObjectsView()
+        PersistentCorfuTable<String, String> tableB = rt.getObjectsView()
                 .build()
                 .setStreamID(streamB)
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .option(ObjectOpenOption.NO_CACHE)
                 .open();
 
+        String key = "key";
+        String value = "value";
+
+        tableA.insert(key, value);
+        tableB.insert(key, value);
+
+        // Access the table and populate the cache
+        tableA.size();
+        tableB.size();
+
         assertThat(rt.getObjectsView().getObjectCache()).containsOnlyKeys(
                 new ObjectsView.ObjectID(streamA, PersistentCorfuTable.class));
+
+        Set<VersionedObjectIdentifier> allKeys = rt.getObjectsView().getMvoCache().keySet();
+        Set<UUID> allObjectIds = allKeys.stream().map(VersionedObjectIdentifier::getObjectId).collect(Collectors.toSet());
+        assertThat(allObjectIds).containsOnly(streamA);
     }
 
     // PersistentCorfuTable SecondaryIndexes Tests - Adapted From CorfuTableTest & CorfuStoreSecondaryIndexTest

@@ -15,6 +15,7 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
@@ -46,7 +47,8 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
     private final Object[] args;
 
     public MVOCorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<T> type, Object[] args,
-                                ISerializer serializer, Set<UUID> streamTags, ICorfuSMR<T> wrapperObject) {
+                                ISerializer serializer, Set<UUID> streamTags, ICorfuSMR<T> wrapperObject,
+                                ObjectOpenOption objectOpenOption) {
         this.rt = rt;
         this.streamID = streamID;
         this.type = type;
@@ -58,7 +60,8 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
                 rt,
                 this::getNewInstance,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
-                wrapperObject);
+                wrapperObject,
+                objectOpenOption);
     }
 
     @Override

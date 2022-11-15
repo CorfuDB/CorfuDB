@@ -209,6 +209,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      * and make it look like the table is a newly opened one
      * This is useful for JVMs who do not wish to keep the entire table
      * around in memory.
+     * DO NOT USE THIS METHOD WITH NO_CACHE TABLES
      * @param runtime - the runtime that was used to create this table
      * @param serializer - the serializer used to materialize table data
      */
@@ -218,6 +219,9 @@ public class Table<K extends Message, V extends Message, M extends Message> {
         if (streamingMapSupplier == null) {
             // PersistentCorfuTable
             oid = new ObjectsView.ObjectID(getStreamUUID(), PersistentCorfuTable.class);
+
+            // Evict all versions of this Table from MVOCache
+            runtime.getObjectsView().getMvoCache().invalidateAllVersionsOf(getStreamUUID());
         } else {
             // Disk-backed CorfuTable
             oid = new ObjectsView.ObjectID(getStreamUUID(), CorfuTable.class);

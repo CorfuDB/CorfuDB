@@ -4,6 +4,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.serializer.ISerializer;
@@ -36,7 +37,8 @@ public class CorfuCompileWrapperBuilder {
     private static <T extends ICorfuSMR<T>> T getWrapper(Class<T> type, CorfuRuntime rt,
                                                          UUID streamID, Object[] args,
                                                          ISerializer serializer,
-                                                         Set<UUID> streamTags) throws Exception {
+                                                         Set<UUID> streamTags,
+                                                         ObjectOpenOption objectOpenOption) throws Exception {
 
         if (type.getName().equals(PERSISTENT_CORFU_TABLE_CLASS_NAME)) {
             // TODO: make general - This should get cleaned up
@@ -51,7 +53,7 @@ public class CorfuCompileWrapperBuilder {
 
             // Note: args are used when invoking the internal immutable data structure constructor
             wrapperObject.setProxy$CORFUSMR(new MVOCorfuCompileProxy<>(rt, streamID,
-                    immutableClass, args, serializer, streamTags, wrapperObject));
+                    immutableClass, args, serializer, streamTags, wrapperObject, objectOpenOption));
             return (T) wrapperObject;
         }
 
@@ -77,6 +79,7 @@ public class CorfuCompileWrapperBuilder {
                 smrObject.getStreamID(),
                 smrObject.getArguments(),
                 smrObject.getSerializer(),
-                smrObject.getStreamTags());
+                smrObject.getStreamTags(),
+                smrObject.getOption());
     }
 }

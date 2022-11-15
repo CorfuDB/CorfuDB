@@ -12,8 +12,11 @@ import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.runtime.CorfuRuntime;
 
 import javax.annotation.Nonnull;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 
 /**
@@ -75,6 +78,22 @@ public class MVOCache<T extends ICorfuSMR<T>> {
         }
 
         objectCache.put(voId, object);
+    }
+
+    /**
+     * Invalidate all versioned objects with the given object ID.
+     * @param objectId
+     */
+    public void invalidateAllVersionsOf(@Nonnull UUID objectId) {
+        if (log.isTraceEnabled()) {
+            log.trace("MVOCache: performing a invalidateAllVersionsOf for {}", objectId);
+        }
+
+        List<VersionedObjectIdentifier> voIdsToInvalidate =
+                objectCache.asMap().keySet().stream()
+                        .filter(voId -> objectId.equals(voId.getObjectId()))
+                        .collect(Collectors.toList());
+        objectCache.invalidateAll(voIdsToInvalidate);
     }
 
     @VisibleForTesting

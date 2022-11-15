@@ -19,6 +19,7 @@ import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.exceptions.StaleRevisionUpdateException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.proto.RpcCommon;
@@ -45,6 +46,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -194,7 +196,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                 TableOptions.builder().build());
 
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LARGE; i++) {
-            UUID uuid1 = UUID.nameUUIDFromBytes("1".getBytes());
             UuidMsg key = UuidMsg.newBuilder().setMsb(i)
                     .build();
             ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
@@ -212,6 +213,11 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         // Release all the cached objects from the insertions above
         shimStore.freeTableData(someNamespace, tableName);
 
+        Set<VersionedObjectIdentifier> allKeys = corfuRuntime.getObjectsView().getMvoCache().keySet();
+        assertThat(allKeys.stream().map(VersionedObjectIdentifier::getObjectId).collect(Collectors.toSet()))
+                .isNotEmpty()
+                .doesNotContain(table.getStreamUUID());
+
         class EmptyStreamListener implements StreamListener {
             @Override
             public void onNext(CorfuStreamEntries results) {
@@ -227,7 +233,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         // Now simple access the table after free to validate that it works
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LARGE; i++) {
-            UUID uuid1 = UUID.nameUUIDFromBytes("1".getBytes());
             UuidMsg key = UuidMsg.newBuilder().setMsb(i)
                     .build();
             ManagedTxnContext txn = shimStore.tx(someNamespace);

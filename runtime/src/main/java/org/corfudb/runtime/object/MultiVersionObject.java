@@ -9,6 +9,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
 import org.slf4j.Logger;
@@ -57,6 +58,8 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      * A fixed instance of a new instance of this object.
      */
     private final T newInstanceObject;
+
+    private final ObjectOpenOption objectOpenOption;
 
     /**
      * Metadata on object versions generated.
@@ -116,11 +119,13 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
      * @param wrapperObject The wrapper over the actual object.
      */
     public MultiVersionObject(@Nonnull CorfuRuntime corfuRuntime, @Nonnull Supplier<T> newObjectFn,
-               @Nonnull StreamViewSMRAdapter smrStream, @Nonnull ICorfuSMR<T> wrapperObject) {
+                              @Nonnull StreamViewSMRAdapter smrStream, @Nonnull ICorfuSMR<T> wrapperObject,
+                              @Nonnull ObjectOpenOption objectOpenOption) {
         this.lock = new StampedLock();
         this.smrStream = smrStream;
         this.upcallTargetMap = wrapperObject.getSMRUpcallMap();
         this.newObjectFn = newObjectFn;
+        this.objectOpenOption = objectOpenOption;
         this.addressSpace = new StreamAddressSpace();
 
         this.newInstanceObject = newObjectFn.get();
@@ -310,7 +315,7 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                                 "globalAddress %s not >= resolved %s", globalAddress, resolvedUpTo);
 
                         // If we observe a new version, place the previous one into the MVOCache.
-                        if (globalAddress > materializedUpTo) {
+                        if (globalAddress > materializedUpTo && objectOpenOption == ObjectOpenOption.CACHE) {
                             final VersionedObjectIdentifier voId = new VersionedObjectIdentifier(getID(), materializedUpTo);
                             mvoCache.put(voId, currentObject);
                         }
