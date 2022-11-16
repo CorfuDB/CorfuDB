@@ -3,17 +3,17 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
+import org.corfudb.infrastructure.logreplication.replication.send.LRClientEventListener;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
-import org.corfudb.runtime.collections.StreamListener;
 
 import java.util.Collections;
 import java.util.List;
 
 @Slf4j
-public final class LogReplicationEventListener implements StreamListener {
+public final class LogReplicationEventListener extends LRClientEventListener {
     private final CorfuReplicationDiscoveryService discoveryService;
     private final CorfuStore corfuStore;
 

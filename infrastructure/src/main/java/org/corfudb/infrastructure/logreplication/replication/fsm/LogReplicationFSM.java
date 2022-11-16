@@ -120,7 +120,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  *
  */
 @Slf4j
-public class LogReplicationFSM {
+public class LogReplicationFSM extends AbstractLogReplicationFSM {
 
     @Getter
     private long topologyConfigId;
@@ -278,7 +278,8 @@ public class LogReplicationFSM {
      * @param snapshotSender reads and transmits snapshot syncs
      * @param logEntrySender reads and transmits log entry sync
      */
-    private void initializeStates(SnapshotSender snapshotSender, LogEntrySender logEntrySender, DataSender dataSender) {
+    @Override
+    void initializeStates(SnapshotSender snapshotSender, LogEntrySender logEntrySender, DataSender dataSender) {
         /*
          * Log Replication State instances are kept in a map to be reused in transitions, avoid creating one
          * per every transition (reduce GC cycles).
