@@ -346,7 +346,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         interClusterReplicationService = new CorfuInterClusterReplicationServerNode(serverContext,
             logReplicationServerHandler, logReplicationConfig);
 
-        replicationContext = new LogReplicationContext(logReplicationConfig, topologyDescriptor, localCorfuEndpoint);
+        // Pass server's channel context through the Log Replication Context, for shared objects between the server
+        // and the client channel (specific requirements of the transport implementation)
+        replicationContext = new LogReplicationContext(logReplicationConfig, topologyDescriptor,
+            localCorfuEndpoint, interClusterReplicationService.getRouter().getServerAdapter().getChannelContext());
 
         // Unblock server initialization & register to Log Replication Lock, to attempt lock / leadership acquisition
         serverCallback.complete(interClusterReplicationService);
