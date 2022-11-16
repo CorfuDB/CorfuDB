@@ -5,9 +5,9 @@ import org.corfudb.runtime.object.ICorfuExecutionContext;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
+import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 
 import javax.annotation.Nonnull;
-import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -50,6 +50,11 @@ public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<
     @Override
     public void clear() {
         proxy.logUpdate("clear", false, null);
+    }
+
+    @Override
+    public boolean isTableCached() {
+        return ((MVOCorfuCompileProxy)proxy).isObjectCached();
     }
 
     @Override

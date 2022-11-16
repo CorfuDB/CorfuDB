@@ -17,6 +17,8 @@ import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.ObjectOpenOption;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.test.TestSchema;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
@@ -146,7 +148,8 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                 args,
                 runtime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE),
                 new HashSet<UUID>(),
-                table
+                table,
+                ObjectOpenOption.CACHE
                 ));
 
         return table;
@@ -475,6 +478,55 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         assertThat(readerResult.get()).isEqualTo(payload1.getLsb());
         assertThat(writerResult.get()).isEqualTo(payload2.getLsb());
+    }
+
+    /**
+     * For MVO instances, the ObjectOpenOption.NO_CACHE should ensure that the instance
+     * is not saved in ObjectsView.objectCache or MVOCache.objectCache
+     */
+    @Test
+    public void testNoCacheOption() {
+        addSingleServer(SERVERS.PORT_0);
+        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(LARGE_CACHE_SIZE)
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+        setupSerializer();
+
+        UUID streamA = UUID.randomUUID();
+        UUID streamB = UUID.randomUUID();
+
+        PersistentCorfuTable<String, String> tableA = rt.getObjectsView()
+                .build()
+                .setStreamID(streamA)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .option(ObjectOpenOption.CACHE)
+                .open();
+
+        PersistentCorfuTable<String, String> tableB = rt.getObjectsView()
+                .build()
+                .setStreamID(streamB)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .option(ObjectOpenOption.NO_CACHE)
+                .open();
+
+        String key = "key";
+        String value = "value";
+
+        tableA.insert(key, value);
+        tableB.insert(key, value);
+
+        // Access the table and populate the cache
+        tableA.size();
+        tableB.size();
+
+        assertThat(rt.getObjectsView().getObjectCache()).containsOnlyKeys(
+                new ObjectsView.ObjectID(streamA, PersistentCorfuTable.class));
+
+        Set<VersionedObjectIdentifier> allKeys = rt.getObjectsView().getMvoCache().keySet();
+        Set<UUID> allObjectIds = allKeys.stream().map(VersionedObjectIdentifier::getObjectId).collect(Collectors.toSet());
+        assertThat(allObjectIds).containsOnly(streamA);
     }
 
     // PersistentCorfuTable SecondaryIndexes Tests - Adapted From CorfuTableTest & CorfuStoreSecondaryIndexTest

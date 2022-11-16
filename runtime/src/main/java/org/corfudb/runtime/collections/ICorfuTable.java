@@ -1,9 +1,6 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.object.ICorfuSMR;
-
 import javax.annotation.Nonnull;
-import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -51,5 +48,7 @@ public interface ICorfuTable<K, V> {
     boolean isEmpty();
 
     void clear();
+
+    boolean isTableCached();
 
 }

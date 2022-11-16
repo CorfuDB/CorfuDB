@@ -202,7 +202,6 @@ public class SMRMapTest extends AbstractViewTest {
                         .setStreamID(UUID.randomUUID())
                         .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
                         })
-                        .option(ObjectOpenOption.NO_CACHE)
                         .open())
                 .toArray(PersistentCorfuTable[]::new);
 
@@ -406,7 +405,6 @@ public class SMRMapTest extends AbstractViewTest {
                     .build()
                     .setStreamName("A")
                     .setSerializer(Serializers.getDefaultSerializer())
-                    .option(ObjectOpenOption.NO_CACHE)
                     .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                     .open();
 
@@ -474,7 +472,6 @@ public class SMRMapTest extends AbstractViewTest {
                                 .setStreamID(mapStream)
                                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {
                                 })
-                                .option(ObjectOpenOption.NO_CACHE)
                                 .open())
                         .toArray(PersistentCorfuTable[]::new);
 
@@ -567,7 +564,6 @@ public class SMRMapTest extends AbstractViewTest {
         PersistentCorfuTable<String, String> testTable2 = getRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
                 .setStreamID(stream)
-                .option(ObjectOpenOption.NO_CACHE)
                 .open();
         // Do a get to prompt the sync
         assertThat(testTable2.get(Integer.toString(0))).isEqualTo(Integer.toString(0));
