@@ -12,10 +12,11 @@ import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.runtime.CorfuRuntime;
 
 import javax.annotation.Nonnull;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 
 /**
@@ -25,12 +26,6 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 public class MVOCache<T extends ICorfuSMR<T>> {
-
-    /**
-     * A registry to keep track of all opened MVOs.
-     */
-    @Getter
-    private final ConcurrentHashMap<UUID, MultiVersionObject<T>> allMVOs = new ConcurrentHashMap<>();
 
     /**
      * A collection of strong references to all versioned objects and their state.
@@ -86,12 +81,19 @@ public class MVOCache<T extends ICorfuSMR<T>> {
     }
 
     /**
-     * Register an MVO with this MVOCache.
-     * @param objectId The stream id of the provided MVO.
-     * @param mvo      The actual MVO being registered.
+     * Invalidate all versioned objects with the given object ID.
+     * @param objectId
      */
-    public void registerMVO(@Nonnull UUID objectId, @Nonnull MultiVersionObject<T> mvo) {
-        allMVOs.putIfAbsent(objectId, mvo);
+    public void invalidateAllVersionsOf(@Nonnull UUID objectId) {
+        if (log.isTraceEnabled()) {
+            log.trace("MVOCache: performing a invalidateAllVersionsOf for {}", objectId);
+        }
+
+        List<VersionedObjectIdentifier> voIdsToInvalidate =
+                objectCache.asMap().keySet().stream()
+                        .filter(voId -> objectId.equals(voId.getObjectId()))
+                        .collect(Collectors.toList());
+        objectCache.invalidateAll(voIdsToInvalidate);
     }
 
     @VisibleForTesting
