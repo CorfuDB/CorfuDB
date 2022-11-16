@@ -211,9 +211,13 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      * around in memory.
      * DO NOT USE THIS METHOD WITH NO_CACHE TABLES
      * @param runtime - the runtime that was used to create this table
-     * @param serializer - the serializer used to materialize table data
      */
-    public void resetTableData(CorfuRuntime runtime, ISerializer serializer) {
+    public void resetTableData(CorfuRuntime runtime) {
+
+        if (!corfuTable.isTableCached()) {
+            throw new IllegalStateException("Cannot reset a table opened with NO_CACHE option.");
+        }
+
         ObjectsView.ObjectID oid;
 
         if (streamingMapSupplier == null) {

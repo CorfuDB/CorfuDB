@@ -14,6 +14,7 @@ import org.corfudb.annotations.Mutator;
 import org.corfudb.annotations.MutatorAccessor;
 import org.corfudb.annotations.PassThrough;
 import org.corfudb.annotations.TransactionalMethod;
+import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuExecutionContext;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
@@ -465,6 +466,12 @@ public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable
     public void clear() {
         mainMap.clear();
         secondaryIndexes.values().forEach(Map::clear);
+    }
+
+    @Override
+    @DontInstrument
+    public boolean isTableCached() {
+        return ((CorfuCompileProxy)getCorfuSMRProxy()).isObjectCached();
     }
 
     /** {@inheritDoc} */

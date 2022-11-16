@@ -46,6 +46,8 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
 
     private final Object[] args;
 
+    private final ObjectOpenOption objectOpenOption;
+
     public MVOCorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<T> type, Object[] args,
                                 ISerializer serializer, Set<UUID> streamTags, ICorfuSMR<T> wrapperObject,
                                 ObjectOpenOption objectOpenOption) {
@@ -55,6 +57,7 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
         this.args = args;
         this.serializer = serializer;
         this.streamTags = streamTags;
+        this.objectOpenOption = objectOpenOption;
 
         this.underlyingMVO = new MultiVersionObject<>(
                 rt,
@@ -224,5 +227,10 @@ public class MVOCorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRPr
     @Override
     public boolean isMonotonicStreamAccess() {
         return true;
+    }
+
+    @Override
+    public boolean isObjectCached() {
+        return objectOpenOption.equals(ObjectOpenOption.CACHE);
     }
 }

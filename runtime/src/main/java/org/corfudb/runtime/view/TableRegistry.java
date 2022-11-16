@@ -651,7 +651,7 @@ public class TableRegistry {
         if (table == null) {
             throw new NoSuchElementException("freeTableData: Did not find any table "+ fullyQualifiedTableName);
         }
-        table.resetTableData(runtime, this.protobufSerializer);
+        table.resetTableData(runtime);
     }
 
     /**

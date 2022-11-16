@@ -16,6 +16,7 @@ import org.corfudb.runtime.exceptions.TrimmedUpcallException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.Utils;
@@ -103,6 +104,8 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
      */
     private final Object[] args;
 
+    private final ObjectOpenOption objectOpenOption;
+
     /**
      * Correctness Logging
      */
@@ -121,13 +124,15 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
      */
     @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
     CorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<T> type, Object[] args,
-                      ISerializer serializer, Set<UUID> streamTags, ICorfuSMR<T> wrapperObject) {
+                      ISerializer serializer, Set<UUID> streamTags, ICorfuSMR<T> wrapperObject,
+                      ObjectOpenOption objectOpenOption) {
         this.rt = rt;
         this.streamID = streamID;
         this.type = type;
         this.args = args;
         this.serializer = serializer;
         this.streamTags = streamTags;
+        this.objectOpenOption = objectOpenOption;
 
         // Since the VLO is thread safe we don't need to use a thread safe stream implementation
         // because the VLO will control access to the stream
@@ -455,5 +460,10 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     public boolean isMonotonicStreamAccess() {
         // Object version is always in sync with the stream access
         return isMonotonicObject();
+    }
+
+    @Override
+    public boolean isObjectCached() {
+        return objectOpenOption.equals(ObjectOpenOption.CACHE);
     }
 }

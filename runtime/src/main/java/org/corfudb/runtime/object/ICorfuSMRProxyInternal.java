@@ -41,4 +41,6 @@ public interface ICorfuSMRProxyInternal<T extends ICorfuSMR<T>> extends ICorfuSM
      * @return
      */
     Set<UUID> getStreamTags();
+
+    boolean isObjectCached();
 }
