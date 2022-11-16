@@ -2,6 +2,8 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
+import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
+import org.corfudb.infrastructure.logreplication.replication.send.LRClientEventListener;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.StreamListener;
@@ -9,7 +11,7 @@ import org.corfudb.runtime.collections.StreamListener;
 import java.util.List;
 
 @Slf4j
-public final class LogReplicationEventListener implements StreamListener {
+public final class LogReplicationEventListener implements LRClientEventListener {
     private final CorfuReplicationDiscoveryService discoveryService;
 
     public  LogReplicationEventListener(CorfuReplicationDiscoveryService discoveryService) {
@@ -57,5 +59,15 @@ public final class LogReplicationEventListener implements StreamListener {
     @Override
     public void onError(Throwable throwable) {
         log.error("onError with a throwable ", throwable);
+    }
+
+    @Override
+    public void registerFsm(LogReplicationFSM fsm) {
+
+    }
+
+    @Override
+    public void unregisterFsm(LogReplicationFSM fsm) {
+
     }
 }

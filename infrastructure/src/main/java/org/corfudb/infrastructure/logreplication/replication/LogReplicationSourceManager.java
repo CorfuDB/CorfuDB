@@ -109,6 +109,11 @@ public class LogReplicationSourceManager {
         this.ackReader = new LogReplicationAckReader(this.metadataManager, config, runtime,
                 params.getRemoteClusterDescriptor().getClusterId());
 
+        if (session.getSubscriber() == ReplicationSubscriber.DOMAIN_BASED_REPLICATION_SUBSCRIBER) {
+            this.logReplicationFSM = new DomainBasedLogReplicationFSM();
+        } else {
+            this.logReplicationFSM = new RoutingQueueReplicationFSM();
+        }
         this.logReplicationFSM = new LogReplicationFSM(this.runtime, config, params.getRemoteClusterDescriptor(),
                 dataSender, readProcessor, logReplicationFSMWorkers, ackReader, tableManagerPlugin);
 
