@@ -306,16 +306,15 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                                                  int numKeys, CorfuStore corfuStore, int startValue) {
         long tail = 0;
         for (int i = 0; i < numKeys; i++) {
-            for (String name : tablesCrossTxs) {
-                int key = i + startValue;
-                try (TxnContext txn = corfuStore.txn(TEST_NAMESPACE)) {
+            try (TxnContext txn = corfuStore.txn(TEST_NAMESPACE)) {
+                for (String name : tablesCrossTxs) {
+                    int key = i + startValue;
                     txn.putRecord(tables.get(name), StringKey.newBuilder().setKey(String.valueOf(key)).build(),
-                            IntValue.newBuilder().setValue(key).build(), null);
-                    tail = txn.commit().getSequence();
+                        IntValue.newBuilder().setValue(key).build(), null);
+                    tablesForVerification.putIfAbsent(name, new HashMap<>());
+                    tablesForVerification.get(name).put(String.valueOf(key), key);
                 }
-                tablesForVerification.putIfAbsent(name, new HashMap<>());
-                tablesForVerification.get(name).put(String.valueOf(key), key);
-
+                tail = txn.commit().getSequence();
             }
             expectedAckTimestamp.set(Math.max(tail, expectedAckTimestamp.get()));
         }

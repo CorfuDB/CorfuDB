@@ -156,9 +156,11 @@ public class LogEntryWriter extends SinkWriter {
                             if (streamId.equals(REGISTRY_TABLE_ID)) {
                                 // If registry table entries are being handled, indicate the config to sync with
                                 // registry table after this transaction.
-                                registryTableUpdated.set(true);
                                 smrEntries = filterRegistryTableEntries(new ArrayList<>(smrEntries));
-                                log.info("Registry Table entries during log entry sync = {}", smrEntries.size());
+                                if (!smrEntries.isEmpty()) {
+                                    log.info("Registry Table entries during log entry sync = {}", smrEntries.size());
+                                    registryTableUpdated.set(true);
+                                }
                             }
 
                             for (SMREntry smrEntry : smrEntries) {
