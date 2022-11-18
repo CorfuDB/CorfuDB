@@ -30,7 +30,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static org.corfudb.runtime.view.TableRegistry.*;
+import static org.corfudb.runtime.view.TableRegistry.REGISTRY_TABLE_NAME;
+import static org.corfudb.runtime.view.TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
 public class LogReplicationConfigManagerTest extends AbstractViewTest {
