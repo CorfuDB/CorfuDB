@@ -393,24 +393,6 @@ public class StreamsLogEntryReader implements LogEntryReader {
         }
     }
 
-    public static class StreamIteratorMetadata {
-        private long timestamp;
-        private boolean streamsToReplicatePresent;
-
-        public StreamIteratorMetadata(long timestamp, boolean streamsToReplicatePresent) {
-            this.timestamp = timestamp;
-            this.streamsToReplicatePresent = streamsToReplicatePresent;
-        }
-
-        public long getTimestamp() {
-            return timestamp;
-        }
-
-        public boolean isStreamsToReplicatePresent() {
-            return streamsToReplicatePresent;
-        }
-    }
-
     @Override
     public void setTopologyConfigId(long topologyConfigId) {
         this.topologyConfigId = topologyConfigId;

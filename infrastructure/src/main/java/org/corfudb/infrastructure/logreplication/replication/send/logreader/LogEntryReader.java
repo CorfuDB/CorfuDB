@@ -27,4 +27,22 @@ public interface LogEntryReader {
     boolean hasMessageExceededSize();
 
     StreamsLogEntryReader.StreamIteratorMetadata getCurrentProcessedEntryMetadata();
+
+    class StreamIteratorMetadata {
+        private long timestamp;
+        private boolean streamsToReplicatePresent;
+
+        public StreamIteratorMetadata(long timestamp, boolean streamsToReplicatePresent) {
+            this.timestamp = timestamp;
+            this.streamsToReplicatePresent = streamsToReplicatePresent;
+        }
+
+        public long getTimestamp() {
+            return timestamp;
+        }
+
+        public boolean isStreamsToReplicatePresent() {
+            return streamsToReplicatePresent;
+        }
+    }
 }
