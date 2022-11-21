@@ -7,6 +7,7 @@ import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
@@ -1214,11 +1215,12 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(srcTestRuntime);
 
+        ReplicationSubscriber defaultSubscriber = ReplicationSubscriber.getDefaultReplicationSubscriber();
         // This IT requires custom values to be set for the replication config.  Set these values so that the default
         // values are not used
-        configManager.getConfig().setMaxNumMsgPerBatch(BATCH_SIZE);
-        configManager.getConfig().setMaxMsgSize(SMALL_MSG_SIZE);
-        configManager.getConfig().setMaxDataSizePerMsg(SMALL_MSG_SIZE * LogReplicationConfig.DATA_FRACTION_PER_MSG / 100);
+        configManager.getUpdatedConfig(defaultSubscriber).setMaxNumMsgPerBatch(BATCH_SIZE);
+        configManager.getUpdatedConfig(defaultSubscriber).setMaxMsgSize(SMALL_MSG_SIZE);
+        configManager.getUpdatedConfig(defaultSubscriber).setMaxDataSizePerMsg(SMALL_MSG_SIZE * LogReplicationConfig.DATA_FRACTION_PER_MSG / 100);
 
         // Data Sender
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, configManager, testConfig,
@@ -1231,7 +1233,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(
 
             LogReplicationRuntimeParameters.builder().remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID,
-                LogReplicationClusterInfo.ClusterRole.SOURCE, CORFU_PORT)).replicationConfig(configManager.getConfig())
+                LogReplicationClusterInfo.ClusterRole.SOURCE, CORFU_PORT)).replicationConfig(
+                        configManager.getUpdatedConfig(replicationSession.getSubscriber()))
                 .localCorfuEndpoint(SOURCE_ENDPOINT).build(), logReplicationMetadataManager, sourceDataSender,
             configManager, replicationSession);
 

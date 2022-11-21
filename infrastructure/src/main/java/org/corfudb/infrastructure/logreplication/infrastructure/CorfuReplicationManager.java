@@ -60,7 +60,7 @@ public class CorfuReplicationManager {
      */
     public void start() {
         for (ClusterDescriptor remoteCluster : context.getTopology().getSinkClusters().values()) {
-            for (ReplicationSubscriber subscriber : context.getConfig().getReplicationSubscriberToStreamsMap().keySet()) {
+            for (ReplicationSubscriber subscriber : replicationConfigManager.getSubscriberToConfigMap().keySet()) {
                 try {
                     startLogReplicationRuntime(remoteCluster, new ReplicationSession(remoteCluster.getClusterId(),
                         subscriber));
@@ -183,7 +183,7 @@ public class CorfuReplicationManager {
         context.setTopology(newConfig);
 
         // Get all subscribers
-        Set<ReplicationSubscriber> subscribers = context.getConfig().getReplicationSubscriberToStreamsMap().keySet();
+        Set<ReplicationSubscriber> subscribers = replicationConfigManager.getSubscriberToConfigMap().keySet();
 
         // Remove Sinks that are not in the new config
         for (String clusterId : sinksToRemove) {

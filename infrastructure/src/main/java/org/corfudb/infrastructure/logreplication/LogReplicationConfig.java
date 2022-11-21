@@ -49,9 +49,6 @@ public class LogReplicationConfig {
     public static final UUID REGISTRY_TABLE_ID = CorfuRuntime.getStreamID(
         getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME));
 
-    // A map consisting of the streams to replicate for each supported replication model
-    private Map<ReplicationSubscriber, Set<String>> replicationSubscriberToStreamsMap = new HashMap<>();
-
     public static final UUID PROTOBUF_TABLE_ID = CorfuRuntime.getStreamID(
             getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME));
 
@@ -64,38 +61,39 @@ public class LogReplicationConfig {
             PROTOBUF_TABLE_ID
     ));
 
+    private Set<String> streamsToReplicate = new HashSet<>();
+
     // Mapping from stream ids to their fully qualified names.
-    private Map<UUID, String> streamIdsToNameMap;
+    protected Map<UUID, String> streamIdsToNameMap;
 
     // Streaming tags on Sink (map data stream id to list of tags associated to it)
-    private Map<UUID, List<UUID>> dataStreamToTagsMap = new HashMap<>();
+    protected Map<UUID, List<UUID>> dataStreamToTagsMap = new HashMap<>();
 
     // Set of streams to drop on Sink if replication subscriber info differs from Source when both are on different
     // versions
-    private Map<ReplicationSubscriber, Set<UUID>> subscriberToNonReplicatedStreamsMap = new HashMap<>();
+    private Set<UUID> streamsToDrop = new HashSet<>();
 
     // Snapshot Sync Batch Size(number of messages)
-    private int maxNumMsgPerBatch;
+    protected int maxNumMsgPerBatch;
 
     // Max Size of Log Replication Data Message
-    private int maxMsgSize;
+    protected int maxMsgSize;
 
     // Max Cache number of entries
-    private int maxCacheSize;
+    protected int maxCacheSize;
 
     /**
      * The max size of data payload for the log replication message.
      */
-    private int maxDataSizePerMsg;
+    protected int maxDataSizePerMsg;
 
     public static final String SAMPLE_CLIENT = "Sample Client";
 
-    public LogReplicationConfig(Map<ReplicationSubscriber, Set<String>> subscriberToStreamsMap,
-                                Map<ReplicationSubscriber, Set<UUID>> subscriberToNonReplicatedStreamsMap,
+    public LogReplicationConfig(Set<String> streamsToReplicate, Set<UUID> streamsToDrop,
                                 Map<UUID, List<UUID>> streamToTagsMap, ServerContext serverContext) {
-        replicationSubscriberToStreamsMap = subscriberToStreamsMap;
+        this.streamsToReplicate = streamsToReplicate;
         dataStreamToTagsMap = streamToTagsMap;
-        this.subscriberToNonReplicatedStreamsMap = subscriberToNonReplicatedStreamsMap;
+        this.streamsToDrop = streamsToDrop;
 
         if (serverContext == null) {
             this.maxNumMsgPerBatch = DEFAULT_MAX_NUM_MSG_PER_BATCH;
