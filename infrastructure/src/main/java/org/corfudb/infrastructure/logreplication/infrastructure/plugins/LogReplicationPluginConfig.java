@@ -27,8 +27,11 @@ public class LogReplicationPluginConfig {
 
     // Transport Plugin
     public static final String DEFAULT_JAR_PATH = "/infrastructure/target/infrastructure-0.3.1-SNAPSHOT.jar";
-    public static final String DEFAULT_SERVER_CLASSNAME = "org.corfudb.infrastructure.logreplication.transport.sample.NettyLogReplicationServerChannelAdapter";
-    public static final String DEFAULT_CLIENT_CLASSNAME = "org.corfudb.infrastructure.logreplication.transport.sample.NettyLogReplicationClientChannelAdapter";
+//    public static final String DEFAULT_SERVER_CLASSNAME = "org.corfudb.infrastructure.logreplication.transport.sample.NettyLogReplicationServerChannelAdapter";
+//    public static final String DEFAULT_CLIENT_CLASSNAME = "org.corfudb.infrastructure.logreplication.transport.sample.NettyLogReplicationClientChannelAdapter";
+
+    public static final String DEFAULT_SERVER_CLASSNAME = "org.corfudb.infrastructure.logreplication.transport.sample.GRPCLogReplicationServerChannelAdapter";
+    public static final String DEFAULT_CLIENT_CLASSNAME = "org.corfudb.infrastructure.logreplication.transport.sample.GRPCLogReplicationClientChannelAdapter";
 
     // Stream Fetcher Plugin
     public static final String DEFAULT_STREAM_FETCHER_JAR_PATH = "/target/infrastructure-0.3.1-SNAPSHOT.jar";

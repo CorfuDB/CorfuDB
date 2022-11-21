@@ -164,6 +164,7 @@ public class CorfuReplicationBiDirectional extends LogReplicationAbstractIT {
      */
     @Test
     public void test_whenSinkIsConnectionInit() throws Exception {
+        pluginConfigFilePath = grpcConfig;
         //setup source and sink corfu
         setupSourceAndSinkCorfu();
         // Add a new kind of topology where a cluster is both source and destination, but the remote just acts as a sink

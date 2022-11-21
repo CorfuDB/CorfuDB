@@ -40,7 +40,8 @@ message LogReplicationLeadershipLossResponseMsg {
 }
 
 message LogReplicationLeadershipRequestMsg {
-    ReplicationSessionMsg sessionInfo = 1;
+  string nodeId = 1;
+  ReplicationSessionMsg sessionInfo = 2;
 }
 
 message LogReplicationLeadershipResponseMsg {

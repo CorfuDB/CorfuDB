@@ -155,7 +155,7 @@ public class LogReplicationSourceServerRouter extends LogReplicationSourceRouter
 
         //Shama start FSM
         if (validateEpoch(message.getHeader())) {
-//            this.startReplication(nodeId);
+            this.startReplication(nodeId);
         }
     }
 

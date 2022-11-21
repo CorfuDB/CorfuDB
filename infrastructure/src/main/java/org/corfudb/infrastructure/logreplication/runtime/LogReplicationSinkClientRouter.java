@@ -17,6 +17,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationSe
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
+import org.corfudb.infrastructure.logreplication.runtime.sinkFsm.SinkVerifyRemoteLeader;
 import org.corfudb.infrastructure.logreplication.transport.client.ChannelAdapterException;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
@@ -116,11 +117,14 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
     /**
      * Adapter to the channel implementation
      */
+    @Getter
     IClientChannelAdapter channelAdapter;
 
     final String pluginFilePath;
 
     ReplicationSession session;
+
+    private final SinkVerifyRemoteLeader verifyLeadership;
 
 
 
@@ -149,6 +153,8 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
         this.localClusterId = localClusterId;
         // this will be required when the sink is the connection initiator
         this.session = session;
+
+        this.verifyLeadership = new SinkVerifyRemoteLeader(session, this);
     }
 
     // ------------------- IClientRouter Interface ----------------------
@@ -172,8 +178,52 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
             @Nonnull RequestPayloadMsg payload,
             @Nonnull String nodeId) {
 
-        // This is an empty stub when SINK. This method is not being used when the node is a SINK.
-        return  null;
+        CorfuMessage.HeaderMsg.Builder header = CorfuMessage.HeaderMsg.newBuilder()
+                .setVersion(getDefaultProtocolVersionMsg())
+                .setIgnoreClusterId(true)
+                .setIgnoreEpoch(true);
+
+        // Get the next request ID.
+        final long requestId = requestID.getAndIncrement();
+
+        // Generate a future and put it in the completion table.
+        final CompletableFuture<T> cf = new CompletableFuture<>();
+        outstandingRequests.put(requestId, cf);
+        try {
+//            LogReplicationRuntimeParameters parameters =  this.runtimeFSM.getSourceManager().getParameters();
+//            header.setClientId(getUuidMsg(parameters.getClientId()));
+            header.setRequestId(requestId);
+            header.setClusterId(getUuidMsg(UUID.fromString(this.localClusterId)));
+
+            log.info("Send message to {}, type={}", nodeId, payload.getPayloadCase());
+            getChannelAdapter().send(nodeId, getRequestMsg(header.build(), payload));
+        } catch (NetworkException ne) {
+            log.error("Caught Network Exception while trying to send message to remote node {}", nodeId);
+            verifyLeadership.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN,
+                    nodeId));
+            throw ne;
+        } catch (Exception e) {
+            log.info("sendRequestAndGetCompletable removing reqId outstandingRequests {}", requestId);
+            outstandingRequests.remove(requestId);
+            log.error("sendMessageAndGetCompletable: Remove request {} to {} due to exception! Message:{}",
+                    requestId, remoteClusterDescriptor.getClusterId(), payload.getPayloadCase(), e);
+            cf.completeExceptionally(e);
+            return cf;
+        }
+
+        // Generate a timeout future, which will complete exceptionally if the main future is not completed.
+        final CompletableFuture<T> cfTimeout =
+                CFUtils.within(cf, Duration.ofMillis(timeoutResponse));
+        cfTimeout.exceptionally(e -> {
+            if (e.getCause() instanceof TimeoutException) {
+                outstandingRequests.remove(requestId);
+                log.debug("sendMessageAndGetCompletable: Remove request {} to {} due to timeout! Message:{}",
+                        requestId, remoteClusterDescriptor.getClusterId(), payload.getPayloadCase());
+            }
+            return null;
+        });
+
+        return cfTimeout;
     }
 
     /**
@@ -216,12 +266,28 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
 
     @Override
     public <T> void completeRequest(long requestID, T completion) {
-        // SINK doesn't send any Requests, only processes Responses.
+        // only for leadership request
+        log.trace("Complete request: {}...outstandingRequests {}", requestID, outstandingRequests);
+        CompletableFuture<T> cf;
+        if ((cf = (CompletableFuture<T>) outstandingRequests.remove(requestID)) != null) {
+            cf.complete(completion);
+        } else {
+            log.warn("Attempted to complete request {}, but request not outstanding!", requestID);
+        }
     }
 
     @Override
     public void completeExceptionally(long requestID, Throwable cause) {
-
+        // only for leadership request
+        CompletableFuture cf;
+        if ((cf = outstandingRequests.remove(requestID)) != null) {
+            cf.completeExceptionally(cause);
+            log.debug("completeExceptionally: Remove request {} to {} due to {}.", requestID,
+                    remoteClusterDescriptor.getClusterId(), cause.getClass().getSimpleName(), cause);
+        } else {
+            log.warn("Attempted to exceptionally complete request {}, but request not outstanding!",
+                    requestID);
+        }
     }
 
     @Override
@@ -354,7 +420,8 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
      */
     @Override
     public synchronized void onConnectionUp(String nodeId) {
-        log.info("Connection established to remote node {}. Waiting for replication request", nodeId);
+        log.info("Connection established to remote node {}.", nodeId);
+        this.verifyLeadership.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_UP, nodeId));
     }
 
     /**
