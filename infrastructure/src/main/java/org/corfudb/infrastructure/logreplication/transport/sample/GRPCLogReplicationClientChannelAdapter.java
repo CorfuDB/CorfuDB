@@ -4,16 +4,14 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc;
 import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc.LogReplicationChannelBlockingStub;
 import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc.LogReplicationChannelStub;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
-import org.corfudb.infrastructure.logreplication.runtime.ReplicationSinkClientRouter;
-import org.corfudb.infrastructure.logreplication.runtime.ReplicationSinkRouter;
-import org.corfudb.infrastructure.logreplication.runtime.ReplicationSourceRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkClientRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceClientRouter;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
@@ -61,7 +59,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     public GRPCLogReplicationClientChannelAdapter(
             String localClusterId,
             ClusterDescriptor remoteClusterDescriptor,
-            ReplicationSourceRouter adapter, ReplicationSinkClientRouter sinkRouter ) {
+            LogReplicationSourceClientRouter adapter, LogReplicationSinkClientRouter sinkRouter ) {
         super(localClusterId, remoteClusterDescriptor, adapter, sinkRouter);
 
         this.channelMap = new HashMap<>();
@@ -141,6 +139,9 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         }
     }
 
+    @Override
+    public void send(String nodeId, ResponseMsg response) {}
+
     private void queryLeadership(String nodeId, RequestMsg request) {
         try {
             if (blockingStubMap.containsKey(nodeId)) {
@@ -217,6 +218,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
             }
         }
 
+        log.info("request: {}", request);
         log.info("Send replication entry: {} to node {}@{}", request.getHeader().getRequestId(),
                 nodeId, getRemoteClusterDescriptor().getEndpointByNodeId(nodeId));
         if (responseObserverMap.containsKey(requestId)) {

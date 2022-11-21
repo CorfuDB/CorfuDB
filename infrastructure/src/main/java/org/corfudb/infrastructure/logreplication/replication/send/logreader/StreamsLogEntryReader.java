@@ -13,6 +13,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSessi
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
@@ -81,6 +82,8 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     private StreamIteratorMetadata currentProcessedEntryMetadata;
 
+    private final ReplicationSession replicationSession;
+
     public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config,
                                  ReplicationSession replicationSession) {
         runtime.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
@@ -90,7 +93,8 @@ public class StreamsLogEntryReader implements LogEntryReader {
         this.deltaCounter = configureDeltaCounter();
         this.validDeltaCounter = configureValidDeltaCounter();
         this.opaqueEntryCounter = configureOpaqueEntryCounter();
-        Set<String> streams = config.getReplicationSubscriberToStreamsMap().get(replicationSession.getSubscriber());
+        this.replicationSession = replicationSession;
+        Set<String> streams = config.getReplicationSubscriberToStreamsMap().get(this.replicationSession.getSubscriber());
 
         streamUUIDs = new HashSet<>();
         for (String s : streams) {
@@ -115,6 +119,11 @@ public class StreamsLogEntryReader implements LogEntryReader {
                 .setPreviousTimestamp(preMsgTs)
                 .setSnapshotTimestamp(globalBaseSnapshot)
                 .setSnapshotSyncSeqNum(sequence)
+                .setSessionInfo(LogReplication.ReplicationSessionMsg.newBuilder()
+                        .setRemoteClusterId(this.replicationSession.getRemoteClusterId())
+                        .setClient(this.replicationSession.getSubscriber().getClient())
+                        .setReplicationModel(this.replicationSession.getSubscriber().getReplicationModel())
+                        .build())
                 .build();
 
         LogReplicationEntryMsg txMessage = getLrEntryMsg(unsafeWrap(generatePayload(opaqueEntryList)), metadata);

@@ -3,33 +3,25 @@ package org.corfudb.infrastructure.logreplication.runtime;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
-import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent.LogReplicationRuntimeEventType;
 import org.corfudb.infrastructure.logreplication.transport.client.ChannelAdapterException;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
-import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
-import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
+import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
+import org.corfudb.protocols.service.CorfuProtocolMessage;
 import org.corfudb.runtime.clients.IClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.exceptions.NetworkException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.proto.service.CorfuMessage;
-import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
 import org.corfudb.util.CFUtils;
 
 import javax.annotation.Nonnull;
-import java.io.File;
-import java.net.URL;
-import java.net.URLClassLoader;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -47,19 +39,15 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getDefaultProtocolVersionMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 
-/**
- * This Client Router is used when a custom (client-defined) transport layer is specified for
- * Log Replication Server communication.
- */
 @Slf4j
-public class ReplicationSourceRouter extends ReplicationRouter implements IClientRouter {
+public class LogReplicationSourceRouterHelper implements IClientRouter {
 
     public static String REMOTE_LEADER = "REMOTE_LEADER";
 
     /**
      * The handlers registered to this router.
      */
-    private final Map<PayloadCase, IClient> handlerMap;
+    protected final Map<CorfuMessage.ResponsePayloadMsg.PayloadCase, IClient> handlerMap;
 
     /**
      * The clients registered to this router.
@@ -77,7 +65,7 @@ public class ReplicationSourceRouter extends ReplicationRouter implements IClien
      * to the remote node.
      */
     @Getter
-    private volatile CompletableFuture<Void> remoteLeaderConnectionFuture;
+    protected volatile CompletableFuture<Void> remoteLeaderConnectionFuture;
 
     /**
      * The current request ID.
@@ -102,20 +90,32 @@ public class ReplicationSourceRouter extends ReplicationRouter implements IClien
      * Runtime FSM, to insert connectivity events
      */
     @Getter
-    private CorfuLogReplicationRuntime runtimeFSM;
+    protected CorfuLogReplicationRuntime runtimeFSM;
 
     /**
      * Remote cluster's clusterDescriptor
      */
-    private final ClusterDescriptor remoteClusterDescriptor;
+    protected ClusterDescriptor remoteClusterDescriptor;
 
     /**
      * The replicationManager
      */
-    private final CorfuReplicationManager replicationManager;
+    protected final CorfuReplicationManager replicationManager;
 
-    private String localClusterId;
+    protected String localClusterId;
 
+    protected boolean isConnectionInitiator;
+
+    @Setter
+    protected IClientChannelAdapter clientChannelAdapter;
+
+    @Setter
+    protected IServerChannelAdapter serverChannelAdapter;
+
+    protected final String pluginFilePath;
+
+    @Getter
+    ReplicationSession session;
 
     /**
      * Log Replication Client Constructor
@@ -125,21 +125,26 @@ public class ReplicationSourceRouter extends ReplicationRouter implements IClien
      * @param parameters runtime parameters (including connection settings)
      * @param session replication session between current and remote cluster
      */
-    public ReplicationSourceRouter(ClusterDescriptor remoteCluster, String localClusterId,
-                                   LogReplicationRuntimeParameters parameters, CorfuReplicationManager replicationManager,
-                                   ReplicationSession session) {
-        super(remoteCluster, localClusterId, parameters.getPluginFilePath(), session, true);
+    public LogReplicationSourceRouterHelper(ClusterDescriptor remoteCluster, String localClusterId,
+                                            LogReplicationRuntimeParameters parameters, CorfuReplicationManager replicationManager,
+                                            ReplicationSession session, boolean isConnectionInitiator) {
         this.timeoutResponse = parameters.getRequestTimeout().toMillis();
         this.remoteClusterDescriptor = remoteCluster;
         this.localClusterId = localClusterId;
         this.replicationManager = replicationManager;
+        this.session = session;
+        this.pluginFilePath = parameters.getPluginFilePath();
 
         this.handlerMap = new ConcurrentHashMap<>();
         this.clientList = new ArrayList<>();
         this.requestID = new AtomicLong();
         this.outstandingRequests = new ConcurrentHashMap<>();
         this.remoteLeaderConnectionFuture = new CompletableFuture<>();
+        this.isConnectionInitiator = isConnectionInitiator;
+        this.clientChannelAdapter = null;
+        this.serverChannelAdapter = null;
     }
+
 
     // ------------------- IClientRouter Interface ----------------------
 
@@ -181,10 +186,10 @@ public class ReplicationSourceRouter extends ReplicationRouter implements IClien
      */
     @Override
     public <T> CompletableFuture<T> sendRequestAndGetCompletable(
-            @Nonnull RequestPayloadMsg payload,
+            @Nonnull CorfuMessage.RequestPayloadMsg payload,
             @Nonnull String nodeId) {
 
-        HeaderMsg.Builder header = HeaderMsg.newBuilder()
+        CorfuMessage.HeaderMsg.Builder header = CorfuMessage.HeaderMsg.newBuilder()
                 .setVersion(getDefaultProtocolVersionMsg())
                 .setIgnoreClusterId(true)
                 .setIgnoreEpoch(true);
@@ -225,7 +230,7 @@ public class ReplicationSourceRouter extends ReplicationRouter implements IClien
                         nodeId = runtimeFSM.getRemoteLeaderNodeId().get();
                     } else {
                         log.error("Leader not found to remote cluster {}", remoteClusterDescriptor.getClusterId());
-                        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
+                        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
                         throw new ChannelAdapterException(
                                 String.format("Leader not found to remote cluster %s", remoteClusterDescriptor.getClusterId()));
                     }
@@ -234,10 +239,14 @@ public class ReplicationSourceRouter extends ReplicationRouter implements IClien
                 // In the case the message is intended for a specific endpoint, we do not
                 // block on connection future, this is the case of leader verification.
                 log.info("Send message to {}, type={}", nodeId, payload.getPayloadCase());
-                channelAdapter.send(nodeId, getRequestMsg(header.build(), payload));
+                if(isConnectionInitiator) {
+                    clientChannelAdapter.send(nodeId, getRequestMsg(header.build(), payload));
+                } else {
+                    serverChannelAdapter.send(nodeId, getRequestMsg(header.build(), payload));
+                }
             } catch (NetworkException ne) {
                 log.error("Caught Network Exception while trying to send message to remote leader {}", nodeId);
-                runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.ON_CONNECTION_DOWN,
+                runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN,
                         nodeId));
                 throw ne;
             } catch (Exception e) {
@@ -286,9 +295,9 @@ public class ReplicationSourceRouter extends ReplicationRouter implements IClien
      * or a timeout in the case there is no response.
      */
     @Override
-    public <T> CompletableFuture<T> sendRequestAndGetCompletable(RequestPayloadMsg payload, long epoch, RpcCommon.UuidMsg clusterId,
+    public <T> CompletableFuture<T> sendRequestAndGetCompletable(CorfuMessage.RequestPayloadMsg payload, long epoch, RpcCommon.UuidMsg clusterId,
                                                                  org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel priority,
-                                                                 ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
+                                                                 CorfuProtocolMessage.ClusterIdCheck ignoreClusterId, CorfuProtocolMessage.EpochCheck ignoreEpoch) {
         // This is an empty stub. This method is not being used anywhere in the LR framework.
         return null;
     }
@@ -304,9 +313,9 @@ public class ReplicationSourceRouter extends ReplicationRouter implements IClien
      * @param ignoreEpoch
      */
     @Override
-    public void sendRequest(RequestPayloadMsg payload, long epoch, RpcCommon.UuidMsg clusterId,
+    public void sendRequest(CorfuMessage.RequestPayloadMsg payload, long epoch, RpcCommon.UuidMsg clusterId,
                             org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel priority,
-                            ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
+                            CorfuProtocolMessage.ClusterIdCheck ignoreClusterId, CorfuProtocolMessage.EpochCheck ignoreEpoch) {
         // This is an empty stub. This method is not being used anywhere in the LR framework.
     }
 
@@ -334,11 +343,12 @@ public class ReplicationSourceRouter extends ReplicationRouter implements IClien
         }
     }
 
+    //Shama -> for SourceSink have to terminate the stream
     @Override
     public void stop() {
         log.debug("stop: Shutting down router for {}", remoteClusterDescriptor.getClusterId());
         shutdown = true;
-        channelAdapter.stop();
+        clientChannelAdapter.stop();
         remoteLeaderConnectionFuture = new CompletableFuture<>();
         remoteLeaderConnectionFuture.completeExceptionally(new NetworkException("Router stopped", remoteClusterDescriptor.getClusterId()));
     }
@@ -374,100 +384,21 @@ public class ReplicationSourceRouter extends ReplicationRouter implements IClien
 
     // ---------------------------------------------------------------------------
 
-    /**
-     * Receive Corfu Message from the Channel Adapter for further processing
-     *
-     * @param msg received corfu message
-     */
-    public void receive(CorfuMessage.ResponseMsg msg) {
-        try {
-            // If it is a Leadership Loss Message re-trigger leadership discovery
-            if (msg.getPayload().getPayloadCase() == PayloadCase.LR_LEADERSHIP_LOSS) {
-                String nodeId = msg.getPayload().getLrLeadershipLoss().getNodeId();
-                runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, nodeId));
-                return;
-            }
-
-            // We get the handler for this message from the map
-            IClient handler = handlerMap.get(msg.getPayload().getPayloadCase());
-
-            if (handler == null) {
-                // The message was unregistered, we are dropping it.
-                log.warn("Received unregistered message {}, dropping", msg);
-            } else {
-                // Route the message to the handler.
-                if (log.isTraceEnabled()) {
-                    log.trace("Message routed to {}: {}",
-                            handler.getClass().getSimpleName(), msg);
-                }
-                handler.handleMessage(msg, null);
-            }
-        } catch (Exception e) {
-            log.error("Exception caught while receiving message of type {}",
-                    msg.getPayload().getPayloadCase(), e);
-        }
-    }
-
-    public void receive(CorfuMessage.RequestMsg msg) {
-        log.info("recevied request msg {}", msg.getPayload());
-    }
-
-    /**
-     * When an error occurs in the Channel Adapter, trigger
-     * exceptional completeness of all pending requests.
-     *
-     * @param e exception
-     */
-    public void completeAllExceptionally(Exception e) {
-        // Exceptionally complete all requests that were waiting for a completion.
-        outstandingRequests.forEach((reqId, reqCompletableFuture) -> {
-            reqCompletableFuture.completeExceptionally(e);
-            // And also remove them.
-            outstandingRequests.remove(reqId);
-        });
-    }
 
     /**
      * Verify Message is of valid Log Replication type.
      */
-    private boolean isValidMessage(RequestPayloadMsg message) {
-        return message.getPayloadCase().equals(RequestPayloadMsg.PayloadCase.LR_ENTRY) ||
-                message.getPayloadCase().equals(RequestPayloadMsg.PayloadCase.LR_METADATA_REQUEST) ||
-                message.getPayloadCase().equals(RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_QUERY);
+    private boolean isValidMessage(CorfuMessage.RequestPayloadMsg message) {
+        return message.getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_ENTRY) ||
+                message.getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_METADATA_REQUEST) ||
+                message.getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_QUERY);
     }
 
-    /**
-     * Connection Up Callback.
-     *
-     * @param nodeId id of the remote node to which connection was established.
-     */
-    @Override
-    public synchronized void onConnectionUp(String nodeId) {
+    public void startReplication(String nodeId) {
         log.info("Connection established to remote node {}", nodeId);
         replicationManager.startRuntime(session);
         log.debug("runtimeFSM started for session {}", session);
-        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.ON_CONNECTION_UP, nodeId));
-    }
-
-    /**
-     * Connection Down Callback.
-     *
-     * @param nodeId id of the remote node to which connection came down.
-     */
-    @Override
-    public synchronized void onConnectionDown(String nodeId) {
-        log.info("Connection lost to remote node {} on cluster {}", nodeId, this.session.getRemoteClusterId());
-        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.ON_CONNECTION_DOWN,
-                nodeId));
-        // Attempt to reconnect to this endpoint
-        channelAdapter.connectAsync(nodeId);
-    }
-
-    /**
-     * Channel Adapter On Error Callback
-     */
-    public synchronized void onError(Throwable t) {
-        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.ERROR, t));
+        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_UP, nodeId));
     }
 
     /**
@@ -476,18 +407,14 @@ public class ReplicationSourceRouter extends ReplicationRouter implements IClien
      * @param clusterDescriptor remote cluster descriptor
      */
     public synchronized void onClusterChange(ClusterDescriptor clusterDescriptor) {
-        channelAdapter.clusterChangeNotification(clusterDescriptor);
+        this.clientChannelAdapter.clusterChangeNotification(clusterDescriptor);
     }
 
     public Optional<String> getRemoteLeaderNodeId() {
-        return runtimeFSM.getRemoteLeaderNodeId();
+        return Optional.empty();
     }
 
     public void resetRemoteLeader() {
-        if (channelAdapter != null) {
-            log.debug("Reset remote leader from channel adapter.");
-            channelAdapter.resetRemoteLeader();
-        }
-    }
 
+    }
 }

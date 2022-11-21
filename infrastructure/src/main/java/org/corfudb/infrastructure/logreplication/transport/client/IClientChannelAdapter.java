@@ -2,8 +2,8 @@ package org.corfudb.infrastructure.logreplication.transport.client;
 
 import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.infrastructure.logreplication.runtime.ReplicationSinkClientRouter;
-import org.corfudb.infrastructure.logreplication.runtime.ReplicationSourceRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkClientRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceClientRouter;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 
@@ -28,10 +28,10 @@ public abstract class IClientChannelAdapter {
     private final ClusterDescriptor remoteClusterDescriptor;
 
     @Getter
-    private final ReplicationSourceRouter sourceRouter;
+    private final LogReplicationSourceClientRouter sourceRouter;
 
     @Getter
-    private final ReplicationSinkClientRouter sinkRouter;
+    private final LogReplicationSinkClientRouter sinkRouter;
 
     /**
      * Default Constructor
@@ -42,8 +42,8 @@ public abstract class IClientChannelAdapter {
      */
     public IClientChannelAdapter(@Nonnull String localClusterId,
                                  @Nonnull ClusterDescriptor remoteClusterDescriptor,
-                                 @Nonnull ReplicationSourceRouter sourceRouter,
-                                 @Nonnull ReplicationSinkClientRouter sinkRouter) {
+                                 @Nonnull LogReplicationSourceClientRouter sourceRouter,
+                                 @Nonnull LogReplicationSinkClientRouter sinkRouter) {
         this.localClusterId = localClusterId;
         this.remoteClusterDescriptor = remoteClusterDescriptor;
         this.sourceRouter = sourceRouter;
@@ -74,6 +74,14 @@ public abstract class IClientChannelAdapter {
     public abstract void send(String nodeId, RequestMsg request);
 
     /**
+     * Send a message across the channel to a specific endpoint.
+     *
+     * @param nodeId remote node id
+     * @param request corfu message to be sent
+     */
+    public abstract void send(String nodeId, ResponseMsg request);
+
+    /**
      * Notify adapter of cluster change or reconfiguration.
      *
      * Since the adapter manages the connections to the remote site it must close or open
@@ -90,6 +98,14 @@ public abstract class IClientChannelAdapter {
      * @param msg received corfu message
      */
     public void receive(ResponseMsg msg) {
+        if (getSinkRouter() != null) {
+            getSinkRouter().receive(msg);
+        } else {
+            getSourceRouter().receive(msg);
+        }
+    }
+
+    public void receive(RequestMsg msg) {
         if (getSinkRouter() != null) {
             getSinkRouter().receive(msg);
         } else {

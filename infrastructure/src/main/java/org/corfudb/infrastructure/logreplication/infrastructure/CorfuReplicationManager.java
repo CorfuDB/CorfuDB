@@ -4,12 +4,17 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.AbstractServer;
+import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
-import org.corfudb.infrastructure.logreplication.runtime.ReplicationSinkClientRouter;
-import org.corfudb.infrastructure.logreplication.runtime.ReplicationSourceRouter;
-import org.corfudb.infrastructure.logreplication.runtime.ReplicationRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationHandler;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkClientRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkServerRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceClientRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceRouterHelper;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceServerRouter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.retry.IRetry;
@@ -45,8 +50,8 @@ public class CorfuReplicationManager {
 
     private final LogReplicationConfigManager replicationConfigManager;
 
-    private final Map<ReplicationSession, ReplicationSourceRouter> replicationSessionToRouterSource;
-    private final Map<ReplicationSession, ReplicationSinkClientRouter> replicationSessionToRouterSink;
+    private final Map<ReplicationSession, LogReplicationSourceRouterHelper> replicationSessionToRouterSource;
+    private final Map<ReplicationSession, LogReplicationSinkServerRouter> replicationSessionToRouterSink;
     private final Map<ReplicationSession, LogReplicationRuntimeParameters> replicationSessionToRuntimeParams;
 
     /**
@@ -72,40 +77,61 @@ public class CorfuReplicationManager {
      * If local cluster is a source, creates a runtime and a sourceRouter
      * If local cluster is a sink, creates a router and starts the sink-server node.
      */
+    // Shama: remove interclusterServerNode from params
     public void startConnection(Set<ClusterDescriptor> remoteClusters,
                                 Map<String, Set<ReplicationSession>> remoteClusterIdToReplicationSession,
-                                CorfuInterClusterReplicationServerNode interClusterServerNode) {
+                                CorfuInterClusterReplicationServerNode interClusterServerNode, Map<Class, AbstractServer> serverMap) {
 
         for(ClusterDescriptor remote : remoteClusters) {
             Set<ReplicationSession> sessions = remoteClusterIdToReplicationSession.get(remote.getClusterId());
             log.info("Starting connection to remote {} and session {} ", remote, sessions);
 
             for(ReplicationSession session : sessions) {
-                ReplicationRouter router;
-                if (context.getTopology().getRemoteSinkClusters().containsKey(remote.getClusterId())) {
-                    router = getOrCreateRouter(remote,session,true, interClusterServerNode);
-                } else if (this.context.getTopology().getRemoteSourceClusters().containsKey(remote.getClusterId())) {
-                    router = getOrCreateRouter(remote,session,false, interClusterServerNode);
+                log.info("context {}", context);
+                log.info("context.getTopology() {}", context.getTopology());
+                log.info("context.getTopology.getRemoteSinkClusters() {}", context.getTopology().getRemoteSinkClusters());
+                if (!context.getTopology().getRemoteSinkClusters().isEmpty() &&
+                        context.getTopology().getRemoteSinkClusters().containsKey(remote.getClusterId())) {
+                    LogReplicationSourceRouterHelper router = getOrCreateSourceRouter(remote,session, serverMap, true);
+                    try {
+                        IRetry.build(IntervalRetry.class, () -> {
+                            try {
+                                if(router instanceof LogReplicationSourceClientRouter) {
+                                    ((LogReplicationSourceClientRouter) router).connect();
+                                }
+                            } catch (Exception e) {
+                                log.error("Exception {}. Failed to connect to remote cluster for session {}. Retry after 1 second.",
+                                        e, session);
+                                throw new RetryNeededException();
+                            }
+                            return null;
+                        }).run();
+                    } catch (InterruptedException e) {
+                        log.error("Unrecoverable exception when attempting to connect to remote session.", e);
+                    }
+                } else if (!this.context.getTopology().getRemoteSourceClusters().isEmpty() &&
+                        this.context.getTopology().getRemoteSourceClusters().containsKey(remote.getClusterId())) {
+                    LogReplicationSinkServerRouter router = getOrCreateSinkRouter(remote,session, serverMap, true);
+                    try {
+                        IRetry.build(IntervalRetry.class, () -> {
+                            try {
+                                if(router instanceof LogReplicationSinkClientRouter) {
+                                    ((LogReplicationSinkClientRouter) router).connect();
+                                }
+                            } catch (Exception e) {
+                                log.error("Exception {}. Failed to connect to remote cluster for session {}. Retry after 1 second.",
+                                        e, session);
+                                throw new RetryNeededException();
+                            }
+                            return null;
+                        }).run();
+                    } catch (InterruptedException e) {
+                        log.error("Unrecoverable exception when attempting to connect to remote session.", e);
+                    }
                 } else {
                     log.warn("Not connecting to cluster {} as it is neither a source nor a sink to the current cluster", remote);
                     continue;
                 }
-
-                try {
-                    IRetry.build(IntervalRetry.class, () -> {
-                        try {
-                            router.connect();
-                        } catch (Exception e) {
-                            log.error("Exception {}. Failed to connect to remote cluster for session {}. Retry after 1 second.",
-                                    e, session);
-                            throw new RetryNeededException();
-                        }
-                        return null;
-                    }).run();
-                } catch (InterruptedException e) {
-                    log.error("Unrecoverable exception when attempting to connect to remote session.", e);
-                }
-
             }
 
         }
@@ -114,31 +140,46 @@ public class CorfuReplicationManager {
     /**
      * Creates a Router for source and for a sink (i.e., if the local cluster acts as both source/sink).
      */
-    public ReplicationRouter getOrCreateRouter(ClusterDescriptor remote, ReplicationSession session, boolean isSource,
-                                               CorfuInterClusterReplicationServerNode interClusterServerNode) {
-        ReplicationRouter router;
-        if (isSource) {
-            if (replicationSessionToRouterSource.containsKey(session)) {
-                return replicationSessionToRouterSource.get(session);
-            }
-
-            ReplicationSourceRouter sourceRouter = new ReplicationSourceRouter(remote,
-                    localNodeDescriptor.getClusterId(), createRuntimeParams(remote,session), this,
-                    session);
-            router = sourceRouter;
-            replicationSessionToRouterSource.put(session, sourceRouter);
-            createRuntime(remote, session);
-            sourceRouter.setRuntimeFSM(remoteSesionToRuntime.get(session));
-        } else {
-            if(replicationSessionToRouterSink.containsKey(session)) {
-                return replicationSessionToRouterSink.get(session);
-            }
-            ReplicationSinkClientRouter sinkRouter = new ReplicationSinkClientRouter(
-                    new ArrayList<AbstractServer>(interClusterServerNode.getServerMap().values()),
-                    remote, localNodeDescriptor.getClusterId(), pluginFilePath, session);
-            router = sinkRouter;
-            replicationSessionToRouterSink.put(session, sinkRouter);
+    public LogReplicationSourceRouterHelper getOrCreateSourceRouter(ClusterDescriptor remote, ReplicationSession session,
+                                                                    Map<Class, AbstractServer> serverMap, boolean isConnectionStarter) {
+        if (replicationSessionToRouterSource.containsKey(session)) {
+            return replicationSessionToRouterSource.get(session);
         }
+        LogReplicationSourceRouterHelper router;
+        if (isConnectionStarter) {
+            LogReplicationSourceClientRouter sourceClientRouter = new LogReplicationSourceClientRouter(remote,
+                    localNodeDescriptor.getClusterId(), createRuntimeParams(remote, session), this,
+                    session);
+            router = sourceClientRouter;
+        } else {
+            LogReplicationSourceServerRouter sourceServerRouter = new LogReplicationSourceServerRouter(remote,
+                    localNodeDescriptor.getClusterId(), createRuntimeParams(remote, session), this,
+                    session, (BaseServer) serverMap.get(BaseServer.class));
+            router = sourceServerRouter;
+        }
+        replicationSessionToRouterSource.put(session, router);
+        createRuntime(remote, session);
+        router.setRuntimeFSM(remoteSesionToRuntime.get(session));
+
+        return router;
+    }
+
+    public LogReplicationSinkServerRouter getOrCreateSinkRouter(ClusterDescriptor remote, ReplicationSession session,
+                                                                Map<Class, AbstractServer> serverMap, boolean isConnectionStarter) {
+        if (replicationSessionToRouterSink.containsKey(session)) {
+            return replicationSessionToRouterSink.get(session);
+        }
+        LogReplicationSinkServerRouter router;
+        if(isConnectionStarter) {
+            LogReplicationSinkClientRouter sinkClientRouter = new LogReplicationSinkClientRouter(remote,
+                    localNodeDescriptor.getClusterId(), pluginFilePath, corfuRuntime.getParameters()
+                    .getRequestTimeout().toMillis(), session, serverMap);
+            router = sinkClientRouter;
+        } else {
+            LogReplicationSinkServerRouter sinkServerRouter = new LogReplicationSinkServerRouter(serverMap, false);
+            router = sinkServerRouter;
+        }
+        replicationSessionToRouterSink.put(session, router);
         return router;
     }
 
@@ -263,7 +304,7 @@ public class CorfuReplicationManager {
     public void processSinkChange(TopologyDescriptor newConfig, Set<String> remoteClustersToAdd, Set<String> remoteClustersToRemove,
                                   Set<String> intersection, Map<String, ClusterDescriptor> connectionEndsIdToDescriptor,
                                   Map<String, Set<ReplicationSession>> remoteIdToReplicationSession,
-                                  CorfuInterClusterReplicationServerNode interClusterServerNode) {
+                                  CorfuInterClusterReplicationServerNode interClusterServerNode, Map<Class, AbstractServer> serverMap) {
 
         long oldTopologyConfigId = context.getTopology().getTopologyConfigId();
         context.setTopology(newConfig);
@@ -286,12 +327,12 @@ public class CorfuReplicationManager {
                 newConnectionToStart.add(connectionEndsIdToDescriptor.get(clusterId));
             } else {
                 remoteIdToReplicationSession.get(clusterId).stream().forEach(session -> {
-                        getOrCreateRouter(connectionEndsIdToDescriptor.get(clusterId), session, true, interClusterServerNode);
+                        getOrCreateSourceRouter(connectionEndsIdToDescriptor.get(clusterId), session, serverMap, false);
                         startRuntime(session);
                 });
             }
         }
-        startConnection(newConnectionToStart, remoteIdToReplicationSession, interClusterServerNode);
+        startConnection(newConnectionToStart, remoteIdToReplicationSession, interClusterServerNode, serverMap);
 
         // The connection id or other transportation plugin's info could've changed for existing Sink clusters,
         // updating the routers will re-establish the connection to the correct endpoints/nodes

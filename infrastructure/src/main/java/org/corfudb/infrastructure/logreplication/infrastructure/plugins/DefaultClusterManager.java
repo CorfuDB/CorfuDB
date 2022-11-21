@@ -11,10 +11,10 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.ExampleSchemas.ClusterUuidMsg;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
@@ -64,6 +64,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
     public static final ClusterUuidMsg OP_MULTI_SINK = ClusterUuidMsg.newBuilder().setLsb(8L).setMsb(8L).build();
     public static final ClusterUuidMsg OP_MULTI_SOURCE = ClusterUuidMsg.newBuilder().setLsb(9L).setMsb(9L).build();
     public static final ClusterUuidMsg OP_BIDIR_ORPH_SINK = ClusterUuidMsg.newBuilder().setLsb(10L).setMsb(10L).build();
+    public static final ClusterUuidMsg OP_SINK_CONNECT_INIT = ClusterUuidMsg.newBuilder().setLsb(11L).setMsb(11L).build();
 
     @Getter
     private long configId;
@@ -83,8 +84,8 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
     private String corfuEndpoint = "localhost:9000";
 
     private DefaultClusterConfig topology;
-    private final Map<ClusterConfigurationMsg, Set<LogReplicationMetadata.ReplicationModels>> remoteSourcesToReplicationModels;
-    private final Map<ClusterConfigurationMsg, Set<LogReplicationMetadata.ReplicationModels>> remoteSinkToReplicationModels;
+    private final Map<ClusterConfigurationMsg, Set<LogReplication.ReplicationModels>> remoteSourcesToReplicationModels;
+    private final Map<ClusterConfigurationMsg, Set<LogReplication.ReplicationModels>> remoteSinkToReplicationModels;
     private final Set<LogReplicationClusterInfo.ClusterConfigurationMsg> connectionEndPoints;
     private boolean topologyBucketsIinitialized;
     private boolean topologyBucketsCustomized;
@@ -222,20 +223,20 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         return topologyConfig;
     }
 
-    public Map<LogReplicationClusterInfo.ClusterConfigurationMsg, Set<LogReplicationMetadata.ReplicationModels>> getRemoteSourceToReplicationModels() {
+    public Map<LogReplicationClusterInfo.ClusterConfigurationMsg, Set<LogReplication.ReplicationModels>> getRemoteSourceToReplicationModels() {
         log.debug("getRemoteSourceToReplicationModels {}", this.remoteSourcesToReplicationModels.size());
         return getClusterBucket(this.remoteSourcesToReplicationModels);
     }
 
 
-    public Map<ClusterConfigurationMsg, Set<LogReplicationMetadata.ReplicationModels>> getRemoteSinkForReplicationModels(){
+    public Map<ClusterConfigurationMsg, Set<LogReplication.ReplicationModels>> getRemoteSinkForReplicationModels(){
         log.debug("getRemoteSinkForReplicationModels {}", this.remoteSinkToReplicationModels.size());
         return getClusterBucket(this.remoteSinkToReplicationModels);
     }
 
-    private Map<ClusterConfigurationMsg, Set<LogReplicationMetadata.ReplicationModels>> getClusterBucket(
-            Map<ClusterConfigurationMsg, Set<LogReplicationMetadata.ReplicationModels>> bucket) {
-        Map<ClusterConfigurationMsg, Set<LogReplicationMetadata.ReplicationModels>> remoteClustersbucket;
+    private Map<ClusterConfigurationMsg, Set<LogReplication.ReplicationModels>> getClusterBucket(
+            Map<ClusterConfigurationMsg, Set<LogReplication.ReplicationModels>> bucket) {
+        Map<ClusterConfigurationMsg, Set<LogReplication.ReplicationModels>> remoteClustersbucket;
 
         ClusterConfigurationMsg localCluster = findLocalCluster();
         synchronized (this) {
@@ -295,13 +296,13 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         synchronized (this) {
             this.remoteSourcesToReplicationModels.putIfAbsent(topologyConfig.getClustersList().stream()
                     .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSourceClusterIds().get(0)))
-                    .findFirst().get(), new HashSet<LogReplicationMetadata.ReplicationModels>(){{
-                        add(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES);
+                    .findFirst().get(), new HashSet<LogReplication.ReplicationModels>(){{
+                        add(LogReplication.ReplicationModels.REPLICATE_FULL_TABLES);
                     }});
             this.remoteSinkToReplicationModels.putIfAbsent(topologyConfig.getClustersList().stream()
                     .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSinkClusterIds().get(0)))
-                    .findFirst().get(), new HashSet<LogReplicationMetadata.ReplicationModels>(){{
-                add(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES);
+                    .findFirst().get(), new HashSet<LogReplication.ReplicationModels>(){{
+                add(LogReplication.ReplicationModels.REPLICATE_FULL_TABLES);
             }});
             this.connectionEndPoints.add(topologyConfig.getClustersList().stream()
                     .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSinkClusterIds().get(0)))
@@ -321,8 +322,8 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         synchronized (this) {
             this.remoteSourcesToReplicationModels.putIfAbsent(topologyConfig.getClustersList().stream()
                     .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSourceClusterIds().get(0)))
-                    .findFirst().get(), new HashSet<LogReplicationMetadata.ReplicationModels>(){{
-                        add(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES);
+                    .findFirst().get(), new HashSet<LogReplication.ReplicationModels>(){{
+                        add(LogReplication.ReplicationModels.REPLICATE_FULL_TABLES);
             }});
 
             topologyConfig.getClustersList().stream()
@@ -330,7 +331,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
                     .forEach(clusterConfigurationMsg -> {
                         remoteSinkToReplicationModels.putIfAbsent(clusterConfigurationMsg, new HashSet<>());
                         remoteSinkToReplicationModels.get(clusterConfigurationMsg)
-                                .add(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES);
+                                .add(LogReplication.ReplicationModels.REPLICATE_FULL_TABLES);
                     });
 
             topologyConfig.getClustersList().stream()
@@ -369,14 +370,14 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
                     .forEach(clusterConfigurationMsg -> {
                         remoteSourcesToReplicationModels.putIfAbsent(clusterConfigurationMsg, new HashSet<>());
                         remoteSourcesToReplicationModels.get(clusterConfigurationMsg)
-                                .add(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES);
+                                .add(LogReplication.ReplicationModels.REPLICATE_FULL_TABLES);
                     });
 
 
             this.remoteSinkToReplicationModels.putIfAbsent(topologyConfig.getClustersList().stream()
                     .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSinkClusterIds().get(0)))
-                    .findFirst().get(), new HashSet<LogReplicationMetadata.ReplicationModels>(){{
-                        add(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES);
+                    .findFirst().get(), new HashSet<LogReplication.ReplicationModels>(){{
+                        add(LogReplication.ReplicationModels.REPLICATE_FULL_TABLES);
             }});
 
             this.connectionEndPoints.add(topologyConfig.getClustersList().stream()
@@ -402,15 +403,15 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
 
                 this.remoteSourcesToReplicationModels.putIfAbsent(topologyConfig.getClustersList().stream()
                         .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSourceClusterIds().get(1)))
-                        .findFirst().get(), new HashSet<LogReplicationMetadata.ReplicationModels>(){{
+                        .findFirst().get(), new HashSet<LogReplication.ReplicationModels>(){{
                             //replication model chosen at random here
-                            add(LogReplicationMetadata.ReplicationModels.MOVE_DATA);
+                            add(LogReplication.ReplicationModels.MOVE_DATA);
                 }});
 
                 this.remoteSinkToReplicationModels.putIfAbsent(topologyConfig.getClustersList().stream()
                         .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSinkClusterIds().get(0)))
-                        .findFirst().get(), new HashSet<LogReplicationMetadata.ReplicationModels>(){{
-                            add(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES);
+                        .findFirst().get(), new HashSet<LogReplication.ReplicationModels>(){{
+                            add(LogReplication.ReplicationModels.REPLICATE_FULL_TABLES);
                 }});
 
                 this.connectionEndPoints.add(topologyConfig.getClustersList().stream()
@@ -421,8 +422,8 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
                 // have only sink
                 this.remoteSourcesToReplicationModels.putIfAbsent(topologyConfig.getClustersList().stream()
                         .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSourceClusterIds().get(0)))
-                        .findFirst().get(), new HashSet<LogReplicationMetadata.ReplicationModels>(){{
-                            add(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES);
+                        .findFirst().get(), new HashSet<LogReplication.ReplicationModels>(){{
+                            add(LogReplication.ReplicationModels.REPLICATE_FULL_TABLES);
                 }});
             }
 
@@ -431,7 +432,43 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
 
             notify();
         }
+    }
 
+    private void createSinkConnectionInit() {
+        if(topologyConfig == null) {
+            topologyConfig = readConfig();
+        }
+
+        ClusterConfigurationMsg localCluster = findLocalCluster();
+        log.info("localNodeId: {}", localCluster);
+
+        synchronized (this) {
+            if(localCluster.getId().equals(topology.getSourceClusterIds().get(0))) {
+
+                this.remoteSinkToReplicationModels.putIfAbsent(topologyConfig.getClustersList().stream()
+                        .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSinkClusterIds().get(0)))
+                        .findFirst().get(), new HashSet<LogReplication.ReplicationModels>(){{
+                    add(LogReplication.ReplicationModels.REPLICATE_FULL_TABLES);
+                }});
+
+            } else {
+                // have only sink
+                this.remoteSourcesToReplicationModels.putIfAbsent(topologyConfig.getClustersList().stream()
+                        .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSourceClusterIds().get(0)))
+                        .findFirst().get(), new HashSet<LogReplication.ReplicationModels>(){{
+                    add(LogReplication.ReplicationModels.REPLICATE_FULL_TABLES);
+                }});
+
+                this.connectionEndPoints.add(topologyConfig.getClustersList().stream()
+                        .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSourceClusterIds().get(0)))
+                        .findFirst().get());
+            }
+
+            topologyBucketsIinitialized = true;
+            topologyBucketsCustomized = true;
+
+            notify();
+        }
     }
 
 
@@ -484,14 +521,14 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
             if(oldLocalClusterDescriptor.getRole().equals(ClusterRole.SOURCE)) {
                 newSourceClusterMsg.stream().forEach(clusterConfigurationMsg ->
                         remoteSourcesToReplicationModels.put(clusterConfigurationMsg,
-                                new HashSet<LogReplicationMetadata.ReplicationModels>(){{
-                                    add(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES);
+                                new HashSet<LogReplication.ReplicationModels>(){{
+                                    add(LogReplication.ReplicationModels.REPLICATE_FULL_TABLES);
                         }}));
             } else if(oldLocalClusterDescriptor.getRole().equals(ClusterRole.SINK)){
                 newSinkClusterMsg.stream().forEach(clusterConfigurationMsg ->
                         remoteSinkToReplicationModels.put(clusterConfigurationMsg,
-                                new HashSet<LogReplicationMetadata.ReplicationModels>(){{
-                                    add(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES);
+                                new HashSet<LogReplication.ReplicationModels>(){{
+                                    add(LogReplication.ReplicationModels.REPLICATE_FULL_TABLES);
                         }}));
                 this.connectionEndPoints.addAll(newSinkClusterMsg);
             }
@@ -526,8 +563,8 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
             if(oldLocalClusterDescriptor.getRole().equals(ClusterRole.SINK)) {
                 newSourceClusters.forEach(sourceCluster ->
                         this.remoteSourcesToReplicationModels.put(sourceCluster.convertToMessage(),
-                                new HashSet<LogReplicationMetadata.ReplicationModels>(){{
-                                    add(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES); }}
+                                new HashSet<LogReplication.ReplicationModels>(){{
+                                    add(LogReplication.ReplicationModels.REPLICATE_FULL_TABLES); }}
                         ));
             }
         }
@@ -642,15 +679,15 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         synchronized (this) {
             sinkClusters.stream().forEach(cluster ->
                 this.remoteSinkToReplicationModels.putIfAbsent(cluster.convertToMessage(),
-                        new HashSet<LogReplicationMetadata.ReplicationModels>(){{
-                            add(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES);
+                        new HashSet<LogReplication.ReplicationModels>(){{
+                            add(LogReplication.ReplicationModels.REPLICATE_FULL_TABLES);
                         }}
                 )
             );
 
             this.remoteSourcesToReplicationModels.put(currentSource.convertToMessage(),
-                    new HashSet<LogReplicationMetadata.ReplicationModels>(){{
-                        add(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES);
+                    new HashSet<LogReplication.ReplicationModels>(){{
+                        add(LogReplication.ReplicationModels.REPLICATE_FULL_TABLES);
             }});
 
             topologyBucketsCustomized = true;
@@ -756,6 +793,8 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
                     clusterManager.createMultiSourceSingleSinkTopologyBuckets();
                 } else if (entry.getKey().equals(OP_BIDIR_ORPH_SINK)) {
                     clusterManager.createBiDirectionalButOrphanedSink();
+                } else if(entry.getKey().equals(OP_SINK_CONNECT_INIT)) {
+                    clusterManager.createSinkConnectionInit();
                 }
             } else {
                 log.info("onNext :: operation={}, key={}, payload={}, metadata={}", entry.getOperation().name(),

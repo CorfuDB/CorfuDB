@@ -8,7 +8,9 @@ import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerThreadFactory;
-import org.corfudb.infrastructure.logreplication.runtime.ReplicationSinkRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkServerRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceServerRouter;
 
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
@@ -30,7 +32,7 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
     private final Map<Class, AbstractServer> serverMap;
 
     @Getter
-    private Map<ReplicationSession, ReplicationSinkRouter> sessionToRouterMap = new HashMap<>();
+    private Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToRouterMap = new HashMap<>();
 
     // This flag makes the closing of the CorfuServer idempotent.
     private final AtomicBoolean close;
@@ -43,35 +45,34 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
     // Error code required to detect an ungraceful shutdown.
     private static final int EXIT_ERROR_CODE = 100;
 
-    ReplicationSinkRouter router;
+    LogReplicationServerRouter router;
 
     /**
      * Log Replication Server initialization.
      *
      * @param serverContext Initialized Server Context
-     * @param logReplicationServer Replication Server which processes incoming requests
+     * @param serverMap Servers which help process/validate incoming requests
      */
     public CorfuInterClusterReplicationServerNode(@Nonnull ServerContext serverContext,
-        LogReplicationServer logReplicationServer) {
+                                                  Map<Class, AbstractServer> serverMap) {
 
         this.serverContext = serverContext;
 
-        this.logReplicationServer = logReplicationServer;
+        this.logReplicationServer = (LogReplicationServer) serverMap.get(LogReplicationServer.class);
 
-        this.serverMap = ImmutableMap.<Class, AbstractServer>builder()
-            .put(BaseServer.class, new BaseServer(serverContext))
-            .put(LogReplicationServer.class, logReplicationServer)
-            .build();
+        this.serverMap = serverMap;
 
-        this.router = new ReplicationSinkRouter(new ArrayList<>(serverMap.values()));
-        this.serverContext.setServerRouter(router);
         this.close = new AtomicBoolean(false);
 
         logReplicationServerRunner = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
             .setNameFormat("replication-server-runner").build());
     }
 
-    public void setRouterAndStartServer() {
+    public void setRouterAndStartServer(Map<ReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServer,
+                                        Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServer) {
+
+        this.router = new LogReplicationServerRouter(serverMap, this.serverContext, sessionToSourceServer, sessionToSinkServer);
+        this.serverContext.setServerRouter(router);
         // Start and listen to the server
         logReplicationServerRunner.submit(() -> this.startAndListen());
     }
@@ -127,7 +128,10 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
         }
         log.info("close: Shutting down Log Replication server and cleaning resources");
         serverContext.close();
-        cleanupResources();
+        //shama -> once you move the interCluseterNode's init from setupForSink, remove this.
+        if(this.router != null) {
+            cleanupResources();
+        }
     }
 
     private void cleanupResources() {

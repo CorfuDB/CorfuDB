@@ -1,9 +1,11 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import com.google.protobuf.ByteString;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReadMessage;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
@@ -44,8 +46,11 @@ public class TestSnapshotReader implements SnapshotReader {
 
     private List<Long> seqNumsToRead;
 
-    public TestSnapshotReader(TestReaderConfiguration config) {
+    private final ReplicationSession replicationSession;
+
+    public TestSnapshotReader(TestReaderConfiguration config, ReplicationSession replicationSession) {
         this.config = config;
+        this.replicationSession = replicationSession;
         this.baseSnapshot = config.getNumEntries() + offset;
         this.runtime = new CorfuRuntime(config.getEndpoint()).connect();
     }
@@ -54,7 +59,6 @@ public class TestSnapshotReader implements SnapshotReader {
     public SnapshotReadMessage read(UUID snapshotRequestId) {
         // Connect to endpoint
         List<LogReplicationEntryMsg> messages = new ArrayList<>();
-
         for (long i : seqNumsToRead) {
             Object data = runtime.getAddressSpaceView().read(i).getPayload(runtime);
             LogReplicationEntryMetadataMsg metadata = LogReplicationEntryMetadataMsg.newBuilder()
@@ -63,6 +67,11 @@ public class TestSnapshotReader implements SnapshotReader {
                     .setTimestamp(i)
                     .setSnapshotTimestamp(baseSnapshot)
                     .setSyncRequestId(getUuidMsg(snapshotRequestId))
+                    .setSessionInfo(LogReplication.ReplicationSessionMsg.newBuilder()
+                            .setRemoteClusterId(this.replicationSession.getRemoteClusterId())
+                            .setClient(this.replicationSession.getSubscriber().getClient())
+                            .setReplicationModel(this.replicationSession.getSubscriber().getReplicationModel())
+                            .build())
                     .build();
 
             messages.add(getLrEntryMsg(ByteString.copyFrom((byte[]) data), metadata));

@@ -5,6 +5,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationDi
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.runtime.LogReplication;
 
 import java.util.List;
 import java.util.Map;
@@ -66,12 +67,12 @@ public interface CorfuReplicationClusterManagerAdapter {
     /**
      * This API is used to fetch the remote SOURCE clusters and the supported replication models against it.
      */
-    Map<LogReplicationClusterInfo.ClusterConfigurationMsg, Set<LogReplicationMetadata.ReplicationModels>> getRemoteSourceToReplicationModels();
+    Map<LogReplicationClusterInfo.ClusterConfigurationMsg, Set<LogReplication.ReplicationModels>> getRemoteSourceToReplicationModels();
 
     /**
      * This API is used to fetch the remote SINK clusters and the supported replication models against it..
      */
-    Map<LogReplicationClusterInfo.ClusterConfigurationMsg, Set<LogReplicationMetadata.ReplicationModels>> getRemoteSinkForReplicationModels();
+    Map<LogReplicationClusterInfo.ClusterConfigurationMsg, Set<LogReplication.ReplicationModels>> getRemoteSinkForReplicationModels();
 
     /**
      * This API is used to fetch the remote clusters that are the connection endpoints for the local cluster.

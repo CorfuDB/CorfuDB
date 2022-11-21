@@ -1,10 +1,8 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
-import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.view.TableRegistry;
 
 import java.util.Collections;
@@ -54,7 +52,7 @@ public class DefaultLogReplicationConfigAdapter implements ILogReplicationConfig
 
         streamsToReplicateMap = new HashMap<>();
         streamsToReplicateMap.put(
-            new ReplicationSubscriber(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES, SAMPLE_CLIENT),
+            new ReplicationSubscriber(LogReplication.ReplicationModels.REPLICATE_FULL_TABLES, SAMPLE_CLIENT),
             streams);
     }
 

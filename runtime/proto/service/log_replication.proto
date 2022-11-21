@@ -13,6 +13,7 @@ message LogReplicationEntryMetadataMsg {
   UuidMsg syncRequestId = 5;
   int64 snapshotTimestamp = 6;
   int64 snapshotSyncSeqNum = 7;
+  ReplicationSessionMsg sessionInfo = 8;
 }
 
 message LogReplicationEntryMsg {
@@ -21,6 +22,7 @@ message LogReplicationEntryMsg {
 }
 
 message LogReplicationMetadataRequestMsg {
+  ReplicationSessionMsg sessionInfo = 1;
 }
 
 message LogReplicationMetadataResponseMsg {
@@ -30,6 +32,7 @@ message LogReplicationMetadataResponseMsg {
   uint64 snapshotTransferred = 4;
   uint64 snapshotApplied = 5;
   uint64 lastLogEntryTimestamp = 6;
+  ReplicationSessionMsg sessionInfo = 7;
 }
 
 message LogReplicationLeadershipLossResponseMsg {
@@ -37,11 +40,35 @@ message LogReplicationLeadershipLossResponseMsg {
 }
 
 message LogReplicationLeadershipRequestMsg {
+    ReplicationSessionMsg sessionInfo = 1;
 }
 
 message LogReplicationLeadershipResponseMsg {
   bool isLeader = 2;
   string nodeId = 3;
+}
+
+// when the source is the connection endpoint
+message LogReplicationReplicationRequestMsg {
+  LogReplicationEntryMsg msg = 1;
+}
+
+enum ReplicationModels {
+  //federated GM -> GM
+  REPLICATE_FULL_TABLES = 0;
+  // IDFW GM -> LM
+  MERGE_TABLES_AT_SINK = 1;
+  //policy GM -> LM
+  RECORD_LEVEL_REPLICATION = 2;
+  // LM -> GM; Destination is not corfu
+  MOVE_DATA = 3;
+}
+
+message ReplicationSessionMsg {
+  string remoteClusterId = 1;
+  string client = 2;
+  // TODO: shama to remove this once we have the tag.
+  ReplicationModels replicationModel = 3;
 }
 
 enum LogReplicationEntryType {

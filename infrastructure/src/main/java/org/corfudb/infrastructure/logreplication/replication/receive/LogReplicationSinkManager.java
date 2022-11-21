@@ -262,7 +262,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         rxMessageCount.setValue(rxMessageCounter);
 
         log.debug("Sink manager received {} while in {}", message.getMetadata().getEntryType(), rxState);
-
+        log.info("Received request in sinkManager : {}", message);
         // Ignore messages that have different topologyConfigId.
         // It could be caused by an out-of-date sender or the local node hasn't done the site discovery yet.
         // If there is a siteConfig change, the discovery service will detect it and reset the state.

@@ -2,15 +2,14 @@ package org.corfudb.infrastructure.logreplication;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultLogReplicationConfigAdapter;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import java.util.Arrays;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -35,10 +34,10 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
             replicationConfigManager.getSubscriberToStreamsMap();
 
         // Verify that an entry exists for each supported replication model
-        Set<LogReplicationMetadata.ReplicationModels> modelsInConfig =
+        Set<LogReplication.ReplicationModels> modelsInConfig =
             subscriberToStreamsMap.keySet().stream().map(key -> key.getReplicationModel()).collect(Collectors.toSet());
         // TODO: this will be un-commented as we use the replication Models. Currently, we use only 1 out of the four replication models.
-        Assert.assertTrue(modelsInConfig.size() == 1 && modelsInConfig.contains(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES));
+        Assert.assertTrue(modelsInConfig.size() == 1 && modelsInConfig.contains(LogReplication.ReplicationModels.REPLICATE_FULL_TABLES));
 
         // Verify that all streams returned by the default config adapter are present in the constructed config
         // TODO pankti: After the change to read options from the registry table is available, verification must be

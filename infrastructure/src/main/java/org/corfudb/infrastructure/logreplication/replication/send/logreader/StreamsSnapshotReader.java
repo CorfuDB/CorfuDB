@@ -71,6 +71,8 @@ public class StreamsSnapshotReader implements SnapshotReader {
     @Setter
     private long topologyConfigId;
 
+    private final ReplicationSession replicationSession;
+
     /**
      * Init runtime and streams to read
      */
@@ -79,7 +81,8 @@ public class StreamsSnapshotReader implements SnapshotReader {
         this.rt = runtime;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
-        this.streams = config.getReplicationSubscriberToStreamsMap().get(replicationSession.getSubscriber());
+        this.replicationSession = replicationSession;
+        this.streams = config.getReplicationSubscriberToStreamsMap().get(this.replicationSession.getSubscriber());
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
     }
 
@@ -120,6 +123,11 @@ public class StreamsSnapshotReader implements SnapshotReader {
                 .setPreviousTimestamp(preMsgTs)
                 .setSnapshotTimestamp(snapshotTimestamp)
                 .setSnapshotSyncSeqNum(sequence)
+                .setSessionInfo(LogReplication.ReplicationSessionMsg.newBuilder()
+                        .setRemoteClusterId(this.replicationSession.getRemoteClusterId())
+                        .setClient(this.replicationSession.getSubscriber().getClient())
+                        .setReplicationModel(this.replicationSession.getSubscriber().getReplicationModel())
+                        .build())
                 .build();
 
         LogReplicationEntryMsg txMsg = getLrEntryMsg(unsafeWrap(generatePayload(opaqueEntry)), metadata);

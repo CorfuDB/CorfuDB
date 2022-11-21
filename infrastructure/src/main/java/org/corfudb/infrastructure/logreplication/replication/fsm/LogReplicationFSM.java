@@ -207,6 +207,9 @@ public class LogReplicationFSM {
     @Getter
     private final LogReplicationAckReader ackReader;
 
+    @Getter
+    private final ReplicationSession replicationSession;
+
     /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
      *
@@ -250,6 +253,7 @@ public class LogReplicationFSM {
         this.logEntryReader = logEntryReader;
         this.ackReader = ackReader;
         this.tableManagerPlugin = tableManagerPlugin;
+        this.replicationSession = replicationSession;
 
         // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and send data
         // through the callbacks provided by the application

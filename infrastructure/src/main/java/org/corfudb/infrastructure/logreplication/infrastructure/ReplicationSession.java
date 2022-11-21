@@ -1,8 +1,7 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.Getter;
-import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.runtime.LogReplication;
 
 import java.util.Objects;
 
@@ -57,7 +56,7 @@ public class ReplicationSession {
     // TODO: To be removed after session is introduced in connections
     public static ReplicationSession getDefaultReplicationSessionForCluster(String remoteClusterId) {
         return new ReplicationSession(remoteClusterId,
-            new ReplicationSubscriber(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES, SAMPLE_CLIENT));
+            new ReplicationSubscriber(LogReplication.ReplicationModels.REPLICATE_FULL_TABLES, SAMPLE_CLIENT));
     }
 
     @Override

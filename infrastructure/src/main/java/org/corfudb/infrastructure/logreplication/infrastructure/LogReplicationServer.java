@@ -71,8 +71,8 @@ public class LogReplicationServer extends AbstractServer {
     }
 
     public LogReplicationServer(@Nonnull ServerContext context, String localNodeId, LogReplicationConfig config,
-        String localEndpoint, long topologyConfigId,
-        Map<ReplicationSession, LogReplicationMetadataManager> sourceSessionToMetadataManagerMap) {
+                                String localEndpoint, long topologyConfigId,
+                                Map<ReplicationSession, LogReplicationMetadataManager> sourceSessionToMetadataManagerMap) {
         this.localNodeId = localNodeId;
         createSinkManagers(config, localEndpoint, context, sourceSessionToMetadataManagerMap, topologyConfigId);
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
@@ -146,7 +146,7 @@ public class LogReplicationServer extends AbstractServer {
                     getUUID(request.getHeader().getClusterId()).toString());
                 return;
             }
-
+            log.info("in Server. the request is: {}", request);
             // Forward the received message to the Sink Manager for apply
             LogReplicationEntryMsg ack = sinkManager.receive(request.getPayload().getLrEntry());
 

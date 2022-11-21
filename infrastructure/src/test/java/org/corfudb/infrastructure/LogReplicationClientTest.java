@@ -5,10 +5,9 @@ import org.assertj.core.api.Assertions;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
-import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClient;
-import org.corfudb.infrastructure.logreplication.runtime.ReplicationSourceRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceClientRouter;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationHandler;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -35,7 +34,6 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /**
  * Tests {@link LogReplicationClient} message handing.
@@ -46,7 +44,7 @@ public class LogReplicationClientTest {
     private final static String SAMPLE_CLUSTER = "CLUSTER";
     private final static String PLUGIN_PATH = "pluginPath";
 
-    ReplicationSourceRouter lrClient;
+    LogReplicationSourceClientRouter lrClient;
     LogReplicationRuntimeParameters lrRuntimeParameters;
     CorfuLogReplicationRuntime lrFsm;
     LogReplicationHandler lrClientHandler;
@@ -68,11 +66,11 @@ public class LogReplicationClientTest {
         doReturn(mockedSessionToFsm).when(replicationManager).getRemoteSesionToRuntime();
         doReturn(PLUGIN_PATH).when(lrRuntimeParameters).getPluginFilePath();
         doReturn(UUID.randomUUID()).when(lrRuntimeParameters).getClientId();
-        lrClient = spy(new ReplicationSourceRouter(sampleCluster, SAMPLE_CLUSTER, lrRuntimeParameters, replicationManager,session));
+        lrClient = spy(new LogReplicationSourceClientRouter(sampleCluster, SAMPLE_CLUSTER, lrRuntimeParameters, replicationManager,session));
         lrClient.setRuntimeFSM(lrFsm);
 
 
-        lrClientHandler = spy(new LogReplicationHandler());
+        lrClientHandler = spy(new LogReplicationHandler(session));
         responseHandler = spy(lrClientHandler.createResponseHandlers(lrClientHandler, handlerMap));
         lrClientHandler.setResponseHandler(responseHandler);
         lrClient.addClient(lrClientHandler);

@@ -4,7 +4,11 @@ import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc;
-import org.corfudb.infrastructure.logreplication.runtime.ReplicationSinkRouter;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkServerRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceServerRouter;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
@@ -22,12 +26,17 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author annym 05/15/20
  */
 @Slf4j
-public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.LogReplicationChannelImplBase {
+public class GRPCLogReplicationSinkServerHandler extends LogReplicationChannelGrpc.LogReplicationChannelImplBase {
 
     /*
-     * Corfu Message Router (internal to Corfu)
+     * Map of session to SINK Router (internal to Corfu)
      */
-    ReplicationSinkRouter router;
+    final Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServer;
+
+    /*
+     * Map of session to SOURCE Router (internal to Corfu)
+     */
+    final Map<ReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServer;
 
     /*
      * Map of (Remote Cluster Id, Request Id) pair to Stream Observer to send responses back to the client. Used for
@@ -44,28 +53,41 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
      */
     Map<Pair<UuidMsg, Long>, StreamObserver<ResponseMsg>> replicationStreamObserverMap;
 
-    public GRPCLogReplicationServerHandler(ReplicationSinkRouter router) {
-        this.router = router;
+    public GRPCLogReplicationSinkServerHandler(Map<ReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServer,
+                                               Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServer) {
+        this.sessionToSourceServer = sessionToSourceServer;
+        this.sessionToSinkServer = sessionToSinkServer;
         this.streamObserverMap = new ConcurrentHashMap<>();
         this.replicationStreamObserverMap = new ConcurrentHashMap<>();
     }
 
     @Override
     public void negotiate(RequestMsg request, StreamObserver<ResponseMsg> responseObserver) {
-        log.trace("Received[{}]: {}", request.getHeader().getRequestId(),
+        log.info("Received[{}]: {}", request.getHeader().getRequestId(),
                 request.getPayload().getPayloadCase().name());
-        router.receive(request);
-        streamObserverMap.put(Pair.of(request.getHeader().getClusterId(), request.getHeader().getRequestId()),
-            responseObserver);
+        ReplicationSession session = convertSessionMsg(request.getPayload().getLrMetadataRequest().getSessionInfo());
+        if (sessionToSinkServer.containsKey(session)) {
+            sessionToSinkServer.get(session).receive(request);
+            streamObserverMap.put(Pair.of(request.getHeader().getClusterId(), request.getHeader().getRequestId()),
+                    responseObserver);
+        } else {
+            log.info("Dropping msg as the cluster is not SINK for the session {}", session);
+        }
     }
 
     @Override
     public void queryLeadership(RequestMsg request, StreamObserver<ResponseMsg> responseObserver) {
-        log.trace("Received[{}]: {}", request.getHeader().getRequestId(),
+        log.info("Received[{}]: {}", request.getHeader().getRequestId(),
                 request.getPayload().getPayloadCase().name());
+
+        ReplicationSession session = convertSessionMsg(request.getPayload().getLrLeadershipQuery().getSessionInfo());
+        if(sessionToSinkServer.containsKey(session)) {
+            sessionToSinkServer.get(session).receive(request);
+        } else if(sessionToSourceServer.containsKey(session)) {
+            sessionToSourceServer.get(session).receive(request);
+        }
         streamObserverMap.put(Pair.of(request.getHeader().getClusterId(), request.getHeader().getRequestId()),
             responseObserver);
-        router.receive(request);
     }
 
     @Override
@@ -76,8 +98,9 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
             public void onNext(RequestMsg replicationCorfuMessage) {
                 long requestId = replicationCorfuMessage.getHeader().getRequestId();
                 String name = replicationCorfuMessage.getPayload().getPayloadCase().name();
-                log.trace("Received[{}]: {}", requestId, name);
+                log.info("Received[{}]: {}", requestId, name);
 
+                log.info("the request is {}", replicationCorfuMessage);
                 // Register at the observable first.
                 try {
                     replicationStreamObserverMap.putIfAbsent(
@@ -88,7 +111,13 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
                 }
 
                 // Forward the received message to the router
-                router.receive(replicationCorfuMessage);
+                ReplicationSession session = convertSessionMsg(replicationCorfuMessage.getPayload().getLrEntry().getMetadata().getSessionInfo());
+                log.info("lr entry session: {}", session);
+                if(sessionToSinkServer.containsKey(session)) {
+                    sessionToSinkServer.get(session).receive(replicationCorfuMessage);
+                } else if(sessionToSourceServer.containsKey(session)) {
+                    sessionToSourceServer.get(session).receive(replicationCorfuMessage);
+                }
             }
 
             @Override
@@ -151,6 +180,12 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
             // Remove observer as response was already sent
             streamObserverMap.remove(Pair.of(clusterId, requestId));
         }
+    }
+
+    private ReplicationSession convertSessionMsg(LogReplication.ReplicationSessionMsg sessionMsg) {
+        log.info("sessionMsg : {}", sessionMsg);
+        ReplicationSubscriber subscriber = new ReplicationSubscriber(sessionMsg.getReplicationModel(), sessionMsg.getClient());
+        return new ReplicationSession(sessionMsg.getRemoteClusterId(), subscriber);
     }
 
 }

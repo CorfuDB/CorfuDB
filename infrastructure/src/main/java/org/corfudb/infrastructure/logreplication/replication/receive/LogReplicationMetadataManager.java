@@ -6,20 +6,16 @@ import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
-import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataVal;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusKey;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationSessionKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationModels;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -406,7 +402,7 @@ public class LogReplicationMetadataManager {
      */
     public void updateSnapshotSyncStatusOngoing(ReplicationSession session, boolean forced, UUID eventId,
                                                 long baseVersion, long remainingEntries) {
-        ReplicationSessionKey sessionKey = buildReplicationStatusKey(session);
+        LogReplication.ReplicationSessionMsg sessionKey = buildReplicationStatusKey(session);
         ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(session.getRemoteClusterId()).build();
 
         SnapshotSyncInfo.SnapshotSyncType syncType = forced ?
@@ -800,8 +796,8 @@ public class LogReplicationMetadataManager {
         }
     }
 
-    private ReplicationSessionKey buildReplicationStatusKey(ReplicationSession session) {
-        return ReplicationSessionKey.newBuilder()
+    private LogReplication.ReplicationSessionMsg buildReplicationStatusKey(ReplicationSession session) {
+        return LogReplication.ReplicationSessionMsg.newBuilder()
                 .setRemoteClusterId(session.getRemoteClusterId())
                 .setClient(session.getSubscriber().getClient())
                 .setReplicationModel(session.getSubscriber().getReplicationModel())

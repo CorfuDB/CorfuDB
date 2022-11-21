@@ -1,9 +1,8 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
-import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
@@ -57,7 +56,7 @@ public abstract class DefaultAdapterForUpgrade implements ILogReplicationConfigA
             }
         }
         streamsToReplicateMap.put(new ReplicationSubscriber(
-                LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES, SAMPLE_CLIENT), streams);
+                LogReplication.ReplicationModels.REPLICATE_FULL_TABLES, SAMPLE_CLIENT), streams);
     }
 
     @Override

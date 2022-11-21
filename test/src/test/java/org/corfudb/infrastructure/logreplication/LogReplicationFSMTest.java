@@ -488,7 +488,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                         .streamName(TEST_STREAM_NAME)
                         .batchSize(BATCH_SIZE).build();
 
-                snapshotReader = new TestSnapshotReader(testConfig);
+                snapshotReader = new TestSnapshotReader(testConfig, replicationSession);
                 dataSender = new TestDataSender();
                 break;
             case STREAMS:

@@ -7,7 +7,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuRep
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.runtime.LogReplication;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -41,10 +41,10 @@ public class TopologyDescriptor {
     private final Map<String, ClusterDescriptor> remoteSinkClusters;
 
     @Getter
-    private final Map<ClusterDescriptor, Set<LogReplicationMetadata.ReplicationModels>> remoteSourceClusterToReplicationModels;
+    private final Map<ClusterDescriptor, Set<LogReplication.ReplicationModels>> remoteSourceClusterToReplicationModels;
 
     @Getter
-    private final Map<ClusterDescriptor, Set<LogReplicationMetadata.ReplicationModels>> remoteSinkClusterToReplicationModels;
+    private final Map<ClusterDescriptor, Set<LogReplication.ReplicationModels>> remoteSinkClusterToReplicationModels;
 
     @Getter
     private final Map<String, ClusterDescriptor> invalidClusters;
@@ -75,7 +75,7 @@ public class TopologyDescriptor {
         this.topologyConfigId = topologyConfigId;
         this.remoteSinkClusters = new HashMap<>();
         this.remoteSinkClusterToReplicationModels = new HashMap<>();
-        Map<ClusterConfigurationMsg, Set<LogReplicationMetadata.ReplicationModels>> remoteSinkClusterMsg =
+        Map<ClusterConfigurationMsg, Set<LogReplication.ReplicationModels>> remoteSinkClusterMsg =
                 clusterManagerAdapter.getRemoteSinkForReplicationModels();
         remoteSinkClusterMsg.entrySet().stream().forEach(e -> {
             ClusterDescriptor cluster = new ClusterDescriptor(e.getKey());
@@ -87,7 +87,7 @@ public class TopologyDescriptor {
 
         this.remoteSourceClusters = new HashMap<>();
         this.remoteSourceClusterToReplicationModels = new HashMap<>();
-        Map<ClusterConfigurationMsg, Set<LogReplicationMetadata.ReplicationModels>> remoteSourceClusterMsg =
+        Map<ClusterConfigurationMsg, Set<LogReplication.ReplicationModels>> remoteSourceClusterMsg =
                 clusterManagerAdapter.getRemoteSourceToReplicationModels();
         remoteSourceClusterMsg.entrySet().stream().forEach(e -> {
             ClusterDescriptor cluster = new ClusterDescriptor(e.getKey());
@@ -118,15 +118,15 @@ public class TopologyDescriptor {
         remoteSourceClusters.forEach(sourceCluster -> {
             this.remoteSourceClusters.put(sourceCluster.getClusterId(), sourceCluster);
             this.remoteSourceClusterToReplicationModels.putIfAbsent(sourceCluster,
-                    new HashSet<LogReplicationMetadata.ReplicationModels>(){{
-                        add(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES);
+                    new HashSet<LogReplication.ReplicationModels>(){{
+                        add(LogReplication.ReplicationModels.REPLICATE_FULL_TABLES);
             }});
         });
         remoteSinkClusters.forEach(sinkCluster -> {
             this.remoteSinkClusters.put(sinkCluster.getClusterId(), sinkCluster);
             this.remoteSinkClusterToReplicationModels.putIfAbsent(sinkCluster,
-                    new HashSet<LogReplicationMetadata.ReplicationModels>(){{
-                        add(LogReplicationMetadata.ReplicationModels.REPLICATE_FULL_TABLES);
+                    new HashSet<LogReplication.ReplicationModels>(){{
+                        add(LogReplication.ReplicationModels.REPLICATE_FULL_TABLES);
             }});
         });
 

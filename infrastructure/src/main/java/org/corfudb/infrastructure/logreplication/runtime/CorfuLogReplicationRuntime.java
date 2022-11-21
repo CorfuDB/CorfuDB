@@ -2,7 +2,6 @@ package org.corfudb.infrastructure.logreplication.runtime;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
@@ -149,7 +148,7 @@ public class CorfuLogReplicationRuntime {
      */
     private final LinkedBlockingQueue<LogReplicationRuntimeEvent> eventQueue = new LinkedBlockingQueue<>();
 
-    private final ReplicationSourceRouter router;
+    private final LogReplicationSourceRouterHelper router;
     private final LogReplicationMetadataManager metadataManager;
 
     @Getter
@@ -164,13 +163,13 @@ public class CorfuLogReplicationRuntime {
      * Default Constructor
      */
     public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters, LogReplicationMetadataManager metadataManager,
-        LogReplicationConfigManager replicationConfigManager, ReplicationSession replicationSession, ReplicationSourceRouter router) {
+        LogReplicationConfigManager replicationConfigManager, ReplicationSession replicationSession, LogReplicationSourceRouterHelper router) {
         this.remoteClusterId = replicationSession.getRemoteClusterId();
         this.metadataManager = metadataManager;
         this.router = router;
-        this.router.addClient(new LogReplicationHandler());
+        this.router.addClient(new LogReplicationHandler(replicationSession));
         this.sourceManager = new LogReplicationSourceManager(parameters,
-            new LogReplicationClient(this.router, remoteClusterId), metadataManager, replicationConfigManager, replicationSession);
+            new LogReplicationClient(this.router, remoteClusterId, replicationSession), metadataManager, replicationConfigManager, replicationSession);
         this.connectedNodes = new HashSet<>();
 
         ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker-"+remoteClusterId)

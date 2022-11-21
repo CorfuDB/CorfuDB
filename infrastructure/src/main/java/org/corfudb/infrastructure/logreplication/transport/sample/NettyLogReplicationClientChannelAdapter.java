@@ -5,12 +5,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
 
-import org.corfudb.infrastructure.logreplication.runtime.ReplicationRouter;
-import org.corfudb.infrastructure.logreplication.runtime.ReplicationSinkClientRouter;
-import org.corfudb.infrastructure.logreplication.runtime.ReplicationSinkRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkClientRouter;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
-import org.corfudb.infrastructure.logreplication.runtime.ReplicationSourceRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceClientRouter;
 import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 
 import javax.annotation.Nonnull;
@@ -38,8 +37,8 @@ public class NettyLogReplicationClientChannelAdapter extends IClientChannelAdapt
      */
     public NettyLogReplicationClientChannelAdapter(@NonNull String localClusterId,
                                                    @NonNull ClusterDescriptor remoteClusterDescriptor,
-                                                    ReplicationSourceRouter sourceRouter,
-                                                   ReplicationSinkClientRouter sinkRouter ) {
+                                                    LogReplicationSourceClientRouter sourceRouter,
+                                                   LogReplicationSinkClientRouter sinkRouter ) {
         super(localClusterId, remoteClusterDescriptor, sourceRouter, sinkRouter);
         this.channels = new ConcurrentHashMap<>();
         this.executorService = Executors.newSingleThreadExecutor();
@@ -86,6 +85,9 @@ public class NettyLogReplicationClientChannelAdapter extends IClientChannelAdapt
                     request.getPayload().getPayloadCase());
         }
     }
+
+    @Override
+    public void send(String nodeId, CorfuMessage.ResponseMsg response) {}
 
     @Override
     public void onConnectionUp(String nodeId) {
