@@ -1,7 +1,12 @@
 package org.corfudb.integration;
 
-import org.corfudb.runtime.*;
-import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.CompactorMetadataTables;
+import org.corfudb.runtime.CheckpointLivenessUpdater;
+import org.corfudb.runtime.CorfuCompactorManagement;
+import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.test.SampleSchema;
 import org.junit.Assert;
 import org.junit.Before;
@@ -9,7 +14,7 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.util.*;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
@@ -58,7 +63,7 @@ public class LivenessUpdaterIT extends AbstractIT {
         runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
-        final Table<SampleSchema.Uuid, SampleSchema.FirewallRule, SampleSchema.Uuid> table = store.openTable(
+        store.openTable(
                 namespace,
                 tableName,
                 SampleSchema.Uuid.class,
@@ -67,19 +72,20 @@ public class LivenessUpdaterIT extends AbstractIT {
                 TableOptions.fromProtoSchema(SampleSchema.FirewallRule.class));
 
         CheckpointLivenessUpdater livenessUpdater = new CheckpointLivenessUpdater(store);
-        CorfuStoreMetadata.TableName TableName = CorfuStoreMetadata.TableName.newBuilder().setNamespace(namespace).setTableName(tableName).build();
-        Duration INTERVAL = Duration.ofSeconds(15);
+        CorfuStoreMetadata.TableName tableNameBuilder = CorfuStoreMetadata.TableName.newBuilder().
+                setNamespace(namespace).setTableName(tableName).build();
+        Duration interval = Duration.ofSeconds(15);
 
         CompactorMetadataTables compactorMetadataTables = new CompactorMetadataTables(store);
         TxnContext txn = store.txn(CORFU_SYSTEM_NAMESPACE);
-        txn.putRecord(compactorMetadataTables.getActiveCheckpointsTable(), TableName,
+        txn.putRecord(compactorMetadataTables.getActiveCheckpointsTable(), tableNameBuilder,
                 CorfuCompactorManagement.ActiveCPStreamMsg.newBuilder().build(),
                 null);
         txn.commit();
 
-        livenessUpdater.updateLiveness(TableName);
+        livenessUpdater.updateLiveness(tableNameBuilder);
         try {
-            TimeUnit.SECONDS.sleep(INTERVAL.getSeconds());
+            TimeUnit.SECONDS.sleep(interval.getSeconds());
         } catch (InterruptedException e) {
             System.out.println("Sleep interrupted: " + e);
         }
@@ -87,7 +93,8 @@ public class LivenessUpdaterIT extends AbstractIT {
 
         TxnContext newTxn = store.txn(CORFU_SYSTEM_NAMESPACE);
         CorfuCompactorManagement.ActiveCPStreamMsg newStatus = (CorfuCompactorManagement.ActiveCPStreamMsg)
-                newTxn.getRecord(CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME, Optional.of(TableName).get()).getPayload();
+                newTxn.getRecord(CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME,
+                Optional.of(tableNameBuilder).get()).getPayload();
         Assert.assertEquals(1, newStatus.getSyncHeartbeat());
     }
 }

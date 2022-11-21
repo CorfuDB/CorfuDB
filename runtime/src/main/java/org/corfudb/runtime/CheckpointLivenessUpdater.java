@@ -35,7 +35,7 @@ public class CheckpointLivenessUpdater implements LivenessUpdater {
             this.activeCheckpointsTable = getActiveCheckpointsTable();
         } catch (Exception e) {
             log.error("Opening ActiveCheckpointsTable failed due to exception: {}", currentTable, e.getStackTrace());
-            throw new RuntimeException(e);
+            throw new IllegalThreadStateException("Opening ActiveCheckpointsTable failed");
         }
         this.executorService = Executors.newSingleThreadScheduledExecutor();
         executorService.scheduleWithFixedDelay(this::addTask, UPDATE_INTERVAL.toMillis() / 2,
