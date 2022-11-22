@@ -106,3 +106,10 @@ message ReplicationEvent {
   string eventId = 2;
   ReplicationEventType type = 3;
 }
+
+enum ReplicationModel {
+  TABLE_REPLICATION = 0; // Full table replication (Single Source to Single Sink = 1:1)
+  ROUTING_QUEUES = 1; // Routing queue replication (used for entry-level replication) (1:1)
+  LOGICAL_GROUP_REPLICATION = 2; // Table association to logical group (1:1)
+  MERGE_MULTI_TABLES = 3; // Same table replication from multiple sources to single sink (n:1)
+}
