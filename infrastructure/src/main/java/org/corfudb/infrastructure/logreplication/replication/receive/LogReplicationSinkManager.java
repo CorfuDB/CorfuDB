@@ -200,7 +200,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         snapshotSyncPlugin = getOnSnapshotSyncPlugin();
 
         snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadataManager);
-        logEntryWriter = new LogEntryWriter(runtime, config, logReplicationMetadataManager);
+        logEntryWriter = new LogEntryWriter(config, logReplicationMetadataManager);
 
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
                 logReplicationMetadataManager.getLastProcessedLogEntryBatchTimestamp(), this);
@@ -471,7 +471,10 @@ public class LogReplicationSinkManager implements DataReceiver {
         log.debug("Entry Start Snapshot Sync Apply, id={}", entry.getMetadata().getSyncRequestId());
         // set data_consistent as false
         setDataConsistentWithRetry(false);
-
+        
+        // Sync with registry after transfer phase to capture local updates, as transfer phase could
+        // take a relatively long time.
+        config.syncWithRegistry();
         snapshotWriter.clearLocalStreams();
         snapshotWriter.startSnapshotSyncApply();
         completeSnapshotApply(entry);

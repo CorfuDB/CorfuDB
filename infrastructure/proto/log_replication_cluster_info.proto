@@ -33,4 +33,3 @@ enum ClusterRole {
   STANDBY = 2;
   NONE = 3;
 }
-
