@@ -131,6 +131,7 @@ public class CorfuReplicationManager {
                             .localClusterId(localNodeDescriptor.getClusterId())
                             .replicationConfig(context.getConfig())
                             .pluginFilePath(pluginFilePath)
+                            .channelContext(context.getChannelContext())
                             .topologyConfigId(topology.getTopologyConfigId())
                             .keyStore(corfuRuntime.getParameters().getKeyStore())
                             .tlsEnabled(corfuRuntime.getParameters().isTlsEnabled())
