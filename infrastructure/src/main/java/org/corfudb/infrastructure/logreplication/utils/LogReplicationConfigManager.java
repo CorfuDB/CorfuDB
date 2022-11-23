@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.utils;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.LRRollingUpgradeHandler;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ILogReplicationVersionAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
@@ -71,6 +72,9 @@ public class LogReplicationConfigManager {
 
     private ILogReplicationVersionAdapter logReplicationVersionAdapter;
 
+    @Getter
+    private LRRollingUpgradeHandler lrRollingUpgradeHandler;
+
     private final String pluginConfigFilePath;
 
     private final VersionString versionString = VersionString.newBuilder().setName(VERSION_PLUGIN_KEY).build();
@@ -111,21 +115,43 @@ public class LogReplicationConfigManager {
         this.pluginConfigFilePath = pluginConfigFilePath;
         this.corfuStore = new CorfuStore(runtime);
         this.lastRegistryTableLogTail = Address.NON_ADDRESS;
-        initLogReplicationVersionPlugin();
+        initLogReplicationVersionPlugin(runtime);
+        initLogReplicationRollingUpgradeHandler(corfuStore);
         setupVersionTable();
     }
 
-    private void initLogReplicationVersionPlugin() {
+    private void initLogReplicationVersionPlugin(CorfuRuntime runtime) {
         log.info("Plugin :: {}", pluginConfigFilePath);
         LogReplicationPluginConfig config = new LogReplicationPluginConfig(pluginConfigFilePath);
         File jar = new File(config.getStreamFetcherPluginJARPath());
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
             Class plugin = Class.forName(config.getStreamFetcherClassCanonicalName(), true, child);
-            logReplicationVersionAdapter = (ILogReplicationVersionAdapter) plugin.getDeclaredConstructor()
-                    .newInstance();
+            logReplicationVersionAdapter = (ILogReplicationVersionAdapter)
+                    plugin.getDeclaredConstructor(CorfuRuntime.class).newInstance(runtime);
         } catch (Exception e) {
             log.error("Fatal error: Failed to get Log Replicatior Version Plugin", e);
             throw new UnrecoverableCorfuError(e);
+        }
+    }
+
+    /**
+     * Instantiate the LogReplicator's Rolling Upgrade Handler and invoke its
+     * check the first time, so it can cache the result in the common case
+     * where there is no rolling upgrade in progress.
+     * @param corfuStore - instance of the store to which the check is made with.
+     */
+    private void initLogReplicationRollingUpgradeHandler(CorfuStore corfuStore) {
+        this.lrRollingUpgradeHandler = new LRRollingUpgradeHandler(logReplicationVersionAdapter);
+        final int retries = 3;
+        for (int i = retries; i>=0; i--) {
+            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                log.info("LRRollingUpgradeHandler: Prestart check isUpgradeOn: {}",
+                        lrRollingUpgradeHandler.isLRUpgradeInProgress(txn));
+                txn.commit();
+                break;
+            } catch (Exception ex) {
+                log.error("Fatal error: Failed to get LR upgrade status", ex);
+            }
         }
     }
 
@@ -253,7 +279,7 @@ public class LogReplicationConfigManager {
 
         try {
             if (currentVersion == null) {
-                currentVersion = logReplicationVersionAdapter.getVersion();
+                currentVersion = logReplicationVersionAdapter.getNodeVersion();
             }
 
             IRetry.build(IntervalRetry.class, () -> {
