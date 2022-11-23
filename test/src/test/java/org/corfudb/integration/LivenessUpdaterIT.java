@@ -77,11 +77,14 @@ public class LivenessUpdaterIT extends AbstractIT {
         Duration interval = Duration.ofSeconds(15);
 
         CompactorMetadataTables compactorMetadataTables = new CompactorMetadataTables(store);
-        TxnContext txn = store.txn(CORFU_SYSTEM_NAMESPACE);
-        txn.putRecord(compactorMetadataTables.getActiveCheckpointsTable(), tableNameBuilder,
-                CorfuCompactorManagement.ActiveCPStreamMsg.newBuilder().build(),
-                null);
-        txn.commit();
+        try (TxnContext txn = store.txn(CORFU_SYSTEM_NAMESPACE)) {
+            txn.putRecord(compactorMetadataTables.getActiveCheckpointsTable(), tableNameBuilder,
+                    CorfuCompactorManagement.ActiveCPStreamMsg.newBuilder().build(),
+                    null);
+            txn.commit();
+        } catch (Exception e) {
+            Assert.fail("Transaction Failed due to " + e.getStackTrace());
+        }
 
         livenessUpdater.updateLiveness(tableNameBuilder);
         try {
@@ -91,10 +94,14 @@ public class LivenessUpdaterIT extends AbstractIT {
         }
         livenessUpdater.shutdown();
 
-        TxnContext newTxn = store.txn(CORFU_SYSTEM_NAMESPACE);
-        CorfuCompactorManagement.ActiveCPStreamMsg newStatus = (CorfuCompactorManagement.ActiveCPStreamMsg)
-                newTxn.getRecord(CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME,
-                Optional.of(tableNameBuilder).get()).getPayload();
-        Assert.assertEquals(1, newStatus.getSyncHeartbeat());
+        try (TxnContext txn = store.txn(CORFU_SYSTEM_NAMESPACE)) {
+            CorfuCompactorManagement.ActiveCPStreamMsg newStatus = (CorfuCompactorManagement.ActiveCPStreamMsg)
+                    txn.getRecord(CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME,
+                    Optional.of(tableNameBuilder).get()).getPayload();
+            txn.close();
+            Assert.assertEquals(1, newStatus.getSyncHeartbeat());
+        } catch (Exception e) {
+            Assert.fail("Transaction Failed due to " + e.getStackTrace());
+        }
     }
 }
