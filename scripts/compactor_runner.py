@@ -16,6 +16,7 @@ from __future__ import absolute_import, print_function
 from argparse import ArgumentParser
 import fcntl
 import glob
+import logging
 import os
 import os.path
 import re
@@ -29,7 +30,13 @@ import yaml
 CORFU_COMPACTOR_CLASS_NAME = "org.corfudb.compactor.CorfuStoreCompactorMain"
 COMPACTOR_BULK_READ_SIZE = 50
 COMPACTOR_JVM_XMX = 1024
+CORFU_COMPACTOR_LOG = "/var/log/corfu/corfu-compactor.log"
 
+logging.basicConfig(filename=CORFU_COMPACTOR_LOG,
+                    format='%(asctime)s.%(msecs)03dZ %(levelname)5s Runner - %(message)s',
+                    datefmt='%Y-%m-%dT%H:%M:%S')
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
 
 class Config(object):
     def __init__(self):
@@ -170,6 +177,7 @@ class Wizard(object):
 
     def _print_and_log(self, msg):
         print(msg)
+        logger.info(msg)
 
     # Disk space: max 50MB. keep 1000 files.
     # Mem space: max 50MB, most of time 50KB. CORFU_GC_MAX_INDEX 1000 files, each file is 50KB.
