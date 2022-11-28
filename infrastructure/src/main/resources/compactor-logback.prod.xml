@@ -19,14 +19,25 @@
             </pattern>
         </encoder>
     </appender>
-    <appender name="syslog" class="ch.qos.logback.classic.net.SyslogAppender">
-        <syslogHost>localhost</syslogHost>
-        <facility>LOCAL6</facility>
-        <suffixPattern>[%thread] %-5level %msg%n%xException</suffixPattern>
+    <appender name="logfile" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIRECTORY}/corfu-compactor-audit.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
+            <fileNamePattern>${LOG_DIRECTORY}/corfu-compactor-audit.%i.log.gz</fileNamePattern>
+            <minIndex>1</minIndex>
+            <maxIndex>10</maxIndex>
+        </rollingPolicy>
+        <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
+            <maxFileSize>40MB</maxFileSize>
+        </triggeringPolicy>
+        <encoder>
+            <pattern>
+                %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %msg%n%xException
+            </pattern>
+        </encoder>
     </appender>
     <!-- https://logback.qos.ch/manual/appenders.html#AsyncAppender -->
     <appender name="async_file" class="ch.qos.logback.classic.AsyncAppender">
-        <appender-ref ref="syslog" />
+        <appender-ref ref="logfile" />
         <queueSize>1024</queueSize>
         <maxFlushTime>5000</maxFlushTime>
     </appender>

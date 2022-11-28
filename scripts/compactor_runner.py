@@ -215,7 +215,7 @@ class Wizard(object):
         if self._config.upgrade:
             self._print_and_log("Appliance upgrading, skipping grep")
         else:
-            grep_running_tool = "ps aux | grep '/usr/share/corfu/bin/compactor_runner.py\|corfu_compactor_upgrade_runner.py' | grep -v 'grep\|CorfuServer' | grep " + self._config.corfu_port
+            grep_running_tool = "ps aux | grep '/usr/share/corfu/scripts/compactor_runner.py\|corfu_compactor_upgrade_runner.py' | grep -v 'grep\|CorfuServer' | grep " + self._config.corfu_port
 
             try:
                 grep_tool_result = check_output(grep_running_tool, shell=True).decode()
