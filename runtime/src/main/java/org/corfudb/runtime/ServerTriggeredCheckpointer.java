@@ -57,7 +57,7 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
         CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> corfuTable = openTable(tableName, keyDynamicProtobufSerializer,
                 checkpointerBuilder.cpRuntime.get());
         CheckpointWriter<ICorfuTable<?,?>> cpw =
-                new CheckpointWriter(checkpointerBuilder.corfuRuntime, streamId, "ServerCheckpointer", corfuTable);
+                new CheckpointWriter(checkpointerBuilder.cpRuntime.get(), streamId, "ServerCheckpointer", corfuTable);
         ISerializer serializer = ((CorfuCompileProxy) corfuTable.getCorfuSMRProxy())
                 .getSerializer();
         cpw.setSerializer(serializer);
