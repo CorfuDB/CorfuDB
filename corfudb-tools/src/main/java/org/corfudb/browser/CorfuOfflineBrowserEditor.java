@@ -423,12 +423,16 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
     }
 
     class CachedTable {
+        private ConcurrentMap<Object, OrderedObject> table;
         @Setter
         @Getter
         private long clearTableTxn;
 
         public void insert(Object key, Object value, long address) {
-            return;
+            if (table.containsKey(key) && (table.get(key)).getOrder() > address) {
+                return;
+            }
+            table.put(key, new OrderedObject(value, address));
         }
 
         public ConcurrentMap getTrimmedTable() {
