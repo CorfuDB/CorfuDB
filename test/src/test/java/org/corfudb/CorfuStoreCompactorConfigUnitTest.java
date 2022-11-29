@@ -36,6 +36,7 @@ public class CorfuStoreCompactorConfigUnitTest {
                 .systemDownHandlerTriggerLimit(CorfuStoreCompactorConfig.SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT)
                 .systemDownHandler(corfuStoreCompactorConfig.getDefaultSystemDownHandler())
                 .clientName(hostname)
+                .cacheDisabled(true)
                 .build();
 
         Assert.assertEquals(Optional.empty(), corfuStoreCompactorConfig.getPersistedCacheRoot());

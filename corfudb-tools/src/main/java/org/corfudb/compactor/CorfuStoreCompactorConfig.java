@@ -91,7 +91,10 @@ public class CorfuStoreCompactorConfig {
         builder.systemDownHandlerTriggerLimit(SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT)
                 .systemDownHandler(defaultSystemDownHandler);
 
-        params = builder.priorityLevel(PriorityLevel.HIGH).build();
+        params = builder
+                .priorityLevel(PriorityLevel.HIGH)
+                .cacheDisabled(true)
+                .build();
     }
 
     private Map<String, Object> parseOpts(String[] args) {
