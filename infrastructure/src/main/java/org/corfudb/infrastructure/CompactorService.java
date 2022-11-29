@@ -13,6 +13,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.LambdaUtils;
 import org.corfudb.util.concurrent.SingletonResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,7 +74,7 @@ public class CompactorService implements ManagementService {
      */
     @Override
     public void start(Duration interval) {
-        syslog.info("Staring Compaction service...");
+        syslog.info("Starting Compaction service...");
         if (getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis() <= 0) {
             return;
         }
@@ -82,7 +83,7 @@ public class CompactorService implements ManagementService {
         this.trimLog = new TrimLog(getCorfuRuntime(), getCorfuStore());
 
         orchestratorThread.scheduleWithFixedDelay(
-                this::runOrchestrator,
+                () -> LambdaUtils.runSansThrow(this::runOrchestrator),
                 interval.toMillis(),
                 interval.toMillis(),
                 TimeUnit.MILLISECONDS
@@ -119,38 +120,46 @@ public class CompactorService implements ManagementService {
      * b. Triggers the distributed compaction cycle based on the TriggerPolicy
      */
     private void runOrchestrator() {
-        boolean isLeader = isNodePrimarySequencer(updateLayoutAndGet());
-        CheckpointingStatus managerStatus = null;
-        try (TxnContext txn = getCorfuStore().txn(CORFU_SYSTEM_NAMESPACE)) {
-            managerStatus = (CheckpointingStatus) txn.getRecord(
-                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
-                    CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
-            txn.commit();
-        } catch (Exception e) {
-            syslog.warn("Unable to acquire manager status: ", e);
-        }
         try {
-            if (managerStatus != null) {
-                if (managerStatus.getStatus() == StatusType.FAILED || managerStatus.getStatus() == StatusType.COMPLETED) {
-                    checkpointerJvmManager.shutdown();
-                } else if (managerStatus.getStatus() == StatusType.STARTED && !checkpointerJvmManager.isRunning()
-                        && !checkpointerJvmManager.isInvoked()) {
-                    checkpointerJvmManager.invokeCheckpointing();
-                }
-            }
+            boolean isLeader = isNodePrimarySequencer(updateLayoutAndGet());
+            syslog.trace("Current node isLeader: {}", isLeader);
 
-            if (isLeader) {
-                if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED) {
-                    getCompactorLeaderServices().validateLiveness();
-                } else if (compactionTriggerPolicy.shouldTrigger(
-                        getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis(), getCorfuStore())) {
-                    trimLog.invokePrefixTrim();
-                    compactionTriggerPolicy.markCompactionCycleStart();
-                    getCompactorLeaderServices().initCompactionCycle();
-                }
+            CheckpointingStatus managerStatus = null;
+            try (TxnContext txn = getCorfuStore().txn(CORFU_SYSTEM_NAMESPACE)) {
+                managerStatus = (CheckpointingStatus) txn.getRecord(
+                        CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                        CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
+                txn.commit();
+                syslog.trace("ManagerStatus: {}", managerStatus.getStatus().toString());
+            } catch (Exception e) {
+                syslog.warn("Unable to acquire manager status: ", e);
             }
-        } catch (Exception ex) {
-            syslog.warn("Exception in runOrcestrator(): ", ex);
+            try {
+                if (managerStatus != null) {
+                    if (managerStatus.getStatus() == StatusType.FAILED || managerStatus.getStatus() == StatusType.COMPLETED) {
+                        checkpointerJvmManager.shutdown();
+                    } else if (managerStatus.getStatus() == StatusType.STARTED && !checkpointerJvmManager.isRunning()
+                            && !checkpointerJvmManager.isInvoked()) {
+                        checkpointerJvmManager.invokeCheckpointing();
+                    }
+                }
+
+                if (isLeader) {
+                    if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED) {
+                        getCompactorLeaderServices().validateLiveness();
+                    } else if (compactionTriggerPolicy.shouldTrigger(
+                            getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis(), getCorfuStore())) {
+                        trimLog.invokePrefixTrim();
+                        compactionTriggerPolicy.markCompactionCycleStart();
+                        getCompactorLeaderServices().initCompactionCycle();
+                    }
+                }
+            } catch (Exception ex) {
+                syslog.warn("Exception in runOrcestrator(): ", ex);
+            }
+        } catch (Throwable t) {
+            syslog.error("Encountered unexpected exception in runOrchestrator: ", t);
+            throw t;
         }
     }
 
