@@ -27,8 +27,16 @@ public class CheckpointLivenessUpdater implements LivenessUpdater {
 
     private static final Duration UPDATE_INTERVAL = Duration.ofSeconds(15);
 
+    private final Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointsTable;
+
     public CheckpointLivenessUpdater(CorfuStore corfuStore) {
         this.corfuStore = corfuStore;
+        try {
+            this.activeCheckpointsTable = getActiveCheckpointsTable();
+        } catch (Exception e) {
+            log.error("Opening ActiveCheckpointsTable failed due to exception: {}", currentTable, e.getStackTrace());
+            throw new IllegalThreadStateException("Opening ActiveCheckpointsTable failed");
+        }
         this.executorService = Executors.newSingleThreadScheduledExecutor();
         executorService.scheduleWithFixedDelay(this::addTask, UPDATE_INTERVAL.toMillis() / 2,
                 UPDATE_INTERVAL.toMillis(), TimeUnit.MILLISECONDS);
@@ -55,7 +63,6 @@ public class CheckpointLivenessUpdater implements LivenessUpdater {
                 ActiveCPStreamMsg newStatus = ActiveCPStreamMsg.newBuilder()
                         .setSyncHeartbeat(currentStatus.getSyncHeartbeat() + 1)
                         .build();
-                Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointsTable = getActiveCheckpointsTable();
                 // update validity counter for the current table
                 txn.putRecord(activeCheckpointsTable, currentTable.get(), newStatus, null);
                 txn.commit();
