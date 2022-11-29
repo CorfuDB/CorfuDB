@@ -319,9 +319,7 @@ public class CompactorLeaderServices {
             str.append("SUCCESS ");
         }
         str.append(tableName.getNamespace()).append("$").append(tableName.getTableName());
-        str.append(" size(")
-                .append(status.getTableSize())
-                .append(") in ")
+        str.append(" in ")
                 .append(status.getTimeTaken())
                 .append("ms");
         return str.toString();
