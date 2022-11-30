@@ -8,9 +8,13 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.util.LambdaUtils;
 
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -34,11 +38,13 @@ public class CheckpointLivenessUpdater implements LivenessUpdater {
         try {
             this.activeCheckpointsTable = getActiveCheckpointsTable();
         } catch (Exception e) {
-            log.error("Opening ActiveCheckpointsTable failed due to exception: {}", currentTable, e.getStackTrace());
+            log.error("Opening ActiveCheckpointsTable failed due to exception: ", e);
             throw new IllegalThreadStateException("Opening ActiveCheckpointsTable failed");
         }
         this.executorService = Executors.newSingleThreadScheduledExecutor();
-        executorService.scheduleWithFixedDelay(this::addTask, UPDATE_INTERVAL.toMillis() / 2,
+        executorService.scheduleWithFixedDelay(
+                () -> LambdaUtils.runSansThrow(this::updateHeartbeat),
+                UPDATE_INTERVAL.toMillis() / 2,
                 UPDATE_INTERVAL.toMillis(), TimeUnit.MILLISECONDS);
     }
 
@@ -52,24 +58,31 @@ public class CheckpointLivenessUpdater implements LivenessUpdater {
                 TableOptions.fromProtoSchema(ActiveCPStreamMsg.class));
     }
 
-    private void addTask() {
-        if (!currentTable.isPresent()) {
+    private void updateHeartbeat() {
+        TableName table;
+        try {
+            table = currentTable.get();
+        } catch (NoSuchElementException e) {
+            log.info("Encountered NoSuchElementException while accessing currentTable, ", e);
             return;
         }
-        executorService.execute(() -> {
-            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                ActiveCPStreamMsg currentStatus = (ActiveCPStreamMsg)
-                        txn.getRecord(CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME, currentTable.get()).getPayload();
-                ActiveCPStreamMsg newStatus = ActiveCPStreamMsg.newBuilder()
-                        .setSyncHeartbeat(currentStatus.getSyncHeartbeat() + 1)
-                        .build();
-                // update validity counter for the current table
-                txn.putRecord(activeCheckpointsTable, currentTable.get(), newStatus, null);
-                txn.commit();
-            } catch (Exception e) {
-                log.error("Unable to update liveness for table: {} due to exception: {}", currentTable, e.getStackTrace());
+
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            ActiveCPStreamMsg currentStatus = (ActiveCPStreamMsg)
+                    txn.getRecord(CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME, table).getPayload();
+            ActiveCPStreamMsg newStatus = ActiveCPStreamMsg.newBuilder()
+                    .setSyncHeartbeat(currentStatus.getSyncHeartbeat() + 1)
+                    .build();
+            // update validity counter for the current table
+            txn.putRecord(activeCheckpointsTable, table, newStatus, null);
+            txn.commit();
+        } catch (TransactionAbortedException ex) {
+            if (ex.getAbortCause() == AbortCause.CONFLICT) {
+                log.warn("Another thread tried to commit, ", ex);
             }
-        });
+        } catch (Exception e) {
+            log.warn("Unable to update liveness for table: {} due to exception: {}", table, e.getStackTrace());
+        }
     }
 
     @Override

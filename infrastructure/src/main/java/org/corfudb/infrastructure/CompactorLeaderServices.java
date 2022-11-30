@@ -152,13 +152,13 @@ public class CompactorLeaderServices {
 
         for (TableName table : activeCheckpointTables) {
             if (!livenessValidator.isTableCheckpointActive(table, Duration.ofMillis(currentTime)) &&
-                    hasTableCheckpointFailed(table)) {
+                    checkFailureAndFinishCompactionCycle(table)) {
                 break;
             }
         }
     }
 
-    private boolean hasTableCheckpointFailed(TableName table) {
+    private boolean checkFailureAndFinishCompactionCycle(TableName table) {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus tableStatus = (CheckpointingStatus) txn.getRecord(
                     CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, table).getPayload();

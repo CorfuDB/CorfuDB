@@ -92,7 +92,7 @@ public class LivenessUpdaterIT extends AbstractIT {
         } catch (InterruptedException e) {
             System.out.println("Sleep interrupted: " + e);
         }
-        livenessUpdater.shutdown();
+        livenessUpdater.notifyOnSyncComplete();
 
         try (TxnContext txn = store.txn(CORFU_SYSTEM_NAMESPACE)) {
             CorfuCompactorManagement.ActiveCPStreamMsg newStatus = (CorfuCompactorManagement.ActiveCPStreamMsg)
@@ -102,6 +102,8 @@ public class LivenessUpdaterIT extends AbstractIT {
             Assert.assertEquals(1, newStatus.getSyncHeartbeat());
         } catch (Exception e) {
             Assert.fail("Transaction Failed due to " + e.getStackTrace());
+        } finally {
+            livenessUpdater.shutdown();
         }
     }
 }
