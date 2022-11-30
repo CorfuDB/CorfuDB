@@ -28,11 +28,15 @@ public class ReplicationSession {
     @Getter
     private final String remoteClusterId;
 
+    @Getter
+    private final String localClusterId;
+
    @Getter
    private final ReplicationSubscriber subscriber;
 
-    public ReplicationSession(String remoteClusterId, ReplicationSubscriber subscriber) {
+    public ReplicationSession(String remoteClusterId, String localClusterId, ReplicationSubscriber subscriber) {
         this.remoteClusterId = remoteClusterId;
+        this.localClusterId = localClusterId;
         this.subscriber = subscriber;
     }
 
@@ -45,17 +49,18 @@ public class ReplicationSession {
             return false;
         }
         ReplicationSession that = (ReplicationSession) o;
-        return remoteClusterId.equals(that.remoteClusterId) && subscriber.equals(that.subscriber);
+        return remoteClusterId.equals(that.remoteClusterId) && localClusterId.equals(that.localClusterId)
+                && subscriber.equals(that.subscriber);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(remoteClusterId, subscriber);
+        return Objects.hash(remoteClusterId, localClusterId, subscriber);
     }
 
     // TODO: To be removed after session is introduced in connections
-    public static ReplicationSession getDefaultReplicationSessionForCluster(String remoteClusterId) {
-        return new ReplicationSession(remoteClusterId,
+    public static ReplicationSession getDefaultReplicationSessionForCluster(String remoteClusterId, String localClusterId) {
+        return new ReplicationSession(remoteClusterId, localClusterId,
             new ReplicationSubscriber(LogReplication.ReplicationModels.REPLICATE_FULL_TABLES, SAMPLE_CLIENT));
     }
 
@@ -64,6 +69,8 @@ public class ReplicationSession {
         return new StringBuffer()
             .append("Remote Cluster: ")
             .append(remoteClusterId)
+            .append("Local Cluster: ")
+            .append(localClusterId)
             .append("Replication Subscriber: ")
             .append(subscriber)
             .toString();

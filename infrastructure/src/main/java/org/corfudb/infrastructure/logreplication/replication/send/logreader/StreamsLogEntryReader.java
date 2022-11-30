@@ -121,6 +121,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
                 .setSnapshotSyncSeqNum(sequence)
                 .setSessionInfo(LogReplication.ReplicationSessionMsg.newBuilder()
                         .setRemoteClusterId(this.replicationSession.getRemoteClusterId())
+                        .setLocalClusterId(this.replicationSession.getLocalClusterId())
                         .setClient(this.replicationSession.getSubscriber().getClient())
                         .setReplicationModel(this.replicationSession.getSubscriber().getReplicationModel())
                         .build())
@@ -165,8 +166,8 @@ public class StreamsLogEntryReader implements LogEntryReader {
             Set<UUID> ignoredTxStreams = txEntryStreamIds.stream().filter(id -> !streamUUIDs.contains(id))
                     .collect(Collectors.toSet());
             txEntryStreamIds.removeAll(ignoredTxStreams);
-            log.debug("TX Stream entry[{}] :: replicate[{}]={}, ignore[{}]={} [valid]", entry.getVersion(),
-                    txEntryStreamIds.size(), txEntryStreamIds, ignoredTxStreams.size(), ignoredTxStreams);
+//            log.debug("TX Stream entry[{}] :: replicate[{}]={}, ignore[{}]={} [valid]", entry.getVersion(),
+//                    txEntryStreamIds.size(), txEntryStreamIds, ignoredTxStreams.size(), ignoredTxStreams);
             return true;
         }
     }

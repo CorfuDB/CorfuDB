@@ -130,6 +130,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 ReplicationSession session = router.getSession();
                 LogReplication.ReplicationSessionMsg sessionMsg = LogReplication.ReplicationSessionMsg.newBuilder()
                         .setRemoteClusterId(session.getRemoteClusterId())
+                        .setLocalClusterId(session.getLocalClusterId())
                         .setClient(session.getSubscriber().getClient())
                         .setReplicationModel(session.getSubscriber().getReplicationModel())
                         .build();

@@ -19,6 +19,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
+import static org.corfudb.infrastructure.LogReplicationClientTest.SAMPLE_CLUSTER;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 import static org.mockito.ArgumentMatchers.same;
@@ -47,7 +48,7 @@ public class LogReplicationServerTest {
     UuidMsg clusterId = UuidMsg.newBuilder().setLsb(5).setMsb(5).build();
     String sourceClusterId = getUUID(clusterId).toString();
     ReplicationSession replicationSession =
-        ReplicationSession.getDefaultReplicationSessionForCluster(sourceClusterId);
+        ReplicationSession.getDefaultReplicationSessionForCluster(sourceClusterId, SAMPLE_CLUSTER);
 
     /**
      * Stub most of the {@link LogReplicationServer} functionality, but spy on the actual instance.

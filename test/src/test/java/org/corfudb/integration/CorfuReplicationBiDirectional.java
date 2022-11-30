@@ -19,6 +19,7 @@ import org.junit.Test;
 import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_STATUS_TABLE;
 
 @Slf4j
 @SuppressWarnings("checkstyle:magicnumber")
@@ -170,15 +171,17 @@ public class CorfuReplicationBiDirectional extends LogReplicationAbstractIT {
         // Add a new kind of topology where a cluster is both source and destination, but the remote just acts as a sink
         init();
 
+
+
         //open Maps
         System.out.println("Open map on Source and Sink");
         openMaps(2, false);
 
         // Subscribe to replication status table on Sink (to be sure data change on status are captured)
-        Table<LogReplication.ReplicationSessionMsg, LogReplicationMetadata.ReplicationStatusVal, Message>
-                cluster2ReplicationStatus = corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
-                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
-                LogReplication.ReplicationSessionMsg.class,
+        Table<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, Message> sinkStatusTable =
+                corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
+                REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
                 LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
                 TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
@@ -186,16 +189,16 @@ public class CorfuReplicationBiDirectional extends LogReplicationAbstractIT {
         // (1) On startup, init the replication status for each session(2 sessions = 2 updates)
         // (2) When starting snapshot sync apply : is_data_consistent = false
         // (3) When completing snapshot sync apply : is_data_consistent = true
-        CountDownLatch cluster2StatusUpdateLatch = new CountDownLatch(4);
+        CountDownLatch cluster2StatusUpdateLatch = new CountDownLatch(3);
         ReplicationStatusListener cluster2SinkListener =
                 new ReplicationStatusListener(cluster2StatusUpdateLatch, false);
         corfuStoreSink.subscribeListener(cluster2SinkListener, LogReplicationMetadataManager.NAMESPACE,
                 LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
 
-        corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,
-                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
-                LogReplication.ReplicationSessionMsg.class,
+        Table<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, Message> sourceStatusTable = corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,
+                REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
                 LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
                 TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
@@ -226,36 +229,52 @@ public class CorfuReplicationBiDirectional extends LogReplicationAbstractIT {
         //validate that data is replicated
         System.out.println(">> Wait ... Snapshot log replication in progress ...");
         verifyDataOnSink(10);
+        System.out.println("Snapshot completed!. But the latch's value is " + cluster2StatusUpdateLatch.getCount());
 
         // validate the status of replication table. Status -> COMPLETE
         cluster2StatusUpdateLatch.await();
-        assertThat(cluster2SinkListener.getAccumulatedStatus().size()).isEqualTo(4);
-        //check is_data_consistent flag is set true
-        Assert.assertTrue(cluster2SinkListener.getAccumulatedStatus().get(3));
 
+        verifyReplicationStatusFromSource();
+//        assertThat(cluster2SinkListener.getAccumulatedStatus().size()).isEqualTo(3);
+//        //check is_data_consistent flag is set true
+//        Assert.assertTrue(cluster2SinkListener.getAccumulatedStatus().get(2));
+//
+//        System.out.println("assert for sink is done " + cluster1StatusUpdateLatch.getCount());
+//        cluster1StatusUpdateLatch.await();
+//        Assert.assertFalse(cluster1SinkListener.getAccumulatedStatus().get(0));
+//
+//        // Verify Sync Status during the first switchover
+//        LogReplicationMetadata.ReplicationStatusKey key =
+//                LogReplicationMetadata.ReplicationStatusKey
+//                        .newBuilder()
+//                        .setClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
+//                        .build();
+//        LogReplicationMetadata.ReplicationStatusVal replicationStatusVal;
+//
+//        try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
+//            replicationStatusVal = (LogReplicationMetadata.ReplicationStatusVal) txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+//            txn.commit();
+//        }
 
-        cluster1StatusUpdateLatch.await();
-        Assert.assertFalse(cluster1SinkListener.getAccumulatedStatus().get(0));
+//        assertThat(replicationStatusVal.getSyncType())
+//                .isEqualTo(LogReplicationMetadata.ReplicationStatusVal.SyncType.SNAPSHOT);
+//        assertThat(replicationStatusVal.getStatus())
+//                .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
 
-        // Verify Sync Status for SINK on cluster1
-        LogReplication.ReplicationSessionMsg key =
-                LogReplication.ReplicationSessionMsg
-                        .newBuilder()
-                        .setRemoteClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-                        .setReplicationModel(LogReplication.ReplicationModels.MOVE_DATA)
-                        .setClient("SampleClient")
-                        .build();
-        LogReplicationMetadata.ReplicationStatusVal replicationStatusVal;
-        try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatusVal = (LogReplicationMetadata.ReplicationStatusVal)txn.getRecord(LogReplicationMetadataManager.REPLICATION_STATUS_TABLE, key).getPayload();
-            txn.commit();
-        }
-        assertThat(replicationStatusVal.getSyncType())
-                .isEqualTo(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
-        assertThat(replicationStatusVal.getStatus())
-                .isEqualTo(LogReplicationMetadata.SyncStatus.NOT_STARTED);
+//        assertThat(replicationStatusVal.getRemainingEntriesToSend()).isEqualTo(0);
 
+        log.info(">> Write deltas");
+        System.out.println("Write deltas");
+        writeToSource(numWrites, numWrites / 2);
 
+        log.info(">> Wait ... Delta log replication in progress ...");
+        System.out.println("verify deltas");
+        verifyDataOnSink((numWrites + (numWrites / 2)));
+
+        assertThat(cluster2SinkListener.getAccumulatedStatus().size()).isEqualTo(3);
+        // Confirm last updates are set to true (corresponding to snapshot sync completed and log entry sync started)
+        assertThat(cluster2SinkListener.getAccumulatedStatus().get(cluster2SinkListener.getAccumulatedStatus().size() - 1)).isTrue();
+        assertThat(cluster2SinkListener.getAccumulatedStatus()).contains(false);
     }
 
 

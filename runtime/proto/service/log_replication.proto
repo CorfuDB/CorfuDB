@@ -37,16 +37,17 @@ message LogReplicationMetadataResponseMsg {
 
 message LogReplicationLeadershipLossResponseMsg {
   string nodeId = 1;
+  ReplicationSessionMsg sessionInfo = 2;
 }
 
 message LogReplicationLeadershipRequestMsg {
-  string nodeId = 1;
-  ReplicationSessionMsg sessionInfo = 2;
+  ReplicationSessionMsg sessionInfo = 1;
 }
 
 message LogReplicationLeadershipResponseMsg {
   bool isLeader = 2;
   string nodeId = 3;
+  ReplicationSessionMsg sessionInfo = 4;
 }
 
 // when the source is the connection endpoint
@@ -67,9 +68,14 @@ enum ReplicationModels {
 
 message ReplicationSessionMsg {
   string remoteClusterId = 1;
-  string client = 2;
+  string localClusterId = 2;
+  string client = 3;
   // TODO: shama to remove this once we have the tag.
-  ReplicationModels replicationModel = 3;
+  ReplicationModels replicationModel = 4;
+}
+
+message LogReplicationSubscribeMsg {
+  ReplicationSessionMsg sessionInfo = 1;
 }
 
 enum LogReplicationEntryType {

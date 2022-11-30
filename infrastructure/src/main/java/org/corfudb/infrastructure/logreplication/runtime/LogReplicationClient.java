@@ -52,6 +52,7 @@ public class LogReplicationClient extends AbstractClient {
                         .setLrMetadataRequest(LogReplicationMetadataRequestMsg.newBuilder()
                                 .setSessionInfo(LogReplication.ReplicationSessionMsg.newBuilder()
                                         .setRemoteClusterId(replicationSession.getRemoteClusterId())
+                                        .setLocalClusterId(replicationSession.getLocalClusterId())
                                         .setClient(replicationSession.getSubscriber().getClient())
                                         .setReplicationModel(replicationSession.getSubscriber().getReplicationModel())
                                         .build())

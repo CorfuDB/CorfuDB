@@ -146,10 +146,11 @@ message ResponsePayloadMsg {
     LogReplicationEntryMsg lr_entry_ack = 70;
     LogReplicationMetadataResponseMsg lr_metadata_response = 71;
     LogReplicationLeadershipResponseMsg lr_leadership_response = 72;
-
+    // Shama, I think the responses are not needed anymore
     LogReplicationLeadershipLossResponseMsg lr_leadership_loss = 73;
     LogReplicationMetadataRequestMsg lr_metadata_request = 75;
     LogReplicationReplicationRequestMsg lr_replication_request = 76;
+    LogReplicationSubscribeMsg lr_subscribe_request = 77;
 
     // Server Error
     ServerErrorMsg server_error = 200;

@@ -1,39 +1,26 @@
 package org.corfudb.infrastructure.logreplication.runtime;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.AbstractServer;
-import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.IServerRouter;
-import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
-import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationManager;
-import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
 import org.corfudb.infrastructure.logreplication.runtime.sinkFsm.SinkVerifyRemoteLeader;
-import org.corfudb.infrastructure.logreplication.transport.client.ChannelAdapterException;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
-import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
 import org.corfudb.protocols.service.CorfuProtocolMessage;
 import org.corfudb.runtime.clients.IClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.proto.service.CorfuMessage;
-import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
-import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
 
 import javax.annotation.Nonnull;
@@ -42,21 +29,19 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getDefaultProtocolVersionMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 
 //==================================================================
 /**
@@ -64,7 +49,7 @@ import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
  */
 //==================================================================
 @Slf4j
-public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRouter implements IClientRouter, LogReplicationClientRouter {
+public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRouter implements IClientRouter, LogReplicationClientRouter, IServerRouter {
 
     public static String REMOTE_LEADER = "REMOTE_LEADER";
 
@@ -110,9 +95,15 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
      */
     private final ClusterDescriptor remoteClusterDescriptor;
 
+    @Getter
     private String localClusterId;
 
 //    LogReplicationSinkServerRouter sinkRouter;
+
+    /**
+     * The response handlers registered to this router.
+     */
+    protected final Map<CorfuMessage.ResponsePayloadMsg.PayloadCase, IClient> handlerMap;
 
     /**
      * Adapter to the channel implementation
@@ -153,6 +144,7 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
         this.localClusterId = localClusterId;
         // this will be required when the sink is the connection initiator
         this.session = session;
+        this.handlerMap = new ConcurrentHashMap<>();
 
         this.verifyLeadership = new SinkVerifyRemoteLeader(session, this);
     }
@@ -161,7 +153,23 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
 
     @Override
     public IClientRouter addClient(IClient client) {
-        return null;
+
+        // Set the client's router to this instance.
+        client.setRouter(this);
+
+        // Iterate through all types of CorfuMsgType, registering the handler
+        try {
+            client.getHandledCases().forEach(x -> {
+                handlerMap.put(x, client);
+                log.info("Registered client to handle messages of type {}", x);
+            });
+        } catch (UnsupportedOperationException ex) {
+            log.trace("No registered CorfuMsg handler for client {}", client, ex);
+        }
+
+        // Register this type
+        clientList.add(client);
+        return this;
     }
 
 
@@ -245,6 +253,31 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
                                                                  CorfuProtocolMessage.ClusterIdCheck ignoreClusterId, CorfuProtocolMessage.EpochCheck ignoreEpoch) {
         // This is an empty stub. This method is not being used anywhere in the LR framework.
         return null;
+    }
+
+    public void sendResponse(@Nonnull CorfuMessage.ResponsePayloadMsg payload, @Nonnull String endpoint) {
+        CorfuMessage.HeaderMsg.Builder header = CorfuMessage.HeaderMsg.newBuilder()
+                .setVersion(getDefaultProtocolVersionMsg())
+                .setIgnoreClusterId(true)
+                .setIgnoreEpoch(true);
+
+        if(payload.getPayloadCase().equals(CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_SUBSCRIBE_REQUEST)) {
+            final long requestId = requestID.getAndIncrement();
+            header.setRequestId(requestId);
+            header.setClusterId(getUuidMsg(UUID.fromString(this.localClusterId)));
+
+            if(verifyLeadership.getRemoteLeaderNodeId().isPresent()) {
+                // Shama: add to outstanding requests.
+                channelAdapter.send(endpoint, getResponseMsg(header.build(), payload));
+            } else {
+                log.error("Leader not found to remote cluster {}", remoteClusterDescriptor.getClusterId());
+                verifyLeadership.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
+            }
+        } else {
+            log.error("Invalid message type {}. Currently only log replication messages are processed.",
+                    payload.getPayloadCase());
+        }
+
     }
 
     /**
@@ -336,36 +369,72 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
      * @param msg received corfu message
      */
     public void receive(CorfuMessage.ResponseMsg msg) {
-//        try {
-//            // If it is a Leadership Loss Message re-trigger leadership discovery
-//            if (msg.getPayload().getPayloadCase() == CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS) {
-//                String nodeId = msg.getPayload().getLrLeadershipLoss().getNodeId();
-//                runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, nodeId));
-//                return;
-//            }
-//
-//            // We get the handler for this message from the map
-//            IClient handler = handlerMap.get(msg.getPayload().getPayloadCase());
-//
-//            if (handler == null) {
-//                // The message was unregistered, we are dropping it.
-//                log.warn("Received unregistered message {}, dropping", msg);
-//            } else {
-//                // Route the message to the handler.
-//                if (log.isTraceEnabled()) {
-//                    log.trace("Message routed to {}: {}",
-//                            handler.getClass().getSimpleName(), msg);
-//                }
-//                handler.handleMessage(msg, null);
-//            }
-//        } catch (Exception e) {
-//            log.error("Exception caught while receiving message of type {}",
-//                    msg.getPayload().getPayloadCase(), e);
-//        }
+        log.info("Received : {}", msg);
+        try {
+            // If it is a Leadership Loss Message re-trigger leadership discovery
+            if (msg.getPayload().getPayloadCase() == CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS) {
+                String nodeId = msg.getPayload().getLrLeadershipLoss().getNodeId();
+                verifyLeadership.input(new LogReplicationRuntimeEvent(
+                        LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, nodeId));
+                return;
+            }
+
+            // We get the handler for this message from the map
+            IClient handler = handlerMap.get(msg.getPayload().getPayloadCase());
+
+            if (handler == null) {
+                // The message was unregistered, we are dropping it.
+                log.warn("Received unregistered message {}, dropping", msg);
+            } else {
+                // Route the message to the handler.
+                if (log.isTraceEnabled()) {
+                    log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(), msg);
+                }
+                handler.handleMessage(msg, null);
+            }
+        } catch (Exception e) {
+            log.error("Exception caught while receiving message of type {}",
+                    msg.getPayload().getPayloadCase(), e);
+        }
     }
 
-    public void receive(CorfuMessage.RequestMsg message) {
-        super.receive(message);
+    /**
+     * Receive messages from the 'custom' serverAdapter implementation. This message will be forwarded
+     * for processing.
+     *
+     * @param message
+     */
+    public void receive(RequestMsg message) {
+        log.debug("Received message {}", message.getPayload().getPayloadCase());
+
+        AbstractServer handler = super.getHandlerMap().get(message.getPayload().getPayloadCase());
+        if (handler == null) {
+            // The message was unregistered, we are dropping it.
+            log.warn("Received unregistered message {}, dropping", message);
+        } else {
+            if (super.validateEpoch(message.getHeader())) {
+                // Route the message to the handler.
+                if (log.isTraceEnabled()) {
+                    log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(), message);
+                }
+
+                try {
+                    handler.handleMessage(message, null,this);
+                } catch (Throwable t) {
+                    log.error("channelRead: Handling {} failed due to {}:{}",
+                            message.getPayload().getPayloadCase(),
+                            t.getClass().getSimpleName(),
+                            t.getMessage(),
+                            t);
+                }
+            }
+        }
+    }
+
+    @Override
+    public void sendResponse(CorfuMessage.ResponseMsg response, ChannelHandlerContext ctx) {
+        log.info("Shama it came here!!");
+        channelAdapter.send(getRemoteLeaderNodeId().get(), response);
     }
 
     /**
@@ -405,6 +474,7 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
             channelAdapter = (IClientChannelAdapter) adapterType.getDeclaredConstructor(String.class, ClusterDescriptor.class, LogReplicationSourceClientRouter.class, LogReplicationSinkClientRouter.class)
                     .newInstance(this.localClusterId, remoteClusterDescriptor, null, this);
             log.info("Connect asynchronously to remote cluster {} and session {} ", remoteClusterDescriptor.getClusterId(), this.session);
+//            this.setClientAdapter(channelAdapter);
             // When connection is established to the remote leader node, the remoteLeaderConnectionFuture will be completed.
             channelAdapter.connectAsync();
         } catch (Exception e) {
@@ -456,8 +526,7 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
     }
 
     public Optional<String> getRemoteLeaderNodeId() {
-//        return runtimeFSM.getRemoteLeaderNodeId();
-        return null;
+        return verifyLeadership.getRemoteLeaderNodeId();
     }
 
     public void resetRemoteLeader() {

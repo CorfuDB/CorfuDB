@@ -5,6 +5,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
+import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
@@ -59,6 +60,17 @@ public abstract class AbstractServer {
     protected abstract void processRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r);
 
     /**
+     * A stub that handlers can override to manage their threading, otherwise
+     * the requests will be executed on the IO threads
+     * @param req An incoming request message.
+     * @param ctx The channel handler context.
+     * @param r The router that took in the request.
+     */
+    protected void processLrRequest(RequestMsg req, ChannelHandlerContext ctx, IClientRouter r) {
+
+    }
+
+    /**
      * Handle a incoming request message.
      *
      * @param req An incoming request message.
@@ -78,6 +90,28 @@ public abstract class AbstractServer {
         }
 
         processRequest(req, ctx, r);
+    }
+
+    /**
+     * Handle a incoming request message.
+     *
+     * @param req An incoming request message.
+     * @param ctx The channel handler context.
+     * @param r   The router that took in the request message.
+     */
+    public final void handleLrMessage(RequestMsg req, ChannelHandlerContext ctx, IClientRouter r) {
+        if (getState() == ServerState.SHUTDOWN) {
+            log.warn("handleMessage[{}]: Server received {} but is already shutdown.",
+                    req.getHeader().getRequestId(), req.getPayload().getPayloadCase());
+            return;
+        }
+
+        if (!isServerReadyToHandleMsg(req)) {
+            log.warn("Server is not ready to handle the incoming request, has State {}", getState());
+            return;
+        }
+
+        processLrRequest(req, ctx, r);
     }
 
     private ResponseMsg getNotReadyError(HeaderMsg requestHeader) {

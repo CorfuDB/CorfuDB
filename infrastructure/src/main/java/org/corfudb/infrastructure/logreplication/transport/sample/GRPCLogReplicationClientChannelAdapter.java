@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.transport.sample;
 
+import io.grpc.Context;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
@@ -55,12 +56,14 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     @Getter
     volatile CompletableFuture<Void> connectionFuture;
 
+    Context context;
+
     /** Construct client for accessing LogReplicationService server using the existing channel. */
     public GRPCLogReplicationClientChannelAdapter(
             String localClusterId,
             ClusterDescriptor remoteClusterDescriptor,
-            LogReplicationSourceClientRouter adapter, LogReplicationSinkClientRouter sinkRouter ) {
-        super(localClusterId, remoteClusterDescriptor, adapter, sinkRouter);
+            LogReplicationSourceClientRouter sourceRouter, LogReplicationSinkClientRouter sinkRouter ) {
+        super(localClusterId, remoteClusterDescriptor, sourceRouter, sinkRouter);
 
         this.channelMap = new HashMap<>();
         this.blockingStubMap = new HashMap<>();
@@ -69,6 +72,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         this.connectionFuture = new CompletableFuture<>();
         this.requestObserverMap = new ConcurrentHashMap<>();
         this.responseObserverMap = new ConcurrentHashMap<>();
+        context = Context.current();
     }
 
     @Override
@@ -80,6 +84,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 log.info("GRPC create connection to node{}@{}:{}", node.getNodeId(), nodeLocator.getHost(), nodeLocator.getPort());
                 ManagedChannel channel = ManagedChannelBuilder.forAddress(nodeLocator.getHost(), nodeLocator.getPort())
                         .usePlaintext()
+                        .idleTimeout(30, TimeUnit.MINUTES)
                         .build();
                 channelMap.put(node.getNodeId(), channel);
                 blockingStubMap.put(node.getNodeId(), LogReplicationChannelGrpc.newBlockingStub(channel));
@@ -140,7 +145,62 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     }
 
     @Override
-    public void send(String nodeId, ResponseMsg response) {}
+    public void send(String nodeId, ResponseMsg response) {
+        if(nodeId == null) {
+            nodeId = this.getSinkRouter().getRemoteLeaderNodeId().get();
+        }
+        long requestId = response.getHeader().getRequestId();
+        if (!responseObserverMap.containsKey(requestId)) {
+            // Shama : No action. The below is what to do with the requests received from SOURCE
+            StreamObserver<RequestMsg> requestObserver = new StreamObserver<RequestMsg>() {
+                @Override
+                public void onNext(RequestMsg request) {
+                    try {
+                        log.info("Received request {}", request.getHeader().getRequestId());
+                        log.info("Shama: request {}", request);
+                        receive(request);
+                    } catch (Exception e) {
+                        log.error("Caught exception while receiving Requests", e);
+                        getSinkRouter().completeExceptionally(request.getHeader().getRequestId(), e);
+                        responseObserverMap.remove(requestId);
+                    }
+                }
+
+                @Override
+                public void onError(Throwable t) {
+                    log.error("Error from response observer", t);
+                    getSinkRouter().completeExceptionally(requestId, t);
+                    responseObserverMap.remove(requestId);
+                }
+
+                @Override
+                public void onCompleted() {
+                    log.info("Completed");
+                    responseObserverMap.remove(requestId);
+                }
+            };
+
+            requestObserverMap.put(requestId, requestObserver);
+
+            log.info("Initiate stub for replication");
+
+            if(asyncStubMap.containsKey(nodeId)) {
+                StreamObserver<ResponseMsg> responseObserver = asyncStubMap.get(nodeId).subscribeAndStartreplication(requestObserver);
+                responseObserverMap.put(requestId, responseObserver);
+            } else {
+                log.error("No stub found for remote node {}@{}. Message dropped type={}",
+                        nodeId, getRemoteClusterDescriptor().getEndpointByNodeId(nodeId),
+                        response.getPayload().getPayloadCase());
+            }
+        }
+
+        log.info("response: {}", response);
+        log.info("Send msgId: {} to node {}@{}", response.getHeader().getRequestId(), nodeId, getRemoteClusterDescriptor().getEndpointByNodeId(nodeId));
+        if (requestObserverMap.containsKey(requestId)) {
+            // Send negotiation and log replication ACKs across channel
+            responseObserverMap.get(requestId).onNext(response);
+        }
+    }
 
     private void queryLeadership(String nodeId, RequestMsg request) {
         try {

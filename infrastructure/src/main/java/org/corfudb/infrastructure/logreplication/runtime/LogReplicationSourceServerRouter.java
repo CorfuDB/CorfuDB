@@ -51,9 +51,6 @@ import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 @Slf4j
 public class LogReplicationSourceServerRouter extends LogReplicationSourceRouterHelper implements IServerRouter {
 
-    @Getter
-    private IServerChannelAdapter serverAdapter;
-
     /**
      * This map stores the mapping from message type to netty server handler.
      */
@@ -66,6 +63,12 @@ public class LogReplicationSourceServerRouter extends LogReplicationSourceRouter
     @Setter
     private volatile long serverEpoch;
 
+    /**
+     * This map stores the mapping from message type to netty server handler.
+     */
+    private final Map<CorfuMessage.RequestPayloadMsg.PayloadCase, AbstractServer> msgHandlerMap;
+
+
     /** The {@link AbstractServer}s this {@link LogReplicationSourceServerRouter} routes messages for. */
 //    final List<AbstractServer> servers;
 
@@ -74,19 +77,19 @@ public class LogReplicationSourceServerRouter extends LogReplicationSourceRouter
      */
     public LogReplicationSourceServerRouter(ClusterDescriptor remoteCluster, String localClusterId,
                                             LogReplicationRuntimeParameters parameters, CorfuReplicationManager replicationManager,
-                                            ReplicationSession session, BaseServer baseServer) {
+                                            ReplicationSession session, Map<Class, AbstractServer> serverMap) {
         super(remoteCluster, localClusterId, parameters, replicationManager, session, false);
-        this.serverEpoch = baseServer.serverContext.getServerEpoch();
+        this.serverEpoch = ((BaseServer) serverMap.get(BaseServer.class)).serverContext.getServerEpoch();
 //        this.servers = ImmutableList.copyOf(servers);
-//        this.handlerMap = new EnumMap<>(CorfuMessage.RequestPayloadMsg.PayloadCase.class);
+        this.msgHandlerMap = new EnumMap<>(CorfuMessage.RequestPayloadMsg.PayloadCase.class);
 
-//        servers.forEach(server -> {
-//            try {
-//                server.getHandlerMethods().getHandledTypes().forEach(x -> handlerMap.put(x, server));
-//            } catch (UnsupportedOperationException ex) {
-//                log.trace("No registered CorfuMsg handler for server {}", server, ex);
-//            }
-//        });
+        serverMap.values().forEach(server -> {
+            try {
+                server.getHandlerMethods().getHandledTypes().forEach(x -> msgHandlerMap.put(x, server));
+            } catch (UnsupportedOperationException ex) {
+                log.trace("No registered CorfuMsg handler for server {}", server, ex);
+            }
+        });
 
         // create an adapter and set it
 //        this.serverAdapter = getAdapter(baseServer.serverContext);
@@ -94,7 +97,7 @@ public class LogReplicationSourceServerRouter extends LogReplicationSourceRouter
     }
 
     public void setAdapter(IServerChannelAdapter serverAdapter) {
-        this.serverAdapter = serverAdapter;
+        this.setServerChannelAdapter(serverAdapter);
     }
 
 //    private IServerChannelAdapter getAdapter(ServerContext serverContext) {
@@ -117,10 +120,10 @@ public class LogReplicationSourceServerRouter extends LogReplicationSourceRouter
 
     @Override
     public void sendResponse(CorfuMessage.ResponseMsg response, ChannelHandlerContext ctx) {
-        log.trace("Ready to send response {}", response.getPayload().getPayloadCase());
+        log.info("Ready to send response {}", response.getPayload().getPayloadCase());
         try {
-            serverAdapter.send(response);
-            log.trace("Sent response: {}", response);
+            this.serverChannelAdapter.send(response);
+            log.info("Sent response: {}", response);
         } catch (IllegalArgumentException e) {
             log.warn("Illegal response type. Ignoring message.", e);
         }
@@ -144,18 +147,37 @@ public class LogReplicationSourceServerRouter extends LogReplicationSourceRouter
     // ================================================
 
     /**
-     * Receive messages from the 'custom' serverAdapter implementation. This message will be forwarded
-     * for processing.
+     * When the SOURCE is the connection endpoint, the only request it can receive is the leadership_Query.
+     * This request is received and passed to an appropriate handler.
      *
      * @param message
      */
     public void receive(CorfuMessage.RequestMsg message) {
-        // Shama: you get the leadership request here.
-        log.info("Received message {}. Starting FSM", message.getPayload().getPayloadCase());
+        log.info("Received message {}.", message.getPayload().getPayloadCase());
 
-        //Shama start FSM
-        if (validateEpoch(message.getHeader())) {
-            this.startReplication(nodeId);
+        AbstractServer handler = msgHandlerMap.get(message.getPayload().getPayloadCase());
+        if (handler == null) {
+            // The message was unregistered, we are dropping it.
+            log.warn("Received unregistered message {}, dropping", message);
+        } else {
+            if (validateEpoch(message.getHeader())) {
+                // Route the message to the handler.
+                if (log.isTraceEnabled()) {
+                    log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(), message);
+                }
+
+                try {
+                    handler.handleMessage(message, null, this);
+                } catch (Throwable t) {
+                    log.error("channelRead: Handling {} failed due to {}:{}",
+                            message.getPayload().getPayloadCase(),
+                            t.getClass().getSimpleName(),
+                            t.getMessage(),
+                            t);
+                }
+                String remoteLeaderId = message.getPayload().getLrLeadershipQuery().getSessionInfo().getLocalClusterId();
+                runtimeFSM.setRemoteLeaderNodeId(remoteLeaderId);
+            }
         }
     }
 
@@ -166,11 +188,15 @@ public class LogReplicationSourceServerRouter extends LogReplicationSourceRouter
      * @param message
      */
     public void receive(CorfuMessage.ResponseMsg message) {
-        log.trace("Received message {}", message.getPayload().getPayloadCase());
+        log.info("Received message {}", message.getPayload().getPayloadCase());
 
-        //Shama start FSM
         if (validateEpoch(message.getHeader())) {
-//            this.startReplication(nodeId);
+            if(message.getPayload().getPayloadCase().equals(CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_SUBSCRIBE_REQUEST)) {
+                this.startReplication(runtimeFSM.getRemoteLeaderNodeId().get());
+            } else {
+                super.receive(message);
+            }
+
         }
     }
 

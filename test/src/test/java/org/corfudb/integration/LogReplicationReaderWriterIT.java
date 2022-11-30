@@ -267,7 +267,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     public static void readSnapLogMsgs(List<LogReplicationEntryMsg> msgQ, Set<String> streams, CorfuRuntime rt, boolean blockOnSem)  {
         int cnt = 0;
         ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
+            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID, SOURCE_CLUSTER_ID);
         Map<ReplicationSubscriber, Set<String>> streamsMap = new HashMap<>();
         streamsMap.put(replicationSession.getSubscriber(), streams);
 
@@ -301,7 +301,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
     public static void writeSnapLogMsgs(List<LogReplicationEntryMsg> msgQ, Set<String> streams, CorfuRuntime rt) {
         ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
+            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID, SOURCE_CLUSTER_ID);
         Map<ReplicationSubscriber, Set<String>> streamsMap = new HashMap<>();
         streamsMap.put(replicationSession.getSubscriber(), streams);
         LogReplicationConfig config = new LogReplicationConfig(streamsMap, BATCH_SIZE, MAX_MSG_SIZE);
@@ -332,7 +332,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     public static void readLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, Set<String> streams, CorfuRuntime rt,
         boolean blockOnce) throws TrimmedException {
         ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
+            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID, SOURCE_CLUSTER_ID);
         Map<ReplicationSubscriber, Set<String>> streamsMap = new HashMap<>();
         streamsMap.put(replicationSession.getSubscriber(), streams);
         LogReplicationConfig config = new LogReplicationConfig(streamsMap, BATCH_SIZE, MAX_MSG_SIZE);
@@ -366,7 +366,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
 
     public static void writeLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, Set<String> streams, CorfuRuntime rt) {
         ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
+            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID, SOURCE_CLUSTER_ID);
         Map<ReplicationSubscriber, Set<String>> streamsMap = new HashMap<>();
         streamsMap.put(replicationSession.getSubscriber(), streams);
         LogReplicationConfig config = new LogReplicationConfig(streamsMap);

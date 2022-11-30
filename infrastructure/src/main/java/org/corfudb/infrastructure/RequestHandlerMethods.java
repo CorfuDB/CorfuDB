@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
+import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
@@ -166,7 +167,10 @@ public class RequestHandlerMethods {
         String timerName = getTimerName(type);
         // Register the handler. Depending on metrics collection configuration by MetricsUtil,
         // handler will be instrumented by the metrics context.
-        return (req, ctx, r) -> MicroMeterUtils.time(() -> handler.handle(req, ctx, r), timerName);
+        return (req, ctx, r) -> MicroMeterUtils.time(() -> {
+            log.info("Shama in generateConditionalHandler payLoadCase {} handler {}", type, handler);
+            handler.handle(req, ctx, r);
+        }, timerName);
     }
 
     // Create a timer using cached timer name for the corresponding type

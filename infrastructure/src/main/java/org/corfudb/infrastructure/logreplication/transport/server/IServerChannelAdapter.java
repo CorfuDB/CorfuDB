@@ -6,12 +6,10 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkServerRouter;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceClientRouter;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceServerRouter;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 
-import javax.annotation.Nonnull;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -26,18 +24,18 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 public abstract class IServerChannelAdapter {
 
-    private final Map<ReplicationSession, LogReplicationSourceServerRouter> sourceServerRouter;
-    private final Map<ReplicationSession, LogReplicationSinkServerRouter> sinkServerRouter;
+    private final Map<ReplicationSession, LogReplicationSourceServerRouter> sesionToSourceServerRouter;
+    private final Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServerRouter;
 
     @Getter
     private final ServerContext serverContext;
 
     public IServerChannelAdapter(ServerContext serverContext,
-                                 Map<ReplicationSession, LogReplicationSourceServerRouter> sourceServerRouter,
-                                 Map<ReplicationSession, LogReplicationSinkServerRouter> sinkServerRouter) {
+                                 Map<ReplicationSession, LogReplicationSourceServerRouter> sesionToSourceServerRouter,
+                                 Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServerRouter) {
         this.serverContext = serverContext;
-        this.sourceServerRouter = sourceServerRouter;
-        this.sinkServerRouter = sinkServerRouter;
+        this.sesionToSourceServerRouter = sesionToSourceServerRouter;
+        this.sessionToSinkServerRouter = sessionToSinkServerRouter;
     }
 
     /**
@@ -68,10 +66,10 @@ public abstract class IServerChannelAdapter {
         } else if (msg.getPayload().getPayloadCase().equals(CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_ENTRY_ACK)) {
             session = convertSessionMsg(msg.getPayload().getLrEntryAck().getMetadata().getSessionInfo());
         }
-        if(sourceServerRouter.containsKey(session)) {
-            sourceServerRouter.get(session).receive(msg);
-        } else if(sinkServerRouter.containsKey(session)){
-            sinkServerRouter.get(session).receive(msg);
+        if(sesionToSourceServerRouter.containsKey(session)) {
+            sesionToSourceServerRouter.get(session).receive(msg);
+        } else if(sessionToSinkServerRouter.containsKey(session)){
+            sessionToSinkServerRouter.get(session).receive(msg);
         }
     }
 
@@ -89,10 +87,10 @@ public abstract class IServerChannelAdapter {
         } else if (msg.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_ENTRY)) {
             session = convertSessionMsg(msg.getPayload().getLrEntry().getMetadata().getSessionInfo());
         }
-        if(sourceServerRouter.containsKey(session)) {
-            sourceServerRouter.get(session).receive(msg);
-        } else if(sinkServerRouter.containsKey(session)){
-            sinkServerRouter.get(session).receive(msg);
+        if(sesionToSourceServerRouter.containsKey(session)) {
+            sesionToSourceServerRouter.get(session).receive(msg);
+        } else if(sessionToSinkServerRouter.containsKey(session)){
+            sessionToSinkServerRouter.get(session).receive(msg);
         }
     }
 
@@ -119,6 +117,6 @@ public abstract class IServerChannelAdapter {
     private ReplicationSession convertSessionMsg(LogReplication.ReplicationSessionMsg sessionMsg) {
         log.info("sessionMsg : {}", sessionMsg);
         ReplicationSubscriber subscriber = new ReplicationSubscriber(sessionMsg.getReplicationModel(), sessionMsg.getClient());
-        return new ReplicationSession(sessionMsg.getRemoteClusterId(), subscriber);
+        return new ReplicationSession(sessionMsg.getRemoteClusterId(), sessionMsg.getLocalClusterId(), subscriber);
     }
 }

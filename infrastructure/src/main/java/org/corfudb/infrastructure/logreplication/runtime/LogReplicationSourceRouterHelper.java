@@ -225,6 +225,8 @@ public class LogReplicationSourceRouterHelper implements IClientRouter {
                         return cf;
                     }
 
+                    log.info("#228, nodeId {}, remoteLeaderId present {}", nodeId, runtimeFSM.getRemoteLeaderNodeId().isPresent());
+                    log.info("remoteLeaderId {}, fsm hash {}", runtimeFSM.getRemoteLeaderNodeId().get(), runtimeFSM.hashCode());
                     // Get Remote Leader
                     if (runtimeFSM.getRemoteLeaderNodeId().isPresent()) {
                         nodeId = runtimeFSM.getRemoteLeaderNodeId().get();
@@ -238,7 +240,7 @@ public class LogReplicationSourceRouterHelper implements IClientRouter {
 
                 // In the case the message is intended for a specific endpoint, we do not
                 // block on connection future, this is the case of leader verification.
-                log.info("Send message to {}, type={}", nodeId, payload.getPayloadCase());
+                log.info("#243 Send message to {}, type={}", nodeId, payload.getPayloadCase());
                 if(isConnectionInitiator) {
                     clientChannelAdapter.send(nodeId, getRequestMsg(header.build(), payload));
                 } else {
@@ -384,6 +386,40 @@ public class LogReplicationSourceRouterHelper implements IClientRouter {
 
     // ---------------------------------------------------------------------------
 
+    /**
+     * Receive Corfu Message from the Channel Adapter for further processing
+     *
+     * @param msg received corfu message
+     */
+    protected void receive(CorfuMessage.ResponseMsg msg) {
+        try {
+            // If it is a Leadership Loss Message re-trigger leadership discovery
+            if (msg.getPayload().getPayloadCase() == CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS) {
+                String nodeId = msg.getPayload().getLrLeadershipLoss().getNodeId();
+                this.runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, nodeId));
+                return;
+            }
+
+            // We get the handler for this message from the map
+            IClient handler = handlerMap.get(msg.getPayload().getPayloadCase());
+
+            if (handler == null) {
+                // The message was unregistered, we are dropping it.
+                log.warn("Received unregistered message {}, dropping", msg);
+            } else {
+                // Route the message to the handler.
+                if (log.isTraceEnabled()) {
+                    log.trace("Message routed to {}: {}",
+                            handler.getClass().getSimpleName(), msg);
+                }
+                handler.handleMessage(msg, null);
+            }
+        } catch (Exception e) {
+            log.error("Exception caught while receiving message of type {}",
+                    msg.getPayload().getPayloadCase(), e);
+        }
+    }
+
 
     /**
      * Verify Message is of valid Log Replication type.
@@ -395,7 +431,6 @@ public class LogReplicationSourceRouterHelper implements IClientRouter {
     }
 
     public void startReplication(String nodeId) {
-        log.info("Connection established to remote node {}", nodeId);
         replicationManager.startRuntime(session);
         log.debug("runtimeFSM started for session {}", session);
         runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_UP, nodeId));

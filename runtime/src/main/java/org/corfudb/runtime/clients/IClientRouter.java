@@ -1,5 +1,6 @@
 package org.corfudb.runtime.clients;
 
+import io.netty.channel.ChannelHandlerContext;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import java.util.concurrent.CompletableFuture;
@@ -122,4 +123,8 @@ public interface IClientRouter {
      * @param timeoutResponse Response timeout in milliseconds.
      */
     void setTimeoutResponse(long timeoutResponse);
+
+    default void sendResponse(CorfuMessage.ResponseMsg response, ChannelHandlerContext ctx) {
+
+    }
 }

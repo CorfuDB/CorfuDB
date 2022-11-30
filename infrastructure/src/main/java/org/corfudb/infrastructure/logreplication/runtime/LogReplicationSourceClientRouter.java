@@ -76,32 +76,7 @@ public class LogReplicationSourceClientRouter extends LogReplicationSourceRouter
      * @param msg received corfu message
      */
     public void receive(CorfuMessage.ResponseMsg msg) {
-        try {
-            // If it is a Leadership Loss Message re-trigger leadership discovery
-            if (msg.getPayload().getPayloadCase() == PayloadCase.LR_LEADERSHIP_LOSS) {
-                String nodeId = msg.getPayload().getLrLeadershipLoss().getNodeId();
-                this.runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, nodeId));
-                return;
-            }
-
-            // We get the handler for this message from the map
-            IClient handler = handlerMap.get(msg.getPayload().getPayloadCase());
-
-            if (handler == null) {
-                // The message was unregistered, we are dropping it.
-                log.warn("Received unregistered message {}, dropping", msg);
-            } else {
-                // Route the message to the handler.
-                if (log.isTraceEnabled()) {
-                    log.trace("Message routed to {}: {}",
-                            handler.getClass().getSimpleName(), msg);
-                }
-                handler.handleMessage(msg, null);
-            }
-        } catch (Exception e) {
-            log.error("Exception caught while receiving message of type {}",
-                    msg.getPayload().getPayloadCase(), e);
-        }
+        super.receive(msg);
     }
 
     public void receive(CorfuMessage.RequestMsg msg) {
@@ -160,6 +135,7 @@ public class LogReplicationSourceClientRouter extends LogReplicationSourceRouter
      */
     @Override
     public synchronized void onConnectionUp(String nodeId) {
+        log.info("Connection established to remote node {}", nodeId);
         this.startReplication(nodeId);
     }
 

@@ -469,7 +469,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         LogEntryReader logEntryReader = new TestLogEntryReader();
         ReplicationSession replicationSession = ReplicationSession.getDefaultReplicationSessionForCluster(
-            TEST_LOCAL_CLUSTER_ID);
+            TEST_LOCAL_CLUSTER_ID, TEST_LOCAL_CLUSTER_ID);
 
         switch(readerImpl) {
             case EMPTY:

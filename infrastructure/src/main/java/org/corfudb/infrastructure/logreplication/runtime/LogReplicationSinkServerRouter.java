@@ -10,6 +10,7 @@ import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
+import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
@@ -38,9 +39,13 @@ public class LogReplicationSinkServerRouter implements IServerRouter {
     @Getter
     private IServerChannelAdapter serverAdapter;
 
+    @Setter
+    IClientChannelAdapter clientAdapter;
+
     /**
      * This map stores the mapping from message type to netty server handler.
      */
+    @Getter
     private final Map<RequestPayloadMsg.PayloadCase, AbstractServer> handlerMap;
 
     /**
@@ -121,7 +126,11 @@ public class LogReplicationSinkServerRouter implements IServerRouter {
     public void sendResponse(ResponseMsg response, ChannelHandlerContext ctx) {
         log.trace("Ready to send response {}", response.getPayload().getPayloadCase());
         try {
-            serverAdapter.send(response);
+//            if(serverAdapter != null) {
+                serverAdapter.send(response);
+//            } else {
+//                clientAdapter.send(null, response);
+//            }
             log.trace("Sent response: {}", response);
         } catch (IllegalArgumentException e) {
             log.warn("Illegal response type. Ignoring message.", e);
@@ -180,8 +189,6 @@ public class LogReplicationSinkServerRouter implements IServerRouter {
 
     public void receive(ResponseMsg message) {
         // no op.
-
-        // Shama: now may reveice msg -> leadership msg.
     }
 
     /**
@@ -192,7 +199,7 @@ public class LogReplicationSinkServerRouter implements IServerRouter {
      * @param header The incoming header to validate.
      * @return True, if the epoch is correct, but false otherwise.
      */
-    private boolean validateEpoch(HeaderMsg header) {
+    protected boolean validateEpoch(HeaderMsg header) {
         long serverEpoch = getServerEpoch();
         if (!header.getIgnoreEpoch() && header.getEpoch()!= serverEpoch) {
             log.trace("Incoming message with wrong epoch, got {}, expected {}",

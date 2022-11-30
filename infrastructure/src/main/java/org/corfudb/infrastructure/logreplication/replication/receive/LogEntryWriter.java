@@ -126,6 +126,8 @@ public class LogEntryWriter extends SinkWriter {
 
                     for (SMREntry smrEntry : smrEntries) {
                         // If stream tags exist for the current stream, it means its intended for streaming on the Sink (receiver)
+                        log.info("writting to streamId {}", streamId);
+                        log.info("maybe name: {}", streamMap.get(streamId));
                         txnContext.logUpdate(streamId, smrEntry, dataStreamToTagsMap.get(streamId));
                     }
                 }

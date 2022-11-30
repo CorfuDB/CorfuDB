@@ -17,6 +17,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
@@ -52,6 +53,8 @@ public class LogReplicationServer extends AbstractServer {
     // node id should be the only identifier for a node in the topology
     private String localNodeId;
 
+    private String localClusterId;
+
     private final ExecutorService executor;
 
     private static final String EXECUTOR_NAME_PREFIX = "LogReplicationServer-";
@@ -72,8 +75,10 @@ public class LogReplicationServer extends AbstractServer {
 
     public LogReplicationServer(@Nonnull ServerContext context, String localNodeId, LogReplicationConfig config,
                                 String localEndpoint, long topologyConfigId,
-                                Map<ReplicationSession, LogReplicationMetadataManager> sourceSessionToMetadataManagerMap) {
+                                Map<ReplicationSession, LogReplicationMetadataManager> sourceSessionToMetadataManagerMap,
+                                String localClusterId) {
         this.localNodeId = localNodeId;
+        this.localClusterId = localClusterId;
         createSinkManagers(config, localEndpoint, context, sourceSessionToMetadataManagerMap, topologyConfigId);
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
@@ -109,6 +114,11 @@ public class LogReplicationServer extends AbstractServer {
         executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
     }
 
+//    @Override
+//    protected void processLrRequest(RequestMsg req, ChannelHandlerContext ctx, IClientRouter r) {
+//        executor.submit(() -> getHandlerMethods().handleLrRequest(req, ctx, r));
+//    }
+
     @Override
     public void shutdown() {
         super.shutdown();
@@ -138,7 +148,7 @@ public class LogReplicationServer extends AbstractServer {
             // Get the Sink Manager corresponding to the remote cluster session
             String sourceClusterId = getUUID(request.getHeader().getClusterId()).toString();
             LogReplicationSinkManager sinkManager = sourceSessionToSinkManagerMap.get(
-                ReplicationSession.getDefaultReplicationSessionForCluster(sourceClusterId));
+                ReplicationSession.getDefaultReplicationSessionForCluster(sourceClusterId, localClusterId));
 
             // If no sink Manager is found, drop the message and log an error
             if (sinkManager == null) {
@@ -188,12 +198,15 @@ public class LogReplicationServer extends AbstractServer {
         if (isLeader.get()) {
             String sourceClusterId = getUUID(request.getHeader().getClusterId()).toString();
             ReplicationSession sourceSession = ReplicationSession
-                .getDefaultReplicationSessionForCluster(sourceClusterId);
+                .getDefaultReplicationSessionForCluster(sourceClusterId, localClusterId);
 
             LogReplicationSinkManager sinkManager = sourceSessionToSinkManagerMap.get(sourceSession);
 
             // If no sink Manager is found, drop the message and log an error
             if (sinkManager == null) {
+                log.info("sourceSessionToSinkManagerMap {}", sourceSessionToSinkManagerMap);
+                log.info("sourceSession {}", sourceSession);
+                log.info("req: {}", request);
                 log.error("Sink Manager not found for remote cluster {}.  This could be due to a topology mismatch.",
                     getUUID(request.getHeader().getClusterId()).toString());
                 return;

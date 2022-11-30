@@ -31,7 +31,7 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
     /*
      * GRPC Service Stub
      */
-    private final GRPCLogReplicationSinkServerHandler service;
+    private final GRPCLogReplicationServerHandler service;
 
     private CompletableFuture<Boolean> serverCompletable;
 
@@ -39,7 +39,7 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
                                                   Map<ReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServer,
                                                   Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServer) {
         super(serverContext, sessionToSourceServer, sessionToSinkServer);
-        this.service = new GRPCLogReplicationSinkServerHandler(sessionToSourceServer, sessionToSinkServer);
+        this.service = new GRPCLogReplicationServerHandler(sessionToSourceServer, sessionToSinkServer);
         this.port = Integer.parseInt((String) serverContext.getServerConfig().get("<port>"));
         this.server = ServerBuilder.forPort(port).addService(service).build();
     }
@@ -52,7 +52,8 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
 
     @Override
     public void send(String nodeId, CorfuMessage.RequestMsg msg) {
-        log.info("Server send message {}", msg.getPayload().getPayloadCase());
+        log.info("Server send Request message {}", msg.getPayload().getPayloadCase());
+        service.send(msg);
     }
 
     @Override

@@ -125,6 +125,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
                 .setSnapshotSyncSeqNum(sequence)
                 .setSessionInfo(LogReplication.ReplicationSessionMsg.newBuilder()
                         .setRemoteClusterId(this.replicationSession.getRemoteClusterId())
+                        .setLocalClusterId(this.replicationSession.getLocalClusterId())
                         .setClient(this.replicationSession.getSubscriber().getClient())
                         .setReplicationModel(this.replicationSession.getSubscriber().getReplicationModel())
                         .build())

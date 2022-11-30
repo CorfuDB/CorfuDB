@@ -209,6 +209,12 @@ public class LogReplicationMetadataManager {
                 .setSnapshotStart(getLastStartedSnapshotTimestamp())
                 .setSnapshotTransferred(getLastTransferredSnapshotTimestamp())
                 .setSnapshotApplied(getLastAppliedSnapshotTimestamp())
+                .setSessionInfo(LogReplication.ReplicationSessionMsg.newBuilder()
+                        .setRemoteClusterId(replicationSession.getRemoteClusterId())
+                        .setLocalClusterId(replicationSession.getLocalClusterId())
+                        .setClient(replicationSession.getSubscriber().getClient())
+                        .setReplicationModel(replicationSession.getSubscriber().getReplicationModel())
+                        .build())
                 .setLastLogEntryTimestamp(getLastProcessedLogEntryTimestamp()).build();
         CorfuMessage.ResponsePayloadMsg payload = CorfuMessage.ResponsePayloadMsg.newBuilder()
                 .setLrMetadataResponse(metadataMsg).build();
@@ -799,6 +805,7 @@ public class LogReplicationMetadataManager {
     private LogReplication.ReplicationSessionMsg buildReplicationStatusKey(ReplicationSession session) {
         return LogReplication.ReplicationSessionMsg.newBuilder()
                 .setRemoteClusterId(session.getRemoteClusterId())
+                .setLocalClusterId(session.getLocalClusterId())
                 .setClient(session.getSubscriber().getClient())
                 .setReplicationModel(session.getSubscriber().getReplicationModel())
                 .build();

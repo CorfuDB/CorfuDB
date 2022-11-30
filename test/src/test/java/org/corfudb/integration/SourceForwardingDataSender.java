@@ -107,7 +107,7 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
         this.destinationDataControl = new DefaultDataControl(new DefaultDataControlConfig(
             false, 0));
         ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(testConfig.getRemoteClusterId());
+            ReplicationSession.getDefaultReplicationSessionForCluster(testConfig.getRemoteClusterId(), testConfig.getRemoteClusterId());
         this.destinationLogReplicationManager = new LogReplicationSinkManager(runtime.getLayoutServers().get(0), config,
             metadataManager, pluginConfigFilePath, replicationSession);
         this.ifDropMsg = testConfig.getDropMessageLevel();

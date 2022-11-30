@@ -41,7 +41,7 @@ import static org.mockito.Mockito.verify;
 @Slf4j
 public class LogReplicationClientTest {
 
-    private final static String SAMPLE_CLUSTER = "CLUSTER";
+    public final static String SAMPLE_CLUSTER = "CLUSTER";
     private final static String PLUGIN_PATH = "pluginPath";
 
     LogReplicationSourceClientRouter lrClient;
@@ -59,7 +59,7 @@ public class LogReplicationClientTest {
         ClusterDescriptor sampleCluster = new ClusterDescriptor(SAMPLE_CLUSTER);
         doReturn(sampleCluster).when(lrRuntimeParameters).getRemoteClusterDescriptor();
         CorfuReplicationManager replicationManager = mock(CorfuReplicationManager.class);
-        ReplicationSession session = ReplicationSession.getDefaultReplicationSessionForCluster(SAMPLE_CLUSTER);
+        ReplicationSession session = ReplicationSession.getDefaultReplicationSessionForCluster(SAMPLE_CLUSTER, SAMPLE_CLUSTER);
 
         Map<ReplicationSession, CorfuLogReplicationRuntime> mockedSessionToFsm = new HashMap<>();
         mockedSessionToFsm.put(session, lrFsm);

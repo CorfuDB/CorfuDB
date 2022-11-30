@@ -81,8 +81,17 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
         log.debug("onEntry :: Verifying Remote Leader, transition from {}", from.getType());
         log.trace("Submitted tasks to worker :: size={} activeCount={} taskCount={}", worker.getQueue().size(),
                 worker.getActiveCount(), worker.getTaskCount());
-        // Verify Leadership on connected nodes (ignore those for which leadership is pending)
-        this.worker.submit(this::verifyLeadership);
+
+        if (fsm.getRemoteLeaderNodeId().isPresent()) {
+            fsm.input(new LogReplicationRuntimeEvent(
+                    LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_FOUND,
+                    fsm.getRemoteLeaderNodeId().get())
+            );
+            log.debug("Exit :: leadership verification");
+        } else {
+            // Verify Leadership on connected nodes (ignore those for which leadership is pending)
+            this.worker.submit(this::verifyLeadership);
+        }
     }
 
 
@@ -111,6 +120,7 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
                         ReplicationSession session = router.getSession();
                         LogReplication.ReplicationSessionMsg sessionMsg = LogReplication.ReplicationSessionMsg.newBuilder()
                                 .setRemoteClusterId(session.getRemoteClusterId())
+                                .setLocalClusterId(session.getLocalClusterId())
                                 .setClient(session.getSubscriber().getClient())
                                 .setReplicationModel(session.getSubscriber().getReplicationModel())
                                 .build();

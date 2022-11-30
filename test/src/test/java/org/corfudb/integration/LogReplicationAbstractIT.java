@@ -336,7 +336,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         assertThat(replicationStatusVal.getRemainingEntriesToSend()).isEqualTo(0);
     }
 
-    private void verifyReplicationStatusFromSource() throws Exception {
+    protected void verifyReplicationStatusFromSource() throws Exception {
         Table<LogReplicationMetadata.ReplicationStatusKey,
             LogReplicationMetadata.ReplicationStatusVal,
             LogReplicationMetadata.ReplicationStatusVal> replicationStatusTable =
@@ -443,6 +443,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
                     if (this.waitSnapshotStatusComplete && statusVal.getSnapshotSyncInfo().getStatus().equals(LogReplicationMetadata.SyncStatus.COMPLETED)) {
                         countDownLatch.countDown();
                     }
+                    System.out.println("Status : "+ statusVal.getStatus() +" "+statusVal.getSyncType());
             }));
             countDownLatch.countDown();
         }

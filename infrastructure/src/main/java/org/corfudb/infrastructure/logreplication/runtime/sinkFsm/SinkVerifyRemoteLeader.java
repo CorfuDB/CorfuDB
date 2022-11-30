@@ -118,6 +118,10 @@ public class SinkVerifyRemoteLeader {
                 updateConnectedNodes(event.getNodeId());
                 verifyLeadership();
                 break;
+            case REMOTE_LEADER_FOUND:
+                log.debug("Remote Leader is found: {}", event.getNodeId());
+                setupReplicationStream();
+                break;
             default: {
                 log.warn("Unexpected communication event {}", event.getType());
             }
@@ -167,6 +171,7 @@ public class SinkVerifyRemoteLeader {
                     // Check Leadership
                     LogReplication.ReplicationSessionMsg sessionMsg = LogReplication.ReplicationSessionMsg.newBuilder()
                             .setRemoteClusterId(session.getRemoteClusterId())
+                            .setLocalClusterId(session.getLocalClusterId())
                             .setClient(session.getSubscriber().getClient())
                             .setReplicationModel(session.getSubscriber().getReplicationModel())
                             .build();
@@ -199,6 +204,7 @@ public class SinkVerifyRemoteLeader {
                         pendingLeadershipQueries.clear();
 
                         // A new leader has been found,
+                        input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_FOUND, leader));
                         log.debug("Exit :: leadership verification");
                         return;
                     } else {
@@ -221,6 +227,25 @@ public class SinkVerifyRemoteLeader {
         }
 
         log.debug("Exit :: leadership verification");
+    }
+
+    private void setupReplicationStream() {
+        LogReplication.ReplicationSessionMsg sessionMsg = LogReplication.ReplicationSessionMsg.newBuilder()
+                .setRemoteClusterId(session.getRemoteClusterId())
+                .setLocalClusterId(router.getLocalClusterId())
+                .setClient(session.getSubscriber().getClient())
+                .setReplicationModel(session.getSubscriber().getReplicationModel())
+                .build();
+        CorfuMessage.ResponsePayloadMsg payload =
+                CorfuMessage.ResponsePayloadMsg.newBuilder().setLrSubscribeRequest(
+                        LogReplication.LogReplicationSubscribeMsg
+                                .newBuilder()
+                                .setSessionInfo(sessionMsg)
+                                .build()
+                ).build();
+
+        log.info("Sending the subscribe msg {}", payload);
+        router.sendResponse(payload, getRemoteLeaderNodeId().get());
     }
 
 }

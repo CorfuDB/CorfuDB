@@ -234,7 +234,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         dstTestRuntime.connect();
 
         this.replicationSession =
-                ReplicationSession.getDefaultReplicationSessionForCluster(REMOTE_CLUSTER_ID);
+                ReplicationSession.getDefaultReplicationSessionForCluster(REMOTE_CLUSTER_ID, SOURCE_CLUSTER_ID);
         logReplicationMetadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0, replicationSession);
         expectedAckTimestamp = new AtomicLong(Long.MAX_VALUE);
         testConfig.clear().setRemoteClusterId(REMOTE_CLUSTER_ID);
@@ -1368,7 +1368,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private LogReplicationSourceManager setupSourceManagerAndObservedValues(Set<String> tablesToReplicate,
         Set<WAIT> waitConditions, TransitionSource function) throws InterruptedException {
         ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(REMOTE_CLUSTER_ID);
+            ReplicationSession.getDefaultReplicationSessionForCluster(REMOTE_CLUSTER_ID, SOURCE_CLUSTER_ID);
 
         Map<ReplicationSubscriber, Set<String>> tablesMap = new HashMap<>();
         tablesMap.put(replicationSession.getSubscriber(), tablesToReplicate);
