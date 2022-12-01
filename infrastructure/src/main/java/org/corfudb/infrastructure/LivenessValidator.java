@@ -72,6 +72,7 @@ public class LivenessValidator {
 
     public boolean isTableCheckpointActive(TableName table, Duration currentTime) {
         livenessValidatorHelper.clear();
+        log.trace("Checking if table checkpoint is active...");
         if (validateLivenessMap.containsKey(table)) {
             LivenessMetadata previousStatus = validateLivenessMap.get(table);
             return isTailMovingForward(table, currentTime) || isHeartBeatMovingForward(table, currentTime) ||
@@ -90,6 +91,7 @@ public class LivenessValidator {
                     cpStreamTail, currentTime));
             return true;
         }
+        log.debug("Tail not moving forward for table: {}", table);
         return false;
     }
 
@@ -101,6 +103,7 @@ public class LivenessValidator {
                     previousStatus.getStreamTail(), currentTime));
             return true;
         }
+        log.debug("HeartBeat not moving forward for table: {}", table);
         return false;
     }
 
@@ -154,8 +157,9 @@ public class LivenessValidator {
                     CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload());
             txn.commit();
+            log.trace("ManagerStatus: {}", managerStatus.get().getStatus().toString());
         } catch (Exception e) {
-            log.warn("Unable to acquire Manager Status");
+            log.warn("Unable to acquire Manager Status, ", e);
         }
 
         boolean isTimedOut = currentTime.minus(livenessValidatorHelper.getPrevActiveTime()).compareTo(timeout) > 0;
