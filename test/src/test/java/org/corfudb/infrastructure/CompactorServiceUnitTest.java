@@ -9,6 +9,7 @@ import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.concurrent.SingletonResource;
 import org.junit.Before;
@@ -121,6 +122,40 @@ public class CompactorServiceUnitTest {
         }
 
         verify(leaderServices).validateLiveness();
+        verify(leaderServices).initCompactionCycle();
+        verify(invokeCheckpointingJvm, times(1)).shutdown();
+    }
+
+    @Test
+    public void runOrchestratorSchedulerTest() {
+        Layout mockLayout = mock(Layout.class);
+        CompletableFuture invalidateLayoutFuture = mock(CompletableFuture.class);
+        when(corfuRuntime.invalidateLayout()).thenReturn(invalidateLayoutFuture);
+        when(invalidateLayoutFuture.join())
+                .thenThrow(new UnrecoverableCorfuInterruptedError(new InterruptedException()))
+                .thenReturn(mockLayout);
+        when(mockLayout.getPrimarySequencer()).thenReturn(NODE_ENDPOINT);
+
+        when((CheckpointingStatus) corfuStoreEntry.getPayload())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
+        when(dynamicTriggerPolicy.shouldTrigger(Matchers.anyLong(), Matchers.any(CorfuStore.class))).thenReturn(true).thenReturn(false);
+        doNothing().when(leaderServices).validateLiveness();
+        doReturn(CompactorLeaderServices.LeaderInitStatus.SUCCESS).when(leaderServices).initCompactionCycle();
+        when(invokeCheckpointingJvm.isRunning())
+                .thenReturn(false).thenReturn(true);
+        when(invokeCheckpointingJvm.isInvoked()).thenReturn(false).thenReturn(true);
+
+        while (true) {
+            try {
+                TimeUnit.SECONDS.sleep(SLEEP_WAIT);
+                break;
+            } catch (InterruptedException e) {
+                //sleep gets interrupted on throwable, hence the loop
+                log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
+            }
+        }
+
         verify(leaderServices).initCompactionCycle();
         verify(invokeCheckpointingJvm, times(1)).shutdown();
     }

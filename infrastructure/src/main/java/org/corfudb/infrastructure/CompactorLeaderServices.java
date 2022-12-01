@@ -118,6 +118,7 @@ public class CompactorLeaderServices {
             syslog.error("Exception while initiating Compaction cycle {}. Stack Trace {}", e, e.getStackTrace());
             return LeaderInitStatus.FAIL;
         }
+        syslog.info("Init compaction cycle is successful");
         return LeaderInitStatus.SUCCESS;
     }
 
@@ -142,6 +143,7 @@ public class CompactorLeaderServices {
             LivenessValidator.Status statusToChange = livenessValidator.shouldChangeManagerStatus(
                     Duration.ofMillis(currentTime));
             if (statusToChange == LivenessValidator.Status.FINISH) {
+                syslog.info("Invoking finishCompactionCycle");
                 finishCompactionCycle();
                 livenessValidator.clearLivenessMap();
                 livenessValidator.clearLivenessValidator();
