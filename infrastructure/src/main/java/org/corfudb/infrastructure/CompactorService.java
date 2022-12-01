@@ -2,6 +2,7 @@ package org.corfudb.infrastructure;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import lombok.extern.slf4j.Slf4j;
 import lombok.NonNull;
 import org.corfudb.infrastructure.health.Component;
 import org.corfudb.infrastructure.health.HealthMonitor;
@@ -15,8 +16,6 @@ import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.LambdaUtils;
 import org.corfudb.util.concurrent.SingletonResource;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.Optional;
@@ -31,6 +30,7 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  * <p>
  * Created by Sundar Sridharan on 3/2/22.
  */
+@Slf4j
 public class CompactorService implements ManagementService {
 
     private final ServerContext serverContext;
@@ -42,9 +42,6 @@ public class CompactorService implements ManagementService {
     private Optional<CompactorLeaderServices> compactorLeaderServices = Optional.empty();
     private Optional<CorfuStore> corfuStore = Optional.empty();
     private TrimLog trimLog;
-
-    private final Logger syslog;
-
     private static final Duration LIVENESS_TIMEOUT = Duration.ofMinutes(1);
 
     CompactorService(@NonNull ServerContext serverContext,
@@ -60,7 +57,6 @@ public class CompactorService implements ManagementService {
                         .build());
         this.checkpointerJvmManager = checkpointerJvmManager;
         this.compactionTriggerPolicy = compactionTriggerPolicy;
-        syslog = LoggerFactory.getLogger("syslog");
     }
 
     private CorfuRuntime getCorfuRuntime() {
@@ -68,7 +64,7 @@ public class CompactorService implements ManagementService {
     }
 
     /**
-     * Starts the long running service.
+     * Starts the long-running service.
      *
      * @param interval interval to run the service
      */
@@ -99,7 +95,7 @@ public class CompactorService implements ManagementService {
                         serverContext.getLocalEndpoint(), getCorfuStore(),
                         new LivenessValidator(getCorfuRuntime(), getCorfuStore(), LIVENESS_TIMEOUT)));
             } catch (Exception e) {
-                syslog.error("Unable to create CompactorLeaderServices object. Will retry on next attempt. Exception: ", e);
+                log.error("Unable to create CompactorLeaderServices object. Will retry on next attempt. Exception: ", e);
             }
         }
         return compactorLeaderServices.get();
@@ -180,7 +176,7 @@ public class CompactorService implements ManagementService {
     public void shutdown() {
         checkpointerJvmManager.shutdown();
         orchestratorThread.shutdownNow();
-        syslog.info("Compactor Orchestrator service shutting down.");
+        log.info("Compactor Orchestrator service shutting down.");
         HealthMonitor.reportIssue(Issue.createInitIssue(Component.COMPACTOR));
     }
 }

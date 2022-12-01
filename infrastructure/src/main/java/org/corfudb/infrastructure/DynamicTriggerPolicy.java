@@ -1,27 +1,25 @@
 package org.corfudb.infrastructure;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.DistributedCheckpointerHelper;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.RpcCommon;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
+@Slf4j
 public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
     /**
      * What time did the previous cycle start
      */
     private long lastCompactionCycleStartTS;
-    private final Logger syslog;
 
     public DynamicTriggerPolicy() {
         this.lastCompactionCycleStartTS = System.currentTimeMillis();
-        this.syslog = LoggerFactory.getLogger("syslog");
     }
 
     @Override
@@ -55,12 +53,12 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
     public boolean shouldTrigger(long interval, CorfuStore corfuStore) {
         DistributedCheckpointerHelper distributedCheckpointerHelper = new DistributedCheckpointerHelper(corfuStore);
         if (distributedCheckpointerHelper.isCheckpointFrozen()) {
-            syslog.warn("Compaction has been frozen");
+            log.warn("Compaction has been frozen");
             return false;
         }
 
         if (shouldForceTrigger(corfuStore)) {
-            syslog.info("Force triggering compaction");
+            log.info("Force triggering compaction");
             return true;
         }
 
@@ -68,7 +66,7 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
         final long timeSinceLastCycleMillis = currentTime - lastCompactionCycleStartTS;
 
         if (timeSinceLastCycleMillis > interval) {
-            syslog.info("DynamicTriggerPolicy: Trigger as elapsedTime {} > safeTrimPeriod {}",
+            log.info("DynamicTriggerPolicy: Trigger as elapsedTime {} > safeTrimPeriod {}",
                     TimeUnit.MILLISECONDS.toSeconds(timeSinceLastCycleMillis),
                     TimeUnit.MILLISECONDS.toSeconds(interval));
             return true;

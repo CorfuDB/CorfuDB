@@ -9,12 +9,13 @@ GCParameters:
   GCLogFileSize: 1M
 
 ConfigFiles:
-  CompactorLogPath: /usr/share/corfu/conf/compactor-logback.prod.xml
+  CompactorLogbackPath: /usr/share/corfu/conf/compactor-logback.prod.xml
   TempDir: /image/corfu-tools/temp
   ClassPath: /usr/share/corfu/lib/corfudb-tools*jar
   HeapDumpPath: /image/core/compactor_oom.hprof
 
 CorfuPaths:
+  CompactorLogfile: /var/log/corfu/corfu-compactor-audit.log
   CorfuMemLogPrefix: /dev/shm/corfu.jvm.gc.
   CorfuDiskLogDir: /var/log/corfu/jvm
 

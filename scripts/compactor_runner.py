@@ -19,22 +19,16 @@ import glob
 import logging
 import os
 import os.path
-import re
 import socket
 import struct
 from subprocess import check_call, check_output, STDOUT
-import sys
 import time
 import yaml
 
 CORFU_COMPACTOR_CLASS_NAME = "org.corfudb.compactor.CorfuStoreCompactorMain"
 COMPACTOR_BULK_READ_SIZE = 50
 COMPACTOR_JVM_XMX = 1024
-CORFU_COMPACTOR_LOG = "/var/log/corfu/corfu-compactor.log"
 
-logging.basicConfig(filename=CORFU_COMPACTOR_LOG,
-                    format='%(asctime)s.%(msecs)03dZ %(levelname)5s Runner - %(message)s',
-                    datefmt='%Y-%m-%dT%H:%M:%S')
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
@@ -92,7 +86,7 @@ class CommandBuilder(object):
 
         ConfigFiles = compactor_config["ConfigFiles"]
         cmd.append("-Djava.io.tmpdir=" + ConfigFiles["TempDir"])
-        cmd.append("-Dlogback.configurationFile=" + ConfigFiles["CompactorLogPath"])
+        cmd.append("-Dlogback.configurationFile=" + ConfigFiles["CompactorLogbackPath"])
         cmd.append("-XX:HeapDumpPath=" + ConfigFiles["HeapDumpPath"])
         cmd.append("-XX:OnOutOfMemoryError=\"gzip -f " + ConfigFiles["HeapDumpPath"] + "\"")
 
@@ -213,6 +207,9 @@ class Wizard(object):
         with open(self._config.configPath, "r") as config:
             compactor_config = yaml.load(config)
         corfu_paths = compactor_config["CorfuPaths"]
+        logging.basicConfig(filename=corfu_paths["CompactorLogfile"],
+                                    format='%(asctime)s.%(msecs)03dZ %(levelname)5s Runner - %(message)s',
+                                    datefmt='%Y-%m-%dT%H:%M:%S')
         # Copy mem jvm gc log files to disk
         try:
             self._rsync_log(corfu_paths["CorfuMemLogPrefix"], corfu_paths["CorfuDiskLogDir"])

@@ -1,24 +1,22 @@
 package org.corfudb.infrastructure;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.DistributedCheckpointer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 
+@Slf4j
 public class InvokeCheckpointingJvm implements InvokeCheckpointing {
 
     private static final int MAX_COMPACTION_RETRIES = 8;
     private final ServerContext serverContext;
     private volatile Process checkpointerProcess;
-    private final Logger syslog;
     private volatile boolean isInvoked;
 
     public InvokeCheckpointingJvm(ServerContext serverContext) {
         this.serverContext = serverContext;
-        syslog = LoggerFactory.getLogger("syslog");
     }
 
     @Override
@@ -26,7 +24,7 @@ public class InvokeCheckpointingJvm implements InvokeCheckpointing {
         for (int i = 1; i <= MAX_COMPACTION_RETRIES; i++) {
             try {
                 if (!serverContext.getCompactorScriptPath().isPresent() || !serverContext.getCompactorConfig().isPresent()) {
-                    syslog.warn("Compactor client runner script or config file not found");
+                    log.warn("Compactor client runner script or config file not found");
                     return;
                 }
 
@@ -46,14 +44,14 @@ public class InvokeCheckpointingJvm implements InvokeCheckpointing {
                 pb.redirectError(ProcessBuilder.Redirect.PIPE);
                 this.checkpointerProcess = pb.start();
                 this.isInvoked = true;
-                syslog.info("Triggered compactor jvm");
+                log.info("Triggered compactor jvm");
                 return;
             } catch (RuntimeException re) {
                 if (DistributedCheckpointer.isCriticalRuntimeException(re, i, MAX_COMPACTION_RETRIES)) {
                     break;
                 }
             } catch (IOException io) {
-                syslog.error("Encountered IOException due to : {}. StackTrace: {}", io.getMessage(), io.getStackTrace());
+                log.error("Encountered IOException due to : {}. StackTrace: {}", io.getMessage(), io.getStackTrace());
             }
         }
     }
