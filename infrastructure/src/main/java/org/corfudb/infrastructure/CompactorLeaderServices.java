@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.health.HealthMonitor;
 import org.corfudb.infrastructure.health.Issue;
@@ -15,6 +14,8 @@ import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.proto.RpcCommon;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -31,12 +32,12 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  * 3. Set CompactoinManager's status as COMPLETED or FAILED based on the checkpointing status of all the tables. This
  * marks the end of the compaction cycle
  */
-@Slf4j
 public class CompactorLeaderServices {
     private final CorfuRuntime corfuRuntime;
     private final CorfuStore corfuStore;
     private final String nodeEndpoint;
     private final TrimLog trimLog;
+    private final Logger log;
     private final LivenessValidator livenessValidator;
     private final CompactorMetadataTables compactorMetadataTables;
 
@@ -61,6 +62,7 @@ public class CompactorLeaderServices {
         this.corfuStore = corfuStore;
         this.livenessValidator = livenessValidator;
         this.trimLog = new TrimLog(corfuRuntime, corfuStore);
+        this.log = LoggerFactory.getLogger("compactor-leader");
     }
 
     /**

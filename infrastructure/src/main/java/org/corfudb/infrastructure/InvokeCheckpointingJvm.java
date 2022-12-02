@@ -1,22 +1,24 @@
 package org.corfudb.infrastructure;
 
-import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.DistributedCheckpointer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 
-@Slf4j
 public class InvokeCheckpointingJvm implements InvokeCheckpointing {
 
     private static final int MAX_COMPACTION_RETRIES = 8;
     private final ServerContext serverContext;
     private volatile Process checkpointerProcess;
+    private final Logger log;
     private volatile boolean isInvoked;
 
     public InvokeCheckpointingJvm(ServerContext serverContext) {
         this.serverContext = serverContext;
+        this.log = LoggerFactory.getLogger("compactor-leader");
     }
 
     @Override

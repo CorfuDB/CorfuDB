@@ -1,25 +1,27 @@
 package org.corfudb.infrastructure;
 
-import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.DistributedCheckpointerHelper;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.RpcCommon;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
-@Slf4j
 public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
     /**
      * What time did the previous cycle start
      */
     private long lastCompactionCycleStartTS;
+    private final Logger log;
 
     public DynamicTriggerPolicy() {
         this.lastCompactionCycleStartTS = System.currentTimeMillis();
+        this.log = LoggerFactory.getLogger("compactor-leader");
     }
 
     @Override

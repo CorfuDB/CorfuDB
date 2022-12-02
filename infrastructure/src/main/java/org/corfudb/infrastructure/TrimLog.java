@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
@@ -8,20 +7,23 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.RpcCommon;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
-@Slf4j
 public class TrimLog {
     private final CorfuRuntime corfuRuntime;
     private final CorfuStore corfuStore;
+    private final Logger log;
 
     TrimLog(CorfuRuntime corfuRuntime, CorfuStore corfuStore) {
         this.corfuStore = corfuStore;
         this.corfuRuntime = corfuRuntime;
+        this.log = LoggerFactory.getLogger("compactor-leader");
     }
 
     private Optional<Long> getTrimAddress() {
