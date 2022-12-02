@@ -175,7 +175,7 @@ public class CorfuReplicationBiDirectional extends LogReplicationAbstractIT {
 
         //open Maps
         System.out.println("Open map on Source and Sink");
-        openMaps(2, false);
+        openMaps(1, false);
 
         // Subscribe to replication status table on Sink (to be sure data change on status are captured)
         Table<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, Message> sinkStatusTable =
@@ -211,11 +211,11 @@ public class CorfuReplicationBiDirectional extends LogReplicationAbstractIT {
 
 
         //write to source maps
-        writeToSource(0, 10);
+        writeToSource(0, numWrites);
 
         // Confirm data does exist on Source Cluster
         for(Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapSource.values()) {
-            assertThat(map.count()).isEqualTo(10);
+            assertThat(map.count()).isEqualTo(numWrites);
         }
 
         //validate sink cluster is still empty
@@ -228,7 +228,7 @@ public class CorfuReplicationBiDirectional extends LogReplicationAbstractIT {
 
         //validate that data is replicated
         System.out.println(">> Wait ... Snapshot log replication in progress ...");
-        verifyDataOnSink(10);
+        verifyDataOnSink(numWrites);
         System.out.println("Snapshot completed!. But the latch's value is " + cluster2StatusUpdateLatch.getCount());
 
         // validate the status of replication table. Status -> COMPLETE
@@ -265,11 +265,11 @@ public class CorfuReplicationBiDirectional extends LogReplicationAbstractIT {
 
         log.info(">> Write deltas");
         System.out.println("Write deltas");
-        writeToSource(numWrites, numWrites / 2);
+        writeToSource(numWrites, 5);
 
         log.info(">> Wait ... Delta log replication in progress ...");
         System.out.println("verify deltas");
-        verifyDataOnSink((numWrites + (numWrites / 2)));
+        verifyDataOnSink((numWrites + 5));
 
         assertThat(cluster2SinkListener.getAccumulatedStatus().size()).isEqualTo(3);
         // Confirm last updates are set to true (corresponding to snapshot sync completed and log entry sync started)

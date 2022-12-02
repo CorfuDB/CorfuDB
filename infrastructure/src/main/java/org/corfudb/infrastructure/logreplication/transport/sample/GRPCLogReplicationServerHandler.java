@@ -160,17 +160,18 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
                 long requestId = lrResponseMsg.getHeader().getRequestId();
                 String name = lrResponseMsg.getPayload().getPayloadCase().name();
 //                log.info("#159 Received[{}]: {}", requestId, name);
-//
+
 //                log.info("#161 received is {}", lrResponseMsg);
 
-                ReplicationSession session = convertSessionMsg(null, lrResponseMsg);
+                ReplicationSession sessionFromSink = convertSessionMsg(null, lrResponseMsg);
+                ReplicationSession session = new ReplicationSession(sessionFromSink.getLocalClusterId(),
+                        sessionFromSink.getRemoteClusterId(), sessionFromSink.getSubscriber());
 
                 // For ACKs, the SINK copies the metadata of the lr_msg. Hence convert the incoming session to reflect session as seen by SINK
-                if(lrResponseMsg.getPayload().getPayloadCase().equals(LR_ENTRY_ACK)) {
-                    ReplicationSession ackSession = new ReplicationSession(session.getLocalClusterId(),
-                            session.getRemoteClusterId(), session.getSubscriber());
-                    session = ackSession;
-                }
+//                if(lrResponseMsg.getPayload().getPayloadCase().equals(LR_ENTRY_ACK)) {
+//                    ReplicationSession ackSession =
+//                    session = ackSession;
+//                }
                 // create an outgoing session from incoming session. This will be used to query the streamObserver in the BiDirectional Stream.
                 ReplicationSession observerSession =  new ReplicationSession(session.getLocalClusterId(),
                         session.getRemoteClusterId(), session.getSubscriber());
@@ -217,18 +218,18 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
         // Case: message to send is an ACK (async observers)
         if (msg.getPayload().getPayloadCase().equals(ResponsePayloadMsg.PayloadCase.LR_ENTRY_ACK)) {
             try {
-                log.info("Shama: in send response {}", msg);
-                if (!replicationStreamObserverMap.containsKey(
-                    Pair.of(clusterId, requestId))) {
+//                log.info("Shama: in send response {}", msg);
+                if (!replicationStreamObserverMap.containsKey(Pair.of(clusterId, requestId))) {
                     log.warn("Corfu Message {} has no pending observer. Message {} will not be sent.",
                         msg.getHeader().getRequestId(), msg.getPayload().getPayloadCase().name());
-                    log.info("Stream observers in map: {}", replicationStreamObserverMap.keySet());
+//                    log.info("Stream observers in map: {}", replicationStreamObserverMap.keySet());
                     return;
                 }
 
                 StreamObserver<ResponseMsg> observer = replicationStreamObserverMap.get(Pair.of(clusterId, requestId));
-                log.info("Sending[{}:{}]: {}", clusterId, requestId,
-                    msg.getPayload().getPayloadCase().name());
+                log.info("Sending[{}:{}]: {}", clusterId, requestId, msg.getPayload().getPayloadCase().name());
+                log.info("requestID {}", requestId);
+                log.info("replicationStreamObserverMap {}", replicationStreamObserverMap);
                 observer.onNext(msg);
                 observer.onCompleted();
 
@@ -247,12 +248,12 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
             if (!streamObserverMap.containsKey(Pair.of(clusterId, requestId))) {
                 log.warn("Corfu Message {} has no pending observer. Message {} will not be sent.",
                     requestId, msg.getPayload().getPayloadCase().name());
-                log.info("Stream observers in map: {}", streamObserverMap.keySet());
+//                log.info("Stream observers in map: {}", streamObserverMap.keySet());
                 return;
             }
 
             StreamObserver<ResponseMsg> observer = streamObserverMap.get(Pair.of(clusterId, requestId));
-            log.info("#255 Sending[{}]: {}", requestId, msg.getPayload().getPayloadCase().name());
+//            log.info("#255 Sending[{}]: {}", requestId, msg.getPayload().getPayloadCase().name());
             observer.onNext(msg);
             observer.onCompleted();
 
@@ -269,21 +270,21 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
         if (msg.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_METADATA_REQUEST) ||
                 msg.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_ENTRY)) {
             try {
-                log.info("Shama: in send request {}", msg);
-                log.info("sessionToStreamObserverRequestMap hash {}", sessionToStreamObserverRequestMap.hashCode());
-                log.info("contents of sessionToStreamObserverRequestMap {}", sessionToStreamObserverRequestMap);
+//                log.info("Shama: in send request {}", msg);
+//                log.info("sessionToStreamObserverRequestMap hash {}", sessionToStreamObserverRequestMap.hashCode());
+//                log.info("contents of sessionToStreamObserverRequestMap {}", sessionToStreamObserverRequestMap);
                 ReplicationSession session = convertSessionMsg(msg, null);
-                log.info("looking for {} ", session);
+//                log.info("looking for {} ", session);
                 if (!sessionToStreamObserverRequestMap.containsKey(session)) {
                     log.warn("Corfu Message {} has no pending observer. Message {} will not be sent.",
                             msg.getHeader().getRequestId(), msg.getPayload().getPayloadCase().name());
-                    log.info("Stream observers in map: {}", replicationStreamObserverMap.keySet());
+//                    log.info("Stream observers in map: {}", replicationStreamObserverMap.keySet());
                     return;
                 }
 
                 StreamObserver<RequestMsg> observer = sessionToStreamObserverRequestMap.get(session);
                 log.info("#285 Sending[{}:{}]: {}", clusterId, requestId, msg.getPayload().getPayloadCase().name());
-                log.info("#285 observer from the map {}", observer);
+//                log.info("#285 observer from the map {}", observer);
                 observer.onNext(msg);
 
                 // Remove observer as request was already sent.

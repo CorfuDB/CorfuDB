@@ -4,6 +4,7 @@ import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkClientRouter;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceClientRouter;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 
@@ -53,12 +54,12 @@ public abstract class IClientChannelAdapter {
     /**
      * Connect Asynchronously to all endpoints specified in the Cluster Descriptor.
      */
-    public void connectAsync() {}
+    public void connectAsync(LogReplication.ReplicationSessionMsg sessionMsg) {}
 
     /**
      * If connection is lost to a specific endpoint, attempt to reconnect to the specific node.
      */
-    public void connectAsync(String nodeId) {}
+    public void connectAsync(String nodeId, LogReplication.ReplicationSessionMsg sessionMsg) {}
 
     /**
      * Stop communication across Clusters.

@@ -635,9 +635,9 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 for (ReplicationSession session : remoteClusterIdToReplicationSession.get(clusterId)) {
 //                    ReplicationSession expectedToReceiveSession = new ReplicationSession(
 //                            localClusterDescriptor.getClusterId(), session.getSubscriber());
-                    ReplicationSession expectedToReceiveSession = new ReplicationSession(
+                    ReplicationSession incomingSession = new ReplicationSession(
                             localClusterDescriptor.getClusterId(), session.getRemoteClusterId(), session.getSubscriber());
-                    sessionToSourceServer.put(expectedToReceiveSession,
+                    sessionToSourceServer.put(incomingSession,
                             (LogReplicationSourceServerRouter) replicationManager.getOrCreateSourceRouter(
                                     topologyDescriptor.getRemoteSinkClusters().get(clusterId),
                                     session,  serverMap, false)
@@ -672,9 +672,9 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 for (ReplicationSession session : remoteClusterIdToReplicationSession.get(clusterId)) {
 //                    ReplicationSession expectedToReceiveSession = new ReplicationSession(
 //                            localClusterDescriptor.getClusterId(), session.getSubscriber());
-                    ReplicationSession expectedToReceiveSession = new ReplicationSession(
+                    ReplicationSession incomingSession = new ReplicationSession(
                             localClusterDescriptor.getClusterId(), session.getRemoteClusterId(), session.getSubscriber());
-                    sessionToSinkServe.put(expectedToReceiveSession,
+                    sessionToSinkServe.put(incomingSession,
                             replicationManager.getOrCreateSinkRouter(topologyDescriptor.getRemoteSinkClusters().get(clusterId),
                             session,  serverMap,false)
                     );

@@ -19,7 +19,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -105,7 +104,13 @@ public class SinkVerifyRemoteLeader {
 
                 // If no connection exists, establish a connection again
                 if (connectedNodes.size() == 0) {
-                    router.getChannelAdapter().connectAsync();
+                    LogReplication.ReplicationSessionMsg sessionMsg = LogReplication.ReplicationSessionMsg.newBuilder()
+                            .setRemoteClusterId(session.getRemoteClusterId())
+                            .setLocalClusterId(session.getLocalClusterId())
+                            .setClient(session.getSubscriber().getClient())
+                            .setReplicationModel(session.getSubscriber().getReplicationModel())
+                            .build();
+                    router.getChannelAdapter().connectAsync(sessionMsg);
                 }
                 break;
             case REMOTE_LEADER_NOT_FOUND:
@@ -120,7 +125,7 @@ public class SinkVerifyRemoteLeader {
                 break;
             case REMOTE_LEADER_FOUND:
                 log.debug("Remote Leader is found: {}", event.getNodeId());
-                setupReplicationStream();
+                subscribeAndStartReplication();
                 break;
             default: {
                 log.warn("Unexpected communication event {}", event.getType());
@@ -229,10 +234,11 @@ public class SinkVerifyRemoteLeader {
         log.debug("Exit :: leadership verification");
     }
 
-    private void setupReplicationStream() {
+    private void subscribeAndStartReplication() {
+        //Session as seen from the SOURCE
         LogReplication.ReplicationSessionMsg sessionMsg = LogReplication.ReplicationSessionMsg.newBuilder()
-                .setRemoteClusterId(session.getRemoteClusterId())
-                .setLocalClusterId(router.getLocalClusterId())
+                .setRemoteClusterId(session.getLocalClusterId())
+                .setLocalClusterId(session.getRemoteClusterId())
                 .setClient(session.getSubscriber().getClient())
                 .setReplicationModel(session.getSubscriber().getReplicationModel())
                 .build();

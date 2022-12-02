@@ -1174,7 +1174,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // simulate negotiation. Return metadata from the sink
         LogReplicationMetadataResponseMsg negotiationResponse = sourceDataSender.getSinkManager()
                 .getLogReplicationMetadataManager()
-                .getMetadataResponse(CorfuMessage.HeaderMsg.newBuilder().build())
+                .getMetadataResponse(CorfuMessage.HeaderMsg.newBuilder().build(), replicationSession)
                 .getPayload().getLrMetadataResponse();
 
         logReplicationSourceManager.getLogReplicationFSM().input(

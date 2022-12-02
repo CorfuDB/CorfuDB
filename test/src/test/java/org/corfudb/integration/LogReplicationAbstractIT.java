@@ -236,29 +236,30 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
             startLogReplicatorServers();
 
-            log.info(">> Wait ... Snapshot log replication in progress ...");
+            System.out.println(">> Wait ... Snapshot log replication in progress ...");
             verifyDataOnSink(numWrites);
 
             // Confirm replication status reflects snapshot sync completed
-            log.info(">> Verify replication status completed on source");
+            System.out.println(">> Verify replication status completed on source");
             verifyReplicationStatusFromSource();
 
             // Wait until both plugin updates
-            log.info(">> Wait snapshot sync plugin updates received");
+            System.out.println(">> Wait snapshot sync plugin updates received");
             latchSnapshotSyncPlugin.await();
             // Confirm snapshot sync plugin was triggered on start and on end
             validateSnapshotSyncPlugin(snapshotSyncPluginListener);
 
             // Add Delta's for Log Entry Sync
-            log.info(">> Write deltas");
+            System.out.println(">> Write deltas");
             writeToSource(numWrites, numWrites / 2);
 
-            log.info(">> Wait ... Delta log replication in progress ...");
+            System.out.println(">> Wait ... Delta log replication in progress ...");
             verifyDataOnSink((numWrites + (numWrites / 2)));
 
             // Verify Sink Status Listener received all expected updates (is_data_consistent)
-            log.info(">> Wait ... Replication status UPDATE ...");
+            System.out.println(">> Wait ... Replication status UPDATE ...");
             statusUpdateLatch.await();
+            System.out.println("out of statusUpdateLatch");
             assertThat(sinkListener.getAccumulatedStatus().size()).isEqualTo(totalSinkStatusUpdates);
             // Confirm last updates are set to true (corresponding to snapshot sync completed and log entry sync started)
             assertThat(sinkListener.getAccumulatedStatus().get(sinkListener.getAccumulatedStatus().size() - 1)).isTrue();
@@ -367,6 +368,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
                 log.error("Error while attempting to connect to update dummy table in onSnapshotSyncStart.", tae);
                 throw new RetryNeededException();
             }
+//            System.out.println("getStatus() "+ entry.getPayload().getSnapshotSyncInfo().getStatus());
             if (entry.getPayload().getSnapshotSyncInfo().getStatus() != LogReplicationMetadata.SyncStatus.COMPLETED) {
                 Sleep.sleepUninterruptibly(Duration.ofMillis(SHORT_SLEEP_TIME));
                 throw new RetryNeededException();
@@ -443,7 +445,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
                     if (this.waitSnapshotStatusComplete && statusVal.getSnapshotSyncInfo().getStatus().equals(LogReplicationMetadata.SyncStatus.COMPLETED)) {
                         countDownLatch.countDown();
                     }
-                    System.out.println("Status : "+ statusVal.getStatus() +" "+statusVal.getSyncType());
+//                    System.out.println("Status : "+ statusVal.getStatus() +" "+statusVal.getSyncType());
             }));
             countDownLatch.countDown();
         }
@@ -735,10 +737,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
         for(Map.Entry<String, Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata>> entry : mapNameToMapSink.entrySet()) {
 
             log.info("Verify Data on Sink's Table {}", entry.getKey());
-
+            System.out.println("expectedCount: "+ expectedConsecutiveWrites);
             // Wait until data is fully replicated
             while (entry.getValue().count() != expectedConsecutiveWrites) {
                 // Block until expected number of entries is reached
+                System.out.println("count: "+ entry.getValue().count());
             }
 
             log.info("Number updates on Sink Map {} :: {} ", entry.getKey(), expectedConsecutiveWrites);

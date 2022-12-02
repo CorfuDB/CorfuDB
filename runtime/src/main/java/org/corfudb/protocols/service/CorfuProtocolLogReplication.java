@@ -162,8 +162,7 @@ public final class CorfuProtocolLogReplication {
         return buf.array();
     }
 
-    public static ResponseMsg getLeadershipResponse(
-            HeaderMsg header, boolean isLeader, String nodeId) {
+    public static ResponseMsg getLeadershipResponse(HeaderMsg header, boolean isLeader, String nodeId) {
         LogReplication.LogReplicationLeadershipResponseMsg request = LogReplication.LogReplicationLeadershipResponseMsg
                 .newBuilder()
                 .setIsLeader(isLeader)

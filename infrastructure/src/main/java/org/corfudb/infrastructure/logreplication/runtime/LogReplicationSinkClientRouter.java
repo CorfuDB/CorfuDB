@@ -13,6 +13,7 @@ import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRunti
 import org.corfudb.infrastructure.logreplication.runtime.sinkFsm.SinkVerifyRemoteLeader;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.protocols.service.CorfuProtocolMessage;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.clients.IClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.exceptions.NetworkException;
@@ -474,9 +475,15 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
             channelAdapter = (IClientChannelAdapter) adapterType.getDeclaredConstructor(String.class, ClusterDescriptor.class, LogReplicationSourceClientRouter.class, LogReplicationSinkClientRouter.class)
                     .newInstance(this.localClusterId, remoteClusterDescriptor, null, this);
             log.info("Connect asynchronously to remote cluster {} and session {} ", remoteClusterDescriptor.getClusterId(), this.session);
-//            this.setClientAdapter(channelAdapter);
+
             // When connection is established to the remote leader node, the remoteLeaderConnectionFuture will be completed.
-            channelAdapter.connectAsync();
+            LogReplication.ReplicationSessionMsg sessionMsg = LogReplication.ReplicationSessionMsg.newBuilder()
+                    .setRemoteClusterId(session.getRemoteClusterId())
+                    .setLocalClusterId(session.getLocalClusterId())
+                    .setClient(session.getSubscriber().getClient())
+                    .setReplicationModel(session.getSubscriber().getReplicationModel())
+                    .build();
+            channelAdapter.connectAsync(sessionMsg);
         } catch (Exception e) {
             log.error("Fatal error: Failed to initialize transport adapter {}", config.getTransportClientClassCanonicalName(), e);
             throw new UnrecoverableCorfuError(e);
@@ -503,7 +510,13 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
     public synchronized void onConnectionDown(String nodeId) {
         log.info("Connection lost to remote node {} on cluster {}", nodeId, this.session.getRemoteClusterId());
         // Attempt to reconnect to this endpoint
-        channelAdapter.connectAsync(nodeId);
+        LogReplication.ReplicationSessionMsg sessionMsg = LogReplication.ReplicationSessionMsg.newBuilder()
+                .setRemoteClusterId(session.getRemoteClusterId())
+                .setLocalClusterId(session.getLocalClusterId())
+                .setClient(session.getSubscriber().getClient())
+                .setReplicationModel(session.getSubscriber().getReplicationModel())
+                .build();
+        channelAdapter.connectAsync(nodeId, sessionMsg);
     }
 
     /**

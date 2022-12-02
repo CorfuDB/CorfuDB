@@ -14,6 +14,7 @@ import org.corfudb.infrastructure.logreplication.transport.client.ChannelAdapter
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.clients.IClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.exceptions.NetworkException;
@@ -121,7 +122,13 @@ public class LogReplicationSourceClientRouter extends LogReplicationSourceRouter
                     .newInstance(this.localClusterId, remoteClusterDescriptor, this, null);
             log.info("Connect asynchronously to remote cluster {} and session {} ", remoteClusterDescriptor.getClusterId(), this.session);
             // When connection is established to the remote leader node, the remoteLeaderConnectionFuture will be completed.
-            this.clientChannelAdapter.connectAsync();
+            LogReplication.ReplicationSessionMsg sessionMsg = LogReplication.ReplicationSessionMsg.newBuilder()
+                    .setRemoteClusterId(session.getRemoteClusterId())
+                    .setLocalClusterId(session.getLocalClusterId())
+                    .setClient(session.getSubscriber().getClient())
+                    .setReplicationModel(session.getSubscriber().getReplicationModel())
+                    .build();
+            this.clientChannelAdapter.connectAsync(sessionMsg);
         } catch (Exception e) {
             log.error("Fatal error: Failed to initialize transport adapter {}", config.getTransportClientClassCanonicalName(), e);
             throw new UnrecoverableCorfuError(e);
@@ -150,7 +157,13 @@ public class LogReplicationSourceClientRouter extends LogReplicationSourceRouter
         runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.ON_CONNECTION_DOWN,
                 nodeId));
         // Attempt to reconnect to this endpoint
-        this.clientChannelAdapter.connectAsync(nodeId);
+        LogReplication.ReplicationSessionMsg sessionMsg = LogReplication.ReplicationSessionMsg.newBuilder()
+                .setRemoteClusterId(session.getRemoteClusterId())
+                .setLocalClusterId(session.getLocalClusterId())
+                .setClient(session.getSubscriber().getClient())
+                .setReplicationModel(session.getSubscriber().getReplicationModel())
+                .build();
+        this.clientChannelAdapter.connectAsync(nodeId, sessionMsg);
     }
 
     /**

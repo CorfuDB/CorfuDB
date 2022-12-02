@@ -8,6 +8,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkClientRouter;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceClientRouter;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
@@ -45,7 +46,7 @@ public class NettyLogReplicationClientChannelAdapter extends IClientChannelAdapt
     }
 
     @Override
-    public void connectAsync() {
+    public void connectAsync(LogReplication.ReplicationSessionMsg session) {
         executorService.submit(() -> {
             ClusterDescriptor remoteCluster = getRemoteClusterDescriptor();
             for (NodeDescriptor node : remoteCluster.getNodesDescriptors()) {

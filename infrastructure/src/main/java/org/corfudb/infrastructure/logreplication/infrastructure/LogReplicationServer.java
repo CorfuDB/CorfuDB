@@ -15,9 +15,9 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
-import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
@@ -59,7 +59,7 @@ public class LogReplicationServer extends AbstractServer {
 
     private static final String EXECUTOR_NAME_PREFIX = "LogReplicationServer-";
 
-    private Map<ReplicationSession, LogReplicationSinkManager> sourceSessionToSinkManagerMap = new HashMap<>();
+    private Map<ReplicationSession, LogReplicationSinkManager> incomingSessionToSinkManagerMap = new HashMap<>();
 
     private final AtomicBoolean isLeader = new AtomicBoolean(false);
 
@@ -85,8 +85,13 @@ public class LogReplicationServer extends AbstractServer {
 
     @VisibleForTesting
     public LogReplicationServer(@Nonnull ServerContext context, LogReplicationSinkManager sinkManager,
-        String localNodeId) {
-        sourceSessionToSinkManagerMap.put(sinkManager.getSourceSession(), sinkManager);
+                                String localNodeId) {
+        //Revert session while adding it to sourceSessionToSinkManagerMap so the requests handlers don't have to.
+        ReplicationSession sourceSession = sinkManager.getSourceSession();
+        ReplicationSession incomingSession = new ReplicationSession(sourceSession.getLocalClusterId(),
+                sourceSession.getRemoteClusterId(), sourceSession.getSubscriber());
+        incomingSessionToSinkManagerMap.put(incomingSession, sinkManager);
+
         this.localNodeId = localNodeId;
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
@@ -96,15 +101,19 @@ public class LogReplicationServer extends AbstractServer {
                                      Map<ReplicationSession, LogReplicationMetadataManager> sourceSessionToMetadataManagerMap,
                                      long topologyConfigId) {
         for (Map.Entry<ReplicationSession, LogReplicationMetadataManager> entry :
-            sourceSessionToMetadataManagerMap.entrySet()) {
+                sourceSessionToMetadataManagerMap.entrySet()) {
             LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(localEndpoint, logReplicationConfig,
                 entry.getValue(), serverContext, topologyConfigId, entry.getKey());
-            sourceSessionToSinkManagerMap.put(entry.getKey(), sinkManager);
+
+            //Revert session while adding it to sourceSessionToSinkManagerMap so the requests handlers don't have to.
+            ReplicationSession incomingSession = new ReplicationSession(entry.getKey().getLocalClusterId(),
+                    entry.getKey().getRemoteClusterId(), entry.getKey().getSubscriber());
+            incomingSessionToSinkManagerMap.put(incomingSession, sinkManager);
         }
     }
 
     public void updateTopologyConfigId(long topologyConfigId) {
-        sourceSessionToSinkManagerMap.values().forEach(sinkManager -> sinkManager.updateTopologyConfigId(topologyConfigId));
+        incomingSessionToSinkManagerMap.values().forEach(sinkManager -> sinkManager.updateTopologyConfigId(topologyConfigId));
     }
 
     /* ************ Override Methods ************ */
@@ -123,8 +132,8 @@ public class LogReplicationServer extends AbstractServer {
     public void shutdown() {
         super.shutdown();
         executor.shutdown();
-        sourceSessionToSinkManagerMap.values().forEach(sinkManager -> sinkManager.shutdown());
-        sourceSessionToSinkManagerMap.clear();
+        incomingSessionToSinkManagerMap.values().forEach(sinkManager -> sinkManager.shutdown());
+        incomingSessionToSinkManagerMap.clear();
     }
 
     /* ************ Server Handlers ************ */
@@ -146,10 +155,11 @@ public class LogReplicationServer extends AbstractServer {
 
         if (isLeader.get()) {
             // Get the Sink Manager corresponding to the remote cluster session
-            String sourceClusterId = getUUID(request.getHeader().getClusterId()).toString();
-            LogReplicationSinkManager sinkManager = sourceSessionToSinkManagerMap.get(
-                ReplicationSession.getDefaultReplicationSessionForCluster(sourceClusterId, localClusterId));
-
+            LogReplicationSinkManager sinkManager = incomingSessionToSinkManagerMap.get(
+                    convertSessionMsgToSession(request.getPayload().getLrEntry().getMetadata().getSessionInfo()));
+//            log.info("Looking for {}", convertSessionMsgToSession(request.getPayload().getLrEntry().getMetadata().getSessionInfo()));
+//            log.info("sourceSessionToSinkManagerMap {}", incomingSessionToSinkManagerMap);
+//            log.info("#162 request is {}", request);
             // If no sink Manager is found, drop the message and log an error
             if (sinkManager == null) {
                 log.error("Sink Manager not found for remote cluster {}.  This could be due to a topology mismatch.",
@@ -196,17 +206,15 @@ public class LogReplicationServer extends AbstractServer {
         log.info("Log Replication Metadata Request received by Server.");
 
         if (isLeader.get()) {
-            String sourceClusterId = getUUID(request.getHeader().getClusterId()).toString();
-            ReplicationSession sourceSession = ReplicationSession
-                .getDefaultReplicationSessionForCluster(sourceClusterId, localClusterId);
+            ReplicationSession sourceSession = convertSessionMsgToSession(request.getPayload().getLrMetadataRequest().getSessionInfo());
 
-            LogReplicationSinkManager sinkManager = sourceSessionToSinkManagerMap.get(sourceSession);
+            LogReplicationSinkManager sinkManager = incomingSessionToSinkManagerMap.get(sourceSession);
 
             // If no sink Manager is found, drop the message and log an error
             if (sinkManager == null) {
-                log.info("sourceSessionToSinkManagerMap {}", sourceSessionToSinkManagerMap);
-                log.info("sourceSession {}", sourceSession);
-                log.info("req: {}", request);
+//                log.info("sourceSessionToSinkManagerMap {}", incomingSessionToSinkManagerMap);
+//                log.info("sourceSession {}", sourceSession);
+//                log.info("req: {}", request);
                 log.error("Sink Manager not found for remote cluster {}.  This could be due to a topology mismatch.",
                     getUUID(request.getHeader().getClusterId()).toString());
                 return;
@@ -214,7 +222,7 @@ public class LogReplicationServer extends AbstractServer {
 
             LogReplicationMetadataManager metadataMgr = sinkManager.getLogReplicationMetadataManager();
 
-            ResponseMsg response = metadataMgr.getMetadataResponse(getHeaderMsg(request.getHeader()));
+            ResponseMsg response = metadataMgr.getMetadataResponse(getHeaderMsg(request.getHeader()), sourceSession);
             log.info("Send Metadata response: :: {}", TextFormat.shortDebugString(response.getPayload()));
             router.sendResponse(response, ctx);
 
@@ -227,6 +235,11 @@ public class LogReplicationServer extends AbstractServer {
                 request.getHeader().getRequestId());
             sendLeadershipLoss(request, ctx, router);
         }
+    }
+
+    private ReplicationSession convertSessionMsgToSession(LogReplication.ReplicationSessionMsg sessionMsg) {
+        return new ReplicationSession(sessionMsg.getRemoteClusterId(), sessionMsg.getLocalClusterId(),
+                new ReplicationSubscriber(sessionMsg.getReplicationModel(), sessionMsg.getClient()));
     }
 
     /**
@@ -271,10 +284,10 @@ public class LogReplicationServer extends AbstractServer {
 
         if (isLeader.get()) {
             // Reset the Sink Managers on acquiring leadership
-            sourceSessionToSinkManagerMap.values().forEach(sinkManager -> sinkManager.reset());
+            incomingSessionToSinkManagerMap.values().forEach(sinkManager -> sinkManager.reset());
         } else {
             // Stop the Sink Managers if leadership is lost
-            sourceSessionToSinkManagerMap.values().forEach(sinkManager -> sinkManager.stopOnLeadershipLoss());
+            incomingSessionToSinkManagerMap.values().forEach(sinkManager -> sinkManager.stopOnLeadershipLoss());
         }
     }
 }

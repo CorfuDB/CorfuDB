@@ -80,13 +80,13 @@ public class LogReplicationServerTest {
 
         lrServer.setLeadership(true);
         doReturn(metadataManager).when(sinkManager).getLogReplicationMetadataManager();
-        doReturn(response).when(metadataManager).getMetadataResponse(any());
+        doReturn(response).when(metadataManager).getMetadataResponse(any(), replicationSession);
 
         lrServer.getHandlerMethods().handle(request, mockHandlerContext,
             mockServerRouter);
 
         verify(sinkManager).getLogReplicationMetadataManager();
-        verify(metadataManager).getMetadataResponse(any());
+        verify(metadataManager).getMetadataResponse(any(), replicationSession);
     }
 
     /**

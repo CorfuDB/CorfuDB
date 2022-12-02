@@ -201,7 +201,7 @@ public class LogReplicationMetadataManager {
         return queryMetadata(LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED);
     }
 
-    public ResponseMsg getMetadataResponse(HeaderMsg header) {
+    public ResponseMsg getMetadataResponse(HeaderMsg header, ReplicationSession sourceSession) {
         LogReplication.LogReplicationMetadataResponseMsg metadataMsg = LogReplication.LogReplicationMetadataResponseMsg
                 .newBuilder()
                 .setTopologyConfigID(getTopologyConfigId())
@@ -210,10 +210,10 @@ public class LogReplicationMetadataManager {
                 .setSnapshotTransferred(getLastTransferredSnapshotTimestamp())
                 .setSnapshotApplied(getLastAppliedSnapshotTimestamp())
                 .setSessionInfo(LogReplication.ReplicationSessionMsg.newBuilder()
-                        .setRemoteClusterId(replicationSession.getRemoteClusterId())
-                        .setLocalClusterId(replicationSession.getLocalClusterId())
-                        .setClient(replicationSession.getSubscriber().getClient())
-                        .setReplicationModel(replicationSession.getSubscriber().getReplicationModel())
+                        .setRemoteClusterId(sourceSession.getRemoteClusterId())
+                        .setLocalClusterId(sourceSession.getLocalClusterId())
+                        .setClient(sourceSession.getSubscriber().getClient())
+                        .setReplicationModel(sourceSession.getSubscriber().getReplicationModel())
                         .build())
                 .setLastLogEntryTimestamp(getLastProcessedLogEntryTimestamp()).build();
         CorfuMessage.ResponsePayloadMsg payload = CorfuMessage.ResponsePayloadMsg.newBuilder()
