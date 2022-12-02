@@ -70,7 +70,7 @@ public class InvokeCheckpointingJvm implements InvokeCheckpointing {
     public void shutdown() {
         if (isRunning()) {
             this.checkpointerProcess.destroy();
-            syslog.info("Shutting down existing checkpointer jvm ");
+            log.info("Shutting down existing checkpointer jvm ");
         }
         this.isInvoked = false;
     }

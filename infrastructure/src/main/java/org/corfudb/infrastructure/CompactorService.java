@@ -70,7 +70,7 @@ public class CompactorService implements ManagementService {
      */
     @Override
     public void start(Duration interval) {
-        syslog.info("Starting Compaction service...");
+        log.info("Starting Compaction service...");
         if (getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis() <= 0) {
             return;
         }
@@ -118,7 +118,7 @@ public class CompactorService implements ManagementService {
     private void runOrchestrator() {
         try {
             boolean isLeader = isNodePrimarySequencer(updateLayoutAndGet());
-            syslog.trace("Current node isLeader: {}", isLeader);
+            log.trace("Current node isLeader: {}", isLeader);
 
             CheckpointingStatus managerStatus = null;
             try (TxnContext txn = getCorfuStore().txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -126,9 +126,9 @@ public class CompactorService implements ManagementService {
                         CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                         CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
                 txn.commit();
-                syslog.trace("ManagerStatus: {}", managerStatus.getStatus().toString());
+                log.trace("ManagerStatus: {}", managerStatus.getStatus().toString());
             } catch (Exception e) {
-                syslog.warn("Unable to acquire manager status: ", e);
+                log.warn("Unable to acquire manager status: ", e);
             }
             try {
                 if (managerStatus != null) {
@@ -151,10 +151,10 @@ public class CompactorService implements ManagementService {
                     }
                 }
             } catch (Exception ex) {
-                syslog.warn("Exception in runOrcestrator(): ", ex);
+                log.warn("Exception in runOrcestrator(): ", ex);
             }
         } catch (Throwable t) {
-            syslog.error("Encountered unexpected exception in runOrchestrator: ", t);
+            log.error("Encountered unexpected exception in runOrchestrator: ", t);
             throw t;
         }
     }
