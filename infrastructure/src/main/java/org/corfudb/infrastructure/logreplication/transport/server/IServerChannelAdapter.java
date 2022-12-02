@@ -75,7 +75,6 @@ public abstract class IServerChannelAdapter {
 
     /**
      * Receive a message from Client.
-     * Shama:  Now need to check to which router should the msg be forwarded to.
      * @param msg received corfu message
      */
     public void receive(CorfuMessage.RequestMsg msg) {

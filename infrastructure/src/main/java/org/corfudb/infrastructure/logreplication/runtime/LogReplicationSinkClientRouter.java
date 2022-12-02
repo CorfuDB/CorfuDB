@@ -533,9 +533,8 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
      * @param clusterDescriptor remote cluster descriptor
      */
 
-    // Shama: Now sink needs to find the leader.
     public synchronized void onClusterChange(ClusterDescriptor clusterDescriptor) {
-        channelAdapter.clusterChangeNotification(clusterDescriptor);
+        //no-op. Any topology change notification goes to discovery-service
     }
 
     public Optional<String> getRemoteLeaderNodeId() {

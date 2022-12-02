@@ -737,11 +737,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
         for(Map.Entry<String, Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata>> entry : mapNameToMapSink.entrySet()) {
 
             log.info("Verify Data on Sink's Table {}", entry.getKey());
-            System.out.println("expectedCount: "+ expectedConsecutiveWrites);
+//            System.out.println("expectedCount: "+ expectedConsecutiveWrites);
             // Wait until data is fully replicated
             while (entry.getValue().count() != expectedConsecutiveWrites) {
                 // Block until expected number of entries is reached
-                System.out.println("count: "+ entry.getValue().count());
+//                System.out.println("count: "+ entry.getValue().count());
             }
 
             log.info("Number updates on Sink Map {} :: {} ", entry.getKey(), expectedConsecutiveWrites);

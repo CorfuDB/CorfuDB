@@ -237,8 +237,8 @@ public class SinkVerifyRemoteLeader {
     private void subscribeAndStartReplication() {
         //Session as seen from the SOURCE
         LogReplication.ReplicationSessionMsg sessionMsg = LogReplication.ReplicationSessionMsg.newBuilder()
-                .setRemoteClusterId(session.getLocalClusterId())
-                .setLocalClusterId(session.getRemoteClusterId())
+                .setRemoteClusterId(session.getRemoteClusterId())
+                .setLocalClusterId(session.getLocalClusterId())
                 .setClient(session.getSubscriber().getClient())
                 .setReplicationModel(session.getSubscriber().getReplicationModel())
                 .build();

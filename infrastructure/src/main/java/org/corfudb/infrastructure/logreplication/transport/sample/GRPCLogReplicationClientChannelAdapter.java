@@ -193,7 +193,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         }
 
         LogReplication.ReplicationSessionMsg sessionMsg;
-        //SINK sends Negotiation responses and ACKs
+        //SINK sends subscribe, Negotiation and ACKs
         if(response.getPayload().getPayloadCase().equals(CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_METADATA_RESPONSE)) {
             sessionMsg = response.getPayload().getLrMetadataResponse().getSessionInfo();
         } else if(response.getPayload().getPayloadCase().equals(CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_ENTRY_ACK)) {
@@ -239,25 +239,17 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
             requestObserverMap.put(sessionMsg, requestObserver);
 
 //            log.info("Initiate stub for replication");
-
-            // since SINK just copies over the session info in its responses, we need to convert it to a session from SINK
-            LogReplication.ReplicationSessionMsg sinkSession = LogReplication.ReplicationSessionMsg.newBuilder()
-                    .setRemoteClusterId(sessionMsg.getLocalClusterId())
-                    .setLocalClusterId(sessionMsg.getRemoteClusterId())
-                    .setClient(sessionMsg.getClient())
-                    .setReplicationModel(sessionMsg.getReplicationModel())
-                    .build();
-
+//
 //            log.info("SessionMsg: {}", sessionMsg);
-//            log.info("sinkSession {}", sinkSession);
+//            log.info("sinkSession {}", sessionMsg);
 //            log.info("asyncStubMap : {}", asyncStubMap);
-//            log.info("looking for {}", sinkSession);
+//            log.info("looking for {}", sessionMsg);
 //            log.info("blockingStub : {}", blockingStubMap);
 //
 //            log.info("#252 response is {}", response);
 
-            if(asyncStubMap.containsKey(sinkSession)) {
-                StreamObserver<ResponseMsg> responseObserver = asyncStubMap.get(sinkSession).subscribeAndStartreplication(requestObserver);
+            if(asyncStubMap.containsKey(sessionMsg)) {
+                StreamObserver<ResponseMsg> responseObserver = asyncStubMap.get(sessionMsg).subscribeAndStartreplication(requestObserver);
                 responseObserverMap.put(sessionMsg, responseObserver);
             } else {
                 log.error("No stub found for remote node {}@{}. Message dropped type={}",

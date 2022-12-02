@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication.receive;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
@@ -50,9 +51,15 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
      */
     @Override
     public LogReplicationEntryMetadataMsg generateAckMetadata(LogReplicationEntryMsg entry) {
+        LogReplication.ReplicationSessionMsg entrySession = entry.getMetadata().getSessionInfo();
         LogReplicationEntryMetadataMsg metadata = LogReplicationEntryMetadataMsg.newBuilder()
                 .mergeFrom(entry.getMetadata())
                 .setEntryType(LogReplicationEntryType.LOG_ENTRY_REPLICATED)
+                .setSessionInfo(LogReplication.ReplicationSessionMsg.newBuilder()
+                        .mergeFrom(entrySession)
+                        .setRemoteClusterId(entrySession.getLocalClusterId())
+                        .setLocalClusterId(entrySession.getRemoteClusterId())
+                        .build())
                 .setTimestamp(lastProcessedSeq).build();
         log.debug("Sink Buffer lastProcessedSeq {}", lastProcessedSeq);
         return metadata;

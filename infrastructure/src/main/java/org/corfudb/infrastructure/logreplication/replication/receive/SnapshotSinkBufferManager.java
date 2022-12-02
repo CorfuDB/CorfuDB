@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 
 import com.google.protobuf.TextFormat;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
@@ -57,9 +58,15 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
      */
     @Override
     public LogReplicationEntryMetadataMsg generateAckMetadata(LogReplicationEntryMsg entry) {
+        LogReplication.ReplicationSessionMsg entrySession = entry.getMetadata().getSessionInfo();
         LogReplicationEntryMetadataMsg.Builder metadata = LogReplicationEntryMetadataMsg
                 .newBuilder()
-                .mergeFrom(entry.getMetadata());
+                .mergeFrom(entry.getMetadata())
+                .setSessionInfo(LogReplication.ReplicationSessionMsg.newBuilder()
+                        .mergeFrom(entrySession)
+                        .setRemoteClusterId(entrySession.getLocalClusterId())
+                        .setLocalClusterId(entrySession.getRemoteClusterId())
+                        .build());
 
         /*
          * If SNAPSHOT_END message has been processed, send back SNAPSHOT_TRANSFER_COMPLETE to notify
