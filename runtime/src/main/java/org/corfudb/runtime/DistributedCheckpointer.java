@@ -43,6 +43,7 @@ public abstract class DistributedCheckpointer {
         this.corfuStore = corfuStore;
         this.compactorMetadataTables = compactorMetadataTables;
         this.livenessUpdater = new CheckpointLivenessUpdater(corfuStore);
+        this.livenessUpdater.start();
     }
 
     private boolean tryLockTableToCheckpoint(@NonNull CompactorMetadataTables compactorMetadataTables,

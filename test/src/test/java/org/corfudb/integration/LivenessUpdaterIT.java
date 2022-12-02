@@ -72,6 +72,7 @@ public class LivenessUpdaterIT extends AbstractIT {
                 TableOptions.fromProtoSchema(SampleSchema.FirewallRule.class));
 
         CheckpointLivenessUpdater livenessUpdater = new CheckpointLivenessUpdater(store);
+        livenessUpdater.start();
         CorfuStoreMetadata.TableName tableNameBuilder = CorfuStoreMetadata.TableName.newBuilder().
                 setNamespace(namespace).setTableName(tableName).build();
         Duration interval = Duration.ofSeconds(15);

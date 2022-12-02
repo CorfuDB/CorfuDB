@@ -27,7 +27,7 @@ public class CheckpointLivenessUpdater implements LivenessUpdater {
     private final CorfuStore corfuStore;
     private final ScheduledExecutorService executorService;
 
-    private Optional<TableName> currentTable = Optional.empty();
+    private volatile Optional<TableName> currentTable = Optional.empty();
 
     private static final Duration UPDATE_INTERVAL = Duration.ofSeconds(15);
 
@@ -42,10 +42,6 @@ public class CheckpointLivenessUpdater implements LivenessUpdater {
             throw new IllegalThreadStateException("Opening ActiveCheckpointsTable failed");
         }
         this.executorService = Executors.newSingleThreadScheduledExecutor();
-        executorService.scheduleWithFixedDelay(
-                () -> LambdaUtils.runSansThrow(this::updateHeartbeat),
-                UPDATE_INTERVAL.toMillis() / 2,
-                UPDATE_INTERVAL.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     private Table<TableName, ActiveCPStreamMsg, Message> getActiveCheckpointsTable()
@@ -58,7 +54,15 @@ public class CheckpointLivenessUpdater implements LivenessUpdater {
                 TableOptions.fromProtoSchema(ActiveCPStreamMsg.class));
     }
 
-    private void updateHeartbeat() {
+    @Override
+    public void start() {
+        executorService.scheduleWithFixedDelay(
+                () -> LambdaUtils.runSansThrow(this::updateHeartbeat),
+                UPDATE_INTERVAL.toMillis() / 2,
+                UPDATE_INTERVAL.toMillis(), TimeUnit.MILLISECONDS);
+    }
+
+    protected void updateHeartbeat() {
         TableName table;
         try {
             table = currentTable.get();
@@ -78,7 +82,7 @@ public class CheckpointLivenessUpdater implements LivenessUpdater {
             txn.commit();
         } catch (TransactionAbortedException ex) {
             if (ex.getAbortCause() == AbortCause.CONFLICT) {
-                log.warn("Another thread tried to commit, ", ex);
+                log.warn("Another thread tried to commit while updating heartbeat for table: {}, ", table, ex);
             }
         } catch (Exception e) {
             log.warn("Unable to update liveness for table: {} due to exception: {}", table, e.getStackTrace());
