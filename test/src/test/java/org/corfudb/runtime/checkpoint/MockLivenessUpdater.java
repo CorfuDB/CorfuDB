@@ -54,6 +54,11 @@ public class MockLivenessUpdater implements LivenessUpdater {
     }
 
     @Override
+    public void start() {
+        //No action done
+    }
+
+    @Override
     public void updateLiveness(TableName tableName) {
         this.tableName = tableName;
         // update validity counter every 250ms
