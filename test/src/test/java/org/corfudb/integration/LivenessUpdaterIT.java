@@ -72,6 +72,7 @@ public class LivenessUpdaterIT extends AbstractIT {
                 TableOptions.fromProtoSchema(SampleSchema.FirewallRule.class));
 
         CheckpointLivenessUpdater livenessUpdater = new CheckpointLivenessUpdater(store);
+        livenessUpdater.start();
         CorfuStoreMetadata.TableName tableNameBuilder = CorfuStoreMetadata.TableName.newBuilder().
                 setNamespace(namespace).setTableName(tableName).build();
         Duration interval = Duration.ofSeconds(15);
@@ -92,7 +93,7 @@ public class LivenessUpdaterIT extends AbstractIT {
         } catch (InterruptedException e) {
             System.out.println("Sleep interrupted: " + e);
         }
-        livenessUpdater.shutdown();
+        livenessUpdater.notifyOnSyncComplete();
 
         try (TxnContext txn = store.txn(CORFU_SYSTEM_NAMESPACE)) {
             CorfuCompactorManagement.ActiveCPStreamMsg newStatus = (CorfuCompactorManagement.ActiveCPStreamMsg)
@@ -102,6 +103,8 @@ public class LivenessUpdaterIT extends AbstractIT {
             Assert.assertEquals(1, newStatus.getSyncHeartbeat());
         } catch (Exception e) {
             Assert.fail("Transaction Failed due to " + e.getStackTrace());
+        } finally {
+            livenessUpdater.shutdown();
         }
     }
 }

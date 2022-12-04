@@ -1,8 +1,7 @@
-package org.corfudb.runtime.checkpoint;
+package org.corfudb.runtime;
 
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.CheckpointLivenessUpdater;
 import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
@@ -40,13 +39,13 @@ public class CheckpointLivenessUpdaterUnitTest {
 
     @Before
     public void setup() throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
-        livenessUpdater = new CheckpointLivenessUpdater(corfuStore);
         when(corfuStore.openTable(Matchers.any(), Matchers.any(), Matchers.any(), Matchers.any(), Matchers.any(), Matchers.any())).thenReturn(mock(Table.class));
 
         when(corfuStore.txn(CORFU_SYSTEM_NAMESPACE)).thenReturn(txn);
         when(txn.getRecord(Matchers.anyString(), Matchers.any(Message.class))).thenReturn(corfuStoreEntry);
         doNothing().when(txn).putRecord(Matchers.any(), Matchers.any(), Matchers.any(), Matchers.any());
         when(txn.commit()).thenReturn(Timestamp.getDefaultInstance());
+        livenessUpdater = new CheckpointLivenessUpdater(corfuStore);
     }
 
     @Test
@@ -54,9 +53,47 @@ public class CheckpointLivenessUpdaterUnitTest {
         ActiveCPStreamMsg activeCPStreamMsg = ActiveCPStreamMsg.newBuilder().setSyncHeartbeat(0).build();
         when((ActiveCPStreamMsg) corfuStoreEntry.getPayload()).thenReturn(activeCPStreamMsg);
 
+        livenessUpdater.start();
         livenessUpdater.updateLiveness(tableName);
         try {
             TimeUnit.SECONDS.sleep(INTERVAL.getSeconds());
+        } catch (InterruptedException e) {
+            log.warn("Sleep interrupted: ", e);
+        }
+        livenessUpdater.notifyOnSyncComplete();
+
+        ArgumentCaptor<ActiveCPStreamMsg> captor = ArgumentCaptor.forClass(ActiveCPStreamMsg.class);
+        verify(txn).putRecord(Matchers.any(), Matchers.any(), captor.capture(), Matchers.any());
+        Assert.assertEquals(1, captor.getValue().getSyncHeartbeat());
+    }
+
+    @Test
+    public void testUpdateLivenessRaceCondition() {
+        ActiveCPStreamMsg activeCPStreamMsg = ActiveCPStreamMsg.newBuilder().setSyncHeartbeat(0).build();
+        when((ActiveCPStreamMsg) corfuStoreEntry.getPayload()).thenReturn(activeCPStreamMsg);
+
+        livenessUpdater.updateLiveness(tableName);
+        livenessUpdater.updateHeartbeat();
+        livenessUpdater.notifyOnSyncComplete();
+
+        livenessUpdater.updateHeartbeat();
+
+        ArgumentCaptor<ActiveCPStreamMsg> captor = ArgumentCaptor.forClass(ActiveCPStreamMsg.class);
+        verify(txn).putRecord(Matchers.any(), Matchers.any(), captor.capture(), Matchers.any());
+        Assert.assertEquals(1, captor.getValue().getSyncHeartbeat());
+    }
+
+    @Test
+    public void testSchedulerOnException() {
+        ActiveCPStreamMsg activeCPStreamMsg = ActiveCPStreamMsg.newBuilder().setSyncHeartbeat(0).build();
+        when((ActiveCPStreamMsg) corfuStoreEntry.getPayload())
+                .thenReturn(null)
+                .thenReturn(activeCPStreamMsg);
+        livenessUpdater.start();
+
+        livenessUpdater.updateLiveness(tableName);
+        try {
+            TimeUnit.SECONDS.sleep(INTERVAL.getSeconds()*2);
         } catch (InterruptedException e) {
             log.warn("Sleep interrupted: ", e);
         }
