@@ -18,12 +18,12 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 public class TrimLog {
     private final CorfuRuntime corfuRuntime;
     private final CorfuStore corfuStore;
-    private final Logger syslog;
+    private final Logger log;
 
     TrimLog(CorfuRuntime corfuRuntime, CorfuStore corfuStore) {
         this.corfuStore = corfuStore;
         this.corfuRuntime = corfuRuntime;
-        this.syslog = LoggerFactory.getLogger("syslog");
+        this.log = LoggerFactory.getLogger("compactor-leader");
     }
 
     private Optional<Long> getTrimAddress() {
@@ -37,11 +37,11 @@ public class TrimLog {
                         CompactorMetadataTables.MIN_CHECKPOINT).getPayload();
                 trimAddress = Optional.of(trimToken.getSequence());
             } else {
-                syslog.warn("Skip trimming since last checkpointing cycle did not complete successfully");
+                log.warn("Skip trimming since last checkpointing cycle did not complete successfully");
             }
             txn.commit();
         } catch (Exception e) {
-            syslog.warn("Unable to acquire the trim token");
+            log.warn("Unable to acquire the trim token");
         }
         return trimAddress;
     }
@@ -61,7 +61,7 @@ public class TrimLog {
         corfuRuntime.getAddressSpaceView().gc();
         final long endTime = System.nanoTime();
 
-        syslog.info("Trim completed, elapsed({}s), log address up to {}.",
+        log.info("Trim completed, elapsed({}s), log address up to {}.",
                 TimeUnit.NANOSECONDS.toSeconds(endTime - startTime), trimAddress.get());
     }
 }

@@ -42,9 +42,7 @@ public class CompactorService implements ManagementService {
     private Optional<CompactorLeaderServices> compactorLeaderServices = Optional.empty();
     private Optional<CorfuStore> corfuStore = Optional.empty();
     private TrimLog trimLog;
-
-    private final Logger syslog;
-
+    private final Logger log;
     private static final Duration LIVENESS_TIMEOUT = Duration.ofMinutes(1);
 
     CompactorService(@NonNull ServerContext serverContext,
@@ -60,7 +58,7 @@ public class CompactorService implements ManagementService {
                         .build());
         this.checkpointerJvmManager = checkpointerJvmManager;
         this.compactionTriggerPolicy = compactionTriggerPolicy;
-        syslog = LoggerFactory.getLogger("syslog");
+        this.log = LoggerFactory.getLogger("compactor-leader");
     }
 
     private CorfuRuntime getCorfuRuntime() {
@@ -68,13 +66,13 @@ public class CompactorService implements ManagementService {
     }
 
     /**
-     * Starts the long running service.
+     * Starts the long-running service.
      *
      * @param interval interval to run the service
      */
     @Override
     public void start(Duration interval) {
-        syslog.info("Starting Compaction service...");
+        log.info("Starting Compaction service...");
         if (getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis() <= 0) {
             return;
         }
@@ -99,7 +97,7 @@ public class CompactorService implements ManagementService {
                         serverContext.getLocalEndpoint(), getCorfuStore(),
                         new LivenessValidator(getCorfuRuntime(), getCorfuStore(), LIVENESS_TIMEOUT)));
             } catch (Exception e) {
-                syslog.error("Unable to create CompactorLeaderServices object. Will retry on next attempt. Exception: ", e);
+                log.error("Unable to create CompactorLeaderServices object. Will retry on next attempt. Exception: ", e);
             }
         }
         return compactorLeaderServices.get();
@@ -122,7 +120,7 @@ public class CompactorService implements ManagementService {
     private void runOrchestrator() {
         try {
             boolean isLeader = isNodePrimarySequencer(updateLayoutAndGet());
-            syslog.trace("Current node isLeader: {}", isLeader);
+            log.trace("Current node isLeader: {}", isLeader);
 
             CheckpointingStatus managerStatus = null;
             try (TxnContext txn = getCorfuStore().txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -130,9 +128,9 @@ public class CompactorService implements ManagementService {
                         CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                         CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
                 txn.commit();
-                syslog.trace("ManagerStatus: {}", managerStatus.getStatus().toString());
+                log.trace("ManagerStatus: {}", managerStatus.getStatus().toString());
             } catch (Exception e) {
-                syslog.warn("Unable to acquire manager status: ", e);
+                log.warn("Unable to acquire manager status: ", e);
             }
             try {
                 if (managerStatus != null) {
@@ -155,10 +153,10 @@ public class CompactorService implements ManagementService {
                     }
                 }
             } catch (Exception ex) {
-                syslog.warn("Exception in runOrcestrator(): ", ex);
+                log.warn("Exception in runOrcestrator(): ", ex);
             }
         } catch (Throwable t) {
-            syslog.error("Encountered unexpected exception in runOrchestrator: ", t);
+            log.error("Encountered unexpected exception in runOrchestrator: ", t);
             throw t;
         }
     }
@@ -180,7 +178,7 @@ public class CompactorService implements ManagementService {
     public void shutdown() {
         checkpointerJvmManager.shutdown();
         orchestratorThread.shutdownNow();
-        syslog.info("Compactor Orchestrator service shutting down.");
+        log.info("Compactor Orchestrator service shutting down.");
         HealthMonitor.reportIssue(Issue.createInitIssue(Component.COMPACTOR));
     }
 }

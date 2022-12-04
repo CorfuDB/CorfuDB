@@ -3,7 +3,6 @@ package org.corfudb.infrastructure;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
@@ -15,6 +14,8 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.HashMap;
@@ -24,13 +25,13 @@ import java.util.UUID;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
-@Slf4j
 public class LivenessValidator {
     private final Map<TableName, LivenessMetadata> validateLivenessMap = new HashMap<>();
     private final CorfuRuntime corfuRuntime;
     private final CorfuStore corfuStore;
     private final Duration timeout;
     private final LivenessValidatorHelper livenessValidatorHelper;
+    private final Logger log;
 
     private static final long LIVENESS_INIT_VALUE = -1;
 
@@ -39,6 +40,7 @@ public class LivenessValidator {
         this.corfuStore = corfuStore;
         this.timeout = timeout;
         this.livenessValidatorHelper = new LivenessValidatorHelper();
+        this.log = LoggerFactory.getLogger("compactor-leader");
     }
 
     @AllArgsConstructor

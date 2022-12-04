@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.health.HealthMonitor;
 import org.corfudb.infrastructure.health.Issue;
@@ -33,13 +32,12 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  * 3. Set CompactoinManager's status as COMPLETED or FAILED based on the checkpointing status of all the tables. This
  * marks the end of the compaction cycle
  */
-@Slf4j
 public class CompactorLeaderServices {
     private final CorfuRuntime corfuRuntime;
     private final CorfuStore corfuStore;
     private final String nodeEndpoint;
     private final TrimLog trimLog;
-    private final Logger syslog;
+    private final Logger log;
     private final LivenessValidator livenessValidator;
     private final CompactorMetadataTables compactorMetadataTables;
 
@@ -64,7 +62,7 @@ public class CompactorLeaderServices {
         this.corfuStore = corfuStore;
         this.livenessValidator = livenessValidator;
         this.trimLog = new TrimLog(corfuRuntime, corfuStore);
-        this.syslog = LoggerFactory.getLogger("syslog");
+        this.log = LoggerFactory.getLogger("compactor-leader");
     }
 
     /**
@@ -74,7 +72,7 @@ public class CompactorLeaderServices {
      * @return compaction cycle start status
      */
     public LeaderInitStatus initCompactionCycle() {
-        syslog.info("=============Initiating Distributed Compaction============");
+        log.info("=============Initiating Distributed Compaction============");
 
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
@@ -83,7 +81,7 @@ public class CompactorLeaderServices {
 
             if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED) {
                 txn.commit();
-                syslog.warn("Compaction cycle already started");
+                log.warn("Compaction cycle already started");
                 return LeaderInitStatus.FAIL;
             }
 
@@ -115,10 +113,10 @@ public class CompactorLeaderServices {
 
             txn.commit();
         } catch (Exception e) {
-            syslog.error("Exception while initiating Compaction cycle {}. Stack Trace {}", e, e.getStackTrace());
+            log.error("Exception while initiating Compaction cycle {}. Stack Trace {}", e, e.getStackTrace());
             return LeaderInitStatus.FAIL;
         }
-        syslog.info("Init compaction cycle is successful");
+        log.info("Init compaction cycle is successful");
         return LeaderInitStatus.SUCCESS;
     }
 
@@ -143,7 +141,7 @@ public class CompactorLeaderServices {
             LivenessValidator.Status statusToChange = livenessValidator.shouldChangeManagerStatus(
                     Duration.ofMillis(currentTime));
             if (statusToChange == LivenessValidator.Status.FINISH) {
-                syslog.info("Invoking finishCompactionCycle");
+                log.info("Invoking finishCompactionCycle");
                 finishCompactionCycle();
                 livenessValidator.clearLivenessMap();
                 livenessValidator.clearLivenessValidator();
@@ -219,7 +217,7 @@ public class CompactorLeaderServices {
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
 
             if (managerStatus == null || managerStatus.getStatus() != StatusType.STARTED) {
-                syslog.warn("Cannot perform finishCompactionCycle due to managerStatus {}", managerStatus == null ?
+                log.warn("Cannot perform finishCompactionCycle due to managerStatus {}", managerStatus == null ?
                         "null" : managerStatus.getStatus());
                 txn.commit();
                 return;
@@ -232,7 +230,7 @@ public class CompactorLeaderServices {
                         CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, table).getPayload();
                 StringBuilder str = new StringBuilder();
                 str.append(printCheckpointStatus(table, tableStatus));
-                syslog.info("{}", str);
+                log.info("{}", str);
                 if (tableStatus.getStatus() != StatusType.COMPLETED) {
                     finalStatus = StatusType.FAILED;
                     break;
@@ -243,7 +241,7 @@ public class CompactorLeaderServices {
                     buildCheckpointStatus(finalStatus, tableNames.size(), totalTimeElapsed, managerStatus.getEpoch()),
                     null);
             txn.commit();
-            syslog.info("Total time taken for the compaction cycle: {}ms for {} tables with status {}", totalTimeElapsed,
+            log.info("Total time taken for the compaction cycle: {}ms for {} tables with status {}", totalTimeElapsed,
                     tableNames.size(), finalStatus);
             MicroMeterUtils.time(Duration.ofMillis(totalTimeElapsed), "compaction.total.timer",
                     "nodeEndpoint", nodeEndpoint);
@@ -251,7 +249,7 @@ public class CompactorLeaderServices {
             //Do not retry here, the compactor service will trigger this method again
             // The txn should succeed otherwise the status is FAILED
             finalStatus = StatusType.FAILED;
-            syslog.warn("Exception in finishCompactionCycle: {}. StackTrace={}", re, re.getStackTrace());
+            log.warn("Exception in finishCompactionCycle: {}. StackTrace={}", re, re.getStackTrace());
         }
         finally {
             Issue compactionCycleIssue =
@@ -273,7 +271,7 @@ public class CompactorLeaderServices {
                 if (instantTrimToken != null) {
                     txn.delete(CompactorMetadataTables.CHECKPOINT_TABLE_NAME, CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM);
                     txn.commit();
-                    syslog.info("Invoking trimlog() due to InstantTrigger with trim found");
+                    log.info("Invoking trimlog() due to InstantTrigger with trim found");
                     trimLog.invokePrefixTrim();
                     return;
                 }
@@ -313,7 +311,7 @@ public class CompactorLeaderServices {
     }
 
     private String printCheckpointStatus(TableName tableName, CheckpointingStatus status) {
-        StringBuilder str = new StringBuilder("\n");
+        StringBuilder str = new StringBuilder();
         str.append(status.getClientName()).append(":");
         if (status.getStatus() != StatusType.COMPLETED) {
             str.append("FAILED ");
