@@ -3,8 +3,8 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationServer;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -58,7 +58,7 @@ public class LogReplicationServerTest {
         metadataManager = mock(LogReplicationMetadataManager.class);
         sinkManager = mock(LogReplicationSinkManager.class);
         doReturn(replicationSession).when(sinkManager).getSourceSession();
-        lrServer = spy(new LogReplicationServer(context, sinkManager,"nodeId"));
+        lrServer = spy(new LogReplicationServer(context, sinkManager,"nodeId", metadataManager));
         mockHandlerContext = mock(ChannelHandlerContext.class);
         mockServerRouter = mock(IServerRouter.class);
     }
@@ -78,14 +78,12 @@ public class LogReplicationServerTest {
         final ResponseMsg response = ResponseMsg.newBuilder().build();
 
         lrServer.setLeadership(true);
-        doReturn(metadataManager).when(sinkManager).getLogReplicationMetadataManager();
-        doReturn(response).when(metadataManager).getMetadataResponse(any());
+        doReturn(metadataManager).when(sinkManager).getMetadataManager();
 
         lrServer.getHandlerMethods().handle(request, mockHandlerContext,
             mockServerRouter);
 
-        verify(sinkManager).getLogReplicationMetadataManager();
-        verify(metadataManager).getMetadataResponse(any());
+        verify(sinkManager).getMetadataManager();
     }
 
     /**

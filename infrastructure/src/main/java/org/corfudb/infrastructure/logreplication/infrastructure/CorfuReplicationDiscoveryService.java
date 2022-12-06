@@ -17,7 +17,8 @@ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogRepli
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
@@ -47,7 +48,6 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.time.Duration;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -66,7 +66,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * - Log replication configuration (streams to replicate)
  */
 @Slf4j
-public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscoveryServiceAdapter {
+public class CorfuReplicationDiscoveryService {
     /**
      * Wait interval (in seconds) between consecutive fetch topology attempts to cap exponential back-off.
      */
@@ -83,14 +83,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     private static final int MONITOR_LEASE_FRACTION = 10;
 
     /**
-     * Bookkeeping the topologyConfigId, version number and other log replication state information.
-     * It is backed by a corfu store table.
-     **/
-    @Getter
-    private final Map<ReplicationSession, LogReplicationMetadataManager> remoteSessionToMetadataManagerMap
-        = new HashMap<>();
-
-    /**
      * Lock-related configuration parameters
      */
     private static final String LOCK_GROUP = "Log_Replication_Group";
@@ -101,9 +93,10 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      */
     private static final int SYSTEM_EXIT_ERROR_CODE = -3;
 
+    private LogReplicationMetadataManager metadataManager;
+
     /**
-     * Used for managing the set of streams to replicate, and also used for upgrading path
-     * in Log Replication
+     * Used for managing the set of streams to replicate, and also used for upgrading path in Log Replication
      */
     private LogReplicationConfigManager replicationConfigManager;
 
@@ -151,7 +144,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      */
     // Note: not to be confused with NodeDescriptor's NodeId, which is a unique
     // identifier for the node as reported by the Cluster/Topology Manager
-    // This node Id is internal to Corfu Log Replication and used for the lock acquisition
+    // This id is internal to LR and used for the lock acquisition
     @Getter
     private final UUID logReplicationLockId;
 
@@ -159,7 +152,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * A queue of Discovery Service events
      */
     private final LinkedBlockingQueue<DiscoveryServiceEvent> eventQueue = new LinkedBlockingQueue<>();
-
 
     private Optional<LongTaskTimer.Sample> lockAcquireSample = Optional.empty();
 
@@ -178,7 +170,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     private boolean shouldRun = true;
 
     @Getter
-    private final AtomicBoolean isLeader;
+    private final AtomicBoolean isLeader = new AtomicBoolean();
 
     private LockClient lockClient;
 
@@ -201,18 +193,18 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     /**
      * Constructor Discovery Service
      *
-     * @param serverContext         current server's context
+     * @param serverContext current server's context
      */
     public CorfuReplicationDiscoveryService(@Nonnull ServerContext serverContext) {
         this.serverContext = serverContext;
         this.logReplicationLockId = serverContext.getNodeId();
         this.localEndpoint = serverContext.getLocalEndpoint();
-        this.isLeader = new AtomicBoolean();
         this.clusterManagerAdapter = getClusterManagerAdapter(serverContext.getPluginConfigFilePath());
     }
 
     /**
      * Create the Cluster Manager Adapter, i.e., the adapter to external provider of the topology.
+     *
      * @param pluginConfigFilePath File path of the ClusterManagerAdapter plugin
      * @return cluster manager adapter instance
      */
@@ -230,18 +222,22 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         }
     }
 
-    public void run() {
+    /**
+     * Start Log Replication Discovery Service
+     */
+    public void start() {
         try {
-            startDiscovery();
+            log.info("Start Log Replication Discovery Service");
+
+            setLocalNodeId();
+            fetchTopologyFromClusterManager();
+            processDiscoveredTopology(topologyDescriptor, true);
 
             while (shouldRun) {
                 try {
                     DiscoveryServiceEvent event = eventQueue.take();
                     processEvent(event);
                 } catch (Exception e) {
-                    // TODO: We should take care of which exceptions really end up being
-                    //  caught at this level, or we could be stopping LR completely on
-                    //  any exception.
                     log.error("Caught an exception. Stop discovery service.", e);
                     shouldRun = false;
                     stopLogReplication();
@@ -290,59 +286,44 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         }
     }
 
-    /**
-     * On first access start topology discovery.
-     * <p>
-     * On discovery, process the topology information and fetch log replication configuration
-     * (streams to replicate) required by an source and sink site before starting
-     * log replication.
-     */
-    private void startDiscovery() {
-        log.info("Start Log Replication Discovery Service");
-        setupLocalNodeId();
-        connectToClusterManager();
-        fetchTopologyFromClusterManager();
-        processDiscoveredTopology(topologyDescriptor, true);
-    }
-
-    /**
-     * Connect to Cluster Manager
-     */
-    private void connectToClusterManager() {
-        // The ClusterManager orchestrates the Log Replication Service. If it is not available,
-        // topology cannot be discovered and therefore LR cannot start, for this reason connection
+     private void connectToClusterManager() {
+        // The cluster manager orchestrates the Log Replication Service. If it is not available,
+        // topology cannot be discovered and therefore LR cannot start, for this reason, connection
         // should be attempted indefinitely.
         try {
             clusterManagerAdapter.register(this);
 
             IRetry.build(IntervalRetry.class, () -> {
                 try {
-                    log.info("Connecting to Cluster Manager {}", clusterManagerAdapter.getClass().getSimpleName());
+                    log.info("Connecting to cluster manager {}", clusterManagerAdapter.getClass().getSimpleName());
                     clusterManagerAdapter.start();
                 } catch (Exception e) {
-                    log.error("Error while attempting to connect to ClusterManager.", e);
+                    log.error("Error while attempting to connect to cluster manager. Retry.", e);
                     throw new RetryNeededException();
                 }
                 return null;
             }).run();
         } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to connect to ClusterManager.", e);
+            log.error("Unrecoverable exception when attempting to connect to cluster manager.", e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
 
     /**
      * Instantiate the LR components based on role
+     *
      * Source:
-     * - build logReplication context(LR context available for both Source and Sink.  Currently only used on the Source)
-     * - start even listener: listens to forced snapshot sync requests
+     * - Build log replication context (LR context available for both Source and Sink. Currently only used on the Source)
+     * - Start event listener: listens to forced snapshot sync requests
      * Sink:
      * - Start Log Replication Server(listens and processes incoming requests from the Source)
      * Both:
      * - Metadata Managers which maintain metadata related to replication and its status
-     * @param role
      */
-    private void performRoleBasedSetup(ClusterRole role) {
+    private void performRoleBasedSetup(TopologyDescriptor topology) {
+
+        ClusterRole role = topology.getClusterDescriptor(localNodeId).role;
+
         if (role != ClusterRole.SOURCE && role != ClusterRole.SINK) {
             log.debug("Cluster role is {}.  Not performing role-based setup.", role);
             return;
@@ -352,50 +333,16 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         // for supported replication models and version
         replicationConfigManager = new LogReplicationConfigManager(getCorfuRuntime(), serverContext);
         logReplicationConfig = replicationConfigManager.getConfig();
-
-        Set<String> remoteClusterIds = new HashSet<>();
+        metadataManager.refresh(topologyDescriptor);
 
         if (role == ClusterRole.SOURCE) {
-            remoteClusterIds.addAll(topologyDescriptor.getSinkClusters().keySet());
-            createMetadataManagers(remoteClusterIds);
             replicationContext = new LogReplicationContext(logReplicationConfig, topologyDescriptor, localCorfuEndpoint);
-            logReplicationEventListener = new LogReplicationEventListener(this, getCorfuRuntime());
+            logReplicationEventListener = new LogReplicationEventListener(this, getCorfuRuntime(), localClusterDescriptor);
             logReplicationEventListener.start();
         } else {
-            // Sink Cluster
-            remoteClusterIds.addAll(topologyDescriptor.getSourceClusters().keySet());
-            createMetadataManagers(remoteClusterIds);
-
             LogReplicationServer server = new LogReplicationServer(serverContext, localNodeId, replicationConfigManager,
-                localCorfuEndpoint, topologyDescriptor.getTopologyConfigId(), remoteSessionToMetadataManagerMap);
+                localCorfuEndpoint, topologyDescriptor.getTopologyConfigId(), metadataManager);
             interClusterServerNode = new CorfuInterClusterReplicationServerNode(serverContext, server);
-        }
-    }
-
-    private void createMetadataManagers(Set<String> remoteClusterIds) {
-        for (String remoteClusterId : remoteClusterIds) {
-            for (ReplicationSubscriber subscriber :
-                logReplicationConfig.getReplicationSubscriberToStreamsMap().keySet()) {
-                LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(getCorfuRuntime(),
-                    topologyDescriptor.getTopologyConfigId(), remoteClusterId);
-                ReplicationSession replicationSession = new ReplicationSession(remoteClusterId, subscriber);
-                remoteSessionToMetadataManagerMap.put(replicationSession, metadataManager);
-            }
-        }
-
-        // We currently do not have the ability to add subscribers if they are discovered on the Sink through an
-        // incoming messaged.  This is because a metadata manager corresponding to the new subscriber(session) must
-        // be constructed from LogReplicationServer, which will not be clean.  So add the temporary workaround to
-        // return the default subscriber so that a metadata manager for it gets created.
-        // TODO pankti: Remove this workaround after Metadata Manager is unified for all replication sessions.
-        if (remoteSessionToMetadataManagerMap.isEmpty()) {
-            for (String remoteClusterId : remoteClusterIds) {
-                LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(getCorfuRuntime(),
-                    topologyDescriptor.getTopologyConfigId(), remoteClusterId);
-                ReplicationSession replicationSession = ReplicationSession.getDefaultReplicationSessionForCluster(
-                    remoteClusterId);
-                remoteSessionToMetadataManagerMap.put(replicationSession, metadataManager);
-            }
         }
     }
 
@@ -499,17 +446,18 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 log.info("Start as Source (sender/replicator)");
                 if (replicationManager == null) {
                     replicationManager = new CorfuReplicationManager(replicationContext, localNodeDescriptor,
-                        remoteSessionToMetadataManagerMap, serverContext.getPluginConfigFilePath(), getCorfuRuntime(),
+                        metadataManager, serverContext.getPluginConfigFilePath(), getCorfuRuntime(),
                         replicationConfigManager);
                 } else {
-                    // Replication Context contains the topology which
+                    // Replication context contains the topology which
                     // must be updated if it has changed
                     replicationManager.setContext(replicationContext);
                 }
                 replicationManager.start();
 
                 // Set initial/default replication status for newly added Sink clusters
-                initReplicationStatusForRemoteClusters(true);
+                // TODO[Anny]: I don't think this is needed / confirm
+                // initReplicationStatusForRemoteClusters(true);
                 lockAcquireSample = recordLockAcquire(localClusterDescriptor.getRole());
                 processCountOnLockAcquire(localClusterDescriptor.getRole());
                 break;
@@ -522,7 +470,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 lockAcquireSample = recordLockAcquire(localClusterDescriptor.getRole());
 
                 // Set initial/default replication status for newly added Source clusters
-                initReplicationStatusForRemoteClusters(false);
+                // TODO[Anny]: I don't think this is needed / confirm
+                // initReplicationStatusForRemoteClusters(false);
                 processCountOnLockAcquire(localClusterDescriptor.getRole());
                 break;
             default:
@@ -533,27 +482,28 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     }
 
     /**
-     * Fetch current topology from Cluster Manager
+     * Fetch current topology from cluster manager
      */
     private void fetchTopologyFromClusterManager() {
+
+        connectToClusterManager();
+
         try {
             IRetry.build(ExponentialBackoffRetry.class, () -> {
                 try {
-                    log.info("Fetching topology from Cluster Manager...");
+                    log.info("Fetching topology from cluster manager...");
                     TopologyConfigurationMsg topologyMessage = clusterManagerAdapter.queryTopologyConfig(false);
                     topologyDescriptor = new TopologyDescriptor(topologyMessage);
                 } catch (Exception e) {
                     log.error("Caught exception while fetching topology. Retry.", e);
                     throw new RetryNeededException();
                 }
-
                 return null;
             }).setOptions(x -> x.setMaxRetryThreshold(Duration.ofSeconds(FETCH_THRESHOLD))).run();
         } catch (InterruptedException ie) {
             throw new UnrecoverableCorfuInterruptedError(ie);
         } catch (RetryExhaustedException ree) {
-            // Retries exhausted. Return
-            log.warn("Failed to retrieve updated topology from Cluster Manager.");
+            log.warn("Failed to retrieve updated topology from cluster manager.");
         }
     }
 
@@ -604,21 +554,20 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     }
 
     /**
-     * Process Topology Config Change:
+     * Process topology config change:
      * - Higher config id
      * - Potential cluster role change
-     * <p>
-     * Cluster change from Source to Sink is a two step process, we first
-     * confirm that
-     * we are ready to do the cluster role change, so by the time we receive cluster change
-     * notification, nothing needs to be done, other than stop.
+     *
+     * Cluster change from Source to Sink is a two step process,
+     * we first confirm that we are ready to do the cluster role change,
+     * so by the time we receive cluster change notification,
+     * nothing needs to be done, other than stop.
      *
      * @param newTopology new discovered topology
      */
     public void onClusterRoleChange(TopologyDescriptor newTopology) {
 
         log.debug("OnClusterRoleChange, topology={}", newTopology);
-
 
         // Stop ongoing replication, stopLogReplication() checks leadership and role as SOURCE
         // We do not update topology until we successfully stop log replication
@@ -632,25 +581,22 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         if (isLeader.get()) {
             // Reset the Replication Status on Source and Sink only on the
-            // leader node.  Consider the case of async configuration changes,
+            // leader node. Consider the case of async configuration changes,
             // non-lead nodes could overwrite the replication status if it
             // has already completed by the lead node
+            // TODO[V2]: this API should only be used for ReplicationModel.FULL_TABLES, we should filter on sessions
+            // based on the type
             resetReplicationStatusTableWithRetry();
         }
 
-        // Clear existing Metadata Managers.
-        remoteSessionToMetadataManagerMap.clear();
-
-        // Update topology, cluster, and node configs
-        log.debug("Update existing topologyConfigId {}, cluster id={}, " +
-            "role={} with the new topology",
+        log.debug("Update existing topologyConfigId {}, cluster id={}, role={} with the new topology",
             topologyDescriptor.getTopologyConfigId(),
             localClusterDescriptor.getClusterId(),
             localClusterDescriptor.getRole());
         updateLocalTopology(newTopology);
 
         // Update with the new roles
-        performRoleBasedSetup(localClusterDescriptor.getRole());
+        performRoleBasedSetup(topologyDescriptor);
 
         // On Topology Config Change, only if this node is the leader take action
         if (isLeader.get()) {
@@ -667,7 +613,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * @param event discovery event
      */
     public void processTopologyChangeNotification(DiscoveryServiceEvent event) {
-        // Skip stale topology notification
         if (event.getTopologyConfig().getTopologyConfigID() < topologyDescriptor.getTopologyConfigId()) {
             log.debug("Stale Topology Change Notification, current={}, received={}",
                     topologyDescriptor.getTopologyConfigId(), event.getTopologyConfig().getTopologyConfigID());
@@ -680,8 +625,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         boolean isValid;
         try {
-            isValid = processDiscoveredTopology(discoveredTopology,
-                localClusterDescriptor == null);
+            isValid = processDiscoveredTopology(discoveredTopology, localClusterDescriptor == null);
         } catch (Throwable t) {
             log.error("Exception when processing the discovered topology", t);
             stopLogReplication();
@@ -694,6 +638,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             } else {
                 onSinkClusterAddRemove(discoveredTopology);
             }
+            metadataManager.refresh(discoveredTopology);
         } else {
             // Stop Log Replication in case this node was previously SOURCE but no longer belongs to the Topology
             stopLogReplication();
@@ -716,48 +661,44 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     }
 
     /**
-     * Process a topology change where a Sink cluster has been added or removed from the topology.
+     * Process a topology change where a sink cluster has been added or removed from the topology.
      *
-     * @param discoveredTopology new discovered topology
+     * @param newTopology the new discovered topology
      */
-    private void onSinkClusterAddRemove(TopologyDescriptor discoveredTopology) {
+    private void onSinkClusterAddRemove(TopologyDescriptor newTopology) {
         log.debug("Sink Cluster has been added or removed");
 
         // We only need to process new sinks if the local cluster role is SOURCE
-        if (localClusterDescriptor.getRole() == ClusterRole.SOURCE &&
-            replicationManager != null && isLeader.get()) {
-            Set<String> receivedSinks = discoveredTopology.getSinkClusters().keySet();
+        if (localClusterDescriptor.getRole() == ClusterRole.SOURCE && replicationManager != null && isLeader.get()) {
+            Set<String> receivedSinks = newTopology.getSinkClusters().keySet();
             Set<String> currentSinks = topologyDescriptor.getSinkClusters().keySet();
 
             Set<String> intersection = Sets.intersection(currentSinks, receivedSinks);
-
             Set<String> sinksToRemove = Sets.difference(currentSinks, receivedSinks);
-
             Set<String> sinksToAdd = Sets.difference(receivedSinks, currentSinks);
 
             for (String remoteClusterId : sinksToRemove) {
-                for (ReplicationSubscriber subscriber :
-                    logReplicationConfig.getReplicationSubscriberToStreamsMap().keySet()) {
-                    ReplicationSession sessionToRemove = new ReplicationSession(remoteClusterId, subscriber);
-                    removeClusterInfoFromStatusTable(sessionToRemove);
-                    remoteSessionToMetadataManagerMap.remove(sessionToRemove);
+
+                for (LogReplicationSession session :
+                    logReplicationConfig.getSessionToStreamsMap().keySet()) {
+                    metadataManager.removeSession(session);
                 }
             }
             createMetadataManagers(sinksToAdd);
             initReplicationStatusForRemoteClusters(true);
-            replicationContext.setTopology(discoveredTopology);
-            replicationManager.processSinkChange(discoveredTopology, sinksToAdd, sinksToRemove, intersection);
+            replicationContext.setTopology(newTopology);
+            replicationManager.processSinkChange(newTopology, sinksToAdd, sinksToRemove, intersection);
         } else {
             // Update the topology config id on the Sink components
-            updateTopologyConfigIdOnSink(discoveredTopology.getTopologyConfigId());
+            updateTopologyConfigIdOnSink(newTopology.getTopologyConfigId());
         }
 
         // Update Topology Config Id on MetadataManagers (contains persisted
         // metadata tables)
         remoteSessionToMetadataManagerMap.values().forEach(metadataManager -> metadataManager.setupTopologyConfigId(
-            discoveredTopology.getTopologyConfigId()));
+                newTopology.getTopologyConfigId()));
 
-        updateLocalTopology(discoveredTopology);
+        updateLocalTopology(newTopology);
         log.debug("Persisted new topologyConfigId {}, cluster id={}, role={}", topologyDescriptor.getTopologyConfigId(),
             localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
     }
@@ -777,7 +718,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 localEndpoint, localNodeId, localClusterDescriptor, topology);
             if (!bootstrapComplete) {
                 log.info("Bootstrap the Log Replication Service");
-                performRoleBasedSetup(topology.getClusterDescriptor(localNodeId).getRole());
+                metadataManager = new LogReplicationMetadataManager(getCorfuRuntime(), localClusterDescriptor.getClusterId());
+                performRoleBasedSetup(topology);
                 registerToLogReplicationLock();
                 bootstrapComplete = true;
             }
@@ -791,14 +733,9 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         return false;
     }
 
-    private void updateLocalTopology(TopologyDescriptor newConfig) {
-        // Update local topology descriptor
-        topologyDescriptor = newConfig;
-
-        // Update local cluster descriptor
+    private void updateLocalTopology(TopologyDescriptor newTopology) {
+        topologyDescriptor = newTopology;
         localClusterDescriptor = topologyDescriptor.getClusterDescriptor(localNodeId);
-
-        // Update local node descriptor
         localNodeDescriptor = localClusterDescriptor.getNode(localNodeId);
     }
 
@@ -829,7 +766,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         notifyAll();
     }
 
-    @Override
     public void updateTopology(LogReplicationClusterInfo.TopologyConfigurationMsg topologyConfig) {
         input(new DiscoveryServiceEvent(DiscoveryServiceEventType.DISCOVERED_TOPOLOGY, topologyConfig));
     }
@@ -841,31 +777,23 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * Sink Cluster - Read the shared metadata table and find if data is consistent(set to false if snapshot sync is
      * in the apply phase)
      */
-    @Override
-    public Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus() {
-        Map<String, LogReplicationMetadata.ReplicationStatusVal> clientToReplicationStatusMap = new HashMap<>();
+    public Map<LogReplicationSession, ReplicationStatus> queryReplicationStatus() {
+        Map<LogReplicationSession, ReplicationStatus> replicationStatusMap = new HashMap<>();
 
         if (localClusterDescriptor == null) {
             log.warn("Cluster configuration has not been pushed to current LR node.");
-            return clientToReplicationStatusMap;
+            return replicationStatusMap;
         }
 
         if (localClusterDescriptor.getRole() != ClusterRole.SOURCE &&
             localClusterDescriptor.getRole() != ClusterRole.SINK) {
-            log.error("Received Replication Status Query in Incorrect Role {}.", localClusterDescriptor.getRole());
-            return clientToReplicationStatusMap;
+            log.error("Replication Status Query in incorrect role {}", localClusterDescriptor.getRole());
+            return replicationStatusMap;
         }
 
-        // Note: MetadataManager is currently instantiated per remote session.  In a subsequent PR, change to share a
-        // single instance for all remote sessions will be added.  So for now, get all replication statuses using any
-        // 1 metadata manager.
-        if (remoteSessionToMetadataManagerMap.values().iterator().hasNext()) {
-            return remoteSessionToMetadataManagerMap.values().iterator().next().getReplicationStatus();
-        }
-        return clientToReplicationStatusMap;
+        return metadataManager.getReplicationStatus();
     }
 
-    @Override
     public UUID forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException {
         if (localClusterDescriptor.getRole() == ClusterRole.SINK) {
             String errorStr = "The forceSnapshotSync command is not supported on sink cluster.";
@@ -889,14 +817,9 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         //  whole cluster?
         // For now, get the only supported(default) replication model and client for this cluster and trigger the
         // operation on it.
-        remoteSessionToMetadataManagerMap.get(ReplicationSession.getDefaultReplicationSessionForCluster(clusterId))
-            .updateLogReplicationEventTable(key, event);
+//        remoteSessionToMetadataManagerMap.get(ReplicationSession.getDefaultReplicationSessionForCluster(clusterId))
+//            .updateLogReplicationEventTable(key, event);
         return forceSyncId;
-    }
-
-    @Override
-    public ClusterRole getLocalClusterRoleType() {
-        return localClusterDescriptor.getRole();
     }
 
     public void shutdown() {
@@ -916,8 +839,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             lockClient.shutdown();
         }
 
-        remoteSessionToMetadataManagerMap.values().forEach(metadataManager -> metadataManager.shutdown());
-
         if (interClusterServerNode != null) {
             interClusterServerNode.close();
         }
@@ -931,7 +852,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     private String getLocalHost() {
         return NodeLocator.parseString(serverContext.getLocalEndpoint()).getHost();
     }
-
 
     private Optional<LongTaskTimer.Sample> recordLockAcquire(ClusterRole role) {
         return MeterRegistryProvider.getInstance()
@@ -962,75 +882,38 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         lockAcquireSample.ifPresent(LongTaskTimer.Sample::stop);
     }
 
-    private void initReplicationStatusForRemoteClusters(boolean isSource) {
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try {
-                    remoteSessionToMetadataManagerMap.values().forEach(
-                        metadataManager -> metadataManager.initReplicationStatus(isSource));
-                } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to update Replication Status for new remote", tae);
-                    throw new RetryNeededException();
-                }
-                log.debug("Replication Status for new remote added successfully.");
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to add Replication Status for new remote.", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
-        }
-    }
-
-    private void setupLocalNodeId() {
+    private void setLocalNodeId() {
         // Retrieve system-specific node id
         LogReplicationPluginConfig config = new LogReplicationPluginConfig(serverContext.getPluginConfigFilePath());
         String nodeIdFilePath = config.getNodeIdFilePath();
+
+        // TODO[V2]: this code should come from plugin
         if (nodeIdFilePath != null) {
             File nodeIdFile = new File(nodeIdFilePath);
             try (BufferedReader bufferedReader = new BufferedReader(new FileReader(nodeIdFile))) {
                 String line = bufferedReader.readLine();
                 localNodeId = line.split("=")[1].trim().toLowerCase();
-                log.info("setupLocalNodeId succeeded, node id is {}", localNodeId);
+                log.info("Local node id={}", localNodeId);
             } catch (IOException e) {
                 log.error("setupLocalNodeId failed", e);
                 throw new IllegalStateException(e.getCause());
             }
         } else {
-            log.error("setupLocalNodeId failed, because nodeId file path is " +
-                "missing!");
+            log.error("setupLocalNodeId failed, because nodeId file path is missing!");
             DefaultClusterConfig defaultClusterConfig = new DefaultClusterConfig();
 
             // For testing purpose, it uses the default host to assign node id
             if (getLocalHost().equals(defaultClusterConfig.getDefaultHost())) {
                 localNodeId = defaultClusterConfig.getDefaultNodeId(localEndpoint);
-                if (localNodeId != null) {
-                    log.info("setupLocalNodeId failed, using default node id {} for test", localNodeId);
-                } else {
+
+                if (localNodeId == null) {
                     throw new IllegalStateException("SetupLocalNodeId failed for testing");
                 }
+
+                log.info("Default node id={} for testing", localNodeId);
             } else {
                 throw new IllegalArgumentException("NodeId file path is missing");
             }
-        }
-    }
-
-    private void removeClusterInfoFromStatusTable(ReplicationSession session) {
-        try {
-            IRetry.build(IntervalRetry.class, () -> {
-                try {
-                    remoteSessionToMetadataManagerMap.get(session).removeFromStatusTable(session.getRemoteClusterId());
-                } catch (TransactionAbortedException tae) {
-                    log.error("Error while attempting to remove clusterInfo from LR status tables", tae);
-                    throw new RetryNeededException();
-                }
-
-                log.debug("removeClusterInfoFromStatusTable succeeds, removed clusterID {}", session.getRemoteClusterId());
-
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to removeClusterInfoFromStatusTable", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
 
@@ -1038,12 +921,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
-                    // Note: MetadataManager is currently instantiated per remote session.  In a subsequent PR, change
-                    // to share a single instance for all remote sessions will be added.  So for now, reset the table
-                    // using any 1 metadata manager.
-                    if (remoteSessionToMetadataManagerMap.values().iterator().hasNext()) {
-                        remoteSessionToMetadataManagerMap.values().iterator().next().resetReplicationStatus();
-                    }
+                    metadataManager.resetReplicationStatus();
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to resetReplicationStatusTable in DiscoveryService's role change", tae);
                     throw new RetryNeededException();

@@ -2,7 +2,10 @@ package org.corfudb.integration;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+<<<<<<< Updated upstream
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+=======
+>>>>>>> Stashed changes
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
@@ -205,21 +208,21 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
     private void writeOnSender(int startIndex, int totalEntries) {
         int maxIndex = totalEntries + startIndex;
 
-        for(Map.Entry<String, Table<Sample.StringKey,
+        for (Map.Entry<String, Table<Sample.StringKey,
             SampleSchema.ValueFieldTagOne, Sample.Metadata>> entry :
             mapNameToMapSource.entrySet()) {
 
             Table<Sample.StringKey, SampleSchema.ValueFieldTagOne,
-                Sample.Metadata> map = entry.getValue();
+                    Sample.Metadata> map = entry.getValue();
 
             for (int i = startIndex; i < maxIndex; i++) {
                 Sample.StringKey stringKey = Sample.StringKey.newBuilder()
-                    .setKey(String.valueOf(i)).build();
+                        .setKey(String.valueOf(i)).build();
                 SampleSchema.ValueFieldTagOne value = SampleSchema
-                    .ValueFieldTagOne.newBuilder()
-                    .setPayload(String.valueOf(i)).build();
+                        .ValueFieldTagOne.newBuilder()
+                        .setPayload(String.valueOf(i)).build();
                 Sample.Metadata metadata = Sample.Metadata.newBuilder()
-                    .setMetadata("Metadata_" + i).build();
+                        .setMetadata("Metadata_" + i).build();
                 try (TxnContext txn = corfuStoreSource.txn(NAMESPACE)) {
                     txn.putRecord(map, stringKey, value, metadata);
                     txn.commit();

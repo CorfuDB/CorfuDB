@@ -5,9 +5,9 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
-import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationSession;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.IllegalTransitionException;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
@@ -159,17 +159,21 @@ public class CorfuLogReplicationRuntime {
     @Getter
     public final String remoteClusterId;
 
+    @Getter
+    public final LogReplicationSession session;
+
     /**
      * Default Constructor
      */
     public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters, LogReplicationMetadataManager metadataManager,
-        LogReplicationConfigManager replicationConfigManager, ReplicationSession replicationSession) {
-        this.remoteClusterId = replicationSession.getRemoteClusterId();
+        LogReplicationConfigManager replicationConfigManager, LogReplicationSession session) {
+        this.remoteClusterId = session.getSinkClusterId();
+        this.session = session;
         this.metadataManager = metadataManager;
         this.router = new LogReplicationClientRouter(parameters, this);
         this.router.addClient(new LogReplicationHandler());
-        this.sourceManager = new LogReplicationSourceManager(parameters,
-            new LogReplicationClient(router, remoteClusterId), metadataManager, replicationConfigManager, replicationSession);
+        this.sourceManager = new LogReplicationSourceManager(parameters, new LogReplicationClient(router, session.getSinkClusterId()),
+                metadataManager, replicationConfigManager, session);
         this.connectedNodes = new HashSet<>();
 
         ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker-"+remoteClusterId)
@@ -194,7 +198,7 @@ public class CorfuLogReplicationRuntime {
      * Start Log Replication Communication FSM
      */
     public void start() {
-        log.info("Start Log Replication Runtime to remote {}", remoteClusterId);
+        log.info("Start Log Replication Runtime to remote {}", session.getSinkClusterId());
         // Start Consumer Thread for this state machine (dedicated thread for event consumption)
         communicationFSMConsumer.submit(this::consume);
         router.connect();

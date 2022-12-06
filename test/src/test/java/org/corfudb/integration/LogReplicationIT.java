@@ -6,13 +6,14 @@ import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample.StringKey;
-import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationStateType;
@@ -30,7 +31,6 @@ import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.proto.service.CorfuMessage;
 
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.Utils;
@@ -56,6 +56,8 @@ import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.integration.LogReplicationAbstractIT.checkpointAndTrimCorfuStore;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 
 /**
  * Test the core components of log replication, namely, Snapshot Sync and Log Entry Sync,
@@ -118,6 +120,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private SourceForwardingDataSender sourceDataSender;
 
+    private final LogReplicationSession session = LogReplicationSession.newBuilder()
+            .setSinkClusterId(REMOTE_CLUSTER_ID)
+            .build();
+
     // List of all opened maps backed by Corfu on Source and Destination
     private Map<String, Table<StringKey, IntValue, Metadata>> srcCorfuTables = new HashMap<>();
     private Map<String, Table<StringKey, IntValue, Metadata>> dstCorfuTables = new HashMap<>();
@@ -175,7 +181,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private final Semaphore blockUntilExpectedAckTs = new Semaphore(1, true);
 
-    private LogReplicationMetadataManager logReplicationMetadataManager;
+    private LogReplicationMetadataManager metadataManager;
 
     private final String t0Name = TABLE_PREFIX + 0;
     private final String t1Name = TABLE_PREFIX + 1;
@@ -233,7 +239,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         srcCorfuStore = new CorfuStore(srcDataRuntime);
         dstCorfuStore = new CorfuStore(dstDataRuntime);
 
-        logReplicationMetadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0, REMOTE_CLUSTER_ID);
+        metadataManager = new LogReplicationMetadataManager(dstTestRuntime, REMOTE_CLUSTER_ID);
+
         expectedAckTimestamp = new AtomicLong(Long.MAX_VALUE);
         testConfig.clear().setRemoteClusterId(REMOTE_CLUSTER_ID);
     }
@@ -718,7 +725,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // expectedAckTimestamp was set in 'startLogEntrySync' to the tail of the Log Replication Stream.  Verify
         // that the metadata table was updated with it after a successful LogEntrySync
-        assertThat(expectedAckTimestamp.get()).isEqualTo(logReplicationMetadataManager.getLastProcessedLogEntryBatchTimestamp());
+        expectedAckTimestamp.set(srcDataRuntime.getAddressSpaceView().getLogTail());
+
         verifyPersistedSnapshotMetadata();
         verifyPersistedLogEntryMetadata();
 
@@ -1039,15 +1047,22 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 LogReplicationStateType.INITIALIZED, true);
         testConfig.clear();
 
-        // add a listner to ACKs received. This is used to unblock the current thread before the final verification.
+        // Add a listener to ACKs received. This is used to unblock the current thread before the final verification.
         ackMessages = sourceDataSender.getAckMessages();
         ackMessages.addObserver(this);
 
-        // simulate negotiation. Return metadata from the sink
-        LogReplicationMetadataResponseMsg negotiationResponse = sourceDataSender.getSinkManager()
-                .getLogReplicationMetadataManager()
-                .getMetadataResponse(CorfuMessage.HeaderMsg.newBuilder().build())
-                .getPayload().getLrMetadataResponse();
+        // Simulate negotiation. Return metadata from the sink
+        ReplicationMetadata metadata = sourceDataSender.getSinkManager()
+                .getMetadataManager()
+                .queryReplicationMetadata(session);
+        LogReplicationMetadataResponseMsg negotiationResponse = LogReplicationMetadataResponseMsg.newBuilder()
+                .setTopologyConfigID(metadata.getTopologyConfigId())
+                .setVersion(metadata.getVersion())
+                .setSnapshotStart(metadata.getLastSnapshotStarted())
+                .setSnapshotTransferred(metadata.getLastSnapshotTransferred())
+                .setSnapshotApplied(metadata.getLastSnapshotApplied())
+                .setLastLogEntryTimestamp(metadata.getLastLogEntryBatchProcessed())
+                .build();
 
         logReplicationSourceManager.getLogReplicationFSM().input(
                 new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST,
@@ -1223,18 +1238,21 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Data Sender
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, configManager, testConfig,
-            logReplicationMetadataManager, nettyConfig, function);
+                metadataManager, nettyConfig, function);
 
-        ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(REMOTE_CLUSTER_ID);
+        LogReplicationSession session = LogReplicationSession.newBuilder()
+                .setSinkClusterId(REMOTE_CLUSTER_ID)
+                .build();
 
         // Source Manager
-        LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(
-
-            LogReplicationRuntimeParameters.builder().remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID,
-                LogReplicationClusterInfo.ClusterRole.SOURCE, CORFU_PORT)).replicationConfig(configManager.getConfig())
-                .localCorfuEndpoint(SOURCE_ENDPOINT).build(), logReplicationMetadataManager, sourceDataSender,
-            configManager, replicationSession);
+        LogReplicationRuntimeParameters runtimeParameters = LogReplicationRuntimeParameters.builder()
+                .remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID,
+                        LogReplicationClusterInfo.ClusterRole.SOURCE, CORFU_PORT))
+                .replicationConfig(configManager.getConfig())
+                .localCorfuEndpoint(SOURCE_ENDPOINT)
+                .build();
+        LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(runtimeParameters,
+                metadataManager, sourceDataSender, configManager, session);
 
         // Set Log Replication Source Manager so we can emulate the channel for data & control messages (required
         // for testing)
@@ -1343,15 +1361,15 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private void verifyPersistedSnapshotMetadata() {
-        long lastSnapshotStart = logReplicationMetadataManager.getLastStartedSnapshotTimestamp();
-        long lastSnapshotDone = logReplicationMetadataManager.getLastAppliedSnapshotTimestamp();
+        ReplicationMetadata metadata = metadataManager.queryReplicationMetadata(session);
+        long lastSnapshotStart = metadata.getLastSnapshotStarted();
+        long lastSnapshotDone = metadata.getLastSnapshotApplied();
         assertThat(lastSnapshotStart).isEqualTo(lastSnapshotDone);
     }
 
     private void verifyPersistedLogEntryMetadata() {
-        long lastLogProcessed = logReplicationMetadataManager.getLastProcessedLogEntryBatchTimestamp();
-
-        log.debug("\nlastLogProcessed " + lastLogProcessed + " expectedTimestamp " + expectedAckTimestamp.get());
+        long lastLogProcessed = metadataManager.queryReplicationMetadata(session)
+                .getLastLogEntryBatchProcessed();
         assertThat(expectedAckTimestamp.get() == lastLogProcessed).isTrue();
     }
 
@@ -1366,7 +1384,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     @FunctionalInterface
-    public static interface TransitionSource {
+    public interface TransitionSource {
         void changeState();
     }
 

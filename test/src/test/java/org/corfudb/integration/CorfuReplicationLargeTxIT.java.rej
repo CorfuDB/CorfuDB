@@ -1,0 +1,17 @@
+diff a/test/src/test/java/org/corfudb/integration/CorfuReplicationLargeTxIT.java b/test/src/test/java/org/corfudb/integration/CorfuReplicationLargeTxIT.java	(rejected hunks)
+@@ -96,11 +97,11 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
+         // change on status are captured)
+         int totalStandbyStatusUpdates = 2;
+         corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
+-            LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+-            LogReplicationMetadata.ReplicationStatusKey.class,
+-            LogReplicationMetadata.ReplicationStatusVal.class,
++            LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME,
++            LogReplicationSession.class,
++            ReplicationStatus.class,
+             null,
+-            TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
++            TableOptions.fromProtoSchema(ReplicationStatus.class));
+ 
+         CountDownLatch statusUpdateLatch = new CountDownLatch(totalStandbyStatusUpdates);
+         ReplicationStatusListener standbyListener =

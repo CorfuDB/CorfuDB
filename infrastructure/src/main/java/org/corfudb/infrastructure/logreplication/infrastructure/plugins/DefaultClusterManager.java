@@ -4,12 +4,16 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryService;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationDiscoveryServiceException;
 import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationSession;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SinkReplicationStatus;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.ExampleSchemas.ClusterUuidMsg;
@@ -24,7 +28,9 @@ import org.corfudb.runtime.view.Address;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -34,7 +40,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  * one source cluster, and one or more sink clusters.
  */
 @Slf4j
-public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAdapter {
+public class DefaultClusterManager implements CorfuReplicationClusterManagerAdapter {
     private static final int BACKUP_CORFU_PORT = 9007;
 
     private static final String SOURCE_CLUSTER_NAME = "primary_site";
@@ -50,6 +56,14 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
     public static final ClusterUuidMsg OP_INVALID = ClusterUuidMsg.newBuilder().setLsb(4L).setMsb(4L).build();
     public static final ClusterUuidMsg OP_ENFORCE_SNAPSHOT_FULL_SYNC = ClusterUuidMsg.newBuilder().setLsb(5L).setMsb(5L).build();
     public static final ClusterUuidMsg OP_BACKUP = ClusterUuidMsg.newBuilder().setLsb(6L).setMsb(6L).build();
+
+    @Getter
+    public CorfuReplicationDiscoveryService corfuReplicationDiscoveryService;
+
+    @Getter
+    public TopologyConfigurationMsg topologyConfig;
+
+    public String localEndpoint;
 
     @Getter
     private long configId;
@@ -124,6 +138,25 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         log.info("Shutdown Cluster Manager completed.");
     }
 
+    @Override
+    public Map<LogReplicationSession, ReplicationStatus> queryReplicationStatus() {
+        return null;
+    }
+
+    @Override
+    public Map<LogReplicationSession, SinkReplicationStatus> queryStatusOnSink() {
+        return null;
+    }
+
+    public Map<LogReplicationSession, SinkReplicationStatus> isDataConsistent() {
+        return null;
+    }
+
+    @Override
+    public UUID forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException {
+        return null;
+    }
+
     public TopologyDescriptor readConfig() {
         List<ClusterDescriptor> sourceClusters = new ArrayList<>();
         List<ClusterDescriptor> sinkClusters = new ArrayList<>();
@@ -191,6 +224,16 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
 
 
     @Override
+    public void register(CorfuReplicationDiscoveryService corfuReplicationDiscoveryService) {
+        this.corfuReplicationDiscoveryService = corfuReplicationDiscoveryService;
+    }
+
+    @Override
+    public void setLocalEndpoint(String endpoint) {
+        this.localEndpoint = endpoint;
+    }
+
+    @Override
     public TopologyConfigurationMsg queryTopologyConfig(boolean useCached) {
         if (topologyConfig == null || !useCached) {
             topologyConfig = constructTopologyConfigMsg();
@@ -198,6 +241,11 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
 
         log.debug("new cluster config msg " + topologyConfig);
         return topologyConfig;
+    }
+
+    @Override
+    public void updateTopologyConfig(TopologyConfigurationMsg newClusterConfig) {
+
     }
 
     /**
@@ -385,11 +433,11 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
                             sinkCluster.get().getId());
                     } catch (LogReplicationDiscoveryServiceException e) {
                         log.warn("Caught a RuntimeException ", e);
-                        ClusterRole role = clusterManager.getCorfuReplicationDiscoveryService().getLocalClusterRoleType();
-                        if (role != ClusterRole.SINK) {
-                            log.error("The current cluster role is {} and should not throw a RuntimeException for forceSnapshotSync call.", role);
-                            Thread.interrupted();
-                        }
+//                        ClusterRole role = clusterManager.getCorfuReplicationDiscoveryService().getLocalClusterRoleType();
+//                        if (role != ClusterRole.SINK) {
+//                            log.error("The current cluster role is {} and should not throw a RuntimeException for forceSnapshotSync call.", role);
+//                            Thread.interrupted();
+//                        }
                     }
                 } else if (entry.getKey().equals(OP_BACKUP)) {
                     clusterManager.getClusterManagerCallback()

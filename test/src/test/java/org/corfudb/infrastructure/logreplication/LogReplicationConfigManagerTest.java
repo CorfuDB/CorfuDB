@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication;
 
+<<<<<<< Updated upstream
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
@@ -11,10 +12,13 @@ import org.corfudb.test.SampleSchema.ValueFieldTagOne;
 import org.corfudb.test.SampleSchema.Uuid;
 
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+=======
+>>>>>>> Stashed changes
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.view.AbstractViewTest;
+<<<<<<< Updated upstream
 
 import org.corfudb.runtime.view.TableRegistry;
 import org.junit.Assert;
@@ -29,6 +33,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+=======
+>>>>>>> Stashed changes
 
 import static org.corfudb.runtime.view.TableRegistry.REGISTRY_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME;
@@ -150,7 +156,7 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
 
     private void verifyExpectedConfigGenerated(LogReplicationConfig actualConfig) {
         Assert.assertTrue(Objects.equals(expectedSubscriberToStreamsToReplicateMap,
-            actualConfig.getReplicationSubscriberToStreamsMap()));
+            actualConfig.getSessionToStreamsMap()));
 
         Assert.assertTrue(Objects.equals(expectedSubscriberToStreamsToDropMap,
             actualConfig.getSubscriberToNonReplicatedStreamsMap()));

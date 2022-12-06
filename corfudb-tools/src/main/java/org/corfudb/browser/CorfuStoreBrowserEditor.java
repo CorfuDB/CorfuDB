@@ -110,7 +110,7 @@ public class CorfuStoreBrowserEditor {
     public EnumMap<IMetadata.LogUnitMetadataType, Object> printMetadataMap(long address) {
         ILogData data = runtime.getAddressSpaceView().read(address);
         System.out.println("\n========== Metadata Map ==========\n");
-        for(Map.Entry<IMetadata.LogUnitMetadataType, Object> entry : data.getMetadataMap().entrySet()) {
+        for (Map.Entry<IMetadata.LogUnitMetadataType, Object> entry : data.getMetadataMap().entrySet()) {
             System.out.println(entry.getKey() + "  :: " + entry.getValue());
         }
         System.out.println("\n==================================\n");

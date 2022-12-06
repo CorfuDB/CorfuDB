@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.CorfuRuntime;
@@ -14,12 +15,15 @@ import java.util.List;
 
 @Slf4j
 public final class LogReplicationEventListener implements StreamListener {
+
     private final CorfuReplicationDiscoveryService discoveryService;
     private final CorfuStore corfuStore;
+    private final ClusterDescriptor localCluster;
 
-    public LogReplicationEventListener(CorfuReplicationDiscoveryService discoveryService, CorfuRuntime runtime) {
+    public LogReplicationEventListener(CorfuReplicationDiscoveryService discoveryService, CorfuRuntime runtime, ClusterDescriptor localCluster) {
         this.discoveryService = discoveryService;
         this.corfuStore = new CorfuStore(runtime);
+        this.localCluster = localCluster;
     }
 
     public void start() {
@@ -62,9 +66,8 @@ public final class LogReplicationEventListener implements StreamListener {
                     log.info("ReplicationEventListener received an event with id {}, type {}, cluster id {}",
                         event.getEventId(), event.getType(), event.getClusterId());
                     if (event.getType().equals(ReplicationEvent.ReplicationEventType.FORCE_SNAPSHOT_SYNC)) {
-                        discoveryService.input(new DiscoveryServiceEvent(
-                            DiscoveryServiceEvent.DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC, event.getClusterId(),
-                            event.getEventId()));
+                        discoveryService.input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC,
+                                localCluster.getClusterId(), event.getClusterId(), event.getEventId()));
                     }
                 }
             }

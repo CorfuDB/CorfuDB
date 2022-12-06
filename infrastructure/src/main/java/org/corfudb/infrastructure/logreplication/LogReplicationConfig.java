@@ -4,12 +4,11 @@ import lombok.Data;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationSession;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.TableRegistry;
 
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -50,7 +49,7 @@ public class LogReplicationConfig {
         getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME));
 
     // A map consisting of the streams to replicate for each supported replication model
-    private Map<ReplicationSubscriber, Set<String>> replicationSubscriberToStreamsMap = new HashMap<>();
+    private Map<LogReplicationSession, Set<String>> sessionToStreamsMap;
 
     public static final UUID PROTOBUF_TABLE_ID = CorfuRuntime.getStreamID(
             getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME));
@@ -68,11 +67,11 @@ public class LogReplicationConfig {
     private Map<UUID, String> streamIdsToNameMap;
 
     // Streaming tags on Sink (map data stream id to list of tags associated to it)
-    private Map<UUID, List<UUID>> dataStreamToTagsMap = new HashMap<>();
+    private Map<UUID, List<UUID>> dataStreamToTagsMap;
 
     // Set of streams to drop on Sink if replication subscriber info differs from Source when both are on different
     // versions
-    private Map<ReplicationSubscriber, Set<UUID>> subscriberToNonReplicatedStreamsMap = new HashMap<>();
+    private Map<LogReplicationSession, Set<UUID>> subscriberToNonReplicatedStreamsMap;
 
     // Snapshot Sync Batch Size(number of messages)
     private int maxNumMsgPerBatch;
@@ -90,10 +89,10 @@ public class LogReplicationConfig {
 
     public static final String SAMPLE_CLIENT = "Sample Client";
 
-    public LogReplicationConfig(Map<ReplicationSubscriber, Set<String>> subscriberToStreamsMap,
-                                Map<ReplicationSubscriber, Set<UUID>> subscriberToNonReplicatedStreamsMap,
+    public LogReplicationConfig(Map<LogReplicationSession, Set<String>> subscriberToStreamsMap,
+                                Map<LogReplicationSession, Set<UUID>> subscriberToNonReplicatedStreamsMap,
                                 Map<UUID, List<UUID>> streamToTagsMap, ServerContext serverContext) {
-        replicationSubscriberToStreamsMap = subscriberToStreamsMap;
+        sessionToStreamsMap = subscriberToStreamsMap;
         dataStreamToTagsMap = streamToTagsMap;
         this.subscriberToNonReplicatedStreamsMap = subscriberToNonReplicatedStreamsMap;
 
@@ -107,10 +106,5 @@ public class LogReplicationConfig {
             this.maxCacheSize = serverContext.getLogReplicationCacheMaxSize();
         }
         this.maxDataSizePerMsg = maxMsgSize * DATA_FRACTION_PER_MSG / 100;
-    }
-
-    // An enum of all supported Replication Models
-    public static enum ReplicationModel {
-        SINGLE_SOURCE_SINK
     }
 }

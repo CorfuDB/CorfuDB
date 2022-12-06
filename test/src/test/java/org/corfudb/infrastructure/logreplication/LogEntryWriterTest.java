@@ -86,19 +86,19 @@ public class LogEntryWriterTest extends AbstractViewTest {
         List<LogReplicationMetadataType> metadataTypes = new ArrayList<>();
         List<Long> timestamps = new ArrayList<>();
 
-        for(int i = 0; i < numOpaqueEntries + 1; i++) {
+        for (int i = 0; i < numOpaqueEntries + 1; i++) {
             txnContexts.add(txnContext);
         }
 
-        for(int i = 0; i < numOpaqueEntries + 1; i++) {
+        for (int i = 0; i < numOpaqueEntries + 1; i++) {
             // The first 3 metadata updates will be for LAST_LOG_ENTRY_APPLIED
             if (i < numOpaqueEntries) {
                 metadataTypes.add(LogReplicationMetadataType.LAST_LOG_ENTRY_APPLIED);
-                timestamps.add((long)i+1);
+                timestamps.add((long) i + 1);
             } else {
                 // The last one will be for LAST_LOG_ENTRY_BATCH_PROCESSED
                 metadataTypes.add(LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED);
-                timestamps.add((long)i);
+                timestamps.add((long) i);
             }
         }
         verifyMetadataAppliedAndOrder(numOpaqueEntries+1, txnContexts, metadataTypes, timestamps);

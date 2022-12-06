@@ -7,9 +7,8 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
-import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
-import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationSession;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
 import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
@@ -218,15 +217,15 @@ public class LogReplicationFSM {
      * @param workers FSM executor service for state tasks
      * @param ackReader AckReader which listens to acks from the Sink and updates the replication status accordingly
      * @param tableManagerPlugin Plugin which builds the streams to replicate
-     * @param replicationSession Replication Session to the remote(Sink) cluster
+     * @param session Replication Session to the remote(Sink) cluster
      */
     public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfigManager configManager, DataSender dataSender,
                              ReadProcessor readProcessor, ExecutorService workers, LogReplicationAckReader ackReader,
-                             LogReplicationConfigManager tableManagerPlugin, ReplicationSession replicationSession) {
+                             LogReplicationConfigManager tableManagerPlugin, LogReplicationSession session) {
         // Use stream-based readers for snapshot and log entry sync reads
-        this(runtime, new StreamsSnapshotReader(runtime, configManager, replicationSession), dataSender,
-            new StreamsLogEntryReader(runtime, configManager, replicationSession), readProcessor, configManager,
-            workers, ackReader, tableManagerPlugin, replicationSession);
+        this(runtime, new StreamsSnapshotReader(runtime, configManager, session), dataSender,
+            new StreamsLogEntryReader(runtime, configManager, session), readProcessor, configManager,
+            workers, ackReader, tableManagerPlugin, session);
     }
 
     /**
@@ -245,7 +244,7 @@ public class LogReplicationFSM {
                              LogEntryReader logEntryReader, ReadProcessor readProcessor,
                              LogReplicationConfigManager configManager,
                              ExecutorService workers, LogReplicationAckReader ackReader,
-                             LogReplicationConfigManager tableManagerPlugin, ReplicationSession replicationSession) {
+                             LogReplicationConfigManager tableManagerPlugin, LogReplicationSession session) {
 
         this.snapshotReader = snapshotReader;
         this.logEntryReader = logEntryReader;
@@ -264,12 +263,13 @@ public class LogReplicationFSM {
         this.state = states.get(LogReplicationStateType.INITIALIZED);
         this.logReplicationFSMWorkers = workers;
         this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
-            ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer-" + replicationSession.getRemoteClusterId())
+                // TODO(Anny): have an util method that gives a nice id out of a session
+            ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer-" + session.getSourceClusterId())
             .build());
 
         logReplicationFSMConsumer.submit(this::consume);
 
-        log.info("Log Replication FSM initialized, replicate to remote cluster {}", replicationSession.getRemoteClusterId());
+        log.info("Log Replication FSM initialized for session={}", session);
     }
 
     /**

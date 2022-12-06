@@ -2,11 +2,16 @@ package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
+<<<<<<< Updated upstream
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+=======
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
+>>>>>>> Stashed changes
 import org.corfudb.infrastructure.logreplication.proto.Sample;
-import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -195,9 +200,9 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
         // While the TX log is growing, the remaining entries to send can be changing during this time, as it is computed
         // wrt. the tail of the log and this varies depending on how fast we are catching the tail of the log.
-        verifyReplicationStatus(ReplicationStatusVal.SyncType.LOG_ENTRY,
-                LogReplicationMetadata.SyncStatus.ONGOING, LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
-                LogReplicationMetadata.SyncStatus.COMPLETED);
+        verifyReplicationStatus(ReplicationStatus.SyncType.LOG_ENTRY,
+                SyncStatus.ONGOING, SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
+                SyncStatus.COMPLETED);
 
         stopWrites.set(true);
 

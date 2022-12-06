@@ -6,12 +6,11 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
-import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
-import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationError;
 import org.corfudb.infrastructure.logreplication.replication.fsm.ObservableAckMsg;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
@@ -229,14 +228,23 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
                 timeoutMetadataResponse = false;
                 return new CompletableFuture<>();
             }
+
+            ReplicationMetadata metadata = destinationLogReplicationManager.getMetadataManager().queryReplicationMetadata(sinkSession);
+
             // In test implementation emulate the apply has succeeded and return a LogReplicationMetadataResponse
             response = LogReplicationMetadataResponseMsg.newBuilder()
                     .setTopologyConfigID(0)
                     .setVersion("version")
                     .setSnapshotStart(baseSnapshotTimestamp)
-                    .setSnapshotTransferred(destinationLogReplicationManager.getLogReplicationMetadataManager().getLastTransferredSnapshotTimestamp())
-                    .setSnapshotApplied(destinationLogReplicationManager.getLogReplicationMetadataManager().getLastAppliedSnapshotTimestamp())
-                    .setLastLogEntryTimestamp(destinationLogReplicationManager.getLogReplicationMetadataManager().getLastProcessedLogEntryBatchTimestamp())
+<<<<<<< Updated upstream
+                    .setSnapshotTransferred(destinationLogReplicationManager.getMetadataManager().getLastTransferredSnapshotTimestamp())
+                    .setSnapshotApplied(destinationLogReplicationManager.getMetadataManager().getLastAppliedSnapshotTimestamp())
+                    .setLastLogEntryTimestamp(destinationLogReplicationManager.getMetadataManager().getLastProcessedLogEntryBatchTimestamp())
+=======
+                    .setSnapshotTransferred(metadata.getLastSnapshotTransferred())
+                    .setSnapshotApplied(metadata.getLastSnapshotApplied())
+                    .setLastLogEntryTimestamp(metadata.getLastLogEntryProcessed())
+>>>>>>> Stashed changes
                     .build();
         }
 
@@ -310,11 +318,19 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
                         .build())
                 .build();
 
-        assertThat(destinationLogReplicationManager.getLogReplicationMetadataManager()
+<<<<<<< Updated upstream
+        assertThat(destinationLogReplicationManager.getMetadataManager()
                 .getLastProcessedLogEntryBatchTimestamp())
                 .isGreaterThanOrEqualTo(newMessage.getMetadata().getPreviousTimestamp());
-        assertThat(destinationLogReplicationManager.getLogReplicationMetadataManager()
+        assertThat(destinationLogReplicationManager.getMetadataManager()
                 .getLastProcessedLogEntryBatchTimestamp())
+=======
+        ReplicationMetadata metadata = destinationLogReplicationManager.getMetadataManager()
+                .queryReplicationMetadata(sinkSession);
+        assertThat(metadata.getLastLogEntryProcessed())
+                .isGreaterThanOrEqualTo(newMessage.getMetadata().getPreviousTimestamp());
+        assertThat(metadata.getLastLogEntryProcessed())
+>>>>>>> Stashed changes
                 .isLessThan(newMessage.getMetadata().getTimestamp());
 
         lastAckDropped = Long.MAX_VALUE;

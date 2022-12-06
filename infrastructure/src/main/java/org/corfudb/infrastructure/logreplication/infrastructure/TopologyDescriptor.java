@@ -6,12 +6,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationModel;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationSession;
+import org.corfudb.runtime.proto.RpcCommon;
 
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -27,6 +34,8 @@ import java.util.stream.Stream;
 @Slf4j
 public class TopologyDescriptor {
 
+    public static final String DEFAULT_CLIENT = "Federation";
+
     // Represents a state of the topology configuration (a topology epoch)
     @Getter
     private final long topologyConfigId;
@@ -39,6 +48,8 @@ public class TopologyDescriptor {
 
     @Getter
     private final Map<String, ClusterDescriptor> invalidClusters;
+
+    private Set<LogReplicationSession> sessions;
 
     /**
      * Constructor
@@ -159,7 +170,7 @@ public class TopologyDescriptor {
                 .flatMap(Collection::stream)
                 .collect(Collectors.toList());
 
-        for(ClusterDescriptor cluster : clusters) {
+        for (ClusterDescriptor cluster : clusters) {
             for (NodeDescriptor node : cluster.getNodesDescriptors()) {
                 if (node.getNodeId().equals(nodeId)) {
                     return cluster;
@@ -169,6 +180,44 @@ public class TopologyDescriptor {
         log.warn("Node {} does not belong to any cluster defined in {}", nodeId, clusters);
 
         return null;
+    }
+
+    /**
+     * Get all current replication sessions for this cluster
+     *
+     * @return set of log replication sessions
+     */
+    // TODO: a Session is given by replication model + client + source/sink so this method in a modified way
+    // should be moved to Chris's Dynamic Discovery Service
+    public Set<LogReplicationSession> getSessions() {
+        if (sessions == null) {
+            sessions = new HashSet<>();
+            // TODO: until replication models are fully introduced we are assuming
+            // FULL_TABLE as the default model for all clusters. This will
+            // change as soon as replication models are supported.
+            for (ClusterDescriptor sourceCluster : sourceClusters.values()) {
+                for (ClusterDescriptor sinkCluster : sinkClusters.values()) {
+
+                    UUID sessionClientId = UUID.fromString(DEFAULT_CLIENT);
+
+                    LogReplicationSession session = LogReplicationSession.newBuilder()
+                            .setSourceClusterId(sourceCluster.clusterId)
+                            .setSinkClusterId(sinkCluster.clusterId)
+                            .setSubscriber(LogReplicationMetadata.ReplicationSubscriber.newBuilder()
+                                    .setClientId(RpcCommon.UuidMsg.newBuilder()
+                                            .setMsb(sessionClientId.getMostSignificantBits())
+                                            .setLsb(sessionClientId.getMostSignificantBits())
+                                            .build())
+                                    .setClientName(DEFAULT_CLIENT)
+                                    .setModel(ReplicationModel.FULL_TABLE)
+                                    .build())
+                            .build();
+                    sessions.add(session);
+                }
+            }
+        }
+
+        return sessions;
     }
 
     @Override

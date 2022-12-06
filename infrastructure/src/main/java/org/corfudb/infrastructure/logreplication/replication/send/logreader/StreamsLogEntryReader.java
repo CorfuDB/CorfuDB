@@ -8,7 +8,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -38,6 +38,7 @@ import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.generatePayload;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryMsg;
+import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 
 @Slf4j
 @NotThreadSafe
@@ -84,10 +85,10 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     private StreamIteratorMetadata currentProcessedEntryMetadata;
 
-    private ReplicationSession session;
+    private LogReplicationSession session;
 
     public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfigManager configManager,
-                                 ReplicationSession replicationSession) {
+                                 LogReplicationSession replicationSession) {
         runtime.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         this.configManager = configManager;
         this.maxDataSizePerMsg = configManager.getConfig().getMaxDataSizePerMsg();
@@ -111,7 +112,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
      * constructor and when LogReplicationConfig is synced with registry table.
      */
     private void refreshStreamUUIDs() {
-        Set<String> streams = configManager.getConfig().getReplicationSubscriberToStreamsMap().get(session.getSubscriber());
+        Set<String> streams = configManager.getConfig().getSessionToStreamsMap().get(session.getSubscriber());
         streamUUIDs = new HashSet<>();
         for (String s : streams) {
             streamUUIDs.add(CorfuRuntime.getStreamID(s));
@@ -248,7 +249,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
                 if (lastOpaqueEntryValid) {
                     validDeltaCounter.ifPresent(Counter::increment);
                 }
-                currentProcessedEntryMetadata = new StreamIteratorMetadata(txOpaqueStream.txStream.pos(), lastOpaqueEntryValid);
+                currentProcessedEntryMetadata = new StreamIteratorMetadata(txOpaqueStream.logReplicatorOpaqueStream.pos(), lastOpaqueEntryValid);
             }
 
             log.trace("Generate LogEntryDataMessage size {} with {} entries for maxDataSizePerMsg {}. lastEntry size {}",
@@ -331,13 +332,12 @@ public class StreamsLogEntryReader implements LogEntryReader {
      */
     public static class TxOpaqueStream {
         private CorfuRuntime rt;
-        private OpaqueStream txStream;
+        private OpaqueStream logReplicatorOpaqueStream;
         private Iterator iterator;
 
         public TxOpaqueStream(CorfuRuntime rt) {
-            //create an opaque stream for transaction stream
             this.rt = rt;
-            txStream = new OpaqueStream(rt.getStreamsView().get(ObjectsView.getLogReplicatorStreamId()));
+            logReplicatorOpaqueStream = new OpaqueStream(rt.getStreamsView().get(ObjectsView.getLogReplicatorStreamId()));
             streamUpTo();
         }
 
@@ -348,7 +348,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
          */
         private void streamUpTo(long snapshot) {
             log.trace("StreamUpTo {}", snapshot);
-            iterator = txStream.streamUpTo(snapshot).iterator();
+            iterator = logReplicatorOpaqueStream.streamUpTo(snapshot).iterator();
         }
 
         /**
@@ -388,7 +388,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
          */
         public void seek(long firstAddress) {
             log.trace("seek head {}", firstAddress);
-            txStream.seek(firstAddress);
+            logReplicatorOpaqueStream.seek(firstAddress);
             streamUpTo();
         }
     }

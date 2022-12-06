@@ -3,7 +3,7 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
@@ -33,11 +33,10 @@ public abstract class SinkWriter {
 
     private final ISerializer protobufSerializer;
 
-    private final ReplicationSession session;
-
+    final LogReplicationSession session;
 
     // Limit the initialization of this class only to its children classes.
-    SinkWriter(LogReplicationConfigManager configManager, ReplicationSession session) {
+    SinkWriter(LogReplicationConfigManager configManager, LogReplicationSession session) {
         this.configManager = configManager;
         this.session = session;
 

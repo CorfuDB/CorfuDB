@@ -7,6 +7,7 @@ import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationSession;
 import org.corfudb.runtime.RuntimeParameters;
 import org.corfudb.runtime.RuntimeParametersBuilder;
 
@@ -20,6 +21,9 @@ import java.util.UUID;
  */
 @Data
 public class LogReplicationRuntimeParameters extends RuntimeParameters {
+
+    // Runtime unique log replication session identifier
+    private LogReplicationSession session;
 
     // Remote Cluster Descriptor
     private ClusterDescriptor remoteClusterDescriptor;
@@ -55,12 +59,18 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
         private long topologyConfigId;
         private LogReplicationConfig replicationConfig;
         private int maxWriteSize;
+        private LogReplicationSession session;
 
         private LogReplicationRuntimeParametersBuilder() {
         }
 
         public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder localCorfuEndpoint(String localCorfuEndpoint) {
             this.localCorfuEndpoint = localCorfuEndpoint;
+            return this;
+        }
+
+        public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder session(LogReplicationSession session) {
+            this.session = session;
             return this;
         }
 
@@ -241,6 +251,7 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
             runtimeParameters.setUncaughtExceptionHandler(uncaughtExceptionHandler);
             runtimeParameters.setSystemDownHandler(systemDownHandler);
             runtimeParameters.setBeforeRpcHandler(beforeRpcHandler);
+            runtimeParameters.setSession(session);
             runtimeParameters.setLocalCorfuEndpoint(localCorfuEndpoint);
             runtimeParameters.setLocalClusterId(localClusterId);
             runtimeParameters.setRemoteClusterDescriptor(remoteClusterDescriptor);

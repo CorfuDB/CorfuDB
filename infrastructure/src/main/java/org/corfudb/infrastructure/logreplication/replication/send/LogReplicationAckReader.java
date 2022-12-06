@@ -1,13 +1,13 @@
-package org.corfudb.infrastructure.logreplication.replication;
+package org.corfudb.infrastructure.logreplication.replication.send;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncType;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
-import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader.StreamIteratorMetadata;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
@@ -39,7 +39,7 @@ public class LogReplicationAckReader {
     private final LogReplicationConfigManager configManager;
     private final CorfuRuntime runtime;
     private final String remoteClusterId;
-    private final ReplicationSession replicationSession;
+    private final LogReplicationSession session;
 
     // Log tail when the current snapshot sync started.  We do not need to synchronize access to it because it will not
     // be read(calculateRemainingEntriesToSend) and written(setBaseSnapshot) concurrently.
@@ -66,15 +66,15 @@ public class LogReplicationAckReader {
     private final Lock lock = new ReentrantLock();
 
     public LogReplicationAckReader(LogReplicationMetadataManager metadataManager, LogReplicationConfigManager configManager,
-                                   CorfuRuntime runtime, ReplicationSession replicationSession) {
+                                   CorfuRuntime runtime, LogReplicationSession session) {
         this.metadataManager = metadataManager;
         this.configManager = configManager;
         this.runtime = runtime;
-        this.remoteClusterId = replicationSession.getRemoteClusterId();
-        this.replicationSession = replicationSession;
+        this.remoteClusterId = session.getSinkClusterId();
+        this.session = session;
     }
 
-    public void setAckedTsAndSyncType(long ackedTs, SyncType syncType) {
+    public void setAckedTsAndSyncType(long ackedTs, LogReplicationMetadata.SyncType syncType) {
         lock.lock();
         try {
             lastAckedTimestamp = ackedTs;
@@ -176,8 +176,8 @@ public class LogReplicationAckReader {
      */
     private long getMaxReplicatedStreamsTail(Map<UUID, Long> tailMap) {
         long maxTail = Address.NON_ADDRESS;
-        Set<String> streamsToReplicate = configManager.getUpdatedConfig().getReplicationSubscriberToStreamsMap()
-            .getOrDefault(replicationSession.getSubscriber(), new HashSet<>());
+        Set<String> streamsToReplicate = configManager.getUpdatedConfig().getSessionToStreamsMap()
+            .getOrDefault(session.getSubscriber(), new HashSet<>());
         for (String streamName : streamsToReplicate) {
             UUID streamUuid = CorfuRuntime.getStreamID(streamName);
             if (tailMap.containsKey(streamUuid)) {
@@ -381,7 +381,7 @@ public class LogReplicationAckReader {
                 try {
                     lock.lock();
                     long remainingEntriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
-                    metadataManager.updateSnapshotSyncStatusOngoing(remoteClusterId, forced, eventId,
+                    metadataManager.updateSnapshotSyncStatusOngoing(session, forced, eventId,
                             baseSnapshotTimestamp, remainingEntriesToSend);
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to markSnapshotSyncInfoOngoing for event {}.", eventId, tae);
