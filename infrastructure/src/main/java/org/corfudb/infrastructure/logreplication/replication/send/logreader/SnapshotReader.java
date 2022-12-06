@@ -5,11 +5,12 @@ import lombok.NonNull;
 import java.util.UUID;
 
 /**
- * An Interface for snapshot logreader.
- *
- * A snapshot reader provides the functionality for reading data from Corfu.
+ * Abstract class for snapshot reader. This provides the functionality
+ * for reading data from Corfu during snapshot sync.
  */
-public interface SnapshotReader {
+public abstract class SnapshotReader {
+
+    protected long topologyConfigId;
 
     /**
      * Read streams to replicate across sites.
@@ -19,14 +20,16 @@ public interface SnapshotReader {
      * @return result of read operation. If the read result is NULL, the snapshot sync will be terminated.
      */
     @NonNull
-    SnapshotReadMessage read(UUID snapshotRequestId);
+    public abstract SnapshotReadMessage read(UUID snapshotRequestId);
 
     /**
      * Reset reader in between snapshot syncs.
      *
      * @param snapshotTimestamp new snapshot timestamp.
      */
-    void reset(long snapshotTimestamp);
+    public abstract void reset(long snapshotTimestamp);
 
-    void setTopologyConfigId(long topologyConfigId);
+    public void setTopologyConfigId(long topologyConfigId) {
+        this.topologyConfigId = topologyConfigId;
+    }
 }
