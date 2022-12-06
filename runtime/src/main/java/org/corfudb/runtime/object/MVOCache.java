@@ -96,6 +96,16 @@ public class MVOCache<T extends ICorfuSMR<T>> {
         objectCache.invalidateAll(voIdsToInvalidate);
     }
 
+    public long invalidateAll() {
+        if (log.isTraceEnabled()) {
+            log.trace("MVOCache: performing invalidateAll");
+        }
+
+        long numOfObjectsEvicted = objectCache.size();
+        objectCache.invalidateAll();
+        return numOfObjectsEvicted;
+    }
+
     @VisibleForTesting
     public Set<VersionedObjectIdentifier> keySet() {
         return ImmutableSet.copyOf(objectCache.asMap().keySet());

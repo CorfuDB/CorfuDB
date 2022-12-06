@@ -257,6 +257,16 @@ public class CorfuRuntime {
          */
         long cacheExpiryTime = Long.MAX_VALUE;
 
+        /*
+         * Periodically flush the MVO Cache. This is used to trigger TrimmedException and test client retry.
+         */
+        boolean mvoCacheFlushEnabled = false;
+
+        /*
+         * The period at which the MVO Cache gets flushed in seconds.
+         */
+        Duration mvoCacheFlushPeriod = Duration.ofSeconds(60);
+
         // endregion
 
         // region Stream Parameters
@@ -424,6 +434,8 @@ public class CorfuRuntime {
             private long maxCacheWeight;
             private int cacheConcurrencyLevel = 0;
             private long cacheExpiryTime = Long.MAX_VALUE;
+            private boolean mvoCacheFlushEnabled = false;
+            private Duration mvoCacheFlushPeriod = Duration.ofSeconds(60);
             private boolean holeFillingDisabled = false;
             private int writeRetry = 5;
             private int trimRetry = 2;
@@ -654,6 +666,16 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder mvoCacheFlushEnabled(boolean mvoCacheFlushEnabled) {
+                this.mvoCacheFlushEnabled = mvoCacheFlushEnabled;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder mvoCacheFlushPeriod(Duration mvoCacheFlushPeriod) {
+                this.mvoCacheFlushPeriod = mvoCacheFlushPeriod;
+                return this;
+            }
+
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder holeFillingDisabled(boolean holeFillingDisabled) {
                 this.holeFillingDisabled = holeFillingDisabled;
                 return this;
@@ -789,6 +811,8 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setMaxCacheWeight(maxCacheWeight);
                 corfuRuntimeParameters.setCacheConcurrencyLevel(cacheConcurrencyLevel);
                 corfuRuntimeParameters.setCacheExpiryTime(cacheExpiryTime);
+                corfuRuntimeParameters.setMvoCacheFlushEnabled(mvoCacheFlushEnabled);
+                corfuRuntimeParameters.setMvoCacheFlushPeriod(mvoCacheFlushPeriod);
                 corfuRuntimeParameters.setHoleFillingDisabled(holeFillingDisabled);
                 corfuRuntimeParameters.setWriteRetry(writeRetry);
                 corfuRuntimeParameters.setTrimRetry(trimRetry);

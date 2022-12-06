@@ -36,6 +36,8 @@ public class ViewsGarbageCollector {
                     .setNameFormat("ViewsGarbageCollector")
                     .build());
 
+    ScheduledExecutorService mvoCacheFlushThread = null;
+
     final CorfuRuntime runtime;
 
     public ViewsGarbageCollector(CorfuRuntime runtime) {
@@ -48,11 +50,26 @@ public class ViewsGarbageCollector {
                 runtime.getParameters().getRuntimeGCPeriod().toMillis(),
                 runtime.getParameters().getRuntimeGCPeriod().toMillis(),
                 TimeUnit.MILLISECONDS);
+
+        if (runtime.getParameters().isMvoCacheFlushEnabled()) {
+            mvoCacheFlushThread = Executors.newSingleThreadScheduledExecutor(
+                    new ThreadFactoryBuilder().setDaemon(true)
+                            .setNameFormat("ViewsGarbageCollector-MvoCacheFlushThread")
+                            .build());
+            mvoCacheFlushThread.scheduleAtFixedRate(() -> flushMvoCache(),
+                    runtime.getParameters().getMvoCacheFlushPeriod().toMillis(),
+                    runtime.getParameters().getMvoCacheFlushPeriod().toMillis(),
+                    TimeUnit.MILLISECONDS);
+        }
+
         this.started = true;
     }
 
     public void stop() {
         gcThread.shutdownNow();
+        if (mvoCacheFlushThread != null) {
+            mvoCacheFlushThread.shutdownNow();
+        }
         this.started = false;
     }
 
@@ -89,6 +106,24 @@ public class ViewsGarbageCollector {
                 throw new UnrecoverableCorfuInterruptedError((InterruptedException) e.getCause());
             } else {
                 log.error("Encountered an error while running runtime GC", e);
+            }
+        }
+    }
+
+    public void flushMvoCache() {
+        try {
+            log.info("flushMvoCache: starting flushing MVO Cache");
+
+            long startTs = System.currentTimeMillis();
+            long numOfObjectsEvicted = runtime.getObjectsView().getMvoCache().invalidateAll();
+            long endTs = System.currentTimeMillis();
+            log.info("flushMvoCache: completed evicting {} objects in MVO Cache in {}ms",
+                    numOfObjectsEvicted, endTs - startTs);
+        } catch (Exception e) {
+            if (e.getCause() instanceof InterruptedException) {
+                throw new UnrecoverableCorfuInterruptedError((InterruptedException) e.getCause());
+            } else {
+                log.error("Encountered an error while running flushMvoCache", e);
             }
         }
     }
