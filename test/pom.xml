@@ -18,11 +18,6 @@
     <dependencies>
         <!-- external dependencies -->
         <dependency>
-            <groupId>com.google.protobuf</groupId>
-            <artifactId>protobuf-java</artifactId>
-            <version>3.6.1</version>
-        </dependency>
-        <dependency>
             <groupId>org.corfudb</groupId>
             <artifactId>infrastructure</artifactId>
             <version>${project.version}</version>
@@ -65,6 +60,72 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <profiles>
+        <profile>
+            <id>it</id>
+            <activation>
+                <property>
+                    <name>code-coverage</name>
+                    <value>true</value>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.jacoco</groupId>
+                        <artifactId>jacoco-maven-plugin</artifactId>
+                        <version>${jacoco.version}</version>
+                        <executions>
+                            <execution>
+                                <id>prepare-integration-agent</id>
+                                <goals>
+                                    <goal>prepare-agent-integration</goal>
+                                </goals>
+                                <configuration>
+                                    <destFile>${project.build.directory}/jacoco-it-tests.exec</destFile>
+                                    <propertyName>it.jacoco.args</propertyName>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <version>3.0.0-M5</version>
+                        <configuration>
+                            <!--suppress UnresolvedMavenProperty (resolved at runtime) -->
+                            <argLine>${it.jacoco.args}</argLine>
+                            <forkCount>1</forkCount>
+                            <shutdown>exit</shutdown>
+                            <reuseForks>false</reuseForks>
+                            <trimStackTrace>false</trimStackTrace>
+                            <!-- Option to generate a file test report or just output the test report to the console. -->
+                            <useFile>false</useFile>
+                            <includes>
+                                <include>**/*IT.java</include>
+                            </includes>
+                            <excludes>
+                            </excludes>
+                            <systemPropertyVariables>
+                                <propertyName>test.seed</propertyName>
+                            </systemPropertyVariables>
+                            <skipTests>false</skipTests>
+                            <skipAfterFailureCount>1</skipAfterFailureCount>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
     <build>
         <plugins>
@@ -144,6 +205,7 @@
                             <encoding>UTF-8</encoding>
                             <consoleOutput>true</consoleOutput>
                             <failsOnError>true</failsOnError>
+                            <!--suppress UnresolvedMavenProperty (resolved at runtime) -->
                             <configLocation>${session.executionRootDirectory}/test_checks.xml</configLocation>
                             <sourceDirectories>
                                 <sourceDirectory>${project.build.sourceDirectory}</sourceDirectory>

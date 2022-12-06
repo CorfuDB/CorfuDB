@@ -94,8 +94,31 @@
     <profiles>
         <profile>
             <id>universe</id>
+            <activation>
+                <property>
+                    <name>code-coverage</name>
+                    <value>true</value>
+                </property>
+            </activation>
             <build>
                 <plugins>
+                    <plugin>
+                        <groupId>org.jacoco</groupId>
+                        <artifactId>jacoco-maven-plugin</artifactId>
+                        <version>${jacoco.version}</version>
+                        <executions>
+                            <execution>
+                                <id>prepare-universe-agent</id>
+                                <goals>
+                                    <goal>prepare-agent-integration</goal>
+                                </goals>
+                                <configuration>
+                                    <destFile>${project.build.directory}/jacoco-universe-tests.exec</destFile>
+                                    <propertyName>universe.jacoco.args</propertyName>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-failsafe-plugin</artifactId>
@@ -110,6 +133,8 @@
                             </execution>
                         </executions>
                         <configuration>
+                            <!--suppress UnresolvedMavenProperty (resolved at runtime) -->
+                            <argLine>${universe.jacoco.args}</argLine>
                             <skipITs>false</skipITs>
                             <reuseForks>false</reuseForks>
                             <trimStackTrace>false</trimStackTrace>

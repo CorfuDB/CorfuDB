@@ -13,7 +13,6 @@ import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParam
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.util.serializer.ISerializer;
 import org.junit.After;
 import org.junit.Before;
@@ -30,6 +29,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
@@ -61,7 +61,12 @@ public class AbstractIT extends AbstractCorfuTest {
     private static final String KILL_COMMAND = "pkill -9 -P ";
     // FIXME: if jps doesn't exist tear down will fail silently
     private static final String FORCE_KILL_ALL_CORFU_COMMAND = "jps | grep -e CorfuServer -e CorfuInterClusterReplicationServer|awk '{print $1}'| xargs kill -9";
+    private static final String GRACEFULLY_KILL_ALL_CORFU_COMMAND = "jps | grep -e CorfuServer -e CorfuInterClusterReplicationServer|awk '{print $1}'| xargs kill -SIGTERM";
+    public boolean shouldForceKill = false;
 
+    // Bash command literals to avoid string duplicate usage errors from Static Code Analysis
+    private static final String SH = "sh";
+    private static final String HYPHEN_C = "-c";
     private static final int SHUTDOWN_RETRIES = 10;
     private static final long SHUTDOWN_RETRY_WAIT = 500;
 
@@ -96,9 +101,49 @@ public class AbstractIT extends AbstractCorfuTest {
      */
     @Before
     public void setUp() throws Exception {
+        // These tests kill the Corfu or LR Server in the middle. The shutdown must happen
+        // immediately so that the test can succeed. The coverage data from these servers is
+        // not collected due to force kill. However, during normal shutdown, we need to gracefully
+        // shut them down for jacoco agent to collect coverage data.
+        String[] classNames = {"CorfuReplicationTrimIT",
+                "CorfuReplicationUpgradeIT",
+                "CorfuReplicationReconfigurationIT",
+                "CorfuReplicationClusterConfigIT",
+                "WorkflowIT",
+                "ClusterReconfigIT"};
+        if (Arrays.asList(classNames).contains(this.getClass().getSimpleName())) {
+            shouldForceKill = true;
+        }
+
         runtime = null;
-        forceShutdownAllCorfuServers();
+        shutdownAllCorfuServers(shouldForceKill);
         FileUtils.cleanDirectory(new File(CORFU_LOG_PATH));
+    }
+
+    public static String getCodeCoverageCmd() {
+        // Check if coverage is enabled and signal the shell script by setting an env variable
+        // (for enabling pass -Dcode-coverage=true to the maven command)
+        if (System.getProperty("code-coverage")!= null &&
+                System.getProperty("code-coverage").equals("true")) {
+            // log.info("System.getProperty(\"code-coverage\")={}",System.getProperty("code-coverage") );
+            return "export CODE_COVERAGE=true;";
+        } else {
+            return "";
+        }
+    }
+
+    private static String getMetricsCmd(String metricsConfigFile) throws IOException {
+        if (!metricsConfigFile.isEmpty()) {
+            URL resource = AbstractIT.class.getResource("/" + metricsConfigFile);
+            try {
+                String configPath = Paths.get(resource.toURI()).toAbsolutePath().toString();
+                return "export METRICS_CONFIG_FILE=" + configPath + ";";
+            } catch (URISyntaxException use) {
+                throw new IOException(use);
+            }
+        } else {
+            return "";
+        }
     }
 
     /**
@@ -108,7 +153,8 @@ public class AbstractIT extends AbstractCorfuTest {
      */
     @After
     public void cleanUp() throws Exception {
-        forceShutdownAllCorfuServers();
+        shutdownAllCorfuServers(shouldForceKill);
+
         if (runtime != null) {
             runtime.shutdown();
         }
@@ -124,9 +170,13 @@ public class AbstractIT extends AbstractCorfuTest {
      * @throws IOException
      * @throws InterruptedException
      */
-    public static void forceShutdownAllCorfuServers() throws IOException, InterruptedException {
+    public static void shutdownAllCorfuServers(boolean shouldForceKill) throws IOException, InterruptedException {
         ProcessBuilder builder = new ProcessBuilder();
-        builder.command("sh", "-c", FORCE_KILL_ALL_CORFU_COMMAND);
+        if (shouldForceKill){
+            builder.command(SH, HYPHEN_C, FORCE_KILL_ALL_CORFU_COMMAND);
+        } else {
+            builder.command(SH, HYPHEN_C, GRACEFULLY_KILL_ALL_CORFU_COMMAND);
+        }
         Process p = builder.start();
         p.waitFor();
     }
@@ -149,7 +199,7 @@ public class AbstractIT extends AbstractCorfuTest {
 
             ProcessBuilder builder = new ProcessBuilder();
             for (Long pid : pidList) {
-                builder.command("sh", "-c", KILL_COMMAND + pid);
+                builder.command(SH, HYPHEN_C, KILL_COMMAND + pid);
                 Process p = builder.start();
                 p.waitFor();
             }
@@ -236,7 +286,7 @@ public class AbstractIT extends AbstractCorfuTest {
         try {
             // Get child pid(s)
             ProcessBuilder builder = new ProcessBuilder();
-            builder.command("sh", "-c", "pgrep -P " + pid);
+            builder.command(SH, HYPHEN_C, "pgrep -P " + pid);
             Process p = builder.start();
             p.waitFor();
 
@@ -517,6 +567,7 @@ public class AbstractIT extends AbstractCorfuTest {
             }
             command.append(" -d ").append(logLevel).append(" ")
                     .append(port);
+
             return command.toString();
         }
 
@@ -535,28 +586,13 @@ public class AbstractIT extends AbstractCorfuTest {
             }
             ProcessBuilder builder = new ProcessBuilder();
 
-            if (!metricsConfigFile.isEmpty()) {
-                addMetricsToProcessBuilder(builder, "corfu_server");
-            } else {
-                builder.command("sh", "-c", "bin/corfu_server " + getOptionsString());
-            }
+            builder.command(SH, HYPHEN_C, getCodeCoverageCmd() + getMetricsCmd(metricsConfigFile) +
+                    " bin/corfu_server " + getOptionsString());
             builder.directory(new File(CORFU_PROJECT_DIR));
             Process corfuServerProcess = builder.start();
             StreamGobbler streamGobbler = new StreamGobbler(corfuServerProcess.getInputStream(), serverConsoleLogPath);
             Executors.newSingleThreadExecutor().submit(streamGobbler);
             return corfuServerProcess;
-        }
-
-        private void addMetricsToProcessBuilder(ProcessBuilder builder, String runnable) throws IOException {
-            URL resource = AbstractIT.class.getResource("/" + metricsConfigFile);
-            try {
-                String configPath = Paths.get(resource.toURI()).toAbsolutePath().toString();
-                String exportMetricsConfigFile = "export METRICS_CONFIG_FILE=" + configPath + ";";
-                builder.command("sh", "-c", exportMetricsConfigFile + " bin/" + runnable + " "
-                        + getOptionsString());
-            } catch (URISyntaxException use) {
-                throw new IOException(use);
-            }
         }
     }
 
@@ -639,6 +675,7 @@ public class AbstractIT extends AbstractCorfuTest {
 
             command.append(" -d ").append(logLevel).append(" ")
                     .append(port);
+
             return command.toString();
         }
 
@@ -657,29 +694,14 @@ public class AbstractIT extends AbstractCorfuTest {
             }
             ProcessBuilder builder = new ProcessBuilder();
 
-            if (!metricsConfigFile.isEmpty()) {
-                addMetricsToProcessBuilder(builder, "corfu_replication_server");
-            } else {
-                builder.command("sh", "-c", "bin/corfu_replication_server " + getOptionsString());
-            }
+            builder.command(SH, HYPHEN_C, getCodeCoverageCmd() + getMetricsCmd(metricsConfigFile) +
+                    " bin/corfu_replication_server " + getOptionsString());
 
             builder.directory(new File(CORFU_PROJECT_DIR));
             Process corfuReplicationServerProcess = builder.start();
             StreamGobbler streamGobbler = new StreamGobbler(corfuReplicationServerProcess.getInputStream(), serverConsoleLogPath);
             Executors.newSingleThreadExecutor().submit(streamGobbler);
             return corfuReplicationServerProcess;
-        }
-
-        private void addMetricsToProcessBuilder(ProcessBuilder builder, String runnable) throws IOException {
-            URL resource = AbstractIT.class.getResource("/" + metricsConfigFile);
-            try {
-                String configPath = Paths.get(resource.toURI()).toAbsolutePath().toString();
-                String exportMetricsConfigFile = "export METRICS_CONFIG_FILE=" + configPath + ";";
-                builder.command("sh", "-c", exportMetricsConfigFile + " bin/" + runnable + " "
-                        + getOptionsString());
-            } catch (URISyntaxException use) {
-                throw new IOException(use);
-            }
         }
     }
 }

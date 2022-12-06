@@ -54,8 +54,44 @@
                 <version>${jacoco.version}</version>
                 <executions>
                     <execution>
-                        <id>report-aggregate</id>
+                        <!-- Contains the unit tests only -->
+                        <id>report-aggregate-unit-test</id>
                         <phase>test</phase>
+                        <goals>
+                            <goal>report-aggregate</goal>
+                        </goals>
+                        <configuration>
+                            <dataFileIncludes>
+                                <dataFileInclude>**/jacoco-unit-tests.exec</dataFileInclude>
+                            </dataFileIncludes>
+                            <outputDirectory>${project.reporting.outputDirectory}/jacoco-unit-tests</outputDirectory>
+                            <excludes>
+                                <exclude>**/*$CORFUSMR.*</exclude>
+                                <exclude>**/format/*</exclude>
+
+                                <!-- All packages that contain proto keyword -->
+                                <exclude>**/proto/**</exclude>
+                                <!-- Classes with Msg in their name (Rename ObservableAckMsg?) -->
+                                <exclude>**/*Msg*</exclude>
+
+                                <!-- Runtime specific protobuf files -->
+                                <exclude>org/corfudb/runtime/CorfuOptions*</exclude>
+                                <exclude>org/corfudb/runtime/CorfuStoreMetadata*</exclude>
+                                <exclude>org/corfudb/runtime/ExampleSchemas*</exclude>
+                                <exclude>org/corfudb/runtime/Queue*</exclude>
+                                <exclude>org/corfudb/runtime/LogReplication*</exclude>
+
+                                <!-- Infrastructure specific protobuf files -->
+                                <exclude>org/corfudb/infrastructure/log/LogFormat*</exclude>
+                                <exclude>org/corfudb/infrastructure/logreplication/LogReplicationTransport*</exclude>
+                                <exclude>org/corfudb/infrastructure/logreplication/LogReplicationChannelGrpc*</exclude>
+                            </excludes>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <!-- Contains the aggregate results -->
+                        <id>report-aggregate</id>
+                        <phase>verify</phase>
                         <goals>
                             <goal>report-aggregate</goal>
                         </goals>
