@@ -1,17 +1,6 @@
 package org.corfudb.runtime.view;
 
-import static java.util.Arrays.stream;
-
-import java.util.Arrays;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeoutException;
-import java.util.stream.Collectors;
-
-import javax.annotation.Nonnull;
-
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
@@ -22,6 +11,17 @@ import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
+
+import javax.annotation.Nonnull;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
+
+import static java.util.Arrays.stream;
 
 /**
  * Created by mwei on 12/10/15.
@@ -269,8 +269,11 @@ public class LayoutView extends AbstractView {
     @SuppressWarnings("unchecked")
     public void committed(long epoch, Layout layout, boolean force)
             throws WrongEpochException {
-        CompletableFuture<Boolean>[] commitList = layout.getLayoutServers().stream()
-                .map(x -> {
+        // Map of endpoints to completable futures to log which endpoints
+        // responded to the commit request
+        Map<String,CompletableFuture<Boolean>> layoutServersRequestsMap;
+        layoutServersRequestsMap = layout.getLayoutServers().stream()
+                .collect(Collectors.toMap(x -> x, x -> {
                     CompletableFuture<Boolean> cf = new CompletableFuture<>();
                     try {
                         // Connection to router can cause network exception too.
@@ -282,17 +285,15 @@ public class LayoutView extends AbstractView {
                     } catch (NetworkException e) {
                         cf.completeExceptionally(e);
                     }
-                    return cf;
-                })
-                .toArray(CompletableFuture[]::new);
+                   return cf;
+                }));
 
-
-        int responses = 0;
-        for (CompletableFuture cf : commitList) {
+        List<String> layoutServersResponsesList = new ArrayList<>();
+        layoutServersRequestsMap.forEach((k,v)-> {
             try {
-                CFUtils.getUninterruptibly(cf, WrongEpochException.class,
+                CFUtils.getUninterruptibly(v, WrongEpochException.class,
                         TimeoutException.class, NetworkException.class, NoBootstrapException.class);
-                responses++;
+                layoutServersResponsesList.add(k);
             } catch (WrongEpochException e) {
                 if (!force) {
                     throw  e;
@@ -301,8 +302,12 @@ public class LayoutView extends AbstractView {
             } catch (NoBootstrapException |  TimeoutException | NetworkException e) {
                 log.warn("committed: encountered exception", e);
             }
-        }
-        log.debug("committed: Successful requests={}, responses={}", commitList.length, responses);
+        });
+        log.debug("committed: RequestsCount={}, requests={}, responsesCount={}, responses={}, ",
+                layoutServersRequestsMap.size(),
+                layoutServersRequestsMap.keySet(),
+                layoutServersResponsesList.size(),
+                layoutServersResponsesList);
     }
 
     /**

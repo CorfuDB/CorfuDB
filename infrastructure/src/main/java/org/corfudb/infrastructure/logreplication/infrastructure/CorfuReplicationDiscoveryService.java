@@ -468,8 +468,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     throw new RetryNeededException();
                 }
 
-                log.debug("Registered to lock, client msb={}, lsb={}", logReplicationLockId.getMostSignificantBits(),
-                        logReplicationLockId.getLeastSignificantBits());
+                log.debug("Registered to lock, client={}", logReplicationLockId);
                 return null;
             }).run();
         } catch (InterruptedException e) {

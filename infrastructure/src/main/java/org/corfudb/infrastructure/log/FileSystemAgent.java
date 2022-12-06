@@ -251,7 +251,9 @@ public final class FileSystemAgent {
          * Sets PartitionAttribute's fields with the values from log file and the log partition.
          */
         private void setPartitionAttribute() {
-            log.info("setPartitionAttribute: fetching PartitionAttribute.");
+            if (log.isTraceEnabled()) {
+                log.trace("setPartitionAttribute: fetching PartitionAttribute.");
+            }
             try {
                 // Log path to check if it is in readOnly mode
                 File logDirectoryFile = config.logDir.toFile();
@@ -263,8 +265,11 @@ public final class FileSystemAgent {
                         fileStore.getUsableSpace(),
                         fileStore.getTotalSpace()
                 );
-                log.info("setPartitionAttribute: fetched PartitionAttribute successfully. " +
-                        "{}", partitionAttribute);
+
+                log.info("setPartitionAttribute: " +
+                        "readOnly={},availableSpace={},totalSpace={}", partitionAttribute.isReadOnly(),
+                        partitionAttribute.availableSpace,
+                        partitionAttribute.totalSpace);
 
             } catch (Exception ex) {
                 log.error("setPartitionAttribute: Error while fetching PartitionAttributes.", ex);
