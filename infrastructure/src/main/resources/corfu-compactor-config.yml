@@ -10,7 +10,7 @@ GCParameters:
 
 ConfigFiles:
   CompactorLogbackPath: /usr/share/corfu/conf/compactor-logback.prod.xml
-  TempDir: /image/corfu-tools/temp
+  TempDir: /tmp
   ClassPath: /usr/share/corfu/lib/corfudb-tools*jar
   HeapDumpPath: /image/core/compactor_oom.hprof
 
