@@ -79,14 +79,14 @@ public class InitializedState implements LogReplicationState {
     public void onExit(LogReplicationState to) {
         if (to != this || to.getType() != LogReplicationStateType.ERROR) {
             switch (to.getType()) {
-                case IN_SNAPSHOT_SYNC:
-                    fsm.getAckReader().startSyncStatusUpdatePeriodicTask(LogReplicationMetadata.ReplicationStatusVal.SyncType.SNAPSHOT);
-                    break;
                 case IN_LOG_ENTRY_SYNC:
                     fsm.getAckReader().startSyncStatusUpdatePeriodicTask(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
                     break;
+                case IN_SNAPSHOT_SYNC:
+                case WAIT_SNAPSHOT_APPLY:
+                    fsm.getAckReader().startSyncStatusUpdatePeriodicTask(LogReplicationMetadata.ReplicationStatusVal.SyncType.SNAPSHOT);
                 default:
-                    throw new IllegalStateException("Illegal transition from INITIALISED state");
+                    fsm.getAckReader().startSyncStatusUpdatePeriodicTask(null);
             }
         }
     }
