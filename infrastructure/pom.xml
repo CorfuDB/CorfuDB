@@ -129,6 +129,23 @@
                             </arguments>
                         </configuration>
                     </execution>
+
+                    <execution>
+                        <id>Docker push</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>docker</executable>
+                            <arguments>
+                                <argument>push</argument>
+                                <argument>
+                                    corfudb/corfu-server:cloud
+                                </argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
         </plugins>

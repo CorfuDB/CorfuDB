@@ -41,6 +41,8 @@ if [ -n "$BASE_IMAGE" ]; then
   CMD_LINE+="--build-arg BASE_IMAGE=$BASE_IMAGE "
 fi
 
+CMD_LINE+="-t corfudb/corfu-server:cloud "
+
 if [ "$PROFILE" = "docker" ]; then
   CMD_LINE+="-t corfudb/corfu-server:${CORFU_VERSION} -t corfudb-universe/corfu-server:${CORFU_VERSION}"
 else
