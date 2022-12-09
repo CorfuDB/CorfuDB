@@ -211,7 +211,8 @@ public class LogReplicationSinkManager implements DataReceiver {
         File jar = new File(config.getSnapshotSyncPluginJARPath());
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
             Class plugin = Class.forName(config.getSnapshotSyncPluginCanonicalName(), true, child);
-            return (ISnapshotSyncPlugin) plugin.getDeclaredConstructor().newInstance();
+            return (ISnapshotSyncPlugin) plugin.getDeclaredConstructor(CorfuRuntime.class)
+                    .newInstance(runtime);
         } catch (Throwable t) {
             log.error("Fatal error: Failed to get snapshot sync plugin {}", config.getSnapshotSyncPluginCanonicalName(), t);
             throw new UnrecoverableCorfuError(t);
