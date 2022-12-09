@@ -21,7 +21,8 @@ public class CorfuStoreCompactorConfigUnitTest {
     private static final int bulkReadSize = 50;
     private static final String CMD = "--hostname=" + hostname + " --port=" + port + " --trim=true" +
             " --upgradeDescriptorTable=true --startCheckpointing=true --instantTriggerCompaction=true " +
-            "--freezeCompaction=true --unfreezeCompaction=true --tlsEnabled=true --bulkReadSize=" + bulkReadSize +
+            "--freezeCompaction=true --unfreezeCompaction=true --disableCompaction=true --enableCompaction=true " +
+            "--tlsEnabled=true --bulkReadSize=" + bulkReadSize +
             " --keystore=" + keystore + " --ks_password=" + ks_password + " --truststore=" + truststore +
             " --truststore_password=" + truststore_password;
 
@@ -46,6 +47,8 @@ public class CorfuStoreCompactorConfigUnitTest {
         Assert.assertTrue(corfuStoreCompactorConfig.isTrim());
         Assert.assertTrue(corfuStoreCompactorConfig.isFreezeCompaction());
         Assert.assertTrue(corfuStoreCompactorConfig.isUnfreezeCompaction());
+        Assert.assertTrue(corfuStoreCompactorConfig.isDisableCompaction());
+        Assert.assertTrue(corfuStoreCompactorConfig.isEnableCompaction());
         Assert.assertTrue(corfuStoreCompactorConfig.isStartCheckpointing());
         Assert.assertEquals(PriorityLevel.HIGH, corfuStoreCompactorConfig.getParams().getPriorityLevel());
         Assert.assertEquals(params, corfuStoreCompactorConfig.getParams());

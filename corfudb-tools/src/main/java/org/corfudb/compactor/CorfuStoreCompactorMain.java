@@ -77,6 +77,13 @@ public class CorfuStoreCompactorMain {
             log.info("Unfreezing compaction...");
             distributedCheckpointerHelper.updateCompactionControlsTable(compactionControlsTable, CompactorMetadataTables.FREEZE_TOKEN, UpdateAction.DELETE);
         }
+        if (config.isDisableCompaction()) {
+            log.info("Disabling compaction...");
+            distributedCheckpointerHelper.updateCheckpointTable(checkpointTable, CompactorMetadataTables.DISABLE_COMPACTION, UpdateAction.PUT);
+        } else if (config.isEnableCompaction()) {
+            log.info("Enabling compaction...");
+            distributedCheckpointerHelper.updateCheckpointTable(checkpointTable, CompactorMetadataTables.DISABLE_COMPACTION, UpdateAction.DELETE);
+        }
         if (config.isUpgradeDescriptorTable()) {
             log.info("Upgrading descriptor table...");
             upgradeDescriptorTable.syncProtobufDescriptorTable();

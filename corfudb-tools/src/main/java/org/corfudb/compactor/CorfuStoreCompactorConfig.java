@@ -36,6 +36,8 @@ public class CorfuStoreCompactorConfig {
     private final boolean trim;
     private final boolean freezeCompaction;
     private final boolean unfreezeCompaction;
+    private final boolean disableCompaction;
+    private final boolean enableCompaction;
 
     public CorfuStoreCompactorConfig(String[] args) {
         this.opts = parseOpts(args);
@@ -53,6 +55,8 @@ public class CorfuStoreCompactorConfig {
         trim = getOpt("--trim").isPresent();
         freezeCompaction = getOpt("--freezeCompaction").isPresent();
         unfreezeCompaction = getOpt("--unfreezeCompaction").isPresent();
+        disableCompaction = getOpt("--disableCompaction").isPresent();
+        enableCompaction = getOpt("--enableCompaction").isPresent();
 
         CorfuRuntimeParametersBuilder builder = CorfuRuntimeParameters.builder();
 
@@ -125,6 +129,8 @@ public class CorfuStoreCompactorConfig {
                 "[--instantTriggerCompaction=<instantTriggerCompaction>] " +
                 "[--freezeCompaction=<freezeCompaction>] " +
                 "[--unfreezeCompaction=<unfreezeCompaction>] " +
+                "[--disableCompaction=<disableCompaction>] " +
+                "[--enableCompaction=<enableCompaction>] " +
                 "[--tlsEnabled=<tls_enabled>]\n"
                 + "Options:\n"
                 + "--hostname=<hostname>   Hostname\n"
@@ -142,6 +148,8 @@ public class CorfuStoreCompactorConfig {
                 + "--instantTriggerCompaction=<instantTriggerCompaction> If compactor cycle needs to be triggered instantly\n"
                 + "--freezeCompaction=<freezeCompaction> If compaction needs to be frozen\n"
                 + "--unfreezeCompaction=<unfreezeCompaction> If compaction needs to be resumed\n"
+                + "--disableCompaction=<disableCompaction> If compaction needs to be disabled\n"
+                + "--enableCompaction=<enableCompaction> If compaction needs to be enabled\n"
                 + "--tlsEnabled=<tls_enabled>";
     }
 }

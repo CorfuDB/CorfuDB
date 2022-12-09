@@ -2,6 +2,7 @@ package org.corfudb.infrastructure;
 
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
@@ -13,7 +14,10 @@ import org.mockito.Matchers;
 
 import java.util.concurrent.TimeUnit;
 
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @Slf4j
@@ -33,6 +37,7 @@ public class DynamicTriggerPolicyUnitTest {
 
         when(corfuStore.txn(Matchers.any())).thenReturn(txn);
         when(txn.getRecord(Matchers.anyString(), Matchers.any(Message.class))).thenReturn(corfuStoreEntry);
+        doNothing().when(txn).delete(CompactorMetadataTables.CHECKPOINT_TABLE_NAME, CompactorMetadataTables.FREEZE_TOKEN);
         when(txn.commit()).thenReturn(CorfuStoreMetadata.Timestamp.getDefaultInstance());
     }
 
@@ -55,14 +60,32 @@ public class DynamicTriggerPolicyUnitTest {
     @Test
     public void testShouldForceTrigger() {
         when((RpcCommon.TokenMsg) corfuStoreEntry.getPayload()).thenReturn(null)
+                .thenReturn(null)
                 .thenReturn(RpcCommon.TokenMsg.getDefaultInstance());
         assert dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore);
     }
 
     @Test
+    public void testDisableCompaction() {
+        when((RpcCommon.TokenMsg) corfuStoreEntry.getPayload()).thenReturn(RpcCommon.TokenMsg.getDefaultInstance());
+        assert !dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore);
+    }
+
+    @Test
     public void testCheckpointFrozen() {
-        when((RpcCommon.TokenMsg) corfuStoreEntry.getPayload()).thenReturn(RpcCommon.TokenMsg.newBuilder()
+        when((RpcCommon.TokenMsg) corfuStoreEntry.getPayload()).thenReturn(null).thenReturn(RpcCommon.TokenMsg.newBuilder()
                 .setSequence(System.currentTimeMillis()).build());
         assert !dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore);
+    }
+
+    @Test
+    public void testCheckpointFrozenReturnFalse() {
+        final long patience = 3 * 60 * 60 * 1000; //freezeToken found but expired
+        when((RpcCommon.TokenMsg) corfuStoreEntry.getPayload())
+                .thenReturn(null)
+                .thenReturn(RpcCommon.TokenMsg.newBuilder().setSequence(System.currentTimeMillis() - patience).build())
+                .thenReturn(RpcCommon.TokenMsg.newBuilder().setSequence(System.currentTimeMillis()).build());
+        assert dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore);
+        verify(txn, times(1)).delete(CompactorMetadataTables.CHECKPOINT_TABLE_NAME, CompactorMetadataTables.FREEZE_TOKEN);
     }
 }

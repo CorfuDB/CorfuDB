@@ -43,6 +43,18 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
         return false;
     }
 
+    private boolean isCompactionDisabled(CorfuStore corfuStore) {
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            RpcCommon.TokenMsg disableCompaction = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT_TABLE_NAME,
+                    CompactorMetadataTables.DISABLE_COMPACTION).getPayload();
+            txn.commit();
+            if (disableCompaction != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Returns true if it has been interval time since the previous trigger or
      * if force trigger condition is met
@@ -54,11 +66,15 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
     @Override
     public boolean shouldTrigger(long interval, CorfuStore corfuStore) {
         DistributedCheckpointerHelper distributedCheckpointerHelper = new DistributedCheckpointerHelper(corfuStore);
+
+        if (isCompactionDisabled(corfuStore)) {
+            log.warn("Compaction has been disabled");
+            return false;
+        }
         if (distributedCheckpointerHelper.isCheckpointFrozen()) {
             log.warn("Compaction has been frozen");
             return false;
         }
-
         if (shouldForceTrigger(corfuStore)) {
             log.info("Force triggering compaction");
             return true;
