@@ -605,7 +605,7 @@ public class LogReplicationMetadataManager {
             SnapshotSyncInfo currentSnapshotSyncInfo;
             if (snapshotStatus == null){
                 log.warn("syncStatusPoller [snapshot] :: previous status is not present for cluster: {}", clusterId);
-                currentSnapshotSyncInfo = SnapshotSyncInfo.newBuilder().setStatus(SyncStatus.UNAVAILABLE).build();
+                currentSnapshotSyncInfo = SnapshotSyncInfo.newBuilder().setStatus(SyncStatus.NOT_STARTED).build();
                 currentStatus = SyncStatus.NOT_STARTED;
             } else {
 
