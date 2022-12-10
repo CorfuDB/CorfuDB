@@ -83,8 +83,11 @@ public class InitializedState implements LogReplicationState {
                     fsm.getAckReader().startSyncStatusUpdatePeriodicTask(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
                     break;
                 case IN_SNAPSHOT_SYNC:
+                    fsm.getAckReader().startSyncStatusUpdatePeriodicTask(LogReplicationMetadata.ReplicationStatusVal.SyncType.SNAPSHOT);
+                    break;
                 case WAIT_SNAPSHOT_APPLY:
                     fsm.getAckReader().startSyncStatusUpdatePeriodicTask(LogReplicationMetadata.ReplicationStatusVal.SyncType.SNAPSHOT);
+                    break;
                 default:
                     fsm.getAckReader().startSyncStatusUpdatePeriodicTask(null);
             }
