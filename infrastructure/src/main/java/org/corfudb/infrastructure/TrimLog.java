@@ -33,7 +33,7 @@ public class TrimLog {
                     CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
             if (managerStatus.getStatus() == CheckpointingStatus.StatusType.COMPLETED) {
-                RpcCommon.TokenMsg trimToken = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT_TABLE_NAME,
+                RpcCommon.TokenMsg trimToken = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.COMPACTOR_UTILS_TABLE,
                         CompactorMetadataTables.MIN_CHECKPOINT).getPayload();
                 trimAddress = Optional.of(trimToken.getSequence());
             } else {

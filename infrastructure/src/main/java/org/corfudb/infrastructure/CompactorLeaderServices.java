@@ -100,7 +100,7 @@ public class CompactorLeaderServices {
             // This is the safest point to trim from, since all data up to this point will surely
             // be included in the upcoming checkpoint cycle
             long minAddressBeforeCycleStarts = corfuRuntime.getAddressSpaceView().getLogTail();
-            txn.putRecord(compactorMetadataTables.getCheckpointTable(), CompactorMetadataTables.MIN_CHECKPOINT,
+            txn.putRecord(compactorMetadataTables.getCompactorUtilsTable(), CompactorMetadataTables.MIN_CHECKPOINT,
                     RpcCommon.TokenMsg.newBuilder()
                             .setSequence(minAddressBeforeCycleStarts)
                             .build(),
@@ -267,9 +267,9 @@ public class CompactorLeaderServices {
         for (int i = 0; i < MAX_RETRIES; i++) {
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                 RpcCommon.TokenMsg instantTrimToken = (RpcCommon.TokenMsg) txn.getRecord(
-                        CompactorMetadataTables.CHECKPOINT_TABLE_NAME, CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM).getPayload();
+                        CompactorMetadataTables.COMPACTOR_UTILS_TABLE, CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM).getPayload();
                 if (instantTrimToken != null) {
-                    txn.delete(CompactorMetadataTables.CHECKPOINT_TABLE_NAME, CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM);
+                    txn.delete(CompactorMetadataTables.COMPACTOR_UTILS_TABLE, CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM);
                     txn.commit();
                     log.info("Invoking trimlog() due to InstantTrigger with trim found");
                     trimLog.invokePrefixTrim();
@@ -277,9 +277,9 @@ public class CompactorLeaderServices {
                 }
 
                 RpcCommon.TokenMsg instantToken = (RpcCommon.TokenMsg) txn.getRecord(
-                        CompactorMetadataTables.CHECKPOINT_TABLE_NAME, CompactorMetadataTables.INSTANT_TIGGER).getPayload();
+                        CompactorMetadataTables.COMPACTOR_UTILS_TABLE, CompactorMetadataTables.INSTANT_TIGGER).getPayload();
                 if (instantToken != null) {
-                    txn.delete(CompactorMetadataTables.CHECKPOINT_TABLE_NAME, CompactorMetadataTables.INSTANT_TIGGER);
+                    txn.delete(CompactorMetadataTables.COMPACTOR_UTILS_TABLE, CompactorMetadataTables.INSTANT_TIGGER);
                 }
                 txn.commit();
                 return;
