@@ -116,6 +116,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     static private final int SMALL_MSG_SIZE = 12000;
 
+    static private final Duration WAIT_INTERVAL = Duration.ofSeconds(5);
+    static private final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
+
     static private TestConfig testConfig = new TestConfig();
 
     // Connect with sourceServer to generate data
@@ -198,10 +201,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private final String t2NameUFO = TEST_NAMESPACE + "$" + t2Name;
 
     private final CountDownLatch blockUntilFSMTransition = new CountDownLatch(1);
-
-    private final Duration WAIT_INTERVAL = Duration.ofSeconds(5);
-
-    private final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
 
     /**
      * Setup Test Environment
@@ -406,9 +405,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         try (TxnContext txn = srcCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            CorfuStoreEntry<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, Message> record = txn.getRecord(replicationStatusTable, key);
-            if (record.getPayload() != null) {
-                snapshotSyncStatus = record.getPayload().getSnapshotSyncInfo().getStatus();
+            CorfuStoreEntry<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, Message>
+                    entry = txn.getRecord(replicationStatusTable, key);
+            if (entry.getPayload() != null) {
+                snapshotSyncStatus = entry.getPayload().getSnapshotSyncInfo().getStatus();
             }
             txn.commit();
         }
@@ -429,9 +429,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         try (TxnContext txn = srcCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            CorfuStoreEntry<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, Message> record = txn.getRecord(replicationStatusTable, key);
-            if (record.getPayload() != null) {
-                syncStatus = record.getPayload().getStatus();
+            CorfuStoreEntry<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, Message>
+                    entry = txn.getRecord(replicationStatusTable, key);
+            if (entry.getPayload() != null) {
+                syncStatus = entry.getPayload().getStatus();
             }
             txn.commit();
         }
