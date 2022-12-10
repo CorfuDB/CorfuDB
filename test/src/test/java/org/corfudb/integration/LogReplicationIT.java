@@ -199,6 +199,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private final CountDownLatch blockUntilFSMTransition = new CountDownLatch(1);
 
+    private final Duration WAIT_INTERVAL = Duration.ofSeconds(5);
+
+    private final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
+
     /**
      * Setup Test Environment
      *
@@ -395,7 +399,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         LogReplicationMetadata.SyncStatus snapshotSyncStatus = null;
         Table<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, Message> replicationStatusTable;
         replicationStatusTable = srcCorfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                "LogReplicationStatus",
+                REPLICATION_STATUS_TABLE,
                 LogReplicationMetadata.ReplicationStatusKey.class,
                 LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
@@ -409,7 +413,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             txn.commit();
         }
 
-        Assert.assertEquals(snapshotSyncStatus, expectedStatus);
+        Assert.assertEquals(expectedStatus, snapshotSyncStatus);
     }
 
     private void verifyCurrentSyncStatus(LogReplicationMetadata.SyncStatus expectedStatus) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
@@ -418,7 +422,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         LogReplicationMetadata.SyncStatus syncStatus = null;
         Table<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, Message> replicationStatusTable;
         replicationStatusTable = srcCorfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                "LogReplicationStatus",
+                REPLICATION_STATUS_TABLE,
                 LogReplicationMetadata.ReplicationStatusKey.class,
                 LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
@@ -432,7 +436,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             txn.commit();
         }
 
-        Assert.assertEquals(syncStatus, expectedStatus);
+        Assert.assertEquals(expectedStatus, syncStatus);
     }
 
     /* ***************************** LOG REPLICATION IT TESTS ***************************** */
@@ -457,10 +461,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         LogReplicationAckReader ackReader = new LogReplicationAckReader(srcManager, config, srcTestRuntime, REMOTE_CLUSTER_ID);
         ackReader.setLogEntryReader(logEntryReader);
 
-        Duration interval = Duration.ofSeconds(5);
         try {
             ackReader.startSyncStatusUpdatePeriodicTask(LogReplicationMetadata.ReplicationStatusVal.SyncType.SNAPSHOT);
-            TimeUnit.SECONDS.sleep(interval.getSeconds());
+            TimeUnit.SECONDS.sleep(WAIT_INTERVAL.getSeconds());
         } catch (InterruptedException e) {
             System.out.println("Sleep interrupted: " + e);
         } finally {
