@@ -116,8 +116,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     static private final int SMALL_MSG_SIZE = 12000;
 
-    static private final Duration WAIT_INTERVAL = Duration.ofSeconds(5);
-    static private final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
+    private static final Duration WAIT_INTERVAL = Duration.ofSeconds(5);
+    private static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
 
     static private TestConfig testConfig = new TestConfig();
 
