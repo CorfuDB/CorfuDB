@@ -273,11 +273,7 @@ public class CompactorServiceTest extends AbstractViewTest {
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
             log.info("ManagerStatus: " + (managerStatus == null ? "null" : managerStatus.toString()));
             if (managerStatus == null) {
-                if (targetStatus == null) {
-                    return true;
-                } else {
-                    return false;
-                }
+                return targetStatus == null;
             }
             if (managerStatus.getStatus() == targetStatus) {
                 return true;
