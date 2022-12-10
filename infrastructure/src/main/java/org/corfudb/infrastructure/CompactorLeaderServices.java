@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import lombok.Getter;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.health.HealthMonitor;
 import org.corfudb.infrastructure.health.Issue;
@@ -39,6 +40,7 @@ public class CompactorLeaderServices {
     private final TrimLog trimLog;
     private final Logger log;
     private final LivenessValidator livenessValidator;
+    @Getter
     private final CompactorMetadataTables compactorMetadataTables;
 
     public static final int MAX_RETRIES = 5;
