@@ -31,9 +31,9 @@ public class DynamicTriggerPolicy implements CompactionTriggerPolicy {
 
     private boolean shouldForceTrigger(CorfuStore corfuStore) {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            RpcCommon.TokenMsg instantTrigger = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT_TABLE_NAME,
+            RpcCommon.TokenMsg instantTrigger = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE,
                     CompactorMetadataTables.INSTANT_TIGGER).getPayload();
-            RpcCommon.TokenMsg instantTrimTrigger = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT_TABLE_NAME,
+            RpcCommon.TokenMsg instantTrimTrigger = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE,
                     CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM).getPayload();
             txn.commit();
             if (instantTrigger != null || instantTrimTrigger != null) {
