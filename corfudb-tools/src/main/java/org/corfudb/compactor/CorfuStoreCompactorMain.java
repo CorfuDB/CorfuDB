@@ -32,7 +32,7 @@ public class CorfuStoreCompactorMain {
     private final CorfuStoreCompactorConfig config;
     private final DistributedCheckpointerHelper distributedCheckpointerHelper;
     private final UpgradeDescriptorTable upgradeDescriptorTable;
-    private final Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable;
+    private final Table<StringKey, RpcCommon.TokenMsg, Message> compactorUtilsTable;
 
     private static final int RETRY_CHECKPOINTING = 5;
     private static final int RETRY_CHECKPOINTING_SLEEP_SECOND = 10;
@@ -49,7 +49,7 @@ public class CorfuStoreCompactorMain {
         this.upgradeDescriptorTable = new UpgradeDescriptorTable(corfuRuntime);
 
         this.compactorMetadataTables = new CompactorMetadataTables(corfuStore);
-        this.checkpointTable = compactorMetadataTables.getCheckpointTable();
+        this.compactorUtilsTable = compactorMetadataTables.getCompactorUtilsTable();
         this.distributedCheckpointerHelper = new DistributedCheckpointerHelper(corfuStore);
     }
 
@@ -72,10 +72,10 @@ public class CorfuStoreCompactorMain {
     private void doCompactorAction() {
         if (config.isFreezeCompaction()) {
             log.info("Freezing compaction...");
-            distributedCheckpointerHelper.updateCheckpointTable(checkpointTable, CompactorMetadataTables.FREEZE_TOKEN, UpdateAction.PUT);
+            distributedCheckpointerHelper.updateCompactorUtilsTable(compactorUtilsTable, CompactorMetadataTables.FREEZE_TOKEN, UpdateAction.PUT);
         } else if (config.isUnfreezeCompaction()) {
             log.info("Unfreezing compaction...");
-            distributedCheckpointerHelper.updateCheckpointTable(checkpointTable, CompactorMetadataTables.FREEZE_TOKEN, UpdateAction.DELETE);
+            distributedCheckpointerHelper.updateCompactorUtilsTable(compactorUtilsTable, CompactorMetadataTables.FREEZE_TOKEN, UpdateAction.DELETE);
         }
         if (config.isUpgradeDescriptorTable()) {
             log.info("Upgrading descriptor table...");
@@ -84,11 +84,11 @@ public class CorfuStoreCompactorMain {
         if (config.isInstantTriggerCompaction()) {
             if (config.isTrim()) {
                 log.info("Enabling instant compaction trigger with trim...");
-                distributedCheckpointerHelper.updateCheckpointTable(checkpointTable,
+                distributedCheckpointerHelper.updateCompactorUtilsTable(compactorUtilsTable,
                         CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM, UpdateAction.PUT);
             } else {
                 log.info("Enabling instant compactor trigger...");
-                distributedCheckpointerHelper.updateCheckpointTable(checkpointTable,
+                distributedCheckpointerHelper.updateCompactorUtilsTable(compactorUtilsTable,
                         CompactorMetadataTables.INSTANT_TIGGER, UpdateAction.PUT);
             }
         }

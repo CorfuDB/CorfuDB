@@ -212,7 +212,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     private Table<StringKey, CheckpointingStatus, Message> openCompactionManagerTable(CorfuStore corfuStore) {
         try {
             return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                    CompactorMetadataTables.COMPACTION_CYCLE_STATUS_TABLE,
                     StringKey.class,
                     CheckpointingStatus.class,
                     null,
@@ -254,7 +254,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     private Table<StringKey, RpcCommon.TokenMsg, Message> openCheckpointTable() {
         try {
             return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    CompactorMetadataTables.CHECKPOINT_TABLE_NAME,
+                    CompactorMetadataTables.COMPACTION_CONTROLS_TABLE,
                     StringKey.class,
                     RpcCommon.TokenMsg.class,
                     null,
@@ -269,7 +269,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         openCompactionManagerTable(corfuStore);
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                    CompactorMetadataTables.COMPACTION_CYCLE_STATUS_TABLE,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
             log.info("ManagerStatus: " + managerStatus);
             if (managerStatus.getStatus() == targetStatus) {
@@ -300,7 +300,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         openCheckpointTable();
         RpcCommon.TokenMsg token;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            token = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.CHECKPOINT_TABLE_NAME, targetRecord).getPayload();
+            token = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, targetRecord).getPayload();
             txn.commit();
         }
         log.info("VerifyCheckpointTable Token: {}", token == null ? "null" : token.toString());
@@ -311,7 +311,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     private boolean pollForFinishCheckpointing() {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                    CompactorMetadataTables.COMPACTION_CYCLE_STATUS_TABLE,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
             txn.commit();
             if (managerStatus != null && (managerStatus.getStatus() == StatusType.COMPLETED
