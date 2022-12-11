@@ -28,9 +28,9 @@ public class DistributedCheckpointerHelper {
         DELETE
     }
 
-    public void updateCompactorUtilsTable(Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable,
-                                          StringKey stringKey,
-                                          UpdateAction action) {
+    public void updateCompactionControlsTable(Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable,
+                                              StringKey stringKey,
+                                              UpdateAction action) {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             if (action == UpdateAction.PUT) {
                 txn.putRecord(checkpointTable, stringKey,
@@ -46,7 +46,7 @@ public class DistributedCheckpointerHelper {
 
     public boolean isCheckpointFrozen() {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            RpcCommon.TokenMsg freezeToken = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.COMPACTOR_UTILS_TABLE,
+            RpcCommon.TokenMsg freezeToken = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE,
                     CompactorMetadataTables.FREEZE_TOKEN).getPayload();
             final long patience = 2 * 60 * 60 * 1000;
             if (freezeToken != null) {
@@ -54,7 +54,7 @@ public class DistributedCheckpointerHelper {
                 long frozeAt = freezeToken.getSequence();
                 Date frozeAtDate = new Date(frozeAt);
                 if (now - frozeAt > patience) {
-                    txn.delete(CompactorMetadataTables.COMPACTOR_UTILS_TABLE, CompactorMetadataTables.FREEZE_TOKEN);
+                    txn.delete(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, CompactorMetadataTables.FREEZE_TOKEN);
                     log.warn("Checkpointer asked to freeze at {} but run out of patience",
                             frozeAtDate);
                 } else {

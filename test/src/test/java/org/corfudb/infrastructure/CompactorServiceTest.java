@@ -254,7 +254,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     private Table<StringKey, RpcCommon.TokenMsg, Message> openCheckpointTable() {
         try {
             return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    CompactorMetadataTables.COMPACTOR_UTILS_TABLE,
+                    CompactorMetadataTables.COMPACTION_CONTROLS_TABLE,
                     StringKey.class,
                     RpcCommon.TokenMsg.class,
                     null,
@@ -300,7 +300,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         openCheckpointTable();
         RpcCommon.TokenMsg token;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            token = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.COMPACTOR_UTILS_TABLE, targetRecord).getPayload();
+            token = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, targetRecord).getPayload();
             txn.commit();
         }
         log.info("VerifyCheckpointTable Token: {}", token == null ? "null" : token.toString());
