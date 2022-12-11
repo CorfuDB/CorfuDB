@@ -31,9 +31,7 @@ public class CorfuStoreCompactorMain {
     private final CorfuStore corfuStore;
     private final CorfuStoreCompactorConfig config;
     private final DistributedCheckpointerHelper distributedCheckpointerHelper;
-    private final UpgradeDescriptorTable upgradeDescriptorTable;
     private final Table<StringKey, RpcCommon.TokenMsg, Message> compactionControlsTable;
-
     private static final int RETRY_CHECKPOINTING = 5;
     private static final int RETRY_CHECKPOINTING_SLEEP_SECOND = 10;
 
@@ -46,7 +44,6 @@ public class CorfuStoreCompactorMain {
         this.corfuRuntime = (CorfuRuntime.fromParameters(
                 config.getParams())).parseConfigurationString(config.getNodeLocator().toEndpointUrl()).connect();
         this.corfuStore = new CorfuStore(corfuRuntime);
-        this.upgradeDescriptorTable = new UpgradeDescriptorTable(corfuRuntime);
 
         this.compactorMetadataTables = new CompactorMetadataTables(corfuStore);
         this.compactionControlsTable = compactorMetadataTables.getCompactionControlsTable();
@@ -70,23 +67,25 @@ public class CorfuStoreCompactorMain {
     }
 
     private void doCompactorAction() {
-        if (config.isFreezeCompaction()) {
-            log.info("Freezing compaction...");
-            distributedCheckpointerHelper.updateCompactionControlsTable(compactionControlsTable, CompactorMetadataTables.FREEZE_TOKEN, UpdateAction.PUT);
-        } else if (config.isUnfreezeCompaction()) {
+        if (config.isFreezeCompaction() || config.isDisableCompaction()) {
+            if (config.isDisableCompaction()) {
+                log.info("Disabling compaction...");
+                distributedCheckpointerHelper.updateCompactionControlsTable(compactionControlsTable, CompactorMetadataTables.DISABLE_COMPACTION, UpdateAction.PUT);
+            }
+            if (config.isFreezeCompaction()) {
+                log.info("Freezing compaction...");
+                distributedCheckpointerHelper.updateCompactionControlsTable(compactionControlsTable, CompactorMetadataTables.FREEZE_TOKEN, UpdateAction.PUT);
+            }
+            return;
+        }
+
+        if (config.isUnfreezeCompaction()) {
             log.info("Unfreezing compaction...");
             distributedCheckpointerHelper.updateCompactionControlsTable(compactionControlsTable, CompactorMetadataTables.FREEZE_TOKEN, UpdateAction.DELETE);
         }
-        if (config.isDisableCompaction()) {
-            log.info("Disabling compaction...");
-            distributedCheckpointerHelper.updateCheckpointTable(checkpointTable, CompactorMetadataTables.DISABLE_COMPACTION, UpdateAction.PUT);
-        } else if (config.isEnableCompaction()) {
+        if (config.isEnableCompaction()) {
             log.info("Enabling compaction...");
-            distributedCheckpointerHelper.updateCheckpointTable(checkpointTable, CompactorMetadataTables.DISABLE_COMPACTION, UpdateAction.DELETE);
-        }
-        if (config.isUpgradeDescriptorTable()) {
-            log.info("Upgrading descriptor table...");
-            upgradeDescriptorTable.syncProtobufDescriptorTable();
+            distributedCheckpointerHelper.updateCompactionControlsTable(compactionControlsTable, CompactorMetadataTables.DISABLE_COMPACTION, UpdateAction.DELETE);
         }
         if (config.isInstantTriggerCompaction()) {
             if (config.isTrim()) {

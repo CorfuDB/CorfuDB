@@ -37,7 +37,7 @@ public class DynamicTriggerPolicyUnitTest {
 
         when(corfuStore.txn(Matchers.any())).thenReturn(txn);
         when(txn.getRecord(Matchers.anyString(), Matchers.any(Message.class))).thenReturn(corfuStoreEntry);
-        doNothing().when(txn).delete(CompactorMetadataTables.CHECKPOINT_TABLE_NAME, CompactorMetadataTables.FREEZE_TOKEN);
+        doNothing().when(txn).delete(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, CompactorMetadataTables.FREEZE_TOKEN);
         when(txn.commit()).thenReturn(CorfuStoreMetadata.Timestamp.getDefaultInstance());
     }
 
@@ -67,7 +67,7 @@ public class DynamicTriggerPolicyUnitTest {
 
     @Test
     public void testDisableCompaction() {
-        when((RpcCommon.TokenMsg) corfuStoreEntry.getPayload()).thenReturn(RpcCommon.TokenMsg.getDefaultInstance());
+        when((RpcCommon.TokenMsg) corfuStoreEntry.getPayload()).thenReturn(RpcCommon.TokenMsg.getDefaultInstance()).thenReturn(null);
         assert !dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore);
     }
 
@@ -86,6 +86,6 @@ public class DynamicTriggerPolicyUnitTest {
                 .thenReturn(RpcCommon.TokenMsg.newBuilder().setSequence(System.currentTimeMillis() - patience).build())
                 .thenReturn(RpcCommon.TokenMsg.newBuilder().setSequence(System.currentTimeMillis()).build());
         assert dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore);
-        verify(txn, times(1)).delete(CompactorMetadataTables.CHECKPOINT_TABLE_NAME, CompactorMetadataTables.FREEZE_TOKEN);
+        verify(txn, times(1)).delete(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, CompactorMetadataTables.FREEZE_TOKEN);
     }
 }

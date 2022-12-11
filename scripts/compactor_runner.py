@@ -173,6 +173,12 @@ class Wizard(object):
         """
         Run compactor.
         """
+        if self._config.freezeCompaction and self._config.unfreezeCompaction:
+            self._print_and_log("ERROR: Both freeze and unfreeze compaction parameters cannot be passed together")
+            return
+        if self._config.enableCompaction and self._config.disableCompaction:
+            self._print_and_log("ERROR: Both enable and disable compaction parameters cannot be passed together")
+            return
         self._run_corfu_compactor()
 
     def _print_and_log(self, msg):

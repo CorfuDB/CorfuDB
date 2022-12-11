@@ -68,9 +68,21 @@ public class DistributedCheckpointerHelper {
         return false;
     }
 
+    public boolean isCompactionDisabled() {
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            RpcCommon.TokenMsg disableCompaction = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE,
+                    CompactorMetadataTables.DISABLE_COMPACTION).getPayload();
+            txn.commit();
+            if (disableCompaction != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public boolean hasCompactionStarted() {
         //This is necessary here to stop checkpointing after it has started
-        if (isCheckpointFrozen()) {
+        if (isCompactionDisabled() || isCheckpointFrozen()) {
             return false;
         }
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
