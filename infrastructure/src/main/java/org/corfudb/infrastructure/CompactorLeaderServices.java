@@ -76,7 +76,7 @@ public class CompactorLeaderServices {
 
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                    CompactorMetadataTables.COMPACTION_CYCLE_STATUS_TABLE,
+                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
 
             if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED) {
@@ -100,7 +100,7 @@ public class CompactorLeaderServices {
             // This is the safest point to trim from, since all data up to this point will surely
             // be included in the upcoming checkpoint cycle
             long minAddressBeforeCycleStarts = corfuRuntime.getAddressSpaceView().getLogTail();
-            txn.putRecord(compactorMetadataTables.getCompactorUtilsTable(), CompactorMetadataTables.MIN_CHECKPOINT,
+            txn.putRecord(compactorMetadataTables.getCompactionControlsTable(), CompactorMetadataTables.MIN_CHECKPOINT,
                     RpcCommon.TokenMsg.newBuilder()
                             .setSequence(minAddressBeforeCycleStarts)
                             .build(),
@@ -167,7 +167,7 @@ public class CompactorLeaderServices {
                 txn.delete(CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME, table);
 
                 CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                        CompactorMetadataTables.COMPACTION_CYCLE_STATUS_TABLE,
+                        CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                         CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
                 txn.putRecord(compactorMetadataTables.getCompactionManagerTable(), CompactorMetadataTables.COMPACTION_MANAGER_KEY,
                         buildCheckpointStatus(
@@ -213,7 +213,7 @@ public class CompactorLeaderServices {
         StatusType finalStatus = StatusType.UNRECOGNIZED;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                    CompactorMetadataTables.COMPACTION_CYCLE_STATUS_TABLE,
+                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
 
             if (managerStatus == null || managerStatus.getStatus() != StatusType.STARTED) {
