@@ -51,7 +51,7 @@ public abstract class DistributedCheckpointer {
         for (int retry = 0; retry < MAX_RETRIES; retry++) {
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                 CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                        CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                        CompactorMetadataTables.COMPACTION_CYCLE_STATUS_TABLE,
                         CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
                 if (managerStatus.getStatus() != StatusType.STARTED) {
                     txn.commit();
@@ -95,7 +95,7 @@ public abstract class DistributedCheckpointer {
         for (int retry = 0; retry < MAX_RETRIES; retry++) {
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                 CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                        CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                        CompactorMetadataTables.COMPACTION_CYCLE_STATUS_TABLE,
                         CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
                 if (epoch != managerStatus.getEpoch() ||
                         managerStatus.getStatus() == StatusType.COMPLETED ||

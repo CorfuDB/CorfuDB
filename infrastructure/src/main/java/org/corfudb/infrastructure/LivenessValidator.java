@@ -156,7 +156,7 @@ public class LivenessValidator {
         Optional<CheckpointingStatus> managerStatus = Optional.empty();
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             managerStatus = Optional.ofNullable((CheckpointingStatus) txn.getRecord(
-                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                    CompactorMetadataTables.COMPACTION_CYCLE_STATUS_TABLE,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload());
             txn.commit();
             log.trace("ManagerStatus: {}", managerStatus.get().getStatus().toString());
