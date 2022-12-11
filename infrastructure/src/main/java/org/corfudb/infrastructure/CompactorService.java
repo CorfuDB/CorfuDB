@@ -125,7 +125,7 @@ public class CompactorService implements ManagementService {
             CheckpointingStatus managerStatus = null;
             try (TxnContext txn = getCorfuStore().txn(CORFU_SYSTEM_NAMESPACE)) {
                 managerStatus = (CheckpointingStatus) txn.getRecord(
-                        CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                        CompactorMetadataTables.COMPACTION_CYCLE_STATUS_TABLE,
                         CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
                 txn.commit();
                 log.trace("ManagerStatus: {}", managerStatus.getStatus().toString());
