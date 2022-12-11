@@ -176,7 +176,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
     private Table<StringKey, CheckpointingStatus, Message> openCompactionManagerTable() {
         try {
             return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                    CompactorMetadataTables.COMPACTION_CYCLE_STATUS_TABLE,
                     StringKey.class,
                     CheckpointingStatus.class,
                     null,
@@ -204,7 +204,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
     private Table<StringKey, TokenMsg, Message> openCheckpointTable() {
         try {
             return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    CompactorMetadataTables.COMPACTOR_UTILS_TABLE,
+                    CompactorMetadataTables.COMPACTION_CONTROLS_TABLE,
                     StringKey.class,
                     TokenMsg.class,
                     null,
@@ -233,7 +233,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
         openCompactionManagerTable();
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                    CompactorMetadataTables.COMPACTION_CYCLE_STATUS_TABLE,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
             if (managerStatus.getStatus() == targetStatus) {
                 return true;
@@ -267,7 +267,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
 
         TokenMsg token;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            token = (TokenMsg) txn.getRecord(CompactorMetadataTables.COMPACTOR_UTILS_TABLE, CompactorMetadataTables.MIN_CHECKPOINT).getPayload();
+            token = (TokenMsg) txn.getRecord(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, CompactorMetadataTables.MIN_CHECKPOINT).getPayload();
             txn.commit();
         }
 
@@ -424,7 +424,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
     private boolean pollForFinishCheckpointing() {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                    CompactorMetadataTables.COMPACTION_CYCLE_STATUS_TABLE,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
             txn.commit();
             log.debug("managerStatus in test: {}", managerStatus == null ? "null" : managerStatus.getStatus());

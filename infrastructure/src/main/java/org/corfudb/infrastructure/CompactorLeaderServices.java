@@ -76,7 +76,7 @@ public class CompactorLeaderServices {
 
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                    CompactorMetadataTables.COMPACTION_CYCLE_STATUS_TABLE,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
 
             if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED) {
@@ -167,7 +167,7 @@ public class CompactorLeaderServices {
                 txn.delete(CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME, table);
 
                 CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                        CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                        CompactorMetadataTables.COMPACTION_CYCLE_STATUS_TABLE,
                         CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
                 txn.putRecord(compactorMetadataTables.getCompactionManagerTable(), CompactorMetadataTables.COMPACTION_MANAGER_KEY,
                         buildCheckpointStatus(
@@ -213,7 +213,7 @@ public class CompactorLeaderServices {
         StatusType finalStatus = StatusType.UNRECOGNIZED;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                    CompactorMetadataTables.COMPACTION_CYCLE_STATUS_TABLE,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
 
             if (managerStatus == null || managerStatus.getStatus() != StatusType.STARTED) {
@@ -267,9 +267,9 @@ public class CompactorLeaderServices {
         for (int i = 0; i < MAX_RETRIES; i++) {
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                 RpcCommon.TokenMsg instantTrimToken = (RpcCommon.TokenMsg) txn.getRecord(
-                        CompactorMetadataTables.COMPACTOR_UTILS_TABLE, CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM).getPayload();
+                        CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM).getPayload();
                 if (instantTrimToken != null) {
-                    txn.delete(CompactorMetadataTables.COMPACTOR_UTILS_TABLE, CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM);
+                    txn.delete(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM);
                     txn.commit();
                     log.info("Invoking trimlog() due to InstantTrigger with trim found");
                     trimLog.invokePrefixTrim();
@@ -277,9 +277,9 @@ public class CompactorLeaderServices {
                 }
 
                 RpcCommon.TokenMsg instantToken = (RpcCommon.TokenMsg) txn.getRecord(
-                        CompactorMetadataTables.COMPACTOR_UTILS_TABLE, CompactorMetadataTables.INSTANT_TIGGER).getPayload();
+                        CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, CompactorMetadataTables.INSTANT_TIGGER).getPayload();
                 if (instantToken != null) {
-                    txn.delete(CompactorMetadataTables.COMPACTOR_UTILS_TABLE, CompactorMetadataTables.INSTANT_TIGGER);
+                    txn.delete(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, CompactorMetadataTables.INSTANT_TIGGER);
                 }
                 txn.commit();
                 return;

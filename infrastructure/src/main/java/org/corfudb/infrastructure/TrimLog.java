@@ -30,10 +30,10 @@ public class TrimLog {
         Optional<Long> trimAddress = Optional.empty();
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                    CompactorMetadataTables.COMPACTION_CYCLE_STATUS_TABLE,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
             if (managerStatus.getStatus() == CheckpointingStatus.StatusType.COMPLETED) {
-                RpcCommon.TokenMsg trimToken = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.COMPACTOR_UTILS_TABLE,
+                RpcCommon.TokenMsg trimToken = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE,
                         CompactorMetadataTables.MIN_CHECKPOINT).getPayload();
                 trimAddress = Optional.of(trimToken.getSequence());
             } else {
