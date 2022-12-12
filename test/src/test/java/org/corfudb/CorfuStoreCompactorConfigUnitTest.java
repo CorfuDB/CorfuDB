@@ -22,16 +22,15 @@ public class CorfuStoreCompactorConfigUnitTest {
     private static final String ks_password = "ks_password";
     private static final String truststore_password = "truststore_password";
     private static final int bulkReadSize = 50;
-
+    private final String baseCmd = "--hostname=" + hostname + " --port=" + port + " --trim=true" +
+            " --upgradeDescriptorTable=true --startCheckpointing=true --instantTriggerCompaction=true " +
+            "--tlsEnabled=true --bulkReadSize=" + bulkReadSize + " --keystore=" + keystore + " --ks_password=" +
+            ks_password + " --truststore=" + truststore + " --truststore_password=" + truststore_password;
     @Test
     public void testCompactorConfigSuccess() {
-        final String CMD = "--hostname=" + hostname + " --port=" + port + " --trim=true" +
-                " --upgradeDescriptorTable=true --startCheckpointing=true --instantTriggerCompaction=true " +
-                "--freezeCompaction=true --disableCompaction=true --tlsEnabled=true --bulkReadSize=" + bulkReadSize +
-                " --keystore=" + keystore + " --ks_password=" + ks_password + " --truststore=" + truststore +
-                " --truststore_password=" + truststore_password;
+        final String cmd = baseCmd + " --freezeCompaction=true --disableCompaction=true";
 
-        CorfuStoreCompactorConfig corfuStoreCompactorConfig = new CorfuStoreCompactorConfig(CMD.split(" "));
+        CorfuStoreCompactorConfig corfuStoreCompactorConfig = new CorfuStoreCompactorConfig(cmd.split(" "));
 
         CorfuRuntimeParameters params = CorfuRuntimeParameters.builder().tlsEnabled(true).keyStore(keystore)
                 .ksPasswordFile(ks_password).trustStore(truststore).tsPasswordFile(truststore_password)
@@ -57,23 +56,15 @@ public class CorfuStoreCompactorConfigUnitTest {
 
     @Test
     public void testCompactorConfigException() {
-        final String CMD1 = "--hostname=" + hostname + " --port=" + port + " --trim=true" +
-                " --upgradeDescriptorTable=true --startCheckpointing=true --instantTriggerCompaction=true " +
-                "--freezeCompaction=true --unfreezeCompaction=true --tlsEnabled=true --bulkReadSize=" + bulkReadSize +
-                " --keystore=" + keystore + " --ks_password=" + ks_password + " --truststore=" + truststore +
-                " --truststore_password=" + truststore_password;
+        final String cmd1 = baseCmd + " --freezeCompaction=true --unfreezeCompaction=true";
         Exception actualException = assertThrows(IllegalArgumentException.class, () -> {
-            new CorfuStoreCompactorConfig(CMD1.split(" "));
+            new CorfuStoreCompactorConfig(cmd1.split(" "));
         });
         assertTrue(actualException.getMessage().contentEquals("Both freeze and unfreeze compaction parameters cannot be passed together"));
 
-        final String CMD2 = "--hostname=" + hostname + " --port=" + port + " --trim=true" +
-                " --upgradeDescriptorTable=true --startCheckpointing=true --instantTriggerCompaction=true " +
-                "--enableCompaction=true --disableCompaction=true --tlsEnabled=true --bulkReadSize=" + bulkReadSize +
-                " --keystore=" + keystore + " --ks_password=" + ks_password + " --truststore=" + truststore +
-                " --truststore_password=" + truststore_password;
+        final String cmd2 = baseCmd + " --enableCompaction=true --disableCompaction=true";
         actualException = assertThrows(IllegalArgumentException.class, () -> {
-            new CorfuStoreCompactorConfig(CMD2.split(" "));
+            new CorfuStoreCompactorConfig(cmd2.split(" "));
         });
         assertTrue(actualException.getMessage().contentEquals("Both enable and disable compaction parameters cannot be passed together"));
     }
