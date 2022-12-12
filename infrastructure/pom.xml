@@ -114,7 +114,7 @@
                     </execution>
 
                     <execution>
-                        <id>Docker push</id>
+                        <id>Docker push corfu server</id>
                         <phase>deploy</phase>
                         <goals>
                             <goal>exec</goal>
@@ -131,7 +131,7 @@
                     </execution>
 
                     <execution>
-                        <id>Docker push</id>
+                        <id>Docker push corfu cloud server</id>
                         <phase>deploy</phase>
                         <goals>
                             <goal>exec</goal>
