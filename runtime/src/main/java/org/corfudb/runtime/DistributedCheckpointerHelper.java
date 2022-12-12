@@ -28,9 +28,9 @@ public class DistributedCheckpointerHelper {
         DELETE
     }
 
-    public void updateCompactorUtilsTable(Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable,
-                                          StringKey stringKey,
-                                          UpdateAction action) {
+    public void updateCompactionControlsTable(Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable,
+                                              StringKey stringKey,
+                                              UpdateAction action) {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             if (action == UpdateAction.PUT) {
                 txn.putRecord(checkpointTable, stringKey,
@@ -75,7 +75,7 @@ public class DistributedCheckpointerHelper {
         }
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             final CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                    CompactorMetadataTables.COMPACTION_CYCLE_STATUS_TABLE,
+                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
             txn.commit();
             if (managerStatus == null || managerStatus.getStatus() != StatusType.STARTED) {

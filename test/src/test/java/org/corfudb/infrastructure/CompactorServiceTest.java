@@ -212,7 +212,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     private Table<StringKey, CheckpointingStatus, Message> openCompactionManagerTable(CorfuStore corfuStore) {
         try {
             return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                    CompactorMetadataTables.COMPACTION_CYCLE_STATUS_TABLE,
+                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                     StringKey.class,
                     CheckpointingStatus.class,
                     null,
@@ -269,7 +269,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         openCompactionManagerTable(corfuStore);
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                    CompactorMetadataTables.COMPACTION_CYCLE_STATUS_TABLE,
+                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
             log.info("ManagerStatus: " + managerStatus);
             if (managerStatus.getStatus() == targetStatus) {
@@ -311,7 +311,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     private boolean pollForFinishCheckpointing() {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                    CompactorMetadataTables.COMPACTION_CYCLE_STATUS_TABLE,
+                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
             txn.commit();
             if (managerStatus != null && (managerStatus.getStatus() == StatusType.COMPLETED

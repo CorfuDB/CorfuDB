@@ -20,9 +20,8 @@ public class CompactorMetadataTables {
     private Table<StringKey, CheckpointingStatus, Message> compactionManagerTable;
     private Table<TableName, CheckpointingStatus, Message> checkpointingStatusTable;
     private Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointsTable;
-    private Table<StringKey, RpcCommon.TokenMsg, Message> compactorUtilsTable;
-
-    public static final String COMPACTION_CYCLE_STATUS_TABLE = "CompactionCycleStatusTable";
+    private Table<StringKey, RpcCommon.TokenMsg, Message> compactionControlsTable;
+    public static final String COMPACTION_MANAGER_TABLE_NAME = "CompactionManagerTable";
     public static final String CHECKPOINT_STATUS_TABLE_NAME = "CheckpointStatusTable";
     public static final String ACTIVE_CHECKPOINTS_TABLE_NAME = "ActiveCheckpointsTable";
     public static final String COMPACTION_CONTROLS_TABLE = "CompactionControlsTable";
@@ -39,7 +38,7 @@ public class CompactorMetadataTables {
         for (int retry = 0; ; retry++) {
             try {
                 this.compactionManagerTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                        COMPACTION_CYCLE_STATUS_TABLE,
+                        COMPACTION_MANAGER_TABLE_NAME,
                         StringKey.class,
                         CheckpointingStatus.class,
                         null,
@@ -59,7 +58,7 @@ public class CompactorMetadataTables {
                         null,
                         TableOptions.fromProtoSchema(ActiveCPStreamMsg.class));
 
-                this.compactorUtilsTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                this.compactionControlsTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
                         COMPACTION_CONTROLS_TABLE,
                         StringKey.class,
                         RpcCommon.TokenMsg.class,
