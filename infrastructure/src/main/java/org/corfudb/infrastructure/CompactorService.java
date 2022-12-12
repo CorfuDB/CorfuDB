@@ -130,7 +130,7 @@ public class CompactorService implements ManagementService {
                 if (managerStatus == null && isLeader) {
                     txn.putRecord(getCompactorLeaderServices().getCompactorMetadataTables().getCompactionManagerTable(),
                             CompactorMetadataTables.COMPACTION_MANAGER_KEY,
-                            CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).setEpoch(0).build(), null);
+                            CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).setCycleCount(0).build(), null);
                 }
                 txn.commit();
             } catch (Exception e) {
