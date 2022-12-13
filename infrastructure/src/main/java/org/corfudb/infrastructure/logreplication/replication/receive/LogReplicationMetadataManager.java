@@ -608,8 +608,8 @@ public class LogReplicationMetadataManager {
             SnapshotSyncInfo currentSnapshotSyncInfo;
             if (snapshotStatus == null) {
                 log.warn("syncStatusPoller [snapshot] :: previous status is not present for cluster: {}", clusterId);
-                // currentSnapshotSyncInfo gives the state of the previous SNAPSHOT SYNC,
-                // since the given sync is of SNAPSHOT sync, it points towards the status of current SYNC.
+                // Given it is a SNAPSHOT sync, both currentSnapshotSyncInfo & currentStatus points towards the status of current SYNC.
+                // In general, currentStatus gives the status of the SYNC status irrespective of snapshot/log entry.
                 currentSnapshotSyncInfo = SnapshotSyncInfo.newBuilder().setStatus(SyncStatus.NOT_STARTED).build();
                 currentStatus = SyncStatus.NOT_STARTED;
             } else {
