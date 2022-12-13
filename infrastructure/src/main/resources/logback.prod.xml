@@ -74,7 +74,7 @@
     </logger>
     <logger name="org.corfudb.client.metricsdata" level="off" />
 
-    <logger additivity="true" name="compactor-leader" level="debug">
+    <logger additivity="false" name="compactor-leader" level="debug">
 	    <appender-ref ref="async_compactor_leader_file"/>
     </logger>
     <root level="info">
