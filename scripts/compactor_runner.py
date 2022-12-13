@@ -48,6 +48,8 @@ class Config(object):
         self.trim = None
         self.freezeCompaction = None
         self.unfreezeCompaction = None
+        self.disableCompaction = None
+        self.enableCompaction = None
         self.xmx_min_in_mb = 150  # arbitrary
         self.xmx_perc = 0.65
 
@@ -151,6 +153,10 @@ class CommandBuilder(object):
             cmd.append("--freezeCompaction=true")
         if self._config.unfreezeCompaction:
             cmd.append("--unfreezeCompaction=true")
+        if self._config.disableCompaction:
+            cmd.append("--disableCompaction=true")
+        if self._config.enableCompaction:
+            cmd.append("--enableCompaction=true")
 
         return " ".join(cmd)
 
@@ -167,6 +173,12 @@ class Wizard(object):
         """
         Run compactor.
         """
+        if self._config.freezeCompaction and self._config.unfreezeCompaction:
+            self._print_and_log("ERROR: Both freeze and unfreeze compaction parameters cannot be passed together")
+            return
+        if self._config.enableCompaction and self._config.disableCompaction:
+            self._print_and_log("ERROR: Both enable and disable compaction parameters cannot be passed together")
+            return
         self._run_corfu_compactor()
 
     def _print_and_log(self, msg):
@@ -275,6 +287,8 @@ class Wizard(object):
         if not config.upgrade:
             config.freezeCompaction = args.freezeCompaction
             config.unfreezeCompaction = args.unfreezeCompaction
+            config.disableCompaction = args.disableCompaction
+            config.enableCompaction = args.enableCompaction
             config.startCheckpointing = args.startCheckpointing
         else:
             config.startCheckpointing = True
@@ -320,6 +334,12 @@ if __name__ == "__main__":
                             required=False)
     arg_parser.add_argument("--unfreezeCompaction", type=bool,
                             help="To unfreeze compaction",
+                            required=False)
+    arg_parser.add_argument("--disableCompaction", type=bool,
+                            help="To disable compaction",
+                            required=False)
+    arg_parser.add_argument("--enableCompaction", type=bool,
+                            help="To enable compaction",
                             required=False)
     arg_parser.add_argument("--trimAfterCheckpoint", type=bool,
                             help="To enable trim again after checkpointing all tables",
