@@ -131,11 +131,11 @@ public class DistributedCheckpointerUnitTest {
         verify(txn, times(numTimesMethodInvoked * putInvokedPerMethodCall))
                 .putRecord(any(), any(), captor.capture(), any());
         Assert.assertEquals(StatusType.COMPLETED, captor.getAllValues().get(getIndex(++i, putInvokedPerMethodCall)).getStatus());
-        Assert.assertEquals(0, captor.getAllValues().get(getIndex(i, putInvokedPerMethodCall)).getEpoch());
+        Assert.assertEquals(0, captor.getAllValues().get(getIndex(i, putInvokedPerMethodCall)).getCycleCount());
         Assert.assertEquals(StatusType.FAILED, captor.getAllValues().get(getIndex(++i, putInvokedPerMethodCall)).getStatus());
-        Assert.assertEquals(0, captor.getAllValues().get(getIndex(i, putInvokedPerMethodCall)).getEpoch());
+        Assert.assertEquals(0, captor.getAllValues().get(getIndex(i, putInvokedPerMethodCall)).getCycleCount());
         Assert.assertEquals(StatusType.COMPLETED, captor.getAllValues().get(getIndex(++i, putInvokedPerMethodCall)).getStatus());
-        Assert.assertEquals(0, captor.getAllValues().get(getIndex(i, putInvokedPerMethodCall)).getEpoch());
+        Assert.assertEquals(0, captor.getAllValues().get(getIndex(i, putInvokedPerMethodCall)).getCycleCount());
     }
 
     private int getIndex(int i, int putInvokedPerMethodCall) {
@@ -171,8 +171,8 @@ public class DistributedCheckpointerUnitTest {
         when((CheckpointingStatus) corfuStoreEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build())
-                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).setEpoch(1).build());
-        //Fail on different epoch values
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).setCycleCount(1).build());
+        //Fail on different cycleCount values
         assert !distributedCheckpointer.tryCheckpointTable(tableName, t -> cpw);
 
         when((CheckpointingStatus) corfuStoreEntry.getPayload())

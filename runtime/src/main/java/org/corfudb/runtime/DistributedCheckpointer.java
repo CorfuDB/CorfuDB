@@ -31,7 +31,7 @@ public abstract class DistributedCheckpointer {
     private final CorfuRuntime corfuRuntime;
     private final String clientName;
 
-    private long epoch;
+    private long compactorCycleCount;
 
     public static final long CONN_RETRY_DELAY_MILLISEC = 500;
     public static final int MAX_RETRIES = 5;
@@ -60,11 +60,11 @@ public abstract class DistributedCheckpointer {
                 CheckpointingStatus tableStatus = (CheckpointingStatus) txn.getRecord(
                         CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, tableName).getPayload();
                 if (tableStatus.getStatus() == StatusType.IDLE) {
-                    epoch = tableStatus.getEpoch();
+                    compactorCycleCount = tableStatus.getCycleCount();
                     txn.putRecord(compactorMetadataTables.getCheckpointingStatusTable(),
                             tableName,
                             CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).setClientName(clientName)
-                                    .setEpoch(epoch).build(),
+                                    .setCycleCount(compactorCycleCount).build(),
                             null);
                     txn.putRecord(compactorMetadataTables.getActiveCheckpointsTable(), tableName,
                             CorfuCompactorManagement.ActiveCPStreamMsg.newBuilder().build(),
@@ -97,7 +97,7 @@ public abstract class DistributedCheckpointer {
                 CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
                         CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                         CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
-                if (epoch != managerStatus.getEpoch() ||
+                if (compactorCycleCount != managerStatus.getCycleCount() ||
                         managerStatus.getStatus() == StatusType.COMPLETED ||
                         managerStatus.getStatus() == StatusType.FAILED) {
                     log.error("Compaction cycle has already ended with status {}", managerStatus.getStatus());
@@ -183,7 +183,7 @@ public abstract class DistributedCheckpointer {
         this.livenessUpdater.notifyOnSyncComplete();
         return CheckpointingStatus.newBuilder()
                 .setStatus(returnStatus).setClientName(clientName)
-                .setEpoch(epoch).setTimeTaken(System.currentTimeMillis() - tableCkptStartTime)
+                .setCycleCount(compactorCycleCount).setTimeTaken(System.currentTimeMillis() - tableCkptStartTime)
                 .build();
     }
 

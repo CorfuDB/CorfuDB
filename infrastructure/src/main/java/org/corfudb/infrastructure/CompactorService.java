@@ -127,8 +127,12 @@ public class CompactorService implements ManagementService {
                 managerStatus = (CheckpointingStatus) txn.getRecord(
                         CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                         CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
+                if (managerStatus == null && isLeader) {
+                    txn.putRecord(getCompactorLeaderServices().getCompactorMetadataTables().getCompactionManagerTable(),
+                            CompactorMetadataTables.COMPACTION_MANAGER_KEY,
+                            CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).setCycleCount(0).build(), null);
+                }
                 txn.commit();
-                log.trace("ManagerStatus: {}", managerStatus.getStatus().toString());
             } catch (Exception e) {
                 log.warn("Unable to acquire manager status: ", e);
             }
