@@ -1,8 +1,11 @@
 package org.corfudb.infrastructure.logreplication.transport.sample;
 
+import io.grpc.ConnectivityState;
 import io.grpc.Context;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -50,10 +53,10 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
     private final int MAX_STREAMS_IN_CHANNEL = 100;
 
-    private static Map<String, Set<LogReplication.ReplicationSessionMsg>> channelToStreamsMap = new HashMap<>();
+    private static Map<ManagedChannel, Set<LogReplication.ReplicationSessionMsg>> channelToStreamsMap = new HashMap<>();
     private static final ReentrantLock lock = new ReentrantLock();
 
-    private final Map<String, ManagedChannel> channelMap;
+    private final Map<String, Set<ManagedChannel>> nodeIdToChannelMap;
     private final Map<LogReplication.ReplicationSessionMsg, LogReplicationChannelBlockingStub> blockingStubMap;
     private final Map<LogReplication.ReplicationSessionMsg, LogReplicationChannelStub> asyncStubMap;
     private final ExecutorService executorService;
@@ -78,7 +81,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
             LogReplicationSourceClientRouter sourceRouter, LogReplicationSinkClientRouter sinkRouter ) {
         super(localClusterId, remoteClusterDescriptor, sourceRouter, sinkRouter);
 
-        this.channelMap = new HashMap<>();
+        this.nodeIdToChannelMap = new HashMap<>();
         this.blockingStubMap = new HashMap<>();
         this.asyncStubMap = new HashMap<>();
         this.executorService = Executors.newSingleThreadExecutor();
@@ -99,17 +102,19 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 ManagedChannel channel;
 
                 lock.lock();
-                if(!channelToStreamsMap.containsKey(node.getNodeId()) || channelToStreamsMap.get(node.getNodeId()).size() >= MAX_STREAMS_IN_CHANNEL) {
+                Pair<Boolean, ManagedChannel> reuseChannel = canReuseChannel(node.getNodeId());
+                if(!nodeIdToChannelMap.containsKey(node.getNodeId()) || !reuseChannel.getLeft()) {
                     log.info("GRPC create new channel to node{}@{}:{}", node.getNodeId(), nodeLocator.getHost(), nodeLocator.getPort());
                     channel = ManagedChannelBuilder.forAddress(nodeLocator.getHost(), nodeLocator.getPort())
                             .usePlaintext()
                             .build();
-                    channelMap.put(node.getNodeId(), channel);
+                    nodeIdToChannelMap.putIfAbsent(node.getNodeId(), new HashSet<>());
+                    nodeIdToChannelMap.get(node.getNodeId()).add(channel);
                 } else {
-                    channel = channelMap.get(node.getNodeId());
+                    channel = reuseChannel.getRight();
                 }
-                channelToStreamsMap.putIfAbsent(node.getNodeId(), new HashSet<>());
-                channelToStreamsMap.get(node.getNodeId()).add(session);
+                channelToStreamsMap.putIfAbsent(channel, new HashSet<>());
+                channelToStreamsMap.get(channel).add(session);
                 lock.unlock();
 
                 blockingStubMap.put(session, LogReplicationChannelGrpc.newBlockingStub(channel));
@@ -120,6 +125,21 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 onConnectionDown(node.getNodeId());
             }
         }));
+    }
+
+    private Pair<Boolean, ManagedChannel> canReuseChannel(String nodeId) {
+        if(!nodeIdToChannelMap.isEmpty()) {
+            Set<ManagedChannel> channels = nodeIdToChannelMap.get(nodeId);
+            if (!channels.isEmpty()) {
+                for (ManagedChannel channel : channels) {
+                    if (channelToStreamsMap.get(channel).size() < MAX_STREAMS_IN_CHANNEL && !channel.getState(false).equals(ConnectivityState.SHUTDOWN)) {
+                        return Pair.of(true, channel);
+                    }
+                }
+            }
+        }
+
+        return Pair.of(false, null);
     }
 
     @Override
@@ -142,16 +162,18 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 ManagedChannel channel;
 
                 lock.lock();
-                if(!channelToStreamsMap.containsKey(nodeId) || channelToStreamsMap.get(nodeId).size() >= MAX_STREAMS_IN_CHANNEL) {
+                Pair<Boolean, ManagedChannel> reuseChannel = canReuseChannel(nodeId);
+                if(!nodeIdToChannelMap.containsKey(nodeId) || reuseChannel.getLeft()) {
                     log.info("GRPC create new channel to node{}@{}:{}", nodeId, nodeLocator.getHost(), nodeLocator.getPort());
                     channel = ManagedChannelBuilder.forAddress(nodeLocator.getHost(), nodeLocator.getPort())
                             .usePlaintext()
                             .build();
-                    channelMap.put(nodeId, channel);
+                    nodeIdToChannelMap.putIfAbsent(nodeId, new HashSet<>());
+                    nodeIdToChannelMap.get(nodeId).add(channel);
                 } else {
-                    channel = channelMap.get(nodeId);
+                    channel = reuseChannel.getRight();
                 }
-                channelToStreamsMap.putIfAbsent(nodeId, new HashSet<>());
+                channelToStreamsMap.putIfAbsent(channel, new HashSet<>());
                 channelToStreamsMap.get(nodeId).add(session);
                 lock.unlock();
 
@@ -159,7 +181,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 asyncStubMap.put(session, LogReplicationChannelGrpc.newStub(channel));
                 onConnectionUp(nodeId);
             } catch (Exception e) {
-                log.error("Error2: {}", e.getMessage());
+                log.error("Error: {}", e.getMessage());
                 onConnectionDown(nodeId);
             }
         });
@@ -220,7 +242,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
                 @Override
                 public void onError(Throwable t) {
-                    log.error("Error from response observer", t);
+                    log.error("Error from request observer", t);
                     long requestId = response.getHeader().getRequestId();
                     getSinkRouter().completeExceptionally(requestId, t);
                     responseObserverMap.remove(sessionMsg);
@@ -264,6 +286,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         } catch (Exception e) {
             log.error("Caught exception while sending message to query leadership status id {}",
                     request.getHeader().getRequestId(), e);
+            onServiceUnavailable(e, nodeId);
             getSourceRouter().completeExceptionally(request.getHeader().getRequestId(), e);
         }
     }
@@ -281,6 +304,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         } catch (Exception e) {
             log.error("Caught exception while sending message to query metadata id={}",
                     request.getHeader().getRequestId(), e);
+            onServiceUnavailable(e, nodeId);
             getSourceRouter().completeExceptionally(request.getHeader().getRequestId(), e);
         }
     }
@@ -307,19 +331,17 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 public void onError(Throwable t) {
                     log.error("Error from response observer", t);
                     long requestId = request.getHeader().getRequestId();
+                    onServiceUnavailable(t, nodeId);
                     getSourceRouter().completeExceptionally(requestId, t);
                     replicationReqObserverMap.remove(Pair.of(sessionMsg, requestId));
                 }
 
                 @Override
                 public void onCompleted() {
-//                    log.info("Completed");
                     replicationReqObserverMap.remove(Pair.of(sessionMsg, requestId));
                 }
             };
             replicationResObserverMap.put(Pair.of(sessionMsg, requestId), responseObserver);
-
-//            log.info("Initiate stub for replication");
 
             if(asyncStubMap.containsKey(sessionMsg)) {
                 StreamObserver<RequestMsg> requestObserver = asyncStubMap.get(sessionMsg).replicate(responseObserver);
@@ -331,7 +353,6 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
             }
         }
 
-//        log.info("request: {}", request);
         log.info("Send replication entry: {} to node {}@{}", request.getHeader().getRequestId(),
                 nodeId, getRemoteClusterDescriptor().getEndpointByNodeId(nodeId));
         if (replicationResObserverMap.containsKey(Pair.of(sessionMsg, requestId))) {
@@ -342,18 +363,44 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
     @Override
     public void stop() {
-        channelMap.values().forEach(channel -> {
-            try {
-                channel.shutdownNow();
-                channel.awaitTermination(10, TimeUnit.MILLISECONDS);
-            } catch (Exception e) {
-                log.error("Caught exception when waiting to shutdown channel {}", channel.toString());
+        lock.lock();
+        nodeIdToChannelMap.values().stream().forEach(channelSet -> {
+            if(!channelSet.isEmpty()) {
+                channelSet.stream().forEach(channel -> {
+                    try {
+                        channel.shutdownNow();
+                        channel.awaitTermination(10, TimeUnit.MILLISECONDS);
+                    } catch (Exception e) {
+                        log.error("Caught exception when waiting to shutdown channel {}", channel.toString());
+                    }
+                });
             }
         });
+        lock.unlock();
     }
 
     @Override
     public void resetRemoteLeader() {
         // No-op
     }
+
+    private void onServiceUnavailable(Throwable t, String nodeId) {
+        Set<ManagedChannel> allChannelsToNode = nodeIdToChannelMap.get(nodeId);
+
+        allChannelsToNode.stream().forEach(channel -> {
+            ConnectivityState channelState = channel.getState(false);
+            if (!channelState.equals(ConnectivityState.SHUTDOWN) && t instanceof StatusRuntimeException &&
+                    ((StatusRuntimeException) t).getStatus().getCode().equals(Status.UNAVAILABLE.getCode())) {
+                //generally a transient issue, retry connection...
+                onConnectionDown(nodeId);
+            } else if (channelState.equals(ConnectivityState.SHUTDOWN)) {
+                lock.lock();
+                channelToStreamsMap.remove(nodeId);
+                nodeIdToChannelMap.remove(nodeId);
+                lock.unlock();
+            }
+        });
+
+    }
+
 }

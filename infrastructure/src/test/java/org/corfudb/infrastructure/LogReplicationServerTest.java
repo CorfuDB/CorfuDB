@@ -7,6 +7,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSessi
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationLeadershipRequestMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataRequestMsg;
@@ -22,6 +23,7 @@ import org.mockito.ArgumentCaptor;
 import static org.corfudb.infrastructure.LogReplicationClientTest.SAMPLE_CLUSTER;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
@@ -71,7 +73,11 @@ public class LogReplicationServerTest {
     @Test
     public void testHandleMetadataRequest() {
         final LogReplicationMetadataRequestMsg metadataRequest = LogReplicationMetadataRequestMsg
-                .newBuilder().build();
+                .newBuilder().setSessionInfo(LogReplication.ReplicationSessionMsg.newBuilder()
+                        .setLocalClusterId(replicationSession.getRemoteClusterId())
+                        .setRemoteClusterId(replicationSession.getLocalClusterId())
+                        .setClient(replicationSession.getSubscriber().getClient())
+                        .build()).build();
         final RequestMsg request =
             getRequestMsg(HeaderMsg.newBuilder().setClusterId(clusterId).build(),
                 CorfuMessage.RequestPayloadMsg.newBuilder()
@@ -80,13 +86,13 @@ public class LogReplicationServerTest {
 
         lrServer.setLeadership(true);
         doReturn(metadataManager).when(sinkManager).getLogReplicationMetadataManager();
-        doReturn(response).when(metadataManager).getMetadataResponse(any(), replicationSession);
+        doReturn(response).when(metadataManager).getMetadataResponse(any(), eq(replicationSession));
 
         lrServer.getHandlerMethods().handle(request, mockHandlerContext,
             mockServerRouter);
 
         verify(sinkManager).getLogReplicationMetadataManager();
-        verify(metadataManager).getMetadataResponse(any(), replicationSession);
+        verify(metadataManager).getMetadataResponse(any(), any(ReplicationSession.class));
     }
 
     /**
@@ -131,12 +137,21 @@ public class LogReplicationServerTest {
      */
     @Test
     public void testHandleEntry() {
+        final LogReplication.LogReplicationEntryMetadataMsg metadataRequest = LogReplication.LogReplicationEntryMetadataMsg
+                .newBuilder().setSessionInfo(LogReplication.ReplicationSessionMsg.newBuilder()
+                        .setLocalClusterId(replicationSession.getRemoteClusterId())
+                        .setRemoteClusterId(replicationSession.getLocalClusterId())
+                        .setClient(replicationSession.getSubscriber().getClient())
+                        .build()).build();
         final LogReplicationEntryMsg logEntry = LogReplicationEntryMsg
-                .newBuilder().build();
+                .newBuilder()
+                .setMetadata(metadataRequest)
+                .build();
         final RequestMsg request =
             getRequestMsg(HeaderMsg.newBuilder().setClusterId(clusterId).build(),
                 CorfuMessage.RequestPayloadMsg.newBuilder()
-                        .setLrEntry(logEntry).build());
+                        .setLrEntry(logEntry)
+                        .build());
         final LogReplicationEntryMsg ack = LogReplicationEntryMsg.newBuilder().build();
 
         // Make this server the leader and verify the response

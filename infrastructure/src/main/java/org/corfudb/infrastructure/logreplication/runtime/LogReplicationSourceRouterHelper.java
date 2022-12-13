@@ -341,6 +341,10 @@ public class LogReplicationSourceRouterHelper implements IClientRouter {
             log.warn("Attempted to exceptionally complete request {}, but request not outstanding!",
                     requestID);
         }
+
+        if(cause.getCause().getMessage().contains("Network closed")) {
+
+        }
     }
 
     @Override

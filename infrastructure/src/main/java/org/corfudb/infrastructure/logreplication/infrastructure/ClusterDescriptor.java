@@ -7,7 +7,8 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * This class describes a Cluster ore Site in terms of its Log Replication Nodes
@@ -91,6 +92,23 @@ public class ClusterDescriptor {
     @Override
     public String toString() {
         return String.format("Cluster[%s]:: role=%s, CorfuPort=%s, Nodes[%s]:  %s", getClusterId(), role, corfuPort, nodesDescriptors.size(), listToString(nodesDescriptors));
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        ClusterDescriptor that = (ClusterDescriptor) o;
+        return clusterId.equals(that.clusterId) && role.equals(that.role) && nodesDescriptors.equals(that.nodesDescriptors);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(clusterId, role, nodesDescriptors);
     }
 
     /**

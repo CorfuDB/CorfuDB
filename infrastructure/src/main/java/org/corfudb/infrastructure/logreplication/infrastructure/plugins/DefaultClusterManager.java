@@ -224,13 +224,13 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
     }
 
     public Map<LogReplicationClusterInfo.ClusterConfigurationMsg, Set<LogReplication.ReplicationModel>> getRemoteSourceToReplicationModels() {
-        log.debug("getRemoteSourceToReplicationModels {}", this.remoteSourcesToReplicationModels.size());
+        log.debug("getRemoteSourceToReplicationModels {}", this.remoteSourcesToReplicationModels);
         return getClusterBucket(this.remoteSourcesToReplicationModels);
     }
 
 
     public Map<ClusterConfigurationMsg, Set<LogReplication.ReplicationModel>> getRemoteSinkForReplicationModels(){
-        log.debug("getRemoteSinkForReplicationModels {}", this.remoteSinkToReplicationModels.size());
+        log.debug("getRemoteSinkForReplicationModels {}", this.remoteSinkToReplicationModels);
         return getClusterBucket(this.remoteSinkToReplicationModels);
     }
 
@@ -355,6 +355,17 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
                 }
             });
         });
+
+        //true when a backup cluster becomes the source
+        if(localCluster.get() == null) {
+            ClusterDescriptor currentSource = new ClusterDescriptor(topologyConfig.getClustersList().stream()
+                    .filter(clusterMsg -> clusterMsg.getId().equals(topology.getSourceClusterIds().get(0))).findFirst().get());
+
+            ClusterDescriptor newLocalCluster = new ClusterDescriptor(
+                    currentSource.getClusterId(), ClusterRole.SOURCE,
+                    BACKUP_CORFU_PORT);
+            localCluster.set(newLocalCluster.convertToMessage());
+        }
 
         return localCluster.get();
     }
@@ -673,7 +684,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
                 );
         newSourceClusters.get(0).getNodesDescriptors().add(backupNode);
         List<ClusterDescriptor> sinkClusters = new ArrayList<>();
-        topologyConfig.getClustersList().stream().filter(clusterMsg -> clusterMsg.getRole().equals(ClusterRole.SINK))
+        topologyConfig.getClustersList().stream().filter(clusterMsg -> clusterMsg.getId().equals(topology.getSinkClusterIds().get(0)))
                 .forEach(clusterMsg -> sinkClusters.add(new ClusterDescriptor(clusterMsg)));
 
         synchronized (this) {
@@ -690,7 +701,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
                         add(LogReplication.ReplicationModel.FULL_TABLE);
             }});
 
-            topologyBucketsCustomized = true;
+            topologyBucketsCustomized = false;
         }
         return new TopologyDescriptor(++configId, newSourceClusters, sinkClusters);
     }

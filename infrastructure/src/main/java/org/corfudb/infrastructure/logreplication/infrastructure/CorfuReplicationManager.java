@@ -81,6 +81,9 @@ public class CorfuReplicationManager {
         for(ClusterDescriptor remote : remoteClusters) {
             Set<ReplicationSession> sessions = remoteClusterIdToReplicationSession.get(remote.getClusterId());
             log.info("Starting connection to remote {} and session {} ", remote, sessions);
+            if(sessions.isEmpty()) {
+                continue;
+            }
 
             for(ReplicationSession session : sessions) {
                 if (!context.getTopology().getRemoteSinkClusters().isEmpty() &&
@@ -293,7 +296,7 @@ public class CorfuReplicationManager {
     }
 
     /**
-     * The notification of adding/removing Sinks with/without topology configId change.
+     * The notification of adding/removing remote clusters with/without topology configId change.
      *
      * @param newConfig should have the same topologyConfigId as the current config
      * @param remoteSinkClustersToAdd the new sink clusters to be added
@@ -301,10 +304,10 @@ public class CorfuReplicationManager {
      * @param remoteClustersToRemove sink clusters which are not found in the new topology
      * @param intersection Sink clusters found in both old and new topologies
      */
-    public void processSinkChange(TopologyDescriptor newConfig, Set<String> remoteSinkClustersToAdd, Set<String> remoteSourceClusterToAdd,
-                                  Set<String> remoteClustersToRemove, Set<String> intersection, Map<String, ClusterDescriptor> connectionEndsIdToDescriptor,
-                                  Map<String, Set<ReplicationSession>> remoteIdToReplicationSession,
-                                  CorfuInterClusterReplicationServerNode interClusterServerNode, Map<Class, AbstractServer> serverMap) {
+    public void processRemoteClusterChange(TopologyDescriptor newConfig, Set<String> remoteSinkClustersToAdd, Set<String> remoteSourceClusterToAdd,
+                                           Set<String> remoteClustersToRemove, Set<String> intersection, Map<String, ClusterDescriptor> connectionEndsIdToDescriptor,
+                                           Map<String, Set<ReplicationSession>> remoteIdToReplicationSession,
+                                           CorfuInterClusterReplicationServerNode interClusterServerNode, Map<Class, AbstractServer> serverMap) {
 
         long oldTopologyConfigId = context.getTopology().getTopologyConfigId();
         context.setTopology(newConfig);
@@ -319,7 +322,7 @@ public class CorfuReplicationManager {
             }
         }
 
-        // Start the newly added Sinks
+        // Add the new clusters
         Set<ClusterDescriptor> newConnectionToStart = new HashSet<>();
         Set<String> remoteClustersToAdd = new HashSet<>();
         remoteClustersToAdd.addAll(remoteSinkClustersToAdd);

@@ -1,6 +1,7 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
@@ -11,6 +12,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.Table;
@@ -47,7 +49,7 @@ public class LogReplicationDynamicStreamIT extends LogReplicationAbstractIT {
      */
     @Before
     public void setupPluginPath() throws Exception {
-        String nettyConfigDynamic = "src/test/resources/transport/nettyConfig.properties";
+        String nettyConfigDynamic = "src/test/resources/transport/grpcConfig.properties";
         if(runProcess) {
             File f = new File(nettyConfigDynamic);
             this.pluginConfigFilePath = f.getAbsolutePath();
@@ -72,6 +74,32 @@ public class LogReplicationDynamicStreamIT extends LogReplicationAbstractIT {
                 ReplicationStatusVal.class,
                 null,
                 TableOptions.fromProtoSchema(ReplicationStatusVal.class));
+
+        initSingleSourceSinkCluster();
+    }
+
+    public void initSingleSourceSinkCluster() throws Exception {
+        Table<ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg> configTableSource = corfuStoreSource.openTable(
+                DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
+                ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class,
+                TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
+        );
+        try (TxnContext txn = corfuStoreSource.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTableSource, DefaultClusterManager.OP_SINGLE_SOURCE_SINK,
+                    DefaultClusterManager.OP_SINGLE_SOURCE_SINK, DefaultClusterManager.OP_SINGLE_SOURCE_SINK);
+            txn.commit();
+        }
+
+        Table<ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg> configTableSink = corfuStoreSink.openTable(
+                DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
+                ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class,
+                TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
+        );
+        try (TxnContext txn = corfuStoreSink.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+            txn.putRecord(configTableSink, DefaultClusterManager.OP_SINGLE_SOURCE_SINK,
+                    DefaultClusterManager.OP_SINGLE_SOURCE_SINK, DefaultClusterManager.OP_SINGLE_SOURCE_SINK);
+            txn.commit();
+        }
     }
 
     /*
