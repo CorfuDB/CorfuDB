@@ -459,11 +459,12 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 SMALL_MSG_SIZE, MAX_CACHE_NUM_ENTRIES);
 
         LogEntryReader logEntryReader = new TestLogEntryReader();
-        LogReplicationAckReader ackReader = new LogReplicationAckReader(srcManager, config, srcTestRuntime, REMOTE_CLUSTER_ID);
+        LogReplicationAckReader ackReader = new LogReplicationAckReader(srcManager, config, srcDataRuntime, REMOTE_CLUSTER_ID);
         ackReader.setLogEntryReader(logEntryReader);
 
         try {
-            ackReader.startSyncStatusUpdatePeriodicTask(LogReplicationMetadata.ReplicationStatusVal.SyncType.SNAPSHOT);
+            ackReader.setSyncType(LogReplicationMetadata.ReplicationStatusVal.SyncType.SNAPSHOT);
+            ackReader.startSyncStatusUpdatePeriodicTask();
             TimeUnit.SECONDS.sleep(WAIT_INTERVAL.getSeconds());
         } catch (InterruptedException e) {
             System.out.println("Sleep interrupted: " + e);

@@ -34,12 +34,14 @@ public class InitializedState implements LogReplicationState {
                 log.info("Start Snapshot Sync, requestId={}", event.getEventId());
                 // Set the id of the event that caused the transition to the new state
                 // This is used to correlate trim or error events that derive from this state
+                fsm.getAckReader().setSyncType(LogReplicationMetadata.ReplicationStatusVal.SyncType.SNAPSHOT);
                 LogReplicationState snapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
                 snapshotSyncState.setTransitionEventId(event.getEventId());
                 ((InSnapshotSyncState)snapshotSyncState).setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
                 return snapshotSyncState;
             case SNAPSHOT_TRANSFER_COMPLETE:
                 log.info("Snapshot Sync transfer completed. Wait for snapshot apply to complete.");
+                fsm.getAckReader().setSyncType(LogReplicationMetadata.ReplicationStatusVal.SyncType.SNAPSHOT);
                 WaitSnapshotApplyState waitSnapshotApplyState = (WaitSnapshotApplyState)fsm.getStates().get(LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
                 waitSnapshotApplyState.setTransitionEventId(event.getEventId());
                 waitSnapshotApplyState.setBaseSnapshotTimestamp(fsm.getBaseSnapshot());
@@ -50,6 +52,7 @@ public class InitializedState implements LogReplicationState {
                 log.info("Start Log Entry Sync, requestId={}", event.getEventId());
                 // Set the id of the event that caused the transition to the new state
                 // This is used to correlate trim or error events that derive from this state
+                fsm.getAckReader().setSyncType(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
                 LogReplicationState logEntrySyncState = fsm.getStates().get(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
                 logEntrySyncState.setTransitionEventId(event.getEventId());
                 fsm.setBaseSnapshot(event.getMetadata().getLastTransferredBaseSnapshot());
@@ -78,19 +81,7 @@ public class InitializedState implements LogReplicationState {
     @Override
     public void onExit(LogReplicationState to) {
         if (to != this || to.getType() != LogReplicationStateType.ERROR) {
-            switch (to.getType()) {
-                case IN_LOG_ENTRY_SYNC:
-                    fsm.getAckReader().startSyncStatusUpdatePeriodicTask(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
-                    break;
-                case IN_SNAPSHOT_SYNC:
-                    fsm.getAckReader().startSyncStatusUpdatePeriodicTask(LogReplicationMetadata.ReplicationStatusVal.SyncType.SNAPSHOT);
-                    break;
-                case WAIT_SNAPSHOT_APPLY:
-                    fsm.getAckReader().startSyncStatusUpdatePeriodicTask(LogReplicationMetadata.ReplicationStatusVal.SyncType.SNAPSHOT);
-                    break;
-                default:
-                    fsm.getAckReader().startSyncStatusUpdatePeriodicTask(null);
-            }
+            fsm.getAckReader().startSyncStatusUpdatePeriodicTask();
         }
     }
 

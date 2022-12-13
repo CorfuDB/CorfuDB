@@ -442,11 +442,8 @@ public class LogReplicationAckReader {
     /**
      * Start periodic replication status update task (completion percentage)
      */
-    public void startSyncStatusUpdatePeriodicTask(SyncType type) {
+    public void startSyncStatusUpdatePeriodicTask() {
         log.info("Start sync status update periodic task");
-        if (type != null) {
-            setSyncType(type);
-        }
         lastAckedTsPoller = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder().setNameFormat("ack-timestamp-reader").build());
         lastAckedTsPoller.scheduleWithFixedDelay(new TsPollingTask(), 0, ACKED_TS_READ_INTERVAL_SECONDS,
