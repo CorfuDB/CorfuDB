@@ -271,7 +271,10 @@ public class CompactorServiceTest extends AbstractViewTest {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
                     CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
-            log.info("ManagerStatus: " + managerStatus);
+            log.info("ManagerStatus: " + (managerStatus == null ? "null" : managerStatus.toString()));
+            if (managerStatus == null) {
+                return targetStatus == null;
+            }
             if (managerStatus.getStatus() == targetStatus) {
                 return true;
             }
@@ -532,6 +535,39 @@ public class CompactorServiceTest extends AbstractViewTest {
 
         assert verifyManagerStatus(StatusType.FAILED);
         assert verifyCheckpointStatusTable(StatusType.COMPLETED, 1);
+    }
+
+    @Test
+    public void runOrchestratorLeaderInitManagerStatusTest() {
+        testSetup(logSizeLimitPercentageFull);
+        SingletonResource<CorfuRuntime> runtimeSingletonResource0 = SingletonResource.withInitial(() -> runtime0);
+        CompactorService compactorService0 = new CompactorService(sc0, runtimeSingletonResource0, mockInvokeJvm0, new DynamicTriggerPolicy());
+        when(dynamicTriggerPolicy0.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(false);
+        compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
+
+        try {
+            TimeUnit.MILLISECONDS.sleep(WAIT_TO_TIMEOUT);
+        } catch (InterruptedException e) {
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
+        }
+
+        assert verifyManagerStatus(StatusType.IDLE);
+    }
+
+    @Test
+    public void runOrchestratorNonLeaderInitManagerStatusTest() {
+        testSetup(logSizeLimitPercentageFull);
+        SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime1);
+        CompactorService compactorService1 = new CompactorService(sc1, runtimeSingletonResource1, mockInvokeJvm1, new DynamicTriggerPolicy());
+        compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
+
+        try {
+            TimeUnit.MILLISECONDS.sleep(WAIT_TO_TIMEOUT);
+        } catch (InterruptedException e) {
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
+        }
+
+        assert verifyManagerStatus(null);
     }
 
     @Test
