@@ -30,6 +30,7 @@ public class CompactorMetadataTables {
     public static final StringKey MIN_CHECKPOINT = StringKey.newBuilder().setKey("MinCheckpointToken").build();
     public static final StringKey FREEZE_TOKEN = StringKey.newBuilder().setKey("freezeCheckpointNS").build();
     public static final StringKey INSTANT_TIGGER = StringKey.newBuilder().setKey("InstantTrigger").build();
+    public static final StringKey DISABLE_COMPACTION = StringKey.newBuilder().setKey("DisableCompaction").build();
     public static final StringKey INSTANT_TIGGER_WITH_TRIM = StringKey.newBuilder().setKey("InstantTriggerTrim").build();
 
     private static final int MAX_RETRIES = 5;
