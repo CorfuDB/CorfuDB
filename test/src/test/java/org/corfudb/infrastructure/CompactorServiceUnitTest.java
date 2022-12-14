@@ -38,6 +38,7 @@ public class CompactorServiceUnitTest {
     private final InvokeCheckpointingJvm invokeCheckpointingJvm = mock(InvokeCheckpointingJvm.class);
     private final CorfuStore corfuStore = mock(CorfuStore.class);
     private final TxnContext txn = mock(TxnContext.class);
+    private CompactorService compactorServiceSpy;
     private final CorfuStoreEntry<? extends Message, ? extends Message, ? extends Message> corfuStoreEntry =
             (CorfuStoreEntry<? extends Message, ? extends Message, ? extends Message>) mock(CorfuStoreEntry.class);
     private final DynamicTriggerPolicy dynamicTriggerPolicy = mock(DynamicTriggerPolicy.class);
@@ -52,9 +53,6 @@ public class CompactorServiceUnitTest {
 
     @Before
     public void setup() {
-        CompactorService compactorService = new CompactorService(serverContext,
-                SingletonResource.withInitial(() -> corfuRuntime), invokeCheckpointingJvm, dynamicTriggerPolicy);
-        CompactorService compactorServiceSpy = spy(compactorService);
 
         Map<String, Object> map = new HashMap<>();
         map.put("<port>", "port");
@@ -65,13 +63,15 @@ public class CompactorServiceUnitTest {
         when(corfuRuntime.getParameters()).thenReturn(mockParams);
         when(mockParams.getCheckpointTriggerFreqMillis()).thenReturn(1L);
 
-        doReturn(leaderServices).when(compactorServiceSpy).getCompactorLeaderServices();
-        doReturn(corfuStore).when(compactorServiceSpy).getCorfuStore();
-        compactorServiceSpy.start(Duration.ofSeconds(SCHEDULER_INTERVAL));
-
         when(corfuStore.txn(CORFU_SYSTEM_NAMESPACE)).thenReturn(txn);
         when(txn.getRecord(Matchers.anyString(), Matchers.any(Message.class))).thenReturn(corfuStoreEntry);
         when(txn.commit()).thenReturn(CorfuStoreMetadata.Timestamp.getDefaultInstance());
+
+        CompactorService compactorService = new CompactorService(serverContext,
+                SingletonResource.withInitial(() -> corfuRuntime), invokeCheckpointingJvm, dynamicTriggerPolicy);
+        compactorServiceSpy = spy(compactorService);
+        doReturn(leaderServices).when(compactorServiceSpy).getCompactorLeaderServices();
+        doReturn(corfuStore).when(compactorServiceSpy).getCorfuStore();
     }
 
     @Test
@@ -87,6 +87,7 @@ public class CompactorServiceUnitTest {
         when(invokeCheckpointingJvm.isRunning()).thenReturn(false).thenReturn(true);
         when(invokeCheckpointingJvm.isInvoked()).thenReturn(false).thenReturn(true);
 
+        compactorServiceSpy.start(Duration.ofSeconds(SCHEDULER_INTERVAL));
         try {
             TimeUnit.SECONDS.sleep(SLEEP_WAIT);
         } catch (InterruptedException e) {
@@ -115,6 +116,7 @@ public class CompactorServiceUnitTest {
         when(invokeCheckpointingJvm.isRunning()).thenReturn(false).thenReturn(true);
         when(invokeCheckpointingJvm.isInvoked()).thenReturn(false).thenReturn(true);
 
+        compactorServiceSpy.start(Duration.ofSeconds(SCHEDULER_INTERVAL));
         try {
             TimeUnit.SECONDS.sleep(SLEEP_WAIT);
         } catch (InterruptedException e) {
@@ -146,6 +148,7 @@ public class CompactorServiceUnitTest {
                 .thenReturn(false).thenReturn(true);
         when(invokeCheckpointingJvm.isInvoked()).thenReturn(false).thenReturn(true);
 
+        compactorServiceSpy.start(Duration.ofSeconds(SCHEDULER_INTERVAL));
         while (true) {
             try {
                 TimeUnit.SECONDS.sleep(SLEEP_WAIT);

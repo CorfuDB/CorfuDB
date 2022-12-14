@@ -1,15 +1,9 @@
-package org.corfudb.runtime.checkpoint;
+package org.corfudb.runtime;
 
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
-import org.corfudb.runtime.CheckpointerBuilder;
-import org.corfudb.runtime.CheckpointWriter;
-import org.corfudb.runtime.CompactorMetadataTables;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.DistributedCheckpointer;
-import org.corfudb.runtime.ServerTriggeredCheckpointer;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;

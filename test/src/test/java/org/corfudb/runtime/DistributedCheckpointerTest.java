@@ -1,4 +1,4 @@
-package org.corfudb.runtime.checkpoint;
+package org.corfudb.runtime;
 
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
@@ -11,15 +11,11 @@ import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.infrastructure.health.HealthMonitor;
 import org.corfudb.infrastructure.health.Issue;
-import org.corfudb.runtime.CheckpointerBuilder;
-import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuCompactorManagement.ActiveCPStreamMsg;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
-import org.corfudb.runtime.ServerTriggeredCheckpointer;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -31,6 +27,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.Matchers;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -48,6 +45,9 @@ import static org.corfudb.infrastructure.health.HealthReport.ComponentReportedHe
 import static org.corfudb.infrastructure.health.HealthReport.ComponentStatus.FAILURE;
 import static org.corfudb.infrastructure.health.HealthReport.ComponentStatus.UP;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.spy;
 
 @Slf4j
 public class DistributedCheckpointerTest extends AbstractViewTest {
@@ -582,5 +582,38 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
 
         assert verifyManagerStatus(StatusType.COMPLETED);
         assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
+    }
+
+    @Test
+    public void checkpointTablesFailureTest() throws Exception {
+        CompactorLeaderServices compactorLeaderServices1 = new CompactorLeaderServices(runtime0, SERVERS.ENDPOINT_0,
+                corfuStore, livenessValidator);
+        compactorLeaderServices1.initCompactionCycle();
+
+        ServerTriggeredCheckpointer distributedCheckpointer = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
+                .corfuRuntime(runtime0)
+                .cpRuntime(Optional.of(cpRuntime0))
+                .isClient(false)
+                .persistedCacheRoot(Optional.empty())
+                .build(), corfuStore, compactorMetadataTables);
+        ServerTriggeredCheckpointer serverTriggeredCheckpointerSpy = spy(distributedCheckpointer);
+        doNothing().when(serverTriggeredCheckpointerSpy).checkpointOpenedTables();
+        doReturn(false).when(serverTriggeredCheckpointerSpy).tryCheckpointTable(Matchers.any(), Matchers.any());
+        serverTriggeredCheckpointerSpy.checkpointTables();
+
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        scheduler.scheduleWithFixedDelay(compactorLeaderServices1::validateLiveness, 0,
+                LIVENESS_TIMEOUT, TimeUnit.MILLISECONDS);
+        try {
+            while (!pollForFinishCheckpointing()) {
+                TimeUnit.MILLISECONDS.sleep(WAIT_FOR_FINISH_CYCLE);
+            }
+        } catch (InterruptedException e) {
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
+        }
+
+        assert verifyManagerStatus(StatusType.FAILED);
+        assert verifyCheckpointStatusTable(StatusType.IDLE, 1);
+        assert verifyCheckpointTable();
     }
 }
