@@ -6,11 +6,11 @@ USAGE:
 /usr/share/corfu/scripts/compactor_runner.py --port <port> --compactorConfig /usr/share/corfu/conf/corfu-compactor-config.yml --instantTriggerCompaction=True
 2. To trigger compactor instantly with trimming at the end of the cycle
  /usr/share/corfu/scripts/compactor_runner.py--port <port> --compactorConfig /usr/share/corfu/conf/corfu-compactor-config.yml --instantTriggerCompaction=True --trimAfterCheckpoint=True
-3. To freeze compactor
+3. To freeze compactor (This stops running compactor for 2 hrs from the time of freezing)
 /usr/share/corfu/scripts/compactor_runner.py--port <port> --compactorConfig /usr/share/corfu/conf/corfu-compactor-config.yml--freezeCompaction=True
 4. To unfreeze compactor
 /usr/share/corfu/scripts/compactor_runner.py--port <port> --compactorConfig /usr/share/corfu/conf/corfu-compactor-config.yml--unfreezeCompaction=True
-5. To disable compactor
+5. To disable compactor (This stops running compactor until it is enabled again)
 /usr/share/corfu/scripts/compactor_runner.py--port <port> --compactorConfig /usr/share/corfu/conf/corfu-compactor-config.yml--disableCompaction=True
 6. To enable compactor
 /usr/share/corfu/scripts/compactor_runner.py--port <port> --compactorConfig /usr/share/corfu/conf/corfu-compactor-config.yml--enableCompaction=True
