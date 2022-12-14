@@ -65,7 +65,6 @@ import java.util.stream.Collectors;
 @Slf4j
 public class AddressSpaceView extends AbstractView implements AutoCloseable {
 
-    private final static long DEFAULT_MAX_CACHE_ENTRIES = 5000;
     private final SizeOf sizeOf;
     /**
      * A cache for read results.
@@ -91,7 +90,8 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
         CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
 
         final boolean cacheDisabled = runtime.getParameters().isCacheDisabled();
-        final long maxCacheEntries = runtime.getParameters().getMaxCacheEntries();
+        // If not explicitly set by user, it takes default value in CorfuRuntimeParameters
+        long maxCacheEntries = runtime.getParameters().getMaxCacheEntries();
         final long maxCacheWeight = runtime.getParameters().getMaxCacheWeight();
         final int concurrencyLevel = runtime.getParameters().getCacheConcurrencyLevel();
 
@@ -100,13 +100,11 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
         }
 
         if (cacheDisabled) {
-            cacheBuilder.maximumSize(0); // Do not allocate memory when cache is disabled.
-        } else if (maxCacheEntries != 0) {
-            cacheBuilder.maximumSize(maxCacheEntries);
-        } else if (maxCacheWeight == 0) {
-            // If cache weight/size are not set, then we default to using size based cache.
-            cacheBuilder.maximumSize(DEFAULT_MAX_CACHE_ENTRIES);
+            // Do not allocate memory when cache is disabled.
+            maxCacheEntries = 0;
         }
+        cacheBuilder.maximumSize(maxCacheEntries);
+        log.info("AddressSpaceView readCache size is set to {}", maxCacheEntries);
 
         if (concurrencyLevel != 0) {
             cacheBuilder.concurrencyLevel(concurrencyLevel);

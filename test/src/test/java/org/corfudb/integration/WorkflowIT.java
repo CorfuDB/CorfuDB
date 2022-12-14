@@ -387,7 +387,7 @@ public class WorkflowIT extends AbstractIT {
     public void testRuntimeGCForActiveTransactionsInTrimRangeSingleThread() throws Exception {
         // Run single node server and create runtime
         runDefaultServer();
-        runtime = createDefaultRuntime();
+        runtime = createRuntimeWithCache();
 
         final int numDataEntries = 10;
 

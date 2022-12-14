@@ -1259,7 +1259,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
         // Open map.
         final String streamA = "streamA";
-        PersistentCorfuTable<String, Long> mA = instantiateTable(streamA);
+        PersistentCorfuTable<String, Long> mA = instantiateTable(streamA, r);
 
         // (1) Write 25 Entries
         for (int i = 0; i < numEntries; i++) {
@@ -1272,6 +1272,8 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         Token cp2Token = cpw2.appendCheckpoint(new Token(0, snapshotAddress2 - 1), Optional.empty());
 
         // Checkpoint Writer 1 @10
+        r = getNewRuntime(getDefaultNode()).setCacheDisabled(true).connect();
+        mA = instantiateTable(streamA, r);
         CheckpointWriter<PersistentCorfuTable<String, Long>> cpw1 =
                 new CheckpointWriter<>(r, CorfuRuntime.getStreamID(streamA), "checkpointer-1", mA);
         cpw1.appendCheckpoint(new Token(0, snapshotAddress1 - 1), Optional.empty());
