@@ -114,7 +114,7 @@
                     </execution>
 
                     <execution>
-                        <id>Docker push</id>
+                        <id>Docker push corfu server</id>
                         <phase>deploy</phase>
                         <goals>
                             <goal>exec</goal>
@@ -125,6 +125,23 @@
                                 <argument>push</argument>
                                 <argument>
                                     corfudb/corfu-server:${project.version}
+                                </argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+
+                    <execution>
+                        <id>Docker push corfu cloud server</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>docker</executable>
+                            <arguments>
+                                <argument>push</argument>
+                                <argument>
+                                    corfudb/corfu-server:cloud
                                 </argument>
                             </arguments>
                         </configuration>
