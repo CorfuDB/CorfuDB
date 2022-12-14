@@ -10,6 +10,10 @@ USAGE:
 /usr/share/corfu/scripts/compactor_runner.py--port <port> --compactorConfig /usr/share/corfu/conf/corfu-compactor-config.yml--freezeCompaction=True
 4. To unfreeze compactor
 /usr/share/corfu/scripts/compactor_runner.py--port <port> --compactorConfig /usr/share/corfu/conf/corfu-compactor-config.yml--unfreezeCompaction=True
+5. To disable compactor
+/usr/share/corfu/scripts/compactor_runner.py--port <port> --compactorConfig /usr/share/corfu/conf/corfu-compactor-config.yml--disableCompaction=True
+6. To enable compactor
+/usr/share/corfu/scripts/compactor_runner.py--port <port> --compactorConfig /usr/share/corfu/conf/corfu-compactor-config.yml--enableCompaction=True
 """
 
 from __future__ import absolute_import, print_function
@@ -320,7 +324,7 @@ if __name__ == "__main__":
                             required=False)
     arg_parser.add_argument("--compactorConfig", type=str,
                             help="The file containing config for compactor",
-                            default="/opt/vmware/corfu-tools/corfu-compactor-config.yml",
+                            default="/usr/share/corfu/conf/corfu-compactor-config.yml",
                             required=False)
     arg_parser.add_argument("--startCheckpointing", type=bool, default=False,
                             help="Start checkpointing tables if compaction cycle has started",
