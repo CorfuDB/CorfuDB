@@ -34,8 +34,17 @@ public class MVOCache<T extends ICorfuSMR<T>> {
     private final Cache<VersionedObjectIdentifier, T> objectCache;
 
     public MVOCache(@Nonnull CorfuRuntime corfuRuntime) {
+
+        // If not explicitly set by user, it takes default value in CorfuRuntimeParameters
+        long maxCacheSize = corfuRuntime.getParameters().getMaxMvoCacheEntries();
+        if (corfuRuntime.getParameters().isCacheDisabled()) {
+            // Do not allocate memory when cache is disabled.
+            maxCacheSize = 0;
+        }
+        log.info("MVO cache size is set to {}", maxCacheSize);
+
         this.objectCache = CacheBuilder.newBuilder()
-                .maximumSize(corfuRuntime.getParameters().getMaxMvoCacheEntries())
+                .maximumSize(maxCacheSize)
                 .removalListener(this::handleEviction)
                 .recordStats()
                 .build();

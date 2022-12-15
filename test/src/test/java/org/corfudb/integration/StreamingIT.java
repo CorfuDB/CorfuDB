@@ -478,7 +478,7 @@ public class StreamingIT extends AbstractIT {
     public void testStreamingPrevValue() throws Exception {
         // Run a corfu server and start runtime
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
-        runtime = createRuntime(singleNodeEndpoint);
+        runtime = createRuntimeWithCache(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
         String ns = "test_namespace";
         String tn = "tableA";
