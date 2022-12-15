@@ -273,7 +273,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
                     .snapshot(new Token(maxCheckpointAddress.getEpoch(), snapshotAddress))
                     .build()
                     .begin();
-            assertThat(table1.size()).isEqualTo(sizeAtSnapshot);
+            assertThat(table1rt.size()).isEqualTo(sizeAtSnapshot);
             readRuntime.getObjectsView().TXEnd();
         } catch (Exception e) {
             fail("Exception thrown", e);
