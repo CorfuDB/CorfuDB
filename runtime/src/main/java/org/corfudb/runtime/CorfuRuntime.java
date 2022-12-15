@@ -225,17 +225,19 @@ public class CorfuRuntime {
         boolean cacheEntryMetricsDisabled = true;
 
         /*
-         * Whether or not to disable the cache.
+         * Whether to disable the cache (both AddressSpaceView readCache and MVO Cache).
          */
         boolean cacheDisabled = false;
 
         /*
          * The maximum number of entries in the AddressSpaceView cache.
+         * This will be overridden to 0 if cacheDisabled is true.
          */
-        long maxCacheEntries = 2500;
+        long maxCacheEntries = 500;
 
         /*
          * The maximum number of entries in the MVOCache.
+         * This will be overridden to 0 if cacheDisabled is true.
          */
         long maxMvoCacheEntries = 2500;
 
