@@ -17,12 +17,11 @@ import java.util.Optional;
 @Slf4j
 public class CorfuStoreCompactorConfig {
 
-    // Reduce checkpoint batch size due to disk-based nature and smaller compactor JVM size
-    public static final int NON_CONFIG_DEFAULT_CP_MAX_WRITE_SIZE = 1 << 20;
+    // Reduce checkpoint batch size due to disk-based nature and for smaller compactor JVM size
+    public static final int DISK_BACKED_DEFAULT_CP_MAX_WRITE_SIZE = 1 << 20;
     public static final int DEFAULT_CP_MAX_WRITE_SIZE = 25 << 20;
     public static final int SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 100;  // Corfu default is 20
     public static final int CORFU_LOG_CHECKPOINT_ERROR = 3;
-    public static final int CHECKPOINT_RETRY_UPGRADE = 10;
 
     private final Runnable defaultSystemDownHandler = () -> {
         throw new UnreachableClusterException("Cluster is unavailable");
@@ -91,8 +90,8 @@ public class CorfuStoreCompactorConfig {
                 // in-memory compaction
                 maxWriteSize = DEFAULT_CP_MAX_WRITE_SIZE;
             } else {
-                // disk-backed non-config compaction
-                maxWriteSize = NON_CONFIG_DEFAULT_CP_MAX_WRITE_SIZE;
+                // disk-backed compaction
+                maxWriteSize = DISK_BACKED_DEFAULT_CP_MAX_WRITE_SIZE;
             }
         }
 
