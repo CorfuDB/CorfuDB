@@ -206,10 +206,11 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     /**
      * Used to create router and initiate connection to eligible remotes.
      */
+    // TODO: this will be removed once we have the session manager
     private final Map<String, Set<ReplicationSession>> remoteClusterIdToReplicationSession = new HashMap<>();
 
 
-    private final Map<Class, AbstractServer> serverMap =  new HashMap<>();
+    private final Map<Class, AbstractServer> serverMap = new HashMap<>();
 
     /**
      * Constructor Discovery Service
@@ -393,16 +394,18 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
     private void createMetadataManagers(Set<String> remoteClusterIds, TopologyDescriptor topology) {
         for (String remoteClusterId : remoteClusterIds) {
+            // for testing purpose
             if (remoteClusterId == localClusterDescriptor.getClusterId()) {
                 continue;
             }
-            // TODO: to be constructed with the client from protobuf and the remoteClusterId/replicationModels
+            // TODO: this will be replaced by session manager
             Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteClusterToReplicationModel = new HashMap<>();
             remoteClusterToReplicationModel.putAll(topology.getRemoteSinkClusterToReplicationModels());
             remoteClusterToReplicationModel.putAll(topology.getRemoteSourceClusterToReplicationModels());
 
             for (Map.Entry<ClusterDescriptor, Set<LogReplication.ReplicationModel>> e : remoteClusterToReplicationModel.entrySet()) {
                 remoteClusterIdToReplicationSession.putIfAbsent(remoteClusterId, new HashSet<>());
+                // session creation
                 e.getValue().forEach(model -> {
                     ReplicationSession replicationSession = new ReplicationSession(remoteClusterId,localClusterDescriptor.getClusterId(),
                             ReplicationSubscriber.getDefaultReplicationSubscriber());
@@ -540,22 +543,24 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             setupServerNode();
         }
 
+        // create connection endpoint routers to pass to the interClusterServerNode.
+        // The incoming msgs will be routed to the appropriate router in the transport layer adapter.
         Map<ReplicationSession, LogReplicationSourceServerRouter> receivedSessionToSourceServer = new HashMap<>();
-        Map<ReplicationSession, LogReplicationSinkServerRouter> receivedToSinkServer = new HashMap<>();
+        Map<ReplicationSession, LogReplicationSinkServerRouter> receivedSessionToSinkServer = new HashMap<>();
 
         if(!remoteSinkClusters.isEmpty()) {
             startSourceComponents(connectionEndpoints, receivedSessionToSourceServer);
         }
 
         if (!remoteSourceClusters.isEmpty()) {
-            startSinkComponents(connectionEndpoints, receivedToSinkServer);
+            startSinkComponents(connectionEndpoints, receivedSessionToSinkServer);
         }
 
         if(isConnectionReceiver) {
-            interClusterServerNode.setRouterAndStartServer(receivedSessionToSourceServer, receivedToSinkServer);
+            interClusterServerNode.setRouterAndStartServer(receivedSessionToSourceServer, receivedSessionToSinkServer);
         }
 
-         // connect to endpoints
+        // connect to endpoints
         replicationManager.startConnection(connectionEndpoints, remoteClusterIdToReplicationSession, serverMap);
 
         lockAcquireSample = recordLockAcquire(localClusterDescriptor.getRole());
@@ -565,7 +570,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
     private void setupServerNode() {
         serverMap.put(LogReplicationServer.class, new LogReplicationServer(serverContext, localNodeId, replicationConfigManager,
-                localCorfuEndpoint, topologyDescriptor.getTopologyConfigId(), remoteSessionToMetadataManagerMap, localClusterDescriptor.getClusterId()));
+                localCorfuEndpoint, topologyDescriptor.getTopologyConfigId(), remoteSessionToMetadataManagerMap));
         serverMap.put(BaseServer.class, new BaseServer(serverContext));
         interClusterServerNode = new CorfuInterClusterReplicationServerNode(serverContext, serverMap);
 
@@ -604,12 +609,13 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             log.debug("starting sources and wait for connection from remote sinks {}", allRemoteSinkClusterIds);
             allRemoteSinkClusterIds.stream().forEach(clusterId -> {
                 for (ReplicationSession session : remoteClusterIdToReplicationSession.get(clusterId)) {
+                    // create incoming session so that the transport layer is able to route the incoming msgs to the correct router.
                     ReplicationSession incomingSession = new ReplicationSession(
                             localClusterDescriptor.getClusterId(), session.getRemoteClusterId(), session.getSubscriber());
                     sessionToSourceServer.put(incomingSession,
                             (LogReplicationSourceServerRouter) replicationManager.getOrCreateSourceRouter(
                                     topologyDescriptor.getRemoteSinkClusters().get(clusterId),
-                                    session,  serverMap, false)
+                                    session, serverMap, false)
                     );
                 }
             });
@@ -637,11 +643,12 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             allRemoteSourceClusterIds.stream().forEach(clusterId -> {
                 log.info("remoteClusterIdToReplicationSession : {}", remoteClusterIdToReplicationSession);
                 for (ReplicationSession session : remoteClusterIdToReplicationSession.get(clusterId)) {
+                    // create incoming session so that the transport layer is able to route the incoming msgs to the correct router.
                     ReplicationSession incomingSession = new ReplicationSession(
                             localClusterDescriptor.getClusterId(), session.getRemoteClusterId(), session.getSubscriber());
                     sessionToSinkServe.put(incomingSession,
                             replicationManager.getOrCreateSinkRouter(topologyDescriptor.getRemoteSinkClusters().get(clusterId),
-                            session,  serverMap,false)
+                            session, serverMap,false)
                     );
                 }
             });
@@ -859,7 +866,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         log.debug("remote sink to add {} and remote source to add {}", remoteSinkClustersToAdd, remoteSourceClustersToAdd);
 
         if ((!remoteClustersToRemove.isEmpty() || !remoteSinkClustersToAdd.isEmpty() || !remoteSourceClustersToAdd.isEmpty()) &&
-            replicationManager != null && isLeader.get()) {
+                replicationManager != null && isLeader.get()) {
 
             Set<String> intersection = Sets.intersection(currentRemoteSinks, receivedRemoteSinks);
 
@@ -879,7 +886,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             replicationContext.setTopology(discoveredTopology);
             replicationManager.processRemoteClusterChange(discoveredTopology, remoteSinkClustersToAdd, remoteSourceClustersToAdd,
                     remoteClustersToRemove, intersection, fetchConnectionEndpoints(), remoteClusterIdToReplicationSession,
-                    interClusterServerNode, serverMap);
+                    serverMap);
         } else {
             // Update the topology config id on the Sink components
             updateTopologyConfigIdOnSink(discoveredTopology.getTopologyConfigId());

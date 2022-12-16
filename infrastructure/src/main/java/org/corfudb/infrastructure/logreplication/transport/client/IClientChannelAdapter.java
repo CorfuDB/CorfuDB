@@ -44,6 +44,7 @@ public abstract class IClientChannelAdapter {
      * @param localClusterId local cluster unique identifier
      * @param remoteClusterDescriptor descriptor of the remote cluster (sink)
      * @param sourceRouter interface to forward
+     * @param sinkRouter interface to forward
      */
     public IClientChannelAdapter(@Nonnull String localClusterId,
                                  @Nonnull ClusterDescriptor remoteClusterDescriptor,

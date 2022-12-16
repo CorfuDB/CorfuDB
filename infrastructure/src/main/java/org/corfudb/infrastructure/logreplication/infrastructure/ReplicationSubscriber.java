@@ -30,10 +30,7 @@ public class ReplicationSubscriber {
         this.replicationModel = model;
         this.client = client;
     }
-
-    public static ReplicationSubscriber getDefaultReplicationSubscriber() {
-        return new ReplicationSubscriber(ReplicationModel.FULL_TABLE, SAMPLE_CLIENT);
-    }
+    
 
     @Override
     public boolean equals(Object o) {

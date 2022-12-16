@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.logreplication.runtime.sinkFsm;
+package org.corfudb.infrastructure.logreplication.runtime.fsm.sink;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +18,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j

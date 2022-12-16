@@ -203,7 +203,7 @@ public class LogReplicationSourceRouterHelper implements IClientRouter {
             outstandingRequests.put(requestId, cf);
 
             try {
-                LogReplicationRuntimeParameters parameters =  this.runtimeFSM.getSourceManager().getParameters();
+                LogReplicationRuntimeParameters parameters = this.runtimeFSM.getSourceManager().getParameters();
                 header.setClientId(getUuidMsg(parameters.getClientId()));
                 header.setRequestId(requestId);
                 header.setClusterId(getUuidMsg(UUID.fromString(this.localClusterId)));
@@ -238,7 +238,6 @@ public class LogReplicationSourceRouterHelper implements IClientRouter {
 
                 // In the case the message is intended for a specific endpoint, we do not
                 // block on connection future, this is the case of leader verification.
-//                log.info("#243 Send message to {}, type={}", nodeId, payload.getPayloadCase());
                 if(isConnectionInitiator) {
                     clientChannelAdapter.send(nodeId, getRequestMsg(header.build(), payload));
                 } else {
@@ -250,7 +249,6 @@ public class LogReplicationSourceRouterHelper implements IClientRouter {
                         nodeId));
                 throw ne;
             } catch (Exception e) {
-//                log.info("sendRequestAndGetCompletable removing reqId outstandingRequests {}", requestId);
                 outstandingRequests.remove(requestId);
                 log.error("sendMessageAndGetCompletable: Remove request {} to {} due to exception! Message:{}",
                         requestId, remoteClusterDescriptor.getClusterId(), payload.getPayloadCase(), e);
@@ -335,8 +333,8 @@ public class LogReplicationSourceRouterHelper implements IClientRouter {
         CompletableFuture cf;
         if ((cf = outstandingRequests.remove(requestID)) != null) {
             cf.completeExceptionally(cause);
-//            log.debug("completeExceptionally: Remove request {} to {} due to {}.", requestID,
-//                    remoteClusterDescriptor.getClusterId(), cause.getClass().getSimpleName(), cause);
+            log.debug("completeExceptionally: Remove request {} to {} due to {}.", requestID,
+                    remoteClusterDescriptor.getClusterId(), cause.getClass().getSimpleName(), cause);
         } else {
             log.warn("Attempted to exceptionally complete request {}, but request not outstanding!",
                     requestID);

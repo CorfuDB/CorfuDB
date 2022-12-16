@@ -50,6 +50,14 @@ public class LogReplicationServerRouter implements IServerRouter {
     /** The {@link AbstractServer}s this {@link LogReplicationSinkServerRouter} routes messages for. */
     final List<AbstractServer> servers;
 
+    /**
+     * Construct a new {@link LogReplicationServerRouter}
+     *
+     * @param serverMap A list of {@link AbstractServer}s this router will route messages for.
+     * @param serverContext
+     * @param sessionToSourceServer A map of session and the corresponding source-server router
+     * @param sessionToSinkServer A map of session and the corresponding sink-server router
+     */
     public LogReplicationServerRouter(Map<Class, AbstractServer> serverMap, ServerContext serverContext,
                                       Map<ReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServer,
                                       Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServer) {
@@ -65,6 +73,8 @@ public class LogReplicationServerRouter implements IServerRouter {
         });
 
         serverAdapter = getAdapter(serverContext, sessionToSourceServer, sessionToSinkServer);
+
+        // set the server adapter in every server router.
         if(!sessionToSourceServer.isEmpty()) {
             sessionToSourceServer.values().forEach(router -> router.setAdapter(serverAdapter));
         }

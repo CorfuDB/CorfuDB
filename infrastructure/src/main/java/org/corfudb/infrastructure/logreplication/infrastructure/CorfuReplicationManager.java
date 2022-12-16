@@ -70,7 +70,7 @@ public class CorfuReplicationManager {
     }
 
     /**
-     * Used when the local cluster is a connection initiator.
+     * Called when the local cluster is a connection initiator.
      * If local cluster is a source, creates a runtime and a sourceRouter
      * If local cluster is a sink, creates a router and starts the sink-server node.
      */
@@ -80,7 +80,7 @@ public class CorfuReplicationManager {
 
         for(ClusterDescriptor remote : remoteClusters) {
             Set<ReplicationSession> sessions = remoteClusterIdToReplicationSession.get(remote.getClusterId());
-            log.info("Starting connection to remote {} and session {} ", remote, sessions);
+            log.info("Starting connection to remote {} for session {} ", remote, sessions);
             if(sessions.isEmpty()) {
                 continue;
             }
@@ -92,12 +92,10 @@ public class CorfuReplicationManager {
                     try {
                         IRetry.build(IntervalRetry.class, () -> {
                             try {
-                                if(router instanceof LogReplicationSourceClientRouter) {
-                                    ((LogReplicationSourceClientRouter) router).connect();
-                                }
+                                ((LogReplicationSourceClientRouter) router).connect();
                             } catch (Exception e) {
-                                log.error("Exception {}. Failed to connect to remote cluster for session {}. Retry after 1 second.",
-                                        e, session);
+                                log.error("Failed to connect to remote cluster for session {}. Retry after 1 second. Exception {}.",
+                                        session, e);
                                 throw new RetryNeededException();
                             }
                             return null;
@@ -111,12 +109,10 @@ public class CorfuReplicationManager {
                     try {
                         IRetry.build(IntervalRetry.class, () -> {
                             try {
-                                if(router instanceof LogReplicationSinkClientRouter) {
-                                    ((LogReplicationSinkClientRouter) router).connect();
-                                }
+                                ((LogReplicationSinkClientRouter) router).connect();
                             } catch (Exception e) {
-                                log.error("Exception {}. Failed to connect to remote cluster for session {}. Retry after 1 second.",
-                                        e, session);
+                                log.error("Failed to connect to remote cluster for session {}. Retry after 1 second.Exception {}.",
+                                        session, e);
                                 throw new RetryNeededException();
                             }
                             return null;
@@ -134,7 +130,7 @@ public class CorfuReplicationManager {
     }
 
     /**
-     * Creates a source router if not already created,
+     * Creates a source router if not already created:
      * A source-client router if cluster is connection starter else a source-server router
      */
     public LogReplicationSourceRouterHelper getOrCreateSourceRouter(ClusterDescriptor remote, ReplicationSession session,
@@ -162,7 +158,7 @@ public class CorfuReplicationManager {
     }
 
     /**
-     * Creates a sink router if not already created,
+     * Creates a sink router if not already created:
      * A sink-client router if cluster is connection starter else a sink-server router
      */
     public LogReplicationSinkServerRouter getOrCreateSinkRouter(ClusterDescriptor remote, ReplicationSession session,
@@ -178,7 +174,7 @@ public class CorfuReplicationManager {
             sinkClientRouter.addClient(new LogReplicationHandler(session));
             router = sinkClientRouter;
         } else {
-            LogReplicationSinkServerRouter sinkServerRouter = new LogReplicationSinkServerRouter(serverMap, false);
+            LogReplicationSinkServerRouter sinkServerRouter = new LogReplicationSinkServerRouter(serverMap);
             router = sinkServerRouter;
         }
         replicationSessionToRouterSink.put(session, router);
@@ -304,10 +300,11 @@ public class CorfuReplicationManager {
      * @param remoteClustersToRemove sink clusters which are not found in the new topology
      * @param intersection Sink clusters found in both old and new topologies
      */
-    public void processRemoteClusterChange(TopologyDescriptor newConfig, Set<String> remoteSinkClustersToAdd, Set<String> remoteSourceClusterToAdd,
-                                           Set<String> remoteClustersToRemove, Set<String> intersection, Map<String, ClusterDescriptor> connectionEndsIdToDescriptor,
+    public void processRemoteClusterChange(TopologyDescriptor newConfig, Set<String> remoteSinkClustersToAdd,
+                                           Set<String> remoteSourceClusterToAdd, Set<String> remoteClustersToRemove,
+                                           Set<String> intersection, Map<String, ClusterDescriptor> connectionEndsIdToDescriptor,
                                            Map<String, Set<ReplicationSession>> remoteIdToReplicationSession,
-                                           CorfuInterClusterReplicationServerNode interClusterServerNode, Map<Class, AbstractServer> serverMap) {
+                                           Map<Class, AbstractServer> serverMap) {
 
         long oldTopologyConfigId = context.getTopology().getTopologyConfigId();
         context.setTopology(newConfig);
@@ -322,7 +319,7 @@ public class CorfuReplicationManager {
             }
         }
 
-        // Add the new clusters
+        // Add the new clusters to LR
         Set<ClusterDescriptor> newConnectionToStart = new HashSet<>();
         Set<String> remoteClustersToAdd = new HashSet<>();
         remoteClustersToAdd.addAll(remoteSinkClustersToAdd);
@@ -345,7 +342,9 @@ public class CorfuReplicationManager {
                 }
             }
         }
-        startConnection(newConnectionToStart, remoteIdToReplicationSession, serverMap);
+        if (!newConnectionToStart.isEmpty()) {
+            startConnection(newConnectionToStart, remoteIdToReplicationSession, serverMap);
+        }
 
         // The connection id or other transportation plugin's info could've changed for existing Sink clusters,
         // updating the routers will re-establish the connection to the correct endpoints/nodes

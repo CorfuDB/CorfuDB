@@ -10,7 +10,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescripto
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
-import org.corfudb.infrastructure.logreplication.runtime.sinkFsm.SinkVerifyRemoteLeader;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.sink.SinkVerifyRemoteLeader;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.protocols.service.CorfuProtocolMessage;
 import org.corfudb.runtime.LogReplication;
@@ -136,7 +136,7 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
     public LogReplicationSinkClientRouter(ClusterDescriptor remoteCluster, String localClusterId,
                                             String pluginFilePath, long timeoutResponse, ReplicationSession session,
                                           Map<Class, AbstractServer> serverMap) {
-        super(serverMap, true);
+        super(serverMap);
         this.timeoutResponse = timeoutResponse;
         this.remoteClusterDescriptor = remoteCluster;
         this.localClusterId = localClusterId;

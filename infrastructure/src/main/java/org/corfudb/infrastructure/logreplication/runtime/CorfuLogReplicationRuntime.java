@@ -188,7 +188,6 @@ public class CorfuLogReplicationRuntime {
         this.state = states.get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY);
 
         log.info("Log Replication Runtime State Machine initialized");
-
     }
 
     /**
@@ -231,7 +230,6 @@ public class CorfuLogReplicationRuntime {
                 // Not accepting events, in stopped state
                 return;
             }
-
             eventQueue.put(event);
         } catch (InterruptedException ex) {
             log.error("Log Replication interrupted Exception: ", ex);

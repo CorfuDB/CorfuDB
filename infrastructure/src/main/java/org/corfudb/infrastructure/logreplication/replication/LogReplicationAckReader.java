@@ -65,7 +65,6 @@ public class LogReplicationAckReader {
 
     private final Lock lock = new ReentrantLock();
 
-
     public LogReplicationAckReader(LogReplicationMetadataManager metadataManager, LogReplicationConfigManager configManager,
                                    CorfuRuntime runtime, ReplicationSession replicationSession) {
         this.metadataManager = metadataManager;

@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.TxnContext;
 
-
 /**
  * Default testing implementation of a Log Replication Config Provider
  */

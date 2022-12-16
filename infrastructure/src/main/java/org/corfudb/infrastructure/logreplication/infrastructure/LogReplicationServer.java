@@ -53,8 +53,6 @@ public class LogReplicationServer extends AbstractServer {
     // node id should be the only identifier for a node in the topology
     private String localNodeId;
 
-    private String localClusterId;
-
     private final ExecutorService executor;
 
     private static final String EXECUTOR_NAME_PREFIX = "LogReplicationServer-";
@@ -76,10 +74,8 @@ public class LogReplicationServer extends AbstractServer {
     public LogReplicationServer(@Nonnull ServerContext context, String localNodeId,
                                 LogReplicationConfigManager configManager,
                                 String localEndpoint, long topologyConfigId,
-                                Map<ReplicationSession, LogReplicationMetadataManager> sourceSessionToMetadataManagerMap,
-                                String localClusterId) {
+                                Map<ReplicationSession, LogReplicationMetadataManager> sourceSessionToMetadataManagerMap) {
         this.localNodeId = localNodeId;
-        this.localClusterId = localClusterId;
         createSinkManagers(configManager, localEndpoint, context, sourceSessionToMetadataManagerMap, topologyConfigId);
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }

@@ -1,11 +1,9 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.AbstractServer;
-import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerThreadFactory;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
@@ -13,8 +11,6 @@ import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkServe
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceServerRouter;
 
 import javax.annotation.Nonnull;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -30,9 +26,6 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
 
     @Getter
     private final Map<Class, AbstractServer> serverMap;
-
-    @Getter
-    private Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToRouterMap = new HashMap<>();
 
     // This flag makes the closing of the CorfuServer idempotent.
     private final AtomicBoolean close;

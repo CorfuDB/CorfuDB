@@ -5,7 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.NodeConfigurationMsg;
 
 import java.util.Objects;
-import java.util.UUID;
 
 /**
  * This class represents a Log Replication Node

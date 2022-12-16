@@ -1,7 +1,5 @@
 package org.corfudb.infrastructure.logreplication.runtime;
 
-import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
@@ -10,43 +8,16 @@ import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSessi
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent.LogReplicationRuntimeEventType;
-import org.corfudb.infrastructure.logreplication.transport.client.ChannelAdapterException;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
-import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
-import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.runtime.LogReplication;
-import org.corfudb.runtime.clients.IClient;
 import org.corfudb.runtime.clients.IClientRouter;
-import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.proto.service.CorfuMessage;
-import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
-import org.corfudb.util.CFUtils;
 
-import javax.annotation.Nonnull;
 import java.io.File;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicLong;
-
-import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
-import static org.corfudb.protocols.service.CorfuProtocolMessage.getDefaultProtocolVersionMsg;
-import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 
 /**
  * This Client Router is used when a custom (client-defined) transport layer is specified for

@@ -27,7 +27,7 @@ public interface LogReplicationClientRouter {
      * on error Callback.
      *
      */
-    void  onError(Throwable t);
+    void onError(Throwable t);
 
     /**
      * Forward the msg received to a source router

@@ -34,11 +34,11 @@ public class TopologyDescriptor {
     @Getter
     private final long topologyConfigId;
 
-    // contains remote clusters that may be SOURCE to local cluster. Used while creating LR components and connection init
+    // contains remote clusters that's a SOURCE to the local cluster. Used while creating LR components and connection init
     @Getter
     private final Map<String, ClusterDescriptor> remoteSourceClusters;
 
-    // contains remote clusters that may be SINK to local cluster. Used while creating LR components and connection init
+    // contains remote clusters that's a SINK to local cluster. Used while creating LR components and connection init
     @Getter
     private final Map<String, ClusterDescriptor> remoteSinkClusters;
 
@@ -55,7 +55,7 @@ public class TopologyDescriptor {
     @Getter
     private final Map<String, ClusterDescriptor> invalidClusters;
 
-    // This has the complete view of topology. Used to
+    // Contains the complete view of topology.
     @Getter
     private final Map<String, ClusterConfigurationMsg> allClusterConfigMsgsInTopology = new HashMap<>();
 
@@ -82,9 +82,10 @@ public class TopologyDescriptor {
         this.topologyConfigId = topologyConfigId;
         this.remoteSinkClusters = new HashMap<>();
         this.remoteSinkClusterToReplicationModels = new HashMap<>();
-        Map<ClusterConfigurationMsg, Set<LogReplication.ReplicationModel>> remoteSinkClusterMsg =
+
+        Map<ClusterConfigurationMsg, Set<LogReplication.ReplicationModel>> remoteSinkToReplicationModel =
                 clusterManagerAdapter.getRemoteSinkForReplicationModels();
-        remoteSinkClusterMsg.entrySet().stream().forEach(e -> {
+        remoteSinkToReplicationModel.entrySet().stream().forEach(e -> {
             ClusterDescriptor cluster = new ClusterDescriptor(e.getKey());
             remoteSinkClusterToReplicationModels.putIfAbsent(cluster, new HashSet<>());
             e.getValue().forEach(model -> remoteSinkClusterToReplicationModels.get(cluster).add(model));
@@ -94,9 +95,9 @@ public class TopologyDescriptor {
 
         this.remoteSourceClusters = new HashMap<>();
         this.remoteSourceClusterToReplicationModels = new HashMap<>();
-        Map<ClusterConfigurationMsg, Set<LogReplication.ReplicationModel>> remoteSourceClusterMsg =
+        Map<ClusterConfigurationMsg, Set<LogReplication.ReplicationModel>> remoteSourceToReplicationModel =
                 clusterManagerAdapter.getRemoteSourceToReplicationModels();
-        remoteSourceClusterMsg.entrySet().stream().forEach(e -> {
+        remoteSourceToReplicationModel.entrySet().stream().forEach(e -> {
             ClusterDescriptor cluster = new ClusterDescriptor(e.getKey());
             remoteSourceClusterToReplicationModels.putIfAbsent(cluster, new HashSet<>());
             e.getValue().forEach(model -> remoteSourceClusterToReplicationModels.get(cluster).add(model));
@@ -110,8 +111,8 @@ public class TopologyDescriptor {
      * Constructor used by tests
      *
      * @param topologyConfigId topology configuration identifier (epoch)
-     * @param remoteSourceClusters remote source clusters
-     * @param remoteSinkClusters remote sink clusters
+     * @param remoteSourceClusters source clusters to the local cluster
+     * @param remoteSinkClusters sink clusters to the local cluster
      */
     public TopologyDescriptor(long topologyConfigId, @NonNull List<ClusterDescriptor> remoteSourceClusters,
                               @NonNull List<ClusterDescriptor> remoteSinkClusters) {
@@ -124,17 +125,14 @@ public class TopologyDescriptor {
 
         remoteSourceClusters.forEach(sourceCluster -> {
             this.remoteSourceClusters.put(sourceCluster.getClusterId(), sourceCluster);
-            this.remoteSourceClusterToReplicationModels.putIfAbsent(sourceCluster,
-                    new HashSet<LogReplication.ReplicationModel>(){{
-                        add(LogReplication.ReplicationModel.FULL_TABLE);
-            }});
+            this.remoteSourceClusterToReplicationModels.putIfAbsent(sourceCluster, new HashSet<>());
+            this.remoteSourceClusterToReplicationModels.get(sourceCluster).add(LogReplication.ReplicationModel.FULL_TABLE);
         });
+
         remoteSinkClusters.forEach(sinkCluster -> {
             this.remoteSinkClusters.put(sinkCluster.getClusterId(), sinkCluster);
-            this.remoteSinkClusterToReplicationModels.putIfAbsent(sinkCluster,
-                    new HashSet<LogReplication.ReplicationModel>(){{
-                        add(LogReplication.ReplicationModel.FULL_TABLE);
-            }});
+            this.remoteSinkClusterToReplicationModels.putIfAbsent(sinkCluster, new HashSet<>());
+            this.remoteSinkClusterToReplicationModels.get(sinkCluster).add(LogReplication.ReplicationModel.FULL_TABLE);
         });
 
         remoteSourceClusters.stream()
@@ -152,7 +150,7 @@ public class TopologyDescriptor {
      * @param topologyConfigId topology configuration identifier (epoch)
      * @param remoteSourceClusters remote source clusters
      * @param remoteSinkClusters remote sink clusters
-     * @param invalidClusters invalid clusterss
+     * @param invalidClusters invalid clusters
      */
     public TopologyDescriptor(long topologyConfigId, @NonNull List<ClusterDescriptor> remoteSourceClusters,
                               @NonNull List<ClusterDescriptor> remoteSinkClusters, @NonNull List<ClusterDescriptor> invalidClusters) {
@@ -169,12 +167,6 @@ public class TopologyDescriptor {
      * @return topology protoBuf
      */
     public TopologyConfigurationMsg convertToMessage() {
-
-        List<ClusterConfigurationMsg> clusterConfigurationMsgs = Stream.of(remoteSourceClusters.values(),
-                remoteSinkClusters.values(), invalidClusters.values())
-                .flatMap(Collection::stream)
-                .map(ClusterDescriptor::convertToMessage)
-                .collect(Collectors.toList());
 
         return TopologyConfigurationMsg.newBuilder()
                 .setTopologyConfigID(topologyConfigId)

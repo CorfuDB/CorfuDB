@@ -8,7 +8,6 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * This class describes a Cluster ore Site in terms of its Log Replication Nodes

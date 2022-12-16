@@ -34,6 +34,15 @@ public abstract class IServerChannelAdapter {
     @Getter
     private final ServerContext serverContext;
 
+    /**
+     * Constructs a new {@link IServerChannelAdapter}
+     *
+     * @param serverContext
+     * @param sesionToSourceServerRouter map of session-> source-server router. Using this, the adapter forwards the
+     *                                   msg to the correct source router.
+     * @param sessionToSinkServerRouter map of session-> sink-server router. Using this, the adapter forwards the
+     *                                  msg to the correct source router.
+     */
     public IServerChannelAdapter(ServerContext serverContext,
                                  Map<ReplicationSession, LogReplicationSourceServerRouter> sesionToSourceServerRouter,
                                  Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServerRouter) {

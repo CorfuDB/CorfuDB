@@ -51,7 +51,7 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
 
     @Override
     public void send(CorfuMessage.ResponseMsg msg) {
-        log.info("Server send message {}", msg.getPayload().getPayloadCase());
+        log.info("Server send response message {}", msg.getPayload().getPayloadCase());
         service.send(msg);
     }
 

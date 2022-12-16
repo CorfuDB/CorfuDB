@@ -59,7 +59,7 @@ public class LogReplicationSinkServerRouter implements IServerRouter {
      * @param serverMap   A map of {@link AbstractServer}s this router will route
      *                  messages for.
      */
-    public LogReplicationSinkServerRouter(Map<Class, AbstractServer> serverMap, boolean isConnectionStarter) {
+    public LogReplicationSinkServerRouter(Map<Class, AbstractServer> serverMap) {
         this.serverEpoch = ((BaseServer) serverMap.get(BaseServer.class)).serverContext.getServerEpoch();
         this.servers = ImmutableList.copyOf(serverMap.values());
         this.handlerMap = new EnumMap<>(RequestPayloadMsg.PayloadCase.class);
