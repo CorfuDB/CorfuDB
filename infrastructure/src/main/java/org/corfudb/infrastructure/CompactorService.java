@@ -10,6 +10,7 @@ import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.DistributedCheckpointerHelper;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.Layout;
@@ -42,6 +43,7 @@ public class CompactorService implements ManagementService {
     private Optional<CompactorLeaderServices> compactorLeaderServices = Optional.empty();
     private Optional<CorfuStore> corfuStore = Optional.empty();
     private TrimLog trimLog;
+    private DistributedCheckpointerHelper distributedCheckpointerHelper;
     private final Logger log;
     private static final Duration LIVENESS_TIMEOUT = Duration.ofMinutes(1);
 
@@ -79,6 +81,7 @@ public class CompactorService implements ManagementService {
 
         getCompactorLeaderServices();
         this.trimLog = new TrimLog(getCorfuRuntime(), getCorfuStore());
+        this.distributedCheckpointerHelper = new DistributedCheckpointerHelper(getCorfuStore());
 
         orchestratorThread.scheduleWithFixedDelay(
                 () -> LambdaUtils.runSansThrow(this::runOrchestrator),
@@ -137,23 +140,27 @@ public class CompactorService implements ManagementService {
                 log.warn("Unable to acquire manager status: ", e);
             }
             try {
+                if (isLeader) {
+                    if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED) {
+                        if (distributedCheckpointerHelper.isCompactionDisabled()) {
+                            log.info("Compaction has been disabled. Force finish compaction cycle as it already started");
+                            getCompactorLeaderServices().finishCompactionCycle();
+                        } else {
+                            getCompactorLeaderServices().validateLiveness();
+                        }
+                    } else if (compactionTriggerPolicy.shouldTrigger(
+                            getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis(), getCorfuStore())) {
+                        trimLog.invokePrefixTrim();
+                        compactionTriggerPolicy.markCompactionCycleStart();
+                        getCompactorLeaderServices().initCompactionCycle();
+                    }
+                }
                 if (managerStatus != null) {
                     if (managerStatus.getStatus() == StatusType.FAILED || managerStatus.getStatus() == StatusType.COMPLETED) {
                         checkpointerJvmManager.shutdown();
                     } else if (managerStatus.getStatus() == StatusType.STARTED && !checkpointerJvmManager.isRunning()
                             && !checkpointerJvmManager.isInvoked()) {
                         checkpointerJvmManager.invokeCheckpointing();
-                    }
-                }
-
-                if (isLeader) {
-                    if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED) {
-                        getCompactorLeaderServices().validateLiveness();
-                    } else if (compactionTriggerPolicy.shouldTrigger(
-                            getCorfuRuntime().getParameters().getCheckpointTriggerFreqMillis(), getCorfuStore())) {
-                        trimLog.invokePrefixTrim();
-                        compactionTriggerPolicy.markCompactionCycleStart();
-                        getCompactorLeaderServices().initCompactionCycle();
                     }
                 }
             } catch (Exception ex) {

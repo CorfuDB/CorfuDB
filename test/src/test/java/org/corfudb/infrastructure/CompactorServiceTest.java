@@ -38,8 +38,11 @@ import java.util.concurrent.TimeUnit;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @Slf4j
@@ -251,7 +254,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         }
     }
 
-    private Table<StringKey, RpcCommon.TokenMsg, Message> openCheckpointTable() {
+    private Table<StringKey, RpcCommon.TokenMsg, Message> openCompactionControlsTable() {
         try {
             return corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
                     CompactorMetadataTables.COMPACTION_CONTROLS_TABLE,
@@ -299,8 +302,8 @@ public class CompactorServiceTest extends AbstractViewTest {
         }
     }
 
-    private long verifyCheckpointTable(StringKey targetRecord) {
-        openCheckpointTable();
+    private long verifyCompactionControlsTable(StringKey targetRecord) {
+        openCompactionControlsTable();
         RpcCommon.TokenMsg token;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             token = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, targetRecord).getPayload();
@@ -320,6 +323,7 @@ public class CompactorServiceTest extends AbstractViewTest {
             if (managerStatus != null && (managerStatus.getStatus() == StatusType.COMPLETED
                     || managerStatus.getStatus() == StatusType.FAILED)) {
                 log.info("done pollForFinishCp: {}", managerStatus.getStatus());
+                System.out.println("done pollForFinishCp: " + managerStatus.getStatus());
                 return true;
             }
         }
@@ -386,7 +390,7 @@ public class CompactorServiceTest extends AbstractViewTest {
 
         assert verifyManagerStatus(StatusType.COMPLETED);
         assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
-        assert verifyCheckpointTable(CompactorMetadataTables.MIN_CHECKPOINT) > 0;
+        assert verifyCompactionControlsTable(CompactorMetadataTables.MIN_CHECKPOINT) > 0;
     }
 
     @Test
@@ -415,7 +419,7 @@ public class CompactorServiceTest extends AbstractViewTest {
 
         assert verifyManagerStatus(StatusType.COMPLETED);
         assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
-        assert verifyCheckpointTable(CompactorMetadataTables.MIN_CHECKPOINT) > 0;
+        assert verifyCompactionControlsTable(CompactorMetadataTables.MIN_CHECKPOINT) > 0;
     }
 
     @Test
@@ -456,7 +460,7 @@ public class CompactorServiceTest extends AbstractViewTest {
 
         assert verifyManagerStatus(StatusType.COMPLETED);
         assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
-        assert verifyCheckpointTable(CompactorMetadataTables.MIN_CHECKPOINT) > 0;
+        assert verifyCompactionControlsTable(CompactorMetadataTables.MIN_CHECKPOINT) > 0;
     }
 
     @Test
@@ -497,7 +501,7 @@ public class CompactorServiceTest extends AbstractViewTest {
 
         assert verifyManagerStatus(StatusType.COMPLETED);
         assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
-        assert verifyCheckpointTable(CompactorMetadataTables.MIN_CHECKPOINT) > 0;
+        assert verifyCompactionControlsTable(CompactorMetadataTables.MIN_CHECKPOINT) > 0;
     }
 
     @Test
@@ -593,7 +597,7 @@ public class CompactorServiceTest extends AbstractViewTest {
 
         assert verifyManagerStatus(StatusType.COMPLETED);
         assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
-        assert verifyCheckpointTable(CompactorMetadataTables.MIN_CHECKPOINT) > 0;
+        assert verifyCompactionControlsTable(CompactorMetadataTables.MIN_CHECKPOINT) > 0;
     }
 
     @Test
@@ -607,7 +611,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         CompactorService compactorService1 = new CompactorService(sc1, runtimeSingletonResource1, mockInvokeJvm1, new DynamicTriggerPolicy());
         compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
-        Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable = openCheckpointTable();
+        Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable = openCompactionControlsTable();
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             txn.putRecord(checkpointTable,
                     CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM,
@@ -624,37 +628,94 @@ public class CompactorServiceTest extends AbstractViewTest {
             log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
         }
 
-        long trimSequence = verifyCheckpointTable(CompactorMetadataTables.MIN_CHECKPOINT);
+        long trimSequence = verifyCompactionControlsTable(CompactorMetadataTables.MIN_CHECKPOINT);
 
         assert verifyManagerStatus(StatusType.COMPLETED);
         assert verifyCheckpointStatusTable(StatusType.COMPLETED, 0);
         assert trimSequence > 0;
-        assert verifyCheckpointTable(CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM) == 0;
+        assert verifyCompactionControlsTable(CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM) == 0;
         assert runtimeSingletonResource0.get().getAddressSpaceView().getTrimMark().getSequence() == trimSequence + 1;
     }
 
     @Test
-    public void freezeTokenTest() {
+    public void freezeAndDisableTokenTest() {
         testSetup(logSizeLimitPercentageFull);
         SingletonResource<CorfuRuntime> runtimeSingletonResource0 = SingletonResource.withInitial(() -> runtime0);
         CompactorService compactorService0 = new CompactorService(sc0, runtimeSingletonResource0, mockInvokeJvm0, new DynamicTriggerPolicy());
         compactorService0.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
-        Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable = openCheckpointTable();
+        Table<StringKey, RpcCommon.TokenMsg, Message> compactionControlsTable = openCompactionControlsTable();
+
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            txn.putRecord(checkpointTable,
+            txn.putRecord(compactionControlsTable,
                     CompactorMetadataTables.FREEZE_TOKEN,
                     RpcCommon.TokenMsg.newBuilder().setSequence(System.currentTimeMillis()).build(),
                     null);
             txn.commit();
         }
+        try {
+            TimeUnit.MILLISECONDS.sleep(WAIT_TO_TIMEOUT);
+        } catch (InterruptedException e) {
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
+        }
+        assert verifyManagerStatus(StatusType.IDLE);
+        assert verifyCompactionControlsTable(CompactorMetadataTables.FREEZE_TOKEN) != 0;
 
+
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            txn.delete(compactionControlsTable, CompactorMetadataTables.FREEZE_TOKEN);
+            txn.putRecord(compactionControlsTable,
+                    CompactorMetadataTables.DISABLE_COMPACTION,
+                    RpcCommon.TokenMsg.newBuilder().setSequence(System.currentTimeMillis()).build(),
+                    null);
+            txn.commit();
+        }
         try {
             TimeUnit.MILLISECONDS.sleep(WAIT_TO_TIMEOUT);
         } catch (InterruptedException e) {
             log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
         }
 
-        assert !pollForFinishCheckpointing();
+        assert verifyManagerStatus(StatusType.IDLE);
+        assert verifyCompactionControlsTable(CompactorMetadataTables.FREEZE_TOKEN) == 0;
+        assert verifyCompactionControlsTable(CompactorMetadataTables.DISABLE_COMPACTION) != 0;
+    }
+
+    @Test
+    public void disableTokenAfterStartedTest() {
+        testSetup(logSizeLimitPercentageFull);
+        SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);
+
+        CompactorService compactorService1 = new CompactorService(sc0, runtimeSingletonResource1, mockInvokeJvm0, dynamicTriggerPolicy0);
+        doNothing().when(mockInvokeJvm0).invokeCheckpointing();
+        Table<StringKey, CheckpointingStatus, Message> compactionManagerTable = openCompactionManagerTable(corfuStore);
+        Table<TableName, CheckpointingStatus, Message> checkpointStatusTable = openCheckpointStatusTable();
+        Table<StringKey, RpcCommon.TokenMsg, Message> compactionControlsTable = openCompactionControlsTable();
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            txn.putRecord(compactionManagerTable,
+                    CompactorMetadataTables.COMPACTION_MANAGER_KEY,
+                    CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).setCycleCount(1).build(),
+                    null);
+            txn.putRecord(compactionControlsTable,
+                    CompactorMetadataTables.DISABLE_COMPACTION,
+                    RpcCommon.TokenMsg.newBuilder().setSequence(System.currentTimeMillis()).build(),
+                    null);
+            txn.putRecord(checkpointStatusTable,
+                    TableName.newBuilder().setTableName(STREAM_NAME_PREFIX).build(),
+                    CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).setCycleCount(1).build(),
+                    null);
+            txn.commit();
+        }
+        compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
+        try {
+            TimeUnit.MILLISECONDS.sleep(WAIT_TO_TIMEOUT);
+        } catch (InterruptedException e) {
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
+        }
+
+        verify(mockInvokeJvm0, atLeastOnce()).shutdown();
+        assert verifyManagerStatus(StatusType.FAILED);
+        assert verifyCheckpointStatusTable(StatusType.IDLE, 0);
+        assert verifyCompactionControlsTable(CompactorMetadataTables.DISABLE_COMPACTION) != 0;
     }
 }

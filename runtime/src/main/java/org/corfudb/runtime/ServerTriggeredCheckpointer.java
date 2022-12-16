@@ -76,6 +76,7 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
                         .setSerializer(serializer)
                         .addOpenOption(ObjectOpenOption.NO_CACHE);
         if (this.checkpointerBuilder.persistedCacheRoot.isPresent()) {
+            log.info("Opening table in diskBacked mode");
             String persistentCacheDirName = String.format("compactor_%s_%s",
                     tableName.getNamespace(), tableName.getTableName());
             Path persistedCacheLocation = Paths.get(this.checkpointerBuilder.persistedCacheRoot.get()).resolve(persistentCacheDirName);

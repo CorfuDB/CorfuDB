@@ -2,6 +2,7 @@ package org.corfudb.infrastructure;
 
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuRuntime;
@@ -10,6 +11,7 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.concurrent.SingletonResource;
 import org.junit.Before;
@@ -23,13 +25,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 @Slf4j
 public class CompactorServiceUnitTest {
@@ -39,7 +43,9 @@ public class CompactorServiceUnitTest {
     private final CorfuStore corfuStore = mock(CorfuStore.class);
     private final TxnContext txn = mock(TxnContext.class);
     private CompactorService compactorServiceSpy;
-    private final CorfuStoreEntry<? extends Message, ? extends Message, ? extends Message> corfuStoreEntry =
+    private final CorfuStoreEntry<? extends Message, ? extends Message, ? extends Message> corfuStoreCompactionManagerEntry =
+            (CorfuStoreEntry<? extends Message, ? extends Message, ? extends Message>) mock(CorfuStoreEntry.class);
+    private final CorfuStoreEntry<? extends Message, ? extends Message, ? extends Message> corfuStoreCompactionControlsEntry =
             (CorfuStoreEntry<? extends Message, ? extends Message, ? extends Message>) mock(CorfuStoreEntry.class);
     private final DynamicTriggerPolicy dynamicTriggerPolicy = mock(DynamicTriggerPolicy.class);
     private final CompactorLeaderServices leaderServices = mock(CompactorLeaderServices.class);
@@ -64,7 +70,8 @@ public class CompactorServiceUnitTest {
         when(mockParams.getCheckpointTriggerFreqMillis()).thenReturn(1L);
 
         when(corfuStore.txn(CORFU_SYSTEM_NAMESPACE)).thenReturn(txn);
-        when(txn.getRecord(Matchers.anyString(), Matchers.any(Message.class))).thenReturn(corfuStoreEntry);
+        when(txn.getRecord(CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME, CompactorMetadataTables.COMPACTION_MANAGER_KEY)).thenReturn(corfuStoreCompactionManagerEntry);
+        when(txn.getRecord(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, CompactorMetadataTables.DISABLE_COMPACTION)).thenReturn(corfuStoreCompactionControlsEntry);
         when(txn.commit()).thenReturn(CorfuStoreMetadata.Timestamp.getDefaultInstance());
 
         CompactorService compactorService = new CompactorService(serverContext,
@@ -72,6 +79,8 @@ public class CompactorServiceUnitTest {
         compactorServiceSpy = spy(compactorService);
         doReturn(leaderServices).when(compactorServiceSpy).getCompactorLeaderServices();
         doReturn(corfuStore).when(compactorServiceSpy).getCorfuStore();
+        //Compaction enabled
+        when((RpcCommon.TokenMsg) corfuStoreCompactionControlsEntry.getPayload()).thenReturn(null);
     }
 
     @Test
@@ -81,7 +90,7 @@ public class CompactorServiceUnitTest {
         //isLeader becomes false
         when(mockLayout.getPrimarySequencer()).thenReturn(NODE_ENDPOINT + NODE_0);
 
-        when((CheckpointingStatus) corfuStoreEntry.getPayload())
+        when((CheckpointingStatus) corfuStoreCompactionManagerEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
         when(invokeCheckpointingJvm.isRunning()).thenReturn(false).thenReturn(true);
@@ -107,7 +116,7 @@ public class CompactorServiceUnitTest {
                 .thenReturn(NODE_ENDPOINT)
                 .thenReturn(NODE_ENDPOINT + NODE_0);
 
-        when((CheckpointingStatus) corfuStoreEntry.getPayload())
+        when((CheckpointingStatus) corfuStoreCompactionManagerEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
         when(dynamicTriggerPolicy.shouldTrigger(Matchers.anyLong(), Matchers.any(CorfuStore.class))).thenReturn(true).thenReturn(false);
@@ -138,7 +147,7 @@ public class CompactorServiceUnitTest {
                 .thenReturn(mockLayout);
         when(mockLayout.getPrimarySequencer()).thenReturn(NODE_ENDPOINT);
 
-        when((CheckpointingStatus) corfuStoreEntry.getPayload())
+        when((CheckpointingStatus) corfuStoreCompactionManagerEntry.getPayload())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
         when(dynamicTriggerPolicy.shouldTrigger(Matchers.anyLong(), Matchers.any(CorfuStore.class))).thenReturn(true).thenReturn(false);
@@ -161,5 +170,32 @@ public class CompactorServiceUnitTest {
 
         verify(leaderServices).initCompactionCycle();
         verify(invokeCheckpointingJvm, times(1)).shutdown();
+    }
+
+    @Test
+    public void disableCompactionAfterStartedTest() {
+        Layout mockLayout = mock(Layout.class);
+        when(corfuRuntime.invalidateLayout()).thenReturn(CompletableFuture.completedFuture(mockLayout));
+        //isLeader becomes true
+        when(mockLayout.getPrimarySequencer()).thenReturn(NODE_ENDPOINT);
+
+        //Disable compaction
+        when((RpcCommon.TokenMsg) corfuStoreCompactionControlsEntry.getPayload())
+                .thenReturn(RpcCommon.TokenMsg.getDefaultInstance());
+        when((CheckpointingStatus) corfuStoreCompactionManagerEntry.getPayload())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
+        when(invokeCheckpointingJvm.isRunning()).thenReturn(false).thenReturn(true);
+        when(invokeCheckpointingJvm.isInvoked()).thenReturn(false).thenReturn(true);
+
+        compactorServiceSpy.start(Duration.ofSeconds(SCHEDULER_INTERVAL));
+        try {
+            TimeUnit.SECONDS.sleep(SLEEP_WAIT);
+        } catch (InterruptedException e) {
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
+        }
+
+        verify(leaderServices, never()).validateLiveness();
+        verify(leaderServices, never()).initCompactionCycle();
+        verify(leaderServices, atLeastOnce()).finishCompactionCycle();
     }
 }
