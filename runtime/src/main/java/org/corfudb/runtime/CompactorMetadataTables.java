@@ -33,7 +33,9 @@ public class CompactorMetadataTables {
     public static final StringKey DISABLE_COMPACTION = StringKey.newBuilder().setKey("DisableCompaction").build();
     public static final StringKey INSTANT_TIGGER_WITH_TRIM = StringKey.newBuilder().setKey("InstantTriggerTrim").build();
 
-    private static final int MAX_RETRIES = 5;
+    public static final int MAX_RETRIES = 5;
+
+    public static final int TABLE_UPDATE_RETRY_SLEEP_SECONDS = 2;
 
     public CompactorMetadataTables(CorfuStore corfuStore) throws Exception {
         for (int retry = 0; ; retry++) {
@@ -68,9 +70,10 @@ public class CompactorMetadataTables {
                 break;
             } catch (Exception e) {
                 if (retry == MAX_RETRIES) {
+                    log.error("Failed to open Compactor metadata tables after retry for {} times", MAX_RETRIES);
                     throw e;
                 }
-                log.error("Caught an exception while opening Compaction metadata tables ", e);
+                log.warn("Caught an exception while opening Compaction metadata tables. Retrying...", e);
             }
         }
     }

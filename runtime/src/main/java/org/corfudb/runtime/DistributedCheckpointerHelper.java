@@ -1,6 +1,7 @@
 package org.corfudb.runtime;
 
 import com.google.protobuf.Message;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
@@ -11,6 +12,7 @@ import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.RpcCommon;
 
 import java.util.Date;
+import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -19,8 +21,14 @@ public class DistributedCheckpointerHelper {
 
     private final CorfuStore corfuStore;
 
-    public DistributedCheckpointerHelper(CorfuStore corfuStore) {
+    @Getter
+    private final CompactorMetadataTables compactorMetadataTables;
+
+    public DistributedCheckpointerHelper(CorfuStore corfuStore) throws Exception {
         this.corfuStore = corfuStore;
+
+        // Open all compactor related tables
+        this.compactorMetadataTables = new CompactorMetadataTables(corfuStore);
     }
 
     public static enum UpdateAction {
@@ -28,18 +36,60 @@ public class DistributedCheckpointerHelper {
         DELETE
     }
 
-    public void updateCompactionControlsTable(Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable,
-                                              StringKey stringKey,
-                                              UpdateAction action) {
+    public void disableCompaction() {
+        updateCompactionControlsTable(
+                CompactorMetadataTables.DISABLE_COMPACTION, UpdateAction.PUT);
+        log.info("Disabled compaction");
+    }
 
-        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            updateCompactionControlsTable(txn, checkpointTable, stringKey, action);
-            txn.commit();
-        } catch (Exception e) {
-            log.warn("Unable to write UpgradeKey to checkpoint table, ", e);
+    public void enableCompaction() {
+        updateCompactionControlsTable(CompactorMetadataTables.DISABLE_COMPACTION, UpdateAction.DELETE);
+        log.info("Disabled compaction");
+    }
+
+    public void freezeCompaction() {
+        updateCompactionControlsTable(CompactorMetadataTables.FREEZE_TOKEN, UpdateAction.PUT);
+    }
+
+    public void unfreezeCompaction() {
+        updateCompactionControlsTable(CompactorMetadataTables.FREEZE_TOKEN, UpdateAction.DELETE);
+    }
+
+    public void instantTrigger(boolean trim) {
+        if (trim) {
+            updateCompactionControlsTable(CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM, UpdateAction.PUT);
+        } else {
+            updateCompactionControlsTable(CompactorMetadataTables.INSTANT_TIGGER, UpdateAction.PUT);
         }
     }
-    public void updateCompactionControlsTable(TxnContext txn,
+
+    private void updateCompactionControlsTable(StringKey stringKey, UpdateAction action) {
+
+        Table<StringKey, RpcCommon.TokenMsg, Message> compactionControlsTable =
+                compactorMetadataTables.getCompactionControlsTable();
+        for (int retry = 1; retry <= CompactorMetadataTables.MAX_RETRIES; retry++) {
+            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                updateCompactionControlsTable(txn, compactionControlsTable, stringKey, action);
+                txn.commit();
+            } catch (Exception e) {
+                if (retry == CompactorMetadataTables.MAX_RETRIES) {
+                    log.error("Failed to update CompactionControlsTable with Key:{}, Action:{} after retry.",
+                            stringKey, action, e);
+                    throw e;
+                }
+                log.warn("Unable to write Key:{}, Action:{} to CompactionControlsTable. Retrying for {} / {}.",
+                        stringKey, action, retry, CompactorMetadataTables.MAX_RETRIES);
+                try {
+                    TimeUnit.SECONDS.sleep(CompactorMetadataTables.TABLE_UPDATE_RETRY_SLEEP_SECONDS);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(ie);
+                }
+            }
+        }
+        log.info("Updated ");
+    }
+    private void updateCompactionControlsTable(TxnContext txn,
                                               Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable,
                                               StringKey stringKey,
                                               UpdateAction action) {

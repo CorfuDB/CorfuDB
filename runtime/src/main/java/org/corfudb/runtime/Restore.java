@@ -68,6 +68,9 @@ public class Restore {
     // Cache the mapping from table uuid to requires_backup_support in RegistryTable
     private Map<UUID, Boolean> tableTagged = new HashMap<>();
 
+    //
+    private DistributedCheckpointerHelper cpHelper;
+
     /**
      * Unpacked files from backup tar file are stored under RESTORE_TEMP_DIR. They are deleted after restore finishes.
      */
@@ -96,6 +99,7 @@ public class Restore {
         try {
             // The cleanup() in finally block is not guaranteed to have
             // been run in previous restore if there was OOM
+            disableCompaction();
             cleanup();
             openTarFile();
             verify();
@@ -104,9 +108,29 @@ public class Restore {
             log.error("failed to run restore.", e);
             throw new BackupRestoreException("failed to restore from backup file " + filePath, e);
         } finally {
+            enableCompaction();
             cleanup();
         }
         log.info("restore completed");
+    }
+
+    private void disableCompaction() throws Exception {
+        log.info("Disabling compaction...");
+        if (cpHelper == null) {
+            try {
+                cpHelper = new DistributedCheckpointerHelper(corfuStore);
+            } catch (Exception e) {
+                log.error("Failed to obtain a DistributedCheckpointerHelper.", e);
+                throw e;
+            }
+        }
+
+        cpHelper.disableCompaction();
+    }
+
+    private void enableCompaction() {
+        log.info("Enabling compaction...");
+        cpHelper.enableCompaction();
     }
 
     private void restore() throws IOException {
