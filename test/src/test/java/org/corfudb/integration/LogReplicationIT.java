@@ -24,6 +24,8 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -392,78 +394,51 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         }
     }
 
-    private void verifyPreviousSnapshotStatus(LogReplicationMetadata.SyncStatus expectedStatus) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
-
-        LogReplicationMetadata.ReplicationStatusKey key = LogReplicationMetadata.ReplicationStatusKey.newBuilder().setClusterId(REMOTE_CLUSTER_ID).build();
-        LogReplicationMetadata.SyncStatus snapshotSyncStatus = null;
-        Table<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, Message> replicationStatusTable;
-        replicationStatusTable = srcCorfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                REPLICATION_STATUS_TABLE,
-                LogReplicationMetadata.ReplicationStatusKey.class,
-                LogReplicationMetadata.ReplicationStatusVal.class,
-                null,
-                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
-
-        try (TxnContext txn = srcCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            CorfuStoreEntry<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, Message>
-                    entry = txn.getRecord(replicationStatusTable, key);
-            if (entry.getPayload() != null) {
-                snapshotSyncStatus = entry.getPayload().getSnapshotSyncInfo().getStatus();
-            }
-            txn.commit();
-        }
-
-        Assert.assertEquals(expectedStatus, snapshotSyncStatus);
-    }
-
-    private void verifyCurrentSyncStatus(LogReplicationMetadata.SyncStatus expectedStatus) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
-
-        LogReplicationMetadata.ReplicationStatusKey key = LogReplicationMetadata.ReplicationStatusKey.newBuilder().setClusterId(REMOTE_CLUSTER_ID).build();
-        LogReplicationMetadata.SyncStatus syncStatus = null;
-        Table<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, Message> replicationStatusTable;
-        replicationStatusTable = srcCorfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
-                REPLICATION_STATUS_TABLE,
-                LogReplicationMetadata.ReplicationStatusKey.class,
-                LogReplicationMetadata.ReplicationStatusVal.class,
-                null,
-                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
-
-        try (TxnContext txn = srcCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            CorfuStoreEntry<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, Message>
-                    entry = txn.getRecord(replicationStatusTable, key);
-            if (entry.getPayload() != null) {
-                syncStatus = entry.getPayload().getStatus();
-            }
-            txn.commit();
-        }
-
-        Assert.assertEquals(expectedStatus, syncStatus);
-    }
-
     /* ***************************** LOG REPLICATION IT TESTS ***************************** */
 
     /**
-     * This test helps to emulate the raceCondition where statusSyncUpdater thread gets precedence over the state transition.
+     * This test helps to emulate the raceCondition where statusSyncUpdater thread gets
+     * the precedence over the state transition to LOG_ENTRY_SYNC.
      * A statusSyncUpdater service is run independently without the FSM and
      * NOT_STARTED status is verified from the replicationStatus table.
-     *
      * @throws Exception
      */
     @Test
-    public void testSyncStatusBeforeSyncState() throws Exception {
+    public void testSyncStatusBeforeLogEntrySync() throws Exception {
         setupEnv();
+        testSyncStatus(SyncType.LOG_ENTRY, SyncStatus.NOT_STARTED, SyncStatus.UNAVAILABLE);
+        cleanEnv();
+    }
 
-        LogReplicationMetadataManager srcManager = new LogReplicationMetadataManager(srcTestRuntime, 0, ACTIVE_CLUSTER_ID);
-        LogReplicationConfigManager tableManagerPlugin = new LogReplicationConfigManager(srcTestRuntime);
-        LogReplicationConfig config = new LogReplicationConfig(tableManagerPlugin, BATCH_SIZE,
+    /**
+     * This test helps to emulate the raceCondition where statusSyncUpdater thread gets
+     * the precedence over the state transition to SNAPSHOT_SYNC.
+     * A statusSyncUpdater service is run independently without the FSM and
+     * NOT_STARTED status is verified from the replicationStatus table.
+     * @throws Exception
+     */
+    @Test
+    public void testSyncStatusBeforeSnapshotSync() throws Exception {
+        setupEnv();
+        testSyncStatus(SyncType.SNAPSHOT, SyncStatus.NOT_STARTED, SyncStatus.NOT_STARTED);
+        cleanEnv();
+    }
+
+    private void testSyncStatus(SyncType type, SyncStatus expectedSyncStatus,
+                                SyncStatus expectedPreviousSnapshotSyncStatus)
+            throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+
+        LogReplicationMetadataManager srcMetadataManager = new LogReplicationMetadataManager(srcTestRuntime, 0, ACTIVE_CLUSTER_ID);
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(srcTestRuntime);
+        LogReplicationConfig config = new LogReplicationConfig(configManager, BATCH_SIZE,
                 SMALL_MSG_SIZE, MAX_CACHE_NUM_ENTRIES);
 
         LogEntryReader logEntryReader = new TestLogEntryReader();
-        LogReplicationAckReader ackReader = new LogReplicationAckReader(srcManager, config, srcDataRuntime, REMOTE_CLUSTER_ID);
+        LogReplicationAckReader ackReader = new LogReplicationAckReader(srcMetadataManager, config, srcDataRuntime, REMOTE_CLUSTER_ID);
         ackReader.setLogEntryReader(logEntryReader);
 
         try {
-            ackReader.setSyncType(LogReplicationMetadata.ReplicationStatusVal.SyncType.SNAPSHOT);
+            ackReader.setSyncType(type);
             ackReader.startSyncStatusUpdatePeriodicTask();
             TimeUnit.SECONDS.sleep(WAIT_INTERVAL.getSeconds());
         } catch (InterruptedException e) {
@@ -472,10 +447,36 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             ackReader.shutdown();
         }
 
-        verifyPreviousSnapshotStatus(LogReplicationMetadata.SyncStatus.NOT_STARTED);
-        verifyCurrentSyncStatus(LogReplicationMetadata.SyncStatus.NOT_STARTED);
+        LogReplicationMetadata.ReplicationStatusKey key = LogReplicationMetadata.
+                ReplicationStatusKey.
+                newBuilder().
+                setClusterId(REMOTE_CLUSTER_ID).
+                build();
 
-        cleanEnv();
+        SyncStatus syncStatus = null, previousSnapshotSyncStatus = null;
+
+        Table<LogReplicationMetadata.ReplicationStatusKey,
+                LogReplicationMetadata.ReplicationStatusVal,
+                Message> replicationStatusTable = srcCorfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
+                REPLICATION_STATUS_TABLE,
+                LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadata.ReplicationStatusVal.class,
+                null,
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+
+        try (TxnContext txn = srcCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            CorfuStoreEntry<LogReplicationMetadata.ReplicationStatusKey,
+                    LogReplicationMetadata.ReplicationStatusVal,
+                    Message> entry = txn.getRecord(replicationStatusTable, key);
+            if (entry.getPayload() != null) {
+                syncStatus = entry.getPayload().getStatus();
+                previousSnapshotSyncStatus = entry.getPayload().getSnapshotSyncInfo().getStatus();
+            }
+            txn.commit();
+        }
+
+        Assert.assertEquals(expectedSyncStatus, syncStatus);
+        Assert.assertEquals(expectedPreviousSnapshotSyncStatus, previousSnapshotSyncStatus);
     }
 
     /**
@@ -1288,7 +1289,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                                                 boolean injectTxData, TransitionSource function) throws Exception {
 
         logReplicationSourceManager = setupSourceManagerAndObservedValues(waitConditions, function);
-
         // Start Log Entry Sync
         log.info("****** Start Log Entry Sync with src tail " + srcDataRuntime.getAddressSpaceView().getLogTail()
                 + " dst tail " + dstDataRuntime.getAddressSpaceView().getLogTail());
