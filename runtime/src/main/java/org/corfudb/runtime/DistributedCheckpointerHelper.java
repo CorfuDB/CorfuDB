@@ -9,6 +9,8 @@ import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.proto.RpcCommon;
 
 import java.util.Date;
@@ -98,6 +100,7 @@ public class DistributedCheckpointerHelper {
         boolean isCompactionInProgress = false;
         Table<StringKey, RpcCommon.TokenMsg, Message> compactionControlsTable =
                 compactorMetadataTables.getCompactionControlsTable();
+
         for (int retry = 1; retry <= CompactorMetadataTables.MAX_RETRIES; retry++) {
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                 updateCompactionControlsTable(txn, compactionControlsTable, stringKey, action);
@@ -110,6 +113,12 @@ public class DistributedCheckpointerHelper {
 
                 txn.commit();
                 break;
+            } catch (TransactionAbortedException tae) {
+                if (tae.getAbortCause() == AbortCause.CONFLICT) {
+                    log.error("Another transaction has updated the CompactionControlsTable while " +
+                            "updating with Key:{}, Action:{}. Abort retrying.", stringKey, action);
+                    throw tae;
+                }
             } catch (Exception e) {
                 if (retry == CompactorMetadataTables.MAX_RETRIES) {
                     log.error("Failed to update CompactionControlsTable with Key:{}, Action:{} after retry.",
@@ -118,6 +127,7 @@ public class DistributedCheckpointerHelper {
                 }
                 log.warn("Unable to write Key:{}, Action:{} to CompactionControlsTable. Retrying for {} / {}.",
                         stringKey, action, retry, CompactorMetadataTables.MAX_RETRIES);
+
                 try {
                     TimeUnit.SECONDS.sleep(CompactorMetadataTables.TABLE_UPDATE_RETRY_SLEEP_SECONDS);
                 } catch (InterruptedException ie) {
