@@ -125,7 +125,7 @@ public class Restore {
             }
         }
 
-        cpHelper.disableCompaction();
+        cpHelper.disableCompactionWithWait();
     }
 
     private void enableCompaction() {

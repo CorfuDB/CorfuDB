@@ -24,6 +24,8 @@ public class DistributedCheckpointerHelper {
     @Getter
     private final CompactorMetadataTables compactorMetadataTables;
 
+    private static final long COMPACTION_TRIGGER_INTERVAL = 10;
+
     public DistributedCheckpointerHelper(CorfuStore corfuStore) throws Exception {
         this.corfuStore = corfuStore;
 
@@ -36,15 +38,34 @@ public class DistributedCheckpointerHelper {
         DELETE
     }
 
-    public void disableCompaction() {
-        updateCompactionControlsTable(
+    public boolean disableCompaction() {
+        return updateCompactionControlsTable(
                 CompactorMetadataTables.DISABLE_COMPACTION, UpdateAction.PUT);
-        log.info("Disabled compaction");
+    }
+
+    public void disableCompactionWithWait() {
+        boolean isCompactionInProgress = disableCompaction();
+
+        if (isCompactionInProgress) {
+            // Wait for time longer than Compactor's orchestrator scheduling period to ensure
+            // the disable command is effective across the cluster
+            try {
+                log.info("Waiting ({} seconds) for the disabling to complete...", COMPACTION_TRIGGER_INTERVAL);
+                TimeUnit.SECONDS.sleep(2 * COMPACTION_TRIGGER_INTERVAL);
+                log.info("Done waiting for {}", COMPACTION_TRIGGER_INTERVAL);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(ie);
+            }
+        } else {
+            log.info("Compaction is not started at the time of disabling. Skip waiting.");
+        }
+
+        log.info("Disabled compaction.");
     }
 
     public void enableCompaction() {
         updateCompactionControlsTable(CompactorMetadataTables.DISABLE_COMPACTION, UpdateAction.DELETE);
-        log.info("Disabled compaction");
     }
 
     public void freezeCompaction() {
@@ -63,14 +84,32 @@ public class DistributedCheckpointerHelper {
         }
     }
 
-    private void updateCompactionControlsTable(StringKey stringKey, UpdateAction action) {
+    /**
+     * Update the CompactionControlsTable with given Key and Action.
+     * Return if compaction is STARTED at the time of the update.
+     *
+     * @param stringKey the control operation in StringKey format
+     * @param action the action to perform
+     * @return if compaction is STARTED at the time of the update
+     */
+    private boolean updateCompactionControlsTable(StringKey stringKey, UpdateAction action) {
+        log.info("Updating CompactionControlsTable with Key:{}, Action:{}", stringKey, action);
 
+        boolean isCompactionInProgress = false;
         Table<StringKey, RpcCommon.TokenMsg, Message> compactionControlsTable =
                 compactorMetadataTables.getCompactionControlsTable();
         for (int retry = 1; retry <= CompactorMetadataTables.MAX_RETRIES; retry++) {
             try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                 updateCompactionControlsTable(txn, compactionControlsTable, stringKey, action);
+
+                CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
+                        CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                        CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
+                isCompactionInProgress = (managerStatus != null && managerStatus.getStatus().equals(StatusType.STARTED));
+                log.info("During updateCompactionControlsTable, isCompactionInProgress? {}", isCompactionInProgress);
+
                 txn.commit();
+                break;
             } catch (Exception e) {
                 if (retry == CompactorMetadataTables.MAX_RETRIES) {
                     log.error("Failed to update CompactionControlsTable with Key:{}, Action:{} after retry.",
@@ -87,8 +126,10 @@ public class DistributedCheckpointerHelper {
                 }
             }
         }
-        log.info("Updated ");
+        log.info("Updated CompactionControlsTable with Key:{}, Action:{}", stringKey, action);
+        return isCompactionInProgress;
     }
+
     private void updateCompactionControlsTable(TxnContext txn,
                                               Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable,
                                               StringKey stringKey,
