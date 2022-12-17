@@ -57,7 +57,7 @@ public class DistributedCheckpointerHelper {
                 log.info("Done waiting for {}", COMPACTION_TRIGGER_INTERVAL);
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
-                throw new IllegalStateException(ie);
+                log.warn("disableCompactionWithWait sleep got interrupted.");
             }
         } else {
             log.info("Compaction is not started at the time of disabling. Skip waiting.");
@@ -108,7 +108,7 @@ public class DistributedCheckpointerHelper {
                 CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
                         CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                         CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
-                isCompactionInProgress = (managerStatus != null && managerStatus.getStatus().equals(StatusType.STARTED));
+                isCompactionInProgress = managerStatus != null && managerStatus.getStatus().equals(StatusType.STARTED);
                 log.info("During updateCompactionControlsTable, isCompactionInProgress? {}", isCompactionInProgress);
 
                 txn.commit();
@@ -132,7 +132,7 @@ public class DistributedCheckpointerHelper {
                     TimeUnit.SECONDS.sleep(CompactorMetadataTables.TABLE_UPDATE_RETRY_SLEEP_SECONDS);
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
-                    throw new IllegalStateException(ie);
+                    log.warn("updateCompactionControlsTable retry sleep got interrupted.");
                 }
             }
         }
