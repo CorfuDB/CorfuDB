@@ -99,7 +99,7 @@ public class CompactorServiceUnitTest {
     }
 
     @Test
-    public void runOrchestratorLeaderTest() {
+    public void runOrchestratorLeaderTest() throws Exception {
         Layout mockLayout = mock(Layout.class);
         when(corfuRuntime.invalidateLayout()).thenReturn(CompletableFuture.completedFuture(mockLayout));
         //isLeader becomes true
@@ -129,7 +129,7 @@ public class CompactorServiceUnitTest {
     }
 
     @Test
-    public void runOrchestratorSchedulerTest() {
+    public void runOrchestratorSchedulerTest() throws Exception {
         Layout mockLayout = mock(Layout.class);
         CompletableFuture invalidateLayoutFuture = mock(CompletableFuture.class);
         when(corfuRuntime.invalidateLayout()).thenReturn(invalidateLayoutFuture);

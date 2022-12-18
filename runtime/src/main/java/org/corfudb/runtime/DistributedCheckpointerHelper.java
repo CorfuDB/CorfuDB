@@ -1,6 +1,7 @@
 package org.corfudb.runtime;
 
 import com.google.protobuf.Message;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
@@ -8,9 +9,12 @@ import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.proto.RpcCommon;
 
 import java.util.Date;
+import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -19,8 +23,16 @@ public class DistributedCheckpointerHelper {
 
     private final CorfuStore corfuStore;
 
-    public DistributedCheckpointerHelper(CorfuStore corfuStore) {
+    @Getter
+    private final CompactorMetadataTables compactorMetadataTables;
+
+    private static final long COMPACTION_TRIGGER_INTERVAL = 10;
+
+    public DistributedCheckpointerHelper(CorfuStore corfuStore) throws Exception {
         this.corfuStore = corfuStore;
+
+        // Open all compactor related tables
+        this.compactorMetadataTables = new CompactorMetadataTables(corfuStore);
     }
 
     public static enum UpdateAction {
@@ -28,18 +40,107 @@ public class DistributedCheckpointerHelper {
         DELETE
     }
 
-    public void updateCompactionControlsTable(Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable,
-                                              StringKey stringKey,
-                                              UpdateAction action) {
+    public boolean disableCompaction() {
+        return updateCompactionControlsTable(
+                CompactorMetadataTables.DISABLE_COMPACTION, UpdateAction.PUT);
+    }
 
-        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            updateCompactionControlsTable(txn, checkpointTable, stringKey, action);
-            txn.commit();
-        } catch (Exception e) {
-            log.warn("Unable to write UpgradeKey to checkpoint table, ", e);
+    public void disableCompactionWithWait() {
+        boolean isCompactionInProgress = disableCompaction();
+
+        if (isCompactionInProgress) {
+            // Wait for time longer than Compactor's orchestrator scheduling period to ensure
+            // the disable command is effective across the cluster
+            try {
+                log.info("Waiting ({} seconds) for the disabling to complete...", COMPACTION_TRIGGER_INTERVAL);
+                TimeUnit.SECONDS.sleep(2 * COMPACTION_TRIGGER_INTERVAL);
+                log.info("Done waiting for {}", COMPACTION_TRIGGER_INTERVAL);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                log.warn("disableCompactionWithWait sleep got interrupted.");
+            }
+        } else {
+            log.info("Compaction is not started at the time of disabling. Skip waiting.");
+        }
+
+        log.info("Disabled compaction.");
+    }
+
+    public void enableCompaction() {
+        updateCompactionControlsTable(CompactorMetadataTables.DISABLE_COMPACTION, UpdateAction.DELETE);
+    }
+
+    public void freezeCompaction() {
+        updateCompactionControlsTable(CompactorMetadataTables.FREEZE_TOKEN, UpdateAction.PUT);
+    }
+
+    public void unfreezeCompaction() {
+        updateCompactionControlsTable(CompactorMetadataTables.FREEZE_TOKEN, UpdateAction.DELETE);
+    }
+
+    public void instantTrigger(boolean trim) {
+        if (trim) {
+            updateCompactionControlsTable(CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM, UpdateAction.PUT);
+        } else {
+            updateCompactionControlsTable(CompactorMetadataTables.INSTANT_TIGGER, UpdateAction.PUT);
         }
     }
-    public void updateCompactionControlsTable(TxnContext txn,
+
+    /**
+     * Update the CompactionControlsTable with given Key and Action.
+     * Return if compaction is STARTED at the time of the update.
+     *
+     * @param stringKey the control operation in StringKey format
+     * @param action the action to perform
+     * @return if compaction is STARTED at the time of the update
+     */
+    private boolean updateCompactionControlsTable(StringKey stringKey, UpdateAction action) {
+        log.info("Updating CompactionControlsTable with Key:{}, Action:{}", stringKey, action);
+
+        boolean isCompactionInProgress = false;
+        Table<StringKey, RpcCommon.TokenMsg, Message> compactionControlsTable =
+                compactorMetadataTables.getCompactionControlsTable();
+
+        for (int retry = 1; retry <= CompactorMetadataTables.MAX_RETRIES; retry++) {
+            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                updateCompactionControlsTable(txn, compactionControlsTable, stringKey, action);
+
+                CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
+                        CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                        CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
+                isCompactionInProgress = managerStatus != null && managerStatus.getStatus().equals(StatusType.STARTED);
+                log.info("During updateCompactionControlsTable, isCompactionInProgress? {}", isCompactionInProgress);
+
+                txn.commit();
+                break;
+            } catch (TransactionAbortedException tae) {
+                if (tae.getAbortCause() == AbortCause.CONFLICT) {
+                    log.error("Another transaction has updated the CompactionControlsTable while " +
+                            "updating with Key:{}, Action:{}. Abort retrying.", stringKey, action);
+                    throw tae;
+                }
+            } catch (Exception e) {
+                if (retry == CompactorMetadataTables.MAX_RETRIES) {
+                    log.error("Failed to update CompactionControlsTable with Key:{}, Action:{} after retry.",
+                            stringKey, action, e);
+                    throw e;
+                }
+                log.warn("Unable to write Key:{}, Action:{} to CompactionControlsTable. Retrying for {} / {}.",
+                        stringKey, action, retry, CompactorMetadataTables.MAX_RETRIES);
+
+                try {
+                    TimeUnit.SECONDS.sleep(CompactorMetadataTables.TABLE_UPDATE_RETRY_SLEEP_SECONDS);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    log.warn("updateCompactionControlsTable retry sleep got interrupted.");
+                }
+            }
+        }
+        log.info("Updated CompactionControlsTable with Key:{}, Action:{}", stringKey, action);
+        return isCompactionInProgress;
+    }
+
+    private void updateCompactionControlsTable(TxnContext txn,
                                               Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable,
                                               StringKey stringKey,
                                               UpdateAction action) {
