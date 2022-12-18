@@ -1,19 +1,13 @@
 package org.corfudb.compactor;
 
-import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CheckpointerBuilder;
-import org.corfudb.runtime.CompactorMetadataTables;
-import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.DistributedCheckpointer;
 import org.corfudb.runtime.DistributedCheckpointerHelper;
-import org.corfudb.runtime.DistributedCheckpointerHelper.UpdateAction;
 import org.corfudb.runtime.ServerTriggeredCheckpointer;
 import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.Table;
-import org.corfudb.runtime.proto.RpcCommon;
 
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -24,14 +18,11 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 public class CorfuStoreCompactorMain {
-
-    private final CompactorMetadataTables compactorMetadataTables;
     private final CorfuRuntime corfuRuntime;
     private final CorfuRuntime cpRuntime;
     private final CorfuStore corfuStore;
     private final CorfuStoreCompactorConfig config;
     private final DistributedCheckpointerHelper distributedCheckpointerHelper;
-    private final Table<StringKey, RpcCommon.TokenMsg, Message> compactionControlsTable;
     private static final int RETRY_CHECKPOINTING = 5;
     private static final int RETRY_CHECKPOINTING_SLEEP_SECOND = 10;
 
@@ -45,8 +36,6 @@ public class CorfuStoreCompactorMain {
                 config.getParams())).parseConfigurationString(config.getNodeLocator().toEndpointUrl()).connect();
         this.corfuStore = new CorfuStore(corfuRuntime);
 
-        this.compactorMetadataTables = new CompactorMetadataTables(corfuStore);
-        this.compactionControlsTable = compactorMetadataTables.getCompactionControlsTable();
         this.distributedCheckpointerHelper = new DistributedCheckpointerHelper(corfuStore);
     }
 
@@ -70,32 +59,31 @@ public class CorfuStoreCompactorMain {
         if (config.isFreezeCompaction() || config.isDisableCompaction()) {
             if (config.isDisableCompaction()) {
                 log.info("Disabling compaction...");
-                distributedCheckpointerHelper.updateCompactionControlsTable(compactionControlsTable, CompactorMetadataTables.DISABLE_COMPACTION, UpdateAction.PUT);
+                distributedCheckpointerHelper.disableCompaction();
             }
             if (config.isFreezeCompaction()) {
                 log.info("Freezing compaction...");
-                distributedCheckpointerHelper.updateCompactionControlsTable(compactionControlsTable, CompactorMetadataTables.FREEZE_TOKEN, UpdateAction.PUT);
+                distributedCheckpointerHelper.freezeCompaction();
             }
             return;
         }
 
         if (config.isUnfreezeCompaction()) {
             log.info("Unfreezing compaction...");
-            distributedCheckpointerHelper.updateCompactionControlsTable(compactionControlsTable, CompactorMetadataTables.FREEZE_TOKEN, UpdateAction.DELETE);
+            distributedCheckpointerHelper.unfreezeCompaction();
         }
         if (config.isEnableCompaction()) {
             log.info("Enabling compaction...");
-            distributedCheckpointerHelper.updateCompactionControlsTable(compactionControlsTable, CompactorMetadataTables.DISABLE_COMPACTION, UpdateAction.DELETE);
+            distributedCheckpointerHelper.enableCompaction();
         }
         if (config.isInstantTriggerCompaction()) {
             if (config.isTrim()) {
                 log.info("Enabling instant compaction trigger with trim...");
-                distributedCheckpointerHelper.updateCompactionControlsTable(compactionControlsTable,
-                        CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM, UpdateAction.PUT);
+                distributedCheckpointerHelper.instantTrigger(true);
+
             } else {
                 log.info("Enabling instant compactor trigger...");
-                distributedCheckpointerHelper.updateCompactionControlsTable(compactionControlsTable,
-                        CompactorMetadataTables.INSTANT_TIGGER, UpdateAction.PUT);
+                distributedCheckpointerHelper.instantTrigger(false);
             }
         }
         if (config.isStartCheckpointing()) {
@@ -109,7 +97,7 @@ public class CorfuStoreCompactorMain {
                 .cpRuntime(Optional.of(cpRuntime))
                 .persistedCacheRoot(config.getPersistedCacheRoot())
                 .isClient(false)
-                .build(), corfuStore, compactorMetadataTables);
+                .build(), corfuStore, distributedCheckpointerHelper.getCompactorMetadataTables());
         try {
             for (int i = 0; i < RETRY_CHECKPOINTING; i++) {
                 if (distributedCheckpointerHelper.hasCompactionStarted()) {

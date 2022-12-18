@@ -368,7 +368,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     }
 
     @Test
-    public void singleServerTest() {
+    public void singleServerTest() throws Exception {
         testSetup(logSizeLimitPercentageFull);
         SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);
 
@@ -390,7 +390,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     }
 
     @Test
-    public void multipleServerTest() {
+    public void multipleServerTest() throws Exception {
         testSetup(logSizeLimitPercentageFull);
 
         SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);
@@ -419,7 +419,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     }
 
     @Test
-    public void leaderFailureTest() {
+    public void leaderFailureTest() throws Exception {
         testSetup(logSizeLimitPercentageFull);
 
         SingletonResource<CorfuRuntime> runtimeSingletonResource0 = SingletonResource.withInitial(() -> runtime0);
@@ -460,7 +460,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     }
 
     @Test
-    public void nonLeaderFailureTest() {
+    public void nonLeaderFailureTest() throws Exception {
         testSetup(logSizeLimitPercentageFull);
 
         SingletonResource<CorfuRuntime> runtimeSingletonResource0 = SingletonResource.withInitial(() -> runtime0);
@@ -501,7 +501,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     }
 
     @Test
-    public void checkpointFailureTest() {
+    public void checkpointFailureTest() throws Exception {
         testSetup(logSizeLimitPercentageFull);
         SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);
 
@@ -538,7 +538,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     }
 
     @Test
-    public void runOrchestratorLeaderInitManagerStatusTest() {
+    public void runOrchestratorLeaderInitManagerStatusTest() throws Exception {
         testSetup(logSizeLimitPercentageFull);
         SingletonResource<CorfuRuntime> runtimeSingletonResource0 = SingletonResource.withInitial(() -> runtime0);
         CompactorService compactorService0 = new CompactorService(sc0, runtimeSingletonResource0, mockInvokeJvm0, new DynamicTriggerPolicy());
@@ -571,7 +571,7 @@ public class CompactorServiceTest extends AbstractViewTest {
     }
 
     @Test
-    public void quotaExceededTest() {
+    public void quotaExceededTest() throws Exception {
         testSetup(logSizeLimitPercentageLow);
         SingletonResource<CorfuRuntime> runtimeSingletonResource1 = SingletonResource.withInitial(() -> runtime0);
         CompactorService compactorService0 = new CompactorService(sc0, runtimeSingletonResource1, mockInvokeJvm0, dynamicTriggerPolicy0);
