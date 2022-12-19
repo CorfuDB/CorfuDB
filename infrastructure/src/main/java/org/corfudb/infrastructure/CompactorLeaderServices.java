@@ -145,8 +145,6 @@ public class CompactorLeaderServices {
             if (statusToChange == LivenessValidator.Status.FINISH) {
                 log.info("Invoking finishCompactionCycle");
                 finishCompactionCycle();
-                livenessValidator.clearLivenessMap();
-                livenessValidator.clearLivenessValidator();
             }
         }
 
@@ -247,6 +245,8 @@ public class CompactorLeaderServices {
                     tableNames.size(), finalStatus);
             MicroMeterUtils.time(Duration.ofMillis(totalTimeElapsed), "compaction.total.timer",
                     "nodeEndpoint", nodeEndpoint);
+            livenessValidator.clearLivenessMap();
+            livenessValidator.clearLivenessValidator();
         } catch (RuntimeException re) {
             //Do not retry here, the compactor service will trigger this method again
             // The txn should succeed otherwise the status is FAILED
