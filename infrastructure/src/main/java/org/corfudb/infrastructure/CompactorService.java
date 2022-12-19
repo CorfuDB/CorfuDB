@@ -42,8 +42,8 @@ public class CompactorService implements ManagementService {
 
     private Optional<CompactorLeaderServices> compactorLeaderServices = Optional.empty();
     private Optional<CorfuStore> corfuStore = Optional.empty();
+    private Optional<DistributedCheckpointerHelper> distributedCheckpointerHelper = Optional.empty();
     private TrimLog trimLog;
-    private DistributedCheckpointerHelper distributedCheckpointerHelper;
     private final Logger log;
     private static final Duration LIVENESS_TIMEOUT = Duration.ofMinutes(1);
 
@@ -81,7 +81,6 @@ public class CompactorService implements ManagementService {
 
         getCompactorLeaderServices();
         this.trimLog = new TrimLog(getCorfuRuntime(), getCorfuStore());
-        this.distributedCheckpointerHelper = new DistributedCheckpointerHelper(getCorfuStore());
 
         orchestratorThread.scheduleWithFixedDelay(
                 () -> LambdaUtils.runSansThrow(this::runOrchestrator),
@@ -114,6 +113,17 @@ public class CompactorService implements ManagementService {
         return this.corfuStore.get();
     }
 
+    private DistributedCheckpointerHelper getDistributedCheckpointerHelper() {
+        if (!distributedCheckpointerHelper.isPresent()) {
+            try {
+                distributedCheckpointerHelper = Optional.of(new DistributedCheckpointerHelper(getCorfuStore()));
+            } catch (Exception e) {
+                log.error("Failed to obtain a DistributedCheckpointerHelper. Will retry on next attempt. Exception: ", e);
+            }
+        }
+        return distributedCheckpointerHelper.get();
+    }
+
     /**
      * Invokes the CorfuStoreCompactor jvm based on the status of CompactionManager
      * Additionally, If the current node is the leader,
@@ -142,7 +152,7 @@ public class CompactorService implements ManagementService {
             try {
                 if (isLeader) {
                     if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED) {
-                        if (distributedCheckpointerHelper.isCompactionDisabled()) {
+                        if (getDistributedCheckpointerHelper().isCompactionDisabled()) {
                             log.info("Compaction has been disabled. Force finish compaction cycle as it already started");
                             getCompactorLeaderServices().finishCompactionCycle();
                         } else {
