@@ -140,7 +140,7 @@ public class DistributedCheckpointerHelper {
         return isCompactionInProgress;
     }
 
-    private void updateCompactionControlsTable(TxnContext txn,
+    public void updateCompactionControlsTable(TxnContext txn,
                                               Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable,
                                               StringKey stringKey,
                                               UpdateAction action) {
