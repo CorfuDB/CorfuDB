@@ -5,15 +5,15 @@ USAGE:
 1. To trigger compactor instantly without trimming at the end of the cycle
 /usr/share/corfu/scripts/compactor_runner.py --port <port> --compactorConfig /usr/share/corfu/conf/corfu-compactor-config.yml --instantTriggerCompaction=True
 2. To trigger compactor instantly with trimming at the end of the cycle
- /usr/share/corfu/scripts/compactor_runner.py--port <port> --compactorConfig /usr/share/corfu/conf/corfu-compactor-config.yml --instantTriggerCompaction=True --trimAfterCheckpoint=True
+/usr/share/corfu/scripts/compactor_runner.py --port <port> --compactorConfig /usr/share/corfu/conf/corfu-compactor-config.yml --instantTriggerCompaction=True --trimAfterCheckpoint=True
 3. To freeze compactor (This stops running compactor for 2 hrs from the time of freezing)
-/usr/share/corfu/scripts/compactor_runner.py--port <port> --compactorConfig /usr/share/corfu/conf/corfu-compactor-config.yml--freezeCompaction=True
+/usr/share/corfu/scripts/compactor_runner.py --port <port> --compactorConfig /usr/share/corfu/conf/corfu-compactor-config.yml --freezeCompaction=True
 4. To unfreeze compactor
-/usr/share/corfu/scripts/compactor_runner.py--port <port> --compactorConfig /usr/share/corfu/conf/corfu-compactor-config.yml--unfreezeCompaction=True
+/usr/share/corfu/scripts/compactor_runner.py --port <port> --compactorConfig /usr/share/corfu/conf/corfu-compactor-config.yml --unfreezeCompaction=True
 5. To disable compactor (This stops running compactor until it is enabled again)
-/usr/share/corfu/scripts/compactor_runner.py--port <port> --compactorConfig /usr/share/corfu/conf/corfu-compactor-config.yml--disableCompaction=True
+/usr/share/corfu/scripts/compactor_runner.py --port <port> --compactorConfig /usr/share/corfu/conf/corfu-compactor-config.yml --disableCompaction=True
 6. To enable compactor
-/usr/share/corfu/scripts/compactor_runner.py--port <port> --compactorConfig /usr/share/corfu/conf/corfu-compactor-config.yml--enableCompaction=True
+/usr/share/corfu/scripts/compactor_runner.py --port <port> --compactorConfig /usr/share/corfu/conf/corfu-compactor-config.yml --enableCompaction=True
 """
 
 from __future__ import absolute_import, print_function
@@ -32,6 +32,7 @@ import yaml
 CORFU_COMPACTOR_CLASS_NAME = "org.corfudb.compactor.CorfuStoreCompactorMain"
 COMPACTOR_BULK_READ_SIZE = 50
 COMPACTOR_JVM_XMX = 1024
+FORCE_DISABLE_CHECKPOINTING = "FORCE_DISABLE_CHECKPOINTING"
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
@@ -44,7 +45,6 @@ class Config(object):
         """
         self.network_interface = None
         self.corfu_port = None
-        self.diskPath = None
         self.batchSize = None
         self.configPath = None
         self.startCheckpointing = None
@@ -61,11 +61,13 @@ class CommandBuilder(object):
     def __init__(self, config):
         self._config = config
 
-    def derive_xmx_value(self):
+    def derive_xmx_value(self, diskBacked):
         try:
             mem_bytes = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES')
             mem_mb = int(mem_bytes / (1024. ** 2))
             xmx = max(512, int(mem_mb * 0.04))
+            if diskBacked is True:
+                xmx = max(self._config.xmx_min_in_mb, int(mem_mb * float(self._config.xmx_perc)/100))
             return xmx
         except Exception as ex:
             return COMPACTOR_JVM_XMX
@@ -118,7 +120,10 @@ class CommandBuilder(object):
             fcntl.ioctl(sock.fileno(), 0x8915, struct.pack("256s", bytes(ifname[:15], 'utf-8')))[20:24])
 
     def get_corfu_compactor_cmd(self, compactor_config):
-        xmx = self.derive_xmx_value()
+        diskBacked = False
+        if "DiskBacked" in compactor_config["ConfigFiles"] and compactor_config["ConfigFiles"]['DiskBacked'] is True:
+            diskBacked = True
+        xmx = self.derive_xmx_value(diskBacked)
 
         cmd = []
         cmd.append("MALLOC_TRIM_THRESHOLD_=1310720")
@@ -147,7 +152,14 @@ class CommandBuilder(object):
         cmd.append("--truststore=" + Security["Truststore"])
         cmd.append("--truststore_password=" + Security["TruststorePassword"])
 
-        if self._config.startCheckpointing:
+        if diskBacked is True:
+            cmd.append("--persistedCacheRoot=" + compactor_config["ConfigFiles"]["DiskPath"])
+
+        # If the env var FORCE_DISABLE_CHECKPOINTING is set to True, do not run checkpointing.
+        # This is used by Upgrade dry-run tool to disable compaction on one node.
+        force_disable_checkpointing = (os.environ.get(FORCE_DISABLE_CHECKPOINTING, "False") == "True")
+
+        if not force_disable_checkpointing and self._config.startCheckpointing:
             cmd.append("--startCheckpointing=true")
         if self._config.instantTriggerCompaction:
             cmd.append("--instantTriggerCompaction=true")
@@ -186,8 +198,8 @@ class Wizard(object):
         self._run_corfu_compactor()
 
     def _print_and_log(self, msg):
-        print(msg)
         logger.info(msg)
+        print(msg)
 
     # Disk space: max 50MB. keep 1000 files.
     # Mem space: max 50MB, most of time 50KB. CORFU_GC_MAX_INDEX 1000 files, each file is 50KB.
@@ -224,8 +236,8 @@ class Wizard(object):
             compactor_config = yaml.load(config)
         corfu_paths = compactor_config["CorfuPaths"]
         logging.basicConfig(filename=corfu_paths["CompactorLogfile"],
-                                    format='%(asctime)s.%(msecs)03dZ %(levelname)5s Runner - %(message)s',
-                                    datefmt='%Y-%m-%dT%H:%M:%S')
+                    format='%(asctime)s.%(msecs)03dZ %(levelname)5s Runner - %(message)s',
+                    datefmt='%Y-%m-%dT%H:%M:%S')
         # Copy mem jvm gc log files to disk
         try:
             self._rsync_log(corfu_paths["CorfuMemLogPrefix"], corfu_paths["CorfuDiskLogDir"])
@@ -236,7 +248,7 @@ class Wizard(object):
         if self._config.upgrade:
             self._print_and_log("Appliance upgrading, skipping grep")
         else:
-            grep_running_tool = "ps aux | grep '/usr/share/corfu/scripts/compactor_runner.py\|corfu_compactor_upgrade_runner.py' | grep -v 'grep\|CorfuServer' | grep " + self._config.corfu_port
+            grep_running_tool = "ps aux | grep 'python3 /usr/share/corfu/scripts/compactor_runner.py\|corfu_compactor_upgrade_runner.py' | grep -v 'grep\|CorfuServer' | grep " + self._config.corfu_port
 
             try:
                 grep_tool_result = check_output(grep_running_tool, shell=True).decode()
@@ -282,8 +294,6 @@ class Wizard(object):
         config.corfu_port = args.port
         if args.hostname:
             config.hostname = args.hostname
-        if args.diskPath:
-            config.diskPath = args.diskPath
         config.configPath = args.compactorConfig
         config.instantTriggerCompaction = args.instantTriggerCompaction
         config.trim = args.trimAfterCheckpoint
@@ -314,11 +324,6 @@ if __name__ == "__main__":
                                  "Default value is 9000.",
                             required=False,
                             default="9000")
-    arg_parser.add_argument("--diskPath", type=str,
-                            help="Temporary path to materialize a table"
-                                 "Default value is /tmp",
-                            required=False,
-                            default="/tmp/diskonlycorfutable/")
     arg_parser.add_argument("--batchSize", type=str,
                             help="Batch size for loadTable",
                             required=False)
