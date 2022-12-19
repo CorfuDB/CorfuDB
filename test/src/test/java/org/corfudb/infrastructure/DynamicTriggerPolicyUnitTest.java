@@ -42,7 +42,7 @@ public class DynamicTriggerPolicyUnitTest {
     }
 
     @Test
-    public void testShouldTrigger() {
+    public void testShouldTrigger() throws Exception {
         //this makes shouldForceTrigger and isCheckpointFrozen to return false
         when(corfuStoreEntry.getPayload()).thenReturn(null);
 
@@ -58,7 +58,7 @@ public class DynamicTriggerPolicyUnitTest {
     }
 
     @Test
-    public void testShouldForceTrigger() {
+    public void testShouldForceTrigger() throws Exception {
         when((RpcCommon.TokenMsg) corfuStoreEntry.getPayload()).thenReturn(null)
                 .thenReturn(null)
                 .thenReturn(RpcCommon.TokenMsg.getDefaultInstance());
@@ -66,20 +66,20 @@ public class DynamicTriggerPolicyUnitTest {
     }
 
     @Test
-    public void testDisableCompaction() {
+    public void testDisableCompaction() throws Exception {
         when((RpcCommon.TokenMsg) corfuStoreEntry.getPayload()).thenReturn(RpcCommon.TokenMsg.getDefaultInstance()).thenReturn(null);
         assert !dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore);
     }
 
     @Test
-    public void testCheckpointFrozen() {
+    public void testCheckpointFrozen() throws Exception {
         when((RpcCommon.TokenMsg) corfuStoreEntry.getPayload()).thenReturn(null).thenReturn(RpcCommon.TokenMsg.newBuilder()
                 .setSequence(System.currentTimeMillis()).build());
         assert !dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore);
     }
 
     @Test
-    public void testCheckpointFrozenReturnFalse() {
+    public void testCheckpointFrozenReturnFalse() throws Exception {
         final long patience = 3 * 60 * 60 * 1000; //freezeToken found but expired
         when((RpcCommon.TokenMsg) corfuStoreEntry.getPayload())
                 .thenReturn(null)
