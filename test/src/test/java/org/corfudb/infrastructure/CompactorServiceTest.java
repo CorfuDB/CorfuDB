@@ -323,7 +323,6 @@ public class CompactorServiceTest extends AbstractViewTest {
             if (managerStatus != null && (managerStatus.getStatus() == StatusType.COMPLETED
                     || managerStatus.getStatus() == StatusType.FAILED)) {
                 log.info("done pollForFinishCp: {}", managerStatus.getStatus());
-                System.out.println("done pollForFinishCp: " + managerStatus.getStatus());
                 return true;
             }
         }
@@ -513,6 +512,15 @@ public class CompactorServiceTest extends AbstractViewTest {
         when(dynamicTriggerPolicy0.shouldTrigger(Matchers.anyLong(), Matchers.any())).thenReturn(true).thenReturn(false);
         compactorService1.start(Duration.ofMillis(COMPACTOR_SERVICE_INTERVAL));
 
+        Table<StringKey, RpcCommon.TokenMsg, Message> checkpointTable = openCompactionControlsTable();
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            txn.putRecord(checkpointTable,
+                    CompactorMetadataTables.INSTANT_TIGGER,
+                    RpcCommon.TokenMsg.newBuilder().setSequence(System.currentTimeMillis()).build(),
+                    null);
+            txn.commit();
+        }
+
         try {
             TimeUnit.MILLISECONDS.sleep(LIVENESS_TIMEOUT.toMillis() / 2);
             Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointTable = openActiveCheckpointsTable();
@@ -539,6 +547,7 @@ public class CompactorServiceTest extends AbstractViewTest {
 
         assert verifyManagerStatus(StatusType.FAILED);
         assert verifyCheckpointStatusTable(StatusType.COMPLETED, 1);
+        assert verifyCompactionControlsTable(CompactorMetadataTables.INSTANT_TIGGER) == 0;
     }
 
     @Test
@@ -615,7 +624,7 @@ public class CompactorServiceTest extends AbstractViewTest {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             txn.putRecord(checkpointTable,
                     CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM,
-                    RpcCommon.TokenMsg.getDefaultInstance(),
+                    RpcCommon.TokenMsg.newBuilder().setSequence(System.currentTimeMillis()).build(),
                     null);
             txn.commit();
         }
