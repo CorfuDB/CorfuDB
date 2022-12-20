@@ -323,7 +323,6 @@ public class CompactorServiceTest extends AbstractViewTest {
             if (managerStatus != null && (managerStatus.getStatus() == StatusType.COMPLETED
                     || managerStatus.getStatus() == StatusType.FAILED)) {
                 log.info("done pollForFinishCp: {}", managerStatus.getStatus());
-                System.out.println("done pollForFinishCp: " + managerStatus.getStatus());
                 return true;
             }
         }
