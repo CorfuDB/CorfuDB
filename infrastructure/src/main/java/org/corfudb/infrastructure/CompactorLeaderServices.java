@@ -151,6 +151,8 @@ public class CompactorLeaderServices {
         for (TableName table : activeCheckpointTables) {
             if (!livenessValidator.isTableCheckpointActive(table, Duration.ofMillis(currentTime)) &&
                     checkFailureAndFinishCompactionCycle(table)) {
+                log.info("Invoking finishCompactionCycle");
+                finishCompactionCycle();
                 break;
             }
         }
@@ -165,21 +167,9 @@ public class CompactorLeaderServices {
                 txn.putRecord(compactorMetadataTables.getCheckpointingStatusTable(), table,
                         buildCheckpointStatus(StatusType.FAILED, tableStatus.getCycleCount()), null);
                 txn.delete(CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME, table);
-
-                CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
-                        CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
-                        CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
-                txn.putRecord(compactorMetadataTables.getCompactionManagerTable(), CompactorMetadataTables.COMPACTION_MANAGER_KEY,
-                        buildCheckpointStatus(
-                                StatusType.FAILED,
-                                managerStatus.getTableSize(),
-                                System.currentTimeMillis() - managerStatus.getTimeTaken(),
-                                managerStatus.getCycleCount()),
-                        null);
                 txn.commit();
-                log.warn("Finished compaction cycle. FAILED due to no checkpoint activity of table: {}${}",
+                log.warn("Marked table {}${} FAILED due to no checkpoint activity",
                         table.getNamespace(), table.getTableName());
-                livenessValidator.clearLivenessMap();
                 return true;
             } else {
                 txn.delete(CompactorMetadataTables.ACTIVE_CHECKPOINTS_TABLE_NAME, table);
