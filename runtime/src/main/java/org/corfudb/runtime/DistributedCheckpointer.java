@@ -76,7 +76,7 @@ public abstract class DistributedCheckpointer {
                 break;
             } catch (TransactionAbortedException e) {
                 if (e.getAbortCause() == AbortCause.CONFLICT) {
-                    log.info("My opened table {}${} is being checkpointed by someone else",
+                    log.info("Table {}${} is being checkpointed by someone else",
                             tableName.getNamespace(), tableName.getTableName());
                     return false;
                 }
