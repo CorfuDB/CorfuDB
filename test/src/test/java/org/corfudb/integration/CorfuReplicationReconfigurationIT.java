@@ -8,13 +8,17 @@ import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckRe
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
+import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
@@ -87,6 +91,12 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         } else {
             this.pluginConfigFilePath = nettyConfig;
         }
+    }
+
+
+    @Test
+    public void testStopSnapshotSyncTransferRestart() throws Exception {
+
     }
 
     /**
@@ -273,39 +283,55 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         final int numWritesSmaller = 1000;
 
         try {
-            log.debug("Setup active and standby Corfu's");
+            log.info("Setup active and standby Corfu's");
             setupActiveAndStandbyCorfu();
 
-            log.debug("Open map on active and standby");
+            log.info("Open map on active and standby");
             openMaps(MAP_COUNT, false);
 
             // Subscribe to standby map 'Table002' (standbyIndex) to stop Standby LR as soon as updates are received,
             // forcing snapshot sync apply to be interrupted and resumed after LR standby is restarted
-            subscribe(TABLE_PREFIX + standbyIndex);
+            // subscribe(TABLE_PREFIX + standbyIndex);
 
-            log.debug("Write data to active CorfuDB before LR is started ...");
+            // TODO(Anny): subscribe to signal table, to know that 10s sleep is starting time to restart
+            Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapSignal = corfuStoreStandby.openTable(
+                        "LR-Test",
+                        "signalTestTable",
+                    Sample.StringKey.class,
+                    Sample.IntValueTag.class,
+                    Sample.Metadata.class,
+                    TableOptions.fromProtoSchema(Sample.IntValueTag.class));
+
+            StandbyMapListener configStreamListener = new StandbyMapListener(this);
+            corfuStoreStandby.subscribeListener(configStreamListener, NAMESPACE, "test");
+
+            log.info("Write data to active CorfuDB before LR is started ...");
             // Add Data for Snapshot Sync
             writeToActive(0, numWritesSmaller);
 
             // Confirm data does exist on Active Cluster
             for (Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapActive.values()) {
+                log.info("Data exists for {}", map.getFullyQualifiedTableName());
                 assertThat(map.count()).isEqualTo(numWritesSmaller);
             }
 
             // Confirm data does not exist on Standby Cluster
             for (Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapStandby.values()) {
+                log.info("Data does not exist for {}", map.getFullyQualifiedTableName());
                 assertThat(map.count()).isEqualTo(0);
             }
 
+            log.info("> Start LR");
             startLogReplicatorServers();
+            log.info("> LR started");
 
-            log.debug("Wait ... Snapshot log replication in progress ...");
+            log.info("Wait ... Snapshot log replication in progress ...");
             verifyStandbyData(numWritesSmaller);
 
             // Add Delta's for Log Entry Sync
             writeToActive(numWritesSmaller, numWritesSmaller / 2);
 
-            log.debug("Wait ... Delta log replication in progress ...");
+            log.info("Wait ... Delta log replication in progress ...");
             verifyStandbyData((numWritesSmaller + (numWritesSmaller / 2)));
         } finally {
             executorService.shutdownNow();
@@ -395,10 +421,8 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
     private void subscribe(String mapName) {
         // Subscribe to mapName and upon changes stop standby LR
-        CorfuStore corfuStore = new CorfuStore(standbyRuntime);
-
         try {
-            corfuStore.openTable(
+            corfuStoreStandby.openTable(
                     NAMESPACE, mapName,
                     Sample.StringKey.class, Sample.IntValueTag.class, Sample.Metadata.class,
                     TableOptions.fromProtoSchema(Sample.IntValueTag.class)
@@ -407,7 +431,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             throw new RuntimeException(e);
         }
         StandbyMapListener configStreamListener = new StandbyMapListener(this);
-        corfuStore.subscribeListener(configStreamListener, NAMESPACE, "test");
+        corfuStoreStandby.subscribeListener(configStreamListener, NAMESPACE, "test");
     }
 
     /**
@@ -427,18 +451,32 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
         @Override
         public synchronized void onNext(CorfuStreamEntries results) {
-            log.info("StandbyMapListener:: onNext {} with entry size {}", results, results.getEntries().size());
+            try {
+                log.info("StandbyMapListener:: onNext with entry size {}", results.getEntries().size());
 
-            if (!interruptedSnapshotSyncApply) {
+                for (Map.Entry<TableSchema, List<CorfuStreamEntry>> e : results.getEntries().entrySet()) {
+                    log.info("Received for table {}, value = {}", e.getKey().getTableName(), e.getValue().get(0));
 
-                interruptedSnapshotSyncApply = true;
+                    CorfuStoreEntry<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> entry = e.getValue().get(0);
 
-                // Stop Log Replication Server so Snapshot Sync Apply is interrupted in the middle and restart
-                log.debug("StandbyMapListener:: Stop Standby LR while in snapshot sync apply phase...");
-                this.abstractIT.stopStandbyLogReplicator();
+                    if (entry.getKey() != null && entry.getKey().getKey().equals("Signal")) {
+                        try {
+                            log.info("Signal, sleep will start RECEIVED");
 
-                log.debug("StandbyMapListener:: Restart Standby LR...");
-                this.abstractIT.startStandbyLogReplicator();
+                            // Stop Log Replication Server so Snapshot Sync Apply is interrupted in the middle and restart
+                            log.info("StandbyMapListener:: Stop Standby LR while in snapshot sync apply phase...");
+                            this.abstractIT.stopStandbyLogReplicator();
+
+                            log.info("StandbyMapListener:: Restart Standby LR...");
+                            this.abstractIT.startStandbyLogReplicator();
+                        } catch (Exception te) {
+                            log.error("oh oh", te);
+                        }
+                    }
+                }
+
+            } catch (Exception e) {
+                log.error("Exception :: ", e);
             }
         }
 
@@ -619,16 +657,40 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     }
 
     public void verifyStandbyData(int expectedConsecutiveWrites) {
-        for (Map.Entry<String, Table<Sample.StringKey, ValueFieldTagOne, Sample.Metadata>> entry : mapNameToMapStandbyTypeA.entrySet()) {
 
-            log.debug("Verify Data on Standby's Table {}", entry.getKey());
+        for (Map.Entry<String, Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata>> entry : mapNameToMapStandby.entrySet()) {
+
+            log.info("Verify Data on Standby's Table {}", entry.getKey());
 
             // Wait until data is fully replicated
             while (entry.getValue().count() != expectedConsecutiveWrites) {
                 // Block until expected number of entries is reached
             }
 
-            log.debug("Number updates on Standby Map {} :: {} ", entry.getKey(), expectedConsecutiveWrites);
+            log.info("Number updates on Standby Map {} :: {} ", entry.getKey(), expectedConsecutiveWrites);
+
+            // Verify data is present in Standby Site
+            assertThat(entry.getValue().count()).isEqualTo(expectedConsecutiveWrites);
+
+            for (int i = 0; i < (expectedConsecutiveWrites); i++) {
+                try (TxnContext tx = corfuStoreStandby.txn(entry.getValue().getNamespace())) {
+                    assertThat(tx.getRecord(entry.getValue(),
+                            Sample.StringKey.newBuilder().setKey(String.valueOf(i)).build()).getPayload()).isNotNull();
+                    tx.commit();
+                }
+            }
+        }
+
+        for (Map.Entry<String, Table<Sample.StringKey, ValueFieldTagOne, Sample.Metadata>> entry : mapNameToMapStandbyTypeA.entrySet()) {
+
+            log.info("Verify Data on Standby's Table {}", entry.getKey());
+
+            // Wait until data is fully replicated
+            while (entry.getValue().count() != expectedConsecutiveWrites) {
+                // Block until expected number of entries is reached
+            }
+
+            log.info("Number updates on Standby Map {} :: {} ", entry.getKey(), expectedConsecutiveWrites);
 
             // Verify data is present in Standby Site
             assertThat(entry.getValue().count()).isEqualTo(expectedConsecutiveWrites);
@@ -644,14 +706,14 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
         for (Map.Entry<String, Table<Sample.StringKey, ValueFieldTagOneAndTwo, Sample.Metadata>> entry : mapNameToMapStandbyTypeB.entrySet()) {
 
-            log.debug("Verify Data on Standby's Table {}", entry.getKey());
+            log.info("Verify Data on Standby's Table {}", entry.getKey());
 
             // Wait until data is fully replicated
             while (entry.getValue().count() != expectedConsecutiveWrites) {
                 // Block until expected number of entries is reached
             }
 
-            log.debug("Number updates on Standby Map {} :: {} ", entry.getKey(), expectedConsecutiveWrites);
+            log.info("Number updates on Standby Map {} :: {} ", entry.getKey(), expectedConsecutiveWrites);
 
             // Verify data is present in Standby Site
             assertThat(entry.getValue().count()).isEqualTo(expectedConsecutiveWrites);

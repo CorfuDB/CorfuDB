@@ -360,7 +360,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
      * Read from shadowStream and append/apply to the actual stream
      */
     public void applyShadowStreams() {
-        log.debug("Apply Shadow Streams, total={}", replicatedStreamIds.size());
+        log.info("Apply Shadow Streams, total={}", replicatedStreamIds.size());
         long snapshot = rt.getAddressSpaceView().getLogTail();
 
         // Registry table needs to be applied first, as there could be tables that haven't been opened in Sink side,

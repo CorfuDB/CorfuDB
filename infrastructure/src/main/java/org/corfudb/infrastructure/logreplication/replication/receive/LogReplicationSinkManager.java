@@ -11,14 +11,22 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ISnapshotSyncPlugin;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
+import org.corfudb.infrastructure.logreplication.proto.Sample;
+import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.util.Sleep;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
@@ -29,6 +37,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.time.Duration;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -450,8 +459,35 @@ public class LogReplicationSinkManager implements DataReceiver {
                 snapshotWriter.apply(entry);
                 break;
             case SNAPSHOT_END:
+                log.info("[Anny] :: SNAPSHOT END marker received");
                 if (snapshotWriter.getPhase() != StreamsSnapshotWriter.Phase.APPLY_PHASE) {
                     completeSnapshotTransfer(entry);
+                    // TODO(Anny): just for testing purposes
+                    CorfuStore tmp = new CorfuStore(runtime);
+                    Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> mapSignal;
+                    try {
+                        mapSignal = tmp.openTable(
+                                "LR-Test",
+                                "signalTestTable",
+                                Sample.StringKey.class,
+                                Sample.IntValueTag.class,
+                                Sample.Metadata.class,
+                                TableOptions.fromProtoSchema(Sample.IntValueTag.class));
+                        try(TxnContext txn = tmp.txn("LR-Test")) {
+                            Sample.StringKey key = Sample.StringKey.newBuilder()
+                                    .setKey("Signal")
+                                    .build();
+                            Sample.IntValueTag value = Sample.IntValueTag.newBuilder()
+                                    .setValue(1)
+                                    .build();
+                            txn.putRecord(mapSignal, key, value, null);
+                            txn.commit();
+                            log.info("Signal that sleep will start is SET!!!!!");
+                        }
+                    } catch (Exception e) {
+                        log.error("ERROR!!!!!!!!!");
+                    }
+                    Sleep.sleepUninterruptibly(Duration.ofSeconds(10));
                     startSnapshotApplyAsync(entry);
                 }
                 break;
@@ -495,7 +531,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      * @return true if msg was processed else false.
      */
     public boolean processMessage(LogReplication.LogReplicationEntryMsg message) {
-        log.trace("Received dataMessage by Sink Manager. Total [{}]", rxMessageCounter);
+        log.info("Received dataMessage by Sink Manager. Total [{}]", rxMessageCounter);
 
         switch (rxState) {
             case LOG_ENTRY_SYNC:
