@@ -419,10 +419,8 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
     }
 
     @After
-    public void tearDown() {
+    public void tearDown() throws Exception {
         unsubscribeListeners();
-        shutdownCorfuServers();
-        shutdownLogReplicationServers();
 
         for (CorfuRuntime runtime : sourceRuntimes) {
             runtime.shutdown();
@@ -430,25 +428,28 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
         for (CorfuRuntime runtime : sinkRuntimes) {
             runtime.shutdown();
         }
+
+        shutdownLogReplicationServers();
+        shutdownCorfuServers();
     }
 
-    private void shutdownCorfuServers() {
+    private void shutdownCorfuServers() throws Exception {
         for (Process process : sourceCorfuProcesses) {
-            process.destroy();
+            shutdownCorfuServer(process);
         }
 
         for (Process process : sinkCorfuProcesses) {
-            process.destroy();
+            shutdownCorfuServer(process);
         }
     }
 
-    private void shutdownLogReplicationServers() {
+    private void shutdownLogReplicationServers() throws Exception {
         for (Process lrProcess : sourceReplicationServers) {
-            lrProcess.destroy();
+            shutdownCorfuServer(lrProcess);
         }
 
         for (Process lrProcess : sinkReplicationServers) {
-            lrProcess.destroy();
+            shutdownCorfuServer(lrProcess);
         }
     }
 
