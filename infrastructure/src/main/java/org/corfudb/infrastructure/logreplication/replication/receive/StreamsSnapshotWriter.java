@@ -304,17 +304,24 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         // as these streams will get trimmed and 'clear' will be a 'data loss'.
         if (MERGE_ONLY_STREAMS.contains(streamId)) {
             log.debug("Do not clear stream={} (merge stream)", streamId);
-        } else if (!replicatedStreamIds.contains(streamId)) {
-            log.trace("No data was written to stream {} on source or sink." +
-                "  Do not clear.", streamId);
-            return;
-        } else {
-            smrEntries.add(CLEAR_ENTRY);
         }
 
+        boolean shouldAddClearRecord = !MERGE_ONLY_STREAMS.contains(streamId);
         while (iterator.hasNext()) {
+            // append a clear record at the beginning of every non-merge-only streams
+            if(shouldAddClearRecord) {
+                smrEntries.add(CLEAR_ENTRY);
+                shouldAddClearRecord = false;
+            }
+
             OpaqueEntry opaqueEntry = iterator.next();
             smrEntries.addAll(opaqueEntry.getEntries().get(shadowStreamId));
+        }
+
+        // if clear record has not been added by now,indicates that shadow stream is empty.
+        if (shouldAddClearRecord) {
+            log.trace("No data was written to stream {} on source or sink. Do not clear.", streamId);
+            return;
         }
 
         if (streamId.equals(REGISTRY_TABLE_ID)) {
@@ -360,7 +367,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
      * Read from shadowStream and append/apply to the actual stream
      */
     public void applyShadowStreams() {
-        log.debug("Apply Shadow Streams, total={}", replicatedStreamIds.size());
+        log.debug("Apply Shadow Streams");
         long snapshot = rt.getAddressSpaceView().getLogTail();
 
         // Registry table needs to be applied first, as there could be tables that haven't been opened in Sink side,
