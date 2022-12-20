@@ -108,9 +108,4 @@ public class LogReplicationConfig {
         }
         this.maxDataSizePerMsg = maxMsgSize * DATA_FRACTION_PER_MSG / 100;
     }
-
-    // An enum of all supported Replication Models
-    public static enum ReplicationModel {
-        SINGLE_SOURCE_SINK
-    }
 }
