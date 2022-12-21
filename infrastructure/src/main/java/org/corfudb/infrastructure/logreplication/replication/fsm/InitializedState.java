@@ -42,7 +42,7 @@ public class InitializedState implements LogReplicationState {
                 log.info("Snapshot Sync transfer completed. Wait for snapshot apply to complete.");
                 WaitSnapshotApplyState waitSnapshotApplyState = (WaitSnapshotApplyState)fsm.getStates().get(LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
                 waitSnapshotApplyState.setTransitionEventId(event.getEventId());
-                waitSnapshotApplyState.setBaseSnapshotTimestamp(fsm.getBaseSnapshot());
+                waitSnapshotApplyState.setBaseSnapshotTimestamp(event.getMetadata().getLastTransferredBaseSnapshot());
                 fsm.setBaseSnapshot(event.getMetadata().getLastTransferredBaseSnapshot());
                 fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
                 return waitSnapshotApplyState;
