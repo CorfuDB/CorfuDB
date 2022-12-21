@@ -58,9 +58,9 @@ public class LogReplicationClientTest extends AbstractIT {
     public void testRegisterReplicationClient() throws Exception {
         final String namespace = "CorfuSystem";
         final String tableName = "LogReplicationRegistrationTable";
-        final String client_name = "client";
+        final String clientName = "client";
 
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
         CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
@@ -72,7 +72,7 @@ public class LogReplicationClientTest extends AbstractIT {
                 SampleSchema.ManagedResources.class,
                 TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
 
-        LogReplicationClient client = new LogReplicationClient(runtime, client_name);
+        LogReplicationClient client = new LogReplicationClient(runtime, clientName);
 
         Boolean canAddNewClient = client.registerReplicationClient();
         Boolean tryAddingExistingClient = client.registerReplicationClient();
@@ -90,9 +90,9 @@ public class LogReplicationClientTest extends AbstractIT {
     public void testAddDestination() throws Exception {
         final String namespace = "CorfuSystem";
         final String tableName = "LogReplicationSourceMetadataTable";
-        final String client_name = "client";
+        final String clientName = "client";
 
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
         CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
@@ -104,7 +104,7 @@ public class LogReplicationClientTest extends AbstractIT {
                 SampleSchema.ManagedResources.class,
                 TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
 
-        LogReplicationClient client = new LogReplicationClient(runtime, client_name);
+        LogReplicationClient client = new LogReplicationClient(runtime, clientName);
 
         Boolean canAdd1 = client.addDestination("DOMAIN", "DESTINATION1");
         Boolean canAdd2 = client.addDestination("DOMAIN", "DESTINATION2");
@@ -124,9 +124,9 @@ public class LogReplicationClientTest extends AbstractIT {
     public void testAddListOfDestination() throws Exception {
         final String namespace = "CorfuSystem";
         final String tableName = "LogReplicationSourceMetadataTable";
-        final String client_name = "client";
+        final String clientName = "client";
 
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
         CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
@@ -138,7 +138,7 @@ public class LogReplicationClientTest extends AbstractIT {
                 SampleSchema.ManagedResources.class,
                 TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
 
-        LogReplicationClient client = new LogReplicationClient(runtime, client_name);
+        LogReplicationClient client = new LogReplicationClient(runtime, clientName);
 
         List<String> destinationsToAdd = Arrays.asList("DESTINATION1", "DESTINATION1", "DESTINATION2", "DESTINATION3");
         Boolean canAdd = client.addDestination("DOMAIN", destinationsToAdd);
@@ -159,9 +159,9 @@ public class LogReplicationClientTest extends AbstractIT {
     public void removeDestination() throws Exception {
         final String namespace = "CorfuSystem";
         final String tableName = "LogReplicationSourceMetadataTable";
-        final String client_name = "client";
+        final String clientName = "client";
 
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
         CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
@@ -173,7 +173,7 @@ public class LogReplicationClientTest extends AbstractIT {
                 SampleSchema.ManagedResources.class,
                 TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
 
-        LogReplicationClient client = new LogReplicationClient(runtime, client_name);
+        LogReplicationClient client = new LogReplicationClient(runtime, clientName);
 
         Boolean canRemoveNonexistent = client.removeDestination("DOMAIN", "DESTINATION");
         Boolean canAdd = client.addDestination("DOMAIN", "DESTINATION");

@@ -29,7 +29,6 @@ public class LogReplicationClient {
 
     private static final int SYNC_THRESHOLD = 120;
 
-    private final CorfuRuntime runtime;
     private final CorfuStore corfuStore;
 
     private final String clientName;
@@ -38,7 +37,6 @@ public class LogReplicationClient {
     private final Logger log;
 
     public LogReplicationClient(CorfuRuntime runtime, String clientName) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
-        this.runtime = runtime;
         this.corfuStore = new CorfuStore(runtime);
         this.clientName = clientName;
 
@@ -74,6 +72,7 @@ public class LogReplicationClient {
                         txn.putRecord(table, clientKey, clientInfo, null);
                         txn.commit();
                     }
+
                     return txn.isExists(REGISTRATION_TABLE_NAME, clientKey);
                 }
                 catch (Exception e) {
@@ -193,7 +192,7 @@ public class LogReplicationClient {
 
                     if (txn.isExists(LR_SOURCE_METADATA_TABLE_NAME, clientInfoKey)) {
                         SinksInfoVal clientDestinationIds = txn.getRecord(table, clientInfoKey).getPayload();
-                        List<String> clientDestinationIdsList = new ArrayList<>((clientDestinationIds.getDestinationIdsList()));
+                        List<String> clientDestinationIdsList = new ArrayList<>(clientDestinationIds.getDestinationIdsList());
 
                         if (clientDestinationIdsList.remove(destination)) {
                             clientDestinationIds = clientDestinationIds.toBuilder()
