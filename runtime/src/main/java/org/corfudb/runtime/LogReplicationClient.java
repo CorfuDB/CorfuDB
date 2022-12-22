@@ -1,5 +1,6 @@
 package org.corfudb.runtime;
 
+import com.google.common.base.Strings;
 import com.google.protobuf.Message;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.LogReplication.ClientInfo;
@@ -19,7 +20,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Objects;
 
 public class LogReplicationClient {
 
@@ -86,6 +87,10 @@ public class LogReplicationClient {
     }
 
     public boolean addDestination(String domain, String destination) {
+        if (Strings.isNullOrEmpty(domain) || Strings.isNullOrEmpty(destination)) {
+            log.error("Invalid domain or destination");
+            return false;
+        }
         try {
             return IRetry.build(ExponentialBackoffRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -108,7 +113,7 @@ public class LogReplicationClient {
                             return false;
                         }
 
-                        clientDestinations.toBuilder().addDestinationIds(destination).build();
+                        clientDestinations = clientDestinations.toBuilder().addDestinationIds(destination).build();
                     }
                     else {
                         clientDestinations = SinksInfoVal.newBuilder().addDestinationIds(destination).build();
@@ -130,6 +135,10 @@ public class LogReplicationClient {
     }
 
     public boolean addDestination(String domain, List<String> remoteDestinations) {
+        if (Strings.isNullOrEmpty(domain)) {
+            log.error("Invalid domain");
+            return false;
+        }
         try {
             return IRetry.build(ExponentialBackoffRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -140,26 +149,32 @@ public class LogReplicationClient {
                             .build();
 
                     SinksInfoVal clientDestinations;
-                    List<String> distinctRemoteDestinations = remoteDestinations
-                            .stream()
-                            .distinct()
-                            .collect(Collectors.toList());
+
+                    boolean hasNullOrEmptyOrDuplicates =
+                            remoteDestinations.stream().anyMatch(Objects::isNull) ||
+                            remoteDestinations.stream().anyMatch(String::isEmpty) ||
+                            remoteDestinations.stream().distinct().count() < remoteDestinations.size();
+
+                    if (hasNullOrEmptyOrDuplicates) {
+                        log.error("Invalid destinations found in list");
+                        return false;
+                    }
 
                     Table<ClientInfoKey, SinksInfoVal, Message> table = corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, LR_SOURCE_METADATA_TABLE_NAME);
 
                     if (txn.isExists(LR_SOURCE_METADATA_TABLE_NAME, clientInfoKey)) {
                         clientDestinations = txn.getRecord(table, clientInfoKey).getPayload();
 
-                        for (String dest : distinctRemoteDestinations) {
+                        for (String dest : remoteDestinations) {
                             if (clientDestinations.getDestinationIdsList().contains(dest)) {
                                 return false;
                             }
                         }
 
-                        clientDestinations.toBuilder().addAllDestinationIds(distinctRemoteDestinations).build();
+                        clientDestinations = clientDestinations.toBuilder().addAllDestinationIds(remoteDestinations).build();
                     }
                     else {
-                        clientDestinations = SinksInfoVal.newBuilder().addAllDestinationIds(distinctRemoteDestinations).build();
+                        clientDestinations = SinksInfoVal.newBuilder().addAllDestinationIds(remoteDestinations).build();
                     }
 
                     txn.putRecord(table, clientInfoKey, clientDestinations, null);
