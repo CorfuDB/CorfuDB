@@ -34,6 +34,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLException;
 
+import lombok.Builder;
+import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -125,7 +127,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
     /**
      * The outstanding requests on this router.
      */
-    public final Map<Long, CompletableFuture> outstandingRequests;
+    public final Map<Long, RequestMetadata> outstandingRequests;
 
     /**
      * The currently registered channel.
@@ -169,6 +171,13 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
      * Thread pool for this channel to use
      */
     private final EventLoopGroup eventLoopGroup;
+
+    @Data
+    @Builder
+    public static class RequestMetadata {
+        CompletableFuture<?> future;
+        RequestPayloadMsg.PayloadCase payloadCase;
+    }
 
     /**
      * Creates a new NettyClientRouter connected to the specified host and port with the specified tls
@@ -228,6 +237,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
         parameters.getNettyChannelOptions().forEach(b::option);
         b.handler(getChannelInitializer());
         b.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) timeoutConnect);
+
+        log.info("Created a new NettyClientRouter with ID {}", parameters.getClientId());
 
         // Asynchronously connect, retrying until shut down.
         // Once connected, connectionFuture will be completed.
@@ -336,9 +347,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
             // Remove the current completion future, forcing clients to wait for reconnection.
             connectionFuture = new CompletableFuture<>();
             // Exceptionally complete all requests that were waiting for a completion.
-            outstandingRequests.forEach((reqId, reqCompletableFuture) -> {
-                reqCompletableFuture.completeExceptionally(
-                        new NetworkException("Disconnected", node));
+            outstandingRequests.forEach((reqId, requestMetadata) -> {
+                requestMetadata.future.completeExceptionally(new NetworkException(
+                        String.format("Disconnected (%s)", requestMetadata.payloadCase), node));
                 // And also remove them.
                 outstandingRequests.remove(reqId);
             });
@@ -455,7 +466,11 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
 
         // Generate a future and put it in the completion table.
         final CompletableFuture<T> cf = new CompletableFuture<>();
-        outstandingRequests.put(thisRequestId, cf);
+        outstandingRequests.put(thisRequestId,
+                RequestMetadata.builder()
+                        .future(cf)
+                        .payloadCase(request.getPayload().getPayloadCase())
+                        .build());
 
         // Write this message out on the channel
         channel.writeAndFlush(request, channel.voidPromise());
@@ -475,7 +490,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
             if (e.getCause() instanceof TimeoutException) {
                 outstandingRequests.remove(thisRequestId);
                 log.debug(
-                        "sendRequestAndGetCompletable: Remove request {} to {} due to timeout! Request:{}",
+                        "sendRequestAndGetCompletable: Remove request (Type: {} ID: {}) to {} due to timeout! Request:{}",
+                        request.getPayload().getPayloadCase(),
                         thisRequestId, node, TextFormat.shortDebugString(request.getHeader()));
             }
             return null;
@@ -530,8 +546,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
      * @param <T>        The type of the completion.
      */
     public <T> void completeRequest(long requestId, T completion) {
-        CompletableFuture<T> cf;
-        if ((cf = (CompletableFuture<T>) outstandingRequests.remove(requestId)) != null) {
+        RequestMetadata requestMetadata = outstandingRequests.remove(requestId);
+        if (requestMetadata != null) {
+            CompletableFuture<T> cf = (CompletableFuture<T>) requestMetadata.future;
             cf.complete(completion);
         } else {
             log.warn("Attempted to complete request {}, but request not outstanding!", requestId);
@@ -541,18 +558,20 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
     /**
      * Exceptionally complete a request with a given cause.
      *
-     * @param requestID The request to complete.
+     * @param requestId The request to complete.
      * @param cause     The cause to give for the exceptional completion.
      */
-    public void completeExceptionally(long requestID, @Nonnull Throwable cause) {
-        CompletableFuture cf;
-        if ((cf = outstandingRequests.remove(requestID)) != null) {
-            cf.completeExceptionally(cause);
-            log.debug("completeExceptionally: Remove request {} to {} due to {}.", requestID, node,
+    public void completeExceptionally(long requestId, @Nonnull Throwable cause) {
+        RequestMetadata requestMetadata = outstandingRequests.remove(requestId);
+        if (requestMetadata != null) {
+            requestMetadata.future.completeExceptionally(cause);
+            log.debug("completeExceptionally: Remove request (Type: {} ID: {}) to {} due to {}.",
+                    requestMetadata.payloadCase,
+                    requestId, node,
                     cause.getClass().getSimpleName(), cause);
         } else {
             log.warn("Attempted to exceptionally complete request {}, but request not outstanding!",
-                    requestID);
+                    requestId);
         }
     }
 
