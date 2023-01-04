@@ -107,6 +107,7 @@ public abstract class DistributedCheckpointer {
                 CheckpointingStatus tableStatus = (CheckpointingStatus) txn.getRecord(
                         CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, tableName).getPayload();
                 if (tableStatus.getStatus() == StatusType.FAILED) {
+                    //Leader marked me as failed
                     log.error("Table status for {}${} has already been marked as FAILED",
                             tableName.getNamespace(), tableName.getTableName());
                     txn.commit();
@@ -120,7 +121,6 @@ public abstract class DistributedCheckpointer {
             } catch (TransactionAbortedException e) {
                 log.error("TransactionAbortedException exception while trying to unlock table {}${}: {}",
                         tableName.getNamespace(), tableName.getTableName(), e.getMessage());
-                break; //Leader marked me as failed
             } catch (RuntimeException re) {
                 if (isCriticalRuntimeException(re, retry, MAX_RETRIES)) {
                     throw new IllegalStateException(re);
