@@ -5,6 +5,7 @@ option java_package = "org.corfudb.runtime";
 
 import "corfu_options.proto";
 import "rpc_common.proto";
+import "google/protobuf/timestamp.proto";
 
 message LogReplicationEntryMetadataMsg {
   int64 topologyConfigID = 1;
@@ -68,12 +69,17 @@ message ClientInfoKey {
   string group_name = 3;
 }
 
-// TODO: ClientInfo protobuf definition subject to change
-message ClientInfo {
-  string client_name = 1;
-}
-
 message SinksInfoVal {
   option (org.corfudb.runtime.table_schema).stream_tag = "lr_sessions";
   repeated string destination_ids = 1;
+}
+
+message LRClientId {
+  string client_name = 1;
+}
+
+message LRClientInfo {
+  string client_name = 1;
+  ReplicationModel model = 2;
+  google.protobuf.Timestamp registration_time = 3;
 }

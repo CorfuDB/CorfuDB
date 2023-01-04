@@ -2,8 +2,8 @@ package org.corfudb.runtime;
 
 import com.google.common.collect.Iterables;
 import org.corfudb.integration.AbstractIT;
-import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
-import org.corfudb.runtime.LogReplication.ClientInfo;
+import org.corfudb.runtime.LogReplication.LRClientId;
+import org.corfudb.runtime.LogReplication.LRClientInfo;
 import org.corfudb.runtime.LogReplication.ClientInfoKey;
 import org.corfudb.runtime.LogReplication.SinksInfoVal;
 import org.corfudb.runtime.collections.CorfuStore;
@@ -18,6 +18,7 @@ import org.junit.Test;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -66,29 +67,25 @@ public class LogReplicationClientTest extends AbstractIT {
         CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store = new CorfuStore(runtime);
 
-        final Table<StringKey, ClientInfo, SampleSchema.ManagedResources> table = store.openTable(
+        final Table<LRClientId, LRClientInfo, SampleSchema.ManagedResources> table = store.openTable(
                 namespace,
                 tableName,
-                StringKey.class,
-                ClientInfo.class,
+                LRClientId.class,
+                LRClientInfo.class,
                 SampleSchema.ManagedResources.class,
                 TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
 
-        LogReplicationClient client = new LogReplicationClient(runtime, clientName);
-
         // Test registering a new client
-        Assert.assertTrue(client.registerReplicationClient());
+        new LogReplicationClient(runtime, clientName);
+        Assert.assertEquals(1, table.count());
 
-        // Test registering an existing client
-        Assert.assertFalse(client.registerReplicationClient());
+        // Test registering a duplicate client, table count should be the same
+        new LogReplicationClient(runtime, clientName);
+        Assert.assertEquals(1, table.count());
 
         // Test registering additional clients
-        LogReplicationClient client2 = new LogReplicationClient(runtime, "client2");
-        LogReplicationClient client3 = new LogReplicationClient(runtime, "client3");
-        Assert.assertTrue(client2.registerReplicationClient());
-        Assert.assertTrue(client3.registerReplicationClient());
-
-        // Test that the number of clients in the table is correct
+        new LogReplicationClient(runtime, "client2");
+        new LogReplicationClient(runtime, "client3");
         Assert.assertEquals(3, table.count());
     }
 
@@ -118,40 +115,44 @@ public class LogReplicationClientTest extends AbstractIT {
         LogReplicationClient client = new LogReplicationClient(runtime, clientName);
 
         // Test adding new destinations
-        Assert.assertTrue(client.addDestination("DOMAIN", "DESTINATION1"));
-        Assert.assertTrue(client.addDestination("DOMAIN", "DESTINATION2"));
+        Assert.assertTrue(client.addDestination("LOGICALGROUP", "DESTINATION1"));
+        Assert.assertTrue(client.addDestination("LOGICALGROUP", "DESTINATION2"));
 
         // Test adding existing destinations
-        Assert.assertFalse(client.addDestination("DOMAIN", "DESTINATION2"));
+        Assert.assertFalse(client.addDestination("LOGICALGROUP", "DESTINATION2"));
 
-        // Test adding a destination with an invalid domain
+        // Test adding a destination with an invalid logicalGroup
         Assert.assertFalse(client.addDestination("", "DESTINATION3"));
         Assert.assertFalse(client.addDestination(null, "DESTINATION4"));
 
         // Test adding a destination with an invalid name
-        Assert.assertFalse(client.addDestination("DOMAIN", ""));
-        Assert.assertFalse(client.addDestination("DOMAIN", (String) null));
+        Assert.assertFalse(client.addDestination("LOGICALGROUP", ""));
+        Assert.assertFalse(client.addDestination("LOGICALGROUP", (String) null));
 
         // Test that the table size is correct
         Assert.assertEquals(1, table.count());
 
-        // Test that the number of destinations in the domain are correct
-        // DOMAIN1 has 2 destinations after the above, same with DOMAIN2 after the below
-        Assert.assertTrue(client.addDestination("DOMAIN2", "DESTINATION1"));
-        Assert.assertTrue(client.addDestination("DOMAIN2", "DESTINATION2"));
+        // Test that the number of destinations in the logicalGroup are correct
+        // LOGICALGROUP has 2 destinations after the above, same with LOGICALGROUP2 after the below
+        Assert.assertTrue(client.addDestination("LOGICALGROUP2", "DESTINATION1"));
+        Assert.assertTrue(client.addDestination("LOGICALGROUP2", "DESTINATION2"));
+
+        // Test that the table size has increased with the addition of LOGICALGROUP2
+        Assert.assertEquals(2, table.count());
 
         final int batchSize = 2;
-        final int numDestinations = 2;
-
-        // Test that the table size has increased with the addition of DOMAIN2
-        Assert.assertEquals(2, table.count());
+        final HashMap<String, Integer> numDestinations = new HashMap<>();
+        numDestinations.put("LOGICALGROUP", 2);
+        numDestinations.put("LOGICALGROUP2", 2);
 
         Stream<CorfuStoreEntry<ClientInfoKey, SinksInfoVal, SampleSchema.ManagedResources>> entryStream = table.entryStream();
         final Iterable<List<CorfuStoreEntry<ClientInfoKey, SinksInfoVal, SampleSchema.ManagedResources>>> partitions =
                 Iterables.partition(entryStream::iterator, batchSize);
         for (List<CorfuStoreEntry<ClientInfoKey, SinksInfoVal, SampleSchema.ManagedResources>> partition : partitions) {
             for (CorfuStoreEntry<ClientInfoKey, SinksInfoVal, SampleSchema.ManagedResources> entry : partition) {
-                Assert.assertEquals(numDestinations, entry.getPayload().getDestinationIdsList().size());
+                String currentGroup = entry.getKey().getGroupName();
+                Integer currentNumberDestinations = entry.getPayload().getDestinationIdsList().size();
+                Assert.assertEquals(numDestinations.get(currentGroup), currentNumberDestinations);
             }
         }
     }
@@ -181,17 +182,17 @@ public class LogReplicationClientTest extends AbstractIT {
 
         LogReplicationClient client = new LogReplicationClient(runtime, clientName);
 
-        // Test adding destinations to a domain
+        // Test adding destinations to a logicalGroup
         List<String> destinationsToAdd = Arrays.asList("DESTINATION1", "DESTINATION2");
-        Assert.assertTrue(client.addDestination("DOMAIN", destinationsToAdd));
+        Assert.assertTrue(client.addDestination("LOGICALGROUP", destinationsToAdd));
         List<String> destinationsToAdd2 = Arrays.asList("DESTINATION3", "DESTINATION4");
-        Assert.assertTrue(client.addDestination("DOMAIN", destinationsToAdd2));
+        Assert.assertTrue(client.addDestination("LOGICALGROUP", destinationsToAdd2));
 
         // Test adding existing destinations
         List<String> destinationsToAdd3 = Arrays.asList("DESTINATION1", "DESTINATION4");
-        Assert.assertFalse(client.addDestination("DOMAIN", destinationsToAdd3));
+        Assert.assertFalse(client.addDestination("LOGICALGROUP", destinationsToAdd3));
 
-        // Test adding with request having a malformed domain
+        // Test adding with request having a malformed logicalGroup
         List<String> destinationsToAdd4 = Collections.singletonList("DESTINATION1");
         Assert.assertFalse(client.addDestination("", destinationsToAdd4));
         Assert.assertFalse(client.addDestination(null, destinationsToAdd4));
@@ -200,34 +201,36 @@ public class LogReplicationClientTest extends AbstractIT {
         List<String> destinationsToAdd5 = Collections.singletonList("");
         List<String> destinationsToAdd6 = Collections.singletonList(null);
         List<String> destinationsToAdd7 = Arrays.asList("DESTINATION1", "DESTINATION1");
-        Assert.assertFalse(client.addDestination("DOMAIN", destinationsToAdd5));
-        Assert.assertFalse(client.addDestination("DOMAIN", destinationsToAdd6));
-        Assert.assertFalse(client.addDestination("DOMAIN", destinationsToAdd7));
+        Assert.assertFalse(client.addDestination("LOGICALGROUP", destinationsToAdd5));
+        Assert.assertFalse(client.addDestination("LOGICALGROUP", destinationsToAdd6));
+        Assert.assertFalse(client.addDestination("LOGICALGROUP", destinationsToAdd7));
 
-        // Test adding destinations to new domain
+        // Test adding destinations to new logicalGroup
         List<String> destinationsToAdd8 = Arrays.asList("DESTINATION1", "DESTINATION2");
-        Assert.assertTrue(client.addDestination("DOMAIN2", destinationsToAdd8));
+        Assert.assertTrue(client.addDestination("LOGICALGROUP2", destinationsToAdd8));
 
-        // Test addition after removal in new domain
-        Assert.assertTrue(client.removeDestination("DOMAIN2", "DESTINATION2"));
+        // Test addition after removal in new logicalGroup
+        Assert.assertTrue(client.removeDestination("LOGICALGROUP2", "DESTINATION2"));
         List<String> destinationsToAdd9 = Arrays.asList("DESTINATION3", "DESTINATION4");
-        Assert.assertTrue(client.addDestination("DOMAIN2", destinationsToAdd9));
+        Assert.assertTrue(client.addDestination("LOGICALGROUP2", destinationsToAdd9));
 
         // Test table size is correct
         Assert.assertEquals(2, table.count());
 
         final int batchSize = 2;
-        final int[] numDestination = {4, 3};
-        int currentDestination = 0;
+        final HashMap<String, Integer> numDestinations = new HashMap<>();
+        numDestinations.put("LOGICALGROUP", 4);
+        numDestinations.put("LOGICALGROUP2", 3);
 
-        // Test if final list of destinations are as expected for each domain
+        // Test if final list of destinations are as expected for each logicalGroup
         Stream<CorfuStoreEntry<ClientInfoKey, SinksInfoVal, SampleSchema.ManagedResources>> entryStream = table.entryStream();
         final Iterable<List<CorfuStoreEntry<ClientInfoKey, SinksInfoVal, SampleSchema.ManagedResources>>> partitions =
                 Iterables.partition(entryStream::iterator, batchSize);
         for (List<CorfuStoreEntry<ClientInfoKey, SinksInfoVal, SampleSchema.ManagedResources>> partition : partitions) {
             for (CorfuStoreEntry<ClientInfoKey, SinksInfoVal, SampleSchema.ManagedResources> entry : partition) {
-                Assert.assertEquals(numDestination[currentDestination], entry.getPayload().getDestinationIdsList().size());
-                currentDestination++;
+                String currentGroup = entry.getKey().getGroupName();
+                Integer currentNumberDestinations = entry.getPayload().getDestinationIdsList().size();
+                Assert.assertEquals(numDestinations.get(currentGroup), currentNumberDestinations);
             }
         }
     }
@@ -242,7 +245,7 @@ public class LogReplicationClientTest extends AbstractIT {
         final String namespace = "CorfuSystem";
         final String tableName = "LogReplicationSourceMetadataTable";
         final String clientName = "client";
-        final String domain = "DOMAIN";
+        final String logicalGroup = "LOGICALGROUP";
         final String destination = "DESTINATION";
 
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
@@ -260,30 +263,33 @@ public class LogReplicationClientTest extends AbstractIT {
         LogReplicationClient client = new LogReplicationClient(runtime, clientName);
 
         // Test removing a destination that does not exist
-        Assert.assertFalse(client.removeDestination(domain, destination));
+        Assert.assertFalse(client.removeDestination(logicalGroup, destination));
 
         // Test adding a destination
-        Assert.assertTrue(client.addDestination(domain, destination));
+        Assert.assertTrue(client.addDestination(logicalGroup, destination));
 
         // Test removing the added destination
-        Assert.assertTrue(client.removeDestination(domain, destination));
+        Assert.assertTrue(client.removeDestination(logicalGroup, destination));
 
         // Test removing the destination again after it has been removed
-        Assert.assertFalse(client.removeDestination(domain, destination));
+        Assert.assertFalse(client.removeDestination(logicalGroup, destination));
 
         // Test table size is correct
         Assert.assertEquals(1, table.count());
 
         final int batchSize = 1;
-        final int numDestinations = 0;
+        final HashMap<String, Integer> numDestinations = new HashMap<>();
+        numDestinations.put(logicalGroup, 0);
 
-        // Test if final list of destinations are as expected for each domain
+        // Test if final list of destinations are as expected for each logicalGroup
         Stream<CorfuStoreEntry<ClientInfoKey, SinksInfoVal, SampleSchema.ManagedResources>> entryStream = table.entryStream();
         final Iterable<List<CorfuStoreEntry<ClientInfoKey, SinksInfoVal, SampleSchema.ManagedResources>>> partitions =
                 Iterables.partition(entryStream::iterator, batchSize);
         for (List<CorfuStoreEntry<ClientInfoKey, SinksInfoVal, SampleSchema.ManagedResources>> partition : partitions) {
             for (CorfuStoreEntry<ClientInfoKey, SinksInfoVal, SampleSchema.ManagedResources> entry : partition) {
-                Assert.assertEquals(numDestinations, entry.getPayload().getDestinationIdsList().size());
+                String currentGroup = entry.getKey().getGroupName();
+                Integer currentNumberDestinations = entry.getPayload().getDestinationIdsList().size();
+                Assert.assertEquals(numDestinations.get(currentGroup), currentNumberDestinations);
             }
         }
     }
