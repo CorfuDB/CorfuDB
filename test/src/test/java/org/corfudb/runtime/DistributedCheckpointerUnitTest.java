@@ -173,6 +173,17 @@ public class DistributedCheckpointerUnitTest {
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build())
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
+        when(txn.commit()).thenReturn(Timestamp.getDefaultInstance()) //commit in tryLockTableToCheckpoint()
+                .thenThrow(new TransactionAbortedException(
+                        new TxResolutionInfo(UUID.randomUUID(), new Token(0, 0)),
+                        AbortCause.CONFLICT, new Throwable(), null))
+                .thenReturn(Timestamp.getDefaultInstance());
+        assert distributedCheckpointer.tryCheckpointTable(tableName, t -> cpw);
+
+        when((CheckpointingStatus) corfuStoreEntry.getPayload())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
         when(txn.commit()).thenReturn(Timestamp.getDefaultInstance())
                 .thenThrow(new TransactionAbortedException(
                         new TxResolutionInfo(UUID.randomUUID(), new Token(0, 0)),
