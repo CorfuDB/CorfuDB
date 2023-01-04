@@ -33,7 +33,7 @@ public abstract class SinkWriter {
 
     private final ISerializer protobufSerializer;
 
-    private final ReplicationSession session;
+    protected final ReplicationSession session;
 
 
     // Limit the initialization of this class only to its children classes.
@@ -92,9 +92,8 @@ public abstract class SinkWriter {
      * @return True if the entries should be ignored.
      */
     boolean ignoreEntriesForStream(UUID streamId) {
-        return configManager.getConfig().getSubscriberToNonReplicatedStreamsMap()
-            .getOrDefault(session.getSubscriber(), new HashSet<>())
-            .contains(streamId);
+        return configManager.getUpdatedConfig(session.getSubscriber())
+                .getStreamsToDrop().contains(streamId);
     }
 
     /**
@@ -107,8 +106,7 @@ public abstract class SinkWriter {
      */
     boolean ignoreEntryForRegistryTable(UUID streamId, CorfuRecord<TableDescriptors, TableMetadata> record) {
 
-        return configManager.getConfig().getSubscriberToNonReplicatedStreamsMap()
-            .getOrDefault(session.getSubscriber(), new HashSet<>())
-            .contains(streamId) || !record.getMetadata().getTableOptions().getIsFederated();
+        return configManager.getUpdatedConfig(session.getSubscriber()).getStreamsToReplicate()
+            .contains(streamId.toString()) || !record.getMetadata().getTableOptions().getIsFederated();
     }
 }

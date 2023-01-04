@@ -351,7 +351,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         // Through the config manager, retrieve system-specific configurations such as streams to replicate
         // for supported replication models and version
         replicationConfigManager = new LogReplicationConfigManager(getCorfuRuntime(), serverContext);
-        logReplicationConfig = replicationConfigManager.getConfig();
 
         Set<String> remoteClusterIds = new HashSet<>();
 
@@ -375,7 +374,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     private void createMetadataManagers(Set<String> remoteClusterIds) {
         for (String remoteClusterId : remoteClusterIds) {
             for (ReplicationSubscriber subscriber :
-                logReplicationConfig.getReplicationSubscriberToStreamsMap().keySet()) {
+                replicationConfigManager.getSubscriberToConfigMap().keySet()) {
                 LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(getCorfuRuntime(),
                     topologyDescriptor.getTopologyConfigId(), remoteClusterId);
                 ReplicationSession replicationSession = new ReplicationSession(remoteClusterId, subscriber);
@@ -737,7 +736,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
             for (String remoteClusterId : sinksToRemove) {
                 for (ReplicationSubscriber subscriber :
-                    logReplicationConfig.getReplicationSubscriberToStreamsMap().keySet()) {
+                        replicationConfigManager.getSubscriberToConfigMap().keySet()) {
                     ReplicationSession sessionToRemove = new ReplicationSession(remoteClusterId, subscriber);
                     removeClusterInfoFromStatusTable(sessionToRemove);
                     remoteSessionToMetadataManagerMap.remove(sessionToRemove);

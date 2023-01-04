@@ -124,7 +124,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                 .keyStore((String) context.getServerConfig().get(ConfigParamNames.KEY_STORE))
                 .ksPasswordFile((String) context.getServerConfig().get(ConfigParamNames.KEY_STORE_PASS_FILE))
                 .tlsEnabled((Boolean) context.getServerConfig().get("--enable-tls"))
-                .maxCacheEntries(configManager.getConfig().getMaxCacheSize())
+                .maxCacheEntries(configManager.getUpdatedConfig(replicationSession.getSubscriber()).getMaxCacheSize())
                 .maxWriteSize(context.getMaxWriteSize())
                 .build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
@@ -144,7 +144,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                                      LogReplicationMetadataManager metadataManager, String pluginConfigFilePath,
                                      ReplicationSession replicationSession) {
         this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
-                .maxCacheEntries(configManager.getConfig().getMaxCacheSize()).build())
+                .maxCacheEntries(configManager.getUpdatedConfig(replicationSession.getSubscriber()).getMaxCacheSize()).build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.pluginConfigFilePath = pluginConfigFilePath;
         init(metadataManager, configManager, replicationSession);
@@ -483,7 +483,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         
         // Sync with registry after transfer phase to capture local updates, as transfer phase could
         // take a relatively long time.
-        configManager.getUpdatedConfig();
+        configManager.getUpdatedConfig(this.sourceSession.getSubscriber());
         snapshotWriter.clearLocalStreams();
         snapshotWriter.startSnapshotSyncApply();
         completeSnapshotApply(entry);

@@ -176,8 +176,8 @@ public class LogReplicationAckReader {
      */
     private long getMaxReplicatedStreamsTail(Map<UUID, Long> tailMap) {
         long maxTail = Address.NON_ADDRESS;
-        Set<String> streamsToReplicate = configManager.getUpdatedConfig().getReplicationSubscriberToStreamsMap()
-            .getOrDefault(replicationSession.getSubscriber(), new HashSet<>());
+        Set<String> streamsToReplicate = configManager.getUpdatedConfig(replicationSession.getSubscriber())
+                .getStreamsToReplicate();
         for (String streamName : streamsToReplicate) {
             UUID streamUuid = CorfuRuntime.getStreamID(streamName);
             if (tailMap.containsKey(streamUuid)) {

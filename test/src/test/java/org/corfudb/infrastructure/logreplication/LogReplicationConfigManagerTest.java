@@ -130,13 +130,15 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
     @Test
     public void testConfigGeneration() {
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime);
-        verifyExpectedConfigGenerated(configManager.getConfig());
+        verifyExpectedConfigGenerated(configManager
+                .getUpdatedConfig(ReplicationSubscriber.getDefaultReplicationSubscriber()));
     }
 
     @Test
     public void testConfigUpdate() throws Exception {
+        ReplicationSubscriber defaultSubscriber = ReplicationSubscriber.getDefaultReplicationSubscriber();
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime);
-        verifyExpectedConfigGenerated(configManager.getConfig());
+        verifyExpectedConfigGenerated(configManager.getUpdatedConfig(defaultSubscriber));
 
         // Open new tables and update the expected streams to replicate map, streams to drop and stream tags
         setupStreamsToReplicateAndTagsMap(Collections.singleton(TABLE5),
@@ -145,15 +147,15 @@ public class LogReplicationConfigManagerTest extends AbstractViewTest {
         setupStreamsToDrop(Collections.singleton(TABLE6), ReplicationSubscriber.getDefaultReplicationSubscriber(),
             Uuid.class);
 
-        verifyExpectedConfigGenerated(configManager.getUpdatedConfig());
+        verifyExpectedConfigGenerated(configManager.getUpdatedConfig(defaultSubscriber));
     }
 
     private void verifyExpectedConfigGenerated(LogReplicationConfig actualConfig) {
-        Assert.assertTrue(Objects.equals(expectedSubscriberToStreamsToReplicateMap,
-            actualConfig.getReplicationSubscriberToStreamsMap()));
+        Assert.assertTrue(Objects.equals(expectedSubscriberToStreamsToReplicateMap.values(),
+            actualConfig.getStreamsToReplicate()));
 
-        Assert.assertTrue(Objects.equals(expectedSubscriberToStreamsToDropMap,
-            actualConfig.getSubscriberToNonReplicatedStreamsMap()));
+        Assert.assertTrue(Objects.equals(expectedSubscriberToStreamsToDropMap.values(),
+            actualConfig.getStreamsToReplicate()));
 
         Assert.assertTrue(Objects.equals(streamToTagsMap, actualConfig.getDataStreamToTagsMap()));
     }

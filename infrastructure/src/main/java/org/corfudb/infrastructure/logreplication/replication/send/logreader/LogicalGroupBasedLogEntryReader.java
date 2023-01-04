@@ -1,15 +1,17 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
+import org.corfudb.infrastructure.logreplication.LogicalGroupBasedReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
 import java.util.HashSet;
 import java.util.Set;
 
-public class StreamsLogEntryReader extends BaseLogEntryReader {
 
-    public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfigManager configManager,
-                                 ReplicationSession replicationSession) {
+public class LogicalGroupBasedLogEntryReader extends BaseLogEntryReader {
+
+    public LogicalGroupBasedLogEntryReader(CorfuRuntime runtime, LogReplicationConfigManager configManager,
+                                                 ReplicationSession replicationSession) {
         super(runtime, configManager, replicationSession);
     }
 

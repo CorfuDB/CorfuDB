@@ -6,9 +6,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LRRollingUpgradeHandler;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ILogReplicationVersionAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
@@ -25,6 +27,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.retry.IRetry;
@@ -83,14 +86,11 @@ public class LogReplicationConfigManager {
 
     private Table<VersionString, Version, Uuid> pluginVersionTable;
 
-    // In-memory list of registry table entries
-    private List<Map.Entry<TableName, CorfuRecord<TableDescriptors, TableMetadata>>> registryTableEntries =
-        new ArrayList<>();
-
     private long lastRegistryTableLogTail = Address.NON_ADDRESS;
 
+    // Map of Config objects for each subscriber
     @Getter
-    private LogReplicationConfig config;
+    Map<ReplicationSubscriber, LogReplicationConfig> subscriberToConfigMap = new HashMap<>();
 
     private ServerContext serverContext;
 
@@ -103,7 +103,7 @@ public class LogReplicationConfigManager {
         this.runtime = runtime;
         this.corfuStore = new CorfuStore(runtime);
         this.pluginConfigFilePath = EMPTY_STR;
-        config = generateConfig();
+        subscriberToConfigMap = generateConfig();
     }
 
     public LogReplicationConfigManager(CorfuRuntime runtime, ServerContext serverContext) {
@@ -113,25 +113,25 @@ public class LogReplicationConfigManager {
         this.pluginConfigFilePath = serverContext == null ? EMPTY_STR : serverContext.getPluginConfigFilePath();
         initLogReplicationVersionPlugin(runtime);
         setupVersionTable();
-        config = generateConfig();
+        subscriberToConfigMap = generateConfig();
     }
 
-    private LogReplicationConfig generateConfig() {
+    private Map<ReplicationSubscriber, LogReplicationConfig> generateConfig() {
         PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable =
             runtime.getTableRegistry().getRegistryTable();
-        registryTableEntries = registryTable.entryStream().collect(Collectors.toList());
 
-        Map<ReplicationSubscriber, Set<String>> replicationSubscriberToStreamsMap = new HashMap<>();
+        List<Map.Entry<TableName, CorfuRecord<TableDescriptors, TableMetadata>>> registryTableEntries =
+            registryTable.entryStream().collect(Collectors.toList());
+
         Map<UUID, List<UUID>> streamToTagsMap = new HashMap<>();
+        Set<String> streamsToReplicate = new HashSet<>();
+        Set<UUID> streamsToDrop = registryTable.entryStream().map(entry -> getFullyQualifiedTableName(entry.getKey()))
+            .map(CorfuRuntime::getStreamID).collect(Collectors.toSet());
 
         registryTableEntries.forEach(entry -> {
 
             if (entry.getValue().getMetadata().getTableOptions().getIsFederated()) {
-                ReplicationSubscriber subscriber = ReplicationSubscriber.getDefaultReplicationSubscriber();
-                Set<String> streamsToReplicate =
-                    replicationSubscriberToStreamsMap.getOrDefault(subscriber, new HashSet<>());
                 streamsToReplicate.add(getFullyQualifiedTableName(entry.getKey()));
-                replicationSubscriberToStreamsMap.put(subscriber, streamsToReplicate);
 
                 // Collect tags for this stream
                 UUID streamId = CorfuRuntime.getStreamID(getFullyQualifiedTableName(entry.getKey()));
@@ -145,38 +145,26 @@ public class LogReplicationConfigManager {
                     .map(streamTag -> TableRegistry.getStreamIdForStreamTag(entry.getKey().getNamespace(), streamTag))
                     .collect(Collectors.toList()));
                 streamToTagsMap.put(streamId, tags);
+
+                // Remove this stream from the set of streams to drop
+                streamsToDrop.remove(CorfuRuntime.getStreamID(getFullyQualifiedTableName(entry.getKey())));
             }
 
             // TODO: Add other cases once the protobuf options for other subscribers are available
         });
 
-        // For each subscriber, add the Registry and Protobuf descriptor tables to the streams to replicate.
-        // Also construct the set of streams which must not be replicated.
-        Set<ReplicationSubscriber> subscribers = replicationSubscriberToStreamsMap.keySet();
-        Set<String> registryTableStreamNames = new HashSet<>();
-        registryTableEntries.forEach(entry -> registryTableStreamNames.add(getFullyQualifiedTableName(entry.getKey())));
-        Map<ReplicationSubscriber, Set<UUID>> subscriberToNonReplicatedStreamsMap = new HashMap<>();
+        // Add the Registry and Protobuf descriptor tables to the streams to replicate.
+        streamsToReplicate.add(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+            TableRegistry.REGISTRY_TABLE_NAME));
+        streamsToReplicate.add(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
+            TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME));
 
-        for (ReplicationSubscriber subscriber : subscribers) {
-            Set<String> streamsToReplicate = replicationSubscriberToStreamsMap.get(subscriber);
+        ReplicationSubscriber subscriber = ReplicationSubscriber.getDefaultReplicationSubscriber();
 
-            String registryTableName = getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
-                TableRegistry.REGISTRY_TABLE_NAME);
-            String protoTableName = getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
-                TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME);
-
-            streamsToReplicate.add(registryTableName);
-            streamsToReplicate.add(protoTableName);
-
-            // Set of streams to drop
-            Set<UUID> set = registryTableStreamNames.stream().filter(stream -> !streamsToReplicate.contains(stream))
-                .map(CorfuRuntime::getStreamID).collect(Collectors.toSet());
-            subscriberToNonReplicatedStreamsMap.put(subscriber, set);
-        }
-
-        LogReplicationConfig config = new LogReplicationConfig(replicationSubscriberToStreamsMap,
-            subscriberToNonReplicatedStreamsMap, streamToTagsMap, serverContext);
-        return config;
+        Map<ReplicationSubscriber, LogReplicationConfig> configMap = new HashMap<>();
+        configMap.put(subscriber, new LogReplicationConfig(streamsToReplicate, streamsToDrop, streamToTagsMap,
+            serverContext));
+        return configMap;
     }
 
     private void initLogReplicationVersionPlugin(CorfuRuntime runtime) {
@@ -214,17 +202,17 @@ public class LogReplicationConfigManager {
         }
     }
 
-    public LogReplicationConfig getUpdatedConfig() {
+    public LogReplicationConfig getUpdatedConfig(ReplicationSubscriber subscriber) {
 
         // Check if the registry table has new entries.  Otherwise, no update is necessary.
         if (registryTableHasNewEntries()) {
-            LogReplicationConfig updatedConfig = generateConfig();
+            Map<ReplicationSubscriber, LogReplicationConfig> updatedConfig = generateConfig();
 
-            config.setReplicationSubscriberToStreamsMap(updatedConfig.getReplicationSubscriberToStreamsMap());
-            config.setSubscriberToNonReplicatedStreamsMap(updatedConfig.getSubscriberToNonReplicatedStreamsMap());
-            config.setDataStreamToTagsMap(updatedConfig.getDataStreamToTagsMap());
+            for(ReplicationSubscriber replicationSubscriber : updatedConfig.keySet()) {
+                subscriberToConfigMap.put(replicationSubscriber, updatedConfig.get(replicationSubscriber));
+            }
         }
-        return config;
+        return subscriberToConfigMap.get(subscriber);
     }
 
     private boolean registryTableHasNewEntries() {
@@ -232,6 +220,14 @@ public class LogReplicationConfigManager {
             new StreamAddressRange(REGISTRY_TABLE_ID, Long.MAX_VALUE, Address.NON_ADDRESS));
         long currentLogTail = currentAddressSpace.getTail();
         return currentLogTail != lastRegistryTableLogTail;
+    }
+
+    public UUID getOpaqueStreamToTrack(ReplicationSession replicationSession) {
+        if (replicationSession.getSubscriber().getReplicationModel() ==
+            LogReplicationMetadata.ReplicationModel.FULL_TABLE) {
+            return ObjectsView.getLogReplicatorStreamId();
+        }
+        return null;
     }
 
     /**
