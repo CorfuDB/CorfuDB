@@ -14,12 +14,18 @@ import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
 import java.util.Collections;
+import java.util.Enumeration;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Predicate;
@@ -345,7 +351,7 @@ public class LayoutManagementView extends AbstractView {
      *
      * @param layout Layout to be sealed
      */
-    private void sealEpoch(Layout layout) throws QuorumUnreachableException {
+    public void sealEpoch(Layout layout) throws QuorumUnreachableException {
         layout.nextEpoch();
         runtime.getLayoutView().getRuntimeLayout(layout).sealMinServerSet();
     }
@@ -368,6 +374,7 @@ public class LayoutManagementView extends AbstractView {
             log.error("Conflict in updating layout by attemptConsensus:", oe);
             // Update rank to be able to outrank other competition and complete paxos.
             prepareRank = oe.getNewRank() + 1;
+            //prepareRank = oe.getNewRank() + ThreadLocalRandom.current().nextInt(1, 5 + 1);;
             throw oe;
         }
 

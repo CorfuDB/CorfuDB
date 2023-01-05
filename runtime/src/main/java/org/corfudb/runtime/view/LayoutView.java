@@ -2,9 +2,13 @@ package org.corfudb.runtime.view;
 
 import static java.util.Arrays.stream;
 
-import java.util.Arrays;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
@@ -12,6 +16,7 @@ import javax.annotation.Nonnull;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.apache.commons.lang3.BooleanUtils;
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
@@ -31,6 +36,7 @@ public class LayoutView extends AbstractView {
 
     public LayoutView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
+        myEndpoint = getMyEndpoint();
     }
 
     /**
@@ -99,6 +105,23 @@ public class LayoutView extends AbstractView {
         committed(epoch, layoutToPropose);
     }
 
+
+    public static String myEndpoint = "none";
+
+    public static String getMyEndpoint() {
+        String ip;
+        try {
+            Process p = Runtime.getRuntime().exec("hostname");
+            BufferedReader is =
+                    new BufferedReader(new InputStreamReader(p.getInputStream(  )));
+            ip = is.readLine();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        log.info("XXX My endpoint: {}", ip);
+        return ip;
+    }
     /**
      * Sends prepare to the current layout and can proceed only if it is accepted by a quorum.
      *
@@ -113,9 +136,47 @@ public class LayoutView extends AbstractView {
     public Layout prepare(long epoch, long rank)
             throws QuorumUnreachableException, OutrankedException, WrongEpochException {
 
-        CompletableFuture<LayoutPrepareResponse>[] prepareList = getLayout().getLayoutServers()
+        List<LayoutPrepareResponse> acceptList;
+        List<CompletableFuture<LayoutPrepareResponse>> prepareList = new ArrayList<>();
+        long timeouts = 0L;
+        long wrongEpochRejected = 0L;
+        long success = 0L;
+
+        for (String endpoint: getLayout().getLayoutServers()) {
+            if (!endpoint.contains(myEndpoint)) {
+                continue;
+            }
+            log.info("XXX My endpoint: {}", endpoint);
+
+            try {
+                CompletableFuture<LayoutPrepareResponse> cf = new CompletableFuture<>();
+                try {
+                    // Connection to router can cause network exception too.
+                    cf = getRuntimeLayout().getLayoutClient(endpoint).prepare(epoch, rank);
+                    prepareList.add(cf);
+                    cf.get();
+                } catch (Exception e) {
+                    cf.completeExceptionally(e);
+                }
+            } catch (NetworkException e) {
+                timeouts++;
+            } catch (WrongEpochException we) {
+                wrongEpochRejected++;
+            }
+        }
+
+        try {
+            TimeUnit.MILLISECONDS.sleep(20);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
+
+        List<CompletableFuture<LayoutPrepareResponse>> prepareList0 = getLayout().getLayoutServers()
                 .stream()
+                .filter(endpoint -> !endpoint.contains(myEndpoint))
                 .map(x -> {
+                    log.info("XXX Remote endpoint: {}", x);
                     CompletableFuture<LayoutPrepareResponse> cf = new CompletableFuture<>();
                     try {
                         // Connection to router can cause network exception too.
@@ -125,21 +186,22 @@ public class LayoutView extends AbstractView {
                     }
                     return cf;
                 })
-                .toArray(CompletableFuture[]::new);
-        LayoutPrepareResponse[] acceptList;
-        long timeouts = 0L;
-        long wrongEpochRejected = 0L;
+                .collect(Collectors.toList());
+
+
+        prepareList.addAll(prepareList0);
+
         while (true) {
             // do we still have enough for a quorum?
-            if (prepareList.length < getQuorumNumber()) {
+            if (prepareList.size() < getQuorumNumber()) {
                 log.debug("prepare: Quorum unreachable, remaining={}, required={}", prepareList,
                         getQuorumNumber());
-                throw new QuorumUnreachableException(prepareList.length, getQuorumNumber());
+                throw new QuorumUnreachableException(prepareList.size(), getQuorumNumber());
             }
 
             // wait for someone to complete.
             try {
-                CFUtils.getUninterruptibly(CompletableFuture.anyOf(prepareList),
+                CFUtils.getUninterruptibly(CompletableFuture.allOf(prepareList.toArray(new CompletableFuture[prepareList.size()])),
                         OutrankedException.class, TimeoutException.class, NetworkException.class,
                         WrongEpochException.class);
             } catch (TimeoutException | NetworkException e) {
@@ -149,11 +211,12 @@ public class LayoutView extends AbstractView {
             }
 
             // remove errors.
-            prepareList = stream(prepareList)
+            prepareList = prepareList.stream()
                     .filter(x -> !x.isCompletedExceptionally())
-                    .toArray(CompletableFuture[]::new);
+                    .collect(Collectors.toList());
+
             // count successes.
-            acceptList = stream(prepareList)
+            acceptList = prepareList.stream()
                     .map(x -> {
                         try {
                             return x.getNow(null);
@@ -162,14 +225,15 @@ public class LayoutView extends AbstractView {
                         }
                     })
                     .filter(x -> x != null)
-                    .toArray(LayoutPrepareResponse[]::new);
+                    .collect(Collectors.toList());
 
-            if (acceptList.length >= getQuorumNumber()) {
+            if (acceptList.size() >= getQuorumNumber()) {
+                log.info("XXX {} nodes accepted the proposal.", acceptList.size());
                 break;
             }
         }
         // Return any layouts that have been proposed before.
-        List<LayoutPrepareResponse> list = Arrays.stream(acceptList)
+        List<LayoutPrepareResponse> list = acceptList.stream()
                 .filter(x -> x.getLayout() != null)
                 .collect(Collectors.toList());
         if (list.isEmpty()) {
@@ -238,7 +302,7 @@ public class LayoutView extends AbstractView {
                             return false;
                         }
                     })
-                    .filter(x -> x)
+                    .filter(BooleanUtils::isTrue)
                     .count();
 
             if (count >= getQuorumNumber()) {

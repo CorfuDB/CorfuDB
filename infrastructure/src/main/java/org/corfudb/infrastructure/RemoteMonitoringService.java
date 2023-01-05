@@ -36,6 +36,7 @@ import org.corfudb.util.LambdaUtils;
 import org.corfudb.util.concurrent.SingletonResource;
 
 import java.time.Duration;
+import java.time.ZonedDateTime;
 import java.util.Collections;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -214,6 +215,18 @@ public class RemoteMonitoringService implements ManagementService {
             failureDetectorFuture = runDetectionTasks();
         };
 
+
+        long modulo = 20000L;
+        long currentTime = ZonedDateTime.now().toInstant().toEpochMilli();
+        long nextTime = currentTime + modulo;
+        long nextTick = currentTime + (modulo - (nextTime % modulo));
+        log.info("XXX Current time: {} Next Time: {} Waiting till: {}",
+                currentTime, nextTime, nextTick);
+        while(true) {
+            currentTime = ZonedDateTime.now().toInstant().toEpochMilli();
+            if (currentTime >= nextTick) break;
+        }
+
         detectionTasksScheduler.scheduleAtFixedRate(
                 () -> LambdaUtils.runSansThrow(task),
                 0,
@@ -260,6 +273,8 @@ public class RemoteMonitoringService implements ManagementService {
      *  </pre>
      */
     private synchronized CompletableFuture<DetectorTask> runDetectionTasks() {
+
+        log.info("Executing runDetectionTasks...");
 
         return getCorfuRuntime()
                 .invalidateLayout()

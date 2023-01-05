@@ -25,6 +25,7 @@ import org.corfudb.runtime.view.Layout;
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getLayout;
@@ -273,7 +274,8 @@ public class LayoutServer extends AbstractServer {
                     new Rank(-1L, getUUID(requestHeader.getClientId())) : getPhase2Rank(payloadEpoch);
 
             setPhase1Rank(prepareRank, payloadEpoch);
-            log.debug("handlePrepareLayoutRequest[{}]: New phase 1 rank={}", requestHeader.getRequestId(), prepareRank);
+            log.debug("handlePrepareLayoutRequest[{}]: New phase 1 rank={} replacing={}",
+                    requestHeader.getRequestId(), prepareRank, phase1Rank);
 
             responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
             response = getResponseMsg(responseHeader, getPrepareLayoutResponseMsg(
