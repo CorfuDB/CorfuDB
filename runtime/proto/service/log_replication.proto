@@ -63,22 +63,22 @@ enum ReplicationModel {
   MULTI_SOURCE_MERGE = 3;         // Same table replication from multiple sources to single sink (n:1)
 }
 
-message ClientInfoKey {
+message ClientDestinationInfoKey {
   ReplicationModel model = 1;
   string client_name = 2;
   string group_name = 3;
 }
 
-message SinksInfoVal {
+message DestinationInfoVal {
   option (org.corfudb.runtime.table_schema).stream_tag = "lr_sessions";
   repeated string destination_ids = 1;
 }
 
-message LRClientId {
+message ClientRegistrationId {
   string client_name = 1;
 }
 
-message LRClientInfo {
+message ClientRegistrationInfo {
   string client_name = 1;
   ReplicationModel model = 2;
   google.protobuf.Timestamp registration_time = 3;
