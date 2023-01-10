@@ -262,7 +262,8 @@ public class LogReplicationSinkManager implements DataReceiver {
         rxMessageCounter++;
         rxMessageCount.setValue(rxMessageCounter);
 
-        log.debug("Sink manager received {} while in {}", message.getMetadata().getEntryType(), rxState);
+        log.debug("Sink manager received {} while in {} from cluster {}", message.getMetadata().getEntryType(), rxState,
+                message.getMetadata().getSessionInfo().getLocalClusterId());
 
         // Ignore messages that have different topologyConfigId.
         // It could be caused by an out-of-date sender or the local node hasn't done the site discovery yet.

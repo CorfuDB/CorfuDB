@@ -63,8 +63,10 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
     public static final ClusterUuidMsg OP_SINGLE_SOURCE_SINK = ClusterUuidMsg.newBuilder().setLsb(7L).setMsb(7L).build();
     public static final ClusterUuidMsg OP_MULTI_SINK = ClusterUuidMsg.newBuilder().setLsb(8L).setMsb(8L).build();
     public static final ClusterUuidMsg OP_MULTI_SOURCE = ClusterUuidMsg.newBuilder().setLsb(9L).setMsb(9L).build();
-    public static final ClusterUuidMsg OP_BIDIR_ORPH_SINK = ClusterUuidMsg.newBuilder().setLsb(10L).setMsb(10L).build();
-    public static final ClusterUuidMsg OP_SINK_CONNECT_INIT = ClusterUuidMsg.newBuilder().setLsb(11L).setMsb(11L).build();
+    public static final ClusterUuidMsg OP_BIDIR_ORPHAN_SINK = ClusterUuidMsg.newBuilder().setLsb(10L).setMsb(10L).build();
+    public static final ClusterUuidMsg OP_SINK_CONNECTION_INIT = ClusterUuidMsg.newBuilder().setLsb(11L).setMsb(11L).build();
+    public static final ClusterUuidMsg  OP_MULTI_SOURCE_REV_CONNECTION = ClusterUuidMsg.newBuilder().setLsb(12L).setMsb(12L).build();
+    public static final ClusterUuidMsg  OP_MULTI_SINK_REV_CONNECTION = ClusterUuidMsg.newBuilder().setLsb(13L).setMsb(13L).build();
 
     @Getter
     private long configId;
@@ -314,32 +316,44 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         }
     }
 
-    private void createSingleSourceMultiSinkTopologyBuckets() {
+    private void createSingleSourceMultiSinkTopologyBuckets(boolean isSinkConnectionInit) {
         if(topologyConfig == null) {
             topologyConfig = readConfig();
         }
 
+        ClusterConfigurationMsg localCluster = findLocalCluster();
+
         synchronized (this) {
-            this.remoteSourcesToReplicationModels.putIfAbsent(topologyConfig.getClustersList().stream()
-                    .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSourceClusterIds().get(0)))
-                    .findFirst().get(), new HashSet<LogReplication.ReplicationModel>(){{
-                        add(LogReplication.ReplicationModel.FULL_TABLE);
-            }});
+            if(localCluster.getRole().equals(ClusterRole.SOURCE)) {
+                topologyConfig.getClustersList().stream()
+                        .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getRole().equals(ClusterRole.SINK))
+                        .forEach(clusterConfigurationMsg -> {
+                            remoteSinkToReplicationModels.putIfAbsent(clusterConfigurationMsg, new HashSet<>());
+                            remoteSinkToReplicationModels.get(clusterConfigurationMsg)
+                                    .add(LogReplication.ReplicationModel.FULL_TABLE);
+                        });
+                if (!isSinkConnectionInit) {
+                    topologyConfig.getClustersList().stream()
+                            .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getRole().equals(ClusterRole.SINK))
+                            .forEach(connectionEndPoints::add);
+                }
+            } else {
+                this.remoteSourcesToReplicationModels.putIfAbsent(topologyConfig.getClustersList().stream()
+                        .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSourceClusterIds().get(0)))
+                        .findFirst().get(), new HashSet<LogReplication.ReplicationModel>() {{
+                    add(LogReplication.ReplicationModel.FULL_TABLE);
+                }});
 
-            topologyConfig.getClustersList().stream()
-                    .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getRole().equals(ClusterRole.SINK))
-                    .forEach(clusterConfigurationMsg -> {
-                        remoteSinkToReplicationModels.putIfAbsent(clusterConfigurationMsg, new HashSet<>());
-                        remoteSinkToReplicationModels.get(clusterConfigurationMsg)
-                                .add(LogReplication.ReplicationModel.FULL_TABLE);
-                    });
-
-            topologyConfig.getClustersList().stream()
-                    .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getRole().equals(ClusterRole.SINK))
-                    .forEach(connectionEndPoints::add);
+                if (isSinkConnectionInit) {
+                    connectionEndPoints.add(topologyConfig.getClustersList().stream()
+                            .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSourceClusterIds().get(0)))
+                            .findFirst().get());
+                }
+            }
             log.info("added the multi sink clusters: source: {} sink: {} connectionEndpoints: {}", this.remoteSourcesToReplicationModels,
                     this.remoteSinkToReplicationModels, this.connectionEndPoints);
             topologyBucketsIinitialized = true;
+            topologyBucketsCustomized = true;
             notify();
         }
     }
@@ -370,33 +384,49 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         return localCluster.get();
     }
 
-    private void createMultiSourceSingleSinkTopologyBuckets() {
+    private void createMultiSourceSingleSinkTopologyBuckets(boolean isSinkConnectionInit) {
         if(topologyConfig == null) {
             topologyConfig = readConfig();
         }
 
+        ClusterConfigurationMsg localCluster = findLocalCluster();
+
+
         synchronized (this) {
-            topologyConfig.getClustersList().stream()
-                    .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getRole().equals(ClusterRole.SOURCE))
-                    .forEach(clusterConfigurationMsg -> {
-                        remoteSourcesToReplicationModels.putIfAbsent(clusterConfigurationMsg, new HashSet<>());
-                        remoteSourcesToReplicationModels.get(clusterConfigurationMsg)
-                                .add(LogReplication.ReplicationModel.FULL_TABLE);
-                    });
+            if(localCluster.getRole().equals(ClusterRole.SOURCE)) {
 
+                this.remoteSinkToReplicationModels.putIfAbsent(topologyConfig.getClustersList().stream()
+                        .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSinkClusterIds().get(0)))
+                        .findFirst().get(), new HashSet<LogReplication.ReplicationModel>() {{
+                    add(LogReplication.ReplicationModel.FULL_TABLE);
+                }});
 
-            this.remoteSinkToReplicationModels.putIfAbsent(topologyConfig.getClustersList().stream()
-                    .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSinkClusterIds().get(0)))
-                    .findFirst().get(), new HashSet<LogReplication.ReplicationModel>(){{
-                        add(LogReplication.ReplicationModel.FULL_TABLE);
-            }});
+                if(!isSinkConnectionInit) {
+                    this.connectionEndPoints.add(topologyConfig.getClustersList().stream()
+                            .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSinkClusterIds().get(0)))
+                            .findFirst().get());
+                }
 
-            this.connectionEndPoints.add(topologyConfig.getClustersList().stream()
-                    .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getId().equals(topology.getSinkClusterIds().get(0)))
-                    .findFirst().get());
+            } else {
+                topologyConfig.getClustersList().stream()
+                        .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getRole().equals(ClusterRole.SOURCE))
+                        .forEach(clusterConfigurationMsg -> {
+                            remoteSourcesToReplicationModels.putIfAbsent(clusterConfigurationMsg, new HashSet<>());
+                            remoteSourcesToReplicationModels.get(clusterConfigurationMsg)
+                                    .add(LogReplication.ReplicationModel.FULL_TABLE);
+                        });
+
+                if (isSinkConnectionInit) {
+                    topologyConfig.getClustersList().stream()
+                            .filter(clusterConfigurationMsg -> clusterConfigurationMsg.getRole().equals(ClusterRole.SOURCE))
+                            .forEach(this.connectionEndPoints::add);
+                }
+            }
+
             log.info("added the multi source single sink clusters: source: {} sink: {} connectionEndpoints: {}",
                     this.remoteSourcesToReplicationModels, this.remoteSinkToReplicationModels, this.connectionEndPoints);
             topologyBucketsIinitialized = true;
+            topologyBucketsCustomized = true;
             notify();
         }
     }
@@ -789,12 +819,16 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
                 } else if (entry.getKey().equals(OP_SINGLE_SOURCE_SINK)) {
                     clusterManager.createSingleSourceSinkTopologyBuckets();
                 } else if (entry.getKey().equals(OP_MULTI_SINK)) {
-                    clusterManager.createSingleSourceMultiSinkTopologyBuckets();
-                } else if (entry.getKey().equals(OP_MULTI_SOURCE)) {
-                    clusterManager.createMultiSourceSingleSinkTopologyBuckets();
-                } else if (entry.getKey().equals(OP_BIDIR_ORPH_SINK)) {
+                    clusterManager.createSingleSourceMultiSinkTopologyBuckets(false);
+                } else if (entry.getKey().equals(OP_MULTI_SINK_REV_CONNECTION)) {
+                    clusterManager.createSingleSourceMultiSinkTopologyBuckets(true);
+                }  else if (entry.getKey().equals(OP_MULTI_SOURCE)) {
+                    clusterManager.createMultiSourceSingleSinkTopologyBuckets(false);
+                } else if(entry.getKey().equals(OP_MULTI_SOURCE_REV_CONNECTION)) {
+                    clusterManager.createMultiSourceSingleSinkTopologyBuckets(true);
+                } else if (entry.getKey().equals(OP_BIDIR_ORPHAN_SINK)) {
                     clusterManager.createBiDirectionalButOrphanedSink();
-                } else if(entry.getKey().equals(OP_SINK_CONNECT_INIT)) {
+                } else if(entry.getKey().equals(OP_SINK_CONNECTION_INIT)) {
                     clusterManager.createSinkConnectionInit();
                 }
             } else {

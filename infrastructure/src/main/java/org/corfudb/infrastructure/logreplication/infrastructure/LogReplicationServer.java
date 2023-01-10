@@ -259,7 +259,7 @@ public class LogReplicationServer extends AbstractServer {
      * @param ctx Channel context
      * @param router Client router for sending the NACK
      */
-    private void sendLeadershipLoss(@Nonnull RequestMsg request,
+    public void sendLeadershipLoss(@Nonnull RequestMsg request,
         @Nonnull ChannelHandlerContext ctx, @Nonnull IServerRouter router) {
         HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
         ResponseMsg response = getLeadershipLoss(responseHeader, localNodeId);

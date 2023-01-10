@@ -1,7 +1,9 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
@@ -10,6 +12,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Re
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.StreamListener;
@@ -23,12 +26,19 @@ import org.corfudb.test.SampleSchema.SampleTableAMsg;
 import org.corfudb.test.SampleSchema.ValueFieldTagOne;
 import org.corfudb.test.SampleSchema.ValueFieldTagOneAndTwo;
 import org.corfudb.util.Sleep;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import java.io.File;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -52,6 +62,7 @@ import static org.assertj.core.api.Assertions.fail;
  * @author amartinezman
  */
 @Slf4j
+@RunWith(Parameterized.class)
 public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT {
 
     private static final int SLEEP_DURATION = 5;
@@ -74,20 +85,40 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
     private Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> noisyMap;
 
-    /**
-     * Sets the plugin path before starting any test
-     *
-     * @throws Exception
-     */
-    @Before
-    public void setupPluginPath() {
-        if(runProcess) {
-            File f = new File(nettyConfig);
-            this.pluginConfigFilePath = f.getAbsolutePath();
-        } else {
-            this.pluginConfigFilePath = nettyConfig;
-        }
+
+    public CorfuReplicationReconfigurationIT(Pair<String, ExampleSchemas.ClusterUuidMsg> pluginAndTopologyType) {
+        this.pluginConfigFilePath = pluginAndTopologyType.getKey();
+        this.topologyType = pluginAndTopologyType.getValue();
     }
+
+    // Static method that generates and returns test data (automatically test for two transport protocols: netty and GRPC)
+    @Parameterized.Parameters
+    public static Collection<Pair<String, ExampleSchemas.ClusterUuidMsg>> input() {
+
+        List<String> transportPlugins = Arrays.asList(
+                "src/test/resources/transport/grpcConfig.properties"
+//                "src/test/resources/transport/nettyConfig.properties"
+        );
+
+        List<ExampleSchemas.ClusterUuidMsg> topologyTypes = Arrays.asList(
+                DefaultClusterManager.OP_SINGLE_SOURCE_SINK,
+                DefaultClusterManager.OP_SINK_CONNECTION_INIT
+        );
+
+        List<Pair<String, ExampleSchemas.ClusterUuidMsg>> absolutePathPlugins = new ArrayList<>();
+
+        if(runProcess) {
+            transportPlugins.stream().map(File::new).forEach(f ->
+                    topologyTypes.stream().forEach(type -> absolutePathPlugins.add(Pair.of(f.getAbsolutePath(), type))));
+        } else {
+
+            transportPlugins.stream().forEach(f ->
+                    topologyTypes.stream().forEach(type -> absolutePathPlugins.add(Pair.of(f, type))));
+        }
+
+        return absolutePathPlugins;
+    }
+
 
     /**
      * Test the case where Sink leader node is restarted during log entry sync.
@@ -98,7 +129,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     public void testSinkClusterReset() throws Exception {
         // (1) Snapshot and Log Entry Sync
         log.debug(">>> (1) Start Snapshot and Log Entry Sync");
-        testEndToEndSnapshotAndLogEntrySyncUFO(false, false, 1);
+        testEndToEndSnapshotAndLogEntrySyncUFO(false, false, 1, false);
 
         ExecutorService writerService = Executors.newSingleThreadExecutor();
 
@@ -124,6 +155,13 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         verifySinkData((numWrites*2 + numWrites/2));
     }
 
+    private static List<ExampleSchemas.ClusterUuidMsg> fetchTopologyTypes() {
+        return Arrays.asList(
+                DefaultClusterManager.OP_SINGLE_SOURCE_SINK,
+                DefaultClusterManager.OP_SINK_CONNECTION_INIT
+        );
+    }
+
     /**
      * Test the case where Source leader node is restarted during log entry sync.
      *
@@ -136,7 +174,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
         // (1) Snapshot and Log Entry Sync
         log.debug(">>> (1) Start Snapshot and Log Entry Sync");
-        testEndToEndSnapshotAndLogEntrySyncUFO(false, false, 1);
+        testEndToEndSnapshotAndLogEntrySyncUFO(false, false, 1, false);
 
         ExecutorService writerService = Executors.newSingleThreadExecutor();
 
@@ -770,5 +808,25 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         tablesToListen.add(CorfuRuntime.getStreamID(NAMESPACE + SEPARATOR + TABLE_PREFIX + indexOne));
         tablesToListen.add(CorfuRuntime.getStreamID(NAMESPACE + SEPARATOR + TABLE_PREFIX + indexTwo));
         return tablesToListen;
+    }
+
+    @After
+    public void tearDown() throws Exception {
+
+        if (sourceCorfu != null) {
+            sourceCorfu.destroy();
+        }
+
+        if (sinkCorfu != null) {
+            sinkCorfu.destroy();
+        }
+
+        if (sourceReplicationServer != null) {
+            sourceReplicationServer.destroy();
+        }
+
+        if (sinkReplicationServer != null) {
+            sinkReplicationServer.destroy();
+        }
     }
 }

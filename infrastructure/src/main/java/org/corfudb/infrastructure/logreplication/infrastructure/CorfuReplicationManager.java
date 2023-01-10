@@ -140,15 +140,13 @@ public class CorfuReplicationManager {
         }
         LogReplicationSourceRouterHelper router;
         if (isConnectionStarter) {
-            LogReplicationSourceClientRouter sourceClientRouter = new LogReplicationSourceClientRouter(remote,
+            router = new LogReplicationSourceClientRouter(remote,
                     localNodeDescriptor.getClusterId(), createRuntimeParams(remote, session), this,
-                    session);
-            router = sourceClientRouter;
+                    session);;
         } else {
-            LogReplicationSourceServerRouter sourceServerRouter = new LogReplicationSourceServerRouter(remote,
+            router = new LogReplicationSourceServerRouter(remote,
                     localNodeDescriptor.getClusterId(), createRuntimeParams(remote, session), this,
-                    session, serverMap);
-            router = sourceServerRouter;
+                    session, serverMap);;
         }
         replicationSessionToRouterSource.put(session, router);
         createRuntime(remote, session);
@@ -248,6 +246,7 @@ public class CorfuReplicationManager {
      * Stop log replication for all the sink sites
      */
     public void stop() {
+        //Stop the source component
         remoteSesionToRuntime.forEach((session, runtime) -> {
             try {
                 log.info("Stop log replication runtime and source router for session={}", session);
@@ -260,6 +259,9 @@ public class CorfuReplicationManager {
         remoteSesionToRuntime.clear();
         replicationSessionToRouterSource.clear();
         replicationSessionToRuntimeParams.clear();
+
+        //Stop the sink component
+        replicationSessionToRouterSink.values().stream().forEach(router -> ((LogReplicationSinkClientRouter)router).stop());
     }
 
     /**

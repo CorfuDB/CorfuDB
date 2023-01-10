@@ -149,7 +149,7 @@ public class CorfuReplicationBiDirectional extends LogReplicationAbstractIT {
 //    }
 
     /**
-     * This test verifies the behaviour when cluster1 acts as both source and sink(orphaned sink, ie., sink has no remote source),
+     * This test verifies the behaviour when the sink connection starter,
      * and cluster2 acts as a sink for cluster1
      *
      * 1. Init with corfu 9000 source and 9001 sink
@@ -165,7 +165,7 @@ public class CorfuReplicationBiDirectional extends LogReplicationAbstractIT {
         pluginConfigFilePath = grpcConfig;
         //setup source and sink corfu
         setupSourceAndSinkCorfu();
-        // Add a new kind of topology where a cluster is both source and destination, but the remote just acts as a sink
+        // Add a new kind of topology where the SINK is connection starter
         init();
 
         //open Maps
@@ -252,8 +252,8 @@ public class CorfuReplicationBiDirectional extends LogReplicationAbstractIT {
                 TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
         );
         try (TxnContext txn = corfuStoreSource.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-            txn.putRecord(configTable, DefaultClusterManager.OP_SINK_CONNECT_INIT,
-                    DefaultClusterManager.OP_SINK_CONNECT_INIT, DefaultClusterManager.OP_SINK_CONNECT_INIT);
+            txn.putRecord(configTable, DefaultClusterManager.OP_SINK_CONNECTION_INIT,
+                    DefaultClusterManager.OP_SINK_CONNECTION_INIT, DefaultClusterManager.OP_SINK_CONNECTION_INIT);
             txn.commit();
         }
     }

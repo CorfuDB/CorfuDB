@@ -122,6 +122,9 @@ public class LogReplicationAbstractIT extends AbstractIT {
     public CorfuStore corfuStoreSource;
     public CorfuStore corfuStoreSink;
 
+    // default is single Source-Sink topology
+    public ExampleSchemas.ClusterUuidMsg topologyType = DefaultClusterManager.OP_SINGLE_SOURCE_SINK;
+
     private final long longInterval = 20L;
 
     public void testEndToEndSnapshotAndLogEntrySync() throws Exception {
@@ -176,8 +179,10 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     }
 
-    public void testEndToEndSnapshotAndLogEntrySyncUFO(boolean diskBased, boolean checkRemainingEntriesOnSecondLogEntrySync, int numSourceClusters) throws Exception {
-        testEndToEndSnapshotAndLogEntrySyncUFO(1, diskBased, checkRemainingEntriesOnSecondLogEntrySync, numSourceClusters);
+    public void testEndToEndSnapshotAndLogEntrySyncUFO(boolean diskBased,
+                                                       boolean checkRemainingEntriesOnSecondLogEntrySync,
+                                                       int numSourceClusters, boolean cleanup) throws Exception {
+        testEndToEndSnapshotAndLogEntrySyncUFO(1, diskBased, checkRemainingEntriesOnSecondLogEntrySync, numSourceClusters, cleanup);
     }
 
     public void initSingleSourceSinkCluster() throws Exception {
@@ -187,13 +192,15 @@ public class LogReplicationAbstractIT extends AbstractIT {
                 TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
         );
         try (TxnContext txn = corfuStoreSource.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-            txn.putRecord(configTable, DefaultClusterManager.OP_SINGLE_SOURCE_SINK,
-                    DefaultClusterManager.OP_SINGLE_SOURCE_SINK, DefaultClusterManager.OP_SINGLE_SOURCE_SINK);
+            txn.putRecord(configTable, this.topologyType,
+                    this.topologyType, this.topologyType);
             txn.commit();
         }
     }
 
-    public void testEndToEndSnapshotAndLogEntrySyncUFO(int totalNumMaps, boolean diskBased, boolean checkRemainingEntriesOnSecondLogEntrySync, int numSourceClusters) throws Exception {
+    public void testEndToEndSnapshotAndLogEntrySyncUFO(int totalNumMaps, boolean diskBased,
+                                                       boolean checkRemainingEntriesOnSecondLogEntrySync,
+                                                       int numSourceClusters, boolean cleanup) throws Exception {
         // For the purpose of this test, Sink should only update status 5 times:
         // (1) On startup, init the replication status for each Source clusters(3 clusters = 3 updates)
         // (2) When starting snapshot sync apply : is_data_consistent = false
@@ -265,7 +272,6 @@ public class LogReplicationAbstractIT extends AbstractIT {
             // Verify Sink Status Listener received all expected updates (is_data_consistent)
             log.info(">> Wait ... Replication status UPDATE ...");
             statusUpdateLatch.await();
-            log.info("out of statusUpdateLatch");
             assertThat(sinkListener.getAccumulatedStatus().size()).isEqualTo(totalSinkStatusUpdates);
             // Confirm last updates are set to true (corresponding to snapshot sync completed and log entry sync started)
             assertThat(sinkListener.getAccumulatedStatus().get(sinkListener.getAccumulatedStatus().size() - 1)).isTrue();
@@ -277,6 +283,10 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
         } finally {
             executorService.shutdownNow();
+
+            if(!cleanup) {
+                return;
+            }
 
             if (sourceCorfu != null) {
                 sourceCorfu.destroy();

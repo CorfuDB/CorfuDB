@@ -534,14 +534,12 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 topologyDescriptor.getRemoteSourceClusters().values(), topologyDescriptor.getRemoteSinkClusters().values(),
                 fetchConnectionEndpoints().values());
 
-
+        // check if local cluster is a connectionReceiver. This is used to start the server components
         remoteSinkClusters.removeAll(connectionEndpoints);
         remoteSourceClusters.removeAll(connectionEndpoints);
         boolean isConnectionReceiver = !remoteSinkClusters.isEmpty() || !remoteSourceClusters.isEmpty();
 
-        if(isConnectionReceiver) {
-            setupServerNode();
-        }
+        setupConnectionReceiversAndSinkServers(isConnectionReceiver, !topologyDescriptor.getRemoteSourceClusters().isEmpty());
 
         // create connection endpoint routers to pass to the interClusterServerNode.
         // The incoming msgs will be routed to the appropriate router in the transport layer adapter.
@@ -568,15 +566,26 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     }
 
 
-    private void setupServerNode() {
-        serverMap.put(LogReplicationServer.class, new LogReplicationServer(serverContext, localNodeId, replicationConfigManager,
-                localCorfuEndpoint, topologyDescriptor.getTopologyConfigId(), remoteSessionToMetadataManagerMap));
-        serverMap.put(BaseServer.class, new BaseServer(serverContext));
-        interClusterServerNode = new CorfuInterClusterReplicationServerNode(serverContext, serverMap);
+    private void setupConnectionReceiversAndSinkServers(boolean isConnectionReceiver, boolean isSink) {
+        if(!isConnectionReceiver && !isSink) {
+            return;
+        }
 
-        // Sink Site : the LogReplicationServer (server handler) will reset the LogReplicationSinkManager on acquiring
-        // leadership
-        interClusterServerNode.setLeadership(true);
+        LogReplicationServer lrServer = new LogReplicationServer(serverContext, localNodeId, replicationConfigManager,
+                localCorfuEndpoint, topologyDescriptor.getTopologyConfigId(), remoteSessionToMetadataManagerMap);
+        serverMap.put(LogReplicationServer.class, lrServer);
+        serverMap.put(BaseServer.class, new BaseServer(serverContext));
+
+
+        if (isConnectionReceiver) {
+            interClusterServerNode = new CorfuInterClusterReplicationServerNode(serverContext, serverMap);
+
+            // Sink Site : the LogReplicationServer (server handler) will reset the LogReplicationSinkManager on acquiring
+            // leadership
+            interClusterServerNode.setLeadership(true);
+        } else {
+            lrServer.setLeadership(true);
+        }
     }
 
     private Map<String, ClusterDescriptor> fetchConnectionEndpoints() {
@@ -751,8 +760,10 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             logReplicationEventListener.stop();
         }
         if (newTopology.getRemoteSourceClusters().isEmpty()) {
-            // Stop the replication server
-            interClusterServerNode.disable();
+            // Stop the replication server, present when the cluster is a connectionEndpoint.
+            if (interClusterServerNode != null) {
+                interClusterServerNode.disable();
+            }
             replicationManager.clearSessionToSinkRouterMap();
         } else {
             updateTopologyConfigIdOnSink(newTopology.getTopologyConfigId());

@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure.logreplication.transport.sample;
 
+import com.google.gson.Gson;
+import com.google.gson.stream.JsonReader;
 import io.grpc.ConnectivityState;
 import io.grpc.Context;
 import io.grpc.ManagedChannel;
@@ -25,9 +27,11 @@ import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.util.NodeLocator;
 
 import javax.annotation.Nonnull;
+import java.io.InputStreamReader;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -38,6 +42,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
  * This is a default implementation of a custom channel for Log Replication Servers inter-communication
@@ -163,10 +169,12 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
                 lock.lock();
                 Pair<Boolean, ManagedChannel> reuseChannel = canReuseChannel(nodeId);
-                if(!nodeIdToChannelMap.containsKey(nodeId) || reuseChannel.getLeft()) {
+                if(!nodeIdToChannelMap.containsKey(nodeId) || !reuseChannel.getLeft()) {
                     log.info("GRPC create new channel to node{}@{}:{}", nodeId, nodeLocator.getHost(), nodeLocator.getPort());
                     channel = ManagedChannelBuilder.forAddress(nodeLocator.getHost(), nodeLocator.getPort())
                             .usePlaintext()
+//                            .defaultServiceConfig(getRetryingServiceConfig())
+//                            .enableRetry()
                             .build();
                     nodeIdToChannelMap.putIfAbsent(nodeId, new HashSet<>());
                     nodeIdToChannelMap.get(nodeId).add(channel);
@@ -174,14 +182,14 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                     channel = reuseChannel.getRight();
                 }
                 channelToStreamsMap.putIfAbsent(channel, new HashSet<>());
-                channelToStreamsMap.get(nodeId).add(session);
+                channelToStreamsMap.get(channel).add(session);
                 lock.unlock();
 
                 blockingStubMap.put(session, LogReplicationChannelGrpc.newBlockingStub(channel));
                 asyncStubMap.put(session, LogReplicationChannelGrpc.newStub(channel));
                 onConnectionUp(nodeId);
             } catch (Exception e) {
-                log.error("Error: {}", e.getMessage());
+                log.error("Error: {} :::: {}", e.getCause(), e.getStackTrace());
                 onConnectionDown(nodeId);
             }
         });
@@ -227,6 +235,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         }
 
         if (!responseObserverMap.containsKey(sessionMsg)) {
+            String finalNodeId = nodeId;
             StreamObserver<RequestMsg> requestObserver = new StreamObserver<RequestMsg>() {
                 @Override
                 public void onNext(RequestMsg request) {
@@ -246,6 +255,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                     long requestId = response.getHeader().getRequestId();
                     getSinkRouter().completeExceptionally(requestId, t);
                     responseObserverMap.remove(sessionMsg);
+                    onServiceUnavailable(t, finalNodeId, sessionMsg);
                 }
 
                 @Override
@@ -273,9 +283,9 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     }
 
     private void queryLeadership(String nodeId, RequestMsg request) {
+        LogReplication.ReplicationSessionMsg session = request.getPayload().getLrLeadershipQuery().getSessionInfo();
         try {
-            LogReplication.ReplicationSessionMsg session = request.getPayload().getLrLeadershipQuery().getSessionInfo();
-            log.info("queryLeadership session {}", session);
+            log.info("queryLeadership for session {}", session);
             if (blockingStubMap.containsKey(session)) {
                 ResponseMsg response = blockingStubMap.get(session).withWaitForReady().queryLeadership(request);
                 receive(response);
@@ -286,14 +296,14 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         } catch (Exception e) {
             log.error("Caught exception while sending message to query leadership status id {}",
                     request.getHeader().getRequestId(), e);
-            onServiceUnavailable(e, nodeId);
+            onServiceUnavailable(e, nodeId, session);
             getSourceRouter().completeExceptionally(request.getHeader().getRequestId(), e);
         }
     }
 
     private void requestMetadata(String nodeId, RequestMsg request) {
+        LogReplication.ReplicationSessionMsg session = request.getPayload().getLrMetadataRequest().getSessionInfo();
         try {
-            LogReplication.ReplicationSessionMsg session = request.getPayload().getLrMetadataRequest().getSessionInfo();
             if (blockingStubMap.containsKey(session)) {
                 ResponseMsg response = blockingStubMap.get(session).withWaitForReady().negotiate(request);
                 receive(response);
@@ -304,7 +314,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         } catch (Exception e) {
             log.error("Caught exception while sending message to query metadata id={}",
                     request.getHeader().getRequestId(), e);
-            onServiceUnavailable(e, nodeId);
+            onServiceUnavailable(e, nodeId, session);
             getSourceRouter().completeExceptionally(request.getHeader().getRequestId(), e);
         }
     }
@@ -331,7 +341,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 public void onError(Throwable t) {
                     log.error("Error from response observer", t);
                     long requestId = request.getHeader().getRequestId();
-                    onServiceUnavailable(t, nodeId);
+                    onServiceUnavailable(t, nodeId, sessionMsg);
                     getSourceRouter().completeExceptionally(requestId, t);
                     replicationReqObserverMap.remove(Pair.of(sessionMsg, requestId));
                 }
@@ -384,23 +394,37 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         // No-op
     }
 
-    private void onServiceUnavailable(Throwable t, String nodeId) {
+    private void onServiceUnavailable(Throwable t, String nodeId, LogReplication.ReplicationSessionMsg sessionMsg) {
         Set<ManagedChannel> allChannelsToNode = nodeIdToChannelMap.get(nodeId);
 
         allChannelsToNode.stream().forEach(channel -> {
             ConnectivityState channelState = channel.getState(false);
+            lock.lock();
+            channelToStreamsMap.remove(channel);
+            nodeIdToChannelMap.remove(nodeId);
+            lock.unlock();
+
             if (!channelState.equals(ConnectivityState.SHUTDOWN) && t instanceof StatusRuntimeException &&
                     ((StatusRuntimeException) t).getStatus().getCode().equals(Status.UNAVAILABLE.getCode())) {
                 //generally a transient issue, retry connection...
+                log.info("prob channel {}", channel.hashCode());
+                // no retry logic for sample, so create a new channel
                 onConnectionDown(nodeId);
             } else if (channelState.equals(ConnectivityState.SHUTDOWN)) {
-                lock.lock();
-                channelToStreamsMap.remove(nodeId);
-                nodeIdToChannelMap.remove(nodeId);
-                lock.unlock();
+                log.debug("GRPC channel to node {} is shutdown", nodeId);
             }
         });
 
+    }
+
+    private Map<String, ?> getRetryingServiceConfig() {
+        return new Gson()
+                .fromJson(
+                        new JsonReader(new InputStreamReader(
+                                Objects.requireNonNull(this.getClass()
+                                        .getResourceAsStream("lr_service_config.json")),
+                                UTF_8)),
+                        Map.class);
     }
 
 }

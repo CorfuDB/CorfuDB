@@ -1,6 +1,7 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.collections.TableOptions;
@@ -47,11 +48,6 @@ public class CorfuReplicationMultiSinkIT extends CorfuReplicationMultiSourceSink
         return absolutePathPlugins;
     }
 
-    @Before
-    public void setUp() throws Exception {
-        super.setUp(1, MAX_REMOTE_CLUSTERS, DefaultClusterManager.OP_MULTI_SINK);
-    }
-
     /**
      * The test verifies snapshot and log entry sync on a topology with 1 Source clusters and 3 Sink clusters.
      * The Source cluster replicates to all Sink clusters.  The set of streams to replicate as received from the
@@ -66,12 +62,21 @@ public class CorfuReplicationMultiSinkIT extends CorfuReplicationMultiSourceSink
      * verifies that they were applied correctly.
      */
     @Test
-    public void testUpdatesOnReplicatedTables() throws Exception {
+    public void testUpdatesOnReplicatedTables_sourceConnectionInit() throws Exception {
+        super.setUp(1, MAX_REMOTE_CLUSTERS, DefaultClusterManager.OP_MULTI_SINK);
+        verifySnapshotAndLogEntrySink(false);
+    }
+
+    @Test
+    public void testUpdatesOnReplicatedTables_sinkConnectionInit() throws Exception {
+        super.setUp(1, MAX_REMOTE_CLUSTERS, DefaultClusterManager.OP_MULTI_SINK_REV_CONNECTION);
         verifySnapshotAndLogEntrySink(false);
     }
 
     @Test
     public void testRoleChange() throws Exception {
+        super.setUp(1, MAX_REMOTE_CLUSTERS, DefaultClusterManager.OP_MULTI_SINK);
+
         verifySnapshotAndLogEntrySink(false);
         log.info("Preparing for role change");
         prepareTestTopologyForRoleChange(MAX_REMOTE_CLUSTERS, 1);

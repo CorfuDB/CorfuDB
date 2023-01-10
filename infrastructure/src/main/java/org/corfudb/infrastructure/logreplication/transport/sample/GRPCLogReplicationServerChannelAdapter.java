@@ -42,11 +42,7 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
         super(serverContext, sessionToSourceServer, sessionToSinkServer);
         this.service = new GRPCLogReplicationServerHandler(sessionToSourceServer, sessionToSinkServer);
         this.port = Integer.parseInt((String) serverContext.getServerConfig().get("<port>"));
-        // The executor of GRPCLogReplicationServerHandler needs to be single-threaded, otherwise the ordering of
-        // requests and their acks cannot be guaranteed. By default, grpc utilizes thread-pool, so we need to provide
-        // a single-threaded executor here.
-        this.server = ServerBuilder.forPort(port).addService(service)
-                .executor(Executors.newSingleThreadScheduledExecutor()).build();
+        this.server = ServerBuilder.forPort(port).addService(service).executor(Executors.newSingleThreadScheduledExecutor()).build();
     }
 
     @Override

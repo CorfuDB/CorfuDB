@@ -1,7 +1,9 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
+import org.corfudb.runtime.ExampleSchemas;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -44,12 +46,6 @@ public class CorfuReplicationMultiSourceIT extends CorfuReplicationMultiSourceSi
         return absolutePathPlugins;
     }
 
-    @Before
-    public void setUp() throws Exception {
-        // Setup Corfu on 3 LR Source Sites and 1 LR Sink Site
-        super.setUp(MAX_REMOTE_CLUSTERS, 1, DefaultClusterManager.OP_MULTI_SOURCE);
-    }
-
     /**
      * The test verifies snapshot and log entry sync on a topology with 3 Source clusters and 1 Sink cluster.
      * The 3 Source clusters replicate to the same Sink cluster.  The set of streams to replicate as received from the
@@ -68,7 +64,16 @@ public class CorfuReplicationMultiSourceIT extends CorfuReplicationMultiSourceSi
      *
      */
     @Test
-    public void testUpdatesOnReplicatedTables() throws Exception {
+    public void testUpdatesOnReplicatedTables_sourceConnectionInit() throws Exception {
+        // Setup Corfu on 3 LR Source Sites and 1 LR Sink Site
+        super.setUp(MAX_REMOTE_CLUSTERS, 1, DefaultClusterManager.OP_MULTI_SOURCE);
+        verifySnapshotAndLogEntrySink(false);
+    }
+
+    @Test
+    public void testUpdatesOnReplicatedTables_sinkConnectionInit() throws Exception {
+        // Setup Corfu on 3 LR Source Sites and 1 LR Sink Site
+        super.setUp(MAX_REMOTE_CLUSTERS, 1, DefaultClusterManager.OP_MULTI_SOURCE_REV_CONNECTION);
         verifySnapshotAndLogEntrySink(false);
     }
 
@@ -80,6 +85,9 @@ public class CorfuReplicationMultiSourceIT extends CorfuReplicationMultiSourceSi
      */
     @Test
     public void testRoleChange() throws Exception {
+        // Setup Corfu on 3 LR Source Sites and 1 LR Sink Site
+        super.setUp(MAX_REMOTE_CLUSTERS, 1, DefaultClusterManager.OP_MULTI_SOURCE);
+
         verifySnapshotAndLogEntrySink(false);
         log.info("Preparing for role change");
         prepareTestTopologyForRoleChange(1, MAX_REMOTE_CLUSTERS);
