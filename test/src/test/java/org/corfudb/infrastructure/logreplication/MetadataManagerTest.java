@@ -2,7 +2,8 @@ package org.corfudb.infrastructure.logreplication;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
@@ -11,6 +12,7 @@ import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.retry.IRetry;
@@ -21,7 +23,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
-import java.util.Map;
+
+import java.util.List;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -33,12 +36,10 @@ public class MetadataManagerTest extends AbstractViewTest {
     private LogReplicationConfigManager configManager;
     private LogReplicationContext replicationContext;
     private boolean success;
-    private final Long topologyConfigId = 5L;
-    private final String localClusterId = "Test Cluster";
+    private long topologyConfigId = 5L;
     private TestUtils utils;
-    private final String remoteClusterId = "Remote Cluster";
-    private final ReplicationSession replicationSession =
-        ReplicationSession.getDefaultReplicationSessionForCluster(remoteClusterId);
+    private List<LogReplicationSession> sessions = DefaultClusterConfig.getSessions();
+    private LogReplicationSession defaultSession = sessions.get(0);
 
     @Before
     public void setUp() {
@@ -61,34 +62,29 @@ public class MetadataManagerTest extends AbstractViewTest {
      */
     @Test
     public void testMetadataAfterLogEntrySync() {
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime);
+        metadataManager.addSession(defaultSession, topologyConfigId, true);
+        LogReplicationContext context = new LogReplicationContext(configManager, topologyConfigId, getEndpoint(SERVERS.PORT_0));
+        LogEntryWriter writer = new LogEntryWriter(metadataManager, defaultSession, context);
 
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId,
-            localClusterId);
-        LogEntryWriter writer = new LogEntryWriter(replicationContext, metadataManager, replicationSession);
-
-        Long numOpaqueEntries = 3L;
+        long numOpaqueEntries = 3L;
         LogReplication.LogReplicationEntryMsg lrEntryMsg = utils.generateLogEntryMsg(1, numOpaqueEntries,
-            Address.NON_ADDRESS, topologyConfigId, Address.NON_ADDRESS);
+                        Address.NON_ADDRESS, topologyConfigId, Address.NON_ADDRESS);
 
         // Verify that the data was successfully applied
         boolean success = writer.apply(lrEntryMsg);
         Assert.assertTrue(success);
 
-        TxnContext txnContext = metadataManager.getTxnContext();
-        Map<LogReplicationMetadataManager.LogReplicationMetadataType, Long> metadataMap = metadataManager.queryMetadata(
-            txnContext,
-            LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID,
-            LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED,
-            LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_ENTRY_APPLIED);
-        txnContext.commit();
+        ReplicationMetadata metadata;
+        try(TxnContext txnContext = metadataManager.getTxnContext()) {
+            metadata = metadataManager.queryReplicationMetadata(txnContext, defaultSession);
+            txnContext.commit();
+        }
 
         // Verify that metadata was correctly updated
-        Assert.assertEquals(topologyConfigId,
-            metadataMap.get(LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID));
-        Assert.assertEquals(numOpaqueEntries,
-            metadataMap.get(LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED));
-        Assert.assertEquals(numOpaqueEntries,
-            metadataMap.get(LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_ENTRY_APPLIED));
+        Assert.assertEquals(topologyConfigId, metadata.getTopologyConfigId());
+        Assert.assertEquals(numOpaqueEntries, metadata.getLastLogEntryBatchProcessed());
+        Assert.assertEquals(numOpaqueEntries, metadata.getLastLogEntryApplied());
     }
 
     /**
@@ -99,13 +95,14 @@ public class MetadataManagerTest extends AbstractViewTest {
     @Test
     public void testInitTsForSnapshotAndLogEntryProcessed() {
 
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime,
-            topologyConfigId, localClusterId);
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime);
 
-        long lastApppliedSnapshotTimestamp = metadataManager.getLastAppliedSnapshotTimestamp();
-        long lastProcessedLogEntryTimestamp = metadataManager.getLastProcessedLogEntryBatchTimestamp();
+        long lastAppliedSnapshotTimestamp = metadataManager.getReplicationMetadata(defaultSession, false, 0)
+                .getLastSnapshotApplied();
+        long lastProcessedLogEntryTimestamp = metadataManager.getReplicationMetadata(defaultSession, false, 0)
+                .getLastLogEntryBatchProcessed();
 
-        Assert.assertEquals(Address.NON_ADDRESS, lastApppliedSnapshotTimestamp);
+        Assert.assertEquals(Address.NON_ADDRESS, lastAppliedSnapshotTimestamp);
         Assert.assertEquals(Address.NON_ADDRESS, lastProcessedLogEntryTimestamp);
     }
 
@@ -120,12 +117,13 @@ public class MetadataManagerTest extends AbstractViewTest {
     @Test
     public void testConcurrentTopologyChange() throws Exception {
 
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId,
-            localClusterId);
-        LogEntryWriter writer = new LogEntryWriter(replicationContext, metadataManager, replicationSession);
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime);
+        metadataManager.addSession(defaultSession, topologyConfigId, true);
+        LogReplicationContext context = new LogReplicationContext(configManager, 0, defaultSession.getSourceClusterId());
+        LogEntryWriter writer = new LogEntryWriter(metadataManager, defaultSession, context);
 
         // Create a message with 50 opaque entries
-        Long numOpaqueEntries = 50L;
+        long numOpaqueEntries = 50L;
         LogReplication.LogReplicationEntryMsg lrEntryMsg = utils.generateLogEntryMsg(1, numOpaqueEntries,
             Address.NON_ADDRESS, topologyConfigId, Address.NON_ADDRESS);
 
@@ -140,9 +138,8 @@ public class MetadataManagerTest extends AbstractViewTest {
                 IRetry.build(IntervalRetry.class, () -> {
                     CorfuStore corfuStore = new CorfuStore(corfuRuntime);
                     try (TxnContext txnContext = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                        metadataManager.appendUpdate(txnContext,
-                            LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID,
-                            topologyConfigId+1);
+                        metadataManager.updateReplicationMetadataField(txnContext, defaultSession,
+                                ReplicationMetadata.TOPOLOGYCONFIGID_FIELD_NUMBER, topologyConfigId + 1);
                         txnContext.commit();
                     } catch (TransactionAbortedException tae) {
                         log.error("Transaction Aborted", tae);
@@ -158,32 +155,23 @@ public class MetadataManagerTest extends AbstractViewTest {
         executeScheduled(2, PARAMETERS.TIMEOUT_NORMAL);
 
         TxnContext txnContext = metadataManager.getTxnContext();
-        Map<LogReplicationMetadataManager.LogReplicationMetadataType, Long> metadataMap = metadataManager.queryMetadata(
-            txnContext,
-            LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID,
-            LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED,
-            LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_ENTRY_APPLIED);
+        ReplicationMetadata metadata = metadataManager
+                .queryReplicationMetadata(txnContext, defaultSession);
         txnContext.commit();
 
         // Verify that the topology was successfully updated
-        Assert.assertEquals(topologyConfigId+1,
-            (long)metadataMap.get(LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID));
+        Assert.assertEquals(topologyConfigId + 1, metadata.getTopologyConfigId());
 
         if (success) {
             // Log entry apply finished before the topology changed.  Both LAST_LOG_ENTRY_PROCESSED and
             // LAST_LOG_ENTRY_APPLIED will be updated
-            Assert.assertEquals(numOpaqueEntries,
-                metadataMap.get(LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED));
-            Assert.assertEquals(numOpaqueEntries,
-                metadataMap.get(LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_ENTRY_APPLIED));
+            Assert.assertEquals(numOpaqueEntries, metadata.getLastLogEntryBatchProcessed());
+            Assert.assertEquals(numOpaqueEntries, metadata.getLastLogEntryApplied());
         } else {
             // Log entry was partially applied because topology change was detected.  LAST_LOG_ENTRY_PROCESSED should
             // not have changed.
-            Assert.assertEquals(Address.NON_ADDRESS,
-                (long)metadataMap.get(LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED));
-            Assert.assertTrue(
-                metadataMap.get(LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_ENTRY_APPLIED)
-                    < numOpaqueEntries);
+            Assert.assertEquals(Address.NON_ADDRESS, metadata.getLastLogEntryBatchProcessed());
+            Assert.assertTrue(metadata.getLastLogEntryApplied() < numOpaqueEntries);
         }
     }
 }

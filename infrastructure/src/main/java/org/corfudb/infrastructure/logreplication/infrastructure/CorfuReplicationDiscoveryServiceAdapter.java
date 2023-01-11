@@ -6,6 +6,9 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * This class contains all the interfaces exposed from the Discovery Service to the Cluster Manager plugin.
+ */
 public interface CorfuReplicationDiscoveryServiceAdapter {
 
     /**

@@ -237,7 +237,7 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
 
             // Replication Status Listeners
             sinkCorfuStores.get(i).openTable(LogReplicationMetadataManager.NAMESPACE,
-                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE, LogReplicationMetadata.ReplicationStatusKey.class,
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME, LogReplicationMetadata.ReplicationStatusKey.class,
                 LogReplicationMetadata.ReplicationStatusVal.class, null,
                 TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
             statusLatch = new CountDownLatch(numDataConsistentUpdates);

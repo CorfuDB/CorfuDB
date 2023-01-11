@@ -1,0 +1,46 @@
+diff a/infrastructure/src/main/java/org/corfudb/infrastructure/logreplication/runtime/fsm/NegotiatingState.java b/infrastructure/src/main/java/org/corfudb/infrastructure/logreplication/runtime/fsm/NegotiatingState.java	(rejected hunks)
+@@ -176,31 +180,26 @@ public class NegotiatingState implements LogReplicationRuntimeState {
+     private void processNegotiationResponse(LogReplicationMetadataResponseMsg negotiationResponse)
+             throws LogReplicationNegotiationException {
+ 
+-        log.debug("Process negotiation response {} from {}", negotiationResponse, fsm.getRemoteClusterId());
++        log.debug("Process negotiation response {} from {}", negotiationResponse, fsm.getSession().getClusterId());
+ 
+-        /*
+-         * The standby site has a smaller config ID, redo the discovery for this standby site when
+-         * getting a new notification of the site config change if this standby is in the new config.
+-         */
+-        if (negotiationResponse.getTopologyConfigID() < metadataManager.getTopologyConfigId()) {
+-            log.error("The active site configID {} is bigger than the standby configID {} ",
+-                    metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
++        ReplicationMetadata metadata = metadataManager.queryReplicationMetadata(fsm.getSession());
++
++        // The sink has a smaller config ID, redo the discovery for this remote, when
++        // getting a new notification of the site config, change if this sink is in the new config.
++        if (negotiationResponse.getTopologyConfigID() < metadata.getTopologyConfigId()) {
++            log.error("The source site configID {} is bigger than the sink configID {} ",
++                    metadata.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
+             throw new LogReplicationNegotiationException("Mismatch of configID");
+         }
+ 
+-        /*
+-         * The standby site has larger config ID, redo the whole discovery for the active site
+-         * it will be triggered by a notification of the site config change.
+-         */
+-        if (negotiationResponse.getTopologyConfigID() > metadataManager.getTopologyConfigId()) {
+-            log.error("The active site configID {} is smaller than the standby configID {} ",
+-                    metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
++        // The sink has a larger config ID, redo the whole discovery for the source site
++        // it will be triggered by a notification of the site config change.
++        if (negotiationResponse.getTopologyConfigID() > metadata.getTopologyConfigId()) {
++            log.error("The source site configID {} is smaller than the sink configID {} ",
++                    metadata.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
+             throw new LogReplicationNegotiationException("Mismatch of configID");
+         }
+ 
+-        /*
+-         * Get the current log head.
+-         */
+         long logHead = metadataManager.getLogHead();
+ 
+         /*

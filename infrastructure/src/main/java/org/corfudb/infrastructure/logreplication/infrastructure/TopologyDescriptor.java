@@ -8,10 +8,10 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -31,6 +31,7 @@ public class TopologyDescriptor {
     @Getter
     private final long topologyConfigId;
 
+    // TODO: this should change, no longer notion of sink/source. A sink/source is relative to a replication model
     @Getter
     private final Map<String, ClusterDescriptor> sourceClusters;
 
@@ -41,11 +42,21 @@ public class TopologyDescriptor {
     private final Map<String, ClusterDescriptor> invalidClusters;
 
     /**
+     * Defines the cluster to which this node belongs to.
+     */
+    @Getter
+    private ClusterDescriptor localClusterDescriptor;
+
+    @Getter
+    private NodeDescriptor localNodeDescriptor;
+
+    /**
      * Constructor
      *
-     * @param topologyMessage proto definition of the topology
+     * @param topologyMessage   topology message
+     * @param localNodeId       the identifier of this node
      */
-    public TopologyDescriptor(TopologyConfigurationMsg topologyMessage) {
+    public TopologyDescriptor(TopologyConfigurationMsg topologyMessage, String localNodeId) {
         this.topologyConfigId = topologyMessage.getTopologyConfigID();
         this.sinkClusters = new HashMap<>();
         this.sourceClusters = new HashMap<>();
@@ -56,23 +67,13 @@ public class TopologyDescriptor {
             if (clusterConfig.getRole() == ClusterRole.SOURCE) {
                 sourceClusters.put(cluster.getClusterId(), cluster);
             } else if (clusterConfig.getRole() == ClusterRole.SINK) {
-                addSinkCluster(cluster);
+                sinkClusters.put(cluster.getClusterId(), cluster);
             } else {
                 invalidClusters.put(cluster.getClusterId(), cluster);
             }
         }
-    }
 
-    /**
-     * Constructor
-     *
-     * @param topologyConfigId topology configuration identifier (epoch)
-     * @param sourceCluster source cluster
-     * @param sinkClusters sink cluster's
-     */
-    public TopologyDescriptor(long topologyConfigId, @NonNull ClusterDescriptor sourceCluster,
-                              @NonNull List<ClusterDescriptor> sinkClusters) {
-        this(topologyConfigId, Collections.singletonList(sourceCluster), sinkClusters);
+        setLocalDescriptor(localNodeId);
     }
 
     /**
@@ -83,7 +84,7 @@ public class TopologyDescriptor {
      * @param sinkClusters sink cluster's
      */
     public TopologyDescriptor(long topologyConfigId, @NonNull List<ClusterDescriptor> sourceClusters,
-                              @NonNull List<ClusterDescriptor> sinkClusters) {
+                              @NonNull List<ClusterDescriptor> sinkClusters, String localNodeId) {
         this.topologyConfigId = topologyConfigId;
         this.sourceClusters = new HashMap<>();
         this.sinkClusters = new HashMap<>();
@@ -91,6 +92,7 @@ public class TopologyDescriptor {
 
         sourceClusters.forEach(sourceCluster -> this.sourceClusters.put(sourceCluster.getClusterId(), sourceCluster));
         sinkClusters.forEach(sinkCluster -> this.sinkClusters.put(sinkCluster.getClusterId(), sinkCluster));
+        setLocalDescriptor(localNodeId);
     }
 
     /**
@@ -102,8 +104,9 @@ public class TopologyDescriptor {
      * @param invalidClusters invalid cluster's
      */
     public TopologyDescriptor(long topologyConfigId, @NonNull List<ClusterDescriptor> sourceClusters,
-                              @NonNull List<ClusterDescriptor> sinkClusters, @NonNull List<ClusterDescriptor> invalidClusters) {
-        this(topologyConfigId, sourceClusters, sinkClusters);
+                              @NonNull List<ClusterDescriptor> sinkClusters,
+                              @NonNull List<ClusterDescriptor> invalidClusters, String localNodeId) {
+        this(topologyConfigId, sourceClusters, sinkClusters, localNodeId);
         invalidClusters.forEach(invalidCluster -> this.invalidClusters.put(invalidCluster.getClusterId(), invalidCluster));
     }
 
@@ -112,8 +115,7 @@ public class TopologyDescriptor {
      *
      * @return topology protoBuf
      */
-    public TopologyConfigurationMsg convertToMessage() {
-
+    public TopologyConfigurationMsg  convertToMessage() {
         List<ClusterConfigurationMsg> clusterConfigurationMsgs = Stream.of(sourceClusters.values(),
                 sinkClusters.values(), invalidClusters.values())
                 .flatMap(Collection::stream)
@@ -126,49 +128,27 @@ public class TopologyDescriptor {
     }
 
     /**
-     * Add a sink cluster to the current topology
-     *
-     * @param cluster sink cluster to add
-     */
-    public void addSinkCluster(ClusterDescriptor cluster) {
-        sinkClusters.put(cluster.getClusterId(), cluster);
-    }
-
-    /**
-     * Remove a sink cluster from the current topology
-     *
-     * @param clusterId unique identifier of the sink cluster to be removed from topology
-     */
-    public void removeSinkCluster(String clusterId) {
-        ClusterDescriptor removedCluster = sinkClusters.remove(clusterId);
-
-        if (removedCluster == null) {
-            log.warn("Cluster {} never present as a SINK cluster.", clusterId);
-        }
-    }
-
-    /**
      * Get the Cluster Descriptor to which a given endpoint belongs to.
      *
      * @param nodeId
      * @return cluster descriptor to which endpoint belongs to.
      */
-    public ClusterDescriptor getClusterDescriptor(String nodeId) {
+    public void setLocalDescriptor(String nodeId) {
         List<ClusterDescriptor> clusters = Stream.of(sourceClusters.values(), sinkClusters.values(),
                 invalidClusters.values())
                 .flatMap(Collection::stream)
                 .collect(Collectors.toList());
 
-        for(ClusterDescriptor cluster : clusters) {
+        for (ClusterDescriptor cluster : clusters) {
             for (NodeDescriptor node : cluster.getNodesDescriptors()) {
                 if (node.getNodeId().equals(nodeId)) {
-                    return cluster;
+                    localNodeDescriptor = node;
+                    localClusterDescriptor = cluster;
+                    break;
                 }
             }
         }
         log.warn("Node {} does not belong to any cluster defined in {}", nodeId, clusters);
-
-        return null;
     }
 
     @Override

@@ -1,0 +1,144 @@
+diff a/infrastructure/src/main/java/org/corfudb/infrastructure/logreplication/replication/receive/LogReplicationSinkManager.java b/infrastructure/src/main/java/org/corfudb/infrastructure/logreplication/replication/receive/LogReplicationSinkManager.java	(rejected hunks)
+@@ -11,8 +11,11 @@ import org.corfudb.infrastructure.ServerContext;
+ import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ISnapshotSyncPlugin;
+ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
++import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
++import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
+ import org.corfudb.runtime.CorfuRuntime;
+ import org.corfudb.runtime.LogReplication;
++import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
+ import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
+ import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+ import org.corfudb.runtime.exceptions.TransactionAbortedException;
+@@ -101,16 +107,18 @@ public class LogReplicationSinkManager implements DataReceiver {
+     private final AtomicBoolean ongoingApply = new AtomicBoolean(false);
+ 
+     /**
+-     * Constructor Sink Manager
++     * Constructor
+      *
+      * @param localCorfuEndpoint endpoint for local corfu server
+      * @param config log replication configuration
+-     * @param metadataManager
+-     * @param context
++     * @param metadataManager manages log replication session's metadata
++     * @param context server level context
++     * @param topologyConfigId log replication topology epoch
++     * @param session log replication session unique identifier
+      */
+     public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config,
+                                      LogReplicationMetadataManager metadataManager,
+-                                     ServerContext context, long topologyConfigId) {
++                                     ServerContext context, long topologyConfigId, LogReplicationSession session) {
+ 
+         this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
+                 .trustStore((String) context.getServerConfig().get(ConfigParamNames.TRUST_STORE))
+@@ -124,7 +132,10 @@ public class LogReplicationSinkManager implements DataReceiver {
+                 .parseConfigurationString(localCorfuEndpoint).connect();
+         this.pluginConfigFilePath = context.getPluginConfigFilePath();
+         this.topologyConfigId = topologyConfigId;
+-        init(metadataManager, config);
++        this.session = session;
++        this.logReplicationMetadataManager = metadataManager;
++        this.config = config;
++        init();
+     }
+ 
+     /**
+@@ -135,25 +146,23 @@ public class LogReplicationSinkManager implements DataReceiver {
+      */
+     @VisibleForTesting
+     public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config,
+-                                     LogReplicationMetadataManager metadataManager, String pluginConfigFilePath) {
++                                     LogReplicationMetadataManager metadataManager, String pluginConfigFilePath,
++                                     LogReplicationSession session) {
+         this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
+                 .maxCacheEntries(config.getMaxCacheSize())
+                 .build())
+                 .parseConfigurationString(localCorfuEndpoint).connect();
+         this.pluginConfigFilePath = pluginConfigFilePath;
+-        init(metadataManager, config);
++        this.session = session;
++        this.logReplicationMetadataManager = metadataManager;
++        this.config = config;
++        init();
+     }
+ 
+     /**
+      * Initialize common parameters
+-     *
+-     * @param metadataManager metadata manager instance
+-     * @param config log replication configuration
+      */
+-    private void init(LogReplicationMetadataManager metadataManager, LogReplicationConfig config) {
+-        this.logReplicationMetadataManager = metadataManager;
+-        this.config = config;
+-
++    private void init() {
+         // When the server is up, it will be at LOG_ENTRY_SYNC state by default.
+         // The sender will query receiver's status and decide what type of replication to start with.
+         // It will transit to SNAPSHOT_SYNC state if it received a SNAPSHOT_START message from the sender.
+@@ -172,7 +181,7 @@ public class LogReplicationSinkManager implements DataReceiver {
+         try {
+             IRetry.build(IntervalRetry.class, () -> {
+                 try {
+-                    logReplicationMetadataManager.setDataConsistentOnStandby(isDataConsistent);
++                    logReplicationMetadataManager.setDataConsistentOnStandby(isDataConsistent, session);
+                 } catch (TransactionAbortedException tae) {
+                     log.error("Error while attempting to setDataConsistent in SinkManager's init", tae);
+                     throw new RetryNeededException();
+@@ -198,14 +207,14 @@ public class LogReplicationSinkManager implements DataReceiver {
+         // Instantiate Snapshot Sync Plugin, this is an external service which will be triggered on start and end
+         // of a snapshot sync.
+         snapshotSyncPlugin = getOnSnapshotSyncPlugin();
+-
+-        snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadataManager);
+-        logEntryWriter = new LogEntryWriter(config, logReplicationMetadataManager);
+-        logEntryWriter.reset(logReplicationMetadataManager.getLastAppliedSnapshotTimestamp(),
+-                logReplicationMetadataManager.getLastProcessedLogEntryTimestamp());
+-
++        snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadataManager, session);
++        logEntryWriter = new LogEntryWriter(config, logReplicationMetadataManager, session);
+         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
+-                logReplicationMetadataManager.getLastProcessedLogEntryTimestamp(), this);
++                logReplicationMetadataManager.queryReplicationMetadata(session).getLastLogEntryProcessed(),
++                this);
++
++        // TODO(AGMM): I believe the SnapshotSinkManager should be initialized here with NON_ADDRESS.. and reset
++        // to metadata last processedTs, whenever it resumes
+     }
+ 
+     private ISnapshotSyncPlugin getOnSnapshotSyncPlugin() {
+@@ -559,20 +567,23 @@ public class LogReplicationSinkManager implements DataReceiver {
+      *
+      * In the event of restarts, a Snapshot Sync which had finished transfer can resume the apply stage.
+      */
+-    public void resumeSnapshotApply() {
++    private void resumeSnapshotApply(ReplicationMetadata metadata) {
+         // Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
+-        snapshotWriter.reset(topologyConfigId, logReplicationMetadataManager.getLastStartedSnapshotTimestamp());
+-        long snapshotTransferTs = logReplicationMetadataManager.getLastTransferredSnapshotTimestamp();
+-        UUID snapshotSyncId = new UUID(logReplicationMetadataManager.getCurrentSnapshotSyncCycleId(), Long.MAX_VALUE);
++        snapshotWriter.reset(topologyConfigId, logReplicationMetadataManager.queryReplicationMetadata(session).getLastSnapshotStarted());
++
++        long snapshotTransferTs = metadata.getLastSnapshotTransferred();
++        // TODO(AGMM) check if UUID needs to be computed this way with it being now UuidMsg
++        UUID snapshotSyncId = new UUID(metadata.getCurrentSnapshotCycleId(), Long.MAX_VALUE);
+         log.info("Resume Snapshot Sync Apply, snapshot_transfer_ts={}, id={}", snapshotTransferTs, snapshotSyncId);
++
+         // Construct Log Replication Entry message used to complete the Snapshot Sync with info in the metadata manager
+-        LogReplicationEntryMetadataMsg metadata = LogReplicationEntryMetadataMsg.newBuilder()
++        LogReplicationEntryMetadataMsg logEntryMsg = LogReplicationEntryMetadataMsg.newBuilder()
+                 .setEntryType(LogReplicationEntryType.SNAPSHOT_END)
+-                .setTopologyConfigID(logReplicationMetadataManager.getTopologyConfigId())
+-                .setTimestamp(-1L)
++                .setTopologyConfigID(metadata.getTopologyConfigId())
++                .setTimestamp(Address.NON_ADDRESS)
+                 .setSnapshotTimestamp(snapshotTransferTs)
+                 .setSyncRequestId(getUuidMsg(snapshotSyncId)).build();
+-        startSnapshotApplyAsync(getLrEntryAckMsg(metadata));
++        startSnapshotApplyAsync(getLrEntryAckMsg(logEntryMsg));
+     }
+ 
+     /**

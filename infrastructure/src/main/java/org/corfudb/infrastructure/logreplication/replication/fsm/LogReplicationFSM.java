@@ -8,8 +8,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
-import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
+import org.corfudb.infrastructure.logreplication.utils.UpgradeManager;
+import org.corfudb.runtime.proto.service.CorfuMessage.ReplicationModel;
+import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
 import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
@@ -206,35 +208,28 @@ public class LogReplicationFSM {
     @Getter
     private final LogReplicationAckReader ackReader;
 
+    private final LogReplicationContext context;
+
     /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
      *
-     * @param runtime Corfu Runtime
-     * @param replicationContext replication context that provides configuration
-     * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
-     *                   the application callback for data transmission
-     * @param readProcessor read processor for data transformation
-     * @param workers FSM executor service for state tasks
-     * @param ackReader AckReader which listens to acks from the Sink and updates the replication status accordingly
-     * @param upgradeManager version and upgrade related utility
-     * @param session Replication Session to the remote(Sink) cluster
+     * @param runtime           Corfu Runtime
+     * @param upgradeManager    log replication upgrade manager
+     * @param dataSender        implementation of a data sender, both snapshot and log entry, this represents
+     *                          the application callback for data transmission
+     * @param readProcessor     read processor for data transformation
+     * @param workers           FSM executor service for state tasks
+     * @param ackReader         AckReader which listens to acks from the Sink and updates the replication status accordingly
+     * @param session           Replication Session to the remote(Sink) cluster
+     * @param context           session replication context
      */
-    public LogReplicationFSM(CorfuRuntime runtime, LogReplicationContext replicationContext, DataSender dataSender,
+    public LogReplicationFSM(CorfuRuntime runtime, LogReplicationUpgradeManager upgradeManager, DataSender dataSender,
                              ReadProcessor readProcessor, ExecutorService workers, LogReplicationAckReader ackReader,
-                             LogReplicationUpgradeManager upgradeManager, ReplicationSession session) {
-
-        this.snapshotReader = createSnapshotReader(runtime, replicationContext, session);
-        this.logEntryReader = createLogEntryReader(runtime, replicationContext, session);
-        this.ackReader = ackReader;
-        this.snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor,
-                replicationContext.getConfig().getMaxNumMsgPerBatch(), this);
-        this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
-        this.logReplicationFSMWorkers = workers;
-        this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
-                ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer-" + session.getRemoteClusterId())
-                .build());
-
-        init(dataSender, session, upgradeManager);
+                             LogReplicationSession session, LogReplicationContext context) {
+        // Use stream-based readers for snapshot and log entry sync reads
+        this(runtime, new StreamsSnapshotReader(runtime, session, context), dataSender,
+            new StreamsLogEntryReader(runtime, session, context), readProcessor, upgradeManager,
+            workers, ackReader, session, context);
     }
 
     /**
@@ -251,82 +246,83 @@ public class LogReplicationFSM {
     @VisibleForTesting
     public LogReplicationFSM(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
                              LogEntryReader logEntryReader, ReadProcessor readProcessor,
-                             LogReplicationContext replicationContext,
+                             LogReplicationUpgradeManager upgradeManager,
                              ExecutorService workers, LogReplicationAckReader ackReader,
-                             LogReplicationUpgradeManager upgradeManager, ReplicationSession session) {
+                             LogReplicationSession session, LogReplicationContext context) {
 
         this.snapshotReader = snapshotReader;
         this.logEntryReader = logEntryReader;
+        this.context = context;
         this.ackReader = ackReader;
         this.snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor,
-                replicationContext.getConfig().getMaxNumMsgPerBatch(), this);
+            context.getConfig().getMaxNumMsgPerBatch(), this);
         this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
         this.logReplicationFSMWorkers = workers;
         this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
-                ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer-" + session.getRemoteClusterId())
+                ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer-" + session.hashCode())
                 .build());
 
         init(dataSender, session, upgradeManager);
     }
 
-    private SnapshotReader createSnapshotReader(CorfuRuntime runtime, LogReplicationContext replicationContext,
-                                                ReplicationSession replicationSession) {
+    private SnapshotReader createSnapshotReader(CorfuRuntime runtime, LogReplicationSession session,
+                                                LogReplicationContext context) {
         SnapshotReader snapshotReader;
-        switch (replicationSession.getSubscriber().getReplicationModel()) {
+        ReplicationModel model = session.getSubscriber().getModel();
+        switch (model) {
             case FULL_TABLE:
-                snapshotReader = new StreamsSnapshotReader(runtime, replicationContext, replicationSession);
+                snapshotReader = new StreamsSnapshotReader(runtime, session, context);
                 break;
 
             case LOGICAL_GROUPS:
-                snapshotReader = new LogicalGroupSnapshotReader(runtime, replicationContext, replicationSession);
+                snapshotReader = new LogicalGroupSnapshotReader(runtime, session, context);
                 break;
 
             case ROUTING_QUEUES:
-                snapshotReader = new RoutingQueuesSnapshotReader(runtime, replicationContext, replicationSession);
+                snapshotReader = new RoutingQueuesSnapshotReader(runtime, session, context);
                 break;
 
             default:
-                log.error("Unsupported Replication Model Found: {}",
-                    replicationSession.getSubscriber().getReplicationModel());
-                throw new IllegalArgumentException("Unsupported Replication Model Found: " +
-                    replicationSession.getSubscriber().getReplicationModel());
+                log.error("Unsupported replication model found: {}", model);
+                throw new IllegalArgumentException("Unsupported replication model found: " + model);
 
         }
         return snapshotReader;
     }
 
-    private LogEntryReader createLogEntryReader(CorfuRuntime runtime, LogReplicationContext replicationContext,
-                                                ReplicationSession replicationSession) {
+    private LogEntryReader createLogEntryReader(CorfuRuntime runtime, LogReplicationSession session,
+                                                LogReplicationContext context) {
         LogEntryReader logEntryReader;
 
-        switch(replicationSession.getSubscriber().getReplicationModel()) {
+        ReplicationModel model = session.getSubscriber().getModel();
+
+        switch(model) {
             case FULL_TABLE:
-                logEntryReader = new StreamsLogEntryReader(runtime, replicationContext, replicationSession);
+                logEntryReader = new StreamsLogEntryReader(runtime, session, context);
                 break;
 
             case LOGICAL_GROUPS:
-                logEntryReader = new LogicalGroupLogEntryReader(runtime, replicationContext, replicationSession);
+                logEntryReader = new LogicalGroupLogEntryReader(runtime, session, context);
                 break;
 
             case ROUTING_QUEUES:
-                logEntryReader = new RoutingQueuesLogEntryReader(runtime, replicationContext, replicationSession);
+                logEntryReader = new RoutingQueuesLogEntryReader(runtime, session, context);
                 break;
 
             default:
-                log.error("Unsupported Replication Model Found: {}",
-                    replicationSession.getSubscriber().getReplicationModel());
+                log.error("Unsupported Replication Model Found: {}", model);
                 throw new IllegalArgumentException("Unsupported Replication Model Found: " +
-                    replicationSession.getSubscriber().getReplicationModel());
+                        session.getSubscriber().getModel());
         }
         return logEntryReader;
     }
 
-    private void init(DataSender dataSender, ReplicationSession session, LogReplicationUpgradeManager upgradeManager) {
+    private void init(DataSender dataSender, LogReplicationSession session) {
         // Initialize Log Replication 5 FSM states - single instance per state
         initializeStates(snapshotSender, logEntrySender, dataSender, upgradeManager);
         this.state = states.get(LogReplicationStateType.INITIALIZED);
         logReplicationFSMConsumer.submit(this::consume);
-        log.info("Log Replication FSM initialized, replicate for session {}", session);
+        log.info("Log Replication FSM initialized for session={}", session);
     }
 
     /**
@@ -343,8 +339,7 @@ public class LogReplicationFSM {
          */
         states.put(LogReplicationStateType.INITIALIZED, new InitializedState(this));
         states.put(LogReplicationStateType.IN_SNAPSHOT_SYNC, new InSnapshotSyncState(this, snapshotSender));
-        states.put(LogReplicationStateType.WAIT_SNAPSHOT_APPLY, new WaitSnapshotApplyState(this, dataSender,
-            upgradeManager));
+        states.put(LogReplicationStateType.WAIT_SNAPSHOT_APPLY, new WaitSnapshotApplyState(this, dataSender, upgradeManager));
         states.put(LogReplicationStateType.IN_LOG_ENTRY_SYNC, new InLogEntrySyncState(this, logEntrySender));
         states.put(LogReplicationStateType.ERROR, new ErrorState(this));
     }
