@@ -23,7 +23,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager.LOG_REPLICATION_PLUGIN_VERSION_TABLE;
+import static org.corfudb.infrastructure.logreplication.utils.UpgradeManager.LOG_REPLICATION_PLUGIN_VERSION_TABLE;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
@@ -58,7 +58,6 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
     private static final String TEST_PLUGIN_CONFIG_PATH_SINK =
             "./test/src/test/resources/transport/nettyConfigUpgradeSink.properties";
 
-    private static final String SEPARATOR = "$";
     private static final String VERSION_STRING = "test_version";
     private static final String VERSION_KEY = "VERSION";
     private static final String UPGRADE_VERSION_STRING = "new_version";
@@ -102,7 +101,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Subscribe to replication status table on Sink (to be sure data change on status are captured)
         corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
-                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME,
                 LogReplicationMetadata.ReplicationStatusKey.class,
                 LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
@@ -196,7 +195,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Subscribe to replication status table on Sink (to be sure data change on status are captured)
         corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
-                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME,
                 LogReplicationMetadata.ReplicationStatusKey.class,
                 LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
@@ -292,7 +291,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Subscribe to replication status table on Sink (to be sure data change on status are captured)
         corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
-                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME,
                 LogReplicationMetadata.ReplicationStatusKey.class,
                 LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
@@ -420,7 +419,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Subscribe to replication status table on Sink (to be sure data change on status are captured)
         corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
-                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME,
                 LogReplicationMetadata.ReplicationStatusKey.class,
                 LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
@@ -527,7 +526,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Subscribe to replication status table on Sink (to be sure data change on status are captured)
         corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
-                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME,
                 LogReplicationMetadata.ReplicationStatusKey.class,
                 LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
@@ -668,7 +667,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Subscribe to replication status table on Sink (to be sure data change on status are captured)
         corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
-                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE,
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME,
                 LogReplicationMetadata.ReplicationStatusKey.class,
                 LogReplicationMetadata.ReplicationStatusVal.class,
                 null,

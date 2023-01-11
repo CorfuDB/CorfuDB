@@ -6,14 +6,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValueTag;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample.StringKey;
-import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuOptions;
@@ -32,6 +34,7 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.Sleep;
@@ -45,6 +48,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -176,15 +180,15 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         sourceCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE,
-                LogReplicationMetadata.ReplicationStatusKey.class,
-                LogReplicationMetadata.ReplicationStatusVal.class,
+                LogReplicationSession.class,
+                ReplicationStatus.class,
                 null,
                 TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
         sinkCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE,
-                LogReplicationMetadata.ReplicationStatusKey.class,
-                LogReplicationMetadata.ReplicationStatusVal.class,
+                LogReplicationSession.class,
+                ReplicationStatus.class,
                 null,
                 TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
     }
@@ -281,29 +285,32 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                         .setClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
                         .build();
 
-        ReplicationStatusVal replicationStatusVal;
+        ReplicationStatus replicationStatus;
         try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+            replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
             txn.commit();
         }
 
-        log.info("ReplicationStatusVal: RemainingEntriesToSend: {}, SyncType: {}, Status: {}",
-                replicationStatusVal.getRemainingEntriesToSend(), replicationStatusVal.getSyncType(),
-                replicationStatusVal.getStatus());
+        log.info("ReplicationStatus: remainingEntriesToSend: {}, syncType: {}, status: {}",
+                replicationStatus.getSourceStatus().getRemainingEntriesToSend(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getSyncType(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getStatus());
 
         log.info("SnapshotSyncInfo: Base: {}, Type: {}, Status: {}, CompletedTime: {}",
-                replicationStatusVal.getSnapshotSyncInfo().getBaseSnapshot(), replicationStatusVal.getSnapshotSyncInfo().getType(),
-                replicationStatusVal.getSnapshotSyncInfo().getStatus(), replicationStatusVal.getSnapshotSyncInfo().getCompletedTime());
+                replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getBaseSnapshot(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getCompletedTime());
 
 
-        assertThat(replicationStatusVal.getSyncType())
-                .isEqualTo(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
-        assertThat(replicationStatusVal.getStatus())
+        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSyncType())
+                .isEqualTo(LogReplicationMetadata.SyncType.LOG_ENTRY);
+        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
 
-        assertThat(replicationStatusVal.getSnapshotSyncInfo().getType())
+        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
                 .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
-        assertThat(replicationStatusVal.getSnapshotSyncInfo().getStatus())
+        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
 
         // Perform a role switch
@@ -349,7 +356,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 sinkStatusVal.getSnapshotSyncInfo().getStatus(), sinkStatusVal.getSnapshotSyncInfo().getCompletedTime());
 
         assertThat(sinkStatusVal.getSyncType())
-                .isEqualTo(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
+                .isEqualTo(LogReplicationMetadata.SyncType.LOG_ENTRY);
         assertThat(sinkStatusVal.getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
 
@@ -401,26 +408,29 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         // Verify Sync Status
         try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+            replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
             txn.commit();
         }
 
         log.info("ReplicationStatusVal: RemainingEntriesToSend: {}, SyncType: {}, Status: {}",
-                replicationStatusVal.getRemainingEntriesToSend(), replicationStatusVal.getSyncType(),
-                replicationStatusVal.getStatus());
+                replicationStatus.getSourceStatus().getRemainingEntriesToSend(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getSyncType(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getStatus());
 
         log.info("SnapshotSyncInfo: Base: {}, Type: {}, Status: {}, CompletedTime: {}",
-                replicationStatusVal.getSnapshotSyncInfo().getBaseSnapshot(), replicationStatusVal.getSnapshotSyncInfo().getType(),
-                replicationStatusVal.getSnapshotSyncInfo().getStatus(), replicationStatusVal.getSnapshotSyncInfo().getCompletedTime());
+                replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getBaseSnapshot(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getCompletedTime());
 
-        assertThat(replicationStatusVal.getSyncType())
-                .isEqualTo(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
-        assertThat(replicationStatusVal.getStatus())
+        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSyncType())
+                .isEqualTo(LogReplicationMetadata.SyncType.LOG_ENTRY);
+        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
 
-        assertThat(replicationStatusVal.getSnapshotSyncInfo().getType())
+        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
                 .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
-        assertThat(replicationStatusVal.getSnapshotSyncInfo().getStatus())
+        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
     }
 
@@ -471,7 +481,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             txn.commit();
         }
         assertThat(replicationStatusVal.getSyncType())
-            .isEqualTo(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
+            .isEqualTo(LogReplicationMetadata.SyncType.LOG_ENTRY);
         assertThat(replicationStatusVal.getStatus())
             .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
 
@@ -532,7 +542,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             txn.commit();
         }
         assertThat(replicationStatusVal.getSyncType())
-            .isEqualTo(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
+            .isEqualTo(LogReplicationMetadata.SyncType.LOG_ENTRY);
         assertThat(replicationStatusVal.getStatus())
             .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
 
@@ -573,7 +583,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
 
         assertThat(replicationStatusVal.getSyncType())
-            .isEqualTo(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
+            .isEqualTo(LogReplicationMetadata.SyncType.LOG_ENTRY);
         assertThat(replicationStatusVal.getStatus())
             .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
         log.info("Snapshot Sync successful after CP/Trim and Switchover");
@@ -1276,6 +1286,29 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         assertThat(mapSink.count()).isEqualTo(thirdBatch);
     }
 
+    private Table<LogReplicationSession, ReplicationMetadata, Message> getMetadataTable(CorfuRuntime runtime)
+            throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+        CorfuStore corfuStore = new CorfuStore(runtime);
+        CorfuStoreMetadata.TableName metadataTableName = null;
+        Table<LogReplicationSession, ReplicationMetadata, Message> metadataTable;
+
+        for (CorfuStoreMetadata.TableName name : corfuStore.listTables(LogReplicationMetadataManager.NAMESPACE)){
+            if(name.getTableName().contains(LogReplicationMetadataManager.METADATA_TABLE_NAME)) {
+                metadataTableName = name;
+            }
+        }
+
+        metadataTable = corfuStore.openTable(
+                    LogReplicationMetadataManager.NAMESPACE,
+                    metadataTableName.getTableName(),
+                    LogReplicationSession.class,
+                    ReplicationMetadata.class,
+                    null,
+                    TableOptions.fromProtoSchema(ReplicationMetadata.class));
+
+        return metadataTable;
+    }
+
     /**
      * This test verifies enforceSnapshotSync API
      * <p>
@@ -1326,28 +1359,31 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                         .setClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
                         .build();
 
-        LogReplicationMetadata.ReplicationStatusVal replicationStatusVal;
+        ReplicationStatus replicationStatus;
         try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+            replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
             txn.commit();
         }
 
         log.info("ReplicationStatusVal: RemainingEntriesToSend: {}, SyncType: {}, Status: {}",
-                replicationStatusVal.getRemainingEntriesToSend(), replicationStatusVal.getSyncType(),
-                replicationStatusVal.getStatus());
+                replicationStatus.getSourceStatus().getRemainingEntriesToSend(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getSyncType(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getStatus());
 
         log.info("SnapshotSyncInfo: Base: {}, Type: {}, Status: {}, CompletedTime: {}",
-                replicationStatusVal.getSnapshotSyncInfo().getBaseSnapshot(), replicationStatusVal.getSnapshotSyncInfo().getType(),
-                replicationStatusVal.getSnapshotSyncInfo().getStatus(), replicationStatusVal.getSnapshotSyncInfo().getCompletedTime());
+                replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getBaseSnapshot(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getCompletedTime());
 
-        assertThat(replicationStatusVal.getSyncType())
-                .isEqualTo(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
-        assertThat(replicationStatusVal.getStatus())
+        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSyncType())
+                .isEqualTo(LogReplicationMetadata.SyncType.LOG_ENTRY);
+        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
 
-        assertThat(replicationStatusVal.getSnapshotSyncInfo().getType())
+        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
                 .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
-        assertThat(replicationStatusVal.getSnapshotSyncInfo().getStatus())
+        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
 
 
@@ -1401,25 +1437,28 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         // Verify that a forced snapshot sync is finished.
         try (TxnContext txn = sourceCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+            replicationStatus = (ReplicationStatus)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
             txn.commit();
         }
 
         log.info("ReplicationStatusVal: RemainingEntriesToSend: {}, SyncType: {}, Status: {}",
-                replicationStatusVal.getRemainingEntriesToSend(), replicationStatusVal.getSyncType(),
-                replicationStatusVal.getStatus());
+                replicationStatus.getSourceStatus().getRemainingEntriesToSend(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getSyncType(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getStatus());
 
         log.info("SnapshotSyncInfo: Base: {}, Type: {}, Status: {}, CompletedTime: {}",
-                replicationStatusVal.getSnapshotSyncInfo().getBaseSnapshot(), replicationStatusVal.getSnapshotSyncInfo().getType(),
-                replicationStatusVal.getSnapshotSyncInfo().getStatus(), replicationStatusVal.getSnapshotSyncInfo().getCompletedTime());
+                replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getBaseSnapshot(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus(),
+                replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getCompletedTime());
 
-        assertThat(replicationStatusVal.getSyncType())
-                .isEqualTo(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
-        assertThat(replicationStatusVal.getStatus())
+        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSyncType())
+                .isEqualTo(LogReplicationMetadata.SyncType.LOG_ENTRY);
+        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
-        assertThat(replicationStatusVal.getSnapshotSyncInfo().getType())
+        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
                 .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.FORCED);
-        assertThat(replicationStatusVal.getSnapshotSyncInfo().getStatus())
+        assertThat(replicationStatus.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
     }
 

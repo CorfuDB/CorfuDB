@@ -17,9 +17,10 @@ import com.google.protobuf.ByteString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.common.util.ObservableValue;
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
-import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.EmptyDataSender;
 import org.corfudb.infrastructure.logreplication.replication.fsm.EmptySnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.InSnapshotSyncState;
@@ -39,6 +40,7 @@ import org.corfudb.infrastructure.logreplication.replication.send.logreader.Snap
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.infrastructure.logreplication.utils.UpgradeManager;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -46,6 +48,7 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.TableRegistry;
 import org.junit.After;
@@ -466,8 +469,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         LogEntryReader logEntryReader = new TestLogEntryReader();
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime, null);
-        ReplicationSession replicationSession = ReplicationSession.getDefaultReplicationSessionForCluster(
-            TEST_LOCAL_CLUSTER_ID);
+        LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
 
         switch(readerImpl) {
             case EMPTY:
@@ -491,21 +493,23 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 break;
             case STREAMS:
                 CorfuRuntime runtime = getNewRuntime(getDefaultNode()).connect();
-                snapshotReader = new StreamsSnapshotReader(runtime, configManager, replicationSession);
+                snapshotReader = new StreamsSnapshotReader(runtime, session,
+                        new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
+                                "test:" + SERVERS.PORT_0));
                 dataSender = new TestDataSender();
                 break;
             default:
                 break;
         }
 
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, TEST_TOPOLOGY_CONFIG_ID,
-            TEST_LOCAL_CLUSTER_ID);
-        ackReader = new LogReplicationAckReader(metadataManager, configManager, runtime, replicationSession);
-
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime);
+        LogReplicationContext context = new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
+                "test:" + SERVERS.PORT_0);
+        ackReader = new LogReplicationAckReader(metadataManager, runtime, session, context);
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
-                new DefaultReadProcessor(runtime), configManager,
+                new DefaultReadProcessor(runtime), new UpgradeManager(runtime, ""),
                 Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()),
-                ackReader, configManager, replicationSession);
+                ackReader, session, context);
         ackReader.setLogEntryReader(fsm.getLogEntryReader());
         transitionObservable = fsm.getNumTransitions();
         transitionObservable.addObserver(this);

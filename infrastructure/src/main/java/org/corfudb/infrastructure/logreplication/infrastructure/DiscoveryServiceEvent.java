@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
 
 import java.util.UUID;
 
@@ -12,7 +13,7 @@ public class DiscoveryServiceEvent {
 
     private TopologyConfigurationMsg topologyConfig = null;
 
-    private ClusterDescriptor remoteClusterInfo;
+    private LogReplicationSession session;
 
     private UUID eventId = null;
 
@@ -20,9 +21,13 @@ public class DiscoveryServiceEvent {
        this.type = type;
     }
 
-    public DiscoveryServiceEvent(DiscoveryServiceEventType type, String clusterId) {
+    public DiscoveryServiceEvent(DiscoveryServiceEventType type, String sourceClusterId, String sinkClusterId) {
         this.type = type;
-        this.remoteClusterInfo = new ClusterDescriptor(clusterId);
+        this.session = LogReplicationSession.newBuilder()
+                .setSourceClusterId(sourceClusterId)
+                .setSinkClusterId(sinkClusterId)
+                .setSubscriber(SessionManager.getDefaultSubscriber())
+                .build();
     }
 
     public DiscoveryServiceEvent(DiscoveryServiceEventType type, TopologyConfigurationMsg topologyConfigMsg) {
@@ -30,8 +35,9 @@ public class DiscoveryServiceEvent {
         this.topologyConfig = topologyConfigMsg;
     }
 
-    public DiscoveryServiceEvent(DiscoveryServiceEventType type, String clusterId, String eventId) {
-        this(type, clusterId);
+    public DiscoveryServiceEvent(DiscoveryServiceEventType type, String sourceClusterId,
+                                 String sinkClusterId, String eventId) {
+        this(type, sourceClusterId, sinkClusterId);
         this.eventId = UUID.fromString(eventId);
     }
 
