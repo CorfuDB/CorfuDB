@@ -48,13 +48,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class AbstractIT extends AbstractCorfuTest {
     static final String DEFAULT_HOST = "localhost";
     static final int DEFAULT_PORT = 9000;
-    static final int DEFAULT_HEALTH_PORT = 8080;
     static final int DEFAULT_LOG_REPLICATION_PORT = 9020;
 
     static final String DEFAULT_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
 
     static final String CORFU_PROJECT_DIR = new File("..").getAbsolutePath() + File.separator;
-    public static final String CORFU_LOG_PATH = PARAMETERS.TEST_TEMP_DIR;
+    public static final String CORFU_LOG_PATH = "/Users/amartinezman/Desktop/test";
 
     static final long DEFAULT_MVO_CACHE_SIZE = 100;
 

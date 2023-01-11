@@ -1,0 +1,73 @@
+diff a/test/src/test/java/org/corfudb/integration/LogReplicationAbstractIT.java b/test/src/test/java/org/corfudb/integration/LogReplicationAbstractIT.java	(rejected hunks)
+@@ -187,11 +189,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
+ 
+             // Subscribe to replication status table on Standby (to be sure data change on status are captured)
+             corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
+-                    LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME,
+-                    LogReplicationMetadata.ReplicationStatusKey.class,
+-                    LogReplicationMetadata.ReplicationStatusVal.class,
++                    LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME,
++                    LogReplicationSession.class,
++                    ReplicationStatus.class,
+                     null,
+-                    TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
++                    TableOptions.fromProtoSchema(ReplicationStatus.class));
+ 
+             CountDownLatch statusUpdateLatch = new CountDownLatch(totalStandbyStatusUpdates);
+             ReplicationStatusListener standbyListener = new ReplicationStatusListener(statusUpdateLatch, false);
+@@ -295,40 +297,40 @@ public class LogReplicationAbstractIT extends AbstractIT {
+                 LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+ 
+         corfuStoreActive.openTable(LogReplicationMetadataManager.NAMESPACE,
+-                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME,
+-                LogReplicationMetadata.ReplicationStatusKey.class,
+-                LogReplicationMetadata.ReplicationStatusVal.class,
++                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME,
++                LogReplicationSession.class,
++                ReplicationStatus.class,
+                 null,
+-                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
++                TableOptions.fromProtoSchema(ReplicationStatus.class));
+ 
+-        LogReplicationMetadata.ReplicationStatusKey key =
+-                LogReplicationMetadata.ReplicationStatusKey
++        LogReplicationSession key =
++                LogReplicationSession
+                         .newBuilder()
+                         .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                         .build();
+-        LogReplicationMetadata.ReplicationStatusVal replicationStatusVal;
++        ReplicationStatus ReplicationStatus;
+ 
+         statusUpdateLatch.await();
+         try (TxnContext txn = corfuStoreActive.txn(LogReplicationMetadataManager.NAMESPACE)) {
+-            replicationStatusVal = (LogReplicationMetadata.ReplicationStatusVal) txn.getRecord("LogReplicationStatus", key).getPayload();
++            ReplicationStatus = (ReplicationStatus) txn.getRecord("LogReplicationStatus", key).getPayload();
+             txn.commit();
+         }
+ 
+-        assertThat(replicationStatusVal.getRemainingEntriesToSend()).isEqualTo(0);
++        assertThat(ReplicationStatus.getRemainingEntriesToSend()).isEqualTo(0);
+     }
+ 
+     private void verifyReplicationStatusFromActive() throws Exception {
+-        Table<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, LogReplicationMetadata.ReplicationStatusVal>
++        Table<LogReplicationSession, ReplicationStatus, ReplicationStatus>
+                 replicationStatusTable = corfuStoreActive.openTable(LogReplicationMetadataManager.NAMESPACE,
+-                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME,
+-                LogReplicationMetadata.ReplicationStatusKey.class,
+-                LogReplicationMetadata.ReplicationStatusVal.class,
++                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME,
++                LogReplicationSession.class,
++                ReplicationStatus.class,
+                 null,
+-                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
++                TableOptions.fromProtoSchema(ReplicationStatus.class));
+ 
+         IRetry.build(IntervalRetry.class, () -> {
+             try(TxnContext txn = corfuStoreActive.txn(LogReplicationMetadataManager.NAMESPACE)) {
+-                List<CorfuStoreEntry<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, LogReplicationMetadata.ReplicationStatusVal>>
++                List<CorfuStoreEntry<LogReplicationSession, ReplicationStatus, ReplicationStatus>>
+                         entries = txn.executeQuery(replicationStatusTable, all -> true);
+                 assertThat(entries.size()).isNotZero();
+                 if (entries.get(0).getPayload().getSnapshotSyncInfo().getStatus() != LogReplicationMetadata.SyncStatus.COMPLETED) {

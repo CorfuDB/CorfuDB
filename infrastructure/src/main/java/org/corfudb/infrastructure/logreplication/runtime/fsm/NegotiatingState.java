@@ -2,15 +2,18 @@ package org.corfudb.infrastructure.logreplication.runtime.fsm;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationNegotiationException;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.infrastructure.logreplication.utils.UpgradeManager;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage;
+import org.corfudb.runtime.view.Address;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -39,15 +42,15 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
     private final LogReplicationMetadataManager metadataManager;
 
-    private final LogReplicationConfigManager tableManagerPlugin;
+    private final UpgradeManager upgradeManager;
 
     public NegotiatingState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker, LogReplicationClientRouter router,
-                            LogReplicationMetadataManager metadataManager, LogReplicationConfigManager tableManagerPlugin) {
+                            LogReplicationMetadataManager metadataManager, UpgradeManager upgradeManager) {
         this.fsm = fsm;
         this.metadataManager = metadataManager;
         this.worker = worker;
         this.router = router;
-        this.tableManagerPlugin = tableManagerPlugin;
+        this.upgradeManager = upgradeManager;
     }
 
     @Override
@@ -77,7 +80,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 return null;
             case NEGOTIATION_COMPLETE:
                 log.info("Negotiation complete, result={}", event.getNegotiationResult());
-                if (tableManagerPlugin.isUpgraded()) {
+                if (upgradeManager.isUpgraded()) {
                     // Force a snapshot sync if an upgrade has been identified. This will guarantee that
                     // changes in the streams to replicate are captured by the destination.
                     log.info("A forced snapshot sync will be done as Source side LR has been upgraded.");
@@ -178,13 +181,15 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
         log.debug("Process negotiation response {} from {}", negotiationResponse, fsm.getRemoteClusterId());
 
+        ReplicationMetadata metadata = metadataManager.queryReplicationMetadata(fsm.getSession());
+
         /*
          * The sink site has a smaller config ID, redo the discovery for this sink site when
          * getting a new notification of the site config change if this sink is in the new config.
          */
-        if (negotiationResponse.getTopologyConfigID() < metadataManager.getTopologyConfigId()) {
+        if (negotiationResponse.getTopologyConfigID() < metadata.getTopologyConfigId()) {
             log.error("The source site configID {} is bigger than the sink configID {} ",
-                    metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
+                    metadata.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
 
@@ -192,9 +197,9 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          * The sink site has larger config ID, redo the whole discovery for the source site
          * it will be triggered by a notification of the site config change.
          */
-        if (negotiationResponse.getTopologyConfigID() > metadataManager.getTopologyConfigId()) {
+        if (negotiationResponse.getTopologyConfigID() > metadata.getTopologyConfigId()) {
             log.error("The active site configID {} is smaller than the sink configID {} ",
-                    metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
+                    metadata.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
 
@@ -214,8 +219,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          * "snapshotApplied": "-1"
          * "lastLogEntryProcessed": "-1"
          */
-        if (negotiationResponse.getSnapshotStart() == -1) {
-            log.info("No snapshot available in remote. Initiate SNAPSHOT sync to {}", fsm.getRemoteClusterId());
+        if (negotiationResponse.getSnapshotStart() == Address.NON_ADDRESS) {
+            log.info("No snapshot available in remote. Initiate SNAPSHOT sync to {}", fsm.getSession());
             fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
                     new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST)));
             return;

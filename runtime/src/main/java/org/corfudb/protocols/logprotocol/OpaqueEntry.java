@@ -41,14 +41,21 @@ public class OpaqueEntry implements Serializable {
     @Getter
     Map<UUID, List<SMREntry>> entries;
 
+    boolean opaque = true;
+
     @Getter
     // TODO(Maithem): Inconsistent behavior when full-sync vs delta (for full sync the versions will change)
     long version;
 
-
     public OpaqueEntry(long version, Map<UUID, List<SMREntry>> updates) {
         this.entries = updates;
         this.version = version;
+    }
+
+    public OpaqueEntry(long version, Map<UUID, List<SMREntry>> updates, boolean opaque) {
+        this.entries = updates;
+        this.version = version;
+        this.opaque = opaque;
     }
 
     public static void serialize(ByteBuf buf, OpaqueEntry entry) {

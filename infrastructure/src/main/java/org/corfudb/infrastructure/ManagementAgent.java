@@ -170,7 +170,7 @@ public class ManagementAgent {
 
     private void tryImmediateRecovery() {
         log.info("Attempting immediate recovery");
-        for(int i = 0; i < 3; i++) {
+        for (int i = 0; i < 3; i++) {
             try {
                 getCorfuRuntime().invalidateLayout();
                 Layout layout = getCorfuRuntime().getLayoutView().getLayout();
@@ -190,7 +190,6 @@ public class ManagementAgent {
                 Thread.currentThread().interrupt();
                 throw new IllegalStateException(ie);
             }
-
         }
         log.warn("Failed to recover immediately after the restart. The recovery will be completed " +
                 "by the failure detector.");

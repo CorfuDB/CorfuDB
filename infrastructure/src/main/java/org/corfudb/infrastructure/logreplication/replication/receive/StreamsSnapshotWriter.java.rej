@@ -1,0 +1,33 @@
+diff a/infrastructure/src/main/java/org/corfudb/infrastructure/logreplication/replication/receive/StreamsSnapshotWriter.java b/infrastructure/src/main/java/org/corfudb/infrastructure/logreplication/replication/receive/StreamsSnapshotWriter.java	(rejected hunks)
+@@ -5,7 +5,8 @@ import io.netty.buffer.Unpooled;
+ import lombok.Getter;
+ import lombok.extern.slf4j.Slf4j;
+ import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+-import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType;
++import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
++import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
+ import org.corfudb.protocols.logprotocol.OpaqueEntry;
+ import org.corfudb.protocols.logprotocol.SMREntry;
+ import org.corfudb.protocols.wireprotocol.StreamAddressRange;
+@@ -60,6 +61,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
+ 
+     private static final SMREntry CLEAR_ENTRY = new SMREntry(CLEAR_SMR_METHOD, new Array[0], Serializers.PRIMITIVE);
+ 
++    private final LogReplicationSession session;
++
+     // Mapping from regular stream Id to stream Name
+     private final HashMap<UUID, String> streamViewMap;
+ 
+@@ -85,9 +88,11 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
+     @Getter
+     private Phase phase;
+ 
+-    public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager) {
++    public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationConfig config,
++                                 LogReplicationMetadataManager logReplicationMetadataManager, LogReplicationSession session) {
+         this.rt = rt;
+         this.logReplicationMetadataManager = logReplicationMetadataManager;
++        this.session = session;
+         this.streamViewMap = new HashMap<>();
+         this.regularToShadowStreamId = new HashMap<>();
+         this.phase = Phase.TRANSFER_PHASE;

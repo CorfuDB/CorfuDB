@@ -26,7 +26,7 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_STATUS_TABLE;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -60,14 +60,14 @@ public class LogReplicationDynamicStreamIT extends LogReplicationAbstractIT {
 
         // Open replication status table to for verification purpose
         corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,
-                REPLICATION_STATUS_TABLE,
+                REPLICATION_STATUS_TABLE_NAME,
                 ReplicationStatusKey.class,
                 ReplicationStatusVal.class,
                 null,
                 TableOptions.fromProtoSchema(ReplicationStatusVal.class));
 
         corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
-                REPLICATION_STATUS_TABLE,
+                REPLICATION_STATUS_TABLE_NAME,
                 ReplicationStatusKey.class,
                 ReplicationStatusVal.class,
                 null,

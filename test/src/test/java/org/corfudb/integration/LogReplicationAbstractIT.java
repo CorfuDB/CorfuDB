@@ -1,7 +1,6 @@
 package org.corfudb.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_STATUS_TABLE;
 import static org.junit.Assert.fail;
 
 import java.io.BufferedReader;
@@ -30,6 +29,10 @@ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultC
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultSnapshotSyncPlugin;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncType;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -62,6 +65,9 @@ import org.corfudb.util.retry.RetryNeededException;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
+
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME;
+
 
 @Slf4j
 public class LogReplicationAbstractIT extends AbstractIT {
@@ -194,7 +200,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
             // Subscribe to replication status table on Sink (to be sure data change on status are captured)
             corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
-                    REPLICATION_STATUS_TABLE,
+                    REPLICATION_STATUS_TABLE_NAME,
                     LogReplicationMetadata.ReplicationStatusKey.class,
                     LogReplicationMetadata.ReplicationStatusVal.class,
                     null,
@@ -302,7 +308,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
                 LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
         corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,
-                REPLICATION_STATUS_TABLE,
+                REPLICATION_STATUS_TABLE_NAME,
                 LogReplicationMetadata.ReplicationStatusKey.class,
                 LogReplicationMetadata.ReplicationStatusVal.class,
                 null,
@@ -313,15 +319,15 @@ public class LogReplicationAbstractIT extends AbstractIT {
                         .newBuilder()
                         .setClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
                         .build();
-        LogReplicationMetadata.ReplicationStatusVal replicationStatusVal;
-
+        ReplicationStatus replicationStatus;
         statusUpdateLatch.await();
+
         try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatusVal = (LogReplicationMetadata.ReplicationStatusVal) txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+            replicationStatus = (ReplicationStatus) txn.getRecord(REPLICATION_STATUS_TABLE_NAME, key).getPayload();
             txn.commit();
         }
 
-        assertThat(replicationStatusVal.getRemainingEntriesToSend()).isEqualTo(0);
+        assertThat(replicationStatus.getSourceStatus().getRemainingEntriesToSend()).isEqualTo(0);
     }
 
     private void verifyReplicationStatusFromSource() throws Exception {
@@ -330,7 +336,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
             LogReplicationMetadata.ReplicationStatusVal> replicationStatusTable =
             corfuStoreSource.openTable(
                     LogReplicationMetadataManager.NAMESPACE,
-                    REPLICATION_STATUS_TABLE,
+                    REPLICATION_STATUS_TABLE_NAME,
                     LogReplicationMetadata.ReplicationStatusKey.class,
                     LogReplicationMetadata.ReplicationStatusVal.class,
                     null,
@@ -431,9 +437,10 @@ public class LogReplicationAbstractIT extends AbstractIT {
         @Override
         public void onNext(CorfuStreamEntries results) {
             results.getEntries().forEach((schema, entries) -> entries.forEach(e -> {
-                    LogReplicationMetadata.ReplicationStatusVal statusVal = (LogReplicationMetadata.ReplicationStatusVal)e.getPayload();
-                    accumulatedStatus.add(statusVal.getDataConsistent());
-                    if (this.waitSnapshotStatusComplete && statusVal.getSnapshotSyncInfo().getStatus().equals(LogReplicationMetadata.SyncStatus.COMPLETED)) {
+                    ReplicationStatus status = (ReplicationStatus)e.getPayload();
+                    accumulatedStatus.add(status.getSinkStatus().getDataConsistent());
+                    if (this.waitSnapshotStatusComplete &&
+                            status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus().equals(SyncStatus.COMPLETED)) {
                         countDownLatch.countDown();
                     }
             }));
@@ -742,27 +749,27 @@ public class LogReplicationAbstractIT extends AbstractIT {
                         .setClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
                         .build();
 
-        LogReplicationMetadata.ReplicationStatusVal replicationStatusVal = null;
+        ReplicationStatus status = null;
 
-        while (replicationStatusVal == null || !replicationStatusVal.getSyncType().equals(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY)
-                || !replicationStatusVal.getSnapshotSyncInfo().getStatus().equals(LogReplicationMetadata.SyncStatus.COMPLETED)) {
+        while (status == null || !status.getSourceStatus().getReplicationInfo().getSyncType().equals(SyncType.LOG_ENTRY)
+                || !status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus()
+                .equals(LogReplicationMetadata.SyncStatus.COMPLETED)) {
             TimeUnit.SECONDS.sleep(1);
             try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
-                replicationStatusVal = (LogReplicationMetadata.ReplicationStatusVal) txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+                status = (ReplicationStatus) txn.getRecord(REPLICATION_STATUS_TABLE_NAME, key).getPayload();
                 txn.commit();
             }
         }
 
         // Snapshot sync should have completed and log entry sync is ongoing
-        assertThat(replicationStatusVal.getSyncType())
-                .isEqualTo(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
-        assertThat(replicationStatusVal.getStatus())
+        assertThat(status.getSourceStatus().getReplicationInfo().getSyncType()).isEqualTo(SyncType.LOG_ENTRY);
+        assertThat(status.getSourceStatus().getReplicationInfo().getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
 
-        assertThat(replicationStatusVal.getSnapshotSyncInfo().getType())
-                .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
-        assertThat(replicationStatusVal.getSnapshotSyncInfo().getStatus())
-                .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
+        assertThat(status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
+                .isEqualTo(SnapshotSyncType.DEFAULT);
+        assertThat(status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
+                .isEqualTo(SyncStatus.COMPLETED);
     }
 
     /**

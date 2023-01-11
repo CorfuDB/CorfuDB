@@ -99,7 +99,7 @@ public class InMemoryStreamLog implements StreamLog {
     @Override
     public synchronized TailsResponse getTails(List<UUID> streams) {
         Map<UUID, Long> tails = new HashMap<>(streams.size());
-        for(UUID stream: streams) {
+        for (UUID stream: streams) {
             tails.put(stream, logMetadata.getStreamTails().get(stream));
         }
         return new TailsResponse(logMetadata.getGlobalTail(), tails);
