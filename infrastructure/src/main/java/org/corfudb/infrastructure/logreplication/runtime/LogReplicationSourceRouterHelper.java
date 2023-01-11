@@ -349,7 +349,10 @@ public class LogReplicationSourceRouterHelper implements IClientRouter {
     public void stop() {
         log.debug("stop: Shutting down router for {}", remoteClusterDescriptor.getClusterId());
         shutdown = true;
-        clientChannelAdapter.stop();
+        // the source is GRPC-client, close all channels
+        if (clientChannelAdapter != null) {
+            clientChannelAdapter.stop();
+        }
         remoteLeaderConnectionFuture = new CompletableFuture<>();
         remoteLeaderConnectionFuture.completeExceptionally(new NetworkException("Router stopped", remoteClusterDescriptor.getClusterId()));
     }
@@ -394,6 +397,7 @@ public class LogReplicationSourceRouterHelper implements IClientRouter {
         try {
             // If it is a Leadership Loss Message re-trigger leadership discovery
             if (msg.getPayload().getPayloadCase() == CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_LEADERSHIP_LOSS) {
+                log.info("Shama leadership loss");
                 String nodeId = msg.getPayload().getLrLeadershipLoss().getNodeId();
                 this.runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, nodeId));
                 return;

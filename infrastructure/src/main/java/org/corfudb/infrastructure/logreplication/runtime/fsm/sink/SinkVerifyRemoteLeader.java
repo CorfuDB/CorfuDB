@@ -90,17 +90,7 @@ public class SinkVerifyRemoteLeader {
                 String nodeIdDown = event.getNodeId();
                 log.debug("Detected connection down from node={}", nodeIdDown);
                 updateDisconnectedNodes(nodeIdDown);
-
-                // If no connection exists, establish a connection again
-                if (connectedNodes.size() == 0) {
-                    LogReplication.ReplicationSessionMsg sessionMsg = LogReplication.ReplicationSessionMsg.newBuilder()
-                            .setRemoteClusterId(session.getRemoteClusterId())
-                            .setLocalClusterId(session.getLocalClusterId())
-                            .setClient(session.getSubscriber().getClient())
-                            .setReplicationModel(session.getSubscriber().getReplicationModel())
-                            .build();
-                    router.getChannelAdapter().connectAsync(sessionMsg);
-                }
+                resetRemoteLeader();
                 break;
             case REMOTE_LEADER_NOT_FOUND:
                 log.info("Remote Leader not found. Retrying...");
@@ -120,6 +110,11 @@ public class SinkVerifyRemoteLeader {
                 log.warn("Unexpected communication event {}", event.getType());
             }
         }
+    }
+
+    private void resetRemoteLeader() {
+        log.debug("Reset remote leader");
+        leaderNodeId = Optional.empty();
     }
 
     private void updateConnectedNodes(String nodeId) {

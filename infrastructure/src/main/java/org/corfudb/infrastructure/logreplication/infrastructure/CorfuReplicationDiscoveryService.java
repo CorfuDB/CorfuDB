@@ -577,7 +577,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         serverMap.put(BaseServer.class, new BaseServer(serverContext));
 
 
-        if (isConnectionReceiver) {
+        if (isConnectionReceiver && interClusterServerNode == null) {
             interClusterServerNode = new CorfuInterClusterReplicationServerNode(serverContext, serverMap);
 
             // Sink Site : the LogReplicationServer (server handler) will reset the LogReplicationSinkManager on acquiring
@@ -629,7 +629,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 }
             });
         } else {
-            log.debug("No remote cluster found for which this cluster is a connection endpoint");
+            log.debug("No remote SINK cluster found for which this cluster is a connection endpoint");
         }
     }
 
@@ -662,7 +662,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 }
             });
         } else {
-            log.debug("No remote cluster found for which this cluster is a connection endpoint");
+            log.debug("No remote SOURCE cluster found for which this cluster is a connection endpoint");
         }
     }
 
@@ -715,8 +715,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * so messages are filtered on the most up to date topologyConfigId
      */
     private void updateTopologyConfigIdOnSink(long configId) {
-        if (interClusterServerNode != null) {
-            interClusterServerNode.updateTopologyConfigId(configId);
+        if (!serverMap.isEmpty()) {
+            ((LogReplicationServer) serverMap.get(LogReplicationServer.class)).updateTopologyConfigId(configId);
         }
     }
 
@@ -761,7 +761,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         }
         if (newTopology.getRemoteSourceClusters().isEmpty()) {
             // Stop the replication server, present when the cluster is a connectionEndpoint.
-            if (interClusterServerNode != null) {
+            if (interClusterServerNode != null && !checkIfConnectionReceiver(newTopology)) {
                 interClusterServerNode.disable();
             }
             replicationManager.clearSessionToSinkRouterMap();
@@ -797,6 +797,17 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         }
     }
 
+    private boolean checkIfConnectionReceiver(TopologyDescriptor newTopology) {
+        Set<ClusterDescriptor> connectionEndpoints = new HashSet<>(fetchConnectionEndpoints().values());
+        Set<ClusterDescriptor> remoteSinkClusters = new HashSet<>(newTopology.getRemoteSinkClusters().values());
+        Set<ClusterDescriptor> remoteSourceClusters = new HashSet<>(newTopology.getRemoteSourceClusters().values());
+
+        // check if local cluster is a connectionReceiver. This is used to start the server components
+        remoteSinkClusters.removeAll(connectionEndpoints);
+        remoteSourceClusters.removeAll(connectionEndpoints);
+        return !remoteSinkClusters.isEmpty() || !remoteSourceClusters.isEmpty();
+    }
+
     /**
      * Process a topology change as provided by the Cluster Manager
      * <p>
@@ -813,7 +824,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             return;
         }
 
-        log.debug("Received topology change, topology={} {}", event.getTopologyConfig(), event.getTopologyConfig());
+        log.debug("Received topology change, topology={}", event.getTopologyConfig());
 
         TopologyDescriptor discoveredTopology = new TopologyDescriptor(event.getTopologyConfig(), clusterManagerAdapter);
 
@@ -865,12 +876,15 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         // We only need to process new sinks, so find if any remote sink has been added/removed
         Set<String> receivedRemoteSinks = discoveredTopology.getRemoteSinkClusters().keySet();
         Set<String> currentRemoteSinks = topologyDescriptor.getRemoteSinkClusters().keySet();
-        Set<String> remoteClustersToRemove = Sets.difference(currentRemoteSinks, receivedRemoteSinks);
+        Set<String> remoteClustersToRemove = new HashSet<>(Sets.difference(currentRemoteSinks, receivedRemoteSinks));
         Set<String> remoteSinkClustersToAdd = Sets.difference(receivedRemoteSinks, currentRemoteSinks);
 
         Set<String> receivedRemoteSource = discoveredTopology.getRemoteSourceClusters().keySet();
         Set<String> currentRemoteSource = topologyDescriptor.getRemoteSourceClusters().keySet();
-        Sets.difference(currentRemoteSource, receivedRemoteSource).stream().forEach(clusterId -> remoteClustersToRemove.add(clusterId));
+        Set<String> remoteSourceToRemove = Sets.difference(currentRemoteSource, receivedRemoteSource);
+        if (!remoteSourceToRemove.isEmpty()) {
+            remoteSourceToRemove.stream().forEach(clusterId -> remoteClustersToRemove.add(clusterId));
+        }
         Set<String> remoteSourceClustersToAdd = Sets.difference(receivedRemoteSource, currentRemoteSource);
 
         log.debug("remote clusters removed {}", remoteClustersToRemove);
@@ -897,8 +911,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             replicationContext.setTopology(discoveredTopology);
             replicationManager.processRemoteClusterChange(discoveredTopology, remoteSinkClustersToAdd, remoteSourceClustersToAdd,
                     remoteClustersToRemove, intersection, fetchConnectionEndpoints(), remoteClusterIdToReplicationSession,
-                    serverMap);
-        } else {
+                    serverMap, interClusterServerNode);
+
             // Update the topology config id on the Sink components
             updateTopologyConfigIdOnSink(discoveredTopology.getTopologyConfigId());
         }
@@ -971,10 +985,12 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         if (localClusterDescriptor.getRole() == ClusterRole.SINK) {
             log.warn("The current role is STANDBY.  Ignoring the forced snapshot sync event");
             return;
-        }
-        if (replicationManager == null || !isLeader.get()) {
+        } else if (replicationManager == null || !isLeader.get()) {
             log.warn("The current node is not the leader, will skip doing the forced snapshot sync with id {}",
                 event.getEventId());
+            return;
+        } else if (topologyDescriptor.getRemoteSinkClusters().isEmpty()){
+            log.warn("There is no SINK cluster, will skip doing the forced snapshot sync with id {}", event.getEventId());
             return;
         }
 
@@ -1139,7 +1155,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                                 });
                             }
                         });
-                        log.debug("Replication Status for new remote added successfully.");
                     }
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to update Replication Status for new remote", tae);

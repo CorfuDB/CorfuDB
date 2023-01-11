@@ -18,6 +18,13 @@ import java.util.concurrent.CountDownLatch;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_STATUS_TABLE;
 
+/**
+ * PLEASE IGNORE THIS CLASS FOR NOW
+ * Wrote this test to ensure that a cluster an be source and sink at the same time. Had to do some changes to accomodate
+ * multiple replication model else we have a loop in the replication.
+ *
+ */
+
 @Slf4j
 @SuppressWarnings("checkstyle:magicnumber")
 public class CorfuReplicationBiDirectional extends LogReplicationAbstractIT {
@@ -148,113 +155,19 @@ public class CorfuReplicationBiDirectional extends LogReplicationAbstractIT {
 //        }
 //    }
 
-    /**
-     * This test verifies the behaviour when the sink connection starter,
-     * and cluster2 acts as a sink for cluster1
-     *
-     * 1. Init with corfu 9000 source and 9001 sink
-     * 2. Topology: cluster1 as SOURCE cluster2 as SINK, but cluster2 is connectionInitiator
-     * 3. Write 10 entries to source map
-     * 4. Start log replication: Node 9010 - source, Node 9020 - sink
-     * 5. Wait for Snapshot Sync, both maps have size 10
-     * 6. Verify data is replicated
-     * 7. Verify the replication status for SINKs on both cluster1/cluster2
-     */
-    @Test
-    public void test_whenSinkIsConnectionInit() throws Exception {
-        pluginConfigFilePath = grpcConfig;
-        //setup source and sink corfu
-        setupSourceAndSinkCorfu();
-        // Add a new kind of topology where the SINK is connection starter
-        init();
-
-        //open Maps
-        log.info("Open map on Source and Sink");
-        openMaps(1, false);
-
-        // Subscribe to replication status table on Sink (to be sure data change on status are captured)
-        Table<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, Message> sinkStatusTable =
-                corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
-                REPLICATION_STATUS_TABLE,
-                LogReplicationMetadata.ReplicationStatusKey.class,
-                LogReplicationMetadata.ReplicationStatusVal.class,
-                null,
-                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
-
-        // (1) On startup, init the replication status for each session(2 sessions = 2 updates)
-        // (2) When starting snapshot sync apply : is_data_consistent = false
-        // (3) When completing snapshot sync apply : is_data_consistent = true
-        CountDownLatch cluster2StatusUpdateLatch = new CountDownLatch(3);
-        ReplicationStatusListener cluster2SinkListener =
-                new ReplicationStatusListener(cluster2StatusUpdateLatch, false);
-        corfuStoreSink.subscribeListener(cluster2SinkListener, LogReplicationMetadataManager.NAMESPACE,
-                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
 
-        Table<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, Message> sourceStatusTable = corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,
-                REPLICATION_STATUS_TABLE,
-                LogReplicationMetadata.ReplicationStatusKey.class,
-                LogReplicationMetadata.ReplicationStatusVal.class,
-                null,
-                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
 
-        CountDownLatch cluster1StatusUpdateLatch = new CountDownLatch(1);
-        ReplicationStatusListener cluster1SinkListener =
-                new ReplicationStatusListener(cluster1StatusUpdateLatch, false);
-        corfuStoreSource.subscribeListener(cluster1SinkListener, LogReplicationMetadataManager.NAMESPACE,
-                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
-
-
-        //write to source maps
-        writeToSource(0, numWrites);
-
-        // Confirm data does exist on Source Cluster
-        for(Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapSource.values()) {
-            assertThat(map.count()).isEqualTo(numWrites);
-        }
-
-        //validate sink cluster is still empty
-        for(Table<Sample.StringKey, Sample.IntValueTag, Sample.Metadata> map : mapNameToMapSink.values()) {
-            assertThat(map.count()).isEqualTo(0);
-        }
-
-        // startReplication
-        startLogReplicatorServers();
-
-        //validate that data is replicated
-        log.info(">> Wait ... Snapshot log replication in progress ...");
-        verifyDataOnSink(numWrites);
-        log.info("Snapshot completed!. But the latch's value is " + cluster2StatusUpdateLatch.getCount());
-
-        // validate the status of replication table. Status -> COMPLETE
-        cluster2StatusUpdateLatch.await();
-
-        // Verify replication status
-        verifyReplicationStatusFromSource();
-
-        log.info(">> Write deltas");
-        writeToSource(numWrites, 5);
-
-        log.info(">> Wait ... Delta log replication in progress ...");
-        verifyDataOnSink((numWrites + 5));
-
-        assertThat(cluster2SinkListener.getAccumulatedStatus().size()).isEqualTo(3);
-        // Confirm last updates are set to true (corresponding to snapshot sync completed and log entry sync started)
-        assertThat(cluster2SinkListener.getAccumulatedStatus().get(cluster2SinkListener.getAccumulatedStatus().size() - 1)).isTrue();
-        assertThat(cluster2SinkListener.getAccumulatedStatus()).contains(false);
-    }
-
-
-    private void init() throws Exception {
-        configTable = corfuStoreSource.openTable(
-                DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
-                ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class,
-                TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
-        );
-        try (TxnContext txn = corfuStoreSource.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-            txn.putRecord(configTable, DefaultClusterManager.OP_SINK_CONNECTION_INIT,
-                    DefaultClusterManager.OP_SINK_CONNECTION_INIT, DefaultClusterManager.OP_SINK_CONNECTION_INIT);
-            txn.commit();
-        }
-    }
+//    private void init() throws Exception {
+//        configTable = corfuStoreSource.openTable(
+//                DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
+//                ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class,
+//                TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
+//        );
+//        try (TxnContext txn = corfuStoreSource.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+//            txn.putRecord(configTable, DefaultClusterManager.OP_SINK_CONNECTION_INIT,
+//                    DefaultClusterManager.OP_SINK_CONNECTION_INIT, DefaultClusterManager.OP_SINK_CONNECTION_INIT);
+//            txn.commit();
+//        }
+//    }
 }

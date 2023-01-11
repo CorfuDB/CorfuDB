@@ -155,8 +155,7 @@ public class LogReplicationSourceServerRouter extends LogReplicationSourceRouter
     private boolean validateEpoch(CorfuMessage.HeaderMsg header) {
         long serverEpoch = getServerEpoch();
         if (!header.getIgnoreEpoch() && header.getEpoch()!= serverEpoch) {
-            log.trace("Incoming message with wrong epoch, got {}, expected {}",
-                    header.getEpoch(), serverEpoch);
+            log.trace("Incoming message with wrong epoch, got {}, expected {}", header.getEpoch(), serverEpoch);
             sendWrongEpochError(header, null);
             return false;
         }

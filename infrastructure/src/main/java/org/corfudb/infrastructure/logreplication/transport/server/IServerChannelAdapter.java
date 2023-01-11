@@ -1,12 +1,8 @@
 package org.corfudb.infrastructure.logreplication.transport.server;
 
 import lombok.Getter;
-import lombok.Setter;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
-import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkServerRouter;
@@ -28,8 +24,10 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 public abstract class IServerChannelAdapter {
 
-    private final Map<ReplicationSession, LogReplicationSourceServerRouter> sesionToSourceServerRouter;
-    private final Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServerRouter;
+    @Getter
+    private final Map<ReplicationSession, LogReplicationSourceServerRouter> incomingSessionToSourceServerRouter;
+    @Getter
+    private final Map<ReplicationSession, LogReplicationSinkServerRouter> incomingSessionToSinkServerRouter;
 
     @Getter
     private final ServerContext serverContext;
@@ -38,18 +36,21 @@ public abstract class IServerChannelAdapter {
      * Constructs a new {@link IServerChannelAdapter}
      *
      * @param serverContext
-     * @param sesionToSourceServerRouter map of session-> source-server router. Using this, the adapter forwards the
+     * @param incomingSessionToSourceServerRouter map of session-> source-server router. Using this, the adapter forwards the
      *                                   msg to the correct source router.
-     * @param sessionToSinkServerRouter map of session-> sink-server router. Using this, the adapter forwards the
+     * @param incomingSessionToSinkServerRouter map of session-> sink-server router. Using this, the adapter forwards the
      *                                  msg to the correct source router.
      */
     public IServerChannelAdapter(ServerContext serverContext,
-                                 Map<ReplicationSession, LogReplicationSourceServerRouter> sesionToSourceServerRouter,
-                                 Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServerRouter) {
+                                 Map<ReplicationSession, LogReplicationSourceServerRouter> incomingSessionToSourceServerRouter,
+                                 Map<ReplicationSession, LogReplicationSinkServerRouter> incomingSessionToSinkServerRouter) {
         this.serverContext = serverContext;
-        this.sesionToSourceServerRouter = sesionToSourceServerRouter;
-        this.sessionToSinkServerRouter = sessionToSinkServerRouter;
+        this.incomingSessionToSourceServerRouter = incomingSessionToSourceServerRouter;
+        this.incomingSessionToSinkServerRouter = incomingSessionToSinkServerRouter;
     }
+
+    public abstract void updateRouters(Map<ReplicationSession, LogReplicationSourceServerRouter> sesionToSourceServerRouter,
+                                       Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServerRouter);
 
     /**
      * Send message across channel.
@@ -79,10 +80,10 @@ public abstract class IServerChannelAdapter {
         } else if (msg.getPayload().getPayloadCase().equals(CorfuMessage.ResponsePayloadMsg.PayloadCase.LR_ENTRY_ACK)) {
             session = convertSessionMsg(msg.getPayload().getLrEntryAck().getMetadata().getSessionInfo());
         }
-        if(sesionToSourceServerRouter.containsKey(session)) {
-            sesionToSourceServerRouter.get(session).receive(msg);
-        } else if(sessionToSinkServerRouter.containsKey(session)){
-            sessionToSinkServerRouter.get(session).receive(msg);
+        if(incomingSessionToSourceServerRouter.containsKey(session)) {
+            incomingSessionToSourceServerRouter.get(session).receive(msg);
+        } else if(incomingSessionToSinkServerRouter.containsKey(session)){
+            incomingSessionToSinkServerRouter.get(session).receive(msg);
         }
     }
 
@@ -99,10 +100,10 @@ public abstract class IServerChannelAdapter {
         } else if (msg.getPayload().getPayloadCase().equals(CorfuMessage.RequestPayloadMsg.PayloadCase.LR_ENTRY)) {
             session = convertSessionMsg(msg.getPayload().getLrEntry().getMetadata().getSessionInfo());
         }
-        if(sesionToSourceServerRouter.containsKey(session)) {
-            sesionToSourceServerRouter.get(session).receive(msg);
-        } else if(sessionToSinkServerRouter.containsKey(session)){
-            sessionToSinkServerRouter.get(session).receive(msg);
+        if(incomingSessionToSourceServerRouter.containsKey(session)) {
+            incomingSessionToSourceServerRouter.get(session).receive(msg);
+        } else if(incomingSessionToSinkServerRouter.containsKey(session)){
+            incomingSessionToSinkServerRouter.get(session).receive(msg);
         }
     }
 

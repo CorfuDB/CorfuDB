@@ -39,6 +39,8 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
 
     LogReplicationServerRouter router;
 
+    private AtomicBoolean serverStarted;
+
     /**
      * Log Replication Server initialization.
      *
@@ -56,17 +58,27 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
 
         this.close = new AtomicBoolean(false);
 
-        logReplicationServerRunner = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
-            .setNameFormat("replication-server-runner").build());
+        this.serverStarted = new AtomicBoolean(false);
     }
 
-    public void setRouterAndStartServer(Map<ReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServer,
+    public synchronized void setRouterAndStartServer(Map<ReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServer,
                                         Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServer) {
+        if (!serverStarted.get()) {
+            this.router = new LogReplicationServerRouter(serverMap, this.serverContext, sessionToSourceServer, sessionToSinkServer);
+            this.serverContext.setServerRouter(router);
+            logReplicationServerRunner = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
+                    .setNameFormat("replication-server-runner").build());
+            // Start and listen to the server
+            logReplicationServerRunner.submit(() -> this.startAndListen());
+        } else {
+            updateServerRouters(sessionToSourceServer, sessionToSinkServer);
+        }
+    }
 
-        this.router = new LogReplicationServerRouter(serverMap, this.serverContext, sessionToSourceServer, sessionToSinkServer);
-        this.serverContext.setServerRouter(router);
-        // Start and listen to the server
-        logReplicationServerRunner.submit(() -> this.startAndListen());
+    public void updateServerRouters(Map<ReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServer,
+                                    Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServer) {
+        log.info("Server transport adapter is already running. Updating the router information");
+        this.router.updateAndSetServerAdapterForRouters(sessionToSourceServer, sessionToSinkServer);
     }
 
     /**
@@ -75,6 +87,9 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
     private void startAndListen() {
         try {
             log.info("Starting server transport adapter ...");
+            synchronized (this) {
+                serverStarted.set(true);
+            }
             this.router.getServerAdapter().start().get();
         } catch (InterruptedException e) {
             // The server can be interrupted and stopped on a role switch.
@@ -149,6 +164,9 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
         CompletableFuture.allOf(shutdownFutures).join();
         shutdownService.shutdown();
 
+        synchronized (this) {
+            serverStarted.set(false);
+        }
         // Stop listening on the server channel
         logReplicationServerRunner.shutdownNow();
 

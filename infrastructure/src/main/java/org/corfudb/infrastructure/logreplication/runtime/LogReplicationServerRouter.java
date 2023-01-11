@@ -75,11 +75,20 @@ public class LogReplicationServerRouter implements IServerRouter {
         serverAdapter = getAdapter(serverContext, sessionToSourceServer, sessionToSinkServer);
 
         // set the server adapter in every server router.
+        updateAndSetServerAdapterForRouters(sessionToSourceServer, sessionToSinkServer);
+    }
+
+    public void updateAndSetServerAdapterForRouters(Map<ReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServer,
+                                                    Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServer) {
+        serverAdapter.updateRouters(sessionToSourceServer, sessionToSinkServer);
+        // set the server adapter in every server router.
         if(!sessionToSourceServer.isEmpty()) {
-            sessionToSourceServer.values().forEach(router -> router.setAdapter(serverAdapter));
+            sessionToSourceServer.values().stream().filter(router -> router.serverChannelAdapter == null).forEach(router ->
+                router.setAdapter(serverAdapter));
         }
         if (!sessionToSinkServer.isEmpty()) {
-            sessionToSinkServer.values().forEach(router -> router.setAdapter(serverAdapter));
+            sessionToSinkServer.values().stream().filter(router -> router.getServerAdapter() == null).forEach(router ->
+                router.setAdapter(serverAdapter));
         }
     }
 

@@ -32,12 +32,12 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
     /*
      * Map of session to SINK Router (internal to Corfu)
      */
-    final Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServer;
+    final Map<ReplicationSession, LogReplicationSinkServerRouter> incomingSessionToSinkServer;
 
     /*
      * Map of session to SOURCE Router (internal to Corfu)
      */
-    final Map<ReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServer;
+    final Map<ReplicationSession, LogReplicationSourceServerRouter> incomingSessionToSourceServer;
 
     /*
      * Map of (Remote Cluster Id, Request Id) pair to Stream Observer to send responses back to the client. Used for
@@ -56,10 +56,10 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
 
     Map<ReplicationSession, StreamObserver<RequestMsg>> sessionToStreamObserverRequestMap;
 
-    public GRPCLogReplicationServerHandler(Map<ReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServer,
-                                           Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServer) {
-        this.sessionToSourceServer = sessionToSourceServer;
-        this.sessionToSinkServer = sessionToSinkServer;
+    public GRPCLogReplicationServerHandler(Map<ReplicationSession, LogReplicationSourceServerRouter> incomingSessionToSourceServer,
+                                           Map<ReplicationSession, LogReplicationSinkServerRouter> incomingSessionToSinkServer) {
+        this.incomingSessionToSourceServer = incomingSessionToSourceServer;
+        this.incomingSessionToSinkServer = incomingSessionToSinkServer;
         this.streamObserverMap = new ConcurrentHashMap<>();
         this.replicationStreamObserverMap = new ConcurrentHashMap<>();
         this.sessionToStreamObserverRequestMap = new ConcurrentHashMap<>();
@@ -70,8 +70,8 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
         log.info("Received[{}]: {}", request.getHeader().getRequestId(),
                 request.getPayload().getPayloadCase().name());
         ReplicationSession session = convertSessionMsg(request, null);
-        if (sessionToSinkServer.containsKey(session)) {
-            sessionToSinkServer.get(session).receive(request);
+        if (incomingSessionToSinkServer.containsKey(session)) {
+            incomingSessionToSinkServer.get(session).receive(request);
             streamObserverMap.put(Pair.of(request.getHeader().getClusterId(), request.getHeader().getRequestId()),
                     responseObserver);
         } else {
@@ -85,10 +85,12 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
                 request.getPayload().getPayloadCase().name());
 
         ReplicationSession session = convertSessionMsg(request, null);
-        if(sessionToSinkServer.containsKey(session)) {
-            sessionToSinkServer.get(session).receive(request);
-        } else if(sessionToSourceServer.containsKey(session)) {
-            sessionToSourceServer.get(session).receive(request);
+        if(incomingSessionToSinkServer.containsKey(session)) {
+            incomingSessionToSinkServer.get(session).receive(request);
+        } else if(incomingSessionToSourceServer.containsKey(session)) {
+            incomingSessionToSourceServer.get(session).receive(request);
+        } else {
+            log.info("Dropping msg as the cluster is not SINK for the session {}", session);
         }
         streamObserverMap.put(Pair.of(request.getHeader().getClusterId(), request.getHeader().getRequestId()),
             responseObserver);
@@ -116,10 +118,10 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
                 // Forward the received message to the router
                 ReplicationSession session = convertSessionMsg(replicationCorfuMessage, null);
 
-                if(sessionToSinkServer.containsKey(session)) {
-                    sessionToSinkServer.get(session).receive(replicationCorfuMessage);
-                } else if(sessionToSourceServer.containsKey(session)) {
-                    sessionToSourceServer.get(session).receive(replicationCorfuMessage);
+                if(incomingSessionToSinkServer.containsKey(session)) {
+                    incomingSessionToSinkServer.get(session).receive(replicationCorfuMessage);
+                } else if(incomingSessionToSourceServer.containsKey(session)) {
+                    incomingSessionToSourceServer.get(session).receive(replicationCorfuMessage);
                 }
             }
 
@@ -152,14 +154,14 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
                             requestId, e);
                 }
 
-                if(sessionToSourceServer.containsKey(session)) {
-                    sessionToSourceServer.get(session).receive(lrResponseMsg);
+                if(incomingSessionToSourceServer.containsKey(session)) {
+                    incomingSessionToSourceServer.get(session).receive(lrResponseMsg);
                 }
             }
 
             @Override
             public void onError(Throwable t) {
-                log.error("Encountered error while attempting replication.", t);
+                log.error("Encountered error while attempting to replicate via subscribe.", t);
             }
 
             @Override
@@ -289,6 +291,13 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
         }
         ReplicationSubscriber subscriber = new ReplicationSubscriber(sessionMsg.getReplicationModel(), sessionMsg.getClient());
         return new ReplicationSession(sessionMsg.getRemoteClusterId(),sessionMsg.getLocalClusterId(), subscriber);
+    }
+
+    public void updateRouterInfo(Map<ReplicationSession, LogReplicationSourceServerRouter> sesionToSourceServerRouter,
+                                 Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServerRouter) {
+        this.incomingSessionToSourceServer.putAll(sesionToSourceServerRouter);
+        this.incomingSessionToSinkServer.putAll(sessionToSinkServerRouter);
+
     }
 
 }

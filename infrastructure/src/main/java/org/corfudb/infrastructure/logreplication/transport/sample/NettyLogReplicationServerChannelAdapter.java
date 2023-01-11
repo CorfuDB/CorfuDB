@@ -61,6 +61,13 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
     // ================== IServerChannelAdapter ==================
 
     @Override
+    public void updateRouters(Map<ReplicationSession, LogReplicationSourceServerRouter> sesionToSourceServerRouter,
+                              Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServerRouter) {
+        this.getIncomingSessionToSinkServerRouter().putAll(sessionToSinkServerRouter);
+        this.getIncomingSessionToSourceServerRouter().putAll(sesionToSourceServerRouter);
+    }
+
+    @Override
     public void send(@Nonnull ResponseMsg msg) {
         nettyServerChannel.sendResponse(msg);
     }

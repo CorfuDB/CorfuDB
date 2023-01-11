@@ -306,7 +306,7 @@ public class CorfuReplicationManager {
                                            Set<String> remoteSourceClusterToAdd, Set<String> remoteClustersToRemove,
                                            Set<String> intersection, Map<String, ClusterDescriptor> connectionEndsIdToDescriptor,
                                            Map<String, Set<ReplicationSession>> remoteIdToReplicationSession,
-                                           Map<Class, AbstractServer> serverMap) {
+                                           Map<Class, AbstractServer> serverMap, CorfuInterClusterReplicationServerNode interClusterServerNode) {
 
         long oldTopologyConfigId = context.getTopology().getTopologyConfigId();
         context.setTopology(newConfig);
@@ -328,20 +328,31 @@ public class CorfuReplicationManager {
         remoteClustersToAdd.addAll(remoteSourceClusterToAdd);
 
         for (String clusterId : remoteClustersToAdd) {
-            // When the local cluster is the connection initiator to the newly added sink, collect the remoteSinks to start connections
+            // When the local cluster is the connection initiator to the newly added cluster, collect them to start connections
             if(connectionEndsIdToDescriptor.containsKey(clusterId)) {
                 newConnectionToStart.add(connectionEndsIdToDescriptor.get(clusterId));
             } else {
+                // create connection receiver routers, and update the serverNode with the new routers.
+                Map<ReplicationSession, LogReplicationSourceServerRouter> receivedSessionToSourceServer = new HashMap<>();
+                Map<ReplicationSession, LogReplicationSinkServerRouter> receivedSessionToSinkServer = new HashMap<>();
+
                 if (remoteSinkClustersToAdd.contains(clusterId)) {
                     remoteIdToReplicationSession.get(clusterId).stream().forEach(session -> {
-                        getOrCreateSourceRouter(connectionEndsIdToDescriptor.get(clusterId), session, serverMap, false);
-                        startRuntime(session);
+                        ReplicationSession incomingSession = new ReplicationSession(
+                                localNodeDescriptor.getClusterId(), session.getRemoteClusterId(), session.getSubscriber());
+                        receivedSessionToSourceServer.put(incomingSession,
+                                (LogReplicationSourceServerRouter) getOrCreateSourceRouter(
+                                        connectionEndsIdToDescriptor.get(clusterId), session, serverMap, false));
                     });
                 } else {
                     remoteIdToReplicationSession.get(clusterId).stream().forEach(session -> {
-                        getOrCreateSinkRouter(connectionEndsIdToDescriptor.get(clusterId), session, serverMap, false);
+                        ReplicationSession incomingSession = new ReplicationSession(
+                                localNodeDescriptor.getClusterId(), session.getRemoteClusterId(), session.getSubscriber());
+                        receivedSessionToSinkServer.put(incomingSession, getOrCreateSinkRouter(
+                                connectionEndsIdToDescriptor.get(clusterId), session, serverMap, false));
                     });
                 }
+                interClusterServerNode.updateServerRouters(receivedSessionToSourceServer, receivedSessionToSinkServer);
             }
         }
         if (!newConnectionToStart.isEmpty()) {

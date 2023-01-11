@@ -3,6 +3,7 @@ package org.corfudb.integration;
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
@@ -19,6 +20,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.ExampleSchemas.ClusterUuidMsg;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
@@ -43,10 +45,17 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -64,8 +73,9 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  */
 @Slf4j
 @SuppressWarnings("checkstyle:magicnumber")
+@RunWith(Parameterized.class)
 public class CorfuReplicationClusterConfigIT extends AbstractIT {
-    public static final String nettyPluginPath = "src/test/resources/transport/nettyConfig.properties";
+    public static final String nettyPluginPath = "src/test/resources/transport/grpcConfig.properties";
     private static final String streamName = "Table001";
     private static final String LOCK_TABLE_NAME = "LOCK";
 
@@ -110,6 +120,21 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     public static final String TABLE_PREFIX = "Table00";
 
     public static final String NAMESPACE = "LR-Test";
+
+    private ClusterUuidMsg topologyType;
+
+    public CorfuReplicationClusterConfigIT(ClusterUuidMsg topologyType) {
+        this.topologyType = topologyType;
+    }
+
+    @Parameterized.Parameters
+    public static List<ClusterUuidMsg> input() {
+        return Arrays.asList(
+                DefaultClusterManager.OP_SINGLE_SOURCE_SINK,
+                DefaultClusterManager.OP_SINK_CONNECTION_INIT
+        );
+
+    }
 
     @Before
     public void setUp() throws Exception {
@@ -167,13 +192,11 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         );
 
         try (TxnContext txn = sourceCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-            txn.putRecord(configTable, DefaultClusterManager.OP_SINGLE_SOURCE_SINK,
-                    DefaultClusterManager.OP_SINGLE_SOURCE_SINK, DefaultClusterManager.OP_SINGLE_SOURCE_SINK);
+            txn.putRecord(configTable, topologyType, topologyType, topologyType);
             txn.commit();
         }
         try (TxnContext txn = sinkCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-            txn.putRecord(configTable, DefaultClusterManager.OP_SINGLE_SOURCE_SINK,
-                    DefaultClusterManager.OP_SINGLE_SOURCE_SINK, DefaultClusterManager.OP_SINGLE_SOURCE_SINK);
+            txn.putRecord(configTable, topologyType,topologyType,topologyType);
             txn.commit();
         }
 
@@ -214,6 +237,10 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         shutdownCorfuServer(sourceCorfuServer);
         shutdownCorfuServer(sinkCorfuServer);
+        // skipping test
+        if (sourceReplicationServer == null) {
+            return;
+        }
         shutdownCorfuServer(sourceReplicationServer);
         shutdownCorfuServer(sinkReplicationServer);
     }
@@ -232,6 +259,9 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testNewConfigWithSwitchRole() throws Exception {
+        if(skipTest()) {
+            return;
+        }
         // Write 10 entries to source map
         for (int i = 0; i < firstBatch; i++) {
             // Change to default source sink config
@@ -370,7 +400,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
         assertThat(sinkStatusVal.getSnapshotSyncInfo().getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
-
         // Wait until data is fully replicated again
         waitForReplication(size -> size == thirdBatch, mapSource, thirdBatch);
         log.info("Data is fully replicated again after role switch, both maps have size {}. " +
@@ -399,7 +428,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             }
         }
         assertThat(mapSource.count()).isEqualTo(fourthBatch);
-
         // Wait until data is fully replicated again
         waitForReplication(size -> size == fourthBatch, mapSink, fourthBatch);
         log.info("Data is fully replicated again after role switch, both maps have size {}. " +
@@ -716,7 +744,10 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testClusterSyncStatus() throws Exception {
-
+        //TODO shama : for rev connection, the source has to know when the sink (connectionInit) is down
+        if(skipTest()) {
+            return;
+        }
         final int waitInMillis = 500;
         final int deltaSeconds = 5;
 
@@ -831,7 +862,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         // Confirm remaining entries is equal to 0
         assertThat(sinkStatus.getRemainingEntriesToSend()).isEqualTo(0L);
-
         // (5) Confirm that if sink LR is stopped, in the middle of replication, the status changes to STOPPED
         shutdownCorfuServer(sinkReplicationServer);
         while (!sinkStatus.getStatus().equals(LogReplicationMetadata.SyncStatus.STOPPED)) {
@@ -1235,7 +1265,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         }
         assertThat(replicationStatus).isNotNull();
         log.info("Log replication succeeds without config change!");
-
         // Perform a config update with invalid state
         try (TxnContext txn = sourceCorfuStore.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
             txn.putRecord(configTable, DefaultClusterManager.OP_INVALID, DefaultClusterManager.OP_INVALID, DefaultClusterManager.OP_INVALID);
@@ -1643,7 +1672,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         updateTopology(sourceCorfuStore, DefaultClusterManager.OP_BACKUP);
         log.info("Change the topology!!!");
 
-        TimeUnit.SECONDS.sleep(shortInterval);
+        // Sleep for sometime so the new topology could be applied.
+        TimeUnit.SECONDS.sleep(mediumInterval);
 
 
         // Perform an enforce full snapshot sync
@@ -1730,5 +1760,12 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             log.error(errorMsg, throwable);
             fail(errorMsg + throwable.toString());
         }
+    }
+
+    private boolean skipTest() {
+        if(topologyType.equals(DefaultClusterManager.OP_SINK_CONNECTION_INIT)) {
+            return true;
+        }
+        return false;
     }
 }

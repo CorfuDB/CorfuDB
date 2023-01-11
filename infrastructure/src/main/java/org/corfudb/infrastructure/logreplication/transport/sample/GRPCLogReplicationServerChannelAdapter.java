@@ -46,6 +46,14 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
     }
 
     @Override
+    public void updateRouters(Map<ReplicationSession, LogReplicationSourceServerRouter> sessionToSourceServerRouter,
+                              Map<ReplicationSession, LogReplicationSinkServerRouter> sessionToSinkServerRouter) {
+        this.getIncomingSessionToSourceServerRouter().putAll(sessionToSourceServerRouter);
+        this.getIncomingSessionToSinkServerRouter().putAll(sessionToSinkServerRouter);
+        this.service.updateRouterInfo(sessionToSourceServerRouter, sessionToSinkServerRouter);
+    }
+
+    @Override
     public void send(CorfuMessage.ResponseMsg msg) {
         log.info("Server send response message {}", msg.getPayload().getPayloadCase());
         service.send(msg);

@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
@@ -123,6 +124,8 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
      */
     private final SinkVerifyRemoteLeader verifyLeadership;
 
+    private LogReplicationServer lrServer;
+
 
 
     /**
@@ -137,6 +140,7 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
                                             String pluginFilePath, long timeoutResponse, ReplicationSession session,
                                           Map<Class, AbstractServer> serverMap) {
         super(serverMap);
+        this.lrServer = (LogReplicationServer) serverMap.get(LogReplicationServer.class);
         this.timeoutResponse = timeoutResponse;
         this.remoteClusterDescriptor = remoteCluster;
         this.localClusterId = localClusterId;
@@ -147,8 +151,6 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
         this.remoteLeaderConnectionFuture = new CompletableFuture<>();
 
         this.pluginFilePath = pluginFilePath;
-        this.localClusterId = localClusterId;
-        // this will be required when the sink is the connection initiator
         this.session = session;
         this.handlerMap = new ConcurrentHashMap<>();
 
@@ -330,6 +332,21 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
     public void stop() {
         log.debug("stop: Shutting down router for {}", session);
         shutdown = true;
+        // set leadership=false and send leadership_loss msg to source
+        this.lrServer.setLeadership(false);
+
+        CorfuMessage.ResponsePayloadMsg payload =
+                CorfuMessage.ResponsePayloadMsg.newBuilder().setLrLeadershipLoss(
+                        LogReplication.LogReplicationLeadershipLossResponseMsg.newBuilder()
+                                .setSessionInfo(LogReplication.ReplicationSessionMsg.newBuilder()
+                                        .setRemoteClusterId(session.getRemoteClusterId())
+                                        .setLocalClusterId(session.getLocalClusterId())
+                                        .setClient(session.getSubscriber().getClient())
+                                        .setReplicationModel(session.getSubscriber().getReplicationModel())
+                                        .build())
+                                .build()
+                ).build();
+        this.sendResponse(payload, getRemoteLeaderNodeId().get());
         channelAdapter.stop();
         remoteLeaderConnectionFuture = new CompletableFuture<>();
         remoteLeaderConnectionFuture.completeExceptionally(new NetworkException("Router stopped", remoteClusterDescriptor.getClusterId()));
@@ -510,6 +527,7 @@ public class LogReplicationSinkClientRouter extends LogReplicationSinkServerRout
     @Override
     public synchronized void onConnectionDown(String nodeId) {
         log.info("Connection lost to remote node {} on cluster {}", nodeId, this.session.getRemoteClusterId());
+        this.verifyLeadership.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN, nodeId));
         // Attempt to reconnect to this endpoint
         LogReplication.ReplicationSessionMsg sessionMsg = LogReplication.ReplicationSessionMsg.newBuilder()
                 .setRemoteClusterId(session.getRemoteClusterId())
