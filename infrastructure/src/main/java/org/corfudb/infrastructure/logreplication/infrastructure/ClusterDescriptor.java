@@ -7,7 +7,8 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
+
+import static org.corfudb.common.util.URLUtils.getVersionFormattedHostAddress;
 
 /**
  * This class describes a Cluster ore Site in terms of its Log Replication Nodes
@@ -38,7 +39,8 @@ public class ClusterDescriptor {
         this.corfuPort = clusterConfig.getCorfuPort() != 0 ? clusterConfig.getCorfuPort() : CORFU_PORT;
         this.nodesDescriptors = new ArrayList<>();
         for (NodeConfigurationMsg nodeConfig : clusterConfig.getNodeInfoList()) {
-            NodeDescriptor newNode = new NodeDescriptor(nodeConfig.getAddress(),
+            NodeDescriptor newNode = new NodeDescriptor(
+                    getVersionFormattedHostAddress(nodeConfig.getAddress()),
                     Integer.toString(nodeConfig.getPort()), clusterId,
                     nodeConfig.getConnectionId(),
                     nodeConfig.getNodeId());
@@ -52,7 +54,7 @@ public class ClusterDescriptor {
         this.nodesDescriptors = new ArrayList<>();
         this.corfuPort = info.getCorfuPort();
         for (NodeDescriptor nodeInfo : info.nodesDescriptors) {
-            NodeDescriptor newNode = new NodeDescriptor(nodeInfo.getHost(), nodeInfo.getPort(),
+            NodeDescriptor newNode = new NodeDescriptor(getVersionFormattedHostAddress(nodeInfo.getHost()), nodeInfo.getPort(),
                     info.clusterId, nodeInfo.getConnectionId(), nodeInfo.getNodeId());
             this.nodesDescriptors.add(newNode);
         }

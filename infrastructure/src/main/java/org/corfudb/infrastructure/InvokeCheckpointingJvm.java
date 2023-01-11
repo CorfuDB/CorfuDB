@@ -34,9 +34,10 @@ public class InvokeCheckpointingJvm implements InvokeCheckpointing {
                 String compactorScriptPath = serverContext.getCompactorScriptPath().get();
                 String compactorConfigPath = serverContext.getCompactorConfig().get();
                 boolean runCompactorAsRoot = serverContext.getRunCompactorAsRoot();
-                List<String> endpoint = Arrays.asList(serverContext.getLocalEndpoint().split(":"));
-                String hostName = endpoint.get(0);
-                String port = endpoint.get(1);
+
+                String hostName = serverContext.getNodeLocator().getHost();
+                String port = Integer.toString(serverContext.getNodeLocator().getPort());
+                log.info("invokeCheckpointing: hostName: {}, port: {}", hostName, port);
 
                 if (isRunning()) {
                     shutdown();

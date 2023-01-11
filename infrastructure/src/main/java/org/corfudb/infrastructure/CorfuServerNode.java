@@ -41,6 +41,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
+import static org.corfudb.common.util.URLUtils.getVersionFormattedHostAddress;
+
 
 /**
  * Created by zlokhandwala on 2019-05-06.
@@ -240,8 +242,9 @@ public class CorfuServerNode implements AutoCloseable {
                 log.info("Corfu Server listening on all interfaces on port:{}", port);
                 return bootstrap.bind(port).sync();
             } else {
-                log.info("Corfu Server listening on {}:{}", address, port);
-                return bootstrap.bind(address, port).sync();
+                log.info("Corfu Server listening on {}:{}",
+                        getVersionFormattedHostAddress(address), port);
+                return bootstrap.bind(getVersionFormattedHostAddress(address), port).sync();
             }
         } catch (InterruptedException ie) {
             throw new UnrecoverableCorfuInterruptedError(ie);
@@ -266,8 +269,9 @@ public class CorfuServerNode implements AutoCloseable {
                 log.info("Corfu Http Server listening on all interfaces on port:{}", port);
                 return bootstrap.bind(port).sync();
             } else {
-                log.info("Corfu Http Server listening on {}:{}", address, port);
-                return bootstrap.bind(address, port).sync();
+                log.info("Corfu Http Server listening on {}:{}",
+                        getVersionFormattedHostAddress(address), port);
+                return bootstrap.bind(getVersionFormattedHostAddress(address), port).sync();
             }
         } catch (InterruptedException ie) {
             throw new UnrecoverableCorfuInterruptedError(ie);

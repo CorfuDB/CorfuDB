@@ -341,7 +341,7 @@ public class LogReplicationClientRouter implements IClientRouter {
     public String getHost() {
         String host = "";
         // For logging purposes return all remote cluster nodes host in a concatenated form
-        remoteClusterDescriptor.getNodesDescriptors().forEach(node -> host.concat(node.getHost() + ":"));
+        remoteClusterDescriptor.getNodesDescriptors().forEach(node -> host.concat(node.getHost() + ","));
         return host;
     }
 

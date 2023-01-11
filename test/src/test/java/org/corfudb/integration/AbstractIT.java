@@ -8,6 +8,7 @@ import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.common.util.URLUtils.NetworkInterfaceVersion;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
@@ -513,6 +514,10 @@ public class AbstractIT extends AbstractCorfuTest {
         private String logSizeLimitPercentage = null;
         private String trustStorePassword = null;
         private String compressionCodec = null;
+        private boolean disableHost = false;
+        private String networkInterface = null;
+        private NetworkInterfaceVersion networkInterfaceVersion = null;
+
 
         /**
          * Create a command line string according to the properties set for a Corfu Server
@@ -522,7 +527,10 @@ public class AbstractIT extends AbstractCorfuTest {
          */
         public String getOptionsString() {
             StringBuilder command = new StringBuilder();
-            command.append("-a ").append(host);
+
+            if (!disableHost) {
+                command.append("-a ").append(host);
+            }
 
             if (logPath != null) {
                 command.append(" -l ").append(logPath);
@@ -565,6 +573,15 @@ public class AbstractIT extends AbstractCorfuTest {
                     command.append(" -w ").append(trustStorePassword);
                 }
             }
+
+            if (networkInterface != null) {
+                command.append(" --network-interface=").append(networkInterface);
+            }
+
+            if (networkInterfaceVersion != null) {
+                command.append(" --network-interface-version=").append(networkInterfaceVersion);
+            }
+
             command.append(" -d ").append(logLevel).append(" ")
                     .append(port);
 
@@ -589,7 +606,7 @@ public class AbstractIT extends AbstractCorfuTest {
             builder.command(SH, HYPHEN_C, getCodeCoverageCmd() + getMetricsCmd(metricsConfigFile) +
                     " bin/corfu_server " + getOptionsString());
             builder.directory(new File(CORFU_PROJECT_DIR));
-            Process corfuServerProcess = builder.start();
+            Process corfuServerProcess = builder.redirectErrorStream(true).start();
             StreamGobbler streamGobbler = new StreamGobbler(corfuServerProcess.getInputStream(), serverConsoleLogPath);
             Executors.newSingleThreadExecutor().submit(streamGobbler);
             return corfuServerProcess;
@@ -698,7 +715,7 @@ public class AbstractIT extends AbstractCorfuTest {
                     " bin/corfu_replication_server " + getOptionsString());
 
             builder.directory(new File(CORFU_PROJECT_DIR));
-            Process corfuReplicationServerProcess = builder.start();
+            Process corfuReplicationServerProcess = builder.redirectErrorStream(true).start();
             StreamGobbler streamGobbler = new StreamGobbler(corfuReplicationServerProcess.getInputStream(), serverConsoleLogPath);
             Executors.newSingleThreadExecutor().submit(streamGobbler);
             return corfuReplicationServerProcess;

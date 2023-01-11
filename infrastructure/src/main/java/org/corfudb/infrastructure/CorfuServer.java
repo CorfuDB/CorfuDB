@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.common.config.ConfigParamsHelper;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.util.URLUtils.NetworkInterfaceVersion;
 import org.corfudb.infrastructure.health.HealthMonitor;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -50,6 +51,7 @@ public class CorfuServer {
                     + "\n"
                     + "Usage:\n"
                     + "\tcorfu_server (-l <path>|-m) [-nsNA] [-a <address>|-q <interface-name>] "
+                    + "[--network-interface-version=<interface-version>] "
                     + "[--max-replication-data-message-size=<msg-size>] "
                     + "[-c <ratio>] [-d <level>] [-p <seconds>] "
                     + "[--lrCacheSize=<cache-num-entries>]"
@@ -92,6 +94,8 @@ public class CorfuServer {
                     + "advertise to external clients.\n"
                     + " -q <interface-name>, --network-interface=<interface-name>                "
                     + "              The name of the network interface.\n"
+                    + " --network-interface-version=<interface-version>                "
+                    + "              The version of the network interface, IPv4 or IPv6(default).\n"
                     + " -i <channel-implementation>, --implementation <channel-implementation>   "
                     + "              The type of channel to use (auto, nio, epoll, kqueue)"
                     + "[default: nio].\n"
@@ -221,6 +225,10 @@ public class CorfuServer {
 
     private static final Duration DEFAULT_METRICS_LOGGING_INTERVAL = Duration.ofMinutes(1);
 
+    // Declaring strings to avoid code duplication code analysis error
+    private static final String ADDRESS_PARAM = "--address";
+    private static final String NETWORK_INTERFACE_VERSION_PARAM = "--network-interface-version";
+
     /**
      * Main program entry point.
      *
@@ -283,17 +291,33 @@ public class CorfuServer {
         // Bind to all interfaces only if no address or interface specified by the user.
         // Fetch the address if given a network interface.
         if (opts.get("--network-interface") != null) {
-            opts.put("--address", getAddressFromInterfaceName((String) opts.get("--network-interface")));
+            opts.put(
+                    ADDRESS_PARAM,
+                    getAddressFromInterfaceName(
+                            (String) opts.get("--network-interface"),
+                            (opts.get(NETWORK_INTERFACE_VERSION_PARAM) != null) ?
+                                    NetworkInterfaceVersion.valueOf(((String) opts.get(NETWORK_INTERFACE_VERSION_PARAM)).toUpperCase()):
+                                    NetworkInterfaceVersion.IPV6 // Default is IPV6
+                    )
+            );
             opts.put("--bind-to-all-interfaces", false);
-        } else if (opts.get("--address") == null) {
-            // Default the address to localhost and set the bind to all interfaces flag to true,
-            // if the address and interface is not specified.
+        } else if (opts.get(ADDRESS_PARAM) == null) {
+            // If the address and interface is not specified,
+            // pick an address from eth0 interface and set the bind to all interfaces flag to true.
             opts.put("--bind-to-all-interfaces", true);
-            opts.put("--address", "localhost");
+            opts.put(ADDRESS_PARAM,
+                    getAddressFromInterfaceName(
+                            "eth0",
+                            (opts.get(NETWORK_INTERFACE_VERSION_PARAM) != null) ?
+                                    NetworkInterfaceVersion.valueOf(((String) opts.get(NETWORK_INTERFACE_VERSION_PARAM)).toUpperCase()):
+                                    NetworkInterfaceVersion.IPV6 // Default is IPV6
+                    )
+            );
         } else {
             // Address is specified by the user.
             opts.put("--bind-to-all-interfaces", false);
         }
+        log.info("Configured Corfu Server address: {}", opts.get(ADDRESS_PARAM));
 
         createServiceDirectory(opts);
 

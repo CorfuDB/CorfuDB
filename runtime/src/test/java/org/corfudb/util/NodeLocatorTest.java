@@ -1,14 +1,14 @@
-package org.corfudb.runtime.utils;
+package org.corfudb.util;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.util.NodeLocator;
 import org.corfudb.util.NodeLocator.Protocol;
 import org.junit.Test;
 
-public class NodeLocatorTest extends AbstractViewTest {
+public class NodeLocatorTest {
+
+    private static final String LOCALHOST = "localhost";
 
     @Test
     public void invalidNodeThrowsException() {
@@ -19,14 +19,14 @@ public class NodeLocatorTest extends AbstractViewTest {
     /** Tests that a legacy (without protocol) node parses correctly. **/
     @Test
     public void legacyNodeParses() {
-        final int PORT_NUM = 3000;
+        final int port = 3000;
         NodeLocator locator = NodeLocator.parseString("10.0.0.1:3000");
 
         assertThat(locator.getHost())
             .isEqualTo("10.0.0.1");
 
         assertThat(locator.getPort())
-            .isEqualTo(PORT_NUM);
+            .isEqualTo(port);
 
         assertThat(locator.getNodeId())
             .isNull();
@@ -38,7 +38,7 @@ public class NodeLocatorTest extends AbstractViewTest {
     @Test
     public void nodeCanBeConvertedBackAndForth() {
         NodeLocator locator = NodeLocator.builder()
-                .host("localhost")
+                .host(LOCALHOST)
                 .port(1)
                 .protocol(Protocol.TCP)
                 .build();
@@ -51,7 +51,7 @@ public class NodeLocatorTest extends AbstractViewTest {
     @Test
     public void nodeCanBeConvertedBackAndForthWithNoNodeId() {
         NodeLocator locator = NodeLocator.builder()
-            .host("localhost")
+            .host(LOCALHOST)
             .port(1)
             .nodeId(null)
             .protocol(Protocol.TCP)
@@ -61,6 +61,33 @@ public class NodeLocatorTest extends AbstractViewTest {
 
         assertThat(locator).isEqualToComparingFieldByField(parsed);
         assertThat(locator).isEqualTo(parsed);
+    }
+
+    /**
+     * Test that {@link NodeLocator#toEndpointUrl()} method formats the endpoints
+     * of IPv4 and IPv6 versions correctly.
+     */
+    @Test
+    public void testToEndpointURL() {
+        testToEndpointURLHelper("::1");
+        testToEndpointURLHelper("[::1]");
+        testToEndpointURLHelper("0:0:0:0:0:0:0:1");
+        testToEndpointURLHelper("[0:0:0:0:0:0:0:1]");
+        testToEndpointURLHelper(LOCALHOST);
+        testToEndpointURLHelper("127.0.0.1");
+    }
+
+    public void testToEndpointURLHelper(String host) {
+        NodeLocator locator = NodeLocator.builder()
+                .host(host)
+                .port(9000)
+                .build();
+
+        String toEndpointUrl = locator.toEndpointUrl();
+        NodeLocator parsed = NodeLocator.parseString(locator.toEndpointUrl());
+
+        assertThat(locator.toEndpointUrl()).isEqualTo(parsed.toEndpointUrl());
+        assertThat(locator.toString()).isEqualTo(toEndpointUrl);
     }
 
 }

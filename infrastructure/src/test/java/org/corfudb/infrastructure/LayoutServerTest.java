@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.util.concurrent.MoreExecutors;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.datastore.DataStore;
@@ -13,20 +14,27 @@ import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.NodeLocator;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatcher;
+import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.LayoutServer.updateNodeLocator;
 import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLayout.getBootstrapLayoutRequestMsg;
@@ -49,6 +57,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -68,6 +77,36 @@ public class LayoutServerTest {
     private DataStore mockDataStore;
 
     private final AtomicInteger requestCounter = new AtomicInteger();
+
+    private static final String LOCALHOST_ENDPOINT_URL = "localhost:9000";
+    private static final String IPV4_ENDPOINT_URL = "127.0.0.1:9000";
+    private static final String TEST_HOSTNAME = "test";
+
+    /**
+     * Utility method to get a mock ChannelHandlerContext object.
+     */
+    private static ChannelHandlerContext getMockChannelHandlerContext(
+            String localAddress, int localPort, String remoteAddress, int remotePort) {
+        ChannelHandlerContext ctx;
+        ctx = mock(ChannelHandlerContext.class);
+        Channel ch = mock(Channel.class);
+        when(ch.localAddress()).thenReturn(new InetSocketAddress(localAddress, localPort));
+        when(ch.remoteAddress()).thenReturn(new InetSocketAddress(remoteAddress, remotePort));
+        when(ctx.channel()).thenReturn(ch);
+        return ctx;
+    }
+
+    /**
+     * Utility method to get a mock ChannelHandlerContext object.
+     */
+    private static ServerContext getMockServerContext(List<String> layoutServers, NodeLocator nodeLocator) {
+        ServerContext serverContext = mock(ServerContext.class);
+        Layout mockLayout = mock(Layout.class);
+        when(mockLayout.getLayoutServers()).thenReturn(layoutServers);
+        when(serverContext.getCurrentLayout()).thenReturn(mockLayout);
+        when(serverContext.getNodeLocator()).thenReturn(nodeLocator);
+        return serverContext;
+    }
 
     /**
      * A helper method that creates a basic message header populated
@@ -796,8 +835,88 @@ public class LayoutServerTest {
      * Helper method that checks the given layout matches the default layout.
      */
     private void assertLayoutMatch(Layout layout) {
-        assertThat(layout.getActiveLayoutServers()).containsExactly("localhost:9000", "localhost:9001", "localhost:9002");
-        assertThat(layout.getSequencers()).containsExactly("localhost:9000");
-        assertThat(layout.getAllLogServers()).containsExactly("localhost:9002", "localhost:9001", "localhost:9000");
+        assertThat(layout.getActiveLayoutServers()).containsExactly(LOCALHOST_ENDPOINT_URL, "localhost:9001", "localhost:9002");
+        assertThat(layout.getSequencers()).containsExactly(LOCALHOST_ENDPOINT_URL);
+        assertThat(layout.getAllLogServers()).containsExactly("localhost:9002", "localhost:9001", LOCALHOST_ENDPOINT_URL);
+    }
+
+    /**
+     * Test that node locator is not updated when the connection endpoint is invalid
+     */
+    @Test
+    public void testUpdateNodeLocatorInvalidEndpoint() {
+        ChannelHandlerContext ctx = getMockChannelHandlerContext("unavailable", 9000, TEST_HOSTNAME, 54321);
+        ServerContext mockServerContext = mock(ServerContext.class);
+
+        updateNodeLocator(ctx, mockServerContext);
+
+        // Verify that locator value was not changed
+        Mockito.verifyNoInteractions(mockServerContext);
+    }
+
+    /**
+     * Test that node locator is not updated when the connection endpoint is not present in the layout
+     */
+    @Test
+    public void testUpdateNodeLocatorEndpointNotInLayout() {
+        ChannelHandlerContext ctx = getMockChannelHandlerContext("localhost", 9000, TEST_HOSTNAME, 54321);
+        List<String> layoutServers = new ArrayList<>();
+        layoutServers.add(LOCALHOST_ENDPOINT_URL);
+        ServerContext mockServerContext = getMockServerContext(layoutServers, null);
+
+        updateNodeLocator(ctx, mockServerContext);
+
+        // Verify that locator value was not changed
+        verify(mockServerContext, times(0)).setNodeLocator(any());
+        verify(mockServerContext, times(0)).setLocalEndpoint(any());
+    }
+
+    /**
+     * Test that node locator is not updated when the endpoint is present in the layout
+     * and current node locator value is present in the layout, and
+     *
+     * that node locator is updated when the endpoint is present in the layout
+     * and current node locator value is not present in the layout
+     */
+    @Test
+    public void testUpdateNodeLocatorEndpointInLayout() {
+        ChannelHandlerContext ctx = getMockChannelHandlerContext("localhost", 9000, TEST_HOSTNAME, 54321);
+
+        // Layout server has the current endpoint used in the ctx (127.0.0.1:9000), and
+        List<String> layoutServers = new ArrayList<>();
+        layoutServers.add(IPV4_ENDPOINT_URL);
+        NodeLocator localHostNodeLocator = NodeLocator.parseString(LOCALHOST_ENDPOINT_URL);
+        NodeLocator ipv4EndpointURLNodeLocator = NodeLocator.parseString(IPV4_ENDPOINT_URL);
+        ServerContext mockServerContext;
+        // CASE 1
+        // Layout servers contains the current node locator value (=127.0.0.1:9000)
+        mockServerContext = getMockServerContext(layoutServers, ipv4EndpointURLNodeLocator);
+
+        updateNodeLocator(ctx, mockServerContext);
+
+        // Verify that locator value was not changed since the current node locator value is present in the layout
+        verify(mockServerContext, times(0)).setNodeLocator(any());
+        verify(mockServerContext, times(0)).setLocalEndpoint(any());
+
+
+        // CASE 2
+        // Layout servers doesn't contain the current node locator value (=localhost:9000)
+        mockServerContext = getMockServerContext(layoutServers, localHostNodeLocator);
+
+        updateNodeLocator(ctx, mockServerContext);
+
+        // Check nodeLocator was set to the endpoint
+        ArgumentCaptor<NodeLocator> nodeLocatorArgumentCaptor = ArgumentCaptor.forClass(NodeLocator.class);
+        ArgumentCaptor<String> localEndpointArgumentCaptor = ArgumentCaptor.forClass(String.class);
+
+        // Verify that locator value was changed since current node locator value was not present in the layout
+        verify(mockServerContext, times(1)).setNodeLocator(nodeLocatorArgumentCaptor.capture());
+        verify(mockServerContext, times(1)).setLocalEndpoint(localEndpointArgumentCaptor.capture());
+
+        NodeLocator nodeLocatorArgumentCaptorValue = nodeLocatorArgumentCaptor.getValue();
+        String localEndpoint = localEndpointArgumentCaptor.getValue();
+        Assertions.assertEquals(ipv4EndpointURLNodeLocator, nodeLocatorArgumentCaptorValue);
+        assertEquals(IPV4_ENDPOINT_URL,localEndpoint);
+
     }
 }

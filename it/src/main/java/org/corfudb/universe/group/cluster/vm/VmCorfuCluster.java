@@ -25,6 +25,8 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
+
 /**
  * Provides VM implementation of a {@link CorfuCluster}.
  */
@@ -91,7 +93,12 @@ public class VmCorfuCluster extends AbstractCorfuCluster<VmCorfuServerParams, Vm
         List<String> servers = params.getNodesParams()
                 .stream()
                 .map(this::getVmServerParams)
-                .map(vmParams -> vms.get(vmParams.getVmName()).getResolvedIpAddress() + ":" + vmParams.getPort())
+                .map(vmParams ->
+                        getVersionFormattedEndpointURL(
+                                vms.get(vmParams.getVmName()).getResolvedIpAddress().getIp(),
+                                vmParams.getPort()
+                        )
+                )
                 .collect(Collectors.toList());
 
         Layout.LayoutSegment segment = new Layout.LayoutSegment(

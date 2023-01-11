@@ -5,7 +5,7 @@ set -e
 PROFILE=$1
 BASE_IMAGE=$2
 if [ -z "$PROFILE" ]; then
-  echo "Please provide a profile name: 'docker' or 'compatibility'"
+  echo "Usage: './infrastructure-docker-build.sh <profile>', available profiles: docker, compatibility"
   exit 1
 fi
 

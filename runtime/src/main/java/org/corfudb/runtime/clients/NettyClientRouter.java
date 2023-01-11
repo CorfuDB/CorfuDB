@@ -65,6 +65,8 @@ import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 
+import static org.corfudb.common.util.URLUtils.getHostFromEndpointURL;
+import static org.corfudb.common.util.URLUtils.getPortFromEndpointURL;
 import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.service.CorfuProtocolBase.getPingRequestMsg;
@@ -683,7 +685,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
      */
     @Deprecated
     public NettyClientRouter(String endpoint) {
-        this(endpoint.split(":")[0], Integer.parseInt(endpoint.split(":")[1]));
+        this(getHostFromEndpointURL(endpoint),
+                Integer.parseInt(getPortFromEndpointURL(endpoint)));
     }
 
     /**

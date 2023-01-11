@@ -6,6 +6,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import static org.corfudb.common.util.URLUtils.getPortFromEndpointURL;
+
 public final class DefaultClusterConfig {
 
     @Getter
@@ -75,7 +77,7 @@ public final class DefaultClusterConfig {
     private static final int logSinkAckCycleTimer = 1000;
 
     public static String getDefaultNodeId(String endpoint) {
-        String port = endpoint.split(":")[1];
+        String port = getPortFromEndpointURL(endpoint);
         switch (port) {
             case activeLogReplicationPort:
                 return activeNodesUuid.get(0);

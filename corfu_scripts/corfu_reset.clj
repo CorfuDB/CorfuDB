@@ -22,7 +22,7 @@ Options:
 ; Parse the incoming docopt options.
 (def localcmd (.. (new Docopt usage) (parse *args)))
 
-(defn print-reset [endpoint] (do (println (str "Reset " endpoint ":"))
+(defn print-reset [endpoint] (do (println (str "Reset " endpoint ": "))
                                  (if (.. (.. (get-base-client (get-router server localcmd) 0 (.UUID (.fromString "00000000-0000-0000-0000-000000000000"))) (reset)) (get))
                                      (println "ACK")
                                      (println "NACK")
