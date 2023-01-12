@@ -153,6 +153,7 @@ class CommandBuilder(object):
         cmd.append("--truststore_password=" + Security["TruststorePassword"])
 
         if diskBacked is True:
+            os.system("chmod -R 777 " + compactor_config["ConfigFiles"]["DiskPath"])
             cmd.append("--persistedCacheRoot=" + compactor_config["ConfigFiles"]["DiskPath"])
 
         # If the env var FORCE_DISABLE_CHECKPOINTING is set to True, do not run checkpointing.
@@ -235,6 +236,7 @@ class Wizard(object):
         with open(self._config.configPath, "r") as config:
             compactor_config = yaml.load(config)
         corfu_paths = compactor_config["CorfuPaths"]
+        os.system("chown corfu:corfu " + corfu_paths["CompactorLogfile"])
         logging.basicConfig(filename=corfu_paths["CompactorLogfile"],
                     format='%(asctime)s.%(msecs)03dZ %(levelname)5s Runner - %(message)s',
                     datefmt='%Y-%m-%dT%H:%M:%S')
