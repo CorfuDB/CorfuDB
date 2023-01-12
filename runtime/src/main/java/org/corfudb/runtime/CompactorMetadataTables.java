@@ -12,6 +12,9 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.proto.RpcCommon;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
@@ -25,6 +28,12 @@ public class CompactorMetadataTables {
     public static final String CHECKPOINT_STATUS_TABLE_NAME = "CheckpointStatusTable";
     public static final String ACTIVE_CHECKPOINTS_TABLE_NAME = "ActiveCheckpointsTable";
     public static final String COMPACTION_CONTROLS_TABLE = "CompactionControlsTable";
+
+    public static final List<TableName> legacyTables = new ArrayList<>();
+
+    public static final String LEGACY_CHECKPOINT_TABLE_NAME = "checkpoint";
+    public static final String LEGACY_NODE_TOKEN_TABLE_NAME = "node-token";
+    public static final String LEGACY_ALL_OPENED_CLUSTERING_STREAMS_TABLE_NAME = "CLUSTERING_ALL_STREAMS";
 
     public static final StringKey COMPACTION_MANAGER_KEY = StringKey.newBuilder().setKey("CompactionManagerKey").build();
     public static final StringKey MIN_CHECKPOINT = StringKey.newBuilder().setKey("MinCheckpointToken").build();
@@ -76,5 +85,12 @@ public class CompactorMetadataTables {
                 log.warn("Caught an exception while opening Compaction metadata tables. Retrying...", e);
             }
         }
+
+        legacyTables.add(TableName.newBuilder().setNamespace("")
+                .setTableName(LEGACY_CHECKPOINT_TABLE_NAME).build());
+        legacyTables.add(TableName.newBuilder().setNamespace("")
+                .setTableName(LEGACY_NODE_TOKEN_TABLE_NAME).build());
+        legacyTables.add(TableName.newBuilder().setNamespace("")
+                .setTableName(LEGACY_ALL_OPENED_CLUSTERING_STREAMS_TABLE_NAME).build());
     }
 }

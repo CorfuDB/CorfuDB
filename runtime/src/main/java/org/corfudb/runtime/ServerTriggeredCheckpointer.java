@@ -1,7 +1,9 @@
 package org.corfudb.runtime;
 
+import com.google.common.base.Preconditions;
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.*;
 import org.corfudb.runtime.object.CorfuCompileProxy;
@@ -11,6 +13,7 @@ import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.KeyDynamicProtobufSerializer;
+import org.corfudb.util.serializer.Serializers;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -54,14 +57,46 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
     private CheckpointWriter<ICorfuTable<?,?>> getCheckpointWriter(TableName tableName,
                                                               KeyDynamicProtobufSerializer keyDynamicProtobufSerializer) {
         UUID streamId = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(tableName));
-        CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> corfuTable = openTable(tableName, keyDynamicProtobufSerializer,
-                checkpointerBuilder.cpRuntime.get());
+
+        CorfuTable corfuTable;
+        if (CompactorMetadataTables.legacyTables.contains(tableName)) {
+            corfuTable = openLegacyTable(tableName,
+                    checkpointerBuilder.cpRuntime.get());
+        } else {
+            corfuTable = openTable(tableName, keyDynamicProtobufSerializer,
+                    checkpointerBuilder.cpRuntime.get());
+        }
+
         CheckpointWriter<ICorfuTable<?,?>> cpw =
                 new CheckpointWriter(checkpointerBuilder.cpRuntime.get(), streamId, "ServerCheckpointer", corfuTable);
         ISerializer serializer = ((CorfuCompileProxy) corfuTable.getCorfuSMRProxy())
                 .getSerializer();
         cpw.setSerializer(serializer);
         return cpw;
+    }
+
+    private CorfuTable openLegacyTable(TableName tableName, CorfuRuntime rt) {
+        log.info("Opening legacy table {} in namespace {}", tableName.getTableName(), tableName.getNamespace());
+
+        Preconditions.checkState(CompactorMetadataTables.legacyTables.contains(tableName),
+                "Cannot open unknown legacy table %s", tableName);
+
+        if (tableName.getTableName().equals(CompactorMetadataTables.LEGACY_CHECKPOINT_TABLE_NAME) ||
+                tableName.getTableName().equals(CompactorMetadataTables.LEGACY_NODE_TOKEN_TABLE_NAME)) {
+            return rt.getObjectsView()
+                    .build()
+                    .setStreamName(tableName.getTableName())
+                    .setTypeToken(new TypeToken<CorfuTable<String, Token>>() {})
+                    .setSerializer(Serializers.JSON)
+                    .open();
+        } else {
+            return rt.getObjectsView()
+                    .build()
+                    .setStreamName(tableName.getTableName())
+                    .setTypeToken(new TypeToken<CorfuTable<String, Boolean>>() {})
+                    .setSerializer(Serializers.JSON)
+                    .open();
+        }
     }
 
     private CorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> openTable(TableName tableName,

@@ -89,6 +89,7 @@ public class CompactorLeaderServices {
 
             long newCycleCount = managerStatus == null ? 0 : managerStatus.getCycleCount() + 1;
             List<TableName> tableNames = new ArrayList<>(corfuStore.listTables(null));
+            tableNames.addAll(CompactorMetadataTables.legacyTables);
             CheckpointingStatus idleStatus = buildCheckpointStatus(StatusType.IDLE, newCycleCount);
 
             txn.clear(CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME);
