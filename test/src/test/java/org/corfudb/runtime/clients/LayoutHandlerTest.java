@@ -1,6 +1,7 @@
 package org.corfudb.runtime.clients;
 
 import com.google.common.collect.ImmutableSet;
+import org.assertj.core.api.Assertions;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LayoutServer;
 import org.corfudb.infrastructure.ServerContext;
@@ -9,6 +10,7 @@ import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.LayoutManagementView;
 import org.junit.Test;
 
 import java.util.Set;
@@ -102,6 +104,23 @@ public class LayoutHandlerTest extends AbstractClientTest {
         assertThatThrownBy(() -> {
             client.prepare(epoch, 2L).get();
         }).hasCauseInstanceOf(OutrankedException.class);
+    }
+
+    /**
+     * Ensure that the {@link LayoutManagementView#nextRank(long)}
+     * is monotonically increasing but not strictly monotonically
+     * increasing.
+     */
+    @Test
+    public void testNextRankMonotonicity() {
+        long currentRank = 0L;
+        long nextRank = LayoutManagementView.nextRank(currentRank);
+        while (nextRank == currentRank + 1) {
+            currentRank = nextRank;
+            nextRank = LayoutManagementView.nextRank(currentRank);
+        }
+
+        Assertions.assertThat(nextRank).isGreaterThan(currentRank);
     }
 
     @Test
