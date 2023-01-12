@@ -138,6 +138,27 @@ public class CompactorServiceUnitTest {
     }
 
     @Test
+    public void failOnAcquireManagerStatusTest() throws Exception {
+        Layout mockLayout = mock(Layout.class);
+        when(corfuRuntime.invalidateLayout()).thenReturn(CompletableFuture.completedFuture(mockLayout));
+        when(mockLayout.getPrimarySequencer()).thenReturn(NODE_ENDPOINT);
+
+        when((CheckpointingStatus) corfuStoreCompactionManagerEntry.getPayload())
+                .thenThrow(new NullPointerException());
+        when(dynamicTriggerPolicy.shouldTrigger(Matchers.anyLong(), Matchers.any(CorfuStore.class))).thenReturn(true);
+        doReturn(CompactorLeaderServices.LeaderInitStatus.SUCCESS).when(leaderServices).initCompactionCycle();
+
+        compactorServiceSpy.start(Duration.ofSeconds(SCHEDULER_INTERVAL));
+        try {
+            TimeUnit.SECONDS.sleep(SLEEP_WAIT);
+        } catch (InterruptedException e) {
+            log.warn(SLEEP_INTERRUPTED_EXCEPTION_MSG, e);
+        }
+
+        verify(leaderServices, never()).initCompactionCycle();
+    }
+
+    @Test
     public void runOrchestratorSchedulerTest() throws Exception {
         Layout mockLayout = mock(Layout.class);
         CompletableFuture invalidateLayoutFuture = mock(CompletableFuture.class);
