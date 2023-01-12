@@ -254,7 +254,7 @@ public class CorfuStoreBrowserEditor {
     private void printMetadata(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
         StringBuilder builder;
         if (entry.getValue().getMetadata() == null) {
-            log.error("metadata is NULL");
+            log.warn("metadata is NULL");
             return;
         }
         try {
