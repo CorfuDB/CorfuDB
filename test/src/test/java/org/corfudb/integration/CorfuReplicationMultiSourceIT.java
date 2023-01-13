@@ -1,10 +1,7 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
-import org.corfudb.runtime.ExampleSchemas;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -66,14 +63,14 @@ public class CorfuReplicationMultiSourceIT extends CorfuReplicationMultiSourceSi
     @Test
     public void testUpdatesOnReplicatedTables_sourceConnectionInit() throws Exception {
         // Setup Corfu on 3 LR Source Sites and 1 LR Sink Site
-        super.setUp(MAX_REMOTE_CLUSTERS, 1, DefaultClusterManager.OP_MULTI_SOURCE);
+        super.setUp(MAX_REMOTE_CLUSTERS, 1, DefaultClusterManager.TP_MULTI_SOURCE);
         verifySnapshotAndLogEntrySink(false);
     }
 
     @Test
     public void testUpdatesOnReplicatedTables_sinkConnectionInit() throws Exception {
         // Setup Corfu on 3 LR Source Sites and 1 LR Sink Site
-        super.setUp(MAX_REMOTE_CLUSTERS, 1, DefaultClusterManager.OP_MULTI_SOURCE_REV_CONNECTION);
+        super.setUp(MAX_REMOTE_CLUSTERS, 1, DefaultClusterManager.TP_MULTI_SOURCE_REV_CONNECTION);
         verifySnapshotAndLogEntrySink(false);
     }
 
@@ -86,7 +83,7 @@ public class CorfuReplicationMultiSourceIT extends CorfuReplicationMultiSourceSi
     @Test
     public void testRoleChange() throws Exception {
         // Setup Corfu on 3 LR Source Sites and 1 LR Sink Site
-        super.setUp(MAX_REMOTE_CLUSTERS, 1, DefaultClusterManager.OP_MULTI_SOURCE);
+        super.setUp(MAX_REMOTE_CLUSTERS, 1, DefaultClusterManager.TP_MULTI_SOURCE);
 
         verifySnapshotAndLogEntrySink(false);
         log.info("Preparing for role change");

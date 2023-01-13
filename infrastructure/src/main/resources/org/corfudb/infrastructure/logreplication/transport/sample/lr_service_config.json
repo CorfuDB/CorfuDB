@@ -3,13 +3,13 @@
     {
       "name": [
         {
-          "service": "LogReplicationChannel"
+          "service": "org.corfudb.infrastructure.logreplication.LogReplicationChannel"
         }
       ],
 
       "retryPolicy": {
         "maxAttempts": 5,
-        "initialBackoff": "0.5s",
+        "initialBackoff": "1s",
         "maxBackoff": "30s",
         "backoffMultiplier": 2,
         "retryableStatusCodes": [

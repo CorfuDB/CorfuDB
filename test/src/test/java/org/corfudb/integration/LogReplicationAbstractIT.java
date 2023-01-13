@@ -6,7 +6,6 @@ import static org.junit.Assert.fail;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
-import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -123,7 +122,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
     public CorfuStore corfuStoreSink;
 
     // default is single Source-Sink topology
-    public ExampleSchemas.ClusterUuidMsg topologyType = DefaultClusterManager.OP_SINGLE_SOURCE_SINK;
+    public ExampleSchemas.ClusterUuidMsg topologyType = DefaultClusterManager.TP_SINGLE_SOURCE_SINK;
 
     private final long longInterval = 20L;
 

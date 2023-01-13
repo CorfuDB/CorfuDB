@@ -141,11 +141,12 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
     public StreamObserver<ResponseMsg> subscribeAndStartreplication(StreamObserver<RequestMsg> responseObserver) {
 
         return new StreamObserver<ResponseMsg>() {
+            ReplicationSession session;
             @Override
             public void onNext(ResponseMsg lrResponseMsg) {
                 long requestId = lrResponseMsg.getHeader().getRequestId();
 
-                ReplicationSession session = convertSessionMsg(null, lrResponseMsg);
+                session = convertSessionMsg(null, lrResponseMsg);
 
                 try {
                     sessionToStreamObserverRequestMap.putIfAbsent(session, responseObserver);
@@ -161,7 +162,10 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
 
             @Override
             public void onError(Throwable t) {
-                log.error("Encountered error while attempting to replicate via subscribe.", t);
+                log.error("Encountered error in the long living subscribe RPC for {}...",session, t);
+                if(incomingSessionToSourceServer.containsKey(session)) {
+                    incomingSessionToSourceServer.get(session).connectionDown();
+                }
             }
 
             @Override

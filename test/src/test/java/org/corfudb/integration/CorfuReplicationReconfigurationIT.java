@@ -27,10 +27,7 @@ import org.corfudb.test.SampleSchema.ValueFieldTagOne;
 import org.corfudb.test.SampleSchema.ValueFieldTagOneAndTwo;
 import org.corfudb.util.Sleep;
 import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
@@ -101,8 +98,8 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         );
 
         List<ExampleSchemas.ClusterUuidMsg> topologyTypes = Arrays.asList(
-                DefaultClusterManager.OP_SINGLE_SOURCE_SINK,
-                DefaultClusterManager.OP_SINK_CONNECTION_INIT
+                DefaultClusterManager.TP_SINGLE_SOURCE_SINK,
+                DefaultClusterManager.TP_SINGLE_SOURCE_SINK_REV_CONNECTION
         );
 
         List<Pair<String, ExampleSchemas.ClusterUuidMsg>> absolutePathPlugins = new ArrayList<>();
@@ -153,13 +150,6 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         // (6) Verify Data on Sink after Restart
         log.debug(">>> (6) Verify Data on Sink");
         verifySinkData((numWrites*2 + numWrites/2));
-    }
-
-    private static List<ExampleSchemas.ClusterUuidMsg> fetchTopologyTypes() {
-        return Arrays.asList(
-                DefaultClusterManager.OP_SINGLE_SOURCE_SINK,
-                DefaultClusterManager.OP_SINK_CONNECTION_INIT
-        );
     }
 
     /**
@@ -265,9 +255,14 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
                         .build();
 
         ReplicationStatusVal replicationStatusVal;
-        try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatusVal = (ReplicationStatusVal)txn.getRecord(LogReplicationMetadataManager.REPLICATION_STATUS_TABLE, key).getPayload();
-            txn.commit();
+        while(true) {
+            try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                replicationStatusVal = (ReplicationStatusVal) txn.getRecord(LogReplicationMetadataManager.REPLICATION_STATUS_TABLE, key).getPayload();
+                txn.commit();
+            }
+            if (replicationStatusVal.getStatus().equals(targetSyncStatus)) {
+                break;
+            }
         }
 
         log.info("ReplicationStatusVal: RemainingEntriesToSend: {}, SyncType: {}, Status: {}",
@@ -447,6 +442,18 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         SinkMapListener configStreamListener = new SinkMapListener(this);
         corfuStore.subscribeListener(configStreamListener, NAMESPACE, "test");
     }
+
+    /**
+     * test testSinkClusterAdd() {
+     *     // test E2E without cleanup
+     *     // add another node
+     *          // start corfuServer,and runtime on that node (follow setup)
+     *          // add a new topologyType - OP_addSinkCluster
+     *              - this cluster should be a connectionInit and connection Endpoint (2 tests)
+     *         //start LR: sinkReplicationServer = runReplicationServer(sinkReplicationServerPort, pluginConfigFilePath, lockLeaseDuration);
+     *
+     * }
+     */
 
     /**
      * Stream Listener on topology config table, which is for test only.

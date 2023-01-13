@@ -3,7 +3,6 @@ package org.corfudb.integration;
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
@@ -20,7 +19,6 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
-import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.ExampleSchemas.ClusterUuidMsg;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
@@ -45,15 +43,12 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -130,8 +125,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     @Parameterized.Parameters
     public static List<ClusterUuidMsg> input() {
         return Arrays.asList(
-                DefaultClusterManager.OP_SINGLE_SOURCE_SINK,
-                DefaultClusterManager.OP_SINK_CONNECTION_INIT
+                DefaultClusterManager.TP_SINGLE_SOURCE_SINK,
+                DefaultClusterManager.TP_SINGLE_SOURCE_SINK_REV_CONNECTION
         );
 
     }
@@ -259,7 +254,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testNewConfigWithSwitchRole() throws Exception {
-        if(skipTest()) {
+        if(topologyType.equals(DefaultClusterManager.TP_SINGLE_SOURCE_SINK_REV_CONNECTION)) {
             return;
         }
         // Write 10 entries to source map
@@ -744,10 +739,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testClusterSyncStatus() throws Exception {
-        //TODO shama : for rev connection, the source has to know when the sink (connectionInit) is down
-        if(skipTest()) {
-            return;
-        }
         final int waitInMillis = 500;
         final int deltaSeconds = 5;
 
@@ -1760,12 +1751,5 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             log.error(errorMsg, throwable);
             fail(errorMsg + throwable.toString());
         }
-    }
-
-    private boolean skipTest() {
-        if(topologyType.equals(DefaultClusterManager.OP_SINK_CONNECTION_INIT)) {
-            return true;
-        }
-        return false;
     }
 }

@@ -24,7 +24,7 @@ import java.util.Optional;
  * Log Replication Server communication.
  */
 @Slf4j
-public class LogReplicationSourceClientRouter extends LogReplicationSourceRouterHelper implements IClientRouter, LogReplicationClientRouter {
+public class LogReplicationSourceClientRouter extends LogReplicationBaseSourceRouter implements IClientRouter, LogReplicationClientRouter {
 
 
     /**

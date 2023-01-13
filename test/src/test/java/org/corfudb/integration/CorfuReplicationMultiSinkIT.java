@@ -1,12 +1,7 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
-import org.corfudb.runtime.ExampleSchemas;
-import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.collections.TxnContext;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -63,19 +58,19 @@ public class CorfuReplicationMultiSinkIT extends CorfuReplicationMultiSourceSink
      */
     @Test
     public void testUpdatesOnReplicatedTables_sourceConnectionInit() throws Exception {
-        super.setUp(1, MAX_REMOTE_CLUSTERS, DefaultClusterManager.OP_MULTI_SINK);
+        super.setUp(1, MAX_REMOTE_CLUSTERS, DefaultClusterManager.TP_MULTI_SINK);
         verifySnapshotAndLogEntrySink(false);
     }
 
     @Test
     public void testUpdatesOnReplicatedTables_sinkConnectionInit() throws Exception {
-        super.setUp(1, MAX_REMOTE_CLUSTERS, DefaultClusterManager.OP_MULTI_SINK_REV_CONNECTION);
+        super.setUp(1, MAX_REMOTE_CLUSTERS, DefaultClusterManager.TP_MULTI_SINK_REV_CONNECTION);
         verifySnapshotAndLogEntrySink(false);
     }
 
     @Test
     public void testRoleChange() throws Exception {
-        super.setUp(1, MAX_REMOTE_CLUSTERS, DefaultClusterManager.OP_MULTI_SINK);
+        super.setUp(1, MAX_REMOTE_CLUSTERS, DefaultClusterManager.TP_MULTI_SINK);
 
         verifySnapshotAndLogEntrySink(false);
         log.info("Preparing for role change");

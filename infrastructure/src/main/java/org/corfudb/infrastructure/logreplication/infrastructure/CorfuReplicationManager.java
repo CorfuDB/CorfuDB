@@ -11,7 +11,7 @@ import org.corfudb.infrastructure.logreplication.runtime.LogReplicationHandler;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkClientRouter;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSinkServerRouter;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceClientRouter;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceRouterHelper;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationBaseSourceRouter;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceServerRouter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
@@ -47,7 +47,7 @@ public class CorfuReplicationManager {
 
     private final LogReplicationConfigManager replicationConfigManager;
 
-    private final Map<ReplicationSession, LogReplicationSourceRouterHelper> replicationSessionToRouterSource;
+    private final Map<ReplicationSession, LogReplicationBaseSourceRouter> replicationSessionToRouterSource;
     private final Map<ReplicationSession, LogReplicationSinkServerRouter> replicationSessionToRouterSink;
     private final Map<ReplicationSession, LogReplicationRuntimeParameters> replicationSessionToRuntimeParams;
 
@@ -81,14 +81,10 @@ public class CorfuReplicationManager {
         for(ClusterDescriptor remote : remoteClusters) {
             Set<ReplicationSession> sessions = remoteClusterIdToReplicationSession.get(remote.getClusterId());
             log.info("Starting connection to remote {} for session {} ", remote, sessions);
-            if(sessions.isEmpty()) {
-                continue;
-            }
-
             for(ReplicationSession session : sessions) {
                 if (!context.getTopology().getRemoteSinkClusters().isEmpty() &&
                         context.getTopology().getRemoteSinkClusters().containsKey(remote.getClusterId())) {
-                    LogReplicationSourceRouterHelper router = getOrCreateSourceRouter(remote,session, serverMap, true);
+                    LogReplicationBaseSourceRouter router = getOrCreateSourceRouter(remote,session, serverMap, true);
                     try {
                         IRetry.build(IntervalRetry.class, () -> {
                             try {
@@ -133,12 +129,12 @@ public class CorfuReplicationManager {
      * Creates a source router if not already created:
      * A source-client router if cluster is connection starter else a source-server router
      */
-    public LogReplicationSourceRouterHelper getOrCreateSourceRouter(ClusterDescriptor remote, ReplicationSession session,
-                                                                    Map<Class, AbstractServer> serverMap, boolean isConnectionStarter) {
+    public LogReplicationBaseSourceRouter getOrCreateSourceRouter(ClusterDescriptor remote, ReplicationSession session,
+                                                                  Map<Class, AbstractServer> serverMap, boolean isConnectionStarter) {
         if (replicationSessionToRouterSource.containsKey(session)) {
             return replicationSessionToRouterSource.get(session);
         }
-        LogReplicationSourceRouterHelper router;
+        LogReplicationBaseSourceRouter router;
         if (isConnectionStarter) {
             router = new LogReplicationSourceClientRouter(remote,
                     localNodeDescriptor.getClusterId(), createRuntimeParams(remote, session), this,

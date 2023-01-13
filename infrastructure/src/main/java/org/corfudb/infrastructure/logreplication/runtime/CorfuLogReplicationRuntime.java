@@ -148,7 +148,7 @@ public class CorfuLogReplicationRuntime {
      */
     private final LinkedBlockingQueue<LogReplicationRuntimeEvent> eventQueue = new LinkedBlockingQueue<>();
 
-    private final LogReplicationSourceRouterHelper router;
+    private final LogReplicationBaseSourceRouter router;
     private final LogReplicationMetadataManager metadataManager;
 
     @Getter
@@ -163,7 +163,7 @@ public class CorfuLogReplicationRuntime {
      * Default Constructor
      */
     public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters, LogReplicationMetadataManager metadataManager,
-        LogReplicationConfigManager replicationConfigManager, ReplicationSession replicationSession, LogReplicationSourceRouterHelper router) {
+        LogReplicationConfigManager replicationConfigManager, ReplicationSession replicationSession, LogReplicationBaseSourceRouter router) {
         this.remoteClusterId = replicationSession.getRemoteClusterId();
         this.metadataManager = metadataManager;
         this.router = router;

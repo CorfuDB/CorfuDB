@@ -113,6 +113,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                     log.info("GRPC create new channel to node{}@{}:{}", node.getNodeId(), nodeLocator.getHost(), nodeLocator.getPort());
                     channel = ManagedChannelBuilder.forAddress(nodeLocator.getHost(), nodeLocator.getPort())
                             .usePlaintext()
+                            .defaultServiceConfig(getRetryingServiceConfig())
+                            .enableRetry()
                             .build();
                     nodeIdToChannelMap.putIfAbsent(node.getNodeId(), new HashSet<>());
                     nodeIdToChannelMap.get(node.getNodeId()).add(channel);
@@ -173,8 +175,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                     log.info("GRPC create new channel to node{}@{}:{}", nodeId, nodeLocator.getHost(), nodeLocator.getPort());
                     channel = ManagedChannelBuilder.forAddress(nodeLocator.getHost(), nodeLocator.getPort())
                             .usePlaintext()
-//                            .defaultServiceConfig(getRetryingServiceConfig())
-//                            .enableRetry()
+                            .defaultServiceConfig(getRetryingServiceConfig())
+                            .enableRetry()
                             .build();
                     nodeIdToChannelMap.putIfAbsent(nodeId, new HashSet<>());
                     nodeIdToChannelMap.get(nodeId).add(channel);

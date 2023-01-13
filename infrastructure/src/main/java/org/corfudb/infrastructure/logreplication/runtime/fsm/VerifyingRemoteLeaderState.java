@@ -2,10 +2,8 @@ package org.corfudb.infrastructure.logreplication.runtime.fsm;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
-import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSubscriber;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceClientRouter;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationSourceRouterHelper;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationBaseSourceRouter;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationLeadershipResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage;
@@ -30,10 +28,10 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
 
     private ThreadPoolExecutor worker;
 
-    private LogReplicationSourceRouterHelper router;
+    private LogReplicationBaseSourceRouter router;
 
     public VerifyingRemoteLeaderState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker,
-                                      LogReplicationSourceRouterHelper router) {
+                                      LogReplicationBaseSourceRouter router) {
         this.fsm = fsm;
         this.worker = worker;
         this.router = router;

@@ -7,7 +7,7 @@ import "google/protobuf/any.proto";
 import "service/corfu_message.proto";
 
 
-service LogReplicationChannel {
+service LogReplicationChannel{
 
     // Client sends Negotiation Request
     rpc negotiate(org.corfudb.runtime.RequestMsg) returns (org.corfudb.runtime.ResponseMsg) {}

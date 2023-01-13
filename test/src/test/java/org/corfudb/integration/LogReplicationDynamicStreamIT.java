@@ -85,8 +85,8 @@ public class LogReplicationDynamicStreamIT extends LogReplicationAbstractIT {
                 TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
         );
         try (TxnContext txn = corfuStoreSource.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-            txn.putRecord(configTableSource, DefaultClusterManager.OP_SINGLE_SOURCE_SINK,
-                    DefaultClusterManager.OP_SINGLE_SOURCE_SINK, DefaultClusterManager.OP_SINGLE_SOURCE_SINK);
+            txn.putRecord(configTableSource, DefaultClusterManager.TP_SINGLE_SOURCE_SINK,
+                    DefaultClusterManager.TP_SINGLE_SOURCE_SINK, DefaultClusterManager.TP_SINGLE_SOURCE_SINK);
             txn.commit();
         }
 
@@ -96,8 +96,8 @@ public class LogReplicationDynamicStreamIT extends LogReplicationAbstractIT {
                 TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
         );
         try (TxnContext txn = corfuStoreSink.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
-            txn.putRecord(configTableSink, DefaultClusterManager.OP_SINGLE_SOURCE_SINK,
-                    DefaultClusterManager.OP_SINGLE_SOURCE_SINK, DefaultClusterManager.OP_SINGLE_SOURCE_SINK);
+            txn.putRecord(configTableSink, DefaultClusterManager.TP_SINGLE_SOURCE_SINK,
+                    DefaultClusterManager.TP_SINGLE_SOURCE_SINK, DefaultClusterManager.TP_SINGLE_SOURCE_SINK);
             txn.commit();
         }
     }

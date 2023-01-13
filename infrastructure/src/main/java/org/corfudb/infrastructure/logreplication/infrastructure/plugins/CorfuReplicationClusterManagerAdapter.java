@@ -75,7 +75,7 @@ public interface CorfuReplicationClusterManagerAdapter {
      *
      * @return Map of remote cluster that acts as SINK for a corresponding replication model.
      */
-    Map<LogReplicationClusterInfo.ClusterConfigurationMsg, Set<LogReplication.ReplicationModel>> getRemoteSinkForReplicationModels();
+    Map<LogReplicationClusterInfo.ClusterConfigurationMsg, Set<LogReplication.ReplicationModel>> getRemoteSinkToReplicationModels();
 
     /**
      * This API is used to fetch the remote clusters that are the connection endpoints for the local cluster.

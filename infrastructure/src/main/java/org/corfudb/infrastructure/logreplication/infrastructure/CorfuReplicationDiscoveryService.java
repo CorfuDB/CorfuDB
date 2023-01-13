@@ -354,6 +354,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * - Start Log Replication Server(listens and processes incoming requests from the Source)
      * Both:
      * - Metadata Managers which maintain metadata related to replication and its status
+     *
+     * (A cluster can be both Source and Sink)
      * @param topology
      */
     private void performRoleBasedSetups(TopologyDescriptor topology) {
@@ -378,8 +380,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     }
 
     private void setupForSource() {
-        Set<String> remoteSinkClusterIds = new HashSet<>();
-        remoteSinkClusterIds.addAll(topologyDescriptor.getRemoteSinkClusters().keySet());
+        Set<String> remoteSinkClusterIds = new HashSet<>(topologyDescriptor.getRemoteSinkClusters().keySet());
         createMetadataManagers(remoteSinkClusterIds, topologyDescriptor);
         logReplicationEventListener = new LogReplicationEventListener(this, getCorfuRuntime());
         logReplicationEventListener.start();
@@ -387,8 +388,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
 
     private void setupForSink() {
-        Set<String> remoteSourceClusterIds = new HashSet<>();
-        remoteSourceClusterIds.addAll(topologyDescriptor.getRemoteSourceClusters().keySet());
+        Set<String> remoteSourceClusterIds = new HashSet<>(topologyDescriptor.getRemoteSourceClusters().keySet());
         createMetadataManagers(remoteSourceClusterIds, topologyDescriptor);
     }
 
@@ -535,6 +535,9 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 fetchConnectionEndpoints().values());
 
         // check if local cluster is a connectionReceiver. This is used to start the server components
+        // We decide if the cluster isConnectionReceiver by fetching the remoteSink and remoteSource and then taking out
+        // the clusters to which this cluster would start the connection.
+        // The remaining remote clusters imply that we expect to receive a connection from them
         remoteSinkClusters.removeAll(connectionEndpoints);
         remoteSourceClusters.removeAll(connectionEndpoints);
         boolean isConnectionReceiver = !remoteSinkClusters.isEmpty() || !remoteSourceClusters.isEmpty();
@@ -566,26 +569,30 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     }
 
 
+    /**
+     * Create LogReplicationServer and CorfuInterClusterReplicationServerNode when the cluster is either a connection
+     * endpoint or is a SINK
+     *
+     * @param isConnectionReceiver
+     * @param isSink
+     */
     private void setupConnectionReceiversAndSinkServers(boolean isConnectionReceiver, boolean isSink) {
         if(!isConnectionReceiver && !isSink) {
             return;
         }
 
+        // LogReplicationServer is used by both Source (when connection endpoint) and Sink.
         LogReplicationServer lrServer = new LogReplicationServer(serverContext, localNodeId, replicationConfigManager,
                 localCorfuEndpoint, topologyDescriptor.getTopologyConfigId(), remoteSessionToMetadataManagerMap);
         serverMap.put(LogReplicationServer.class, lrServer);
         serverMap.put(BaseServer.class, new BaseServer(serverContext));
 
-
+        // Only when the cluster is a connection endpoint
         if (isConnectionReceiver && interClusterServerNode == null) {
             interClusterServerNode = new CorfuInterClusterReplicationServerNode(serverContext, serverMap);
-
-            // Sink Site : the LogReplicationServer (server handler) will reset the LogReplicationSinkManager on acquiring
-            // leadership
-            interClusterServerNode.setLeadership(true);
-        } else {
-            lrServer.setLeadership(true);
         }
+
+        lrServer.setLeadership(true);
     }
 
     private Map<String, ClusterDescriptor> fetchConnectionEndpoints() {
@@ -683,11 +690,9 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
                 return null;
             }).setOptions(x -> x.setMaxRetryThreshold(Duration.ofSeconds(FETCH_THRESHOLD))).run();
-        } catch (InterruptedException ie) {
-            throw new UnrecoverableCorfuInterruptedError(ie);
-        } catch (RetryExhaustedException ree) {
+        } catch (Exception e) {
             // Retries exhausted. Return
-            log.warn("Failed to retrieve updated topology from Cluster Manager.");
+            log.warn("Failed to retrieve updated topology from Cluster Manager. {}", e.getMessage());
         }
     }
 

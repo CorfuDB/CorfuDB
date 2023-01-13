@@ -39,7 +39,7 @@ import static org.corfudb.protocols.service.CorfuProtocolMessage.getDefaultProto
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 
 @Slf4j
-public class LogReplicationSourceRouterHelper implements IClientRouter {
+public class LogReplicationBaseSourceRouter implements IClientRouter {
 
     public static String REMOTE_LEADER = "REMOTE_LEADER";
 
@@ -125,9 +125,9 @@ public class LogReplicationSourceRouterHelper implements IClientRouter {
      * @param replicationManager replicationManager to start FSM
      * @param session replication session between current and remote cluster
      */
-    public LogReplicationSourceRouterHelper(ClusterDescriptor remoteCluster, String localClusterId,
-                                            LogReplicationRuntimeParameters parameters, CorfuReplicationManager replicationManager,
-                                            ReplicationSession session, boolean isConnectionInitiator) {
+    public LogReplicationBaseSourceRouter(ClusterDescriptor remoteCluster, String localClusterId,
+                                          LogReplicationRuntimeParameters parameters, CorfuReplicationManager replicationManager,
+                                          ReplicationSession session, boolean isConnectionInitiator) {
         this.timeoutResponse = parameters.getRequestTimeout().toMillis();
         this.remoteClusterDescriptor = remoteCluster;
         this.localClusterId = localClusterId;

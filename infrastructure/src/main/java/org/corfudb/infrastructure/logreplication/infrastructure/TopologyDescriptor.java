@@ -9,14 +9,11 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.runtime.LogReplication;
 
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * This class represents a view of a Multi-Cluster Topology,
@@ -42,13 +39,13 @@ public class TopologyDescriptor {
     @Getter
     private final Map<String, ClusterDescriptor> remoteSinkClusters;
 
-    //Map of remote clusterId -> ReplicationModels supported between the local and remote cluster.
-    // Used to construct sessions.
+    //Map of remote clusterId -> ReplicationModels. Contains clusters which will be SOURCE (w.r.t local cluster) for a
+    // replication model. Used to construct sessions.
     @Getter
     private final Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSourceClusterToReplicationModels;
 
-    //Map of remote clusterId -> ReplicationModels supported between the local and remote cluster.
-    // Used to construct sessions.
+    //Map of remote clusterId -> ReplicationModels. Contains clusters which will be SOURCE (w.r.t local cluster) for a
+    // replication model. Used to construct sessions.
     @Getter
     private final Map<ClusterDescriptor, Set<LogReplication.ReplicationModel>> remoteSinkClusterToReplicationModels;
 
@@ -57,7 +54,7 @@ public class TopologyDescriptor {
 
     // Contains the complete view of topology.
     @Getter
-    private final Map<String, ClusterConfigurationMsg> allClusterConfigMsgsInTopology = new HashMap<>();
+    private final Map<String, ClusterConfigurationMsg> allClusterMsgsInTopology = new HashMap<>();
 
 
     /**
@@ -69,7 +66,7 @@ public class TopologyDescriptor {
     public TopologyDescriptor(TopologyConfigurationMsg topologyMessage, CorfuReplicationClusterManagerAdapter clusterManagerAdapter) {
         this(topologyMessage.getTopologyConfigID(), clusterManagerAdapter);
         topologyMessage.getClustersList().stream()
-                .forEach(clusterMsg -> allClusterConfigMsgsInTopology.put(clusterMsg.getId(), clusterMsg));
+                .forEach(clusterMsg -> allClusterMsgsInTopology.put(clusterMsg.getId(), clusterMsg));
     }
 
     /**
@@ -84,7 +81,7 @@ public class TopologyDescriptor {
         this.remoteSinkClusterToReplicationModels = new HashMap<>();
 
         Map<ClusterConfigurationMsg, Set<LogReplication.ReplicationModel>> remoteSinkToReplicationModel =
-                clusterManagerAdapter.getRemoteSinkForReplicationModels();
+                clusterManagerAdapter.getRemoteSinkToReplicationModels();
         remoteSinkToReplicationModel.entrySet().stream().forEach(e -> {
             ClusterDescriptor cluster = new ClusterDescriptor(e.getKey());
             remoteSinkClusterToReplicationModels.putIfAbsent(cluster, new HashSet<>());
@@ -137,11 +134,11 @@ public class TopologyDescriptor {
 
         remoteSourceClusters.stream()
                 .forEach(clusterDescriptor ->
-                        allClusterConfigMsgsInTopology.put(clusterDescriptor.getClusterId(), clusterDescriptor.convertToMessage()));
+                        allClusterMsgsInTopology.put(clusterDescriptor.getClusterId(), clusterDescriptor.convertToMessage()));
 
         remoteSinkClusters.stream()
                 .forEach(clusterDescriptor ->
-                        allClusterConfigMsgsInTopology.put(clusterDescriptor.getClusterId(), clusterDescriptor.convertToMessage()));
+                        allClusterMsgsInTopology.put(clusterDescriptor.getClusterId(), clusterDescriptor.convertToMessage()));
     }
 
     /**
@@ -157,7 +154,7 @@ public class TopologyDescriptor {
         this(topologyConfigId, remoteSourceClusters, remoteSinkClusters);
         invalidClusters.forEach(invalidCluster -> {
             this.invalidClusters.put(invalidCluster.getClusterId(), invalidCluster);
-            allClusterConfigMsgsInTopology.put(invalidCluster.getClusterId(), invalidCluster.convertToMessage());
+            allClusterMsgsInTopology.put(invalidCluster.getClusterId(), invalidCluster.convertToMessage());
         });
     }
 
@@ -170,7 +167,7 @@ public class TopologyDescriptor {
 
         return TopologyConfigurationMsg.newBuilder()
                 .setTopologyConfigID(topologyConfigId)
-                .addAllClusters(allClusterConfigMsgsInTopology.values()).build();
+                .addAllClusters(allClusterMsgsInTopology.values()).build();
     }
 
     /**
@@ -181,14 +178,14 @@ public class TopologyDescriptor {
      */
     public ClusterDescriptor getClusterDescriptor(String nodeId) {
 
-        for(ClusterConfigurationMsg clusterConfigMsg : allClusterConfigMsgsInTopology.values()) {
+        for(ClusterConfigurationMsg clusterConfigMsg : allClusterMsgsInTopology.values()) {
             for (LogReplicationClusterInfo.NodeConfigurationMsg nodeMsg : clusterConfigMsg.getNodeInfoList()) {
                 if (nodeMsg.getNodeId().equals(nodeId)) {
                     return new ClusterDescriptor(clusterConfigMsg);
                 }
             }
         }
-        log.warn("Node {} does not belong to any cluster defined in {}", nodeId, allClusterConfigMsgsInTopology.values());
+        log.warn("Node {} does not belong to any cluster defined in {}", nodeId, allClusterMsgsInTopology.values());
 
         return null;
     }

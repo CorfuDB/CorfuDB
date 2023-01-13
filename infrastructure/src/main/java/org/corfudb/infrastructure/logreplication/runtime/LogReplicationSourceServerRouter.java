@@ -12,6 +12,7 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.view.Layout;
@@ -23,7 +24,7 @@ import java.util.Map;
 import java.util.Optional;
 
 @Slf4j
-public class LogReplicationSourceServerRouter extends LogReplicationSourceRouterHelper implements IServerRouter {
+public class LogReplicationSourceServerRouter extends LogReplicationBaseSourceRouter implements IServerRouter {
 
     /**
      * The epoch of this router. This is managed by the base server implementation.
@@ -172,6 +173,13 @@ public class LogReplicationSourceServerRouter extends LogReplicationSourceRouter
     @Deprecated
     public void addServer(AbstractServer server) {
         throw new UnsupportedOperationException("No longer supported");
+    }
+
+
+    public void connectionDown() {
+        log.debug("Caught Network Exception for session {}", session);
+        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN,
+                session.getRemoteClusterId()));
     }
 
 }
