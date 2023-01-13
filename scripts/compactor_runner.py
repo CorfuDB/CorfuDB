@@ -153,8 +153,8 @@ class CommandBuilder(object):
         cmd.append("--truststore_password=" + Security["TruststorePassword"])
 
         if diskBacked is True:
-            # If this script is started by root user, ensure corfu user has permissions
-            os.system("chown -R corfu:corfu " + compactor_config["ConfigFiles"]["DiskPath"])
+            # If this script is started by root user, ensure all the new files have corfu group access
+            os.system("chmod g+s " + compactor_config["ConfigFiles"]["DiskPath"])
             cmd.append("--persistedCacheRoot=" + compactor_config["ConfigFiles"]["DiskPath"])
 
         # If the env var FORCE_DISABLE_CHECKPOINTING is set to True, do not run checkpointing.
@@ -237,8 +237,9 @@ class Wizard(object):
         with open(self._config.configPath, "r") as config:
             compactor_config = yaml.load(config)
         corfu_paths = compactor_config["CorfuPaths"]
-        # If this script is started by root user, ensure corfu user has permissions to ALL log files
-        os.system("chown corfu:corfu " + corfu_paths["CompactorLogfile"] + "*")
+        # If this script is started by root user, ensure that all newly created log files
+        # have a corfu group access.
+        os.system("chmod g+s " + corfu_paths["CorfuDir"])
         logging.basicConfig(filename=corfu_paths["CompactorLogfile"],
                     format='%(asctime)s.%(msecs)03dZ %(levelname)5s Runner - %(message)s',
                     datefmt='%Y-%m-%dT%H:%M:%S')
@@ -274,8 +275,11 @@ class Wizard(object):
         exp_command = "export MALLOC_TRIM_THRESHOLD_=1310720"
         check_exp_output = check_output(exp_command, shell=True).decode()
         self._print_and_log("Result for " + exp_command + ":\n" + check_exp_output)
-
+        mask = 0
+        prev_mask = None
         try:
+            # set umask to mask and save the previous mask value
+            prev_mask = os.umask(mask)
             # call compactor
             self._print_and_log("============= COMPACTOR ==============")
             cmd = self._command_builder.get_corfu_compactor_cmd(compactor_config)
@@ -286,6 +290,9 @@ class Wizard(object):
         except Exception as ex:
             self._print_and_log("Failed to run compactor tool: %s" % str(ex))
             time.sleep(10)
+        finally:
+            # set back the previous umask value
+            os.umask(prev_mask)
 
     def _complete_config(self, args):
         """

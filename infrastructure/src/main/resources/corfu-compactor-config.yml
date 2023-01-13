@@ -18,6 +18,7 @@ CorfuPaths:
   CompactorLogfile: /var/log/corfu/corfu-compactor-audit.log
   CorfuMemLogPrefix: /dev/shm/corfu.jvm.gc.
   CorfuDiskLogDir: /var/log/corfu/jvm
+  CorfuDir: /var/log/corfu
 
 Security:
   Keystore: /certs/keystore.jks
