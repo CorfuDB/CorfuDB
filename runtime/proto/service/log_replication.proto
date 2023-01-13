@@ -63,21 +63,25 @@ enum ReplicationModel {
   MULTI_SOURCE_MERGE = 3;         // Same table replication from multiple sources to single sink (n:1)
 }
 
+// Key for LogReplicationSourceMetadataTable
 message ClientDestinationInfoKey {
   ReplicationModel model = 1;
   string client_name = 2;
   string group_name = 3;
 }
 
+// Value for LogReplicationSourceMetadataTable
 message DestinationInfoVal {
   option (org.corfudb.runtime.table_schema).stream_tag = "lr_sessions";
   repeated string destination_ids = 1;
 }
 
+// Key for LogReplicationRegistrationTable
 message ClientRegistrationId {
   string client_name = 1;
 }
 
+// Value for LogReplicationRegistrationTable
 message ClientRegistrationInfo {
   string client_name = 1;
   ReplicationModel model = 2;

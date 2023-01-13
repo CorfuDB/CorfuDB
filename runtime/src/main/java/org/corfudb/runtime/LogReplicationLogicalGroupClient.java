@@ -1,5 +1,6 @@
 package org.corfudb.runtime;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.protobuf.Message;
 import com.google.protobuf.Timestamp;
@@ -12,16 +13,15 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.RetryNeededException;
 
 import java.lang.reflect.InvocationTargetException;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.Objects;
+import java.time.Instant;
+import java.util.*;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -29,15 +29,21 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  * A client for log replication
  */
 @Slf4j
-public class LogReplicationServiceClient {
-
-    public static final String LR_REGISTRY_TABLE_NAME = "LogReplicationRegistrationTable";
-    public static final String LR_SOURCE_METADATA_TABLE_NAME = "LogReplicationSourceMetadataTable";
+public class LogReplicationLogicalGroupClient {
 
     /**
-     * Wait interval between consecutive sync attempts to cap exponential back-off
+     * Key: ClientRegistrationId
+     * Value: ClientRegistrationInfo
      */
-    private static final int SYNC_THRESHOLD = 120;
+    public static final String LR_REGISTRY_TABLE_NAME = "LogReplicationRegistrationTable";
+
+    /**
+     * Key: ClientDestinationInfoKey
+     * Value: DestinationInfoVal
+     */
+    public static final String LR_SOURCE_METADATA_TABLE_NAME = "LogReplicationSourceMetadataTable";
+
+    private static final String modelEnum = "LOGICAL_GROUPS";
 
     private final CorfuStore corfuStore;
     private final Table<ClientRegistrationId, ClientRegistrationInfo, Message> replicationRegistrationTable;
@@ -47,7 +53,6 @@ public class LogReplicationServiceClient {
     private final ClientRegistrationInfo clientInfo;
 
     private final String clientName;
-    private final String modelEnum;
 
     /**
      * Constructor for LogReplicationClient
@@ -58,25 +63,37 @@ public class LogReplicationServiceClient {
      * @throws NoSuchMethodException NoSuchMethodException
      * @throws IllegalAccessException IllegalAccessException
      */
-    public LogReplicationServiceClient(CorfuRuntime runtime, String clientName) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+    public LogReplicationLogicalGroupClient(CorfuRuntime runtime, String clientName) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+        Table<ClientDestinationInfoKey, DestinationInfoVal, Message> tempSourceMetadataTable;
+        Table<ClientRegistrationId, ClientRegistrationInfo, Message> tempReplicationRegistrationTable;
         this.corfuStore = new CorfuStore(runtime);
         this.clientName = clientName;
-
-        this.modelEnum = "LOGICAL_GROUPS";
 
         this.clientKey = ClientRegistrationId.newBuilder()
                 .setClientName(clientName)
                 .build();
+        Instant time = Instant.now();
         this.clientInfo = ClientRegistrationInfo.newBuilder()
                 .setClientName(clientName)
                 .setModel(LogReplication.ReplicationModel.valueOf(modelEnum))
-                .setRegistrationTime(Timestamp.newBuilder().setSeconds(new Date().getTime() / 1000).build())
+                .setRegistrationTime(Timestamp.newBuilder().setSeconds(time.getEpochSecond()).setNanos(time.getNano()).build())
                 .build();
 
-        this.replicationRegistrationTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LR_REGISTRY_TABLE_NAME, ClientRegistrationId.class,
-                ClientRegistrationInfo.class, null, TableOptions.builder().build());
-        this.sourceMetadataTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LR_SOURCE_METADATA_TABLE_NAME, ClientDestinationInfoKey.class,
-                DestinationInfoVal.class, null, TableOptions.builder().build());
+        try {
+            tempReplicationRegistrationTable = corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, LR_REGISTRY_TABLE_NAME);
+        } catch (NoSuchElementException nse) {
+            tempReplicationRegistrationTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LR_REGISTRY_TABLE_NAME, ClientRegistrationId.class,
+                    ClientRegistrationInfo.class, null, TableOptions.fromProtoSchema(ClientRegistrationInfo.class));
+        }
+        this.replicationRegistrationTable = tempReplicationRegistrationTable;
+
+        try {
+            tempSourceMetadataTable = corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, LR_SOURCE_METADATA_TABLE_NAME);
+        } catch (NoSuchElementException nse) {
+            tempSourceMetadataTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LR_SOURCE_METADATA_TABLE_NAME, ClientDestinationInfoKey.class,
+                    DestinationInfoVal.class, null, TableOptions.fromProtoSchema(DestinationInfoVal.class));
+        }
+        this.sourceMetadataTable = tempSourceMetadataTable;
 
         register();
     }
@@ -90,19 +107,19 @@ public class LogReplicationServiceClient {
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                     if (txn.isExists(LR_REGISTRY_TABLE_NAME, clientKey)) {
                         log.warn("Client already registered \nclientKey: {} \nclientInfo: {}",
-                                clientKey, txn.getRecord(replicationRegistrationTable, clientKey).getPayload().toString());
-                    }
-                    else {
+                                clientKey, txn.getRecord(replicationRegistrationTable, clientKey).getPayload());
+                    } else {
                         txn.putRecord(replicationRegistrationTable, clientKey, clientInfo, null);
                         txn.commit();
                     }
-                }
-                catch (Exception e) {
-                    log.error("Unable to register client {}, Error: {}", clientName, e);
+                } catch (TransactionAbortedException tae) {
+                    log.error(String.format("Unable to register client %s, Error: ", clientName), tae);
+                    throw new RetryNeededException();
                 }
                 return null;
-            }).setOptions(x -> x.setMaxRetryThreshold(Duration.ofSeconds(SYNC_THRESHOLD))).run();
+            }).run();
         } catch (InterruptedException e) {
+            log.error("Client registration failed");
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
@@ -112,15 +129,12 @@ public class LogReplicationServiceClient {
      *
      * @param logicalGroup String representative of the group of tables to be replicated
      * @param destination Cluster which the logicalGroup should be replicated to
-     * @return true if destination was newly registered
      */
-    public boolean addDestination(String logicalGroup, String destination) {
-        if (Strings.isNullOrEmpty(logicalGroup) || Strings.isNullOrEmpty(destination)) {
-            log.error("Invalid logicalGroup or destination");
-            return false;
-        }
+    public void addDestination(String logicalGroup, String destination) {
+        Preconditions.checkArgument(isValid(logicalGroup), "logicalGroup is null or empty");
+        Preconditions.checkArgument(isValid(destination), "destination is null or empty");
         try {
-            return IRetry.build(ExponentialBackoffRetry.class, () -> {
+            IRetry.build(ExponentialBackoffRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                     ClientDestinationInfoKey clientInfoKey = ClientDestinationInfoKey.newBuilder()
                             .setClientName(clientName)
@@ -134,27 +148,24 @@ public class LogReplicationServiceClient {
                         clientDestinations = txn.getRecord(sourceMetadataTable, clientInfoKey).getPayload();
 
                         if (clientDestinations.getDestinationIdsList().contains(destination)) {
-                            log.warn("Destination already added");
-                            return false;
+                            throw new IllegalArgumentException("Destination already exists");
                         }
 
                         clientDestinations = clientDestinations.toBuilder().addDestinationIds(destination).build();
-                    }
-                    else {
+                    } else {
                         clientDestinations = DestinationInfoVal.newBuilder().addDestinationIds(destination).build();
                     }
 
                     txn.putRecord(sourceMetadataTable, clientInfoKey, clientDestinations, null);
                     txn.commit();
-
-                    return true;
+                } catch (TransactionAbortedException tae) {
+                    log.error("Unable to add destination, will be retried", tae);
+                    throw new RetryNeededException();
                 }
-                catch (Exception e) {
-                    log.error("Unable to add destination", e);
-                    return false;
-                }
-            }).setOptions(x -> x.setMaxRetryThreshold(Duration.ofSeconds(SYNC_THRESHOLD))).run();
+                return null;
+            }).run();
         } catch (InterruptedException e) {
+            log.error("Unable to add destination");
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
@@ -164,15 +175,12 @@ public class LogReplicationServiceClient {
      *
      * @param logicalGroup String representative of the group of tables to be replicated
      * @param remoteDestinations Clusters which the logicalGroup should be replicated to
-     * @return true if all destinations were newly registered
      */
-    public boolean addDestination(String logicalGroup, List<String> remoteDestinations) {
-        if (Strings.isNullOrEmpty(logicalGroup) || remoteDestinations == null || remoteDestinations.isEmpty()) {
-            log.error("Invalid logicalGroup or destination(s)");
-            return false;
-        }
+    public void addDestination(String logicalGroup, List<String> remoteDestinations) {
+        Preconditions.checkArgument(isValid(logicalGroup), "logicalGroup is null or empty");
+        Preconditions.checkArgument(isValid(remoteDestinations), "remoteDestinations is null or empty");
         try {
-            return IRetry.build(ExponentialBackoffRetry.class, () -> {
+            IRetry.build(ExponentialBackoffRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                     ClientDestinationInfoKey clientInfoKey = ClientDestinationInfoKey.newBuilder()
                             .setClientName(clientName)
@@ -188,8 +196,7 @@ public class LogReplicationServiceClient {
                             remoteDestinations.stream().distinct().count() < remoteDestinations.size();
 
                     if (hasNullOrEmptyOrDuplicates) {
-                        log.error("Invalid destination(s) found in list");
-                        return false;
+                        throw new IllegalArgumentException("Invalid destination(s) found in list");
                     }
 
                     if (txn.isExists(LR_SOURCE_METADATA_TABLE_NAME, clientInfoKey)) {
@@ -200,26 +207,25 @@ public class LogReplicationServiceClient {
 
                         if (newDestinations.isEmpty()) {
                             log.debug("All destinations already present");
-                            return true;
+                            return null;
                         }
 
                         clientDestinations = clientDestinations.toBuilder().addAllDestinationIds(newDestinations).build();
-                    }
-                    else {
+                    } else {
                         clientDestinations = DestinationInfoVal.newBuilder().addAllDestinationIds(remoteDestinations).build();
                     }
 
                     txn.putRecord(sourceMetadataTable, clientInfoKey, clientDestinations, null);
                     txn.commit();
 
-                    return true;
+                    return null;
+                } catch (TransactionAbortedException tae) {
+                    log.error("Unable to add destinations, will be retried", tae);
+                    throw new RetryNeededException();
                 }
-                catch (Exception e) {
-                    log.error("Unable to add destinations", e);
-                    return false;
-                }
-            }).setOptions(x -> x.setMaxRetryThreshold(Duration.ofSeconds(SYNC_THRESHOLD))).run();
+            }).run();
         } catch (InterruptedException e) {
+            log.error("Unable to add destinations");
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
@@ -228,12 +234,13 @@ public class LogReplicationServiceClient {
      * Remove destination from LogReplicationSourceMetadataTable
      *
      * @param logicalGroup String representative of the group of tables which are replicated
-     * @param destination Cluster from which the logicalGroup should be removed from further replication
-     * @return true if destination was removed
+     * @param destination The cluster from which the logicalGroup should be removed from all future replication
      */
-    public boolean removeDestination(String logicalGroup, String destination) {
+    public void removeDestination(String logicalGroup, String destination) {
+        Preconditions.checkArgument(isValid(logicalGroup), "logicalGroup is null or empty");
+        Preconditions.checkArgument(isValid(destination), "destination is null or empty");
         try {
-            return IRetry.build(ExponentialBackoffRetry.class, () -> {
+            IRetry.build(ExponentialBackoffRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                     ClientDestinationInfoKey clientInfoKey = ClientDestinationInfoKey.newBuilder()
                             .setClientName(clientName)
@@ -246,26 +253,29 @@ public class LogReplicationServiceClient {
                         List<String> clientDestinationIdsList = new ArrayList<>(clientDestinationIds.getDestinationIdsList());
 
                         if (clientDestinationIdsList.remove(destination)) {
-                            clientDestinationIds = clientDestinationIds.toBuilder()
-                                    .clearDestinationIds()
-                                    .addAllDestinationIds(clientDestinationIdsList)
-                                    .build();
-                            txn.putRecord(sourceMetadataTable, clientInfoKey, clientDestinationIds, null);
+                            if (clientDestinationIdsList.size() == 0) {
+                                txn.delete(sourceMetadataTable, clientInfoKey);
+                            } else {
+                                clientDestinationIds = clientDestinationIds.toBuilder()
+                                        .clearDestinationIds()
+                                        .addAllDestinationIds(clientDestinationIdsList)
+                                        .build();
+                                txn.putRecord(sourceMetadataTable, clientInfoKey, clientDestinationIds, null);
+                            }
                             txn.commit();
 
-                            return true;
+                            return null;
                         }
-                        log.debug("Destination not found");
-                        return false;
+                        throw new NoSuchElementException("No matching destination found");
                     }
-                    throw new Exception(String.format("Record not found for group: %s", logicalGroup));
+                    throw new NoSuchElementException(String.format("Record not found for group: %s", logicalGroup));
+                } catch (TransactionAbortedException tae) {
+                    log.error("Unable to remove destination, will be retried", tae);
+                    throw new RetryNeededException();
                 }
-                catch (Exception e) {
-                    log.error("Unable to remove destination", e);
-                    return false;
-                }
-            }).setOptions(x -> x.setMaxRetryThreshold(Duration.ofSeconds(SYNC_THRESHOLD))).run();
+            }).run();
         } catch (InterruptedException e) {
+            log.error("Unable to remove destination");
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
@@ -274,16 +284,13 @@ public class LogReplicationServiceClient {
      * Remove a list of destinations from LogReplicationSourceMetadataTable
      *
      * @param logicalGroup String representative of the group of tables which are replicated
-     * @param remoteDestinations Cluster from which the logicalGroup should be removed from further replication
-     * @return true if destinations were removed
+     * @param remoteDestinations The cluster from which the logicalGroup should be removed from all future replication
      */
-    public boolean removeDestination(String logicalGroup, List<String> remoteDestinations) {
-        if (Strings.isNullOrEmpty(logicalGroup) || remoteDestinations == null || remoteDestinations.isEmpty()) {
-            log.error("Invalid logicalGroup or destination(s)");
-            return false;
-        }
+    public void removeDestination(String logicalGroup, List<String> remoteDestinations) {
+        Preconditions.checkArgument(isValid(logicalGroup), "logicalGroup is null or empty");
+        Preconditions.checkArgument(isValid(remoteDestinations), "remoteDestinations is null or empty");
         try {
-            return IRetry.build(ExponentialBackoffRetry.class, () -> {
+            IRetry.build(ExponentialBackoffRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                     ClientDestinationInfoKey clientInfoKey = ClientDestinationInfoKey.newBuilder()
                             .setClientName(clientName)
@@ -297,8 +304,7 @@ public class LogReplicationServiceClient {
                             remoteDestinations.stream().distinct().count() < remoteDestinations.size();
 
                     if (hasNullOrEmptyOrDuplicates) {
-                        log.error("Invalid destination(s) found in list");
-                        return false;
+                        throw new IllegalArgumentException("Invalid destination(s) found in list");
                     }
 
                     if (txn.isExists(LR_SOURCE_METADATA_TABLE_NAME, clientInfoKey)) {
@@ -309,31 +315,43 @@ public class LogReplicationServiceClient {
                         clientDestinationIdsList.removeAll(remoteDestinations);
 
                         if (clientDestinationIdsList.size() == initialNumDestinations) {
-                            log.debug("No matching destinations found");
-                            return false;
-                        }
-                        else if (clientDestinationIdsList.size() + remoteDestinations.size() > initialNumDestinations) {
+                            throw new NoSuchElementException("No matching destinations found");
+                        } else if (clientDestinationIdsList.size() + remoteDestinations.size() > initialNumDestinations) {
                             log.warn("Not all destinations to remove are present");
                         }
 
-                        clientDestinationIds = clientDestinationIds.toBuilder()
-                                .clearDestinationIds()
-                                .addAllDestinationIds(clientDestinationIdsList)
-                                .build();
-                        txn.putRecord(sourceMetadataTable, clientInfoKey, clientDestinationIds, null);
+                        if (clientDestinationIdsList.size() == 0) {
+                            txn.delete(sourceMetadataTable, clientInfoKey);
+                        } else {
+                            clientDestinationIds = clientDestinationIds.toBuilder()
+                                    .clearDestinationIds()
+                                    .addAllDestinationIds(clientDestinationIdsList)
+                                    .build();
+                            txn.putRecord(sourceMetadataTable, clientInfoKey, clientDestinationIds, null);
+                        }
                         txn.commit();
 
-                        return true;
+                        return null;
                     }
-                    throw new Exception(String.format("Record not found for group: %s", logicalGroup));
+                    throw new NoSuchElementException(String.format("Record not found for group: %s", logicalGroup));
+                } catch (TransactionAbortedException tae) {
+                    log.error("Unable to remove destinations, will be retried", tae);
+                    throw new RetryNeededException();
                 }
-                catch (Exception e) {
-                    log.error("Unable to remove destinations", e);
-                    return false;
-                }
-            }).setOptions(x -> x.setMaxRetryThreshold(Duration.ofSeconds(SYNC_THRESHOLD))).run();
+            }).run();
         } catch (InterruptedException e) {
+            log.error("Unable to remove destinations");
             throw new UnrecoverableCorfuInterruptedError(e);
+        }
+    }
+
+    private static boolean isValid(final Object obj) {
+        if (obj == null) {
+            return false;
+        } else if (obj instanceof Collection) {
+            return !((Collection<?>) obj).isEmpty();
+        } else {
+            return !Strings.isNullOrEmpty(obj.toString());
         }
     }
 }

@@ -16,14 +16,11 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class LogReplicationServiceClientTest extends AbstractIT {
+public class LogReplicationLogicalGroupClientTest extends AbstractIT {
     private static String corfuSingleNodeHost;
 
     private static int corfuStringNodePort;
@@ -90,17 +87,20 @@ public class LogReplicationServiceClientTest extends AbstractIT {
                 TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
 
         // Test registering a new client
-        new LogReplicationServiceClient(runtime, clientName);
-        Assert.assertEquals(1, table.count());
+        new LogReplicationLogicalGroupClient(runtime, clientName);
+        final int expectedNumberRegisteredClients = 1;
+        Assert.assertEquals(expectedNumberRegisteredClients, table.count());
 
         // Test registering a duplicate client, table count should be the same
-        new LogReplicationServiceClient(runtime, clientName);
-        Assert.assertEquals(1, table.count());
+        new LogReplicationLogicalGroupClient(runtime, clientName);
+        final int expectedNumberRegisteredClients1 = 1;
+        Assert.assertEquals(expectedNumberRegisteredClients1, table.count());
 
         // Test registering additional clients
-        new LogReplicationServiceClient(runtime, "client2");
-        new LogReplicationServiceClient(runtime, "client3");
-        Assert.assertEquals(3, table.count());
+        new LogReplicationLogicalGroupClient(runtime, "client2");
+        new LogReplicationLogicalGroupClient(runtime, "client3");
+        final int expectedNumberRegisteredClients2 = 3;
+        Assert.assertEquals(expectedNumberRegisteredClients2, table.count());
     }
 
     /**
@@ -118,39 +118,53 @@ public class LogReplicationServiceClientTest extends AbstractIT {
                 SampleSchema.ManagedResources.class,
                 TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
 
-        LogReplicationServiceClient client = new LogReplicationServiceClient(runtime, clientName);
+        LogReplicationLogicalGroupClient client = new LogReplicationLogicalGroupClient(runtime, clientName);
 
         // Test adding new destinations
-        Assert.assertTrue(client.addDestination("LOGICALGROUP", "DESTINATION1"));
-        Assert.assertTrue(client.addDestination("LOGICALGROUP", "DESTINATION2"));
+        client.addDestination("LOGICALGROUP1", "DESTINATION1");
+        client.addDestination("LOGICALGROUP1", "DESTINATION2");
 
         // Test adding existing destinations
-        Assert.assertFalse(client.addDestination("LOGICALGROUP", "DESTINATION2"));
+        Assert.assertThrows("Destination already exists", IllegalArgumentException.class, () -> {
+            client.addDestination("LOGICALGROUP1", "DESTINATION2");
+        });
 
         // Test adding a destination with an invalid logicalGroup
-        Assert.assertFalse(client.addDestination("", "DESTINATION3"));
-        Assert.assertFalse(client.addDestination(null, "DESTINATION4"));
+        Assert.assertThrows("logicalGroup is null or empty", IllegalArgumentException.class, () -> {
+            client.addDestination("", "DESTINATION3");
+        });
+        Assert.assertThrows("logicalGroup is null or empty", IllegalArgumentException.class, () -> {
+            client.addDestination(null, "DESTINATION4");
+        });
 
         // Test adding a destination with an invalid name
-        Assert.assertFalse(client.addDestination("LOGICALGROUP", ""));
-        Assert.assertFalse(client.addDestination("LOGICALGROUP", (String) null));
+        Assert.assertThrows("destination is null or empty", IllegalArgumentException.class, () -> {
+            client.addDestination("LOGICALGROUP1", "");
+        });
+        Assert.assertThrows("destination is null or empty", IllegalArgumentException.class, () -> {
+            client.addDestination("LOGICALGROUP1", (String) null);
+        });
 
         // Test that the table size is correct
-        Assert.assertEquals(1, table.count());
+        final int expectedNumberRegisteredGroups = 1;
+        Assert.assertEquals(expectedNumberRegisteredGroups, table.count());
 
-        // Test that the number of destinations in the logicalGroup are correct
-        // LOGICALGROUP has 2 destinations after the above, same with LOGICALGROUP2 after the below
-        Assert.assertTrue(client.addDestination("LOGICALGROUP2", "DESTINATION1"));
-        Assert.assertTrue(client.addDestination("LOGICALGROUP2", "DESTINATION2"));
+        // Test adding destinations to a second logical group
+        client.addDestination("LOGICALGROUP2", "DESTINATION1");
+        client.addDestination("LOGICALGROUP2", "DESTINATION2");
 
         // Test that the table size has increased with the addition of LOGICALGROUP2
-        Assert.assertEquals(2, table.count());
+        final int expectedNumberRegisteredGroups1 = 2;
+        Assert.assertEquals(expectedNumberRegisteredGroups1, table.count());
 
         final int batchSize = 2;
+        final int numDestinationsGroup1 = 2;
+        final int numDestinationsGroup2 = 2;
         final HashMap<String, Integer> numDestinations = new HashMap<>();
-        numDestinations.put("LOGICALGROUP", 2);
-        numDestinations.put("LOGICALGROUP2", 2);
+        numDestinations.put("LOGICALGROUP1", numDestinationsGroup1);
+        numDestinations.put("LOGICALGROUP2", numDestinationsGroup2);
 
+        // Test if final list of destinations are as expected for each logicalGroup
         Stream<CorfuStoreEntry<ClientDestinationInfoKey, DestinationInfoVal, SampleSchema.ManagedResources>> entryStream = table.entryStream();
         final Iterable<List<CorfuStoreEntry<ClientDestinationInfoKey, DestinationInfoVal, SampleSchema.ManagedResources>>> partitions =
                 Iterables.partition(entryStream::iterator, batchSize);
@@ -178,48 +192,66 @@ public class LogReplicationServiceClientTest extends AbstractIT {
                 SampleSchema.ManagedResources.class,
                 TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
 
-        LogReplicationServiceClient client = new LogReplicationServiceClient(runtime, clientName);
+        LogReplicationLogicalGroupClient client = new LogReplicationLogicalGroupClient(runtime, clientName);
 
         // Test adding destinations to a logicalGroup
         List<String> destinationsToAdd = Arrays.asList("DESTINATION1", "DESTINATION2");
-        Assert.assertTrue(client.addDestination("LOGICALGROUP", destinationsToAdd));
+        client.addDestination("LOGICALGROUP1", destinationsToAdd);
         List<String> destinationsToAdd2 = Arrays.asList("DESTINATION3", "DESTINATION4");
-        Assert.assertTrue(client.addDestination("LOGICALGROUP", destinationsToAdd2));
+        client.addDestination("LOGICALGROUP1", destinationsToAdd2);
 
         // Test adding existing destinations
+        final int expectedNumberDestinations = 4;
+        final int currentTableEntry = 0;
         List<String> destinationsToAdd3 = Arrays.asList("DESTINATION1", "DESTINATION4");
-        Assert.assertTrue(client.addDestination("LOGICALGROUP", destinationsToAdd3));
+        client.addDestination("LOGICALGROUP1", destinationsToAdd3);
+        Assert.assertEquals(expectedNumberDestinations, table.entryStream().collect(Collectors.toList()).get(currentTableEntry).getPayload().getDestinationIdsList().size());
 
         // Test adding with request having a malformed logicalGroup
         List<String> destinationsToAdd4 = Collections.singletonList("DESTINATION1");
-        Assert.assertFalse(client.addDestination("", destinationsToAdd4));
-        Assert.assertFalse(client.addDestination(null, destinationsToAdd4));
+        Assert.assertThrows("logicalGroup is null or empty", IllegalArgumentException.class, () -> {
+            client.addDestination("", destinationsToAdd4);
+        });
+        Assert.assertThrows("logicalGroup is null or empty", IllegalArgumentException.class, () -> {
+            client.addDestination(null, destinationsToAdd4);
+        });
 
         // Test adding with request having a malformed destination
         List<String> destinationsToAdd5 = Collections.singletonList("");
         List<String> destinationsToAdd6 = Collections.singletonList(null);
         List<String> destinationsToAdd7 = Arrays.asList("DESTINATION1", "DESTINATION1");
-        Assert.assertFalse(client.addDestination("LOGICALGROUP", destinationsToAdd5));
-        Assert.assertFalse(client.addDestination("LOGICALGROUP", destinationsToAdd6));
-        Assert.assertFalse(client.addDestination("LOGICALGROUP", destinationsToAdd7));
-        Assert.assertFalse(client.addDestination("LOGICALGROUP", (List<String>) null));
+        Assert.assertThrows("Invalid destination(s) found in list", IllegalArgumentException.class, () -> {
+            client.addDestination("LOGICALGROUP1", destinationsToAdd5);
+        });
+        Assert.assertThrows("Invalid destination(s) found in list", IllegalArgumentException.class, () -> {
+            client.addDestination("LOGICALGROUP1", destinationsToAdd6);
+        });
+        Assert.assertThrows("Invalid destination(s) found in list", IllegalArgumentException.class, () -> {
+            client.addDestination("LOGICALGROUP1", destinationsToAdd7);
+        });
+        Assert.assertThrows("remoteDestinations is null or empty", IllegalArgumentException.class, () -> {
+            client.addDestination("LOGICALGROUP1", (List<String>) null);
+        });
 
         // Test adding destinations to new logicalGroup
         List<String> destinationsToAdd8 = Arrays.asList("DESTINATION1", "DESTINATION2");
-        Assert.assertTrue(client.addDestination("LOGICALGROUP2", destinationsToAdd8));
+        client.addDestination("LOGICALGROUP2", destinationsToAdd8);
 
         // Test addition after removal in new logicalGroup
-        Assert.assertTrue(client.removeDestination("LOGICALGROUP2", "DESTINATION2"));
+        client.removeDestination("LOGICALGROUP2", "DESTINATION2");
         List<String> destinationsToAdd9 = Arrays.asList("DESTINATION3", "DESTINATION4");
-        Assert.assertTrue(client.addDestination("LOGICALGROUP2", destinationsToAdd9));
+        client.addDestination("LOGICALGROUP2", destinationsToAdd9);
 
         // Test table size is correct
-        Assert.assertEquals(2, table.count());
+        final int expectedNumberRegisteredGroups1 = 2;
+        Assert.assertEquals(expectedNumberRegisteredGroups1, table.count());
 
         final int batchSize = 2;
+        final int numDestinationsGroup1 = 4;
+        final int numDestinationsGroup2 = 3;
         final HashMap<String, Integer> numDestinations = new HashMap<>();
-        numDestinations.put("LOGICALGROUP", 4);
-        numDestinations.put("LOGICALGROUP2", 3);
+        numDestinations.put("LOGICALGROUP1", numDestinationsGroup1);
+        numDestinations.put("LOGICALGROUP2", numDestinationsGroup2);
 
         // Test if final list of destinations are as expected for each logicalGroup
         Stream<CorfuStoreEntry<ClientDestinationInfoKey, DestinationInfoVal, SampleSchema.ManagedResources>> entryStream = table.entryStream();
@@ -241,7 +273,7 @@ public class LogReplicationServiceClientTest extends AbstractIT {
      */
     @Test
     public void testRemoveDestination() throws Exception {
-        final String logicalGroup = "LOGICALGROUP";
+        final String logicalGroup = "LOGICALGROUP1";
         final String destination = "DESTINATION";
 
         final Table<ClientDestinationInfoKey, DestinationInfoVal, SampleSchema.ManagedResources> table = store.openTable(
@@ -252,33 +284,45 @@ public class LogReplicationServiceClientTest extends AbstractIT {
                 SampleSchema.ManagedResources.class,
                 TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
 
-        LogReplicationServiceClient client = new LogReplicationServiceClient(runtime, clientName);
+        LogReplicationLogicalGroupClient client = new LogReplicationLogicalGroupClient(runtime, clientName);
 
-        // Add and remove dummy destination to initialize the logicalGroup
-        Assert.assertTrue(client.addDestination(logicalGroup, "INIT"));
-        Assert.assertTrue(client.removeDestination(logicalGroup, "INIT"));
+        // Test group is removed after no destinations left
+        final int expectedNumberRegisteredGroups = 0;
+        client.addDestination(logicalGroup, "INIT");
+        client.removeDestination(logicalGroup, "INIT");
+        Assert.assertEquals(expectedNumberRegisteredGroups, table.count());
 
         // Test removing a destination that does not exist
-        Assert.assertFalse(client.removeDestination(logicalGroup, destination));
+        client.addDestination(logicalGroup, "TEMPDEST");
+        Assert.assertThrows("No matching destination found", NoSuchElementException.class, () -> {
+            client.removeDestination(logicalGroup, destination);
+        });
+        client.removeDestination(logicalGroup, "TEMPDEST");
 
-        // Test removing from a logicalGroup that does not exist
-        Assert.assertFalse(client.removeDestination("NOTAGROUP", destination));
+        // Test removing a logicalGroup that does not exist
+        Assert.assertThrows("Record not found for group: NOTAGROUP", NoSuchElementException.class, () -> {
+            client.removeDestination("NOTAGROUP", destination);
+        });
 
         // Test adding a destination
-        Assert.assertTrue(client.addDestination(logicalGroup, destination));
+        client.addDestination(logicalGroup, destination);
 
         // Test removing the added destination
-        Assert.assertTrue(client.removeDestination(logicalGroup, destination));
+        client.removeDestination(logicalGroup, destination);
 
         // Test removing the destination again after it has been removed
-        Assert.assertFalse(client.removeDestination(logicalGroup, destination));
+        Assert.assertThrows("No matching destination found", NoSuchElementException.class, () -> {
+            client.removeDestination(logicalGroup, destination);
+        });
 
         // Test table size is correct
-        Assert.assertEquals(1, table.count());
+        final int expectedNumberRegisteredGroups1 = 0;
+        Assert.assertEquals(expectedNumberRegisteredGroups1, table.count());
 
         final int batchSize = 1;
+        final int numDestinationsGroup1 = 0;
         final HashMap<String, Integer> numDestinations = new HashMap<>();
-        numDestinations.put(logicalGroup, 0);
+        numDestinations.put(logicalGroup, numDestinationsGroup1);
 
         // Test if final list of destinations are as expected for each logicalGroup
         Stream<CorfuStoreEntry<ClientDestinationInfoKey, DestinationInfoVal, SampleSchema.ManagedResources>> entryStream = table.entryStream();
@@ -300,7 +344,7 @@ public class LogReplicationServiceClientTest extends AbstractIT {
      */
     @Test
     public void testRemoveListOfDestinations() throws Exception {
-        final String logicalGroup = "LOGICALGROUP";
+        final String logicalGroup = "LOGICALGROUP1";
         final String destination = "DESTINATION";
 
         final Table<ClientDestinationInfoKey, DestinationInfoVal, SampleSchema.ManagedResources> table = store.openTable(
@@ -311,70 +355,69 @@ public class LogReplicationServiceClientTest extends AbstractIT {
                 SampleSchema.ManagedResources.class,
                 TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
 
-        LogReplicationServiceClient client = new LogReplicationServiceClient(runtime, clientName);
+        LogReplicationLogicalGroupClient client = new LogReplicationLogicalGroupClient(runtime, clientName);
 
-        // Add and remove dummy destination to initialize the logicalGroup
-        Assert.assertTrue(client.addDestination(logicalGroup, "INIT"));
-        Assert.assertTrue(client.removeDestination(logicalGroup, "INIT"));
+        // Test group is removed after no destinations left
+        final int expectedNumberRegisteredGroups = 0;
+        List<String> destinationsToAdd = Arrays.asList("DESTINATION1", "DESTINATION2");
+        client.addDestination(logicalGroup, destinationsToAdd);
+        client.removeDestination(logicalGroup, destinationsToAdd);
+        Assert.assertEquals(expectedNumberRegisteredGroups, table.count());
 
         // Test removing a destination that does not exist
         List<String> destinationsToRemove = Collections.singletonList(destination);
-        Assert.assertFalse(client.removeDestination(logicalGroup, destinationsToRemove));
+        client.addDestination(logicalGroup, "INIT");
+        Assert.assertThrows("No matching destinations found", NoSuchElementException.class, () -> {
+            client.removeDestination(logicalGroup, destinationsToRemove);
+        });
+        client.removeDestination(logicalGroup, "INIT");
 
         // Test removing from a logicalGroup that does not exist
-        Assert.assertFalse(client.removeDestination("NOTAGROUP", destination));
-
-        // Test removal of destinations
-        List<String> destinationsToAdd = Arrays.asList("DESTINATION1", "DESTINATION2");
-        List<String> destinationsToRemove2 = Arrays.asList("DESTINATION1", "DESTINATION2");
-        Assert.assertTrue(client.addDestination(logicalGroup, destinationsToAdd));
-        Assert.assertTrue(client.removeDestination(logicalGroup, destinationsToRemove2));
+        Assert.assertThrows("Record not found for group: NOTAGROUP", NoSuchElementException.class, () -> {
+            client.removeDestination("NOTAGROUP", destination);
+        });
 
         // Test removals of list that is a subset
+        final int expectedNumberDestinations = 1;
+        final int currentTableEntry = 0;
         List<String> destinationsToAdd2 = Arrays.asList("DESTINATION1", "DESTINATION2", "DESTINATION3");
-        List<String> destinationsToRemove3 = Arrays.asList("DESTINATION1", "DESTINATION2");
-        Assert.assertTrue(client.addDestination(logicalGroup, destinationsToAdd2));
-        Assert.assertTrue(client.removeDestination(logicalGroup, destinationsToRemove3));
-        Assert.assertEquals(1, table.entryStream().collect(Collectors.toList()).get(0).getPayload().getDestinationIdsList().size());
+        List<String> destinationsToRemove2 = Arrays.asList("DESTINATION1", "DESTINATION2");
+        client.addDestination(logicalGroup, destinationsToAdd2);
+        client.removeDestination(logicalGroup, destinationsToRemove2);
+        Assert.assertEquals(expectedNumberDestinations, table.entryStream().collect(Collectors.toList()).get(currentTableEntry).getPayload().getDestinationIdsList().size());
 
         // Test removal of a list that is a superset
-        List<String> destinationsToAdd4 = Arrays.asList("DESTINATION2", "DESTINATION3");
-        List<String> destinationsToRemove5 = Arrays.asList("DESTINATION1", "DESTINATION2", "DESTINATION3", "DESTINATION4");
-        Assert.assertTrue(client.addDestination(logicalGroup, destinationsToAdd4));
-        Assert.assertTrue(client.removeDestination(logicalGroup, destinationsToRemove5));
-        Assert.assertEquals(0, table.entryStream().collect(Collectors.toList()).get(0).getPayload().getDestinationIdsList().size());
+        final int expectedNumberRegisteredGroups1 = 0;
+        List<String> destinationsToAdd3 = Arrays.asList("DESTINATION2", "DESTINATION3");
+        List<String> destinationsToRemove3 = Arrays.asList("DESTINATION1", "DESTINATION2", "DESTINATION3", "DESTINATION4");
+        client.addDestination(logicalGroup, destinationsToAdd3);
+        client.removeDestination(logicalGroup, destinationsToRemove3);
+        Assert.assertEquals(expectedNumberRegisteredGroups1, table.count());
 
         // Test adding with request having a malformed logicalGroup
-        List<String> destinationsToRemove6 = Collections.singletonList("DESTINATION1");
-        Assert.assertFalse(client.removeDestination("", destinationsToRemove6));
-        Assert.assertFalse(client.removeDestination(null, destinationsToRemove6));
+        List<String> destinationsToRemove4 = Collections.singletonList("DESTINATION1");
+        Assert.assertThrows("logicalGroup is null or empty", IllegalArgumentException.class, () -> {
+            client.removeDestination("", destinationsToRemove4);
+        });
+        Assert.assertThrows("logicalGroup is null or empty", IllegalArgumentException.class, () -> {
+            client.removeDestination(null, destinationsToRemove4);
+        });
 
         // Test adding with request having a malformed destination
         List<String> destinationsToRemove7 = Collections.singletonList("");
         List<String> destinationsToRemove8 = Collections.singletonList(null);
         List<String> destinationsToRemove9 = Arrays.asList("DESTINATION1", "DESTINATION1");
-        Assert.assertFalse(client.removeDestination(logicalGroup, destinationsToRemove7));
-        Assert.assertFalse(client.removeDestination(logicalGroup, destinationsToRemove8));
-        Assert.assertFalse(client.removeDestination(logicalGroup, destinationsToRemove9));
-        Assert.assertFalse(client.removeDestination(logicalGroup, (List<String>) null));
-
-        // Test table size is correct
-        Assert.assertEquals(1, table.count());
-
-        final int batchSize = 1;
-        final HashMap<String, Integer> numDestinations = new HashMap<>();
-        numDestinations.put(logicalGroup, 0);
-
-        // Test if final list of destinations are as expected for each logicalGroup
-        Stream<CorfuStoreEntry<ClientDestinationInfoKey, DestinationInfoVal, SampleSchema.ManagedResources>> entryStream = table.entryStream();
-        final Iterable<List<CorfuStoreEntry<ClientDestinationInfoKey, DestinationInfoVal, SampleSchema.ManagedResources>>> partitions =
-                Iterables.partition(entryStream::iterator, batchSize);
-        for (List<CorfuStoreEntry<ClientDestinationInfoKey, DestinationInfoVal, SampleSchema.ManagedResources>> partition : partitions) {
-            for (CorfuStoreEntry<ClientDestinationInfoKey, DestinationInfoVal, SampleSchema.ManagedResources> entry : partition) {
-                String currentGroup = entry.getKey().getGroupName();
-                Integer currentNumberDestinations = entry.getPayload().getDestinationIdsList().size();
-                Assert.assertEquals(numDestinations.get(currentGroup), currentNumberDestinations);
-            }
-        }
+        Assert.assertThrows("Invalid destination(s) found in list", IllegalArgumentException.class, () -> {
+            client.removeDestination(logicalGroup, destinationsToRemove7);
+        });
+        Assert.assertThrows("Invalid destination(s) found in list", IllegalArgumentException.class, () -> {
+            client.removeDestination(logicalGroup, destinationsToRemove8);
+        });
+        Assert.assertThrows("Invalid destination(s) found in list", IllegalArgumentException.class, () -> {
+            client.removeDestination(logicalGroup, destinationsToRemove9);
+        });
+        Assert.assertThrows("remoteDestinations is null or empty", IllegalArgumentException.class, () -> {
+            client.removeDestination(logicalGroup, (List<String>) null);
+        });
     }
 }
