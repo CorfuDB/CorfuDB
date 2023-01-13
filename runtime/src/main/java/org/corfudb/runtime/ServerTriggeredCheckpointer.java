@@ -56,15 +56,17 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
 
     private CheckpointWriter<ICorfuTable<?,?>> getCheckpointWriter(TableName tableName,
                                                               KeyDynamicProtobufSerializer keyDynamicProtobufSerializer) {
-        UUID streamId = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(tableName));
-
+        UUID streamId;
         CorfuTable corfuTable;
+
         if (CompactorMetadataTables.legacyTables.contains(tableName)) {
-            corfuTable = openLegacyTable(tableName,
-                    checkpointerBuilder.cpRuntime.get());
+            // Legacy tables do not have namespace
+            streamId = CorfuRuntime.getStreamID(tableName.getTableName());
+            log.info("Legacy table {} UUID is {}", tableName.getTableName(), streamId);
+            corfuTable = openLegacyTable(tableName, checkpointerBuilder.cpRuntime.get());
         } else {
-            corfuTable = openTable(tableName, keyDynamicProtobufSerializer,
-                    checkpointerBuilder.cpRuntime.get());
+            streamId = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(tableName));
+            corfuTable = openTable(tableName, keyDynamicProtobufSerializer, checkpointerBuilder.cpRuntime.get());
         }
 
         CheckpointWriter<ICorfuTable<?,?>> cpw =
