@@ -59,7 +59,7 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
         UUID streamId;
         CorfuTable corfuTable;
 
-        if (CompactorMetadataTables.legacyTables.contains(tableName)) {
+        if (CompactorMetadataTables.isLegacy(tableName)) {
             // Legacy tables do not have namespace
             streamId = CorfuRuntime.getStreamID(tableName.getTableName());
             log.info("Legacy table {} UUID is {}", tableName.getTableName(), streamId);
@@ -80,7 +80,7 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
     private CorfuTable openLegacyTable(TableName tableName, CorfuRuntime rt) {
         log.info("Opening legacy table {} in namespace {}", tableName.getTableName(), tableName.getNamespace());
 
-        Preconditions.checkState(CompactorMetadataTables.legacyTables.contains(tableName),
+        Preconditions.checkState(CompactorMetadataTables.isLegacy(tableName),
                 "Cannot open unknown legacy table %s", tableName);
 
         if (tableName.getTableName().equals(CompactorMetadataTables.LEGACY_CHECKPOINT_TABLE_NAME) ||

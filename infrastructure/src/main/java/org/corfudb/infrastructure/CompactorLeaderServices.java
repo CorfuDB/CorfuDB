@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.health.Component.COMPACTOR;
 import static org.corfudb.infrastructure.health.Issue.IssueId.COMPACTION_CYCLE_FAILED;
@@ -89,7 +90,13 @@ public class CompactorLeaderServices {
 
             long newCycleCount = managerStatus == null ? 0 : managerStatus.getCycleCount() + 1;
             List<TableName> tableNames = new ArrayList<>(corfuStore.listTables(null));
-            tableNames.addAll(CompactorMetadataTables.legacyTables);
+            tableNames.addAll(CompactorMetadataTables.allLegacyTables
+                    .stream()
+                    .map(table -> TableName.newBuilder()
+                            .setNamespace("")
+                            .setTableName(table)
+                            .build())
+                    .collect(Collectors.toList()));
             CheckpointingStatus idleStatus = buildCheckpointStatus(StatusType.IDLE, newCycleCount);
 
             txn.clear(CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME);
