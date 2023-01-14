@@ -194,8 +194,8 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                     syncStreamUnsafe(timestamp);
                     break;
                 } catch (TrimmedException te) {
-                    log.warn("SnapshotProxy[{}] encountered trimmed addresses {} during sync to {}",
-                            Utils.toReadableId(getID()), te.getTrimmedAddresses(), timestamp);
+                    log.warn("SnapshotProxy[{}] encountered trimmed addresses {} during sync to {} on attempt {} of {}",
+                            Utils.toReadableId(getID()), te.getTrimmedAddresses(), timestamp, x + 1, trimRetry);
 
                     resetUnsafe();
 
@@ -311,8 +311,12 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                         Preconditions.checkState(globalAddress >= materializedUpTo,
                                 "globalAddress %s not >= materialized %s", globalAddress, materializedUpTo);
 
-                        Preconditions.checkState(globalAddress >= resolvedUpTo,
-                                "globalAddress %s not >= resolved %s", globalAddress, resolvedUpTo);
+                        // Perform similar validation for resolvedUpTo.
+                        if (globalAddress < resolvedUpTo) {
+                            log.warn("Sync[{}]: globalAddress {} not >= resolved {}",
+                                    Utils.toReadableId(getID()), globalAddress, resolvedUpTo);
+                            throw new TrimmedException();
+                        }
 
                         // If we observe a new version, place the previous one into the MVOCache.
                         if (globalAddress > materializedUpTo && objectOpenOption == ObjectOpenOption.CACHE) {
@@ -327,6 +331,9 @@ public class MultiVersionObject<T extends ICorfuSMR<T>> {
                         addressSpace.addAddress(globalAddress);
                         materializedUpTo = globalAddress;
                         resolvedUpTo = globalAddress;
+                    } catch (TrimmedException e) {
+                        // The caller catches this TrimmedException and resets the object before retrying.
+                        throw e;
                     } catch (Exception e) {
                         log.error("Sync[{}] couldn't execute upcall due to {}", Utils.toReadableId(getID()), e);
                         throw new UnrecoverableCorfuError(e);
