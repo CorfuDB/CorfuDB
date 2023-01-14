@@ -68,17 +68,11 @@ public class CompactorLeaderServicesUnitTest {
 
     @Test
     public void initCompactionCycleTest() {
-        RpcCommon.TokenMsg freezeToken = RpcCommon.TokenMsg.newBuilder().setSequence(System.currentTimeMillis()).build();
-        when(corfuStoreEntry.getPayload()).thenReturn(freezeToken);
-        Assert.assertEquals(CompactorLeaderServices.LeaderInitStatus.FAIL, compactorLeaderServices.initCompactionCycle());
-
         when(corfuStoreEntry.getPayload())
-                .thenReturn(null) //makes isCheckpointFrozen method to return false
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED).build());
         Assert.assertEquals(CompactorLeaderServices.LeaderInitStatus.FAIL, compactorLeaderServices.initCompactionCycle());
 
         when(corfuStoreEntry.getPayload())
-                .thenReturn(null)
                 .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.FAILED).build());
         when(corfuStore.listTables(null)).thenReturn(Collections.singletonList(tableName));
         when(corfuRuntime.getAddressSpaceView()).thenReturn(mock(AddressSpaceView.class));
