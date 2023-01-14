@@ -47,7 +47,7 @@ public class TxnContext implements AutoCloseable {
     private final TableRegistry tableRegistry;
     @Getter
     private final String namespace;
-    private final IsolationLevel isolationLevel;
+    private final Token txnSnapshot;
 
     private final List<CommitCallback> commitCallbacks;
 
@@ -73,17 +73,21 @@ public class TxnContext implements AutoCloseable {
         this.objectsView = objectsView;
         this.tableRegistry = tableRegistry;
         this.namespace = namespace;
-        this.isolationLevel = isolationLevel;
         this.commitCallbacks = new ArrayList<>();
         this.tablesUpdated = new HashMap<>();
-        txBeginInternal(allowNestedTransactions); // May throw exception if transaction was already started
+        this.txnSnapshot = txBeginInternal( // May throw exception if transaction was already started
+                allowNestedTransactions,
+                isolationLevel);
     }
 
     /**
      * @param allowNestedTransactions - is it ok to re-use thread's corfu transaction?
-     *                                Start the actual corfu transaction. Ensure there isn't one already in the same thread.
+     *                                Start the actual corfu transaction.
+     *                                Ensure there isn't one already in the same thread.
+     * @param isolationLevel - the requested snapshot to start transaction (or UNINITIALIZED if none)
+     * @return the snapshot Token of this transaction
      */
-    private void txBeginInternal(boolean allowNestedTransactions) {
+    private Token txBeginInternal(boolean allowNestedTransactions, IsolationLevel isolationLevel) {
         if (TransactionalContext.isInTransaction()) {
             TxnContext txnContext = TransactionalContext.getRootContext().getTxnContext();
             if (!allowNestedTransactions) {
@@ -95,18 +99,28 @@ public class TxnContext implements AutoCloseable {
             log.warn("Reusing the transactional context created outside this layer!");
             this.iDidNotStartCorfuTxn = true;
             TransactionalContext.getRootContext().setTxnContext(this);
-            return;
+            return TransactionalContext.getRootContext().getSnapshotTimestamp();
         }
 
         log.trace("TxnContext: begin transaction in namespace {}", namespace);
         Transaction.TransactionBuilder transactionBuilder = this.objectsView
                 .TXBuild()
                 .type(TransactionType.WRITE_AFTER_WRITE);
+        Token snapshotToken;
         if (isolationLevel.getTimestamp() != Token.UNINITIALIZED) {
             transactionBuilder.snapshot(isolationLevel.getTimestamp());
+            transactionBuilder.build().begin();
+            // Since transaction was requested at a particular snapshot
+            // return that as the transaction's snapshot address.
+            snapshotToken = new Token(isolationLevel.getTimestamp().getEpoch(),
+                    isolationLevel.getTimestamp().getSequence());
+        } else {
+            transactionBuilder.snapshot(isolationLevel.getTimestamp());
+            transactionBuilder.build().begin();
+            snapshotToken = TransactionalContext.getCurrentContext().getSnapshotTimestamp();
         }
-        transactionBuilder.build().begin();
         TransactionalContext.getRootContext().setTxnContext(this);
+        return snapshotToken;
     }
 
     public <K extends Message, V extends Message, M extends Message>
@@ -205,7 +219,11 @@ public class TxnContext implements AutoCloseable {
     }
 
     public long getEpoch() {
-        return isolationLevel.getTimestamp().getEpoch();
+        return txnSnapshot.getEpoch();
+    }
+
+    public long getTxnSequence() {
+        return txnSnapshot.getSequence();
     }
 
     /**
