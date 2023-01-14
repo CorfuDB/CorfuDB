@@ -74,6 +74,7 @@ public class CompactorLeaderServices {
      * @return compaction cycle start status
      */
     public LeaderInitStatus initCompactionCycle() {
+        long minAddressBeforeCycleStarts;
         log.info("=============Initiating Distributed Compaction============");
 
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -99,9 +100,12 @@ public class CompactorLeaderServices {
             }
 
             // Also record the minToken as the earliest token BEFORE checkpointing is initiated
+            // We take the current transaction's snapshot timestamp as this safe point
+            // Either the transaction fails and gets retried or it gets committed at which point
+            // future sequencer regressions will not regress to an earlier point.
             // This is the safest point to trim from, since all data up to this point will surely
             // be included in the upcoming checkpoint cycle
-            long minAddressBeforeCycleStarts = corfuRuntime.getAddressSpaceView().getLogTail();
+            minAddressBeforeCycleStarts = txn.getTxnSequence();
             txn.putRecord(compactorMetadataTables.getCompactionControlsTable(), CompactorMetadataTables.MIN_CHECKPOINT,
                     RpcCommon.TokenMsg.newBuilder()
                             .setSequence(minAddressBeforeCycleStarts)
@@ -118,7 +122,7 @@ public class CompactorLeaderServices {
             log.error("Exception while initiating Compaction cycle {}. Stack Trace {}", e, e.getStackTrace());
             return LeaderInitStatus.FAIL;
         }
-        log.info("Init compaction cycle is successful");
+        log.info("Init compaction cycle is successful. Min token {}", minAddressBeforeCycleStarts);
         return LeaderInitStatus.SUCCESS;
     }
 

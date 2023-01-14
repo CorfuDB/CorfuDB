@@ -8,6 +8,7 @@ import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
@@ -485,6 +486,9 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             // Verify that the write in TX2 was successful
             try (TxnContext txnContext = corfuStore.txn(namespace)) {
                 Assert.assertEquals(newVal, txnContext.getRecord(tableName1, conflictKey).getPayload());
+                assertThat(txnContext.getTxnSequence()).isNotEqualTo(Token.UNINITIALIZED.getSequence());
+                assertThat(txnContext.getEpoch()).isNotEqualTo(Token.UNINITIALIZED.getEpoch());
+                txnContext.commit();
             }
 
             // Clear the tables after each iteration

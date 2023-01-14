@@ -4,9 +4,12 @@ import com.google.common.collect.Iterables;
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.DynamicMessage;
 
+import org.corfudb.infrastructure.CompactorLeaderServices;
+import org.corfudb.infrastructure.LivenessValidator;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
@@ -27,6 +30,7 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
+import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SMRObject;
@@ -44,16 +48,25 @@ import org.rocksdb.Options;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.mockito.Matchers.isNull;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.spy;
 
 /**
  * Simple test that inserts data into CorfuStore via a separate server process
@@ -175,7 +188,7 @@ public class CorfuStoreIT extends AbstractIT {
         PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord> tableRegistry = runtime.getObjectsView().build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {
                 })
-                .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
+                .setStreamName(TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
                         TableRegistry.REGISTRY_TABLE_NAME))
                 .setSerializer(dynamicProtobufSerializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
@@ -183,7 +196,7 @@ public class CorfuStoreIT extends AbstractIT {
         PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord> descriptorTable = runtime.getObjectsView().build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {
                 })
-                .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
+                .setStreamName(TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE,
                         TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME))
                 .setSerializer(dynamicProtobufSerializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
@@ -261,7 +274,7 @@ public class CorfuStoreIT extends AbstractIT {
             String fullTableName = TableRegistry.getFullyQualifiedTableName(
                     tableName.getNamespace(), tableName.getTableName()
             );
-            if (tableName.getNamespace().equals(TableRegistry.CORFU_SYSTEM_NAMESPACE) &&
+            if (tableName.getNamespace().equals(CORFU_SYSTEM_NAMESPACE) &&
                     (tableName.getTableName().equals(TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME) ||
                     tableName.getTableName().equals(TableRegistry.REGISTRY_TABLE_NAME))) {
                 continue; // these tables should have already been checkpointed using normal serializer!
@@ -709,4 +722,99 @@ public class CorfuStoreIT extends AbstractIT {
         }
     }
 
+    private static final String NAMESPACE = "some-namespace";
+    private static final String UNUSED_TABLE_NAME = "some-unused-table";
+
+    /**
+     * This test validates the computation of the trim token during initCompactionCycle.
+     * Specifically, we validate that the trim token computed does not include addresses
+     * that can correspond to new tables that have been registered after listTables is
+     * invoked by the compactor.
+     */
+    @Test
+    public void validateTrimTokenListTableRace() throws Exception {
+        final Process p = new AbstractIT.CorfuServerRunner()
+                .setHost(DEFAULT_HOST)
+                .setPort(DEFAULT_PORT)
+                .setLogPath(getCorfuServerLogPath(DEFAULT_HOST, DEFAULT_PORT))
+                .setSingle(true)
+                .runServer();
+
+        final CorfuRuntime clientRuntime = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+        final CorfuRuntime cpRuntime = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+
+        final CorfuStore clientStore = new CorfuStore(clientRuntime);
+        final CorfuStore cpStoreSpy = spy(new CorfuStore(cpRuntime));
+
+        final CountDownLatch listTableLatch = new CountDownLatch(1);
+        final CountDownLatch writeLatch = new CountDownLatch(1);
+        AtomicLong safeTrimPoint = new AtomicLong();
+        AtomicBoolean encounteredException = new AtomicBoolean(false);
+
+        Thread compactionThread = new Thread(() -> {
+            try {
+                // Initializing CompactorLeaderServices will open and register compactor metadata tables.
+                // This will include writing entries to the RegistryTable.
+                final CompactorLeaderServices leaderServices = new CompactorLeaderServices(cpRuntime,
+                        DEFAULT_ENDPOINT, cpStoreSpy, new LivenessValidator(
+                                cpRuntime, cpStoreSpy, Duration.ofMinutes(1)));
+
+                // Store the log tail at this time. The trim token computed by initCompactionCycle
+                // should not exceed this value.
+                safeTrimPoint.set(clientRuntime.getAddressSpaceView().getLogTail());
+
+                doAnswer(invocationOnMock -> {
+                    Collection<CorfuStoreMetadata.TableName> tableNames = cpRuntime.getTableRegistry().listTables();
+                    listTableLatch.countDown();
+                    writeLatch.await();
+                    return tableNames;
+                }).when(cpStoreSpy).listTables(isNull(String.class));
+
+                leaderServices.initCompactionCycle();
+            } catch (Exception ex) {
+                ex.printStackTrace();
+                encounteredException.set(true);
+            }
+        });
+
+        Thread writerThread = new Thread(() -> {
+            try {
+                // Wait until the compactor thread had performed listTables.
+                listTableLatch.await();
+
+                // Open a previously unused table. The registration process writes to the RegistryTable.
+                clientStore.openTable(NAMESPACE, UNUSED_TABLE_NAME, RpcCommon.UuidMsg.class,
+                        RpcCommon.UuidMsg.class, null, TableOptions.builder().build());
+
+                // Notify the compactor thread to proceed with computing the trim token.
+                writeLatch.countDown();
+            } catch (Exception ex) {
+                ex.printStackTrace();
+                encounteredException.set(true);
+            }
+        });
+
+        writerThread.start();
+        compactionThread.start();
+        writerThread.join();
+        compactionThread.join();
+
+        // Validate that no exceptions were hit by either thread.
+        assertThat(encounteredException.get()).isFalse();
+
+        // Validate the trim token.
+        RpcCommon.TokenMsg trimToken;
+
+        try (TxnContext tx = cpStoreSpy.txn(CORFU_SYSTEM_NAMESPACE)) {
+            trimToken = (RpcCommon.TokenMsg) tx.getRecord(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE,
+                    CompactorMetadataTables.MIN_CHECKPOINT).getPayload();
+            tx.commit();
+        }
+
+        assertThat(trimToken.getSequence()).isLessThanOrEqualTo(safeTrimPoint.get());
+
+        clientRuntime.shutdown();
+        cpRuntime.shutdown();
+        shutdownCorfuServer(p);
+    }
 }
