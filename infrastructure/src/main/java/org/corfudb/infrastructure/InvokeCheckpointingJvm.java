@@ -40,7 +40,7 @@ public class InvokeCheckpointingJvm implements InvokeCheckpointing {
                     shutdown();
                 }
 
-                ProcessBuilder pb = new ProcessBuilder(compactorScriptPath, "--hostname", hostName, "--port",
+                ProcessBuilder pb = new ProcessBuilder("sudo", compactorScriptPath, "--hostname", hostName, "--port",
                         port, "--compactorConfig", compactorConfigPath, "--startCheckpointing=true");
                 pb.redirectOutput(ProcessBuilder.Redirect.PIPE);
                 pb.redirectError(ProcessBuilder.Redirect.PIPE);
