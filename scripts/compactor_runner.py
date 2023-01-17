@@ -44,8 +44,8 @@ class Config(object):
         Fields are public to keep it simple.
         """
         self.network_interface = None
+        self.hostname = None
         self.corfu_port = None
-        self.batchSize = None
         self.configPath = None
         self.startCheckpointing = None
         self.instantTriggerCompaction = None
@@ -244,11 +244,8 @@ class Wizard(object):
         except Exception as ex:
             self._print_and_log("Failed to run rsync_log " + " error: " + str(ex))
 
-        # Grep the compactor tool process, exclude grep itself.
-        if self._config.upgrade:
-            self._print_and_log("Appliance upgrading, skipping grep")
-        else:
-            grep_running_tool = "ps aux | grep 'python3 /usr/share/corfu/scripts/compactor_runner.py\|corfu_compactor_upgrade_runner.py' | grep -v 'grep\|CorfuServer' | grep " + self._config.corfu_port
+        if self._config.startCheckpointing:
+            grep_running_tool = "ps aux | grep 'python3 /usr/share/corfu/scripts/compactor_runner.py' | grep 'startCheckpointing' | grep -v 'grep' | grep " + self._config.corfu_port
 
             try:
                 grep_tool_result = check_output(grep_running_tool, shell=True).decode()
@@ -297,15 +294,16 @@ class Wizard(object):
         config.configPath = args.compactorConfig
         config.instantTriggerCompaction = args.instantTriggerCompaction
         config.trim = args.trimAfterCheckpoint
-        config.upgrade = args.upgrade
-        if not config.upgrade:
+        if 'freezeCompaction' in args:
             config.freezeCompaction = args.freezeCompaction
+        if 'unfreezeCompaction' in args:
             config.unfreezeCompaction = args.unfreezeCompaction
+        if 'disableCompaction' in args:
             config.disableCompaction = args.disableCompaction
+        if 'enableCompaction' in args:
             config.enableCompaction = args.enableCompaction
+        if 'startCheckpointing' in args:
             config.startCheckpointing = args.startCheckpointing
-        else:
-            config.startCheckpointing = True
         return config
 
 if __name__ == "__main__":
@@ -324,9 +322,6 @@ if __name__ == "__main__":
                                  "Default value is 9000.",
                             required=False,
                             default="9000")
-    arg_parser.add_argument("--batchSize", type=str,
-                            help="Batch size for loadTable",
-                            required=False)
     arg_parser.add_argument("--compactorConfig", type=str,
                             help="The file containing config for compactor",
                             default="/usr/share/corfu/conf/corfu-compactor-config.yml",
@@ -334,7 +329,6 @@ if __name__ == "__main__":
     arg_parser.add_argument("--startCheckpointing", type=bool, default=False,
                             help="Start checkpointing tables if compaction cycle has started",
                             required=False)
-    arg_parser.add_argument("--upgrade", type=bool, required=False)
     arg_parser.add_argument("--instantTriggerCompaction", type=bool,
                             help="To instantly trigger compaction cycle",
                             required=False)
