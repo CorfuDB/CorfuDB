@@ -8,7 +8,6 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.infrastructure.logreplication.utils.UpgradeManager;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
@@ -181,7 +180,10 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
         log.debug("Process negotiation response {} from {}", negotiationResponse, fsm.getRemoteClusterId());
 
-        ReplicationMetadata metadata = metadataManager.queryReplicationMetadata(fsm.getSession());
+        // TODO: If there is a guarantee that this session will always be present, we should assert here if no
+        //  metadata found instead of setting it to default values
+        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(fsm.getSession(), true,
+            fsm.context.getTopologyConfigId());
 
         /*
          * The sink site has a smaller config ID, redo the discovery for this sink site when
@@ -198,7 +200,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          * it will be triggered by a notification of the site config change.
          */
         if (negotiationResponse.getTopologyConfigID() > metadata.getTopologyConfigId()) {
-            log.error("The active site configID {} is smaller than the sink configID {} ",
+            log.error("The source site configID {} is smaller than the sink configID {} ",
                     metadata.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }

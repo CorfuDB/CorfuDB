@@ -161,6 +161,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             timestamp = txn.commit();
         }
 
+        // TODO pankti: Shouldnt this be part of the above transaction itself?
         if (!snapshotSyncStartMarker.isPresent()) {
             try (TxnContext txn = metadataManager.getTxnContext()) {
                 metadataManager.setSnapshotSyncStartMarker(txn, session, snapshotSyncId, timestamp);
@@ -273,12 +274,11 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
      * @param snapshot base snapshot timestamp
      */
     private void applyShadowStream(UUID streamId, long snapshot) {
-        log.debug("Apply shadow stream for stream {}, snapshot={}", streamId,
-            snapshot);
-        log.debug("Current addresses of stream {} :: {}", streamId,
-            rt.getSequencerView().getStreamAddressSpace(
-                new StreamAddressRange(streamId, Long.MAX_VALUE,
-                    Address.NON_ADDRESS)));
+        log.debug("Apply shadow stream for stream {}, snapshot={}", streamId, snapshot);
+
+        log.trace("Current addresses of stream {} :: {}", streamId, rt.getSequencerView().getStreamAddressSpace(
+            new StreamAddressRange(streamId, Long.MAX_VALUE, Address.NON_ADDRESS)));
+
         UUID shadowStreamId = getShadowStreamId(streamId);
 
         // In order to avoid data loss as part of a plugin failing to successfully
@@ -295,9 +295,11 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
         // This variable reflects the minimum timestamp for all shadow streams in the current snapshot cycle.
         // We seek up to this address, assuming that no trim should occur beyond this snapshot start
-        long currentMinShadowStreamTimestamp = metadataManager.queryReplicationMetadata(session).getCurrentCycleMinShadowStreamTs();
+        long currentMinShadowStreamTimestamp =
+            metadataManager.getReplicationMetadata(session, false, 0).
+                getCurrentCycleMinShadowStreamTs();
         OpaqueStream shadowOpaqueStream = new OpaqueStream(rt.getStreamsView().get(shadowStreamId, options));
-        // shadowOpaqueStream.seek(currentMinShadowStreamTimestamp);
+        shadowOpaqueStream.seek(currentMinShadowStreamTimestamp);
         Stream<OpaqueEntry> shadowStream = shadowOpaqueStream.streamUpTo(snapshot);
 
         Iterator<OpaqueEntry> iterator = shadowStream.iterator();
@@ -313,8 +315,9 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         }
 
         boolean shouldAddClearRecord = !MERGE_ONLY_STREAMS.contains(streamId);
+
         while (iterator.hasNext()) {
-            // append a clear record at the beginning of every non-merge-only streams
+            // append a clear record at the beginning of every non-merge-only stream
             if(shouldAddClearRecord) {
                 smrEntries.add(CLEAR_ENTRY);
                 shouldAddClearRecord = false;
@@ -324,7 +327,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             smrEntries.addAll(opaqueEntry.getEntries().get(shadowStreamId));
         }
 
-        // if clear record has not been added by now,indicates that shadow stream is empty.
+        // if clear record has not been added by now, indicates that shadow stream is empty.
         if (shouldAddClearRecord) {
             log.trace("No data was written to stream {} on source or sink. Do not clear.", streamId);
             return;
@@ -362,8 +365,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
                 txnContext.commit();
             }
         }
-        log.debug("Completed applying updates to stream {}.  {} " +
-            "entries applied across {} transactions.  ", streamId,
+        log.debug("Completed applying updates to stream {}.  {} entries applied across {} transactions.  ", streamId,
             smrEntries.size(), numBatches);
     }
 
@@ -404,7 +406,9 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         phase = Phase.APPLY_PHASE;
 
         // Get the number of entries to apply
-        long sequenceNumber = metadataManager.queryReplicationMetadata(session).getLastSnapshotTransferredSeqNumber();
+        long sequenceNumber =
+            metadataManager.getReplicationMetadata(session, false, 0)
+                .getLastSnapshotTransferredSeqNumber();
 
         if (sequenceNumber != Address.NON_ADDRESS) {
             log.debug("Start applying shadow streams, seqNum={}", sequenceNumber);

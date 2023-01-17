@@ -5,7 +5,6 @@ import io.micrometer.core.instrument.LongTaskTimer;
 import io.micrometer.core.instrument.Tag;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.checkerframework.checker.units.qual.C;
 import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.ServerContext;
@@ -17,7 +16,6 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
@@ -298,6 +296,7 @@ public class CorfuReplicationDiscoveryService {
             return;
         }
 
+        sessionManager.refresh(topologyDescriptor, true);
         if (role == ClusterRole.SOURCE) {
             logReplicationEventListener = new LogReplicationEventListener(this, getCorfuRuntime(),
                     topologyDescriptor.getLocalClusterDescriptor());
@@ -396,7 +395,7 @@ public class CorfuReplicationDiscoveryService {
      * Depending on the role of the cluster to which this leader node belongs, it will start
      * as source (sender/producer) or sink (receiver).
      */
-    private void onLeadershipAcquire() {
+    private void onLeadershipAcquire(boolean topologyChange) {
         switch (topologyDescriptor.getLocalClusterDescriptor().getRole()) {
             case SOURCE:
                 log.info("Start as Source (sender/replicator)");
@@ -410,8 +409,6 @@ public class CorfuReplicationDiscoveryService {
                 break;
             case SINK:
                 log.info("Start as Sink (receiver)");
-
-                sessionManager.refresh(topologyDescriptor, true);
 
                 // Sink Site : the LogReplicationServer (server handler) will
                 // reset the LogReplicationSinkManager on acquiring leadership
@@ -473,7 +470,7 @@ public class CorfuReplicationDiscoveryService {
     public void processLockAcquire() {
         log.debug("Lock acquired");
         isLeader.set(true);
-        onLeadershipAcquire();
+        onLeadershipAcquire(false);
     }
 
     /**
@@ -539,7 +536,7 @@ public class CorfuReplicationDiscoveryService {
 
         // On Topology Config Change, only if this node is the leader take action
         if (isLeader.get()) {
-            onLeadershipAcquire();
+            onLeadershipAcquire(true);
         }
     }
 
@@ -606,6 +603,7 @@ public class CorfuReplicationDiscoveryService {
         // Only process new sinks if the local cluster role is SOURCE
         if (topologyDescriptor.getLocalClusterDescriptor().getRole() == ClusterRole.SOURCE) {
             sessionManager.refresh(newTopology, isLeader.get());
+            sessionManager.startReplication();
         } else {
             // Update the topology config id on the Sink components
             if (interClusterServerNode != null) {
@@ -615,7 +613,8 @@ public class CorfuReplicationDiscoveryService {
 
         topologyDescriptor = newTopology;
         log.debug("Persisted new topologyConfigId {}, cluster id={}, role={}", topologyDescriptor.getTopologyConfigId(),
-                topologyDescriptor.getLocalClusterDescriptor().getClusterId(), topologyDescriptor.getLocalClusterDescriptor().getRole());
+            topologyDescriptor.getLocalClusterDescriptor().getClusterId(),
+            topologyDescriptor.getLocalClusterDescriptor().getRole());
     }
 
     /**

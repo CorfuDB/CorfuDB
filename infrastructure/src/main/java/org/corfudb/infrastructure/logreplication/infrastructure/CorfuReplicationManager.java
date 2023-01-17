@@ -172,7 +172,7 @@ public class CorfuReplicationManager {
             log.warn("Failed to enforce snapshot sync for session {}",
                 event.getSession());
         } else {
-            log.info("Enforce snapshot sync for remote cluster {}", runtime.getRemoteClusterId());
+            log.info("Enforce snapshot sync for remote session {}", event.getSession());
             runtime.getSourceManager().stopLogReplication();
             runtime.getSourceManager().startForcedSnapshotSync(event.getEventId());
         }

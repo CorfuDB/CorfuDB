@@ -95,6 +95,10 @@ public class SessionManager {
      * @param newTopology   the new discovered topology
      */
     public synchronized void refresh(@Nonnull TopologyDescriptor newTopology, boolean isLeader) {
+
+        // TODO pankti: Make this method a no-op if the new topology has not changed.  Need to override equals and
+        //  hashcode in all TopologyDescriptor and all its members.
+
         Set<String> newSources = newTopology.getSourceClusters().keySet();
         Set<String> currentSources = topology.getSourceClusters().keySet();
         Set<String> sourcesToRemove = Sets.difference(currentSources, newSources);
@@ -143,6 +147,9 @@ public class SessionManager {
     }
 
     private void updateReplicationParameters(Set<LogReplicationSession> sessionsUnchanged) {
+        if (replicationManager == null) {
+            return;
+        }
         for (LogReplicationSession session : sessionsUnchanged) {
             ClusterDescriptor cluster = topology.getSinkClusters().get(session.getSinkClusterId());
             replicationManager.refreshRuntime(session, cluster, topology.getTopologyConfigId());
@@ -180,10 +187,10 @@ public class SessionManager {
                             outgoingSessions.add(session);
                             metadataManager.addSession(txn, session, topology.getTopologyConfigId(), false);
 
-                            if(isLeader) {
+                            /*if(isLeader) {
                                 replicationManager.start(topology.getSinkClusters().get(session.getSinkClusterId()),
                                         session, context);
-                            }
+                            }*/
                         } else if(session.getSinkClusterId() == topology.getLocalClusterDescriptor().getClusterId()) {
                             sessions.add(session);
                             incomingSessions.add(session);
@@ -197,6 +204,7 @@ public class SessionManager {
                     }
                 }
             }
+            txn.commit();
         }
 
         log.info("Total sessions={}, outgoing={}, incoming={}, sessions={}", sessions.size(), outgoingSessions.size(),
@@ -276,7 +284,10 @@ public class SessionManager {
     }
 
     public void stopReplication(Set<LogReplicationSession> sessions, boolean remove) {
-        replicationManager.stop(sessions);
+
+        if (replicationManager != null) {
+            replicationManager.stop(sessions);
+        }
 
         if(remove) {
             sessions.forEach(session -> {
@@ -304,6 +315,7 @@ public class SessionManager {
                     metadataManager, configManager.getServerContext().getPluginConfigFilePath(), runtime);
         }
 
+        createSessions(true);
         outgoingSessions.forEach(session -> {
             ClusterDescriptor remoteClusterDescriptor = topology.getSinkClusters().get(session.getSinkClusterId());
             replicationManager.start(remoteClusterDescriptor, session, sessionToContextMap.get(session));

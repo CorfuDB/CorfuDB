@@ -17,7 +17,6 @@ import org.corfudb.runtime.proto.service.CorfuMessage.ReplicationModel;
 import org.corfudb.runtime.proto.service.CorfuMessage.ReplicationSubscriber;
 import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
@@ -32,7 +31,6 @@ import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -56,6 +54,9 @@ public class LogReplicationServer extends AbstractServer {
     // Note: serverContext.getLocalEndpoint() can return an IP or FQDN, which is mutable (for this we
     // should have a unique way the identify a node in the  topology
     private String localNodeId;
+
+    // Cluster Id of the local node.
+    private String localClusterId;
 
     private final ExecutorService executor;
 
@@ -81,6 +82,7 @@ public class LogReplicationServer extends AbstractServer {
     public LogReplicationServer(@Nonnull ServerContext context, @Nonnull SessionManager sessionManager,
                                 String localEndpoint) {
         this.localNodeId = sessionManager.getTopology().getLocalNodeDescriptor().getNodeId();
+        this.localClusterId = sessionManager.getTopology().getLocalClusterDescriptor().getClusterId();
         this.sessionManager = sessionManager;
         createSinkManagers(localEndpoint, context);
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
@@ -147,7 +149,7 @@ public class LogReplicationServer extends AbstractServer {
                 // Backward compatibility where 'session' field not present
                 session = LogReplicationSession.newBuilder()
                         .setSourceClusterId(getUUID(request.getHeader().getClusterId()).toString())
-                        .setSinkClusterId(sessionManager.getTopology().getLocalClusterDescriptor().getClusterId())
+                        .setSinkClusterId(localClusterId)
                         .setSubscriber(SessionManager.getDefaultSubscriber())
                         .build();
             } else {
@@ -206,7 +208,7 @@ public class LogReplicationServer extends AbstractServer {
 
             // TODO: after multi-model support is added instead of default session, this info will be
             //  part of the RequestMsg
-            LogReplicationSession session = getDefaultSession(sourceClusterId, localNodeId);
+            LogReplicationSession session = getDefaultSession(sourceClusterId, localClusterId);
 
             LogReplicationSinkManager sinkManager = sessionToSinkManagerMap.get(session);
 
@@ -216,13 +218,15 @@ public class LogReplicationServer extends AbstractServer {
                 return;
             }
 
-            ResponseMsg response = getMetadataResponse(request, session);
+            ReplicationMetadata metadata = sessionManager.getMetadataManager().getReplicationMetadata(session, false,
+                0);
+            ResponseMsg response = getMetadataResponse(request, metadata);
 
             log.info("Send Metadata response: :: {}", TextFormat.shortDebugString(response.getPayload()));
             router.sendResponse(response, ctx);
 
             // If a snapshot apply is pending, start (if not started already)
-            if (isSnapshotApplyPending(session) && !sinkManager.getOngoingApply().get()) {
+            if (isSnapshotApplyPending(metadata) && !sinkManager.getOngoingApply().get()) {
                 sinkManager.resumeSnapshotApply();
             }
         } else {
@@ -232,8 +236,7 @@ public class LogReplicationServer extends AbstractServer {
         }
     }
 
-    public ResponseMsg getMetadataResponse(RequestMsg request, LogReplicationSession session) {
-        ReplicationMetadata metadata = sessionManager.getMetadataManager().queryReplicationMetadata(session);
+    public ResponseMsg getMetadataResponse(RequestMsg request, ReplicationMetadata metadata) {
 
         LogReplicationMetadataResponseMsg metadataMsg = LogReplicationMetadataResponseMsg.newBuilder()
                 .setTopologyConfigID(metadata.getTopologyConfigId())
@@ -257,7 +260,7 @@ public class LogReplicationServer extends AbstractServer {
     private LogReplicationSession getDefaultSession(String sourceClusterId, String sinkClusterId) {
         return  LogReplicationSession.newBuilder()
                 .setSourceClusterId(sourceClusterId)
-                .setSinkClusterId(sinkClusterId) // TODO: obtain cluster ID (instead of node)
+                .setSinkClusterId(sinkClusterId)
                 .setSubscriber(ReplicationSubscriber.newBuilder()
                         .setClientName(SessionManager.DEFAULT_CLIENT_ID.toString())
                         .setModel(ReplicationModel.FULL_TABLE)
@@ -288,9 +291,7 @@ public class LogReplicationServer extends AbstractServer {
         router.sendResponse(response, ctx);
     }
 
-    private boolean isSnapshotApplyPending(LogReplicationSession session) {
-        ReplicationMetadata metadata = sessionManager.getMetadataManager().queryReplicationMetadata(session);
-
+    private boolean isSnapshotApplyPending(ReplicationMetadata metadata) {
         return (metadata.getLastSnapshotStarted() == metadata.getLastSnapshotTransferred()) &&
                 metadata.getLastSnapshotTransferred() > metadata.getLastSnapshotApplied();
     }

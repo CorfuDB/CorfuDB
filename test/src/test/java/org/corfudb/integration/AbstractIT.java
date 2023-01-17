@@ -53,7 +53,7 @@ public class AbstractIT extends AbstractCorfuTest {
     static final String DEFAULT_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
 
     static final String CORFU_PROJECT_DIR = new File("..").getAbsolutePath() + File.separator;
-    public static final String CORFU_LOG_PATH = "/Users/amartinezman/Desktop/test";
+    public static final String CORFU_LOG_PATH = "/Users/pmajmudar/Desktop/test";
 
     static final long DEFAULT_MVO_CACHE_SIZE = 100;
 

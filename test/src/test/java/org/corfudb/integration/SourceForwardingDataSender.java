@@ -235,7 +235,7 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
             }
 
             LogReplicationMetadata.ReplicationMetadata metadata = destinationLogReplicationManager
-                    .getMetadataManager().queryReplicationMetadata(session);
+                    .getMetadataManager().getReplicationMetadata(session, false, 0);
 
             // In test implementation emulate the apply has succeeded and return a LogReplicationMetadataResponse
             response = LogReplicationMetadataResponseMsg.newBuilder()
@@ -319,7 +319,7 @@ public class SourceForwardingDataSender extends AbstractIT implements DataSender
                 .build();
 
         ReplicationMetadata metadata = destinationLogReplicationManager.getMetadataManager()
-                .queryReplicationMetadata(session);
+                .getReplicationMetadata(session, false, 0);
         assertThat(metadata.getLastLogEntryApplied())
                 .isGreaterThanOrEqualTo(newMessage.getMetadata().getPreviousTimestamp());
         assertThat(metadata.getLastLogEntryApplied())

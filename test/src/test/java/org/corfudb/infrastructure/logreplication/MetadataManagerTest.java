@@ -96,9 +96,9 @@ public class MetadataManagerTest extends AbstractViewTest {
 
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime);
 
-        long lastAppliedSnapshotTimestamp = metadataManager.queryReplicationMetadata(defaultSession)
+        long lastAppliedSnapshotTimestamp = metadataManager.getReplicationMetadata(defaultSession, false, 0)
                 .getLastSnapshotApplied();
-        long lastProcessedLogEntryTimestamp = metadataManager.queryReplicationMetadata(defaultSession)
+        long lastProcessedLogEntryTimestamp = metadataManager.getReplicationMetadata(defaultSession, false, 0)
                 .getLastLogEntryBatchProcessed();
 
         Assert.assertEquals(Address.NON_ADDRESS, lastAppliedSnapshotTimestamp);

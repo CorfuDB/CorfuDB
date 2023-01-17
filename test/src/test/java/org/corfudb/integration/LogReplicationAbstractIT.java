@@ -22,9 +22,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
+import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultSnapshotSyncPlugin;
@@ -55,6 +57,7 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;
@@ -183,12 +186,16 @@ public class LogReplicationAbstractIT extends AbstractIT {
     }
 
     public void testEndToEndSnapshotAndLogEntrySyncUFO(int totalNumMaps, boolean diskBased, boolean checkRemainingEntriesOnSecondLogEntrySync) throws Exception {
-        // For the purpose of this test, Sink should only update status 5 times:
-        // (1) On startup, init the replication status for each Source cluster(3 clusters = 3 updates)
+        // For the purpose of this test, Sink should get 3 transactions for status update:
+        // (1) On startup, init the replication status for each Source cluster in a single transaction
         // (2) When starting snapshot sync apply : is_data_consistent = false
         // (3) When completing snapshot sync apply : is_data_consistent = true
-        final int totalSinkStatusUpdates = 5;
+        final int totalSinkStatusUpdateTx = 3;
 
+        // Across the above 3 transactions, there will be 5 updates/entries:
+        // 3 (1 init update corresponding to each Source cluster )   +      1 (is_data_consistent = false)    + 1
+        // (is_data_consistent = true)
+        final int totalSinkStatusUpdateEntries = 5;
         try {
             log.info(">> Setup source and sink Corfu's");
             setupSourceAndSinkCorfu();
@@ -199,17 +206,14 @@ public class LogReplicationAbstractIT extends AbstractIT {
             subscribeToSnapshotSyncPluginTable(snapshotSyncPluginListener);
 
             // Subscribe to replication status table on Sink (to be sure data change on status are captured)
-            corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
-                    REPLICATION_STATUS_TABLE_NAME,
-                    LogReplicationMetadata.ReplicationStatusKey.class,
-                    LogReplicationMetadata.ReplicationStatusVal.class,
-                    null,
-                    TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+            corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE, REPLICATION_STATUS_TABLE_NAME,
+                LogReplicationSession.class, ReplicationStatus.class, null,
+                TableOptions.fromProtoSchema(ReplicationStatus.class));
 
-            CountDownLatch statusUpdateLatch = new CountDownLatch(totalSinkStatusUpdates);
+            CountDownLatch statusUpdateLatch = new CountDownLatch(totalSinkStatusUpdateTx);
             ReplicationStatusListener sinkListener = new ReplicationStatusListener(statusUpdateLatch, false);
             corfuStoreSink.subscribeListener(sinkListener, LogReplicationMetadataManager.NAMESPACE,
-                    LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+                LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
             log.info(">> Open map(s) on source and sink");
             openMaps(totalNumMaps, diskBased);
@@ -253,7 +257,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
             // Verify Sink Status Listener received all expected updates (is_data_consistent)
             log.info(">> Wait ... Replication status UPDATE ...");
             statusUpdateLatch.await();
-            assertThat(sinkListener.getAccumulatedStatus().size()).isEqualTo(totalSinkStatusUpdates);
+            assertThat(sinkListener.getAccumulatedStatus().size()).isEqualTo(totalSinkStatusUpdateEntries);
             // Confirm last updates are set to true (corresponding to snapshot sync completed and log entry sync started)
             assertThat(sinkListener.getAccumulatedStatus().get(sinkListener.getAccumulatedStatus().size() - 1)).isTrue();
             assertThat(sinkListener.getAccumulatedStatus()).contains(false);
@@ -309,21 +313,22 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
         corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE_NAME,
-                LogReplicationMetadata.ReplicationStatusKey.class,
-                LogReplicationMetadata.ReplicationStatusVal.class,
+                LogReplicationSession.class,
+                ReplicationStatus.class,
                 null,
-                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+                TableOptions.fromProtoSchema(ReplicationStatus.class));
 
-        LogReplicationMetadata.ReplicationStatusKey key =
-                LogReplicationMetadata.ReplicationStatusKey
-                        .newBuilder()
-                        .setClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-                        .build();
+        LogReplicationSession session = LogReplicationSession.newBuilder()
+            .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
+            .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
+            .setSubscriber(SessionManager.getDefaultSubscriber())
+            .build();
+
         ReplicationStatus replicationStatus;
         statusUpdateLatch.await();
 
         try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
-            replicationStatus = (ReplicationStatus) txn.getRecord(REPLICATION_STATUS_TABLE_NAME, key).getPayload();
+            replicationStatus = (ReplicationStatus) txn.getRecord(REPLICATION_STATUS_TABLE_NAME, session).getPayload();
             txn.commit();
         }
 
@@ -331,45 +336,43 @@ public class LogReplicationAbstractIT extends AbstractIT {
     }
 
     private void verifyReplicationStatusFromSource() throws Exception {
-        Table<LogReplicationMetadata.ReplicationStatusKey,
-            LogReplicationMetadata.ReplicationStatusVal,
-            LogReplicationMetadata.ReplicationStatusVal> replicationStatusTable =
+        Table<LogReplicationSession, ReplicationStatus, Message> replicationStatusTable =
             corfuStoreSource.openTable(
-                    LogReplicationMetadataManager.NAMESPACE,
-                    REPLICATION_STATUS_TABLE_NAME,
-                    LogReplicationMetadata.ReplicationStatusKey.class,
-                    LogReplicationMetadata.ReplicationStatusVal.class,
-                    null,
-                    TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class)
+                LogReplicationMetadataManager.NAMESPACE,
+                REPLICATION_STATUS_TABLE_NAME,
+                LogReplicationSession.class,
+                ReplicationStatus.class,
+                null,
+                TableOptions.fromProtoSchema(ReplicationStatus.class)
             );
 
-        String clusterId =
+        String sinkClusterId =
             new DefaultClusterConfig().getSinkClusterIds().get(0);
 
-        LogReplicationMetadata.ReplicationStatusKey key =
-            LogReplicationMetadata.ReplicationStatusKey
-                .newBuilder()
-                .setClusterId(clusterId)
-                .build();
+        String sourceClusterId = new DefaultClusterConfig().getSourceClusterIds().get(0);
+
+        LogReplicationSession session = LogReplicationSession.newBuilder()
+            .setSourceClusterId(sourceClusterId)
+            .setSinkClusterId(sinkClusterId)
+            .setSubscriber(SessionManager.getDefaultSubscriber())
+            .build();
 
         IRetry.build(IntervalRetry.class, () -> {
             try(TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
-                CorfuStoreEntry<LogReplicationMetadata.ReplicationStatusKey,
-                    LogReplicationMetadata.ReplicationStatusVal,
-                    LogReplicationMetadata.ReplicationStatusVal> entry =
-                    txn.getRecord(replicationStatusTable, key);
+                CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message> entry =
+                    txn.getRecord(replicationStatusTable, session);
 
-                if (entry.getPayload().getSnapshotSyncInfo().getStatus() !=
-                    LogReplicationMetadata.SyncStatus.COMPLETED) {
+                if (entry.getPayload().getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus() !=
+                    SyncStatus.COMPLETED) {
                     Sleep.sleepUninterruptibly(Duration.ofMillis(SHORT_SLEEP_TIME));
                     txn.commit();
                     throw new RetryNeededException();
                 }
-                assertThat(entry.getPayload().getSnapshotSyncInfo().getStatus())
+                assertThat(entry.getPayload().getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus())
                     .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
-                assertThat(entry.getPayload().getSnapshotSyncInfo().getType())
+                assertThat(entry.getPayload().getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getType())
                     .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
-                assertThat(entry.getPayload().getSnapshotSyncInfo()
+                assertThat(entry.getPayload().getSourceStatus().getReplicationInfo().getSnapshotSyncInfo()
                     .getBaseSnapshot()).isNotEqualTo(Address.NON_ADDRESS);
                 txn.commit();
             } catch (TransactionAbortedException tae) {

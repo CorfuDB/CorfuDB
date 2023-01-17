@@ -49,7 +49,7 @@ public class LogEntryWriterTest extends AbstractViewTest {
         txnContext = Mockito.mock(TxnContext.class);
         Mockito.doReturn(txnContext).when(metadataManager).getTxnContext();
         doReturn(getDefaultMetadata()).when(metadataManager).queryReplicationMetadata(txnContext, getDefaultSession());
-        doReturn(getDefaultMetadata()).when(metadataManager).queryReplicationMetadata(getDefaultSession());
+        doReturn(getDefaultMetadata()).when(metadataManager).getReplicationMetadata(getDefaultSession(), false, 0);
 
         logEntryWriter = new LogEntryWriter(metadataManager, getDefaultSession(),
                 new LogReplicationContext(new LogReplicationConfigManager(corfuRuntime), topologyConfigId,
@@ -399,7 +399,7 @@ public class LogEntryWriterTest extends AbstractViewTest {
         Mockito.doReturn(txnContext).when(metadataManager).getTxnContext();
 
         doReturn(getDefaultMetadata()).when(metadataManager).queryReplicationMetadata(txnContext, getDefaultSession());
-        doReturn(getDefaultMetadata()).when(metadataManager).queryReplicationMetadata(getDefaultSession());
+        doReturn(getDefaultMetadata()).when(metadataManager).getReplicationMetadata(getDefaultSession(), false, 0);
     }
 
     private ReplicationMetadata buildMetadata(long topologyConfigId, long lastTsInBatch,
