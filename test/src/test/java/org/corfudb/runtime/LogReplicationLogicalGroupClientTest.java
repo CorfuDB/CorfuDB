@@ -16,16 +16,15 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class LogReplicationLogicalGroupClientTest extends AbstractIT {
-    private static String corfuSingleNodeHost;
-
-    private static int corfuStringNodePort;
-
-    private static String singleNodeEndpoint;
 
     private static String namespace;
 
@@ -55,15 +54,15 @@ public class LogReplicationLogicalGroupClientTest extends AbstractIT {
      */
     @Before
     public void loadProperties() throws Exception {
-        corfuSingleNodeHost = PROPERTIES.getProperty("corfuSingleNodeHost");
-        corfuStringNodePort = Integer.valueOf(PROPERTIES.getProperty("corfuSingleNodePort"));
-        singleNodeEndpoint = String.format("%s:%d",
+        String corfuSingleNodeHost = PROPERTIES.getProperty("corfuSingleNodeHost");
+        int corfuStringNodePort = Integer.valueOf(PROPERTIES.getProperty("corfuSingleNodePort"));
+        String singleNodeEndpoint = String.format("%s:%d",
                 corfuSingleNodeHost,
                 corfuStringNodePort);
 
         namespace = "CorfuSystem";
         registrationTableName = "LogReplicationRegistrationTable";
-        metadataTableName = "LogReplicationSourceMetadataTable";
+        metadataTableName = "LogReplicationModelMetadataTable";
         clientName = "client";
 
         runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
@@ -125,25 +124,18 @@ public class LogReplicationLogicalGroupClientTest extends AbstractIT {
         client.addDestination("LOGICALGROUP1", "DESTINATION2");
 
         // Test adding existing destinations
-        Assert.assertThrows("Destination already exists", IllegalArgumentException.class, () -> {
-            client.addDestination("LOGICALGROUP1", "DESTINATION2");
-        });
+        final int expectedNumberDestinations = 2;
+        final int currentTableEntry = 0;
+        client.addDestination("LOGICALGROUP1", "DESTINATION2");
+        Assert.assertEquals(expectedNumberDestinations, table.entryStream().collect(Collectors.toList()).get(currentTableEntry).getPayload().getDestinationIdsList().size());
 
         // Test adding a destination with an invalid logicalGroup
-        Assert.assertThrows("logicalGroup is null or empty", IllegalArgumentException.class, () -> {
-            client.addDestination("", "DESTINATION3");
-        });
-        Assert.assertThrows("logicalGroup is null or empty", IllegalArgumentException.class, () -> {
-            client.addDestination(null, "DESTINATION4");
-        });
+        Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination("", "DESTINATION3"));
+        Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination(null, "DESTINATION4"));
 
         // Test adding a destination with an invalid name
-        Assert.assertThrows("destination is null or empty", IllegalArgumentException.class, () -> {
-            client.addDestination("LOGICALGROUP1", "");
-        });
-        Assert.assertThrows("destination is null or empty", IllegalArgumentException.class, () -> {
-            client.addDestination("LOGICALGROUP1", (String) null);
-        });
+        Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination("LOGICALGROUP1", ""));
+        Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination("LOGICALGROUP1", (String) null));
 
         // Test that the table size is correct
         final int expectedNumberRegisteredGroups = 1;
@@ -209,29 +201,15 @@ public class LogReplicationLogicalGroupClientTest extends AbstractIT {
 
         // Test adding with request having a malformed logicalGroup
         List<String> destinationsToAdd4 = Collections.singletonList("DESTINATION1");
-        Assert.assertThrows("logicalGroup is null or empty", IllegalArgumentException.class, () -> {
-            client.addDestination("", destinationsToAdd4);
-        });
-        Assert.assertThrows("logicalGroup is null or empty", IllegalArgumentException.class, () -> {
-            client.addDestination(null, destinationsToAdd4);
-        });
+        Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination("", destinationsToAdd4));
+        Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination(null, destinationsToAdd4));
 
         // Test adding with request having a malformed destination
         List<String> destinationsToAdd5 = Collections.singletonList("");
         List<String> destinationsToAdd6 = Collections.singletonList(null);
-        List<String> destinationsToAdd7 = Arrays.asList("DESTINATION1", "DESTINATION1");
-        Assert.assertThrows("Invalid destination(s) found in list", IllegalArgumentException.class, () -> {
-            client.addDestination("LOGICALGROUP1", destinationsToAdd5);
-        });
-        Assert.assertThrows("Invalid destination(s) found in list", IllegalArgumentException.class, () -> {
-            client.addDestination("LOGICALGROUP1", destinationsToAdd6);
-        });
-        Assert.assertThrows("Invalid destination(s) found in list", IllegalArgumentException.class, () -> {
-            client.addDestination("LOGICALGROUP1", destinationsToAdd7);
-        });
-        Assert.assertThrows("remoteDestinations is null or empty", IllegalArgumentException.class, () -> {
-            client.addDestination("LOGICALGROUP1", (List<String>) null);
-        });
+        Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination("LOGICALGROUP1", destinationsToAdd5));
+        Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination("LOGICALGROUP1", destinationsToAdd6));
+        Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination("LOGICALGROUP1", (List<String>) null));
 
         // Test adding destinations to new logicalGroup
         List<String> destinationsToAdd8 = Arrays.asList("DESTINATION1", "DESTINATION2");
@@ -293,16 +271,15 @@ public class LogReplicationLogicalGroupClientTest extends AbstractIT {
         Assert.assertEquals(expectedNumberRegisteredGroups, table.count());
 
         // Test removing a destination that does not exist
+        final int currentTableEntry = 0;
         client.addDestination(logicalGroup, "TEMPDEST");
-        Assert.assertThrows("No matching destination found", NoSuchElementException.class, () -> {
-            client.removeDestination(logicalGroup, destination);
-        });
+        final int sizeBeforeAttemptedDelete = table.entryStream().collect(Collectors.toList()).get(currentTableEntry).getPayload().getDestinationIdsList().size();
+        client.removeDestination(logicalGroup, destination);
+        Assert.assertEquals(sizeBeforeAttemptedDelete, table.entryStream().collect(Collectors.toList()).get(currentTableEntry).getPayload().getDestinationIdsList().size());
         client.removeDestination(logicalGroup, "TEMPDEST");
 
         // Test removing a logicalGroup that does not exist
-        Assert.assertThrows("Record not found for group: NOTAGROUP", NoSuchElementException.class, () -> {
-            client.removeDestination("NOTAGROUP", destination);
-        });
+        Assert.assertThrows(NoSuchElementException.class, () -> client.removeDestination("NOTAGROUP", destination));
 
         // Test adding a destination
         client.addDestination(logicalGroup, destination);
@@ -311,9 +288,7 @@ public class LogReplicationLogicalGroupClientTest extends AbstractIT {
         client.removeDestination(logicalGroup, destination);
 
         // Test removing the destination again after it has been removed
-        Assert.assertThrows("No matching destination found", NoSuchElementException.class, () -> {
-            client.removeDestination(logicalGroup, destination);
-        });
+        Assert.assertThrows(NoSuchElementException.class, () -> client.removeDestination(logicalGroup, destination));
 
         // Test table size is correct
         final int expectedNumberRegisteredGroups1 = 0;
@@ -367,15 +342,11 @@ public class LogReplicationLogicalGroupClientTest extends AbstractIT {
         // Test removing a destination that does not exist
         List<String> destinationsToRemove = Collections.singletonList(destination);
         client.addDestination(logicalGroup, "INIT");
-        Assert.assertThrows("No matching destinations found", NoSuchElementException.class, () -> {
-            client.removeDestination(logicalGroup, destinationsToRemove);
-        });
+        Assert.assertThrows(NoSuchElementException.class, () -> client.removeDestination(logicalGroup, destinationsToRemove));
         client.removeDestination(logicalGroup, "INIT");
 
         // Test removing from a logicalGroup that does not exist
-        Assert.assertThrows("Record not found for group: NOTAGROUP", NoSuchElementException.class, () -> {
-            client.removeDestination("NOTAGROUP", destination);
-        });
+        Assert.assertThrows(NoSuchElementException.class, () -> client.removeDestination("NOTAGROUP", destination));
 
         // Test removals of list that is a subset
         final int expectedNumberDestinations = 1;
@@ -396,28 +367,47 @@ public class LogReplicationLogicalGroupClientTest extends AbstractIT {
 
         // Test adding with request having a malformed logicalGroup
         List<String> destinationsToRemove4 = Collections.singletonList("DESTINATION1");
-        Assert.assertThrows("logicalGroup is null or empty", IllegalArgumentException.class, () -> {
-            client.removeDestination("", destinationsToRemove4);
-        });
-        Assert.assertThrows("logicalGroup is null or empty", IllegalArgumentException.class, () -> {
-            client.removeDestination(null, destinationsToRemove4);
-        });
+        Assert.assertThrows(IllegalArgumentException.class, () -> client.removeDestination("", destinationsToRemove4));
+        Assert.assertThrows(IllegalArgumentException.class, () -> client.removeDestination(null, destinationsToRemove4));
 
         // Test adding with request having a malformed destination
         List<String> destinationsToRemove7 = Collections.singletonList("");
         List<String> destinationsToRemove8 = Collections.singletonList(null);
-        List<String> destinationsToRemove9 = Arrays.asList("DESTINATION1", "DESTINATION1");
-        Assert.assertThrows("Invalid destination(s) found in list", IllegalArgumentException.class, () -> {
-            client.removeDestination(logicalGroup, destinationsToRemove7);
-        });
-        Assert.assertThrows("Invalid destination(s) found in list", IllegalArgumentException.class, () -> {
-            client.removeDestination(logicalGroup, destinationsToRemove8);
-        });
-        Assert.assertThrows("Invalid destination(s) found in list", IllegalArgumentException.class, () -> {
-            client.removeDestination(logicalGroup, destinationsToRemove9);
-        });
-        Assert.assertThrows("remoteDestinations is null or empty", IllegalArgumentException.class, () -> {
-            client.removeDestination(logicalGroup, (List<String>) null);
-        });
+        Assert.assertThrows(IllegalArgumentException.class, () -> client.removeDestination(logicalGroup, destinationsToRemove7));
+        Assert.assertThrows(IllegalArgumentException.class, () -> client.removeDestination(logicalGroup, destinationsToRemove8));
+        Assert.assertThrows(IllegalArgumentException.class, () -> client.removeDestination(logicalGroup, (List<String>) null));
+    }
+
+    /**
+     * Test show destinations for a logical group
+     *
+     * @throws Exception exception
+     */
+    @Test
+    public void testShowDestinations() throws Exception {
+        final String logicalGroup = "LOGICALGROUP";
+        final String destination1 = "DESTINATION1";
+        final String destination2 = "DESTINATION2";
+
+        final Table<ClientDestinationInfoKey, DestinationInfoVal, SampleSchema.ManagedResources> table = store.openTable(
+                namespace,
+                metadataTableName,
+                ClientDestinationInfoKey.class,
+                DestinationInfoVal.class,
+                SampleSchema.ManagedResources.class,
+                TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
+
+        LogReplicationLogicalGroupClient client = new LogReplicationLogicalGroupClient(runtime, clientName);
+
+        Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination(logicalGroup, ""));
+
+        client.addDestination(logicalGroup, destination1);
+        client.addDestination(logicalGroup, destination2);
+
+        client.addDestination(logicalGroup, Arrays.asList("D1", "D2", "D1"));
+        final String invalidDestination = "INVALID";
+        Assert.assertThrows(NoSuchElementException.class, () -> client.showDestinations(invalidDestination));
+
+        client .showDestinations(logicalGroup);
     }
 }
