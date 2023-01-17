@@ -147,7 +147,8 @@ public class CompactorService implements ManagementService {
                 }
                 txn.commit();
             } catch (Exception e) {
-                log.warn("Unable to acquire manager status: ", e);
+                log.error("Unable to acquire manager status: ", e);
+                return;
             }
             try {
                 if (isLeader) {
