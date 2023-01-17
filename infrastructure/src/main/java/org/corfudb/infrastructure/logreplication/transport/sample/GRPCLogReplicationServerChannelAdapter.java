@@ -9,6 +9,7 @@ import org.corfudb.infrastructure.logreplication.transport.server.IServerChannel
 import org.corfudb.runtime.proto.service.CorfuMessage;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
 
 /**
  * Server GRPC Transport Adapter
@@ -36,7 +37,11 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
         super(serverContext, router);
         this.service = new GRPCLogReplicationServerHandler(router);
         this.port = Integer.parseInt((String) serverContext.getServerConfig().get("<port>"));
-        this.server = ServerBuilder.forPort(port).addService(service).build();
+        // The executor of GRPCLogReplicationServerHandler needs to be single-threaded, otherwise the ordering of
+        // requests and their acks cannot be guaranteed. By default, grpc utilizes thread-pool, so we need to provide
+        // a single-threaded executor here.
+        this.server = ServerBuilder.forPort(port).addService(service)
+                .executor(Executors.newSingleThreadScheduledExecutor()).build();
     }
 
     @Override
