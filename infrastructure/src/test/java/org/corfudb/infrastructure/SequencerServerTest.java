@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.util.concurrent.MoreExecutors;
-import com.google.protobuf.ByteString;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
@@ -12,7 +11,6 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.proto.RpcCommon.UuidToStreamAddressSpacePairMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
@@ -30,13 +28,13 @@ import org.mockito.Spy;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
-import java.io.ObjectInputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -55,12 +53,10 @@ import static org.corfudb.protocols.service.CorfuProtocolSequencer.getTokenRespo
 import static org.corfudb.runtime.proto.RpcCommon.SequencerMetricsMsg.SequencerStatus;
 import static org.corfudb.runtime.proto.service.Sequencer.BootstrapSequencerRequestMsg;
 import static org.corfudb.runtime.proto.service.Sequencer.BootstrapSequencerResponseMsg;
-import static org.corfudb.runtime.proto.service.Sequencer.StreamsAddressRequestMsg;
 import static org.corfudb.runtime.proto.service.Sequencer.TokenRequestMsg;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -136,11 +132,15 @@ public class SequencerServerTest {
 
     /**
      * Initialize the DirectExecutorService before running individual tests.
+     * We also mock the health report scheduler to avoid having another thread
+     * interfere with the mocked behaviour of other objects.
      */
     @Before
     public void setup() {
         when(mockServerContext.getExecutorService(anyInt(), anyString()))
                 .thenReturn(MoreExecutors.newDirectExecutorService());
+        when(spySequencerFactoryHelper.getHealthReportScheduler(anyString()))
+                .thenReturn(mock(ScheduledExecutorService.class));
     }
 
     /**
@@ -425,6 +425,7 @@ public class SequencerServerTest {
                 sendResponse(responseCaptor.capture(), any(ChannelHandlerContext.class));
 
         ResponseMsg response = responseCaptor.getValue();
+        assertTrue(response.getPayload().hasStreamsAddressResponse());
         List<UuidToStreamAddressSpacePairMsg> streamAddressSpacePairMsgList =
                 response.getPayload().getStreamsAddressResponse().getAddressMapList();
         assertEquals(1, streamAddressSpacePairMsgList.size());
@@ -450,6 +451,7 @@ public class SequencerServerTest {
         verify(mockServerRouter, times(2))
                 .sendResponse(responseCaptor.capture(), any(ChannelHandlerContext.class));
         response = responseCaptor.getValue();
+        assertTrue(response.getPayload().hasStreamsAddressResponse());
         streamAddressSpacePairMsgList =
                 response.getPayload().getStreamsAddressResponse().getAddressMapList();
         assertEquals(2, streamAddressSpacePairMsgList.size());
@@ -515,8 +517,9 @@ public class SequencerServerTest {
     }
 
     /**
-     * Test that when client sends the SequencerMetricsRequestMsg, the server responds with
-     * SequencerMetricsResponseMsg with SequencerStatus.READY as its content.
+     * Test that the Sequencer can correctly handle SEQUENCER_TRIM_REQUEST messages.
+     * Based on the provided trim mark, the Sequencer is expected to evict entries
+     * from the cache and cleanup its stream address spaces.
      */
     @Test
     public void testSequencerTrimRequest() {
@@ -557,7 +560,7 @@ public class SequencerServerTest {
                 .sendResponse(responseCaptor.capture(), any(ChannelHandlerContext.class));
         ResponseMsg response = responseCaptor.getValue();
 
-        // Assert that the payload has a SequencerMetricsResponseMsg and that the base
+        // Assert that the payload has a SequencerTrimResponseMsg and that the base
         // header fields have remained the same
         assertTrue(compareBaseHeaderFields(request.getHeader(), response.getHeader()));
         // Assert that response has a sequencerTrimResponse object
