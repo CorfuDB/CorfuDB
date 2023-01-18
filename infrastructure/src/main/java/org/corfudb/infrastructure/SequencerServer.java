@@ -212,11 +212,7 @@ public class SequencerServer extends AbstractServer {
         );
         streamsAddressMap = sequencerFactoryHelper.getStreamAddressSpaceMap();
         streamTailToGlobalTailMap = sequencerFactoryHelper.getStreamTailToGlobalTailMap();
-        healthReportScheduler = Executors.newSingleThreadScheduledExecutor(
-                new ThreadFactoryBuilder()
-                        .setDaemon(true)
-                        .setNameFormat("sequencer-health")
-                        .build());
+        healthReportScheduler = sequencerFactoryHelper.getHealthReportScheduler("sequencer-health");
         HealthMonitor.reportIssue(Issue.createInitIssue(Component.SEQUENCER));
         healthReportScheduler.scheduleAtFixedRate(this::reportSequencerHealth, INIT_DELAY, DELAY_NUM, DELAY_UNITS);
     }
@@ -916,6 +912,14 @@ public class SequencerServer extends AbstractServer {
 
         Long getGlobalLogTail() {
             return Address.getMinAddress();
+        }
+
+        ScheduledExecutorService getHealthReportScheduler(@Nonnull String name) {
+            return Executors.newSingleThreadScheduledExecutor(
+                    new ThreadFactoryBuilder()
+                            .setDaemon(true)
+                            .setNameFormat(name)
+                            .build());
         }
     }
 }
