@@ -172,6 +172,7 @@ public abstract class DistributedCheckpointer {
             try {
                 CheckpointWriter<ICorfuTable<?,?>> cpw = checkpointWriterFn.apply(tableName);
                 cpw.appendCheckpoint(Optional.of(livenessUpdater));
+                cpw.getCorfuTable().close();
                 returnStatus = StatusType.COMPLETED;
                 break;
             } catch (RuntimeException re) {

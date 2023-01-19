@@ -91,12 +91,18 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
     private final ISerializer serializer;
     private final RocksDB rocksDb;
 
+    private final String absolutePathString;
+
+    private Options options;
+
     public PersistedStreamingMap(@NonNull Path dataPath,
                                  @NonNull Options options,
                                  @NonNull ISerializer serializer,
                                  @NonNull CorfuRuntime corfuRuntime) {
+        this.absolutePathString = dataPath.toFile().getAbsolutePath();
+        this.options = options;
         try {
-            RocksDB.destroyDB(dataPath.toFile().getAbsolutePath(), options);
+            RocksDB.destroyDB(this.absolutePathString, this.options);
             this.rocksDb = RocksDB.open(options, dataPath.toFile().getAbsolutePath());
         } catch (RocksDBException e) {
             throw new UnrecoverableCorfuError(e);
@@ -311,5 +317,13 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
     @Override
     public void close() {
         this.rocksDb.close();
+
+        // Release disk space
+        try {
+            RocksDB.destroyDB(this.absolutePathString, this.options);
+            log.info("Cleared RocksDB data on {}", absolutePathString);
+        } catch (RocksDBException e) {
+            throw new UnrecoverableCorfuError(e);
+        }
     }
 }

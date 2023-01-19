@@ -49,6 +49,8 @@ public interface ICorfuTable<K, V> {
 
     void clear();
 
+    void close();
+
     boolean isTableCached();
 
 }

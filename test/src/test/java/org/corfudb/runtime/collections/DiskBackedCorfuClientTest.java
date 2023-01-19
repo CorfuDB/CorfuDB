@@ -482,6 +482,21 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
     }
 
     /**
+     * Verify RocksDB persisted cache is cleaned up
+     */
+    @Property(tries = NUM_OF_TRIES)
+    void verifyPersistedCacheCleanUp() {
+        resetTests();
+        assertThat(persistedCacheLocation).doesNotExist();
+        try (final CorfuTable<String, String> table1 = setupTable(alternateMapName)) {
+            table1.put(defaultNewMapEntry, defaultNewMapEntry);
+            assertThat(persistedCacheLocation).exists();
+            table1.close();
+            assertThat(persistedCacheLocation).doesNotExist();
+        }
+    }
+
+    /**
      * A custom generator for a set of {@link Uuid}.
      */
     @Provide

@@ -53,6 +53,11 @@ public class PersistentCorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<
     }
 
     @Override
+    public void close() {
+        // NO OP
+    }
+
+    @Override
     public boolean isTableCached() {
         return ((MVOCorfuCompileProxy)proxy).isObjectCached();
     }
