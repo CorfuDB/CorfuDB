@@ -177,7 +177,7 @@ class CommandBuilder(object):
         return " ".join(cmd)
 
 
-class Wizard(object):
+class CompactorRunner(object):
     def __init__(self, args):
         """
         Initialize components and read user provided configuration.
@@ -233,7 +233,7 @@ class Wizard(object):
         Note: need to ensure the 15min gap between two runs of this tool to avoid trim exception.
         """
         with open(self._config.configPath, "r") as config:
-            compactor_config = yaml.load(config)
+            compactor_config = yaml.load(config, yaml.FullLoader)
         corfu_paths = compactor_config["CorfuPaths"]
         logging.basicConfig(filename=corfu_paths["CompactorLogfile"],
                     format='%(asctime)s.%(msecs)03dZ %(levelname)5s Runner - %(message)s',
@@ -289,11 +289,13 @@ class Wizard(object):
         config = Config()
         config.network_interface = args.ifname
         config.corfu_port = args.port
-        if args.hostname:
-            config.hostname = args.hostname
         config.configPath = args.compactorConfig
-        config.instantTriggerCompaction = args.instantTriggerCompaction
-        config.trim = args.trimAfterCheckpoint
+        if 'hostname' in args and args.hostname:
+            config.hostname = args.hostname
+        if 'instantTriggerCompaction' in args:
+            config.instantTriggerCompaction = args.instantTriggerCompaction
+        if 'trimAfterCheckpoint' in args:
+            config.trim = args.trimAfterCheckpoint
         if 'freezeCompaction' in args:
             config.freezeCompaction = args.freezeCompaction
         if 'unfreezeCompaction' in args:
@@ -348,6 +350,6 @@ if __name__ == "__main__":
                             help="To enable trim again after checkpointing all tables",
                             required=False)
     args = arg_parser.parse_args()
-    wizard = Wizard(args)
-    wizard.run()
+    compactor_runner = CompactorRunner(args)
+    compactor_runner.run()
 
