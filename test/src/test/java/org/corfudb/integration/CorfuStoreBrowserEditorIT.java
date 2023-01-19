@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import com.google.protobuf.Any;
 import com.google.protobuf.DynamicMessage;
+import com.google.protobuf.Message;
 import com.google.protobuf.UnknownFieldSet;
 
 import java.io.IOException;
@@ -17,6 +18,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.corfudb.browser.CorfuStoreBrowserEditor;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -604,6 +606,24 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
         TxnContext tx = store.txn(namespace);
         tx.putRecord(table1, uuidKey, uuidVal, metadata);
         tx.commit();
+
+        final String CORFU_SYSTEM_NAMESPACE = "CorfuSystem";
+        final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
+        final Table<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, Message> replicationStatusTable =
+                store.openTable(CORFU_SYSTEM_NAMESPACE,
+                        REPLICATION_STATUS_TABLE,
+                        LogReplicationMetadata.ReplicationStatusKey.class,
+                        LogReplicationMetadata.ReplicationStatusVal.class,
+                        null,
+                        TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+
+        final String key = "sample";
+        LogReplicationMetadata.ReplicationStatusKey keyMsg = LogReplicationMetadata.ReplicationStatusKey.newBuilder().setClusterId(key).build();
+        LogReplicationMetadata.ReplicationStatusVal valMsg = LogReplicationMetadata.ReplicationStatusVal.newBuilder().build();
+        TxnContext LrTx = store.txn(CORFU_SYSTEM_NAMESPACE);
+        LrTx.putRecord(replicationStatusTable, keyMsg, valMsg, null);
+        LrTx.commit();
+
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
@@ -642,6 +662,10 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
             newValString));
         // Try to delete a deleted key and verify it is a no-op
         assertThat(browser.deleteRecord(namespace, tableName, keyString)).isZero();
+
+
+        assertThat(browser.deleteRecord(CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE, key)).isEqualTo(1);
+        assertThat(browser.deleteRecord(CORFU_SYSTEM_NAMESPACE, REPLICATION_STATUS_TABLE, key)).isZero();
         runtime.shutdown();
     }
 }

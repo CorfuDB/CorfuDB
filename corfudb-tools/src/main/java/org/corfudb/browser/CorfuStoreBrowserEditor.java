@@ -3,6 +3,7 @@ package org.corfudb.browser;
 import com.google.common.collect.Iterables;
 import com.google.common.reflect.TypeToken;
 
+import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -14,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
@@ -23,8 +25,10 @@ import java.util.stream.Stream;
 import com.google.protobuf.Any;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CorfuOptions;
@@ -36,11 +40,13 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.ExampleSchemas.ExampleTableName;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuStoreShim;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
+import org.corfudb.runtime.collections.ManagedTxnContext;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.StreamingMap;
@@ -52,11 +58,15 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
+import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.ProtobufSerializer;
 import org.rocksdb.Options;
 
 import com.google.protobuf.util.JsonFormat;
 
 import javax.annotation.Nonnull;
+
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_STATUS_TABLE;
 
 /**
  * This is the CorfuStore Browser/Editor Tool which prints data in a given
@@ -454,7 +464,9 @@ public class CorfuStoreBrowserEditor {
         String fullName = TableRegistry.getFullyQualifiedTableName(namespace,
                 tableName);
         UUID streamUUID = CorfuRuntime.getStreamID(fullName);
-
+        if (tableName.equals(REPLICATION_STATUS_TABLE)) {
+            return deleteBypassingSerializer(namespace, tableName, keyToDelete, streamUUID);
+        }
         TableName tableNameProto = TableName.newBuilder().setTableName(tableName)
                 .setNamespace(namespace).build();
 
@@ -492,6 +504,85 @@ public class CorfuStoreBrowserEditor {
                 runtime.getObjectsView().TXAbort();
             }
         }
+        return numKeysDeleted;
+    }
+
+    private int deleteBypassingSerializer(String namespace, String tableName, String keyToDelete, UUID streamUUID ) {
+        runtime.getSerializers().removeSerializer(dynamicProtobufSerializer);
+        ProtobufSerializer protoSerializer = new ProtobufSerializer(new ConcurrentHashMap<>());
+        runtime.getSerializers().registerSerializer(protoSerializer);
+
+        CorfuStoreShim store = new CorfuStoreShim(runtime);
+        int numKeysDeleted = 0;
+        LogReplicationMetadata.ReplicationStatusKey keyMsg = LogReplicationMetadata.ReplicationStatusKey.newBuilder()
+                .setClusterId(keyToDelete)
+                .build();
+        Table<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal, Message> LrStatustable =
+                null;
+
+        try {
+            LrStatustable = store.openTable(namespace,
+                    tableName,
+                    LogReplicationMetadata.ReplicationStatusKey.class,
+                    LogReplicationMetadata.ReplicationStatusVal.class,
+                    null,
+                    TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+
+        } catch (Exception ex) {
+            log.error("Unable to open table " + namespace + "$" + tableName);
+            throw new RuntimeException("Unable to open table.");
+        }
+
+//        CorfuTable<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal> corfuTable =
+//                runtime.getObjectsView().build()
+//                        .setStreamName(TableRegistry.getFullyQualifiedTableName(namespace, tableName))
+//                        .setTypeToken(new TypeToken<CorfuTable<LogReplicationMetadata.ReplicationStatusKey, LogReplicationMetadata.ReplicationStatusVal>>() {})
+//                        .open();
+//
+//        try {
+//            runtime.getObjectsView().TXBegin();
+//            if (!corfuTable.containsKey(keyMsg)) {
+//                System.out.println("Key "+keyToDelete+" not found in "+tableName);
+//                runtime.getObjectsView().TXEnd();
+//                numKeysDeleted = 0;
+//                return numKeysDeleted;
+//            }
+//            System.out.println("Deleting record with Key " + keyToDelete +
+//                    " in table " + tableName + " and namespace " + namespace +
+//                    ".  Stream Id " + streamUUID);
+//            corfuTable.delete(keyMsg);
+//            runtime.getObjectsView().TXEnd();
+//            System.out.println("\n======================\n");
+//            numKeysDeleted = 1;
+//        } catch (TransactionAbortedException e) {
+//            log.error("Transaction to delete record {} aborted.", keyToDelete, e);
+//        } finally {
+//            if (TransactionalContext.isInTransaction()) {
+//                runtime.getObjectsView().TXAbort();
+//            }
+//        }
+        try {
+            CorfuStoreEntry record;
+            try (ManagedTxnContext txn = store.tx(namespace)) {
+                record = txn.getRecord(tableName, keyMsg);
+
+                if (record.getPayload() != null) {
+                    System.out.println("Bypassing the DynamicSerializer and Deleting record with Key " + keyToDelete +
+                            " in table " + tableName + " and namespace " + namespace +
+                            ".  Stream Id " + streamUUID);
+                    txn.delete(tableName, keyMsg);
+                    numKeysDeleted++;
+                } else {
+                    System.out.println("Key: " + keyMsg.getClusterId() + " is not found in table " + tableName);
+                }
+
+                txn.commit();
+                System.out.println("\n======================\n");
+            }
+        } catch (TransactionAbortedException e) {
+            log.error("Transaction to delete record {} aborted.", keyToDelete, e);
+        }
+
         return numKeysDeleted;
     }
 
