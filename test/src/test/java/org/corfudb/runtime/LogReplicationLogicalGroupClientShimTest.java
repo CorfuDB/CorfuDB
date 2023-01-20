@@ -24,26 +24,41 @@ import java.util.NoSuchElementException;
 import java.util.Set;
 
 public class LogReplicationLogicalGroupClientShimTest extends AbstractViewTest {
+    private static final String namespace = "CorfuSystem";
+    private static final String registrationTableName = "LogReplicationRegistrationTable";
+    private static final String metadataTableName = "LogReplicationModelMetadataTable";
+    private static final String clientName = "client";
+
+    private static Table<ClientRegistrationId, ClientRegistrationInfo, ManagedResources> replicationRegistrationTable;
+    private static Table<ClientDestinationInfoKey, DestinationInfoVal, ManagedResources> sourceMetadataTable;
+    private static CorfuRuntime runtime;
+    private static LogReplicationLogicalGroupClient client;
 
     private CorfuRuntime getTestRuntime() {
         return getDefaultRuntime();
     }
-    private static String namespace;
-    private static String registrationTableName;
-    private static String metadataTableName;
-    private static String clientName;
-    private static CorfuRuntime runtime;
-    private static CorfuStoreShim store;
 
     @Before
     public void loadProperties() throws Exception {
-        namespace = "CorfuSystem";
-        registrationTableName = "LogReplicationRegistrationTable";
-        metadataTableName = "LogReplicationModelMetadataTable";
-        clientName = "client";
-
         runtime = getTestRuntime();
-        store = new CorfuStoreShim(runtime);
+        CorfuStoreShim store = new CorfuStoreShim(runtime);
+
+        replicationRegistrationTable = store.openTable(
+                namespace,
+                registrationTableName,
+                ClientRegistrationId.class,
+                ClientRegistrationInfo.class,
+                ManagedResources.class,
+                TableOptions.fromProtoSchema(Uuid.class));
+        sourceMetadataTable = store.openTable(
+                namespace,
+                metadataTableName,
+                ClientDestinationInfoKey.class,
+                DestinationInfoVal.class,
+                ManagedResources.class,
+                TableOptions.fromProtoSchema(Uuid.class));
+
+        client = new LogReplicationLogicalGroupClient(runtime, clientName);
     }
 
     /**
@@ -52,52 +67,32 @@ public class LogReplicationLogicalGroupClientShimTest extends AbstractViewTest {
      */
     @Test
     public void testRegisterReplicationClient() throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
-        final Table<ClientRegistrationId, ClientRegistrationInfo, ManagedResources> table = store.openTable(
-                namespace,
-                registrationTableName,
-                ClientRegistrationId.class,
-                ClientRegistrationInfo.class,
-                ManagedResources.class,
-                TableOptions.fromProtoSchema(Uuid.class));
-
         // Test registering client with null/empty client name
-        Assert.assertThrows(IllegalArgumentException.class, () ->  new LogReplicationLogicalGroupClient(runtime, null));
-        Assert.assertThrows(IllegalArgumentException.class, () ->  new LogReplicationLogicalGroupClient(runtime, ""));
+        Assert.assertThrows(IllegalArgumentException.class, () -> new LogReplicationLogicalGroupClient(runtime, null));
+        Assert.assertThrows(IllegalArgumentException.class, () -> new LogReplicationLogicalGroupClient(runtime, ""));
 
-        // Test registering a new client
-        new LogReplicationLogicalGroupClient(runtime, clientName);
+        // Check to see if client was registered from the @Before function
         final int expectedNumberRegisteredClients = 1;
-        Assert.assertEquals(expectedNumberRegisteredClients, table.count());
+        Assert.assertEquals(expectedNumberRegisteredClients, replicationRegistrationTable.count());
 
         // Test registering a duplicate client
         new LogReplicationLogicalGroupClient(runtime, clientName);
         final int expectedNumberRegisteredClients1 = 1;
-        Assert.assertEquals(expectedNumberRegisteredClients1, table.count());
+        Assert.assertEquals(expectedNumberRegisteredClients1, replicationRegistrationTable.count());
 
         // Test registering 2 additional clients
         new LogReplicationLogicalGroupClient(runtime, "client1");
         new LogReplicationLogicalGroupClient(runtime, "client2");
         final int expectedNumberRegisteredClients2 = 3;
-        Assert.assertEquals(expectedNumberRegisteredClients2, table.count());
+        Assert.assertEquals(expectedNumberRegisteredClients2, replicationRegistrationTable.count());
     }
 
     /**
      * Test add destination
      *
-     * @throws Exception exception
      */
     @Test
-    public void testAddDestination() throws Exception {
-        final Table<ClientDestinationInfoKey, DestinationInfoVal, ManagedResources> table = store.openTable(
-                namespace,
-                metadataTableName,
-                ClientDestinationInfoKey.class,
-                DestinationInfoVal.class,
-                ManagedResources.class,
-                TableOptions.fromProtoSchema(Uuid.class));
-
-        LogReplicationLogicalGroupClient client = new LogReplicationLogicalGroupClient(runtime, clientName);
-
+    public void testAddDestination() {
         // Test adding a destination with null/empty logicalGroup
         Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination("", "DESTINATION"));
         Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination(null, "DESTINATION"));
@@ -110,7 +105,7 @@ public class LogReplicationLogicalGroupClientShimTest extends AbstractViewTest {
         final int expectedNumberDestinations = 1;
         final String currentTableEntryKey = "LOGICAL-GROUP";
         client.addDestination("LOGICAL-GROUP", "DESTINATION");
-        Assert.assertEquals(expectedNumberDestinations, table.entryStream()
+        Assert.assertEquals(expectedNumberDestinations, sourceMetadataTable.entryStream()
                 .filter(e -> e.getKey().getGroupName().equals(currentTableEntryKey))
                 .findFirst().get().getPayload().getDestinationIdsList().size());
 
@@ -118,7 +113,7 @@ public class LogReplicationLogicalGroupClientShimTest extends AbstractViewTest {
         final int expectedNumberDestinations1 = 1;
         final String currentTableEntryKey1 = "LOGICAL-GROUP";
         client.addDestination("LOGICAL-GROUP", "DESTINATION");
-        Assert.assertEquals(expectedNumberDestinations1, table.entryStream()
+        Assert.assertEquals(expectedNumberDestinations1, sourceMetadataTable.entryStream()
                 .filter(e -> e.getKey().getGroupName().equals(currentTableEntryKey1))
                 .findFirst().get().getPayload().getDestinationIdsList().size());
 
@@ -127,32 +122,21 @@ public class LogReplicationLogicalGroupClientShimTest extends AbstractViewTest {
         final String currentTableEntryKey2 = "LOGICAL-GROUP1";
         client.addDestination("LOGICAL-GROUP1", "DESTINATION");
         client.addDestination("LOGICAL-GROUP1", "DESTINATION1");
-        Assert.assertEquals(expectedNumberDestinations2, table.entryStream()
+        Assert.assertEquals(expectedNumberDestinations2, sourceMetadataTable.entryStream()
                 .filter(e -> e.getKey().getGroupName().equals(currentTableEntryKey2))
                 .findFirst().get().getPayload().getDestinationIdsList().size());
 
         // Test that the overall table size is correct, 2 expected since 2 groups created
         final int expectedNumberRegisteredGroups = 2;
-        Assert.assertEquals(expectedNumberRegisteredGroups, table.count());
+        Assert.assertEquals(expectedNumberRegisteredGroups, sourceMetadataTable.count());
     }
 
     /**
      * Test remove destination
      *
-     * @throws Exception exception
      */
     @Test
-    public void testRemoveDestination() throws Exception {
-        final Table<ClientDestinationInfoKey, DestinationInfoVal, ManagedResources> table = store.openTable(
-                namespace,
-                metadataTableName,
-                ClientDestinationInfoKey.class,
-                DestinationInfoVal.class,
-                ManagedResources.class,
-                TableOptions.fromProtoSchema(Uuid.class));
-
-        LogReplicationLogicalGroupClient client = new LogReplicationLogicalGroupClient(runtime, clientName);
-
+    public void testRemoveDestination() {
         // Test adding a destination with null/empty logicalGroup
         Assert.assertThrows(IllegalArgumentException.class, () -> client.removeDestination("", "DESTINATION"));
         Assert.assertThrows(IllegalArgumentException.class, () -> client.removeDestination(null, "DESTINATION"));
@@ -168,7 +152,7 @@ public class LogReplicationLogicalGroupClientShimTest extends AbstractViewTest {
         final int expectedNumberRegisteredGroups = 0;
         client.addDestination("LOGICAL-GROUP", "DESTINATION");
         client.removeDestination("LOGICAL-GROUP", "DESTINATION");
-        Assert.assertEquals(expectedNumberRegisteredGroups, table.count());
+        Assert.assertEquals(expectedNumberRegisteredGroups, sourceMetadataTable.count());
 
         // Test removal of destinations
         Set<String> expectedDestinations = new HashSet<>(Arrays.asList("DESTINATION", "DESTINATION2"));
@@ -179,7 +163,7 @@ public class LogReplicationLogicalGroupClientShimTest extends AbstractViewTest {
         client.removeDestination("LOGICAL-GROUP", "DESTINATION1");
         // DESTINATION1 does not exist after removal, log warning here but should not throw exception
         client.removeDestination("LOGICAL-GROUP", "DESTINATION1");
-        Assert.assertEquals(expectedDestinations, new HashSet<>(table.entryStream()
+        Assert.assertEquals(expectedDestinations, new HashSet<>(sourceMetadataTable.entryStream()
                 .filter(e -> e.getKey().getGroupName().equals(currentTableEntryKey))
                 .findFirst().get().getPayload().getDestinationIdsList()));
     }
@@ -187,20 +171,9 @@ public class LogReplicationLogicalGroupClientShimTest extends AbstractViewTest {
     /**
      * Test add multiple destinations
      *
-     * @throws Exception exception
      */
     @Test
-    public void testAddListOfDestination() throws Exception {
-        final Table<ClientDestinationInfoKey, DestinationInfoVal, ManagedResources> table = store.openTable(
-                namespace,
-                metadataTableName,
-                ClientDestinationInfoKey.class,
-                DestinationInfoVal.class,
-                ManagedResources.class,
-                TableOptions.fromProtoSchema(Uuid.class));
-
-        LogReplicationLogicalGroupClient client = new LogReplicationLogicalGroupClient(runtime, clientName);
-
+    public void testAddListOfDestination() {
         // Test adding with request having a malformed logicalGroup
         List<String> destinationsToAdd = Collections.singletonList("DESTINATION");
         Assert.assertThrows(IllegalArgumentException.class, () -> client.addDestination("", destinationsToAdd));
@@ -220,7 +193,7 @@ public class LogReplicationLogicalGroupClientShimTest extends AbstractViewTest {
         final String currentTableEntryKey = "LOGICAL-GROUP";
         List<String> destinationsToAdd4 = Arrays.asList("DESTINATION", "DESTINATION");
         client.addDestination("LOGICAL-GROUP", destinationsToAdd4);
-        Assert.assertEquals(expectedNumberDestinations, table.entryStream()
+        Assert.assertEquals(expectedNumberDestinations, sourceMetadataTable.entryStream()
                 .filter(e -> e.getKey().getGroupName().equals(currentTableEntryKey))
                 .findFirst().get().getPayload().getDestinationIdsList().size());
 
@@ -231,32 +204,21 @@ public class LogReplicationLogicalGroupClientShimTest extends AbstractViewTest {
         List<String> destinationsToAdd6 = Arrays.asList("DESTINATION2", "DESTINATION3");
         client.addDestination("LOGICAL-GROUP1", destinationsToAdd5);
         client.addDestination("LOGICAL-GROUP1", destinationsToAdd6);
-        Assert.assertEquals(expectedNumberDestinations2, table.entryStream()
+        Assert.assertEquals(expectedNumberDestinations2, sourceMetadataTable.entryStream()
                 .filter(e -> e.getKey().getGroupName().equals(currentTableEntryKey2))
                 .findFirst().get().getPayload().getDestinationIdsList().size());
 
         // Test that the overall table size is correct
         final int expectedNumberRegisteredGroups = 2;
-        Assert.assertEquals(expectedNumberRegisteredGroups, table.count());
+        Assert.assertEquals(expectedNumberRegisteredGroups, sourceMetadataTable.count());
     }
 
     /**
      * Test removal of multiple destinations
      *
-     * @throws Exception exception
      */
     @Test
-    public void testRemoveListOfDestinations() throws Exception {
-        final Table<ClientDestinationInfoKey, DestinationInfoVal, ManagedResources> table = store.openTable(
-                namespace,
-                metadataTableName,
-                ClientDestinationInfoKey.class,
-                DestinationInfoVal.class,
-                ManagedResources.class,
-                TableOptions.fromProtoSchema(Uuid.class));
-
-        LogReplicationLogicalGroupClient client = new LogReplicationLogicalGroupClient(runtime, clientName);
-
+    public void testRemoveListOfDestinations() {
         // Test adding with request having a malformed logicalGroup
         List<String> destinationsToRemove = Collections.singletonList("DESTINATION");
         Assert.assertThrows(IllegalArgumentException.class, () -> client.removeDestination("", destinationsToRemove));
@@ -279,7 +241,7 @@ public class LogReplicationLogicalGroupClientShimTest extends AbstractViewTest {
         List<String> destinationsToRemove4 = Arrays.asList("DESTINATION", "DESTINATION1");
         client.addDestination("LOGICAL-GROUP", destinationsToRemove4);
         client.removeDestination("LOGICAL-GROUP", destinationsToRemove4);
-        Assert.assertEquals(expectedNumberRegisteredGroups, table.count());
+        Assert.assertEquals(expectedNumberRegisteredGroups, sourceMetadataTable.count());
 
         // Test removal of multiple destinations
         Set<String> expectedDestinations = new HashSet<>(Arrays.asList("DESTINATION", "DESTINATION2"));
@@ -291,7 +253,7 @@ public class LogReplicationLogicalGroupClientShimTest extends AbstractViewTest {
         client.removeDestination("LOGICAL-GROUP", destinationsToRemove5);
         // None in destinationsToRemove5 should exist after removal, log warning here but should not throw exception
         client.removeDestination("LOGICAL-GROUP", destinationsToRemove5);
-        Assert.assertEquals(expectedDestinations, new HashSet<>(table.entryStream()
+        Assert.assertEquals(expectedDestinations, new HashSet<>(sourceMetadataTable.entryStream()
                         .filter(e -> e.getKey().getGroupName().equals(currentTableEntryKey))
                         .findFirst().get().getPayload().getDestinationIdsList()));
     }
@@ -299,23 +261,12 @@ public class LogReplicationLogicalGroupClientShimTest extends AbstractViewTest {
     /**
      * Test show destinations for a logical group
      *
-     * @throws Exception exception
      */
     @Test
-    public void testShowDestinations() throws Exception {
-        store.openTable(
-                namespace,
-                metadataTableName,
-                ClientDestinationInfoKey.class,
-                DestinationInfoVal.class,
-                ManagedResources.class,
-                TableOptions.fromProtoSchema(Uuid.class));
-
-        LogReplicationLogicalGroupClient client = new LogReplicationLogicalGroupClient(runtime, clientName);
-
+    public void testShowDestinations() {
         // Test show destinations with null/empty group
-        Assert.assertThrows(IllegalArgumentException.class, () ->  client.showDestinations(null));
-        Assert.assertThrows(IllegalArgumentException.class, () ->  client.showDestinations(""));
+        Assert.assertThrows(IllegalArgumentException.class, () -> client.showDestinations(null));
+        Assert.assertThrows(IllegalArgumentException.class, () -> client.showDestinations(""));
 
         // Add destinations to show
         client.addDestination("LOGICAL-GROUP", "DESTINATION");
