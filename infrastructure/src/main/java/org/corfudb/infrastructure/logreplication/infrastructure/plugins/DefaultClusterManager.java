@@ -331,7 +331,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
 
         List<ClusterDescriptor> newActiveClusters = new ArrayList<>();
         newActiveClusters.add(new ClusterDescriptor(
-                currentActive.getClusterId(), ClusterRole.ACTIVE, BACKUP_CORFU_PORT));
+                DefaultClusterConfig.getBackupClusterId(), ClusterRole.ACTIVE, BACKUP_CORFU_PORT));
 
         NodeDescriptor backupNode = new NodeDescriptor(
                 DefaultClusterConfig.getDefaultHost(),

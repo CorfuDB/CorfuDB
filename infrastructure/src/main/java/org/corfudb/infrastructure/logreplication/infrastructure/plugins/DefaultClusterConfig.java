@@ -48,6 +48,10 @@ public final class DefaultClusterConfig {
     private static final String standbyLogReplicationPort = "9020";
 
     @Getter
+    private static final String backupClusterId = "456e4567-e89b-12d3-a456-556642440003";
+
+
+    @Getter
     private static final String backupLogReplicationPort = "9030";
 
     @Getter
