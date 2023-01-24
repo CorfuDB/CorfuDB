@@ -23,7 +23,7 @@ public class CorfuStoreCompactorMain {
     private final CorfuStore corfuStore;
     private final CorfuStoreCompactorConfig config;
     private final DistributedCheckpointerHelper distributedCheckpointerHelper;
-    private static final int RETRY_CHECKPOINTING = 5;
+    public static final int RETRY_CHECKPOINTING = 5;
     private static final int RETRY_CHECKPOINTING_SLEEP_SECOND = 10;
 
     public CorfuStoreCompactorMain(String[] args) throws Exception {
@@ -37,6 +37,15 @@ public class CorfuStoreCompactorMain {
         this.corfuStore = new CorfuStore(corfuRuntime);
 
         this.distributedCheckpointerHelper = new DistributedCheckpointerHelper(corfuStore);
+    }
+
+    public CorfuStoreCompactorMain(CorfuStoreCompactorConfig config, CorfuRuntime corfuRuntime, CorfuRuntime cpRuntime,
+                                   CorfuStore corfuStore, DistributedCheckpointerHelper distributedCheckpointerHelper) {
+        this.config = config;
+        this.cpRuntime = cpRuntime;
+        this.corfuRuntime = corfuRuntime;
+        this.corfuStore = corfuStore;
+        this.distributedCheckpointerHelper = distributedCheckpointerHelper;
     }
 
     /**
@@ -55,7 +64,7 @@ public class CorfuStoreCompactorMain {
         log.info("Exiting CorfuStoreCompactor");
     }
 
-    private void doCompactorAction() {
+    protected void doCompactorAction() {
         if (config.isFreezeCompaction() || config.isDisableCompaction()) {
             if (config.isDisableCompaction()) {
                 log.info("Disabling compaction...");
@@ -87,17 +96,17 @@ public class CorfuStoreCompactorMain {
             }
         }
         if (config.isStartCheckpointing()) {
-            checkpoint();
+            DistributedCheckpointer distributedCheckpointer = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
+                    .corfuRuntime(corfuRuntime)
+                    .cpRuntime(Optional.of(cpRuntime))
+                    .persistedCacheRoot(config.getPersistedCacheRoot())
+                    .isClient(false)
+                    .build(), corfuStore, distributedCheckpointerHelper.getCompactorMetadataTables());
+            checkpoint(distributedCheckpointer);
         }
     }
 
-    private void checkpoint() {
-        DistributedCheckpointer distributedCheckpointer = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
-                .corfuRuntime(corfuRuntime)
-                .cpRuntime(Optional.of(cpRuntime))
-                .persistedCacheRoot(config.getPersistedCacheRoot())
-                .isClient(false)
-                .build(), corfuStore, distributedCheckpointerHelper.getCompactorMetadataTables());
+    protected void checkpoint(DistributedCheckpointer distributedCheckpointer) {
         try {
             for (int i = 0; i < RETRY_CHECKPOINTING; i++) {
                 if (distributedCheckpointerHelper.hasCompactionStarted()) {

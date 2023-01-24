@@ -189,6 +189,7 @@ class Wizard(object):
         """
         Run compactor.
         """
+        self._print_and_log("Invoked compactor_runner...");
         if self._config.freezeCompaction and self._config.unfreezeCompaction:
             self._print_and_log("ERROR: Both freeze and unfreeze compaction parameters cannot be passed together")
             return

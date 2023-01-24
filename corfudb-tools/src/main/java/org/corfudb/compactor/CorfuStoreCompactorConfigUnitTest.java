@@ -1,7 +1,6 @@
-package org.corfudb;
+package org.corfudb.compactor;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.compactor.CorfuStoreCompactorConfig;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
 import org.corfudb.util.NodeLocator;
