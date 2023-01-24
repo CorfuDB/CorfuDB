@@ -86,14 +86,16 @@ public class LogReplicationLogicalGroupClient {
 
         try {
             this.replicationRegistrationTable = corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, LR_REGISTRATION_TABLE_NAME);
-        } catch (NoSuchElementException nse) {
+        } catch (NoSuchElementException | IllegalArgumentException e) {
+            log.warn("Failed getTable operation, opening table.", e);
             this.replicationRegistrationTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LR_REGISTRATION_TABLE_NAME, ClientRegistrationId.class,
                     ClientRegistrationInfo.class, null, TableOptions.fromProtoSchema(ClientRegistrationInfo.class));
         }
 
         try {
             this.sourceMetadataTable = corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, LR_MODEL_METADATA_TABLE_NAME);
-        } catch (NoSuchElementException nse) {
+        } catch (NoSuchElementException | IllegalArgumentException e) {
+            log.warn("Failed getTable operation, opening table.", e);
             this.sourceMetadataTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LR_MODEL_METADATA_TABLE_NAME, ClientDestinationInfoKey.class,
                     DestinationInfoVal.class, null, TableOptions.fromProtoSchema(DestinationInfoVal.class));
         }
@@ -114,8 +116,9 @@ public class LogReplicationLogicalGroupClient {
                         log.warn("Client already registered.\n--- ClientRegistrationId ---\n{}--- ClientRegistrationInfo ---\n{}", clientKey, clientRegistrationInfo);
                     } else {
                         txn.putRecord(replicationRegistrationTable, clientKey, clientInfo, null);
-                        txn.commit();
                     }
+
+                    txn.commit();
                 } catch (TransactionAbortedException tae) {
                     log.error("[{}] {}: {}", clientName, "Unable to register client", tae);
                     throw new RetryNeededException();
@@ -145,7 +148,8 @@ public class LogReplicationLogicalGroupClient {
 
                     if (clientDestinations != null) {
                         if (clientDestinations.getDestinationIdsList().contains(destination)) {
-                            log.debug("[{}] {}", clientName, "Destination already exists.");
+                            txn.commit();
+                            log.info("[{}] {}", clientName, "Destination already exists.");
                             return null;
                         }
                         clientDestinations = clientDestinations.toBuilder().addDestinationIds(destination).build();
@@ -187,7 +191,8 @@ public class LogReplicationLogicalGroupClient {
                     if (clientDestinations != null) {
                         finalRemoteDestinations.removeAll(clientDestinations.getDestinationIdsList());
                         if (finalRemoteDestinations.isEmpty()) {
-                            log.debug("[{}] {}", clientName, "All destinations already present.");
+                            txn.commit();
+                            log.info("[{}] {}", clientName, "All destinations already present.");
                             return null;
                         }
                         clientDestinations = clientDestinations.toBuilder().addAllDestinationIds(finalRemoteDestinations).build();
@@ -237,14 +242,15 @@ public class LogReplicationLogicalGroupClient {
                                         .build();
                                 txn.putRecord(sourceMetadataTable, clientInfoKey, clientDestinations, null);
                             }
-
-                            txn.commit();
-                            return null;
+                        } else {
+                            log.info("[{}] {} {}", clientName, "No matching destination found for:", destination);
                         }
 
-                        log.debug("[{}] {} {}", clientName, "No matching destination found for:", destination);
+                        txn.commit();
                         return null;
                     }
+
+                    txn.commit();
                     throw new NoSuchElementException(String.format("Record not found for group: %s", logicalGroup));
                 } catch (TransactionAbortedException tae) {
                     log.error("[{}] {}: {}", clientName, "Unable to remove destination, will be retried", tae);
@@ -280,27 +286,30 @@ public class LogReplicationLogicalGroupClient {
                                 .filter(i -> !removeRemoteDestinationsSet.contains(i))
                                 .collect(Collectors.toList());
 
-                        if (clientDestinationIdsList.size() == clientDestinationIdsSet.size()) {
-                            log.debug("[{}] {} {}", clientName, "No matching destinations found for:", removeRemoteDestinationsSet);
-                            return null;
-                        } else if (clientDestinationIdsList.size() + removeRemoteDestinationsSet.size() > clientDestinationIdsSet.size()) {
-                            removeRemoteDestinationsSet.removeAll(clientDestinationIdsSet);
-                            log.debug("[{}] {} {}", clientName, "Following destinations to remove are not present:", removeRemoteDestinationsSet);
-                        }
+                        if (clientDestinationIdsList.size() < clientDestinationIdsSet.size()) {
+                            if (clientDestinationIdsList.size() + removeRemoteDestinationsSet.size() > clientDestinationIdsSet.size()) {
+                                removeRemoteDestinationsSet.removeAll(clientDestinationIdsSet);
+                                log.info("[{}] {} {}", clientName, "Following destinations to remove are not present:", removeRemoteDestinationsSet);
+                            }
 
-                        if (clientDestinationIdsList.size() == 0) {
-                            txn.delete(sourceMetadataTable, clientInfoKey);
+                            if (clientDestinationIdsList.size() == 0) {
+                                txn.delete(sourceMetadataTable, clientInfoKey);
+                            } else {
+                                clientDestinations = clientDestinations.toBuilder()
+                                        .clearDestinationIds()
+                                        .addAllDestinationIds(clientDestinationIdsList)
+                                        .build();
+                                txn.putRecord(sourceMetadataTable, clientInfoKey, clientDestinations, null);
+                            }
                         } else {
-                            clientDestinations = clientDestinations.toBuilder()
-                                    .clearDestinationIds()
-                                    .addAllDestinationIds(clientDestinationIdsList)
-                                    .build();
-                            txn.putRecord(sourceMetadataTable, clientInfoKey, clientDestinations, null);
+                            log.info("[{}] {} {}", clientName, "No matching destinations found for:", removeRemoteDestinationsSet);
                         }
 
                         txn.commit();
                         return null;
                     }
+
+                    txn.commit();
                     throw new NoSuchElementException(String.format("Record not found for group: %s", logicalGroup));
                 } catch (TransactionAbortedException tae) {
                     log.error("[{}] {}: {}", clientName, "Unable to remove destinations, will be retried", tae);
@@ -314,30 +323,24 @@ public class LogReplicationLogicalGroupClient {
     }
 
     /**
-     * Displays the destinations associated with a specific logical group.
+     * Get the destinations associated with a specific logical group.
      *
-     * @param logicalGroup The group whose destinations will be displayed.
+     * @param logicalGroup The group whose destinations will be returned.
+     * @return The associated destinations as a list of strings.
      */
-    public void showDestinations(String logicalGroup) {
+    public List<String> getDestinations(String logicalGroup) {
         Preconditions.checkArgument(isValid(logicalGroup), String.format("[%s] %s", clientName, "logicalGroup is null or empty."));
         try {
-            IRetry.build(ExponentialBackoffRetry.class, () -> {
+            return IRetry.build(ExponentialBackoffRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
                     ClientDestinationInfoKey clientInfoKey = buildClientDestinationInfoKey(logicalGroup);
                     DestinationInfoVal clientDestinations = txn.getRecord(sourceMetadataTable, clientInfoKey).getPayload();
+                    txn.commit();
 
                     if (clientDestinations != null) {
-                        List<String> clientDestinationIdsList = new ArrayList<>(clientDestinations.getDestinationIdsList());
-
-                        log.info("\n========== Destinations for {} ==========\n", logicalGroup);
-                        for (String destination : clientDestinationIdsList) {
-                            log.info(destination);
-                        }
-                        log.info("==================================\n");
-
-                        txn.close();
-                        return null;
+                        return (List<String>) clientDestinations.getDestinationIdsList();
                     }
+
                     throw new NoSuchElementException(String.format("Record not found for group: %s", logicalGroup));
                 } catch (TransactionAbortedException tae) {
                     log.error("[{}] {}: {}", clientName, "Unable to show destinations, will be retried", tae);
@@ -365,7 +368,7 @@ public class LogReplicationLogicalGroupClient {
             return false;
         }
         for (Object obj : collection) {
-            if (obj == null || (obj instanceof String && ((String) obj).isEmpty())) {
+            if (obj == null || obj instanceof String && ((String) obj).isEmpty()) {
                 return false;
             }
         }
@@ -376,7 +379,7 @@ public class LogReplicationLogicalGroupClient {
         int initialSize = list.size();
         Set<String> set = new HashSet<>(list);
         if (initialSize != set.size()) {
-            log.debug("[{}] {}", clientName, "Duplicate elements removed from list.");
+            log.info("[{}] {}", clientName, "Duplicate elements removed from list.");
         }
         return set;
     }

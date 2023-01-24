@@ -203,6 +203,8 @@ public class LogReplicationLogicalGroupClientShimTest extends AbstractViewTest {
         List<String> destinationsToAdd5 = Arrays.asList("DESTINATION", "DESTINATION1");
         List<String> destinationsToAdd6 = Arrays.asList("DESTINATION2", "DESTINATION3");
         client.addDestination("LOGICAL-GROUP1", destinationsToAdd5);
+        // Test adding destinations that already exist, log warning here
+        client.addDestination("LOGICAL-GROUP1", destinationsToAdd5);
         client.addDestination("LOGICAL-GROUP1", destinationsToAdd6);
         Assert.assertEquals(expectedNumberDestinations2, sourceMetadataTable.entryStream()
                 .filter(e -> e.getKey().getGroupName().equals(currentTableEntryKey2))
@@ -263,19 +265,20 @@ public class LogReplicationLogicalGroupClientShimTest extends AbstractViewTest {
      *
      */
     @Test
-    public void testShowDestinations() {
+    public void testGetDestinations() {
         // Test show destinations with null/empty group
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.showDestinations(null));
-        Assert.assertThrows(IllegalArgumentException.class, () -> client.showDestinations(""));
+        Assert.assertThrows(IllegalArgumentException.class, () -> client.getDestinations(null));
+        Assert.assertThrows(IllegalArgumentException.class, () -> client.getDestinations(""));
 
         // Add destinations to show
         client.addDestination("LOGICAL-GROUP", "DESTINATION");
         client.addDestination("LOGICAL-GROUP", "DESTINATION1");
 
         // Test show destinations on an invalid group
-        Assert.assertThrows(NoSuchElementException.class, () -> client.showDestinations("LOGICAL-GROUP1"));
+        Assert.assertThrows(NoSuchElementException.class, () -> client.getDestinations("LOGICAL-GROUP1"));
 
         // Test show destinations
-        client.showDestinations("LOGICAL-GROUP");
+        Set<String> expectedDestinations = new HashSet<>(Arrays.asList("DESTINATION", "DESTINATION1"));
+        Assert.assertEquals(expectedDestinations, new HashSet<>(client.getDestinations("LOGICAL-GROUP")));
     }
 }
