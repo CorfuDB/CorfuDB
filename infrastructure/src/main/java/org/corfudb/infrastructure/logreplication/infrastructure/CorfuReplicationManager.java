@@ -58,8 +58,8 @@ public class CorfuReplicationManager {
      * Start Log Replication Manager, this will initiate a runtime against
      * each Sink session(cluster + replication model + client), to further start log replication.
      */
-    public void start() {
-        for (ClusterDescriptor remoteCluster : context.getTopology().getSinkClusters().values()) {
+    public void start(Map<String, ClusterDescriptor> connectionEndpoints) {
+        for (ClusterDescriptor remoteCluster : connectionEndpoints.values()) {
             for (ReplicationSubscriber subscriber : context.getConfig().getReplicationSubscriberToStreamsMap().keySet()) {
                 try {
                     startLogReplicationRuntime(remoteCluster, new ReplicationSession(remoteCluster.getClusterId(),
@@ -194,7 +194,7 @@ public class CorfuReplicationManager {
 
         // Start the newly added Sinks
         for (String clusterId : sinksToAdd) {
-            ClusterDescriptor clusterInfo = newConfig.getSinkClusters().get(clusterId);
+            ClusterDescriptor clusterInfo = newConfig.getRemoteSinkClusters().get(clusterId);
             for (ReplicationSubscriber subscriber : subscribers) {
                 startLogReplicationRuntime(clusterInfo, new ReplicationSession(clusterId, subscriber));
             }
@@ -203,7 +203,7 @@ public class CorfuReplicationManager {
         // The connection id or other transportation plugin's info could've changed for existing Sink clusters,
         // updating the routers will re-establish the connection to the correct endpoints/nodes
         for (String clusterId : intersection) {
-            ClusterDescriptor clusterInfo = newConfig.getSinkClusters().get(clusterId);
+            ClusterDescriptor clusterInfo = newConfig.getRemoteSinkClusters().get(clusterId);
             for (ReplicationSubscriber subscriber : subscribers) {
                 runtimeToRemoteSession.get(new ReplicationSession(clusterId, subscriber))
                     .updateRouterClusterDescriptor(clusterInfo);

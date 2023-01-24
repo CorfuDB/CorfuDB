@@ -1,6 +1,7 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -44,7 +45,7 @@ public class CorfuReplicationMultiSinkIT extends CorfuReplicationMultiSourceSink
 
     @Before
     public void setUp() throws Exception {
-        super.setUp(1, MAX_REMOTE_CLUSTERS);
+        super.setUp(1, MAX_REMOTE_CLUSTERS, DefaultClusterManager.TP_MULTI_SINK);
     }
 
     /**
@@ -70,6 +71,7 @@ public class CorfuReplicationMultiSinkIT extends CorfuReplicationMultiSourceSink
         verifySnapshotAndLogEntrySink(false);
         log.info("Preparing for role change");
         prepareTestTopologyForRoleChange(MAX_REMOTE_CLUSTERS, 1);
+        System.out.println("Testing role change");
         log.info("Testing after role change");
         verifySnapshotAndLogEntrySink(true);
     }

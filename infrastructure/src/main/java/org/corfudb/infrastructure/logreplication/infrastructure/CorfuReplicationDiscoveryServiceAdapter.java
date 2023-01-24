@@ -27,4 +27,10 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
 
 
     LogReplicationClusterInfo.ClusterRole getLocalClusterRoleType();
+
+
+    ClusterDescriptor getLocalCluster();
+
+    String getLocalNodeId();
+
 }

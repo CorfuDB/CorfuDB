@@ -1,6 +1,7 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -45,7 +46,7 @@ public class CorfuReplicationMultiSourceIT extends CorfuReplicationMultiSourceSi
     @Before
     public void setUp() throws Exception {
         // Setup Corfu on 3 LR Source Sites and 1 LR Sink Site
-        super.setUp(MAX_REMOTE_CLUSTERS, 1);
+        super.setUp(MAX_REMOTE_CLUSTERS, 1, DefaultClusterManager.TP_MULTI_SOURCE);
     }
 
     /**

@@ -2,10 +2,13 @@ package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryServiceAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationDiscoveryServiceException;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.runtime.LogReplication;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -59,4 +62,25 @@ public interface CorfuReplicationClusterManagerAdapter {
      * @param clusterId
      */
     UUID forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException;
+
+    /**
+     * This API is used to fetch the remote SOURCE clusters (w.r.t local cluster) and the supported replication models against it.
+     *
+     * @return Map of remote cluster that acts as SOURCE for a corresponding replication model.
+     */
+    Map<LogReplicationClusterInfo.ClusterConfigurationMsg, Set<LogReplicationMetadata.ReplicationModel>> getRemoteSourceToReplicationModels();
+
+    /**
+     * This API is used to fetch the remote SINK clusters (w.r.t local cluster) and the supported replication models against it.
+     *
+     * @return Map of remote cluster that acts as SINK for a corresponding replication model.
+     */
+    Map<LogReplicationClusterInfo.ClusterConfigurationMsg, Set<LogReplicationMetadata.ReplicationModel>> getRemoteSinkToReplicationModels();
+
+    /**
+     * This API is used to fetch the remote clusters that are the connection endpoints for the local cluster.
+     *
+     * @return ClusterConfigurationMsg
+     */
+    Set<LogReplicationClusterInfo.ClusterConfigurationMsg> fetchConnectionEndpoints();
 }

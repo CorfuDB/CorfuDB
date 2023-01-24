@@ -94,10 +94,40 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
     // Listens to replication status updates on a Sink cluster
     private List<ReplicationStatusListener> replicationStatusListeners = new ArrayList<>();
 
-    protected void setUp(int numSourceClusters, int numSinkClusters) throws Exception {
+    protected void setUp(int numSourceClusters, int numSinkClusters, ExampleSchemas.ClusterUuidMsg topologyType) throws Exception {
         this.numSourceClusters = numSourceClusters;
         this.numSinkClusters = numSinkClusters;
         setupSourceAndSinkCorfu(numSourceClusters, numSinkClusters);
+        initMultiSinkTopology(topologyType);
+    }
+
+
+    private void initMultiSinkTopology(ExampleSchemas.ClusterUuidMsg topologyType) throws Exception {
+        for (int i = 0; i < numSourceClusters; i++) {
+            Table<ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg> configTable =
+                    sourceCorfuStores.get(i).openTable(
+                    DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
+                    ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class,
+                    TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
+            );
+            try (TxnContext txn = sourceCorfuStores.get(i).txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+                txn.putRecord(configTable, topologyType, topologyType, topologyType);
+                txn.commit();
+            }
+        }
+
+        for (int i = 0; i < numSinkClusters; i++) {
+            Table<ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg, ExampleSchemas.ClusterUuidMsg> configTable =
+                    sinkCorfuStores.get(i).openTable(
+                    DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
+                    ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class, ExampleSchemas.ClusterUuidMsg.class,
+                    TableOptions.fromProtoSchema(ExampleSchemas.ClusterUuidMsg.class)
+            );
+            try (TxnContext txn = sinkCorfuStores.get(i).txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+                txn.putRecord(configTable, topologyType, topologyType, topologyType);
+                txn.commit();
+            }
+        }
     }
 
     private void setupSourceAndSinkCorfu(int numSourceClusters, int numSinkClusters) throws Exception {
@@ -223,7 +253,7 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
         // On startup, an initial default replication status is written for each remote cluster
         // (NUM_INITIAL_REPLICATION_STATUS_UPDATES).  Subsequently, the table will be updated on snapshot sync from
         // each Source cluster.
-        int numExpectedUpdates = NUM_INITIAL_REPLICATION_STATUS_UPDATES +
+        int numExpectedUpdates = numSourceClusters +
             calculateSnapshotSyncUpdatesOnSinkStatusTable(numSourceClusters);
         List<CountDownLatch> statusLatches = new ArrayList<>();
         CountDownLatch statusLatch;
@@ -435,21 +465,21 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
 
     private void shutdownCorfuServers() throws Exception {
         for (Process process : sourceCorfuProcesses) {
-            shutdownCorfuServer(process);
+            process.destroy();
         }
 
         for (Process process : sinkCorfuProcesses) {
-            shutdownCorfuServer(process);
+            process.destroy();
         }
     }
 
     private void shutdownLogReplicationServers() throws Exception {
         for (Process lrProcess : sourceReplicationServers) {
-            shutdownCorfuServer(lrProcess);
+            lrProcess.destroy();
         }
 
         for (Process lrProcess : sinkReplicationServers) {
-            shutdownCorfuServer(lrProcess);
+            lrProcess.destroy();
         }
     }
 
