@@ -113,20 +113,20 @@ public class LogReplicationLogicalGroupClient {
                     ClientRegistrationInfo clientRegistrationInfo = txn.getRecord(replicationRegistrationTable, clientKey).getPayload();
 
                     if (clientRegistrationInfo != null) {
-                        log.warn("Client already registered.\n--- ClientRegistrationId ---\n{}--- ClientRegistrationInfo ---\n{}", clientKey, clientRegistrationInfo);
+                        log.warn(String.format("Client already registered.\n--- ClientRegistrationId ---\n%s--- ClientRegistrationInfo ---\n%s", clientKey, clientRegistrationInfo));
                     } else {
                         txn.putRecord(replicationRegistrationTable, clientKey, clientInfo, null);
                     }
 
                     txn.commit();
                 } catch (TransactionAbortedException tae) {
-                    log.error("[{}] {}: {}", clientName, "Unable to register client", tae);
+                    log.error(String.format("[%s] Unable to register client.", clientName), tae);
                     throw new RetryNeededException();
                 }
                 return null;
             }).run();
         } catch (InterruptedException e) {
-            log.error("[{}] {}: {}", clientName, "Client registration failed", e);
+            log.error(String.format("[%s] Client registration failed.", clientName), e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
@@ -149,7 +149,7 @@ public class LogReplicationLogicalGroupClient {
                     if (clientDestinations != null) {
                         if (clientDestinations.getDestinationIdsList().contains(destination)) {
                             txn.commit();
-                            log.info("[{}] {}", clientName, "Destination already exists.");
+                            log.info(String.format("[%s] Destination already exists.", clientName));
                             return null;
                         }
                         clientDestinations = clientDestinations.toBuilder().addDestinationIds(destination).build();
@@ -160,13 +160,13 @@ public class LogReplicationLogicalGroupClient {
                     txn.putRecord(sourceMetadataTable, clientInfoKey, clientDestinations, null);
                     txn.commit();
                 } catch (TransactionAbortedException tae) {
-                    log.error("[{}] {}: {}", clientName, "Unable to add destination, will be retried", tae);
+                    log.error(String.format("[%s] Unable to add destination, will be retried.", clientName), tae);
                     throw new RetryNeededException();
                 }
                 return null;
             }).run();
         } catch (InterruptedException e) {
-            log.error("[{}] {}: {}", clientName, "Unable to add destination", e);
+            log.error(String.format("[%s] Unable to add destination.", clientName), e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
@@ -192,7 +192,7 @@ public class LogReplicationLogicalGroupClient {
                         finalRemoteDestinations.removeAll(clientDestinations.getDestinationIdsList());
                         if (finalRemoteDestinations.isEmpty()) {
                             txn.commit();
-                            log.info("[{}] {}", clientName, "All destinations already present.");
+                            log.info(String.format("[%s] All destinations already present.", clientName));
                             return null;
                         }
                         clientDestinations = clientDestinations.toBuilder().addAllDestinationIds(finalRemoteDestinations).build();
@@ -204,12 +204,12 @@ public class LogReplicationLogicalGroupClient {
                     txn.commit();
                     return null;
                 } catch (TransactionAbortedException tae) {
-                    log.error("[{}] {}: {}", clientName, "Unable to add destinations, will be retried", tae);
+                    log.error(String.format("[%s] Unable to add destinations, will be retried.", clientName), tae);
                     throw new RetryNeededException();
                 }
             }).run();
         } catch (InterruptedException e) {
-            log.error("[{}] {}: {}", clientName, "Unable to add destinations", e);
+            log.error(String.format("[%s] Unable to add destinations.", clientName), e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
@@ -218,7 +218,7 @@ public class LogReplicationLogicalGroupClient {
      * Remove a destination from the LogReplicationModelMetadataTable for a specific group.
      *
      * @param logicalGroup The group of tables that are replicated, represented as a string.
-     * @param destination The cluster from which the logicalGroup should be removed from all future replication.
+     * @param destination The cluster which should be removed from the logical group for all future replication.
      */
     public void removeDestination(String logicalGroup, String destination) {
         Preconditions.checkArgument(isValid(logicalGroup), String.format("[%s] %s", clientName, "logicalGroup is null or empty."));
@@ -243,22 +243,21 @@ public class LogReplicationLogicalGroupClient {
                                 txn.putRecord(sourceMetadataTable, clientInfoKey, clientDestinations, null);
                             }
                         } else {
-                            log.info("[{}] {} {}", clientName, "No matching destination found for:", destination);
+                            log.info(String.format("[%s] No matching destination found for: %s", clientName, destination));
                         }
-
-                        txn.commit();
-                        return null;
+                    } else {
+                        log.warn(String.format("Record not found for group: %s", logicalGroup));
                     }
 
                     txn.commit();
-                    throw new NoSuchElementException(String.format("Record not found for group: %s", logicalGroup));
+                    return null;
                 } catch (TransactionAbortedException tae) {
-                    log.error("[{}] {}: {}", clientName, "Unable to remove destination, will be retried", tae);
+                    log.error(String.format("[%s] Unable to remove destination, will be retried.", clientName), tae);
                     throw new RetryNeededException();
                 }
             }).run();
         } catch (InterruptedException e) {
-            log.error("[{}] {}: {}", clientName, "Unable to remove destination", e);
+            log.error(String.format("[%s] Unable to remove destination.", clientName), e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
@@ -267,7 +266,7 @@ public class LogReplicationLogicalGroupClient {
      * Remove a list of destinations from the LogReplicationModelMetadataTable for a specific group.
      *
      * @param logicalGroup The group of tables that are replicated, represented as a string.
-     * @param remoteDestinations The cluster from which the logicalGroup should be removed from all future replication.
+     * @param remoteDestinations The clusters which should be removed from the logical group for all future replication.
      */
     public void removeDestination(String logicalGroup, List<String> remoteDestinations) {
         Preconditions.checkArgument(isValid(logicalGroup), String.format("[%s] %s", clientName, "logicalGroup is null or empty."));
@@ -289,7 +288,7 @@ public class LogReplicationLogicalGroupClient {
                         if (clientDestinationIdsList.size() < clientDestinationIdsSet.size()) {
                             if (clientDestinationIdsList.size() + removeRemoteDestinationsSet.size() > clientDestinationIdsSet.size()) {
                                 removeRemoteDestinationsSet.removeAll(clientDestinationIdsSet);
-                                log.info("[{}] {} {}", clientName, "Following destinations to remove are not present:", removeRemoteDestinationsSet);
+                                log.info(String.format("[%s] Following destinations to remove are not present: %s", clientName, removeRemoteDestinationsSet));
                             }
 
                             if (clientDestinationIdsList.size() == 0) {
@@ -302,22 +301,21 @@ public class LogReplicationLogicalGroupClient {
                                 txn.putRecord(sourceMetadataTable, clientInfoKey, clientDestinations, null);
                             }
                         } else {
-                            log.info("[{}] {} {}", clientName, "No matching destinations found for:", removeRemoteDestinationsSet);
+                            log.info(String.format("[%s] No matching destinations found for: %s", clientName, removeRemoteDestinationsSet));
                         }
-
-                        txn.commit();
-                        return null;
+                    } else {
+                        log.warn(String.format("Record not found for group: %s", logicalGroup));
                     }
 
                     txn.commit();
-                    throw new NoSuchElementException(String.format("Record not found for group: %s", logicalGroup));
+                    return null;
                 } catch (TransactionAbortedException tae) {
-                    log.error("[{}] {}: {}", clientName, "Unable to remove destinations, will be retried", tae);
+                    log.error(String.format("[%s] Unable to remove destinations, will be retried.", clientName), tae);
                     throw new RetryNeededException();
                 }
             }).run();
         } catch (InterruptedException e) {
-            log.error("[{}] {}: {}", clientName, "Unable to remove destinations", e);
+            log.error(String.format("[%s] Unable to remove destinations.", clientName), e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
@@ -341,14 +339,15 @@ public class LogReplicationLogicalGroupClient {
                         return (List<String>) clientDestinations.getDestinationIdsList();
                     }
 
-                    throw new NoSuchElementException(String.format("Record not found for group: %s", logicalGroup));
+                    log.warn(String.format("Record not found for group: %s", logicalGroup));
+                    return null;
                 } catch (TransactionAbortedException tae) {
-                    log.error("[{}] {}: {}", clientName, "Unable to show destinations, will be retried", tae);
+                    log.error(String.format("[%s] Unable to get destinations, will be retried.", clientName), tae);
                     throw new RetryNeededException();
                 }
             }).run();
         } catch (InterruptedException e) {
-            log.error("[{}] {}: {}", clientName, "Unable to show destinations", e);
+            log.error(String.format("[%s] Unable to get destinations.", clientName), e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
@@ -379,7 +378,7 @@ public class LogReplicationLogicalGroupClient {
         int initialSize = list.size();
         Set<String> set = new HashSet<>(list);
         if (initialSize != set.size()) {
-            log.info("[{}] {}", clientName, "Duplicate elements removed from list.");
+            log.info(String.format("[%s] Duplicate elements removed from list.", clientName));
         }
         return set;
     }
