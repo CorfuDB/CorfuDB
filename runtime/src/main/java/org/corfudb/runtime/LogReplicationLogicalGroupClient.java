@@ -246,7 +246,7 @@ public class LogReplicationLogicalGroupClient {
                             log.info(String.format("[%s] No matching destination found for: %s", clientName, destination));
                         }
                     } else {
-                        log.warn(String.format("Record not found for group: %s", logicalGroup));
+                        log.warn(String.format("[%s] Record not found for group: %s", clientName, logicalGroup));
                     }
 
                     txn.commit();
@@ -304,7 +304,7 @@ public class LogReplicationLogicalGroupClient {
                             log.info(String.format("[%s] No matching destinations found for: %s", clientName, removeRemoteDestinationsSet));
                         }
                     } else {
-                        log.warn(String.format("Record not found for group: %s", logicalGroup));
+                        log.warn(String.format("[%s] Record not found for group: %s", clientName, logicalGroup));
                     }
 
                     txn.commit();
@@ -339,7 +339,7 @@ public class LogReplicationLogicalGroupClient {
                         return (List<String>) clientDestinations.getDestinationIdsList();
                     }
 
-                    log.warn(String.format("Record not found for group: %s", logicalGroup));
+                    log.warn(String.format("[%s] Record not found for group: %s", clientName, logicalGroup));
                     return null;
                 } catch (TransactionAbortedException tae) {
                     log.error(String.format("[%s] Unable to get destinations, will be retried.", clientName), tae);
