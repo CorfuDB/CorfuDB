@@ -24,6 +24,9 @@ COPY target/compactor-logback.prod.xml /usr/share/corfu/conf/compactor-logback.p
 # For integration testing purposes
 COPY target/${CORFU_JAR} /app/corfu.jar
 
+# Allow corfu user to execute compactor script
+RUN echo "corfu ALL=(ALL) NOPASSWD: /usr/share/corfu/scripts/compactor_runner.py" >> /etc/sudoers
+
 ENV JAVA_OPTS -verbose:gc \
     -XX:+PrintGCDetails \
     -XX:+PrintGCTimeStamps \
