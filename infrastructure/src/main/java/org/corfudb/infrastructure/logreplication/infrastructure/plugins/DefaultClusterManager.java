@@ -528,8 +528,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
 
         List<ClusterDescriptor> newInvalidClusters = new ArrayList<>();
         topologyConfig.getClustersList().stream()
-                .forEach(clusterMsg -> newInvalidClusters
-                        .add(new ClusterDescriptor(new ClusterDescriptor(clusterMsg), ClusterRole.INVALID)));
+                .forEach(clusterMsg -> newInvalidClusters.add(new ClusterDescriptor(clusterMsg)));
 
         //Since all the sinks are marked as invalid, the remote source/sink/connectionEndPoints will all be empty as
         //(i) if local cluster is source, there are no sinks and hence no connectionEndPoints
