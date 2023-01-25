@@ -61,6 +61,15 @@ public class LogReplicationServer extends AbstractServer {
 
     private final AtomicBoolean isLeader = new AtomicBoolean(false);
 
+    private final LogReplicationConfigManager configManager;
+
+    private final String localEndpoint;
+
+    private long topologyConfigId;
+
+    private final Map<ReplicationSession, LogReplicationMetadataManager> localSessionToMetadataManagerMap;
+
+
     /**
      * RequestHandlerMethods for the LogReplication server
      */
@@ -76,13 +85,22 @@ public class LogReplicationServer extends AbstractServer {
                                 String localEndpoint, long topologyConfigId,
                                 Map<ReplicationSession, LogReplicationMetadataManager> outgoingSessionToMetadataManagerMap) {
         this.localNodeId = localNodeId;
-        createSinkManagers(configManager, localEndpoint, context, outgoingSessionToMetadataManagerMap, topologyConfigId);
+        this.configManager = configManager;
+        this.localEndpoint = localEndpoint;
+        this.topologyConfigId = topologyConfigId;
+        this.localSessionToMetadataManagerMap = outgoingSessionToMetadataManagerMap;
+        createSinkManagers();
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
 
     @VisibleForTesting
     public LogReplicationServer(@Nonnull ServerContext context, LogReplicationSinkManager sinkManager,
         String localNodeId) {
+        this.configManager = null;
+        this.localEndpoint = null;
+        this.topologyConfigId = 0L;
+        this.localSessionToMetadataManagerMap = null;
+
         ReplicationSession outgoingSession = sinkManager.getSourceSession();
         LogReplication.ReplicationSessionMsg incomingSession = LogReplication.ReplicationSessionMsg.newBuilder()
                 .setRemoteClusterId(outgoingSession.getLocalClusterId())
@@ -95,15 +113,12 @@ public class LogReplicationServer extends AbstractServer {
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
 
-     private void createSinkManagers(LogReplicationConfigManager configManager, String localEndpoint,
-                                     ServerContext serverContext,
-                                     Map<ReplicationSession, LogReplicationMetadataManager> outgoingSessionToMetadataManagerMap,
-                                     long topologyConfigId) {
+     private void createSinkManagers() {
         for (Map.Entry<ReplicationSession, LogReplicationMetadataManager> entry :
-                outgoingSessionToMetadataManagerMap.entrySet()) {
+                localSessionToMetadataManagerMap.entrySet()) {
             ReplicationSession outgoingSession = entry.getKey();
             LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(localEndpoint, configManager,
-                entry.getValue(), serverContext, topologyConfigId, entry.getKey());
+                entry.getValue(), configManager.getServerContext(), topologyConfigId, entry.getKey());
             LogReplication.ReplicationSessionMsg incomingSession = LogReplication.ReplicationSessionMsg.newBuilder()
                     .setRemoteClusterId(outgoingSession.getLocalClusterId())
                     .setLocalClusterId(outgoingSession.getRemoteClusterId())
@@ -114,7 +129,25 @@ public class LogReplicationServer extends AbstractServer {
         }
     }
 
+    private void createSinkManagers(LogReplication.ReplicationSessionMsg outgoingSessionMsg) {
+        // TODO: this will change to msg after the sessionsManager PR
+        ReplicationSession session = new ReplicationSession(outgoingSessionMsg.getRemoteClusterId(),
+                outgoingSessionMsg.getLocalClusterId(),
+                new ReplicationSubscriber(outgoingSessionMsg.getReplicationModel(), outgoingSessionMsg.getClient()));
+        LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(localEndpoint, configManager,
+                localSessionToMetadataManagerMap.get(outgoingSessionMsg), configManager.getServerContext(), topologyConfigId, session);
+
+        //Reverse sessionInfo while adding it to incomingSessionMsgToSinkManagerMap so the requests handlers don't have to.
+        LogReplication.ReplicationSessionMsg incomingSession = LogReplication.ReplicationSessionMsg.newBuilder()
+                .mergeFrom(outgoingSessionMsg)
+                .setRemoteClusterId(outgoingSessionMsg.getLocalClusterId())
+                .setLocalClusterId(outgoingSessionMsg.getRemoteClusterId())
+                .build();
+        incomingSessionMsgToSinkManagerMap.put(incomingSession, sinkManager);
+    }
+
     public void updateTopologyConfigId(long topologyConfigId) {
+        this.topologyConfigId = topologyConfigId;
         incomingSessionMsgToSinkManagerMap.values().forEach(sinkManager -> sinkManager.updateTopologyConfigId(topologyConfigId));
     }
 
@@ -154,10 +187,8 @@ public class LogReplicationServer extends AbstractServer {
             // Get the Sink Manager corresponding to the remote cluster session
             LogReplicationSinkManager sinkManager = incomingSessionMsgToSinkManagerMap.get(request.getHeader().getSessionInfo());
 
-            // If no sink Manager is found, drop the message and log an error
-            if (sinkManager == null) {
-                log.error("Sink Manager not found for remote cluster {}.  This could be due to a topology mismatch.",
-                    getUUID(request.getHeader().getClusterId()).toString());
+            // If no sink Manager is found and if the session is not seen by the discoveryService, drop the message and log an error. Else create Sink Manager
+            if (sinkManager == null && !sessionValid(request.getHeader().getSessionInfo(), getUUID(request.getHeader().getClusterId()).toString())) {
                 return;
             }
 
@@ -185,6 +216,31 @@ public class LogReplicationServer extends AbstractServer {
     }
 
     /**
+     * When sink manager is not found, check if the session is valid and create sink managers.
+     * @param incomingSession
+     * @param requestId
+     * @return true if session is valid, false if not valid
+     */
+    private boolean sessionValid(LogReplication.ReplicationSessionMsg incomingSession, String requestId) {
+        LogReplication.ReplicationSessionMsg outgoingSession = LogReplication.ReplicationSessionMsg.newBuilder()
+                .mergeFrom(incomingSession)
+                .setLocalClusterId(incomingSession.getRemoteClusterId())
+                .setRemoteClusterId(incomingSession.getRemoteClusterId())
+                .build();
+        // TODO: the ReplicationSession will be replaced by ReplicationSessionMsg
+        ReplicationSession sessionObj = new ReplicationSession(outgoingSession.getRemoteClusterId(),
+                outgoingSession.getLocalClusterId(),
+                new ReplicationSubscriber(outgoingSession.getReplicationModel(), outgoingSession.getClient()));
+        if(localSessionToMetadataManagerMap.containsKey(sessionObj)) {
+            createSinkManagers(outgoingSession);
+            return true;
+        }
+
+        log.error("Sink Manager not found for remote cluster {}.  This could be due to a topology mismatch.", requestId);
+        return false;
+    }
+
+    /**
      * Given a metadata request message, send back a response signaling
      * current log-replication status (snapshot related information).
      *
@@ -203,9 +259,7 @@ public class LogReplicationServer extends AbstractServer {
             LogReplicationSinkManager sinkManager = incomingSessionMsgToSinkManagerMap.get(request.getHeader().getSessionInfo());
 
             // If no sink Manager is found, drop the message and log an error
-            if (sinkManager == null) {
-                log.error("Sink Manager not found for remote cluster {}.  This could be due to a topology mismatch.",
-                    getUUID(request.getHeader().getClusterId()).toString());
+            if (sinkManager == null && !sessionValid(request.getHeader().getSessionInfo(), getUUID(request.getHeader().getClusterId()).toString())) {
                 return;
             }
 

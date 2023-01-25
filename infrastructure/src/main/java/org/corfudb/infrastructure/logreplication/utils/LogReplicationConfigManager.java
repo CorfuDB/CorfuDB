@@ -92,6 +92,7 @@ public class LogReplicationConfigManager {
     @Getter
     private LogReplicationConfig config;
 
+    @Getter
     private ServerContext serverContext;
 
     /**
