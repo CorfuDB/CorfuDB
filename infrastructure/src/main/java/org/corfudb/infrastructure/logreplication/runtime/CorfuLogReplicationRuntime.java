@@ -162,11 +162,13 @@ public class CorfuLogReplicationRuntime {
     /**
      * Default Constructor
      */
-    public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters, LogReplicationMetadataManager metadataManager,
-        LogReplicationConfigManager replicationConfigManager, ReplicationSession replicationSession) {
+    public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters,
+                                      LogReplicationMetadataManager metadataManager,
+                                      LogReplicationConfigManager replicationConfigManager,
+                                      ReplicationSession replicationSession) {
         this.remoteClusterId = replicationSession.getRemoteClusterId();
         this.metadataManager = metadataManager;
-        this.router = new LogReplicationClientRouter(parameters, this);
+        this.router = new LogReplicationClientRouter(parameters, this, replicationSession);
         this.router.addClient(new LogReplicationHandler());
         this.sourceManager = new LogReplicationSourceManager(parameters,
             new LogReplicationClient(router, remoteClusterId), metadataManager, replicationConfigManager, replicationSession);

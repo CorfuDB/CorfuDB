@@ -5,6 +5,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent.LogReplicationRuntimeEventType;
@@ -12,6 +13,7 @@ import org.corfudb.infrastructure.logreplication.transport.client.ChannelAdapter
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.clients.IClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.exceptions.NetworkException;
@@ -120,18 +122,24 @@ public class LogReplicationClientRouter implements IClientRouter {
     private final CorfuLogReplicationRuntime runtimeFSM;
 
     /**
+     * Replication session, to add to the LR_msgs.
+     */
+    private final ReplicationSession replicationSession;
+
+    /**
      * Log Replication Client Constructor
      *
      * @param parameters runtime parameters (including connection settings)
      * @param runtimeFSM runtime state machine, insert connection related events
      */
     public LogReplicationClientRouter(LogReplicationRuntimeParameters parameters,
-                                      CorfuLogReplicationRuntime runtimeFSM) {
+                                      CorfuLogReplicationRuntime runtimeFSM, ReplicationSession replicationSession) {
         this.remoteClusterDescriptor = parameters.getRemoteClusterDescriptor();
         this.remoteClusterId = remoteClusterDescriptor.getClusterId();
         this.parameters = parameters;
         this.timeoutResponse = parameters.getRequestTimeout().toMillis();
         this.runtimeFSM = runtimeFSM;
+        this.replicationSession = replicationSession;
 
         this.handlerMap = new ConcurrentHashMap<>();
         this.clientList = new ArrayList<>();
@@ -176,6 +184,12 @@ public class LogReplicationClientRouter implements IClientRouter {
             @Nonnull String nodeId) {
 
         HeaderMsg.Builder header = HeaderMsg.newBuilder()
+                .setSessionInfo(LogReplication.ReplicationSessionMsg.newBuilder()
+                        .setLocalClusterId(replicationSession.getLocalClusterId())
+                        .setRemoteClusterId(replicationSession.getRemoteClusterId())
+                        .setClient(replicationSession.getSubscriber().getClient())
+                        .setReplicationModel(replicationSession.getSubscriber().getReplicationModel())
+                        .build())
                 .setVersion(getDefaultProtocolVersionMsg())
                 .setIgnoreClusterId(true)
                 .setIgnoreEpoch(true);

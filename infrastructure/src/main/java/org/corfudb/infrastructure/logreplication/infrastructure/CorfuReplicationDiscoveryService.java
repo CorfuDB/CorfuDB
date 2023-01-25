@@ -378,7 +378,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 logReplicationConfig.getReplicationSubscriberToStreamsMap().keySet()) {
                 LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(getCorfuRuntime(),
                     topologyDescriptor.getTopologyConfigId(), remoteClusterId);
-                ReplicationSession replicationSession = new ReplicationSession(remoteClusterId, subscriber);
+                ReplicationSession replicationSession = new ReplicationSession(remoteClusterId,
+                        localClusterDescriptor.getClusterId(), subscriber);
                 remoteSessionToMetadataManagerMap.put(replicationSession, metadataManager);
             }
         }
@@ -393,7 +394,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(getCorfuRuntime(),
                     topologyDescriptor.getTopologyConfigId(), remoteClusterId);
                 ReplicationSession replicationSession = ReplicationSession.getDefaultReplicationSessionForCluster(
-                    remoteClusterId);
+                    remoteClusterId, localClusterDescriptor.getClusterId());
                 remoteSessionToMetadataManagerMap.put(replicationSession, metadataManager);
             }
         }
@@ -738,7 +739,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             for (String remoteClusterId : sinksToRemove) {
                 for (ReplicationSubscriber subscriber :
                     logReplicationConfig.getReplicationSubscriberToStreamsMap().keySet()) {
-                    ReplicationSession sessionToRemove = new ReplicationSession(remoteClusterId, subscriber);
+                    ReplicationSession sessionToRemove = new ReplicationSession(remoteClusterId,
+                            localClusterDescriptor.getClusterId(), subscriber);
                     removeClusterInfoFromStatusTable(sessionToRemove);
                     remoteSessionToMetadataManagerMap.remove(sessionToRemove);
                 }
@@ -889,7 +891,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         //  whole cluster?
         // For now, get the only supported(default) replication model and client for this cluster and trigger the
         // operation on it.
-        remoteSessionToMetadataManagerMap.get(ReplicationSession.getDefaultReplicationSessionForCluster(clusterId))
+        remoteSessionToMetadataManagerMap.get(ReplicationSession.getDefaultReplicationSessionForCluster(clusterId,
+                localClusterDescriptor.getClusterId()))
             .updateLogReplicationEventTable(key, event);
         return forceSyncId;
     }

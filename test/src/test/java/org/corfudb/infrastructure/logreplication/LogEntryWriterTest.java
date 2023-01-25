@@ -35,6 +35,7 @@ public class LogEntryWriterTest extends AbstractViewTest {
     private int numOpaqueEntries;
     private int topologyConfigId;
     private String remoteClusterId = "Remote Cluster";
+    private String localClusterId = "Local Cluster";
 
     @Before
     public void setUp() {
@@ -45,7 +46,7 @@ public class LogEntryWriterTest extends AbstractViewTest {
 
         // Create the default replication session
         ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(remoteClusterId);
+            ReplicationSession.getDefaultReplicationSessionForCluster(remoteClusterId, localClusterId);
 
         metadataManager = Mockito.mock(LogReplicationMetadataManager.class);
         initMocksForMetadataManager();

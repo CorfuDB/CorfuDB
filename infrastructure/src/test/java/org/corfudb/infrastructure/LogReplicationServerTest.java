@@ -7,6 +7,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSessi
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationServer;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationLeadershipRequestMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataRequestMsg;
@@ -47,7 +48,7 @@ public class LogReplicationServerTest {
     UuidMsg clusterId = UuidMsg.newBuilder().setLsb(5).setMsb(5).build();
     String sourceClusterId = getUUID(clusterId).toString();
     ReplicationSession replicationSession =
-        ReplicationSession.getDefaultReplicationSessionForCluster(sourceClusterId);
+        ReplicationSession.getDefaultReplicationSessionForCluster(sourceClusterId, sourceClusterId);
 
     /**
      * Stub most of the {@link LogReplicationServer} functionality, but spy on the actual instance.
@@ -72,7 +73,14 @@ public class LogReplicationServerTest {
         final LogReplicationMetadataRequestMsg metadataRequest = LogReplicationMetadataRequestMsg
                 .newBuilder().build();
         final RequestMsg request =
-            getRequestMsg(HeaderMsg.newBuilder().setClusterId(clusterId).build(),
+            getRequestMsg(HeaderMsg.newBuilder()
+                            .setClusterId(clusterId)
+                            .setSessionInfo(LogReplication.ReplicationSessionMsg.newBuilder()
+                                    .setLocalClusterId(replicationSession.getRemoteClusterId())
+                                    .setRemoteClusterId(replicationSession.getLocalClusterId())
+                                    .setClient(replicationSession.getSubscriber().getClient())
+                                    .build())
+                            .build(),
                 CorfuMessage.RequestPayloadMsg.newBuilder()
                 .setLrMetadataRequest(metadataRequest).build());
         final ResponseMsg response = ResponseMsg.newBuilder().build();
@@ -133,7 +141,14 @@ public class LogReplicationServerTest {
         final LogReplicationEntryMsg logEntry = LogReplicationEntryMsg
                 .newBuilder().build();
         final RequestMsg request =
-            getRequestMsg(HeaderMsg.newBuilder().setClusterId(clusterId).build(),
+            getRequestMsg(HeaderMsg.newBuilder()
+                            .setClusterId(clusterId)
+                            .setSessionInfo(LogReplication.ReplicationSessionMsg.newBuilder()
+                                    .setLocalClusterId(replicationSession.getRemoteClusterId())
+                                    .setRemoteClusterId(replicationSession.getLocalClusterId())
+                                    .setClient(replicationSession.getSubscriber().getClient())
+                                    .build())
+                            .build(),
                 CorfuMessage.RequestPayloadMsg.newBuilder()
                         .setLrEntry(logEntry).build());
         final LogReplicationEntryMsg ack = LogReplicationEntryMsg.newBuilder().build();

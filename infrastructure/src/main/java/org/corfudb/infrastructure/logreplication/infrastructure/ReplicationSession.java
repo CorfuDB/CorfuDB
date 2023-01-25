@@ -1,8 +1,12 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.Getter;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.runtime.LogReplication;
 
 import java.util.Objects;
+
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.SAMPLE_CLIENT;
 
 
 /**
@@ -26,11 +30,15 @@ public class ReplicationSession {
     @Getter
     private final String remoteClusterId;
 
+    @Getter
+    private final String localClusterId;
+
    @Getter
    private final ReplicationSubscriber subscriber;
 
-    public ReplicationSession(String remoteClusterId, ReplicationSubscriber subscriber) {
+    public ReplicationSession(String remoteClusterId, String localClusterId, ReplicationSubscriber subscriber) {
         this.remoteClusterId = remoteClusterId;
+        this.localClusterId = localClusterId;
         this.subscriber = subscriber;
     }
 
@@ -43,17 +51,19 @@ public class ReplicationSession {
             return false;
         }
         ReplicationSession that = (ReplicationSession) o;
-        return remoteClusterId.equals(that.remoteClusterId) && subscriber.equals(that.subscriber);
+        return remoteClusterId.equals(that.remoteClusterId) && localClusterId.equals(that.localClusterId)
+                && subscriber.equals(that.subscriber);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(remoteClusterId, subscriber);
+        return Objects.hash(remoteClusterId, localClusterId, subscriber);
     }
 
     // TODO: To be removed after session is introduced in connections
-    public static ReplicationSession getDefaultReplicationSessionForCluster(String remoteClusterId) {
-        return new ReplicationSession(remoteClusterId, ReplicationSubscriber.getDefaultReplicationSubscriber());
+    public static ReplicationSession getDefaultReplicationSessionForCluster(String remoteClusterId, String localClusterId) {
+        return new ReplicationSession(remoteClusterId, localClusterId,
+            new ReplicationSubscriber(LogReplication.ReplicationModel.FULL_TABLE, SAMPLE_CLIENT));
     }
 
     @Override
@@ -61,7 +71,9 @@ public class ReplicationSession {
         return new StringBuffer()
             .append("Remote Cluster: ")
             .append(remoteClusterId)
-            .append(" Replication Subscriber: ")
+            .append("Local Cluster: ")
+            .append(localClusterId)
+            .append("Replication Subscriber: ")
             .append(subscriber)
             .toString();
     }

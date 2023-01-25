@@ -63,7 +63,7 @@ public class CorfuReplicationManager {
             for (ReplicationSubscriber subscriber : context.getConfig().getReplicationSubscriberToStreamsMap().keySet()) {
                 try {
                     startLogReplicationRuntime(remoteCluster, new ReplicationSession(remoteCluster.getClusterId(),
-                        subscriber));
+                            localNodeDescriptor.getClusterId(), subscriber));
                 } catch (Exception e) {
                     log.error("Failed to start log replication runtime for remote session {}, replication model {}, " +
                         "client {}", remoteCluster.getClusterId(), subscriber.getReplicationModel(),
@@ -188,7 +188,8 @@ public class CorfuReplicationManager {
         // Remove Sinks that are not in the new config
         for (String clusterId : sinksToRemove) {
             for (ReplicationSubscriber subscriber : subscribers) {
-                stopLogReplicationRuntime(new ReplicationSession(clusterId, subscriber));
+                stopLogReplicationRuntime(new ReplicationSession(clusterId, localNodeDescriptor.getClusterId(),
+                        subscriber));
             }
         }
 
@@ -196,7 +197,8 @@ public class CorfuReplicationManager {
         for (String clusterId : sinksToAdd) {
             ClusterDescriptor clusterInfo = newConfig.getSinkClusters().get(clusterId);
             for (ReplicationSubscriber subscriber : subscribers) {
-                startLogReplicationRuntime(clusterInfo, new ReplicationSession(clusterId, subscriber));
+                startLogReplicationRuntime(clusterInfo, new ReplicationSession(clusterId,
+                        localNodeDescriptor.getClusterId(), subscriber));
             }
         }
 
@@ -205,8 +207,8 @@ public class CorfuReplicationManager {
         for (String clusterId : intersection) {
             ClusterDescriptor clusterInfo = newConfig.getSinkClusters().get(clusterId);
             for (ReplicationSubscriber subscriber : subscribers) {
-                runtimeToRemoteSession.get(new ReplicationSession(clusterId, subscriber))
-                    .updateRouterClusterDescriptor(clusterInfo);
+                runtimeToRemoteSession.get(new ReplicationSession(clusterId,
+                        localNodeDescriptor.getClusterId(), subscriber)).updateRouterClusterDescriptor(clusterInfo);
             }
         }
 
@@ -220,7 +222,7 @@ public class CorfuReplicationManager {
      */
     public void enforceSnapshotSync(DiscoveryServiceEvent event) {
         CorfuLogReplicationRuntime sinkRuntime = runtimeToRemoteSession.get(
-            ReplicationSession.getDefaultReplicationSessionForCluster(event.getRemoteClusterInfo().getClusterId()));
+            ReplicationSession.getDefaultReplicationSessionForCluster(event.getRemoteClusterInfo().getClusterId(), localNodeDescriptor.getClusterId()));
         if (sinkRuntime == null) {
             log.warn("Failed to start enforceSnapshotSync for cluster {} as no runtime to it was found",
                 event.getRemoteClusterInfo().getClusterId());

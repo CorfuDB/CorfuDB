@@ -79,6 +79,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private static final int WRITER_PORT = DEFAULT_PORT + 1;
     private static final String DESTINATION_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
     private static final String REMOTE_CLUSTER_ID = UUID.randomUUID().toString();
+    private static final String SOURCE_CLUSTER_ID = UUID.randomUUID().toString();
     private static final int CORFU_PORT = 9000;
     private static final String TABLE_PREFIX = "test";
 
@@ -1225,7 +1226,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             logReplicationMetadataManager, nettyConfig, function);
 
         ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(REMOTE_CLUSTER_ID);
+            ReplicationSession.getDefaultReplicationSessionForCluster(REMOTE_CLUSTER_ID, SOURCE_CLUSTER_ID);
 
         // Source Manager
         LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(

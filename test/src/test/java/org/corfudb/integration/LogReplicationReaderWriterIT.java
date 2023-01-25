@@ -238,7 +238,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
 
         ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
+            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID, SOURCE_CLUSTER_ID);
 
         StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, configManager, replicationSession);
 
@@ -275,7 +275,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
 
         ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
+            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID, SOURCE_CLUSTER_ID);
 
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, configManager, logReplicationMetadataManager,
             replicationSession);
@@ -302,7 +302,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
 
         ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
+            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID, SOURCE_CLUSTER_ID);
 
         StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, configManager, replicationSession);
         reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
@@ -340,7 +340,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
 
         ReplicationSession replicationSession =
-            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID);
+            ReplicationSession.getDefaultReplicationSessionForCluster(SINK_CLUSTER_ID, SOURCE_CLUSTER_ID);
 
         LogEntryWriter writer = new LogEntryWriter(configManager, logReplicationMetadataManager, replicationSession);
 

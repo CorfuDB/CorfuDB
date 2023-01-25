@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClient;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
@@ -52,7 +53,8 @@ public class LogReplicationClientTest {
         lrFsm = mock(CorfuLogReplicationRuntime.class);
         lrRuntimeParameters = mock(LogReplicationRuntimeParameters.class);
         doReturn(new ClusterDescriptor(SAMPLE_CLUSTER)).when(lrRuntimeParameters).getRemoteClusterDescriptor();
-        lrClient = spy(new LogReplicationClientRouter(lrRuntimeParameters, lrFsm));
+        ReplicationSession session = ReplicationSession.getDefaultReplicationSessionForCluster(SAMPLE_CLUSTER, SAMPLE_CLUSTER);
+        lrClient = spy(new LogReplicationClientRouter(lrRuntimeParameters, lrFsm, session));
 
         lrClientHandler = spy(new LogReplicationHandler());
         responseHandler = spy(lrClientHandler.createResponseHandlers(lrClientHandler, handlerMap));

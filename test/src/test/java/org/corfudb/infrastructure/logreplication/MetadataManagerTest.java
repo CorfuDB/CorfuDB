@@ -36,7 +36,7 @@ public class MetadataManagerTest extends AbstractViewTest {
     private TestUtils utils;
     private String remoteClusterId = "Remote Cluster";
     private ReplicationSession replicationSession =
-        ReplicationSession.getDefaultReplicationSessionForCluster(remoteClusterId);
+        ReplicationSession.getDefaultReplicationSessionForCluster(remoteClusterId, localClusterId);
 
     @Before
     public void setUp() {
