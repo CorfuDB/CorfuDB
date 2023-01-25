@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -32,6 +33,7 @@ public class InvokeCheckpointingJvm implements InvokeCheckpointing {
 
                 String compactorScriptPath = serverContext.getCompactorScriptPath().get();
                 String compactorConfigPath = serverContext.getCompactorConfig().get();
+                boolean runCompactorAsRoot = serverContext.getRunCompactorAsRoot();
                 List<String> endpoint = Arrays.asList(serverContext.getLocalEndpoint().split(":"));
                 String hostName = endpoint.get(0);
                 String port = endpoint.get(1);
@@ -40,8 +42,14 @@ public class InvokeCheckpointingJvm implements InvokeCheckpointing {
                     shutdown();
                 }
 
-                ProcessBuilder pb = new ProcessBuilder("sudo", compactorScriptPath, "--hostname", hostName, "--port",
-                        port, "--compactorConfig", compactorConfigPath, "--startCheckpointing=true");
+                List<String> compactorCmd = new ArrayList<>();
+                if (runCompactorAsRoot) {
+                    compactorCmd.add("sudo");
+                }
+                compactorCmd.addAll(Arrays.asList(compactorScriptPath, "--hostname", hostName, "--port",
+                        port, "--compactorConfig", compactorConfigPath, "--startCheckpointing=true"));
+
+                ProcessBuilder pb = new ProcessBuilder(compactorCmd);
                 pb.redirectOutput(ProcessBuilder.Redirect.PIPE);
                 pb.redirectError(ProcessBuilder.Redirect.PIPE);
                 this.checkpointerProcess = pb.start();

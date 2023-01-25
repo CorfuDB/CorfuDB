@@ -201,6 +201,10 @@ public class ServerContext implements AutoCloseable {
         return getServerConfig("--compactor-script");
     }
 
+    public boolean getRunCompactorAsRoot() {
+        return (boolean) getServerConfig().get("--run-compactor-as-root");
+    }
+
     public String getPluginConfigFilePath() {
         String pluginConfigFilePath = getServerConfig(String.class, "--plugin");
         return pluginConfigFilePath == null ? PLUGIN_CONFIG_FILE_PATH : pluginConfigFilePath;
