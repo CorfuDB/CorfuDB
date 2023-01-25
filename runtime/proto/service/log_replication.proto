@@ -83,6 +83,7 @@ message ClientRegistrationId {
 
 // Value for LogReplicationRegistrationTable
 message ClientRegistrationInfo {
+  option (org.corfudb.runtime.table_schema).stream_tag = "lr_sessions";
   string client_name = 1;
   ReplicationModel model = 2;
   google.protobuf.Timestamp registration_time = 3;

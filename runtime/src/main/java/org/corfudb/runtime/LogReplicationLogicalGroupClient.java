@@ -69,8 +69,9 @@ public class LogReplicationLogicalGroupClient {
      * @throws NoSuchMethodException NoSuchMethodException
      * @throws IllegalAccessException IllegalAccessException
      */
-    public LogReplicationLogicalGroupClient(CorfuRuntime runtime, String clientName) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
-        Preconditions.checkArgument(isValid(clientName), String.format("%s", "clientName is null or empty."));
+    public LogReplicationLogicalGroupClient(CorfuRuntime runtime, String clientName)
+            throws InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+        Preconditions.checkArgument(isValid(clientName), "clientName is null or empty.");
 
         this.corfuStore = new CorfuStore(runtime);
         this.clientName = clientName;
@@ -78,26 +79,34 @@ public class LogReplicationLogicalGroupClient {
                 .setClientName(clientName)
                 .build();
         Instant time = Instant.now();
+        Timestamp timestamp = Timestamp.newBuilder().setSeconds(time.getEpochSecond())
+                .setNanos(time.getNano()).build();
         this.clientInfo = ClientRegistrationInfo.newBuilder()
                 .setClientName(clientName)
                 .setModel(model)
-                .setRegistrationTime(Timestamp.newBuilder().setSeconds(time.getEpochSecond()).setNanos(time.getNano()).build())
+                .setRegistrationTime(timestamp)
                 .build();
 
         try {
             this.replicationRegistrationTable = corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, LR_REGISTRATION_TABLE_NAME);
         } catch (NoSuchElementException | IllegalArgumentException e) {
             log.warn("Failed getTable operation, opening table.", e);
-            this.replicationRegistrationTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LR_REGISTRATION_TABLE_NAME, ClientRegistrationId.class,
-                    ClientRegistrationInfo.class, null, TableOptions.fromProtoSchema(ClientRegistrationInfo.class));
+            this.replicationRegistrationTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LR_REGISTRATION_TABLE_NAME,
+                    ClientRegistrationId.class,
+                    ClientRegistrationInfo.class,
+                    null,
+                    TableOptions.fromProtoSchema(ClientRegistrationInfo.class));
         }
 
         try {
             this.sourceMetadataTable = corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, LR_MODEL_METADATA_TABLE_NAME);
         } catch (NoSuchElementException | IllegalArgumentException e) {
             log.warn("Failed getTable operation, opening table.", e);
-            this.sourceMetadataTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LR_MODEL_METADATA_TABLE_NAME, ClientDestinationInfoKey.class,
-                    DestinationInfoVal.class, null, TableOptions.fromProtoSchema(DestinationInfoVal.class));
+            this.sourceMetadataTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LR_MODEL_METADATA_TABLE_NAME,
+                    ClientDestinationInfoKey.class,
+                    DestinationInfoVal.class,
+                    null,
+                    TableOptions.fromProtoSchema(DestinationInfoVal.class));
         }
 
         register();
@@ -113,7 +122,8 @@ public class LogReplicationLogicalGroupClient {
                     ClientRegistrationInfo clientRegistrationInfo = txn.getRecord(replicationRegistrationTable, clientKey).getPayload();
 
                     if (clientRegistrationInfo != null) {
-                        log.warn(String.format("Client already registered.\n--- ClientRegistrationId ---\n%s--- ClientRegistrationInfo ---\n%s", clientKey, clientRegistrationInfo));
+                        log.warn(String.format("Client already registered.\n--- ClientRegistrationId ---\n%s" +
+                                "--- ClientRegistrationInfo ---\n%s", clientKey, clientRegistrationInfo));
                     } else {
                         txn.putRecord(replicationRegistrationTable, clientKey, clientInfo, null);
                     }
@@ -138,8 +148,10 @@ public class LogReplicationLogicalGroupClient {
      * @param destination The clusters which the specified group will be replicated to.
      */
     public void addDestination(String logicalGroup, String destination) {
-        Preconditions.checkArgument(isValid(logicalGroup), String.format("[%s] %s", clientName, "logicalGroup is null or empty."));
-        Preconditions.checkArgument(isValid(destination), String.format("[%s] %s", clientName, "destination is null or empty."));
+        Preconditions.checkArgument(isValid(logicalGroup),
+                String.format("[%s] logicalGroup is null or empty.", clientName));
+        Preconditions.checkArgument(isValid(destination),
+                String.format("[%s] destination is null or empty.", clientName));
         try {
             IRetry.build(ExponentialBackoffRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -152,9 +164,13 @@ public class LogReplicationLogicalGroupClient {
                             log.info(String.format("[%s] Destination already exists.", clientName));
                             return null;
                         }
-                        clientDestinations = clientDestinations.toBuilder().addDestinationIds(destination).build();
+                        clientDestinations = clientDestinations.toBuilder()
+                                .addDestinationIds(destination)
+                                .build();
                     } else {
-                        clientDestinations = DestinationInfoVal.newBuilder().addDestinationIds(destination).build();
+                        clientDestinations = DestinationInfoVal.newBuilder()
+                                .addDestinationIds(destination)
+                                .build();
                     }
 
                     txn.putRecord(sourceMetadataTable, clientInfoKey, clientDestinations, null);
@@ -178,9 +194,12 @@ public class LogReplicationLogicalGroupClient {
      * @param remoteDestinations The clusters which the specified group will be replicated to.
      */
     public void addDestination(String logicalGroup, List<String> remoteDestinations) {
-        Preconditions.checkArgument(isValid(logicalGroup), String.format("[%s] %s", clientName, "logicalGroup is null or empty."));
-        Preconditions.checkArgument(isValid(remoteDestinations), String.format("[%s] %s", clientName, "remoteDestinations is null or empty."));
-        Preconditions.checkArgument(hasNoNullOrEmptyElements(remoteDestinations), String.format("[%s] %s", clientName, "remoteDestinations contains null or empty elements."));
+        Preconditions.checkArgument(isValid(logicalGroup),
+                String.format("[%s] logicalGroup is null or empty.", clientName));
+        Preconditions.checkArgument(isValid(remoteDestinations),
+                String.format("[%s] remoteDestinations is null or empty.", clientName));
+        Preconditions.checkArgument(hasNoNullOrEmptyElements(remoteDestinations),
+                String.format("[%s] remoteDestinations contains null or empty elements.", clientName));
         List<String> finalRemoteDestinations = new ArrayList<>(deduplicate(remoteDestinations));
         try {
             IRetry.build(ExponentialBackoffRetry.class, () -> {
@@ -195,9 +214,13 @@ public class LogReplicationLogicalGroupClient {
                             log.info(String.format("[%s] All destinations already present.", clientName));
                             return null;
                         }
-                        clientDestinations = clientDestinations.toBuilder().addAllDestinationIds(finalRemoteDestinations).build();
+                        clientDestinations = clientDestinations.toBuilder()
+                                .addAllDestinationIds(finalRemoteDestinations)
+                                .build();
                     } else {
-                        clientDestinations = DestinationInfoVal.newBuilder().addAllDestinationIds(finalRemoteDestinations).build();
+                        clientDestinations = DestinationInfoVal.newBuilder()
+                                .addAllDestinationIds(finalRemoteDestinations)
+                                .build();
                     }
 
                     txn.putRecord(sourceMetadataTable, clientInfoKey, clientDestinations, null);
@@ -221,8 +244,10 @@ public class LogReplicationLogicalGroupClient {
      * @param destination The cluster which should be removed from the logical group for all future replication.
      */
     public void removeDestination(String logicalGroup, String destination) {
-        Preconditions.checkArgument(isValid(logicalGroup), String.format("[%s] %s", clientName, "logicalGroup is null or empty."));
-        Preconditions.checkArgument(isValid(destination), String.format("[%s] %s", clientName, "destination is null or empty."));
+        Preconditions.checkArgument(isValid(logicalGroup),
+                String.format("[%s] logicalGroup is null or empty.", clientName));
+        Preconditions.checkArgument(isValid(destination),
+                String.format("[%s] destination is null or empty.", clientName));
         try {
             IRetry.build(ExponentialBackoffRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
@@ -269,9 +294,12 @@ public class LogReplicationLogicalGroupClient {
      * @param remoteDestinations The clusters which should be removed from the logical group for all future replication.
      */
     public void removeDestination(String logicalGroup, List<String> remoteDestinations) {
-        Preconditions.checkArgument(isValid(logicalGroup), String.format("[%s] %s", clientName, "logicalGroup is null or empty."));
-        Preconditions.checkArgument(isValid(remoteDestinations), String.format("[%s] %s", clientName, "remoteDestinations is null or empty."));
-        Preconditions.checkArgument(hasNoNullOrEmptyElements(remoteDestinations), String.format("[%s] %s", clientName, "remoteDestinations contains null or empty elements."));
+        Preconditions.checkArgument(isValid(logicalGroup),
+                String.format("[%s] logicalGroup is null or empty.", clientName));
+        Preconditions.checkArgument(isValid(remoteDestinations),
+                String.format("[%s] remoteDestinations is null or empty.", clientName));
+        Preconditions.checkArgument(hasNoNullOrEmptyElements(remoteDestinations),
+                String.format("[%s] remoteDestinations contains null or empty elements.", clientName));
         Set<String> removeRemoteDestinationsSet = deduplicate(remoteDestinations);
         try {
             IRetry.build(ExponentialBackoffRetry.class, () -> {
@@ -327,7 +355,8 @@ public class LogReplicationLogicalGroupClient {
      * @return The associated destinations as a list of strings.
      */
     public List<String> getDestinations(String logicalGroup) {
-        Preconditions.checkArgument(isValid(logicalGroup), String.format("[%s] %s", clientName, "logicalGroup is null or empty."));
+        Preconditions.checkArgument(isValid(logicalGroup),
+                String.format("[%s] logicalGroup is null or empty.", clientName));
         try {
             return IRetry.build(ExponentialBackoffRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
