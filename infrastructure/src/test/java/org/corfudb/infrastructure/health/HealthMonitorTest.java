@@ -3,9 +3,13 @@ package org.corfudb.infrastructure.health;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import org.corfudb.infrastructure.health.HealthReport.ComponentReportedHealthStatus;
+import org.corfudb.infrastructure.health.HealthReport.ReportedLivenessStatus;
+import org.corfudb.util.Sleep;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -150,6 +154,7 @@ public class HealthMonitorTest {
                 HealthReport.builder()
                         .init(ImmutableSet.of())
                         .runtime(ImmutableSet.of())
+                        .liveness(new ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
                         .status(UNKNOWN)
                         .reason(OVERALL_STATUS_UNKNOWN)
                         .build();
@@ -172,6 +177,7 @@ public class HealthMonitorTest {
                                 new ComponentReportedHealthStatus(FAILURE_DETECTOR, DOWN, COMPONENT_IS_NOT_RUNNING),
                                 new ComponentReportedHealthStatus(SEQUENCER, DOWN, COMPONENT_IS_NOT_RUNNING),
                                 new ComponentReportedHealthStatus(COMPACTOR, DOWN, COMPONENT_IS_NOT_RUNNING)))
+                        .liveness(new ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
                         .reason(OVERALL_STATUS_DOWN)
                         .status(DOWN)
                         .build();
@@ -190,6 +196,7 @@ public class HealthMonitorTest {
                                 new ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_IS_RUNNING),
                                 new ComponentReportedHealthStatus(SEQUENCER, DOWN, COMPONENT_IS_NOT_RUNNING),
                                 new ComponentReportedHealthStatus(COMPACTOR, UP, COMPONENT_IS_RUNNING)))
+                        .liveness(new ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
                         .reason(OVERALL_STATUS_DOWN)
                         .status(DOWN)
                         .build();
@@ -207,6 +214,7 @@ public class HealthMonitorTest {
                                 new ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_IS_RUNNING),
                                 new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING),
                                 new ComponentReportedHealthStatus(COMPACTOR, UP, COMPONENT_IS_RUNNING)))
+                        .liveness(new ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
                         .reason(OVERALL_STATUS_UP)
                         .status(UP)
                         .build();
@@ -226,6 +234,7 @@ public class HealthMonitorTest {
                                 new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING),
                                 new ComponentReportedHealthStatus(COMPACTOR, UP, COMPONENT_IS_RUNNING),
                                 new ComponentReportedHealthStatus(LOG_UNIT, DOWN, COMPONENT_IS_NOT_RUNNING)))
+                        .liveness(new ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
                         .reason(OVERALL_STATUS_DOWN)
                         .status(DOWN)
                         .build();
@@ -246,6 +255,7 @@ public class HealthMonitorTest {
                                 new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING),
                                 new ComponentReportedHealthStatus(COMPACTOR, UP, COMPONENT_IS_RUNNING),
                                 new ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_IS_RUNNING)))
+                        .liveness(new ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
                         .reason(OVERALL_STATUS_UP)
                         .status(UP)
                         .build();
@@ -268,6 +278,7 @@ public class HealthMonitorTest {
                                 new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING),
                                 new ComponentReportedHealthStatus(COMPACTOR, UP, COMPONENT_IS_RUNNING),
                                 new ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_IS_RUNNING)))
+                        .liveness(new ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
                         .reason(OVERALL_STATUS_FAILURE)
                         .status(FAILURE)
                         .build();
@@ -288,6 +299,7 @@ public class HealthMonitorTest {
                                 new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING),
                                 new ComponentReportedHealthStatus(COMPACTOR, FAILURE, compactorFailure),
                                 new ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_IS_RUNNING)))
+                        .liveness(new ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
                         .reason(OVERALL_STATUS_FAILURE)
                         .status(FAILURE)
                         .build();
@@ -308,6 +320,7 @@ public class HealthMonitorTest {
                                 new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING),
                                 new ComponentReportedHealthStatus(COMPACTOR, FAILURE, compactorFailure),
                                 new ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_IS_RUNNING)))
+                        .liveness(new ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
                         .reason(OVERALL_STATUS_FAILURE)
                         .status(FAILURE)
                         .build();
@@ -327,6 +340,7 @@ public class HealthMonitorTest {
                                 new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING),
                                 new ComponentReportedHealthStatus(COMPACTOR, UP, COMPONENT_IS_RUNNING),
                                 new ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_IS_RUNNING)))
+                        .liveness(new ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
                         .reason(OVERALL_STATUS_FAILURE)
                         .status(FAILURE)
                         .build();
@@ -347,6 +361,7 @@ public class HealthMonitorTest {
                                 new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING),
                                 new ComponentReportedHealthStatus(COMPACTOR, UP, COMPONENT_IS_RUNNING),
                                 new ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_IS_RUNNING)))
+                        .liveness(new ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
                         .reason(OVERALL_STATUS_FAILURE)
                         .status(FAILURE)
                         .build();
@@ -367,6 +382,7 @@ public class HealthMonitorTest {
                                 new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING),
                                 new ComponentReportedHealthStatus(COMPACTOR, UP, COMPONENT_IS_RUNNING),
                                 new ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_IS_RUNNING)))
+                        .liveness(new ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
                         .reason(OVERALL_STATUS_UP)
                         .status(UP)
                         .build();
@@ -387,6 +403,7 @@ public class HealthMonitorTest {
                                 new ComponentReportedHealthStatus(SEQUENCER, DOWN, COMPONENT_IS_NOT_RUNNING),
                                 new ComponentReportedHealthStatus(COMPACTOR, DOWN, COMPONENT_IS_NOT_RUNNING),
                                 new ComponentReportedHealthStatus(LOG_UNIT, DOWN, COMPONENT_IS_NOT_RUNNING)))
+                        .liveness(new ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
                         .reason(OVERALL_STATUS_DOWN)
                         .status(DOWN)
                         .build();
@@ -395,5 +412,86 @@ public class HealthMonitorTest {
         HealthMonitor.shutdown();
     }
 
+    @Test
+    @SuppressWarnings("checkstyle:magicnumber")
+    void testDeadlockDetection() {
+        HealthMonitor.init();
+        HealthMonitor.reportIssue(Issue.createInitIssue(FAILURE_DETECTOR));
+        HealthMonitor.reportIssue(Issue.createInitIssue(SEQUENCER));
+        HealthMonitor.reportIssue(Issue.createInitIssue(COMPACTOR));
+        HealthMonitor.resolveIssue(Issue.createInitIssue(FAILURE_DETECTOR));
+        HealthMonitor.resolveIssue(Issue.createInitIssue(SEQUENCER));
+        HealthMonitor.resolveIssue(Issue.createInitIssue(COMPACTOR));
+        HealthReport healthyReport =
+                HealthReport.builder()
+                        .init(ImmutableSet.of(
+                                new ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_INITIALIZED),
+                                new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_INITIALIZED),
+                                new ComponentReportedHealthStatus(COMPACTOR, UP, COMPONENT_INITIALIZED)))
+                        .runtime(ImmutableSet.of(
+                                new ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_IS_RUNNING),
+                                new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING),
+                                new ComponentReportedHealthStatus(COMPACTOR, UP, COMPONENT_IS_RUNNING)))
+                        .liveness(new ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
+                        .reason(OVERALL_STATUS_UP)
+                        .status(UP)
+                        .build();
+        assertThat(HealthMonitor.generateHealthReport()).isEqualTo(healthyReport);
+        // Deadlock two threads and verify that HealthMonitor is able to detect it
+        ReentrantLock lockA = new ReentrantLock();
+        ReentrantLock lockB = new ReentrantLock();
+
+        Runnable block1 = () -> {
+            try {
+                lockA.lockInterruptibly();
+                Thread.sleep(1000);
+                lockB.lockInterruptibly();
+            }
+            catch(InterruptedException ie) {
+                // interrupted
+            }
+        };
+
+        // Thread-2
+        Runnable block2 = () -> {
+            try {
+                lockB.lockInterruptibly();
+                lockA.lockInterruptibly();
+            }
+            catch(InterruptedException ie) {
+               // interrupted
+            }
+        };
+
+        final Thread thread1 = new Thread(block1);
+        final Thread thread2 = new Thread(block2);
+        thread1.start();
+        thread2.start();
+        Sleep.sleepUninterruptibly(Duration.ofSeconds(2));
+        final HealthReport healthReport = HealthMonitor.generateHealthReport();
+        final String reason = healthReport.getLiveness().getReason();
+
+        HealthReport unhealthyReport =
+                HealthReport.builder()
+                        .init(ImmutableSet.of(
+                                new ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_INITIALIZED),
+                                new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_INITIALIZED),
+                                new ComponentReportedHealthStatus(COMPACTOR, UP, COMPONENT_INITIALIZED)))
+                        .runtime(ImmutableSet.of(
+                                new ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_IS_RUNNING),
+                                new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING),
+                                new ComponentReportedHealthStatus(COMPACTOR, UP, COMPONENT_IS_RUNNING)))
+                        .liveness(new ReportedLivenessStatus(DOWN, reason))
+                        .reason(OVERALL_STATUS_FAILURE)
+                        .status(FAILURE)
+                        .build();
+        assertThat(healthReport).isEqualTo(unhealthyReport);
+        // Resolve the deadlock and verify that it's reflected in the health report
+        thread1.interrupt();
+        thread2.interrupt();
+        Sleep.sleepUninterruptibly(Duration.ofSeconds(2));
+        assertThat(HealthMonitor.generateHealthReport()).isEqualTo(healthyReport);
+        HealthMonitor.shutdown();
+    }
 
 }

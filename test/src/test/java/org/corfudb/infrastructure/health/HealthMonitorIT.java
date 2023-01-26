@@ -159,6 +159,7 @@ public class HealthMonitorIT extends AbstractIT {
                         new ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_IS_RUNNING),
                         new ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_IS_RUNNING),
                         new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING)))
+                .liveness(new HealthReport.ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
                 .build();
         // Give it some time to change state
         Thread.sleep(WAIT_TIME_MILLIS * 3);
@@ -207,6 +208,7 @@ public class HealthMonitorIT extends AbstractIT {
                         new ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_IS_RUNNING),
                         new ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_IS_RUNNING),
                         new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING)))
+                .liveness(new HealthReport.ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
                 .build();
         // Give it some time to notice that quota is exceeded
         Thread.sleep(WAIT_TIME_MILLIS * 5);
@@ -238,6 +240,7 @@ public class HealthMonitorIT extends AbstractIT {
                         new ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_IS_RUNNING),
                         new ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_IS_RUNNING),
                         new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING)))
+                .liveness(new HealthReport.ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
                 .build();
         assertThat(healthReport).isEqualTo(expectedHealthReport);
         assertThat(shutdownCorfuServer(anotherProcessAgain)).isTrue();

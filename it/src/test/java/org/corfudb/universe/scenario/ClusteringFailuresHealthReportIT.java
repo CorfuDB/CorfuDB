@@ -50,6 +50,7 @@ public class ClusteringFailuresHealthReportIT extends GenericIntegrationTest {
                         new HealthReport.ComponentReportedHealthStatus(FAILURE_DETECTOR, FAILURE,
                                 "There are nodes in the unresponsive list"),
                         new HealthReport.ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING)))
+                .liveness(new HealthReport.ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
                 .build();
     }
 
@@ -71,6 +72,7 @@ public class ClusteringFailuresHealthReportIT extends GenericIntegrationTest {
                         new HealthReport.ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_IS_RUNNING),
                         new HealthReport.ComponentReportedHealthStatus(SEQUENCER, FAILURE,
                                 "Sequencer requires bootstrap")))
+                .liveness(new HealthReport.ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
                 .build();
     }
 
@@ -90,6 +92,7 @@ public class ClusteringFailuresHealthReportIT extends GenericIntegrationTest {
                         new HealthReport.ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_IS_RUNNING),
                         new HealthReport.ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_IS_RUNNING),
                         new HealthReport.ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING)))
+                .liveness(new HealthReport.ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
                 .build();
     }
 

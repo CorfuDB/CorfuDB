@@ -2,12 +2,22 @@ package org.corfudb.infrastructure.health;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.util.LambdaUtils;
 
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadInfo;
+import java.lang.management.ThreadMXBean;
+import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * HealthMonitor keeps track of the HealthStatus of each Component.
@@ -19,10 +29,28 @@ public final class HealthMonitor {
 
     private final ConcurrentMap<Component, HealthStatus> componentHealthStatus;
 
+    private final ScheduledExecutorService scheduledExecutorService;
+
+    private final AtomicReference<LivenessStatus> livenessStatus;
+
+    private static final Duration LIVENESS_INTERVAL = Duration.ofSeconds(1);
+
     private static Optional<HealthMonitor> instance = Optional.empty();
 
     private HealthMonitor() {
         this.componentHealthStatus = new ConcurrentHashMap<>();
+        this.livenessStatus = new AtomicReference<>(new LivenessStatus(true, ""));
+        this.scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(
+                new ThreadFactoryBuilder()
+                        .setNameFormat("HealthMonitorLivenessThread")
+                        .build());
+        this.scheduledExecutorService.scheduleWithFixedDelay(
+                () -> LambdaUtils.runSansThrow(this::checkLiveness),
+                0,
+                LIVENESS_INTERVAL.toMillis(),
+                TimeUnit.MILLISECONDS
+        );
+
     }
 
     public static void init() {
@@ -55,6 +83,24 @@ public final class HealthMonitor {
         });
     }
 
+    private void checkLiveness() {
+        ThreadMXBean tmx = ManagementFactory.getThreadMXBean();
+        long[] ids = tmx.findDeadlockedThreads();
+        if (ids != null) {
+            log.warn("Detected deadlock");
+            ThreadInfo[] infos = tmx.getThreadInfo(ids, true, true);
+            StringBuilder sb = new StringBuilder();
+            for (ThreadInfo ti : infos) {
+                sb.append(ti.toString());
+                sb.append("\n");
+            }
+            livenessStatus.set(new LivenessStatus(false, sb.toString()));
+        }
+        else {
+            livenessStatus.set(new LivenessStatus(true, ""));
+        }
+    }
+
     /**
      * Resolve the issue. If there was no issue to begin with, it's a NOOP.
      * @param issue An issue
@@ -77,6 +123,7 @@ public final class HealthMonitor {
     private void close() {
         componentHealthStatus.clear();
         instance = Optional.empty();
+        scheduledExecutorService.shutdown();
     }
 
     public static void shutdown() {
@@ -84,7 +131,7 @@ public final class HealthMonitor {
     }
 
     private HealthReport healthReport() {
-        return HealthReport.fromComponentHealthStatus(componentHealthStatus);
+        return HealthReport.fromComponentHealthStatus(componentHealthStatus, livenessStatus.get());
     }
 
     /**
