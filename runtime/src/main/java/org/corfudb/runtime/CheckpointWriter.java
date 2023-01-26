@@ -107,6 +107,7 @@ public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
     /** Local ref to the object that we're dumping.
      *  TODO: generalize to all SMR objects.
      */
+    @Getter
     private final T corfuTable;
 
     @Getter
