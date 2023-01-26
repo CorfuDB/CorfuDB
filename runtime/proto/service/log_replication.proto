@@ -3,7 +3,9 @@ syntax = "proto3";
 package org.corfudb.runtime;
 option java_package = "org.corfudb.runtime";
 
+import "corfu_options.proto";
 import "rpc_common.proto";
+import "google/protobuf/timestamp.proto";
 
 message LogReplicationEntryMetadataMsg {
   int64 topologyConfigID = 1;
@@ -52,4 +54,37 @@ enum LogReplicationEntryType {
   SNAPSHOT_REPLICATED = 4;
   SNAPSHOT_END = 5;
   SNAPSHOT_TRANSFER_COMPLETE = 6;
+}
+
+enum ReplicationModel {
+  FULL_TABLE = 0;                 // Full table replication (Single Source to Single Sink = 1:1)
+  ROUTING_QUEUES = 1;             // Routing queue replication (used for entry-level replication) (1:1)
+  LOGICAL_GROUPS = 2;             // Table association to logical group (1:1)
+  MULTI_SOURCE_MERGE = 3;         // Same table replication from multiple sources to single sink (n:1)
+}
+
+// Key for LogReplicationModelMetadataTable
+message ClientDestinationInfoKey {
+  ReplicationModel model = 1;
+  string client_name = 2;
+  string group_name = 3;
+}
+
+// Value for LogReplicationModelMetadataTable
+message DestinationInfoVal {
+  option (org.corfudb.runtime.table_schema).stream_tag = "lr_sessions";
+  repeated string destination_ids = 1;
+}
+
+// Key for LogReplicationRegistrationTable
+message ClientRegistrationId {
+  string client_name = 1;
+}
+
+// Value for LogReplicationRegistrationTable
+message ClientRegistrationInfo {
+  option (org.corfudb.runtime.table_schema).stream_tag = "lr_sessions";
+  string client_name = 1;
+  ReplicationModel model = 2;
+  google.protobuf.Timestamp registration_time = 3;
 }
