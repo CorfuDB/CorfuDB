@@ -1418,6 +1418,8 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         assertThat(options.getStreamTagCount()).isEqualTo(2);
         assertThat(options.getStreamTag(0)).isEqualTo("sample_streamer_2");
         assertThat(options.getStreamTag(1)).isEqualTo("sample_streamer_3");
+        assertThat(options.getReplicationGroup().getLogicalGroup()).isEqualTo("group1");
+        assertThat(options.getReplicationGroup().getClientName()).isEqualTo("logical_group_consumer");
 
         // Open the same table again with different schema options, verify that registry table
         // gets updated

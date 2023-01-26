@@ -78,6 +78,7 @@ message SampleTableBMsg {
     option (org.corfudb.runtime.table_schema).stream_tag = "sample_streamer_3";
     option (org.corfudb.runtime.table_schema).requires_backup_support = false;
     option (org.corfudb.runtime.table_schema).is_federated = true;
+    option (org.corfudb.runtime.table_schema).replication_group = { logical_group: "group1" client_name: "logical_group_consumer"};
 
     optional string payload = 1;
 }
