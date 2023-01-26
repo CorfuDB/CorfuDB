@@ -5,6 +5,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.units.qual.C;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryServiceAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationDiscoveryServiceException;
 import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
@@ -33,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicReference;
@@ -45,7 +47,7 @@ import java.util.stream.Stream;
  * one source cluster, and one or more sink clusters.
  */
 @Slf4j
-public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAdapter {
+public class DefaultClusterManager implements CorfuReplicationClusterManagerAdapter {
     private static final int BACKUP_CORFU_PORT = 9007;
 
     private static final String SOURCE_CLUSTER_NAME = "primary_site";
@@ -94,12 +96,43 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
 
     private long smallSleepInterval = 10;
 
+    @Getter
+    public CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService;
+
+    @Getter
+    public TopologyConfigurationMsg topologyConfig;
+
+    public String localEndpoint;
+
     public DefaultClusterManager() {
         topology = new DefaultClusterConfig();
         remoteSourceToReplicationModels = new HashMap<>();
         remoteSinkToReplicationModels = new HashMap<>();
         connectionEndPoints = new HashSet<>();
         topologyBucketsInitialized = false;
+    }
+
+    public void register(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService) {
+        this.corfuReplicationDiscoveryService = corfuReplicationDiscoveryService;
+    }
+
+    public void setLocalEndpoint(String endpoint) {
+        this.localEndpoint = endpoint;
+    }
+
+    public synchronized void updateTopologyConfig(TopologyConfigurationMsg newTopologyConfigMsg) {
+        if (newTopologyConfigMsg.getTopologyConfigID() > topologyConfig.getTopologyConfigID()) {
+            topologyConfig = newTopologyConfigMsg;
+            corfuReplicationDiscoveryService.updateTopology(topologyConfig);
+        }
+    }
+
+    public Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus() {
+        return corfuReplicationDiscoveryService.queryReplicationStatus();
+    }
+
+    public UUID forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException {
+        return corfuReplicationDiscoveryService.forceSnapshotSync(clusterId);
     }
 
     public void start() {
@@ -406,7 +439,8 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
      * and source as sink. Data should flow in the reverse direction.
      **/
     public TopologyDescriptor generateConfigWithRoleSwitch() {
-        TopologyDescriptor currentConfig = new TopologyDescriptor(topologyConfig, this);
+        TopologyDescriptor currentConfig = new TopologyDescriptor(topologyConfig, this.remoteSinkToReplicationModels,
+                this.remoteSourceToReplicationModels);
 
         List<ClusterConfigurationMsg> newSourceClusters = new ArrayList<>();
         List<ClusterConfigurationMsg> newSinkClusters = new ArrayList<>();
@@ -546,7 +580,8 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         resetBuckets();
         createSingleSourceSinkTopologyBuckets();
 
-        TopologyDescriptor defaultTopology = new TopologyDescriptor(readConfig(), this);
+        TopologyDescriptor defaultTopology = new TopologyDescriptor(readConfig(), this.remoteSinkToReplicationModels,
+                this.remoteSourceToReplicationModels);
         List<ClusterDescriptor> sourceClusters = new ArrayList<>(defaultTopology.getRemoteSourceClusters().values());
         List<ClusterDescriptor> sinkClusters = new ArrayList<>(defaultTopology.getRemoteSinkClusters().values());
         List<ClusterDescriptor> allClusters = new ArrayList<>();

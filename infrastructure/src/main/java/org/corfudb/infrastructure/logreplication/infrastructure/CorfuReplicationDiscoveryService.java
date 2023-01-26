@@ -545,7 +545,9 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 try {
                     log.info("Fetching topology from Cluster Manager...");
                     TopologyConfigurationMsg topologyMessage = clusterManagerAdapter.queryTopologyConfig(false);
-                    topologyDescriptor = new TopologyDescriptor(topologyMessage, clusterManagerAdapter);
+                    topologyDescriptor = new TopologyDescriptor(topologyMessage,
+                            clusterManagerAdapter.getRemoteSinkToReplicationModels(),
+                            clusterManagerAdapter.getRemoteSourceToReplicationModels());
                 } catch (Exception e) {
                     log.error("Caught exception while fetching topology. Retry.", e);
                     throw new RetryNeededException();
@@ -677,7 +679,9 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         log.debug("Received topology change, topology={}", event.getTopologyConfig());
 
-        TopologyDescriptor discoveredTopology = new TopologyDescriptor(event.getTopologyConfig(), clusterManagerAdapter);
+        TopologyDescriptor discoveredTopology = new TopologyDescriptor(event.getTopologyConfig(),
+                clusterManagerAdapter.getRemoteSinkToReplicationModels(),
+                clusterManagerAdapter.getRemoteSourceToReplicationModels());
 
         boolean isValid;
         try {
