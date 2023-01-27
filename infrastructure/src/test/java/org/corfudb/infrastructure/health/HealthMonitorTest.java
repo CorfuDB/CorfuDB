@@ -479,8 +479,9 @@ public class HealthMonitorTest {
         thread1.start();
         thread2.start();
         while (!lockA.hasQueuedThreads() && !lockB.hasQueuedThreads()) {
-            HealthMonitor.liveness();
+            Sleep.sleepUninterruptibly(Duration.ofMillis(50));
         }
+        HealthMonitor.liveness();
         final HealthReport healthReport = HealthMonitor.generateHealthReport();
         final String reason = healthReport.getLiveness().getReason();
 
@@ -503,8 +504,9 @@ public class HealthMonitorTest {
         thread1.interrupt();
         thread2.interrupt();
         while (lockA.hasQueuedThreads() && lockB.hasQueuedThreads()) {
-            HealthMonitor.liveness();
+            Sleep.sleepUninterruptibly(Duration.ofMillis(50));
         }
+        HealthMonitor.liveness();
         assertThat(HealthMonitor.generateHealthReport()).isEqualTo(healthyReport);
         HealthMonitor.shutdown();
     }
