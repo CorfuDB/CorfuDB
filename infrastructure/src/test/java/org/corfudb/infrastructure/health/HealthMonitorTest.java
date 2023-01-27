@@ -8,6 +8,7 @@ import org.corfudb.util.Sleep;
 import org.junit.jupiter.api.Test;
 
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CyclicBarrier;
@@ -477,7 +478,9 @@ public class HealthMonitorTest {
         final Thread thread2 = new Thread(block2);
         thread1.start();
         thread2.start();
-        HealthMonitor.liveness();
+        while (!lockA.hasQueuedThreads() && !lockB.hasQueuedThreads()) {
+            HealthMonitor.liveness();
+        }
         final HealthReport healthReport = HealthMonitor.generateHealthReport();
         final String reason = healthReport.getLiveness().getReason();
 
@@ -499,7 +502,9 @@ public class HealthMonitorTest {
         // Resolve the deadlock and verify that it's reflected in the health report
         thread1.interrupt();
         thread2.interrupt();
-        HealthMonitor.liveness();
+        while (lockA.hasQueuedThreads() && lockB.hasQueuedThreads()) {
+            HealthMonitor.liveness();
+        }
         assertThat(HealthMonitor.generateHealthReport()).isEqualTo(healthyReport);
         HealthMonitor.shutdown();
     }
