@@ -184,13 +184,17 @@ public class LogReplicationServer extends AbstractServer {
         log.trace("Log Replication Entry received by Server.");
 
         if (isLeader.get()) {
-            // Get the Sink Manager corresponding to the remote cluster session
-            LogReplicationSinkManager sinkManager = incomingSessionMsgToSinkManagerMap.get(request.getHeader().getSessionInfo());
 
             // If no sink Manager is found and if the session is not seen by the discoveryService, drop the message and log an error. Else create Sink Manager
-            if (sinkManager == null && !sessionValid(request.getHeader().getSessionInfo(), getUUID(request.getHeader().getClusterId()).toString())) {
+            if (incomingSessionMsgToSinkManagerMap.get(request.getHeader().getSessionInfo()) == null &&
+                    !checkSessionAndCreateSinkManager(request.getHeader().getSessionInfo())) {
+                log.error("Sink Manager not found for remote cluster {}.  This could be due to a topology mismatch.",
+                        getUUID(request.getHeader().getClusterId()).toString());
                 return;
             }
+
+            // Get the Sink Manager corresponding to the remote cluster session
+            LogReplicationSinkManager sinkManager = incomingSessionMsgToSinkManagerMap.get(request.getHeader().getSessionInfo());
 
             // Forward the received message to the Sink Manager for apply
             LogReplicationEntryMsg ack = sinkManager.receive(request.getPayload().getLrEntry());
@@ -215,13 +219,14 @@ public class LogReplicationServer extends AbstractServer {
         }
     }
 
+    // TODO: update the comment after SessionManager PR
     /**
-     * When sink manager is not found, check if the session is valid and create sink managers.
+     * A new incoming session is "valid" when the discoveryService has discovered the new session by going through the
+     * registry table. In that case, create a corresponding sinkManager.
      * @param incomingSession
-     * @param requestId
      * @return true if session is valid, false if not valid
      */
-    private boolean sessionValid(LogReplication.ReplicationSessionMsg incomingSession, String requestId) {
+    private boolean checkSessionAndCreateSinkManager(LogReplication.ReplicationSessionMsg incomingSession) {
         LogReplication.ReplicationSessionMsg outgoingSession = LogReplication.ReplicationSessionMsg.newBuilder()
                 .mergeFrom(incomingSession)
                 .setLocalClusterId(incomingSession.getRemoteClusterId())
@@ -236,7 +241,6 @@ public class LogReplicationServer extends AbstractServer {
             return true;
         }
 
-        log.error("Sink Manager not found for remote cluster {}.  This could be due to a topology mismatch.", requestId);
         return false;
     }
 
@@ -256,12 +260,15 @@ public class LogReplicationServer extends AbstractServer {
         log.info("Log Replication Metadata Request received by Server.");
 
         if (isLeader.get()) {
-            LogReplicationSinkManager sinkManager = incomingSessionMsgToSinkManagerMap.get(request.getHeader().getSessionInfo());
-
             // If no sink Manager is found, drop the message and log an error
-            if (sinkManager == null && !sessionValid(request.getHeader().getSessionInfo(), getUUID(request.getHeader().getClusterId()).toString())) {
+            if (incomingSessionMsgToSinkManagerMap.get(request.getHeader().getSessionInfo()) == null &&
+                    !checkSessionAndCreateSinkManager(request.getHeader().getSessionInfo())) {
+                log.error("Sink Manager not found for remote cluster {}.  This could be due to a topology mismatch.",
+                        getUUID(request.getHeader().getClusterId()).toString());
                 return;
             }
+
+            LogReplicationSinkManager sinkManager = incomingSessionMsgToSinkManagerMap.get(request.getHeader().getSessionInfo());
 
             LogReplicationMetadataManager metadataMgr = sinkManager.getLogReplicationMetadataManager();
 
