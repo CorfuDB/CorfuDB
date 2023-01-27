@@ -7,7 +7,7 @@ ARG CORFU_TOOLS_JAR
 
 WORKDIR /app
 
-RUN apt update && apt -y install iptables bash jq python3 sudo iproute2 python3-pip
+RUN apt update && apt -y install iptables bash jq python3 sudo iproute2 python3-pip curl
 RUN python3 -m pip install pyyaml==5.4.1
 
 COPY target/${CORFU_JAR} /usr/share/corfu/lib/${CORFU_JAR}
