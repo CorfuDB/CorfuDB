@@ -7,8 +7,10 @@ import org.corfudb.infrastructure.health.HealthReport.ReportedLivenessStatus;
 import org.corfudb.util.Sleep;
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
+
 import java.util.Map;
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -440,15 +442,19 @@ public class HealthMonitorTest {
         // Deadlock two threads and verify that HealthMonitor is able to detect it
         ReentrantLock lockA = new ReentrantLock();
         ReentrantLock lockB = new ReentrantLock();
+        CyclicBarrier cb = new CyclicBarrier(2);
 
         Runnable block1 = () -> {
             try {
                 lockA.lockInterruptibly();
-                Thread.sleep(1000);
+                cb.await();
                 lockB.lockInterruptibly();
             }
             catch(InterruptedException ie) {
                 // interrupted
+            }
+            catch (BrokenBarrierException bbe) {
+                throw new IllegalStateException();
             }
         };
 
@@ -456,10 +462,14 @@ public class HealthMonitorTest {
         Runnable block2 = () -> {
             try {
                 lockB.lockInterruptibly();
+                cb.await();
                 lockA.lockInterruptibly();
             }
             catch(InterruptedException ie) {
                // interrupted
+            }
+            catch (BrokenBarrierException bbe) {
+                throw new IllegalStateException();
             }
         };
 
@@ -467,7 +477,7 @@ public class HealthMonitorTest {
         final Thread thread2 = new Thread(block2);
         thread1.start();
         thread2.start();
-        Sleep.sleepUninterruptibly(Duration.ofSeconds(2));
+        HealthMonitor.liveness();
         final HealthReport healthReport = HealthMonitor.generateHealthReport();
         final String reason = healthReport.getLiveness().getReason();
 
@@ -489,7 +499,7 @@ public class HealthMonitorTest {
         // Resolve the deadlock and verify that it's reflected in the health report
         thread1.interrupt();
         thread2.interrupt();
-        Sleep.sleepUninterruptibly(Duration.ofSeconds(2));
+        HealthMonitor.liveness();
         assertThat(HealthMonitor.generateHealthReport()).isEqualTo(healthyReport);
         HealthMonitor.shutdown();
     }

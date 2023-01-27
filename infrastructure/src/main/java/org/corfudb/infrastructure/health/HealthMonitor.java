@@ -33,7 +33,7 @@ public final class HealthMonitor {
 
     private final AtomicReference<LivenessStatus> livenessStatus;
 
-    private static final Duration LIVENESS_INTERVAL = Duration.ofSeconds(1);
+    private static final Duration LIVENESS_INTERVAL = Duration.ofMinutes(1);
 
     private static Optional<HealthMonitor> instance = Optional.empty();
 
@@ -81,6 +81,11 @@ public final class HealthMonitor {
             return healthStatus;
 
         });
+    }
+
+    @VisibleForTesting
+    static void liveness() {
+        instance.ifPresent(HealthMonitor::checkLiveness);
     }
 
     private void checkLiveness() {
