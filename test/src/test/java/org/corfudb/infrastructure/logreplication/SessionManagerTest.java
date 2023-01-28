@@ -45,7 +45,7 @@ public class SessionManagerTest extends AbstractViewTest {
      */
     @Test
     public void testSessionMgrAfterLogEntrySync() {
-        SessionManager sessionManager = new SessionManager(topology, corfuRuntime, null, null);
+        SessionManager sessionManager = new SessionManager(topology, corfuRuntime);
         Assert.assertNotNull(sessionManager);
         // TODO: Add further verification.
     }

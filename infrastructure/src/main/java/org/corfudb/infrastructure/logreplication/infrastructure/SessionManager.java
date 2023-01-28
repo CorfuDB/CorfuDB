@@ -95,6 +95,25 @@ public class SessionManager {
     }
 
     /**
+     * Test constructor.
+     *
+     * @param topology            the current topology
+     * @param corfuRuntime        runtime for database access
+     */
+    public SessionManager(@Nonnull TopologyDescriptor topology, CorfuRuntime corfuRuntime) {
+        this.topology = topology;
+        this.runtime = corfuRuntime;
+        this.corfuStore = new CorfuStore(corfuRuntime);
+        this.localCorfuEndpoint = "localhost:" +
+                topology.getLocalClusterDescriptor().getCorfuPort();
+        this.metadataManager =  new LogReplicationMetadataManager(corfuRuntime);
+        this.configManager = new LogReplicationConfigManager(runtime);
+        this.upgradeManager = null;
+
+        createSessions(false);
+    }
+
+    /**
      * Refresh sessions based on new topoloogy
      *
      * @param newTopology   the new discovered topology
