@@ -41,13 +41,12 @@ public class CorfuReplicationManager {
      */
     public CorfuReplicationManager(NodeDescriptor localNodeDescriptor,
                                    LogReplicationMetadataManager metadataManager,
-                                   String pluginFilePath, CorfuRuntime corfuRuntime,
-                                   UpgradeManager upgradeManager) {
+                                   String pluginFilePath, CorfuRuntime corfuRuntime, LogReplicationUpgradeManager upgradeManager) {
         this.metadataManager = metadataManager;
         this.pluginFilePath = pluginFilePath;
         this.corfuRuntime = corfuRuntime;
         this.localNodeDescriptor = localNodeDescriptor;
-        this.upgradeManager = upgradeManager
+        this.upgradeManager = upgradeManager;
     }
 
     /**

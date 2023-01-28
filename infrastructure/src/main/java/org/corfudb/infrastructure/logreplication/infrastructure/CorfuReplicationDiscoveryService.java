@@ -16,6 +16,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
+import org.corfudb.infrastructure.logreplication.utils.UpgradeManager;
 import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
@@ -94,6 +95,11 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     private LogReplicationUpgradeManager upgradeManager;
 
     private SessionManager sessionManager;
+
+    /**
+     * Responsible for version management
+     */
+    private UpgradeManager upgradeManager;
 
     /**
      * Adapter for cluster discovery service
@@ -644,7 +650,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 localEndpoint, localNodeId, topology.getLocalClusterDescriptor(), topology);
             if (!bootstrapComplete) {
                 log.info("Bootstrap the Log Replication Service");
-                sessionManager = new SessionManager(topologyDescriptor, getCorfuRuntime(), serverContext);
+                upgradeManager = new UpgradeManager(getCorfuRuntime(), serverContext.getPluginConfigFilePath());
+                sessionManager = new SessionManager(topologyDescriptor, getCorfuRuntime(), serverContext, upgradeManager);
                 performRoleBasedSetup(topology);
                 registerToLogReplicationLock();
                 bootstrapComplete = true;

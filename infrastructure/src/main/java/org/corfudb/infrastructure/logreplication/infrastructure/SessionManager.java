@@ -7,6 +7,7 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.infrastructure.logreplication.utils.UpgradeManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.proto.service.CorfuMessage.ReplicationSubscriber;
 import org.corfudb.runtime.proto.service.CorfuMessage.ReplicationModel;
@@ -70,6 +71,8 @@ public class SessionManager {
     @Getter
     private final LogReplicationMetadataManager metadataManager;
 
+    private final UpgradeManager upgradeManager;
+
     /**
      * Constructor
      *
@@ -77,18 +80,16 @@ public class SessionManager {
      * @param corfuRuntime        runtime for database access
      * @param serverContext       the server context
      */
-    public SessionManager(@Nonnull TopologyDescriptor topology, CorfuRuntime corfuRuntime, ServerContext serverContext) {
+    public SessionManager(@Nonnull TopologyDescriptor topology, CorfuRuntime corfuRuntime,
+                          ServerContext serverContext, UpgradeManager upgradeManager) {
         this.topology = topology;
         this.runtime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);
-        if (serverContext == null) {
-            this.localCorfuEndpoint = "localhost:9000";
-        } else {
-            this.localCorfuEndpoint = NodeLocator.parseString(serverContext.getLocalEndpoint()).getHost() + ":" +
-                    topology.getLocalClusterDescriptor().getCorfuPort();
-        }
+        this.localCorfuEndpoint = NodeLocator.parseString(serverContext.getLocalEndpoint()).getHost() + ":" +
+                topology.getLocalClusterDescriptor().getCorfuPort();
         this.metadataManager =  new LogReplicationMetadataManager(corfuRuntime);
         this.configManager = new LogReplicationConfigManager(runtime, serverContext);
+        this.upgradeManager = upgradeManager;
 
         createSessions(false);
     }
@@ -316,7 +317,7 @@ public class SessionManager {
 
         if(replicationManager == null) {
             this.replicationManager = new CorfuReplicationManager(topology.getLocalNodeDescriptor(),
-                    metadataManager, configManager.getServerContext().getPluginConfigFilePath(), runtime);
+                    metadataManager, configManager.getServerContext().getPluginConfigFilePath(), runtime, upgradeManager);
         }
 
         createSessions(true);
