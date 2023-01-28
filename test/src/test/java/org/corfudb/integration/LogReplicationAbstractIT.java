@@ -57,7 +57,7 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;

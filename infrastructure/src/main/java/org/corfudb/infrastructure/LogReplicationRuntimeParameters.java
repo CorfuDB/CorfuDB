@@ -8,7 +8,7 @@ import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.RuntimeParameters;
 import org.corfudb.runtime.RuntimeParametersBuilder;
 

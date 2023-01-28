@@ -38,7 +38,7 @@ import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
-import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.junit.Test;
 
 import java.io.IOException;

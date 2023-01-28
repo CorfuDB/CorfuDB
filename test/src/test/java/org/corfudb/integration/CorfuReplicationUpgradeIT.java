@@ -9,7 +9,7 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.utils.CommonTypes;
 import org.corfudb.utils.LogReplicationStreams;
 import org.junit.Assert;

@@ -2,8 +2,7 @@ package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
-
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import java.util.UUID;
 
 /**

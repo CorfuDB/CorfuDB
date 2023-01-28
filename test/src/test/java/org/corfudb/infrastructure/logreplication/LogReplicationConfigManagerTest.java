@@ -7,7 +7,7 @@ import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValueTag;
 import org.corfudb.infrastructure.logreplication.proto.Sample.StringKey;
 import org.corfudb.runtime.proto.service.CorfuMessage;
-import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.test.SampleSchema.ValueFieldTagOne;
 import org.corfudb.test.SampleSchema.Uuid;
 

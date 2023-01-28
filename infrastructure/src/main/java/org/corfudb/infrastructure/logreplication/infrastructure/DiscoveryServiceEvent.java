@@ -2,7 +2,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 
 import java.util.UUID;
 

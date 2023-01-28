@@ -9,10 +9,10 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Re
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.proto.service.CorfuMessage.ReplicationSubscriber;
-import org.corfudb.runtime.proto.service.CorfuMessage.ReplicationModel;
-import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
+import org.corfudb.runtime.LogReplication.ReplicationModel;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.runtime.LogReplication.ReplicationSubscriber;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;

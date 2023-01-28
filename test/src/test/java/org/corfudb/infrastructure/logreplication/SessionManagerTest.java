@@ -6,7 +6,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultC
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.proto.service.CorfuMessage;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.After;
 import org.junit.Assert;
@@ -20,8 +20,8 @@ public class SessionManagerTest extends AbstractViewTest {
     private CorfuRuntime corfuRuntime;
     private LogReplicationConfigManager configManager;
     private TestUtils utils;
-    private List<CorfuMessage.LogReplicationSession> sessions = DefaultClusterConfig.getSessions();
-    private CorfuMessage.LogReplicationSession defaultSession = sessions.get(0);
+    private List<LogReplicationSession> sessions = DefaultClusterConfig.getSessions();
+    private LogReplicationSession defaultSession = sessions.get(0);
     private TopologyDescriptor topology = new DefaultClusterManager().generateDefaultValidConfig();
 
     @Before

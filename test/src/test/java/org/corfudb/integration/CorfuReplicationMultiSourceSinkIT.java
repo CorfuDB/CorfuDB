@@ -10,6 +10,7 @@ import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
@@ -18,7 +19,6 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.test.SampleSchema;
 import org.junit.After;
 import org.junit.Assert;
@@ -238,7 +238,7 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
 
             // Replication Status Listeners
             sinkCorfuStores.get(i).openTable(LogReplicationMetadataManager.NAMESPACE,
-                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME, CorfuMessage.LogReplicationSession.class,
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME, LogReplicationSession.class,
                 LogReplicationMetadata.ReplicationStatus.class, null,
                 TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatus.class));
             statusLatch = new CountDownLatch(numDataConsistentUpdates);

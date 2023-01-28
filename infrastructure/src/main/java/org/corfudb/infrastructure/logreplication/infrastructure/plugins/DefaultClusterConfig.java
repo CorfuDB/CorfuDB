@@ -2,8 +2,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
 import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
-import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
-
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;

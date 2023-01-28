@@ -13,14 +13,11 @@ import org.corfudb.infrastructure.RequestHandler;
 import org.corfudb.infrastructure.RequestHandlerMethods;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
-import org.corfudb.runtime.proto.service.CorfuMessage.ReplicationModel;
-import org.corfudb.runtime.proto.service.CorfuMessage.ReplicationSubscriber;
-import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
-import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
@@ -143,18 +140,7 @@ public class LogReplicationServer extends AbstractServer {
         log.trace("Log Replication Entry received by Server.");
 
         if (isLeader.get()) {
-            LogReplicationSession session;
-
-            if(!request.getHeader().hasSession()) {
-                // Backward compatibility where 'session' field not present
-                session = LogReplicationSession.newBuilder()
-                        .setSourceClusterId(getUUID(request.getHeader().getClusterId()).toString())
-                        .setSinkClusterId(localClusterId)
-                        .setSubscriber(SessionManager.getDefaultSubscriber())
-                        .build();
-            } else {
-               session = request.getHeader().getSession();
-            }
+            LogReplicationSession session = getSession(request);
 
             LogReplicationSinkManager sinkManager = sessionToSinkManagerMap.get(session);
 
@@ -204,11 +190,8 @@ public class LogReplicationServer extends AbstractServer {
         log.info("Log Replication Metadata Request received by Server.");
 
         if (isLeader.get()) {
-            String sourceClusterId = getUUID(request.getHeader().getClusterId()).toString();
 
-            // TODO: after multi-model support is added instead of default session, this info will be
-            //  part of the RequestMsg
-            LogReplicationSession session = getDefaultSession(sourceClusterId, localClusterId);
+            LogReplicationSession session = getSession(request);
 
             LogReplicationSinkManager sinkManager = sessionToSinkManagerMap.get(session);
 
@@ -236,6 +219,29 @@ public class LogReplicationServer extends AbstractServer {
         }
     }
 
+    /**
+     * Get session associated to the received request.
+     *
+     * @param request
+     * @return the session for the given request
+     */
+    private LogReplicationSession getSession(RequestMsg request) {
+        LogReplicationSession session;
+
+        if(!request.getHeader().hasSession()) {
+            // Backward compatibility where 'session' field not present
+            session = LogReplicationSession.newBuilder()
+                    .setSourceClusterId(getUUID(request.getHeader().getClusterId()).toString())
+                    .setSinkClusterId(localClusterId)
+                    .setSubscriber(SessionManager.getDefaultSubscriber())
+                    .build();
+        } else {
+            session = request.getHeader().getSession();
+        }
+
+        return session;
+    }
+
     public ResponseMsg getMetadataResponse(RequestMsg request, ReplicationMetadata metadata) {
 
         LogReplicationMetadataResponseMsg metadataMsg = LogReplicationMetadataResponseMsg.newBuilder()
@@ -251,25 +257,6 @@ public class LogReplicationServer extends AbstractServer {
                 .build();
 
         return  getResponseMsg(getHeaderMsg(request.getHeader()), payload);
-    }
-
-    /**
-     * Return default session. This method should be used during rolling upgrades
-     * between versions V1 and V2. LR-V1 does not have the notion of sessions.
-     */
-    private LogReplicationSession getDefaultSession(String sourceClusterId, String sinkClusterId) {
-        return  LogReplicationSession.newBuilder()
-                .setSourceClusterId(sourceClusterId)
-                .setSinkClusterId(sinkClusterId)
-                .setSubscriber(ReplicationSubscriber.newBuilder()
-                        .setClientName(SessionManager.DEFAULT_CLIENT_ID.toString())
-                        .setModel(ReplicationModel.FULL_TABLE)
-                        .setClientId(RpcCommon.UuidMsg.newBuilder()
-                                .setMsb(SessionManager.DEFAULT_CLIENT_ID.getMostSignificantBits())
-                                .setLsb(SessionManager.DEFAULT_CLIENT_ID.getLeastSignificantBits())
-                                .build())
-                        .build())
-                .build();
     }
 
     /**

@@ -22,7 +22,7 @@ import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.proto.service.CorfuMessage;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.IStreamView;
@@ -172,7 +172,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         // (7) Verify replication status after all data has been replicated (no further data)
         corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,
             REPLICATION_STATUS_TABLE_NAME,
-            CorfuMessage.LogReplicationSession.class,
+            LogReplicationSession.class,
             ReplicationStatus.class,
             null,
             TableOptions.fromProtoSchema(ReplicationStatus.class));
@@ -227,7 +227,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
                                          SnapshotSyncInfo.SnapshotSyncType targetSnapshotSyncType,
                                          SyncStatus targetSnapshotSyncStatus) {
 
-        CorfuMessage.LogReplicationSession session = CorfuMessage.LogReplicationSession.newBuilder()
+        LogReplicationSession session = LogReplicationSession.newBuilder()
             .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
             .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
             .setSubscriber(SessionManager.getDefaultSubscriber())
