@@ -19,6 +19,16 @@ message SchemaOptions {
     repeated string stream_tag = 5;
     // Nested Secondary Key (repeated field)
     repeated SecondaryIndex secondary_key = 6;
+    // The combination of client and logical_group name to indicate how data is to be replicated.
+    optional ReplicationLogicalGroup replication_group = 7;
+}
+
+message ReplicationLogicalGroup {
+    // Logical group name that helps club a number of tables into one group for Log Replication.
+    required string logical_group = 1;
+    // Client Name refers to the name of this replicated table's owner
+    // It can be used on the sink side of replication to apply or consume the incoming replicated updates.
+    required string client_name = 2;
 }
 
 message SecondaryIndex {
