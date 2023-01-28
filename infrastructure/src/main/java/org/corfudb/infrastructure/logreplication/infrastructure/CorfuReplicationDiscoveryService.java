@@ -13,7 +13,10 @@ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuRep
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventInfoKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent.ReplicationEventType;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -101,6 +104,11 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * in Log Replication
      */
     private LogReplicationConfigManager replicationConfigManager;
+
+    /**
+     * Responsible for version management
+     */
+    private LogReplicationUpgradeManager upgradeManager;
 
     /**
      * Used by the source cluster to initiate Log Replication
@@ -364,6 +372,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         // Through the config manager, retrieve system-specific configurations such as streams to replicate
         // for supported replication models and version
         replicationConfigManager = new LogReplicationConfigManager(getCorfuRuntime(), serverContext);
+        upgradeManager = new LogReplicationUpgradeManager(getCorfuRuntime(), serverContext.getPluginConfigFilePath());
         logReplicationConfig = replicationConfigManager.getConfig();
 
         Set<String> remoteClusterIds = new HashSet<>();
@@ -513,7 +522,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 if (replicationManager == null) {
                     replicationManager = new CorfuReplicationManager(replicationContext, localNodeDescriptor,
                         remoteSessionToMetadataManagerMap, serverContext.getPluginConfigFilePath(), getCorfuRuntime(),
-                        replicationConfigManager);
+                        replicationConfigManager, upgradeManager);
                 } else {
                     // Replication Context contains the topology which
                     // must be updated if it has changed

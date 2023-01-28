@@ -12,16 +12,13 @@ import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationCo
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventInfoKey;
-import org.corfudb.runtime.LogReplication.ReplicationStatus;
-import org.corfudb.runtime.LogReplication.ReplicationInfo;
-import org.corfudb.runtime.LogReplication.SyncType;
-import org.corfudb.runtime.LogReplication.SinkReplicationStatus;
-import org.corfudb.runtime.LogReplication.SnapshotSyncInfo;
-import org.corfudb.runtime.LogReplication.SnapshotSyncInfo.SnapshotSyncType;
-import org.corfudb.runtime.LogReplication.SourceReplicationStatus;
-import org.corfudb.runtime.LogReplication.SyncStatus;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusKey;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -375,7 +372,23 @@ public class LogReplicationMetadataManager {
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-                    addSession(txn, session, topologyConfigId, incoming);
+                    for (LogReplicationMetadataType type : LogReplicationMetadataType.values()) {
+                        if (type == LogReplicationMetadataType.TOPOLOGY_CONFIG_ID) {
+                            appendUpdate(txn, type, topologyConfigId);
+                        } else if (type == LogReplicationMetadataType.VERSION) {
+                            // TODO: We should update the version in metadata manager
+                            //  when the version is read from static file
+                            String version = LogReplicationUpgradeManager.getNodeVersion();
+                            if (version == null) {
+                                log.error("Failed to fetch version from plugin.");
+                                appendUpdate(txn, type, Address.NON_ADDRESS);
+                            } else {
+                                appendUpdate(txn, type, version);
+                            }
+                        } else {
+                            appendUpdate(txn, type, Address.NON_ADDRESS);
+                        }
+                    }
                     txn.commit();
                 } catch (TransactionAbortedException e) {
                     log.error("Exception when updating the topology config id", e);

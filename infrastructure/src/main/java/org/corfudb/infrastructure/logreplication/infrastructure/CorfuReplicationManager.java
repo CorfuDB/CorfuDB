@@ -7,7 +7,12 @@ import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientSer
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.IntervalRetry;
+import org.corfudb.util.retry.RetryNeededException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -40,21 +45,23 @@ public class CorfuReplicationManager {
 
     private final Map<LogReplicationSession, LogReplicationRuntimeParameters> replicationSessionToRuntimeParams;
 
+    private final LogReplicationUpgradeManager upgradeManager;
+
     /**
      * Constructor
      */
     public CorfuReplicationManager(LogReplicationContext context, NodeDescriptor localNodeDescriptor,
                                    Map<ReplicationSession, LogReplicationMetadataManager> metadataManagerMap,
                                    String pluginFilePath, CorfuRuntime corfuRuntime,
-                                   LogReplicationConfigManager replicationConfigManager) {
+                                   LogReplicationConfigManager replicationConfigManager,
+                                   LogReplicationUpgradeManager upgradeManager) {
         this.context = context;
         this.metadataManagerMap = metadataManagerMap;
         this.pluginFilePath = pluginFilePath;
         this.corfuRuntime = corfuRuntime;
-        this.localNodeDescriptor = topology.getLocalNodeDescriptor();
-        this.topology = topology;
-        this.replicationContext = replicationContext;
-        this.replicationSessionToRuntimeParams = new HashMap<>();
+        this.localNodeDescriptor = localNodeDescriptor;
+        this.replicationConfigManager = replicationConfigManager;
+        this.upgradeManager = upgradeManager;
     }
 
     /**
@@ -137,7 +144,7 @@ public class CorfuReplicationManager {
                             .maxWriteSize(corfuRuntime.getParameters().getMaxWriteSize())
                             .build();
                     CorfuLogReplicationRuntime replicationRuntime = new CorfuLogReplicationRuntime(parameters,
-                        metadataManagerMap.get(session), replicationConfigManager, session);
+                        metadataManagerMap.get(session), upgradeManager, replicationConfigManager, session);
                     replicationRuntime.start();
                     runtimeToRemoteSession.put(session, replicationRuntime);
                 } catch (Exception e) {

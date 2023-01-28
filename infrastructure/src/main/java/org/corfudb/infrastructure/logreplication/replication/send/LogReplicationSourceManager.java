@@ -14,6 +14,9 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationF
 import org.corfudb.infrastructure.logreplication.replication.fsm.ObservableAckMsg;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.DefaultReadProcessor;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClient;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 
@@ -58,15 +61,18 @@ public class LogReplicationSourceManager {
      * @param metadataManager Replication Metadata Manager
      */
     public LogReplicationSourceManager(LogReplicationRuntimeParameters params, LogReplicationClient client,
-        LogReplicationMetadataManager metadataManager, LogReplicationConfigManager tableManagerPlugin,
-        ReplicationSession replicationSession) {
-        this(params, metadataManager, new CorfuDataSender(client), tableManagerPlugin, replicationSession);
+                                       LogReplicationMetadataManager metadataManager,
+                                       LogReplicationConfigManager configManager,
+                                       LogReplicationUpgradeManager upgradeManager,
+                                       ReplicationSession replicationSession) {
+        this(params, metadataManager, new CorfuDataSender(client), configManager, upgradeManager, replicationSession);
     }
 
     @VisibleForTesting
     public LogReplicationSourceManager(LogReplicationRuntimeParameters params,
-        LogReplicationMetadataManager metadataManager, DataSender dataSender,
-        LogReplicationConfigManager tableManagerPlugin, ReplicationSession replicationSession) {
+                                       LogReplicationMetadataManager metadataManager, DataSender dataSender,
+                                       LogReplicationConfigManager configManager, LogReplicationUpgradeManager upgradeManager,
+                                       ReplicationSession replicationSession) {
 
         // This runtime is used exclusively for the snapshot and log entry reader which do not require a cache
         // as these are one time operations.
@@ -100,11 +106,10 @@ public class LogReplicationSourceManager {
         ReadProcessor readProcessor = new DefaultReadProcessor(runtime);
         this.metadataManager = metadataManager;
         // Ack Reader for Snapshot and LogEntry Sync
-        // TODO pankti: Should AckReader also get tableManagerPlugin?
-        this.ackReader = new LogReplicationAckReader(this.metadataManager, tableManagerPlugin, runtime, replicationSession);
+        this.ackReader = new LogReplicationAckReader(this.metadataManager, configManager, runtime, replicationSession);
 
-        this.logReplicationFSM = new LogReplicationFSM(this.runtime, tableManagerPlugin, dataSender, readProcessor,
-            logReplicationFSMWorkers, ackReader, tableManagerPlugin, replicationSession);
+        this.logReplicationFSM = new LogReplicationFSM(this.runtime, configManager, dataSender, readProcessor,
+            logReplicationFSMWorkers, ackReader, upgradeManager, replicationSession);
 
         this.logReplicationFSM = new LogReplicationFSM(this.runtime, dataSender, readProcessor,
                 logReplicationFSMWorkers, ackReader, session, replicationContext);

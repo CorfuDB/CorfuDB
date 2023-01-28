@@ -7,6 +7,7 @@ import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.LogReplication.SyncType;
 
@@ -55,6 +56,11 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     private final DataSender dataSender;
 
     /**
+     * Used for checking LR is in upgrading path or not
+     */
+    private final LogReplicationUpgradeManager upgradeManager;
+
+    /**
      * Base Snapshot Timestamp for current Snapshot Sync
      */
     private long baseSnapshotTimestamp;
@@ -70,13 +76,15 @@ public class WaitSnapshotApplyState implements LogReplicationState {
      *
      * @param logReplicationFSM log replication state machine
      */
-    public WaitSnapshotApplyState(LogReplicationFSM logReplicationFSM, DataSender dataSender) {
+    public WaitSnapshotApplyState(LogReplicationFSM logReplicationFSM, DataSender dataSender,
+                                  LogReplicationUpgradeManager upgradeManager) {
         this.fsm = logReplicationFSM;
         this.dataSender = dataSender;
         this.snapshotSyncApplyMonitorExecutor = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
                 .setDaemon(true)
                 .setNameFormat("snapshotSyncApplyVerificationScheduler")
                 .build());
+        this.upgradeManager = upgradeManager;
     }
 
     @Override
@@ -129,6 +137,13 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                     logEntrySyncState.setTransitionSyncId(transitionSyncId);
                     fsm.setBaseSnapshot(event.getMetadata().getLastTransferredBaseSnapshot());
                     fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
+                    if (upgradeManager.isUpgraded()) {
+                        // If LR is in upgrading path, it means this cycle of snapshot sync was triggered
+                        // forcibly because LR detected a version mismatch. Flipping the flag back to false
+                        // here to indicate that the upgrade path is completed.
+                        log.info("Forced snapshot sync due to LR upgrade is COMPLETE.");
+                        upgradeManager.resetUpgradeFlag();
+                    }
                     log.info("Snapshot Sync apply completed, syncRequestId={}, baseSnapshot={}. Transition to LOG_ENTRY_SYNC",
                             event.getMetadata().getSyncId(), event.getMetadata().getLastTransferredBaseSnapshot());
                     return logEntrySyncState;
