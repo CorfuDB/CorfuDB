@@ -7,7 +7,7 @@ import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
-import org.corfudb.infrastructure.logreplication.utils.UpgradeManager;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
@@ -121,7 +121,7 @@ public class CorfuLogReplicationRuntime {
     /**
      * Used for checking if LR is in upgrading path
      */
-    private final UpgradeManager upgradeManager;
+    private final LogReplicationUpgradeManager upgradeManager;
 
     /**
      * Current state of the FSM.
@@ -150,6 +150,7 @@ public class CorfuLogReplicationRuntime {
     private final LinkedBlockingQueue<LogReplicationRuntimeEvent> eventQueue = new LinkedBlockingQueue<>();
 
     private final LogReplicationClientRouter router;
+    private final LogReplicationMetadataManager metadataManager;
 
     @Getter
     private final LogReplicationSourceManager sourceManager;
@@ -180,7 +181,6 @@ public class CorfuLogReplicationRuntime {
         this.sourceManager = new LogReplicationSourceManager(parameters, new LogReplicationClient(router, session.getSinkClusterId()),
                 metadataManager, upgradeManager, session, context);
         this.connectedNodes = new HashSet<>();
-        this.upgradeManager = upgradeManager;
 
         ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker-"+remoteClusterId)
             .build();

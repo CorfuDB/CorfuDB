@@ -443,7 +443,8 @@ public class LogReplicationAbstractIT extends AbstractIT {
                     ReplicationStatus status = (ReplicationStatus)e.getPayload();
                     accumulatedStatus.add(status.getSinkStatus().getDataConsistent());
                     if (this.waitSnapshotStatusComplete &&
-                            status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus().equals(SyncStatus.COMPLETED)) {
+                            status.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo().getStatus()
+                                .equals(SyncStatus.COMPLETED)) {
                         countDownLatch.countDown();
                     }
             }));

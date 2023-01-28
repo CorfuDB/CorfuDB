@@ -2,7 +2,6 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
-import org.corfudb.infrastructure.logreplication.utils.UpgradeManager;
 import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
@@ -31,8 +30,6 @@ public class CorfuReplicationManager {
     private final LogReplicationMetadataManager metadataManager;
 
     private final String pluginFilePath;
-
-    private final UpgradeManager upgradeManager;
 
     private final LogReplicationUpgradeManager upgradeManager;
 

@@ -10,7 +10,6 @@ import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationCo
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
-import org.corfudb.infrastructure.logreplication.utils.UpgradeManager;
 import org.corfudb.runtime.proto.service.CorfuMessage.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
@@ -1254,7 +1253,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                         LogReplicationClusterInfo.ClusterRole.SOURCE, CORFU_PORT))
                 .localCorfuEndpoint(SOURCE_ENDPOINT)
                 .build();
-        UpgradeManager upgradeManager = new UpgradeManager(srcDataRuntime, runtimeParameters.getPluginFilePath());
         LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(runtimeParameters,
                 metadataManager, sourceDataSender, upgradeManager, session, context);
 

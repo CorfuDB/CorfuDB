@@ -18,6 +18,7 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.test.SampleSchema;
 import org.junit.After;
 import org.junit.Assert;
@@ -237,9 +238,9 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
 
             // Replication Status Listeners
             sinkCorfuStores.get(i).openTable(LogReplicationMetadataManager.NAMESPACE,
-                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME, LogReplicationMetadata.ReplicationStatusKey.class,
-                LogReplicationMetadata.ReplicationStatusVal.class, null,
-                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+                LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME, CorfuMessage.LogReplicationSession.class,
+                LogReplicationMetadata.ReplicationStatus.class, null,
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatus.class));
             statusLatch = new CountDownLatch(numDataConsistentUpdates);
             statusLatches.add(statusLatch);
 
@@ -457,10 +458,11 @@ public class CorfuReplicationMultiSourceSinkIT extends AbstractIT {
         @Override
         public void onNext(CorfuStreamEntries results) {
             // Only consider updates where data consistent changed to 'true' for counting the latch down.
-            // Ignore 'clear' updates which get sent on a role change and have no payload (to avoid NPE)
+            // Ignore 'clear' and 'delete' operations which get sent on a role change and have no payload (to avoid NPE)
             results.getEntries().forEach((schema, entries) -> entries.forEach(e -> {
                 if (e.getOperation() != CorfuStreamEntry.OperationType.CLEAR &&
-                    ((LogReplicationMetadata.ReplicationStatusVal)e.getPayload()).getDataConsistent()) {
+                    e.getOperation() != CorfuStreamEntry.OperationType.DELETE &&
+                    ((LogReplicationMetadata.ReplicationStatus)e.getPayload()).getSinkStatus().getDataConsistent()) {
                     countDownLatch.countDown();
                 }
             }));

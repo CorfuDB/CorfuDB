@@ -7,7 +7,7 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
-import org.corfudb.infrastructure.logreplication.utils.UpgradeManager;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.proto.service.CorfuMessage.ReplicationSubscriber;
 import org.corfudb.runtime.proto.service.CorfuMessage.ReplicationModel;
@@ -71,7 +71,7 @@ public class SessionManager {
     @Getter
     private final LogReplicationMetadataManager metadataManager;
 
-    private final UpgradeManager upgradeManager;
+    private final LogReplicationUpgradeManager upgradeManager;
 
     /**
      * Constructor
@@ -81,7 +81,7 @@ public class SessionManager {
      * @param serverContext       the server context
      */
     public SessionManager(@Nonnull TopologyDescriptor topology, CorfuRuntime corfuRuntime,
-                          ServerContext serverContext, UpgradeManager upgradeManager) {
+                          ServerContext serverContext, LogReplicationUpgradeManager upgradeManager) {
         this.topology = topology;
         this.runtime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);

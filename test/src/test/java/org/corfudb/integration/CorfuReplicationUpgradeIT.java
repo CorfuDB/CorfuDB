@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_STATUS_TABLE_NAME;
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LR_STATUS_STREAM_TAG;
-import static org.corfudb.infrastructure.logreplication.utils.UpgradeManager.LOG_REPLICATION_PLUGIN_VERSION_TABLE;
+import static org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager.LOG_REPLICATION_PLUGIN_VERSION_TABLE;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
@@ -238,7 +238,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Upgrade the sink site
 
-        statusUpdateLatch = new CountDownLatch(TOTAL_SINK_STATUS_TX_INIT_SNAPSHOT_SYNC);
+        statusUpdateLatch = new CountDownLatch(NUM_SNAPSHOT_SYNC_UPDATES_ON_SINK_STATUS_TABLE);
         sinkListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreSink.subscribeListener(sinkListener, CORFU_SYSTEM_NAMESPACE,
             LR_STATUS_STREAM_TAG);
@@ -262,9 +262,9 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         // Verify that snapshot sync between the different versions was successful
         latchSnapshotSyncPlugin.await();
         statusUpdateLatch.await();
-        Assert.assertEquals(TOTAL_SINK_STATUS_TX_INIT_SNAPSHOT_SYNC, sinkListener.getAccumulatedStatus().size());
-        Assert.assertTrue(sinkListener.getAccumulatedStatus().get(4));
-        Assert.assertFalse(sinkListener.getAccumulatedStatus().get(3));
+        Assert.assertEquals(NUM_SNAPSHOT_SYNC_UPDATES_ON_SINK_STATUS_TABLE, sinkListener.getAccumulatedStatus().size());
+        Assert.assertTrue(sinkListener.getAccumulatedStatus().get(1));
+        Assert.assertFalse(sinkListener.getAccumulatedStatus().get(0));
         verifyDataOnSink(NUM_WRITES);
 
         corfuStoreSink.unsubscribeListener(snapshotSyncPluginListener);
@@ -343,7 +343,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         validateSnapshotSyncPlugin(snapshotSyncPluginListener);
         statusUpdateLatch.await();
 
-        Assert.assertEquals(TOTAL_SINK_STATUS_TX_INIT_SNAPSHOT_SYNC, sinkListener.getAccumulatedStatus().size());
+        Assert.assertEquals(TOTAL_SINK_STATUS_ENTRIES_INIT_SNAPSHOT_SYNC, sinkListener.getAccumulatedStatus().size());
         Assert.assertTrue(sinkListener.getAccumulatedStatus().get(4));
         Assert.assertFalse(sinkListener.getAccumulatedStatus().get(3));
         corfuStoreSink.unsubscribeListener(sinkListener);
@@ -362,7 +362,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         snapshotSyncPluginListener = new SnapshotSyncPluginListener(latchSnapshotSyncPlugin);
         subscribeToSnapshotSyncPluginTable(snapshotSyncPluginListener);
 
-        statusUpdateLatch = new CountDownLatch(TOTAL_SINK_STATUS_TX_INIT_SNAPSHOT_SYNC);
+        statusUpdateLatch = new CountDownLatch(NUM_SNAPSHOT_SYNC_UPDATES_ON_SINK_STATUS_TABLE);
         sinkListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreSink.subscribeListener(sinkListener, CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
 
@@ -379,9 +379,9 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         validateSnapshotSyncPlugin(snapshotSyncPluginListener);
         statusUpdateLatch.await();
 
-        Assert.assertEquals(TOTAL_SINK_STATUS_ENTRIES_INIT_SNAPSHOT_SYNC, sinkListener.getAccumulatedStatus().size());
-        Assert.assertTrue(sinkListener.getAccumulatedStatus().get(4));
-        Assert.assertFalse(sinkListener.getAccumulatedStatus().get(3));
+        Assert.assertEquals(NUM_SNAPSHOT_SYNC_UPDATES_ON_SINK_STATUS_TABLE, sinkListener.getAccumulatedStatus().size());
+        Assert.assertTrue(sinkListener.getAccumulatedStatus().get(1));
+        Assert.assertFalse(sinkListener.getAccumulatedStatus().get(0));
 
         verifyDataOnSink(NUM_WRITES);
 
@@ -586,7 +586,7 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
 
         // Upgrade the sink site
 
-        statusUpdateLatch = new CountDownLatch(TOTAL_SINK_STATUS_TX_INIT_SNAPSHOT_SYNC);
+        statusUpdateLatch = new CountDownLatch(NUM_SNAPSHOT_SYNC_UPDATES_ON_SINK_STATUS_TABLE);
         sinkListener = new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreSink.subscribeListener(sinkListener, CORFU_SYSTEM_NAMESPACE, LR_STATUS_STREAM_TAG);
 
@@ -638,9 +638,9 @@ public class CorfuReplicationUpgradeIT extends LogReplicationAbstractIT {
         // Verify that snapshot sync between the different versions was successful
         latchSnapshotSyncPlugin.await();
         statusUpdateLatch.await();
-        Assert.assertEquals(TOTAL_SINK_STATUS_TX_INIT_SNAPSHOT_SYNC, sinkListener.getAccumulatedStatus().size());
-        Assert.assertTrue(sinkListener.getAccumulatedStatus().get(4));
-        Assert.assertFalse(sinkListener.getAccumulatedStatus().get(3));
+        Assert.assertEquals(NUM_SNAPSHOT_SYNC_UPDATES_ON_SINK_STATUS_TABLE, sinkListener.getAccumulatedStatus().size());
+        Assert.assertTrue(sinkListener.getAccumulatedStatus().get(1));
+        Assert.assertFalse(sinkListener.getAccumulatedStatus().get(0));
 
         verifyDataOnSink(sourceOnlyStreams, NUM_WRITES);
 
