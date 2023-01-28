@@ -32,6 +32,7 @@ import org.corfudb.infrastructure.logreplication.replication.send.logreader.Snap
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -113,6 +114,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private DataSender dataSender;
     private SnapshotReader snapshotReader;
     private LogReplicationAckReader ackReader;
+
+    private static final String pluginConfigFilePath = "src/test/resources/transport/nettyConfig.properties";
 
     @Before
     public void setRuntime() {
@@ -822,6 +825,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         LogEntryReader logEntryReader = new TestLogEntryReader();
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(runtime, null);
+        LogReplicationUpgradeManager upgradeManager = new LogReplicationUpgradeManager(runtime, pluginConfigFilePath);
+
         ReplicationSession replicationSession = ReplicationSession.getDefaultReplicationSessionForCluster(
             TEST_LOCAL_CLUSTER_ID);
 
@@ -861,7 +866,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
                 new DefaultReadProcessor(runtime), configManager,
                 Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()),
-                ackReader, configManager, replicationSession);
+                ackReader, upgradeManager, replicationSession);
         ackReader.setLogEntryReader(fsm.getLogEntryReader());
         transitionObservable = fsm.getNumTransitions();
         transitionObservable.addObserver(this);
