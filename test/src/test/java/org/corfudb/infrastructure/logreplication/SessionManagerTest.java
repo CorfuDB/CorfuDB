@@ -48,9 +48,10 @@ public class SessionManagerTest extends AbstractViewTest {
         topology = new DefaultClusterManager().generateDefaultValidConfig();
         SessionManager sessionManager = new SessionManager(topology, corfuRuntime);
         String sourceClusterId = "456e4567-e89b-12d3-a456-556642440001";
+        int numSourceCluster = topology.getSourceClusters().size();
 
         // Verifies that the source cluster has established session with all 3 sink clusters.
-        Assert.assertEquals(3, sessionManager.getOutgoingSessions().size());
+        Assert.assertEquals(numSourceCluster, sessionManager.getOutgoingSessions().size());
         Assert.assertEquals(sourceClusterId, topology.getLocalClusterDescriptor().getClusterId());
         Assert.assertEquals(0, sessionManager.getIncomingSessions().size());
     }
@@ -65,11 +66,12 @@ public class SessionManagerTest extends AbstractViewTest {
         topology = new DefaultClusterManager(SinkClusterAsLocalEndpoint).generateDefaultValidConfig();
         SessionManager sessionManager = new SessionManager(topology, corfuRuntime);
         String sinkClusterId = "456e4567-e89b-12d3-a456-556642440002";
+        int numSinkCluster = topology.getSinkClusters().size();
 
         // Verifies that the sink cluster has established session with all 3 source clusters.
         Assert.assertEquals(0, sessionManager.getOutgoingSessions().size());
         Assert.assertEquals(sinkClusterId, topology.getLocalClusterDescriptor().getClusterId());
-        Assert.assertEquals(3, sessionManager.getIncomingSessions().size());
+        Assert.assertEquals(numSinkCluster, sessionManager.getIncomingSessions().size());
     }
 }
 
