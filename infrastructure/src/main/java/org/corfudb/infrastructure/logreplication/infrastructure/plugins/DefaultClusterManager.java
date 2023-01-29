@@ -90,6 +90,16 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
         localEndpoint = topology.getSourceNodeUuids().get(0);
     }
 
+    // Test constructor: Sink cluster as local endpoint.
+    public DefaultClusterManager(boolean sinkAsLocalEndpoint) {
+        topology = new DefaultClusterConfig();
+        if (sinkAsLocalEndpoint) {
+            localEndpoint = topology.getSinkNodeUuids().get(0);
+        } else {
+            localEndpoint = topology.getSourceNodeUuids().get(0);
+        }
+    }
+
     public void start() {
         configId = 0L;
         shutdown = false;

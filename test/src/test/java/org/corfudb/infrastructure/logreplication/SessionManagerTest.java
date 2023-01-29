@@ -22,7 +22,7 @@ public class SessionManagerTest extends AbstractViewTest {
     private TestUtils utils;
     private List<LogReplicationSession> sessions = DefaultClusterConfig.getSessions();
     private LogReplicationSession defaultSession = sessions.get(0);
-    private TopologyDescriptor topology = new DefaultClusterManager().generateDefaultValidConfig();
+    private TopologyDescriptor topology;
 
     @Before
     public void setUp() {
@@ -40,14 +40,36 @@ public class SessionManagerTest extends AbstractViewTest {
     }
 
     /**
-     * This test verifies that the timestamp of the last log entry processed during LogEntry sync is correctly
-     * updated in the metadata table on the Sink cluster
+     * This test verifies that the outgoing session is established using session manager.
+     * It verifies that the in-memory state has captured the outgoing session.
      */
     @Test
-    public void testSessionMgrAfterLogEntrySync() {
+    public void testSessionMgrWithOutgoingSession() {
+        topology = new DefaultClusterManager().generateDefaultValidConfig();
         SessionManager sessionManager = new SessionManager(topology, corfuRuntime);
-        Assert.assertNotNull(sessionManager);
-        // TODO: Add further verification.
+        String sourceClusterId = "456e4567-e89b-12d3-a456-556642440001";
+
+        // Verifies that the source cluster has established session with all 3 sink clusters.
+        Assert.assertEquals(3, sessionManager.getOutgoingSessions().size());
+        Assert.assertEquals(sourceClusterId, topology.getLocalClusterDescriptor().getClusterId());
+        Assert.assertEquals(0, sessionManager.getIncomingSessions().size());
+    }
+
+    /**
+     * This test verifies that the incoming session is established using session manager.
+     * It verifies that the in-memory state has captured the incoming session.
+     */
+    @Test
+    public void testSessionMgrWithIncomingSession() {
+        boolean SinkClusterAsLocalEndpoint = true;
+        topology = new DefaultClusterManager(SinkClusterAsLocalEndpoint).generateDefaultValidConfig();
+        SessionManager sessionManager = new SessionManager(topology, corfuRuntime);
+        String sinkClusterId = "456e4567-e89b-12d3-a456-556642440002";
+
+        // Verifies that the sink cluster has established session with all 3 source clusters.
+        Assert.assertEquals(0, sessionManager.getOutgoingSessions().size());
+        Assert.assertEquals(sinkClusterId, topology.getLocalClusterDescriptor().getClusterId());
+        Assert.assertEquals(3, sessionManager.getIncomingSessions().size());
     }
 }
 
