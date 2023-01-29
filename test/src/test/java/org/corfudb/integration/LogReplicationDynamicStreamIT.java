@@ -1,8 +1,7 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusKey;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValueTag;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
@@ -11,11 +10,13 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+
 import org.junit.Before;
 import org.junit.Test;
 
@@ -61,17 +62,17 @@ public class LogReplicationDynamicStreamIT extends LogReplicationAbstractIT {
         // Open replication status table to for verification purpose
         corfuStoreSource.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE_NAME,
-                ReplicationStatusKey.class,
-                ReplicationStatusVal.class,
+                LogReplicationSession.class,
+                ReplicationStatus.class,
                 null,
-                TableOptions.fromProtoSchema(ReplicationStatusVal.class));
+                TableOptions.fromProtoSchema(ReplicationStatus.class));
 
         corfuStoreSink.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE_NAME,
-                ReplicationStatusKey.class,
-                ReplicationStatusVal.class,
+                LogReplicationSession.class,
+                ReplicationStatus.class,
                 null,
-                TableOptions.fromProtoSchema(ReplicationStatusVal.class));
+                TableOptions.fromProtoSchema(ReplicationStatus.class));
     }
 
     /*

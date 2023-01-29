@@ -747,11 +747,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
     }
 
     public void verifyInLogEntrySyncState() throws InterruptedException {
-        LogReplicationMetadata.ReplicationStatusKey key =
-                LogReplicationMetadata.ReplicationStatusKey
-                        .newBuilder()
-                        .setClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
-                        .build();
+        LogReplicationSession session = LogReplicationSession.newBuilder()
+            .setSourceClusterId(new DefaultClusterConfig().getSourceClusterIds().get(0))
+            .setSinkClusterId(new DefaultClusterConfig().getSinkClusterIds().get(0))
+            .setSubscriber(SessionManager.getDefaultSubscriber())
+            .build();
 
         ReplicationStatus status = null;
 
@@ -760,7 +760,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
                 .equals(LogReplicationMetadata.SyncStatus.COMPLETED)) {
             TimeUnit.SECONDS.sleep(1);
             try (TxnContext txn = corfuStoreSource.txn(LogReplicationMetadataManager.NAMESPACE)) {
-                status = (ReplicationStatus) txn.getRecord(REPLICATION_STATUS_TABLE_NAME, key).getPayload();
+                status = (ReplicationStatus) txn.getRecord(REPLICATION_STATUS_TABLE_NAME, session).getPayload();
                 txn.commit();
             }
         }

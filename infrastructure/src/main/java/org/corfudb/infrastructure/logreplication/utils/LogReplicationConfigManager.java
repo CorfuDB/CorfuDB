@@ -28,6 +28,8 @@ import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.REGISTRY_TABLE_ID;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.corfudb.runtime.view.TableRegistry.REGISTRY_TABLE_NAME;
+import static org.corfudb.runtime.view.TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 
 /**
@@ -97,7 +99,11 @@ public class LogReplicationConfigManager {
                     .collect(Collectors.toList()));
                 streamToTagsMap.put(streamId, tags);
             } else {
-                streamsToDrop.add(CorfuRuntime.getStreamID(tableName));
+                // Registry and ProtobufDescriptor tables do not have the is_federated flag but are to be replicated.
+                if (!tableName.equals(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, REGISTRY_TABLE_NAME)) &&
+                    !tableName.equals(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, PROTOBUF_DESCRIPTOR_TABLE_NAME))) {
+                    streamsToDrop.add(CorfuRuntime.getStreamID(tableName));
+                }
             }
 
             // TODO: Add other cases once the protobuf options for other subscribers are available
