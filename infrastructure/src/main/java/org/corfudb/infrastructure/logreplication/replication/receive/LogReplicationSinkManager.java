@@ -152,6 +152,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         this.metadataManager = metadataManager;
         this.pluginConfigFilePath = pluginConfigFilePath;
         this.session = session;
+        this.context = context;
 
         init();
     }
@@ -473,7 +474,7 @@ public class LogReplicationSinkManager implements DataReceiver {
             case SNAPSHOT_END:
                 if (snapshotWriter.getPhase() != StreamsSnapshotWriter.Phase.APPLY_PHASE) {
                     completeSnapshotTransfer(entry);
-                    //startSnapshotApplyAsync(entry);
+                    startSnapshotApplyAsync(entry);
                 }
                 break;
             default:
@@ -490,7 +491,7 @@ public class LogReplicationSinkManager implements DataReceiver {
     }
 
     private synchronized void startSnapshotApply(LogReplicationEntryMsg entry) {
-        log.debug("Start snapshot sync apply, id={}", entry.getMetadata().getSyncRequestId());
+        log.info("Start snapshot sync apply, id={}", entry.getMetadata().getSyncRequestId());
         setDataConsistentWithRetry(false);
 
         // Sync with registry after transfer phase to capture local updates, as transfer phase could

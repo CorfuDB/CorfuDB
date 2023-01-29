@@ -59,8 +59,6 @@ import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.integration.LogReplicationAbstractIT.checkpointAndTrimCorfuStore;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
-import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
-import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 
 /**
  * Test the core components of log replication, namely, Snapshot Sync and Log Entry Sync,
@@ -123,9 +121,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private SourceForwardingDataSender sourceDataSender;
 
-    private final LogReplicationSession session = LogReplicationSession.newBuilder()
-            .setSinkClusterId(REMOTE_CLUSTER_ID)
-            .build();
+    private final LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
 
     // List of all opened maps backed by Corfu on Source and Destination
     private Map<String, Table<StringKey, IntValue, Metadata>> srcCorfuTables = new HashMap<>();
@@ -243,6 +239,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         dstCorfuStore = new CorfuStore(dstDataRuntime);
 
         metadataManager = new LogReplicationMetadataManager(dstTestRuntime);
+        metadataManager.addSession(session, 0, true);
 
         expectedAckTimestamp = new AtomicLong(Long.MAX_VALUE);
         testConfig.clear().setRemoteClusterId(REMOTE_CLUSTER_ID);
@@ -364,17 +361,17 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                             Map<String, Map<String, Integer>> hashMap) {
         for (String name : hashMap.keySet()) {
             Table<StringKey, IntValue, Metadata> table = tables.get(name);
-            Map<String, Integer> mapKeys = hashMap.get(name);
+            Map<String, Integer> map = hashMap.get(name);
 
             log.debug("Table[" + name + "]: " + table.count() + " keys; Expected "
-                    + mapKeys.size() + " keys");
+                    + map.size() + " keys");
 
-            assertThat(table.count()).isEqualTo(mapKeys.size());
+            assertThat(table.count()).isEqualTo(map.size());
             try (TxnContext txn = corfuStore.txn(TEST_NAMESPACE)) {
-                for (String key : mapKeys.keySet()) {
+                for (String key : map.keySet()) {
                     StringKey tableKey = StringKey.newBuilder().setKey(key).build();
                     CorfuStoreEntry<StringKey, IntValue, Metadata> entry = txn.getRecord(table, tableKey);
-                    assertThat(entry.getPayload().getValue()).isEqualTo(mapKeys.get(key));
+                    assertThat(entry.getPayload().getValue()).isEqualTo(map.get(key));
                 }
                 txn.commit();
             }
@@ -697,7 +694,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     /**
-     * While replication log entries from src to dst, still continue to pump data at the src with transactions
+     * While replicating log entries from src to dst, still continue to pump data at the src with transactions
      * The transactions will include both put and delete entries.
      * @throws Exception
      */
@@ -725,11 +722,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Verify Data on Destination
         verifyData(dstCorfuStore, dstCorfuTables, srcDataForVerification);
 
+        verifyPersistedSnapshotMetadata();
+
         // expectedAckTimestamp was set in 'startLogEntrySync' to the tail of the Log Replication Stream.  Verify
         // that the metadata table was updated with it after a successful LogEntrySync
-        expectedAckTimestamp.set(srcDataRuntime.getAddressSpaceView().getLogTail());
-
-        verifyPersistedSnapshotMetadata();
         verifyPersistedLogEntryMetadata();
 
         cleanEnv();
@@ -1244,8 +1240,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Data Sender
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, testConfig, metadataManager,
                 nettyConfig, function, context);
-
-        LogReplicationSession session = DefaultClusterConfig.getSessions().get(0);
 
         // Source Manager
         LogReplicationRuntimeParameters runtimeParameters = LogReplicationRuntimeParameters.builder()
