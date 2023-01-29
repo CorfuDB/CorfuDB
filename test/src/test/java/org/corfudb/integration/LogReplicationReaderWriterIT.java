@@ -215,19 +215,6 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         }
     }
 
-    void verifyTxStream(CorfuRuntime rt) {
-        StreamOptions options = StreamOptions.builder()
-                .cacheEntries(false)
-                .build();
-
-        IStreamView txStream = rt.getStreamsView().getUnsafe(ObjectsView.getLogReplicatorStreamId(), options);
-        List<ILogData> dataList = txStream.remaining();
-        log.debug("\ndataList size " + dataList.size());
-        for (ILogData data : txStream.remaining()) {
-            log.debug("{}", data);
-        }
-    }
-
     public static void printTails(String tag, CorfuRuntime rt0, CorfuRuntime rt1) {
         log.debug("\n" + tag);
         log.debug("src dataTail " + rt0.getAddressSpaceView().getLogTail());
@@ -270,6 +257,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     public static void writeSnapshotMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
 
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt);
+        logReplicationMetadataManager.addSession(getDefaultSession(), 0, true);
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
 
@@ -338,6 +326,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     public static void writeLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
 
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt);
+        logReplicationMetadataManager.addSession(getDefaultSession(),0, true);
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
 

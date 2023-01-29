@@ -46,9 +46,7 @@ public class LogEntryWriter extends SinkWriter {
                           LogReplicationSession session, LogReplicationContext context) {
         super(session, context);
 
-        log.info("Incoming Session: {}", session);
         ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session, false, 0);
-        log.info("Metadata: {}", metadata);
 
         this.srcGlobalSnapshot = metadata.getLastSnapshotApplied();
         this.lastMsgTs = metadata.getLastLogEntryBatchProcessed();
