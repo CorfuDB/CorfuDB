@@ -6,6 +6,7 @@ import com.google.protobuf.Message;
 import com.google.protobuf.Timestamp;
 import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
@@ -86,14 +87,18 @@ public class LogReplicationMetadataManager {
 
     private Optional<Timer.Sample> snapshotSyncTimerSample = Optional.empty();
 
+    @Setter
+    private long topologyConfigId;
+
     /**
      * Constructor
      *
      * @param runtime   the runtime to connect to CorfuDb
      */
-    public LogReplicationMetadataManager(CorfuRuntime runtime) {
+    public LogReplicationMetadataManager(CorfuRuntime runtime, long topologyConfigId) {
         this.runtime = runtime;
         this.corfuStore = new CorfuStore(runtime);
+        this.topologyConfigId = topologyConfigId;
 
         try {
             this.metadataTable = this.corfuStore.openTable(NAMESPACE, METADATA_TABLE_NAME,
@@ -139,7 +144,7 @@ public class LogReplicationMetadataManager {
                 txn.putRecord(statusTable, session, defaultSinkStatus, null);
             }
         } else if (!txn.keySet(statusTable).contains(session)) {
-
+            // TODO pankti: Ask why only the status table is initialized if incoming is false(Source cluster)
             ReplicationStatus defaultSourceStatus = ReplicationStatus.newBuilder()
                     .setSourceStatus(SourceReplicationStatus.newBuilder()
                             .setRemainingEntriesToSend(-1L)
@@ -161,7 +166,6 @@ public class LogReplicationMetadataManager {
     private ReplicationMetadata getDefaultMetadata(long topologyConfigId) {
         return ReplicationMetadata.newBuilder()
                 .setTopologyConfigId(topologyConfigId)
-                //.setVersion(logReplicatorClusterVersion)
                 .setLastLogEntryApplied(Address.NON_ADDRESS)
                 .setLastLogEntryBatchProcessed(Address.NON_ADDRESS)
                 .setLastSnapshotTransferredSeqNumber(Address.NON_ADDRESS)
@@ -203,11 +207,9 @@ public class LogReplicationMetadataManager {
      *
      * @param session   unique identifier for LR session
      * @param setIfNotFound initialize the metadata to default values and current topology config id if not found
-     * @param topologyConfigId Current topology config id with which metadata must get initialized
      * @return          replication metadata info
      */
-    public ReplicationMetadata getReplicationMetadata(LogReplicationSession session, boolean setIfNotFound,
-                                                      long topologyConfigId) {
+    public ReplicationMetadata getReplicationMetadata(LogReplicationSession session, boolean setIfNotFound) {
         ReplicationMetadata metadata;
 
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {

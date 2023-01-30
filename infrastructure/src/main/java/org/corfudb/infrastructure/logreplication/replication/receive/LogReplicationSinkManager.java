@@ -224,7 +224,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         logEntryWriter = new LogEntryWriter(metadataManager, session, context);
 
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                metadataManager.getReplicationMetadata(session, false, 0)
+                metadataManager.getReplicationMetadata(session, false)
                     .getLastLogEntryApplied(), this);
     }
 
@@ -342,7 +342,7 @@ public class LogReplicationSinkManager implements DataReceiver {
     }
 
     private void processSnapshotSyncApplied(LogReplicationEntryMsg entry) {
-        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session, false, 0);
+        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session, false);
         long lastAppliedBaseSnapshotTimestamp = metadata.getLastSnapshotApplied();
         UuidMsg latestSnapshotSyncCycleId = metadata.getCurrentSnapshotCycleId();
         UuidMsg ackSnapshotSyncCycleId = entry.getMetadata().getSyncRequestId();
@@ -453,7 +453,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         rxState = RxState.LOG_ENTRY_SYNC;
         //TODO(AGMM): It seems this is creatig the LogEntrySink on completion of full sync, so last processed log entry should be nothing
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                metadataManager.getReplicationMetadata(session, false, 0)
+                metadataManager.getReplicationMetadata(session, false)
                     .getLastLogEntryBatchProcessed(), this);
         logEntryWriter.reset(entry.getMetadata().getSnapshotTimestamp(), entry.getMetadata().getSnapshotTimestamp());
 
@@ -562,7 +562,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      *
      * */
     public void reset() {
-        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session, false, 0);
+        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session, false);
         log.debug("Reset sink manager, lastAppliedSnapshotTs={}, lastProcessedLogEntryTs={}", metadata.getLastSnapshotApplied(),
                 metadata.getLastLogEntryBatchProcessed());
         snapshotWriter.reset(topologyConfigId, metadata.getLastSnapshotApplied());
@@ -584,7 +584,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     public void resumeSnapshotApply() {
 
-        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session, false, 0);
+        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session, false);
 
         // Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
         snapshotWriter.reset(topologyConfigId, metadata.getLastSnapshotStarted());
@@ -631,8 +631,9 @@ public class LogReplicationSinkManager implements DataReceiver {
         }
     }
 
+    // TODO pankti: Why is this method commented out?
     public void startPendingSnapshotApply() {
-        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session, false, 0);
+        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session, false);
 
         boolean isSnapshotApplyPending = (metadata.getLastSnapshotStarted() == metadata.getLastSnapshotTransferred()) &&
                 metadata.getLastSnapshotTransferred() > metadata.getLastSnapshotApplied();

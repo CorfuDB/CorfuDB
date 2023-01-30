@@ -238,7 +238,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         srcCorfuStore = new CorfuStore(srcDataRuntime);
         dstCorfuStore = new CorfuStore(dstDataRuntime);
 
-        metadataManager = new LogReplicationMetadataManager(dstTestRuntime);
+        metadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0);
         metadataManager.addSession(session, 0, true);
 
         expectedAckTimestamp = new AtomicLong(Long.MAX_VALUE);
@@ -1052,7 +1052,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Simulate negotiation. Return metadata from the sink
         ReplicationMetadata metadata = sourceDataSender.getSinkManager()
                 .getMetadataManager()
-                .getReplicationMetadata(session, false, 0);
+                .getReplicationMetadata(session, false);
         LogReplicationMetadataResponseMsg negotiationResponse = LogReplicationMetadataResponseMsg.newBuilder()
                 .setTopologyConfigID(metadata.getTopologyConfigId())
                 .setVersion(metadata.getVersion())
@@ -1357,14 +1357,14 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private void verifyPersistedSnapshotMetadata() {
-        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session, false, 0);
+        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session, false);
         long lastSnapshotStart = metadata.getLastSnapshotStarted();
         long lastSnapshotDone = metadata.getLastSnapshotApplied();
         assertThat(lastSnapshotStart).isEqualTo(lastSnapshotDone);
     }
 
     private void verifyPersistedLogEntryMetadata() {
-        long lastLogProcessed = metadataManager.getReplicationMetadata(session, false, 0)
+        long lastLogProcessed = metadataManager.getReplicationMetadata(session, false)
                 .getLastLogEntryBatchProcessed();
         assertThat(expectedAckTimestamp.get() == lastLogProcessed).isTrue();
     }

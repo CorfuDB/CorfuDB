@@ -182,8 +182,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
         // TODO: If there is a guarantee that this session will always be present, we should assert here if no
         //  metadata found instead of setting it to default values
-        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(fsm.getSession(), true,
-            fsm.context.getTopologyConfigId());
+        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(fsm.getSession(), true);
 
         /*
          * The sink site has a smaller config ID, redo the discovery for this sink site when

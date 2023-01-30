@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -87,7 +88,7 @@ public class SessionManager {
         this.corfuStore = new CorfuStore(corfuRuntime);
         this.localCorfuEndpoint = NodeLocator.parseString(serverContext.getLocalEndpoint()).getHost() + ":" +
                 topology.getLocalClusterDescriptor().getCorfuPort();
-        this.metadataManager =  new LogReplicationMetadataManager(corfuRuntime);
+        this.metadataManager =  new LogReplicationMetadataManager(corfuRuntime, topology.getTopologyConfigId());
         this.configManager = new LogReplicationConfigManager(runtime, serverContext);
         this.upgradeManager = upgradeManager;
 
@@ -100,13 +101,14 @@ public class SessionManager {
      * @param topology            the current topology
      * @param corfuRuntime        runtime for database access
      */
+    @VisibleForTesting
     public SessionManager(@Nonnull TopologyDescriptor topology, CorfuRuntime corfuRuntime) {
         this.topology = topology;
         this.runtime = corfuRuntime;
         this.corfuStore = new CorfuStore(corfuRuntime);
         this.localCorfuEndpoint = "localhost:" +
                 topology.getLocalClusterDescriptor().getCorfuPort();
-        this.metadataManager =  new LogReplicationMetadataManager(corfuRuntime);
+        this.metadataManager =  new LogReplicationMetadataManager(corfuRuntime, topology.getTopologyConfigId());
         this.configManager = new LogReplicationConfigManager(runtime);
         this.upgradeManager = null;
 
@@ -133,6 +135,7 @@ public class SessionManager {
         Set<String> sinkClustersUnchanged = Sets.intersection(newSinks, currentSinks);
 
         topology = newTopology;
+        metadataManager.setTopologyConfigId(topology.getTopologyConfigId());
 
         Set<LogReplicationSession> sessionsToRemove = new HashSet<>();
         Set<LogReplicationSession> sessionsUnchanged = new HashSet<>();

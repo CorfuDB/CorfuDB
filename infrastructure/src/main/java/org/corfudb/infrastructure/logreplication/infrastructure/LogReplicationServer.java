@@ -201,8 +201,7 @@ public class LogReplicationServer extends AbstractServer {
                 return;
             }
 
-            ReplicationMetadata metadata = sessionManager.getMetadataManager().getReplicationMetadata(session, false,
-                0);
+            ReplicationMetadata metadata = sessionManager.getMetadataManager().getReplicationMetadata(session, false);
             ResponseMsg response = getMetadataResponse(request, metadata);
 
             log.info("Send Metadata response: :: {}", TextFormat.shortDebugString(response.getPayload()));

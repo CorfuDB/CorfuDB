@@ -86,7 +86,7 @@ public class LogReplicationServerTest {
         lrServer.setLeadership(true);
         doReturn(sessionManager).when(lrServer).getSessionManager();
         doReturn(LogReplicationMetadata.ReplicationMetadata.getDefaultInstance()).when(metadataManager)
-            .getReplicationMetadata(session, false, 0);
+            .getReplicationMetadata(session, false);
         doReturn(metadataManager).when(sessionManager).getMetadataManager();
         doReturn(metadataManager).when(sinkManager).getMetadataManager();
 

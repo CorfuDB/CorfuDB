@@ -62,7 +62,7 @@ public class MetadataManagerTest extends AbstractViewTest {
      */
     @Test
     public void testMetadataAfterLogEntrySync() {
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime);
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
         metadataManager.addSession(defaultSession, topologyConfigId, true);
         LogReplicationContext context = new LogReplicationContext(configManager, topologyConfigId, getEndpoint(SERVERS.PORT_0));
         LogEntryWriter writer = new LogEntryWriter(metadataManager, defaultSession, context);
@@ -95,11 +95,11 @@ public class MetadataManagerTest extends AbstractViewTest {
     @Test
     public void testInitTsForSnapshotAndLogEntryProcessed() {
 
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime);
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
 
-        long lastAppliedSnapshotTimestamp = metadataManager.getReplicationMetadata(defaultSession, false, 0)
+        long lastAppliedSnapshotTimestamp = metadataManager.getReplicationMetadata(defaultSession, false)
                 .getLastSnapshotApplied();
-        long lastProcessedLogEntryTimestamp = metadataManager.getReplicationMetadata(defaultSession, false, 0)
+        long lastProcessedLogEntryTimestamp = metadataManager.getReplicationMetadata(defaultSession, false)
                 .getLastLogEntryBatchProcessed();
 
         Assert.assertEquals(Address.NON_ADDRESS, lastAppliedSnapshotTimestamp);
@@ -117,7 +117,7 @@ public class MetadataManagerTest extends AbstractViewTest {
     @Test
     public void testConcurrentTopologyChange() throws Exception {
 
-        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime);
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
         metadataManager.addSession(defaultSession, topologyConfigId, true);
         LogReplicationContext context = new LogReplicationContext(configManager, 0, defaultSession.getSourceClusterId());
         LogEntryWriter writer = new LogEntryWriter(metadataManager, defaultSession, context);
