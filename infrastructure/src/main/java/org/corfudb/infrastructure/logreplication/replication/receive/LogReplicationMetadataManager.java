@@ -42,6 +42,7 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -506,7 +507,7 @@ public class LogReplicationMetadataManager {
 
         // Update if current Snapshot Sync differs from the persisted one, otherwise ignore.
         // It could have already been updated in the case that leader changed in between a snapshot sync cycle
-        if (currentSnapshotCycleId != newSnapshotCycleId) {
+        if (!Objects.equals(currentSnapshotCycleId, newSnapshotCycleId)) {
             RpcCommon.UuidMsg uuidMsg = RpcCommon.UuidMsg.newBuilder()
                 .setMsb(newSnapshotCycleId.getMostSignificantBits())
                 .setLsb(newSnapshotCycleId.getLeastSignificantBits())

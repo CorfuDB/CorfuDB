@@ -225,10 +225,22 @@ public class LogReplicationFSM {
     public LogReplicationFSM(CorfuRuntime runtime, LogReplicationUpgradeManager upgradeManager, DataSender dataSender,
                              ReadProcessor readProcessor, ExecutorService workers, LogReplicationAckReader ackReader,
                              LogReplicationSession session, LogReplicationContext context) {
-        // Use stream-based readers for snapshot and log entry sync reads
-        this(runtime, new StreamsSnapshotReader(runtime, session, context), dataSender,
-            new StreamsLogEntryReader(runtime, session, context), readProcessor, upgradeManager,
-            workers, ackReader, session, context);
+        this.snapshotReader = createSnapshotReader(runtime, session, context);
+        this.logEntryReader = createLogEntryReader(runtime, session, context);
+
+        this.context = context;
+        this.ackReader = ackReader;
+        this.upgradeManager = upgradeManager;
+        this.snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor,
+            context.getConfig().getMaxNumMsgPerBatch(), this);
+        this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
+        this.logReplicationFSMWorkers = workers;
+        this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
+            ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer-" + session.hashCode())
+            .build());
+
+        init(dataSender, session);
+
     }
 
     /**

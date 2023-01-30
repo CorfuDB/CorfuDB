@@ -582,7 +582,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      * In the event of node restarts/failures, a snapshot sync which was fully transferred
      * can resume from the apply stage.
      */
-    public void resumeSnapshotApply() {
+    private void resumeSnapshotApply() {
 
         ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session, false);
 
@@ -631,7 +631,6 @@ public class LogReplicationSinkManager implements DataReceiver {
         }
     }
 
-    // TODO pankti: Why is this method commented out?
     public void startPendingSnapshotApply() {
         ReplicationMetadata metadata = metadataManager.getReplicationMetadata(session, false);
 

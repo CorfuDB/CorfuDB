@@ -452,11 +452,12 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                             sinkCluster.get().getId());
                     } catch (LogReplicationDiscoveryServiceException e) {
                         log.warn("Caught a RuntimeException ", e);
-//                        ClusterRole role = clusterManager.getCorfuReplicationDiscoveryService().getLocalClusterRoleType();
-//                        if (role != ClusterRole.SINK) {
-//                            log.error("The current cluster role is {} and should not throw a RuntimeException for forceSnapshotSync call.", role);
-//                            Thread.interrupted();
-//                        }
+                        /*ClusterRole role = clusterManager.getCorfuReplicationDiscoveryService().getLocalClusterRoleType();
+                        if (role != ClusterRole.SINK) {
+                            log.error("The current cluster role is {} and should not throw a RuntimeException for
+                                forceSnapshotSync call.", role);
+                            Thread.interrupted();
+                        }*/
                     }
                 } else if (entry.getKey().equals(OP_BACKUP)) {
                     clusterManager.getClusterManagerCallback()

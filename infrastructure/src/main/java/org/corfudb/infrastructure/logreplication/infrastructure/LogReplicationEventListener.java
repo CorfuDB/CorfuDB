@@ -71,7 +71,8 @@ public final class LogReplicationEventListener implements StreamListener {
                                 event.getSession(), event.getEventId()));
                     } else {
                         log.warn("Received invalid event :: id={}, type={}, cluster_id={}", event.getEventId(), event.getType(),
-                                event.getClusterId());                    }
+                                event.getClusterId());
+                    }
                 }
             }
         }

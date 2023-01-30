@@ -88,7 +88,7 @@ public class SessionManager {
         this.corfuStore = new CorfuStore(corfuRuntime);
         this.localCorfuEndpoint = NodeLocator.parseString(serverContext.getLocalEndpoint()).getHost() + ":" +
                 topology.getLocalClusterDescriptor().getCorfuPort();
-        this.metadataManager =  new LogReplicationMetadataManager(corfuRuntime, topology.getTopologyConfigId());
+        this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, topology.getTopologyConfigId());
         this.configManager = new LogReplicationConfigManager(runtime, serverContext);
         this.upgradeManager = upgradeManager;
 

@@ -209,9 +209,7 @@ public class LogReplicationServer extends AbstractServer {
             router.sendResponse(response, ctx);
 
             // If a snapshot apply is pending, start (if not started already)
-            if (isSnapshotApplyPending(metadata) && !sinkManager.getOngoingApply().get()) {
-                sinkManager.resumeSnapshotApply();
-            }
+            sinkManager.startPendingSnapshotApply();
         } else {
             log.warn("Dropping metadata request as this node is not the leader.  Request id = {}",
                 request.getHeader().getRequestId());
