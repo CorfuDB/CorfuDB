@@ -406,11 +406,7 @@ public class LogReplicationMetadataManager {
                             "persistedSnapshotStart={}",
                     topologyConfigId, snapshotStartTs, metadata.getTopologyConfigId(), metadata.getLastSnapshotStarted());
         }
-
-        // TODO pankti: Is this check required?  Isnt it sufficient that the transaction committed?
         return true;
-        //return (snapshotStartTs == metadata.getLastSnapshotStarted() && topologyConfigId == metadata
-        // .getTopologyConfigId());
     }
 
     /**

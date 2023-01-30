@@ -160,7 +160,6 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             timestamp = txn.commit();
         }
 
-        // TODO pankti: Shouldnt this be part of the above transaction itself?
         if (!snapshotSyncStartMarker.isPresent()) {
             try (TxnContext txn = metadataManager.getTxnContext()) {
                 metadataManager.setSnapshotSyncStartMarker(txn, session, snapshotSyncId, timestamp);
