@@ -56,7 +56,7 @@ import java.util.function.IntPredicate;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
-
+import static org.corfudb.runtime.collections.streaming.StreamingManager.LR_STATUS_STREAM_TAG;
 
 /**
  * This test suite exercises some topology config change scenarios.
@@ -1500,8 +1500,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         // to change to STOPPED
         CountDownLatch countDownLatch = new CountDownLatch(1);
         ReplicationStopListener listener = new ReplicationStopListener(countDownLatch);
-        activeCorfuStore.subscribeListener(listener, LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+        activeCorfuStore.subscribeListener(listener, LogReplicationMetadataManager.NAMESPACE, LR_STATUS_STREAM_TAG);
 
         // Release Active's lock by deleting the lock table
         try (TxnContext txnContext = activeCorfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {

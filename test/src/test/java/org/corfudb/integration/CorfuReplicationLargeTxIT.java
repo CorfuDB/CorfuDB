@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.runtime.collections.streaming.StreamingManager.LR_STATUS_STREAM_TAG;
 
 /**
  * Test the behavior of transaction batching on the Sink.
@@ -105,7 +106,7 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         ReplicationStatusListener standbyListener =
             new ReplicationStatusListener(statusUpdateLatch, false);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
-            LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+            LR_STATUS_STREAM_TAG);
 
         // Calculate the expected total number of streaming updates across all
         // tables
