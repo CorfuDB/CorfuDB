@@ -17,6 +17,7 @@ import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+import org.corfudb.utils.CommonTypes;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -37,7 +38,8 @@ import static org.mockito.Mockito.atMost;
 public class LogReplicationServerTest {
 
     private final static String SAMPLE_HOSTNAME = "localhost";
-    private String SINK_CLUSTER_ID = getUUID(UuidMsg.newBuilder().setLsb(1).setMsb(1).build()).toString();
+    private final String SINK_CLUSTER_ID = getUUID(UuidMsg.newBuilder().setLsb(1).setMsb(1).build()).toString();
+    private final String SINK_NODE_ID = getUUID(UuidMsg.newBuilder().setLsb(2).setMsb(2).build()).toString();
 
     ServerContext context;
     LogReplicationMetadataManager metadataManager;
@@ -65,7 +67,8 @@ public class LogReplicationServerTest {
         sessionManager = mock(SessionManager.class);
         sinkManager = mock(LogReplicationSinkManager.class);
         doReturn(session).when(sinkManager).getSession();
-        lrServer = spy(new LogReplicationServer(context, sinkManager, SINK_CLUSTER_ID, sessionManager));
+        lrServer = spy(new LogReplicationServer(context, sinkManager, SINK_NODE_ID, SINK_CLUSTER_ID,
+            sessionManager));
         mockHandlerContext = mock(ChannelHandlerContext.class);
         mockServerRouter = mock(IServerRouter.class);
     }
@@ -84,16 +87,13 @@ public class LogReplicationServerTest {
                 .setLrMetadataRequest(metadataRequest).build());
 
         lrServer.setLeadership(true);
-        doReturn(sessionManager).when(lrServer).getSessionManager();
         doReturn(LogReplicationMetadata.ReplicationMetadata.getDefaultInstance()).when(metadataManager)
             .getReplicationMetadata(session, false);
         doReturn(metadataManager).when(sessionManager).getMetadataManager();
-        doReturn(metadataManager).when(sinkManager).getMetadataManager();
 
         lrServer.getHandlerMethods().handle(request, mockHandlerContext, mockServerRouter);
 
-        // TODO(Anny): verify condition
-        // verify(metadataManager).getMetadataResponse(any());
+        verify(metadataManager).getReplicationMetadata(session, false);
     }
 
     /**

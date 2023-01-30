@@ -87,9 +87,10 @@ public class LogReplicationServer extends AbstractServer {
 
     @VisibleForTesting
     public LogReplicationServer(@Nonnull ServerContext context, LogReplicationSinkManager sinkManager,
-        String localNodeId, SessionManager sessionManager) {
+        String localNodeId, String localClusterId, SessionManager sessionManager) {
         sessionToSinkManagerMap.put(sinkManager.getSession(), sinkManager);
         this.localNodeId = localNodeId;
+        this.localClusterId = localClusterId;
         this.sessionManager = sessionManager;
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
