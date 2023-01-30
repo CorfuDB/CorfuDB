@@ -72,5 +72,6 @@ public interface CorfuReplicationClusterManagerAdapter {
      *
      * @param clusterId
      */
+    // TODO(V2): this API needs to be modified to specify a LogReplicationSession (changes on client required)
     UUID forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException;
 }

@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import com.google.common.collect.ImmutableList;
+import com.google.protobuf.Timestamp;
 import io.micrometer.core.instrument.LongTaskTimer;
 import io.micrometer.core.instrument.Tag;
 import lombok.Getter;
@@ -18,6 +19,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent.ReplicationEventType;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.CorfuRuntime;
@@ -43,13 +45,17 @@ import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 /**
  * This class represents the Log Replication Discovery Service.
@@ -305,8 +311,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         sessionManager.refresh(topologyDescriptor, true);
 
         if (role == ClusterRole.SOURCE) {
-            logReplicationEventListener = new LogReplicationEventListener(this, getCorfuRuntime(),
-                    topologyDescriptor.getLocalClusterDescriptor());
+            logReplicationEventListener = new LogReplicationEventListener(this, getCorfuRuntime());
             logReplicationEventListener.start();
         } else {
             LogReplicationServer server = new LogReplicationServer(serverContext, sessionManager, localCorfuEndpoint);
@@ -716,30 +721,41 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     }
 
     public UUID forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException {
-        if (topologyDescriptor.getLocalClusterDescriptor().getRole() == ClusterRole.SINK) {
-            String errorStr = "The forceSnapshotSync command is not supported on sink cluster.";
+        if(topologyDescriptor.getLocalClusterDescriptor().getRole() == ClusterRole.SINK) {
+            String errorStr = "Force snapshot sync not supported on sink cluster.";
             log.error(errorStr);
             throw new LogReplicationDiscoveryServiceException(errorStr);
         }
 
         UUID forceSyncId = UUID.randomUUID();
-        log.info("Received forceSnapshotSync command for sink cluster {}, forced sync id {}",
+        log.info("Received forced snapshot sync request for sink cluster {}, sync_id={}",
                 clusterId, forceSyncId);
 
         // Write a force sync event to the logReplicationEventTable
-        ReplicationEventKey key = ReplicationEventKey.newBuilder().setKey(System.currentTimeMillis() + " " + clusterId).build();
-        ReplicationEvent event = ReplicationEvent.newBuilder()
-                .setClusterId(clusterId)
-                .setEventId(forceSyncId.toString())
-                .setType(ReplicationEvent.ReplicationEventType.FORCE_SNAPSHOT_SYNC)
+        ReplicationEventKey key = ReplicationEventKey.newBuilder()
+                .setKey(System.currentTimeMillis() + " " + clusterId)
                 .build();
 
-        // TODO: Define how forced snapshot sync should work.  Can it be requested for a given client or for the
-        //  whole cluster?
-        // For now, get the only supported(default) replication model and client for this cluster and trigger the
-        // operation on it.
-//        remoteSessionToMetadataManagerMap.get(ReplicationSession.getDefaultReplicationSessionForCluster(clusterId))
-//            .updateLogReplicationEventTable(key, event);
+        // TODO(V2): currently not modifying API signature to session, so picking a session that matches the session
+        // to the 'default' subscriber, session will come from API once change is complete
+        List<LogReplicationSession> sessions = sessionManager.getOutgoingSessions(clusterId).stream()
+                .filter(session -> session.hasSubscriber()
+                        && session.getSubscriber().equals(SessionManager.getDefaultSubscriber())).collect(Collectors.toList());
+
+        if(sessions.isEmpty()) {
+            String message = "Request force snapshot sync rejected, session does not exist for cluster=" + clusterId;
+            log.error(message);
+            throw new LogReplicationDiscoveryServiceException(message);
+        }
+
+        ReplicationEvent event = ReplicationEvent.newBuilder()
+                .setEventId(forceSyncId.toString())
+                .setType(ReplicationEventType.FORCE_SNAPSHOT_SYNC)
+                .setSession(sessions.get(0))
+                .setEventTimestamp(Timestamp.newBuilder().setSeconds(Instant.now().getEpochSecond()).build())
+                .build();
+
+        sessionManager.getMetadataManager().addEvent(key, event);
         return forceSyncId;
     }
 

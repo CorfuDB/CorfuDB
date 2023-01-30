@@ -21,23 +21,14 @@ public class DiscoveryServiceEvent {
        this.type = type;
     }
 
-    public DiscoveryServiceEvent(DiscoveryServiceEventType type, String sourceClusterId, String sinkClusterId) {
-        this.type = type;
-        this.session = LogReplicationSession.newBuilder()
-                .setSourceClusterId(sourceClusterId)
-                .setSinkClusterId(sinkClusterId)
-                .setSubscriber(SessionManager.getDefaultSubscriber())
-                .build();
-    }
-
     public DiscoveryServiceEvent(DiscoveryServiceEventType type, TopologyConfigurationMsg topologyConfigMsg) {
         this.type = type;
         this.topologyConfig = topologyConfigMsg;
     }
 
-    public DiscoveryServiceEvent(DiscoveryServiceEventType type, String sourceClusterId,
-                                 String sinkClusterId, String eventId) {
-        this(type, sourceClusterId, sinkClusterId);
+    public DiscoveryServiceEvent(DiscoveryServiceEventType type, LogReplicationSession session, String eventId) {
+        this.type = type;
+        this.session = session;
         this.eventId = UUID.fromString(eventId);
     }
 

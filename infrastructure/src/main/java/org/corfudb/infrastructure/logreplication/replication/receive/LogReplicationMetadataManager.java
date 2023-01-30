@@ -27,7 +27,6 @@ import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
-import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
@@ -40,7 +39,6 @@ import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
 
 import java.time.Instant;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,7 +58,7 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  * Note that, the status is kept on separate tables for source and sink, as status information can only be queried locally
  * and not across clusters.
  *
- * (3) Log Replication 'Event' Table: used to communicate events across lead and non-lead nodes. Currently, the onnly
+ * (3) Log Replication 'Event' Table: used to communicate events across lead and non-lead nodes. Currently, the only
  * event supported is 'Force Snapshot Sync"
  *
  * For Source it holds replication status
@@ -540,24 +538,6 @@ public class LogReplicationMetadataManager {
             txn.putRecord(replicationEventTable, key, event, null);
             txn.commit();
         }
-    }
-
-    /**
-     * Subscribe to the logReplicationEventTable
-     *
-     * @param listener
-     */
-    public void subscribeReplicationEventTable(StreamListener listener) {
-        log.info("LogReplication start listener for table {}", REPLICATION_EVENT_TABLE_NAME);
-        corfuStore.subscribeListener(listener, NAMESPACE, LR_STREAM_TAG, Collections.singletonList(REPLICATION_EVENT_TABLE_NAME));
-    }
-
-    /**
-     * Unsubscribe the logReplicationEventTable
-     * @param listener
-     */
-    public void unsubscribeReplicationEventTable(StreamListener listener) {
-        corfuStore.unsubscribeListener(listener);
     }
 
     // ================================= Replication Status Table Methods ===================================

@@ -5,6 +5,7 @@ package org.corfudb.infrastructure.logreplication.proto;
 import "corfu_options.proto";
 import "rpc_common.proto";
 import "google/protobuf/timestamp.proto";
+import "service/log_replication.proto";
 
 /* Note: v1 definitions are kept for compatibility and rolling upgrade purposes */
 
@@ -151,6 +152,8 @@ enum SyncStatus {
   UNAVAILABLE = 5;
 }
 
+/*------- Log Replication Event Table Schema ----------*/
+
 message ReplicationEventKey {
   string key = 1;
 }
@@ -164,4 +167,6 @@ message ReplicationEvent {
   string clusterId = 1;
   string eventId = 2;
   ReplicationEventType type = 3;
+  org.corfudb.runtime.LogReplicationSession session = 4;
+  google.protobuf.Timestamp eventTimestamp = 5;
 }

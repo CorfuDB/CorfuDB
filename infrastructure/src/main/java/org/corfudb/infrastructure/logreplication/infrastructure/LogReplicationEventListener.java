@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent.ReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuStore;
@@ -20,13 +21,10 @@ public final class LogReplicationEventListener implements StreamListener {
 
     private final CorfuReplicationDiscoveryService discoveryService;
     private final CorfuStore corfuStore;
-    private final ClusterDescriptor localCluster;
 
-    public LogReplicationEventListener(CorfuReplicationDiscoveryService discoveryService, CorfuRuntime runtime,
-                                       ClusterDescriptor localCluster) {
+    public LogReplicationEventListener(CorfuReplicationDiscoveryService discoveryService, CorfuRuntime runtime) {
         this.discoveryService = discoveryService;
         this.corfuStore = new CorfuStore(runtime);
-        this.localCluster = localCluster;
     }
 
     public void start() {
@@ -66,11 +64,11 @@ public final class LogReplicationEventListener implements StreamListener {
             for (List<CorfuStreamEntry> entryList : results.getEntries().values()) {
                 for (CorfuStreamEntry entry : entryList) {
                     ReplicationEvent event = (ReplicationEvent) entry.getPayload();
-                    log.info("Received event :: id={}, type={}, cluster_id={}", event.getEventId(), event.getType(),
-                            event.getClusterId());
-                    if (event.getType().equals(ReplicationEvent.ReplicationEventType.FORCE_SNAPSHOT_SYNC)) {
+                    log.info("Received event :: id={}, type={}, session={}, ts={}", event.getEventId(), event.getType(),
+                            event.getSession(), event.getEventTimestamp());
+                    if (event.getType().equals(ReplicationEventType.FORCE_SNAPSHOT_SYNC)) {
                         discoveryService.input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC,
-                                localCluster.getClusterId(), event.getClusterId(), event.getEventId()));
+                                event.getSession(), event.getEventId()));
                     } else {
                         log.warn("Received invalid event :: id={}, type={}, cluster_id={}", event.getEventId(), event.getType(),
                                 event.getClusterId());                    }
