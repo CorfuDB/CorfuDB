@@ -69,7 +69,7 @@ public class MetadataManagerTest extends AbstractViewTest {
 
         long numOpaqueEntries = 3L;
         LogReplication.LogReplicationEntryMsg lrEntryMsg = utils.generateLogEntryMsg(1, numOpaqueEntries,
-                        Address.NON_ADDRESS, topologyConfigId, Address.NON_ADDRESS);
+                Address.NON_ADDRESS, topologyConfigId, Address.NON_ADDRESS);
 
         // Verify that the data was successfully applied
         boolean success = writer.apply(lrEntryMsg);
@@ -119,13 +119,14 @@ public class MetadataManagerTest extends AbstractViewTest {
 
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
         metadataManager.addSession(defaultSession, topologyConfigId, true);
-        LogReplicationContext context = new LogReplicationContext(configManager, 0, defaultSession.getSourceClusterId());
+        LogReplicationContext context = new LogReplicationContext(configManager, 0,
+                defaultSession.getSourceClusterId());
         LogEntryWriter writer = new LogEntryWriter(metadataManager, defaultSession, context);
 
         // Create a message with 50 opaque entries
         long numOpaqueEntries = 50L;
         LogReplication.LogReplicationEntryMsg lrEntryMsg = utils.generateLogEntryMsg(1, numOpaqueEntries,
-            Address.NON_ADDRESS, topologyConfigId, Address.NON_ADDRESS);
+                Address.NON_ADDRESS, topologyConfigId, Address.NON_ADDRESS);
 
         // Thread 1: Log Entry apply
         scheduleConcurrently(f -> {
@@ -174,4 +175,76 @@ public class MetadataManagerTest extends AbstractViewTest {
             Assert.assertTrue(metadata.getLastLogEntryApplied() < numOpaqueEntries);
         }
     }
+
+    /**
+     * This test verifies that timestamp of the consistent cut for which
+     * data is being replicated.
+     *
+     * If the current topologyConfigId is not the same as the persisted topologyConfigId, ignore the operation.
+     * If the current ts is smaller than the persisted snapStart, it is an old operation,
+     * ignore it.
+     * Otherwise, update the base snapshot start timestamp. The update of topologyConfigId just fences off
+     * any other metadata updates in other transactions.
+     */
+    @Test
+    public void testSetBaseSnapshotStart() {
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
+        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(defaultSession, true);
+        Assert.assertNotNull(metadata);
+
+        boolean snapshotStartTsSetWithInvalidTopConfigId = metadataManager.setBaseSnapshotStart(defaultSession,
+                topologyConfigId + 1, Address.NON_ADDRESS);
+        boolean snapshotStartTsSetWithValidTopConfigId = metadataManager.setBaseSnapshotStart(defaultSession,
+                topologyConfigId, 6L);
+
+        Assert.assertFalse(snapshotStartTsSetWithInvalidTopConfigId);
+        Assert.assertTrue(snapshotStartTsSetWithValidTopConfigId);
+    }
+
+    /**
+     * This test verifies that the last snapshot transfer complete.
+     */
+    @Test
+    public void testSetLastSnapshotTransferCompleteTimestamp() {
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
+        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(defaultSession, true);
+        Assert.assertNotNull(metadata);
+        long initialLastTransferredTs = metadata.getLastSnapshotTransferred();
+
+        // Modify the cluster config, and verify that the update operation failed.
+        metadataManager.setLastSnapshotTransferCompleteTimestamp(defaultSession,
+                topologyConfigId + 1, Address.NON_ADDRESS);
+        Assert.assertEquals(initialLastTransferredTs,
+                metadataManager.getReplicationMetadata(defaultSession, true).getLastSnapshotTransferred());
+
+        // Verify the update operation succeed.
+        metadataManager.setLastSnapshotTransferCompleteTimestamp(defaultSession,
+                topologyConfigId, 6L);
+        Assert.assertEquals(6L,
+                metadataManager.getReplicationMetadata(defaultSession, true).getLastSnapshotTransferred());
+    }
+
+    /**
+     * This test verifies that the log entry snapshot applied is complete.
+     */
+    @Test
+    public void testSetSnapshotAppliedComplete() {
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId);
+        ReplicationMetadata metadata = metadataManager.getReplicationMetadata(defaultSession, true);
+        Assert.assertNotNull(metadata);
+
+        // Modify the topology config in log entry message, and verify that the update operation failed.
+        long numOpaqueEntries = 3L;
+        LogReplication.LogReplicationEntryMsg lrEntryMsg = utils.generateLogEntryMsg(1, numOpaqueEntries,
+                Address.NON_ADDRESS, topologyConfigId + 1, Address.NON_ADDRESS);
+        metadataManager.setSnapshotAppliedComplete(lrEntryMsg, defaultSession);
+        Assert.assertEquals(0L, metadataManager.getReplicationStatus().size());
+
+        // Verify the update operation succeed.
+        lrEntryMsg = utils.generateLogEntryMsg(1, numOpaqueEntries,
+                Address.NON_ADDRESS, topologyConfigId, Address.NON_ADDRESS);
+        metadataManager.setSnapshotAppliedComplete(lrEntryMsg, defaultSession);
+        Assert.assertTrue(metadataManager.getReplicationStatus().get(defaultSession).getSinkStatus().getDataConsistent());
+    }
+
 }
