@@ -17,6 +17,7 @@ import com.google.protobuf.ByteString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.common.util.ObservableValue;
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
@@ -66,9 +67,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private static final String TEST_STREAM_NAME = "StreamA";
     private static final int BATCH_SIZE = 2;
     private static final int WAIT_TIME = 100;
-    private static final int CORFU_PORT = 9000;
     private static final int TEST_TOPOLOGY_CONFIG_ID = 1;
     private static final String TEST_LOCAL_CLUSTER_ID = "local_cluster";
+    private static final String TEST_LOCAL_ENDPOINT_PREFIX = "test:";
 
     // This semaphore is used to block until the triggering event causes the transition to a new state
     private final Semaphore transitionAvailable = new Semaphore(1, true);
@@ -496,7 +497,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 break;
             case STREAMS:
                 CorfuRuntime runtime = getNewRuntime(getDefaultNode()).connect();
-                snapshotReader = new StreamsSnapshotReader(runtime, configManager, replicationSession);
+                snapshotReader = new StreamsSnapshotReader(runtime, new LogReplicationContext(configManager,
+                        TEST_TOPOLOGY_CONFIG_ID, TEST_LOCAL_ENDPOINT_PREFIX + SERVERS.PORT_0), replicationSession);
                 dataSender = new TestDataSender();
                 break;
             default:
@@ -505,11 +507,12 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, TEST_TOPOLOGY_CONFIG_ID,
             TEST_LOCAL_CLUSTER_ID);
-        ackReader = new LogReplicationAckReader(metadataManager, configManager, runtime, replicationSession);
+        LogReplicationContext replicationContext = new LogReplicationContext(configManager, TEST_TOPOLOGY_CONFIG_ID,
+                TEST_LOCAL_ENDPOINT_PREFIX + SERVERS.PORT_0);
+        ackReader = new LogReplicationAckReader(metadataManager, replicationContext, runtime, replicationSession);
 
-        fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
-                new DefaultReadProcessor(runtime), configManager,
-                Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()),
+        fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader, new DefaultReadProcessor(runtime),
+                replicationContext, Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()),
                 ackReader, upgradeManager, replicationSession);
         ackReader.setLogEntryReader(fsm.getLogEntryReader());
         transitionObservable = fsm.getNumTransitions();
