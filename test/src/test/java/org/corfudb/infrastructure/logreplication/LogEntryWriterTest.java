@@ -67,6 +67,7 @@ public class LogEntryWriterTest extends AbstractViewTest {
      */
     @Test
     public void testLogEntryApplyWithExpectedTx() {
+
         // (1) Generate log entry message for 'numOpaqueEntries'
         LogReplicationEntryMsg lrEntryMsg = utils.generateLogEntryMsg(1, numOpaqueEntries, Address.NON_ADDRESS,
             topologyConfigId, Address.NON_ADDRESS);
@@ -138,8 +139,7 @@ public class LogEntryWriterTest extends AbstractViewTest {
                 .setLastSnapshotApplied(Address.NON_ADDRESS)
                 .build();
         resetMock();
-        Mockito.doReturn(mismatchMetadata).when(metadataManager).queryReplicationMetadata(txnContext,
-            getDefaultSession());
+        Mockito.doReturn(mismatchMetadata).when(metadataManager).queryReplicationMetadata(txnContext, getDefaultSession());
 
         Assert.assertTrue(logEntryWriter.apply(lrEntryMsg));
 
@@ -147,8 +147,8 @@ public class LogEntryWriterTest extends AbstractViewTest {
         // will be applied.  So the total number of times commit is invoked should be 1
         verifyNumberOfTx(1);
 
-        // Verify that the right metadata was applied - there will be 2 updates, 1 to LAST_LOG_ENTRY_APPLIED and
-        // the other to LAST_LOG_ENTRY_BATCH_PROCESSED
+        // Verify that the right metadata was applied - there will be 1 write, with the updated values of
+        // LAST_LOG_ENTRY_APPLIED and LAST_LOG_ENTRY_BATCH_PROCESSED
         List<TxnContext> txnContexts = Arrays.asList(txnContext);
         List<LogReplicationSession> sessions = Arrays.asList(getDefaultSession());
         List<ReplicationMetadata> metadataList = Arrays.asList(getDefaultMetadata()
@@ -243,7 +243,7 @@ public class LogEntryWriterTest extends AbstractViewTest {
         LogReplicationEntryMsg lrEntryMsg = utils.generateLogEntryMsg(startTs, numOpaqueEntries, Address.NON_ADDRESS,
             topologyConfigId, Address.NON_ADDRESS);
 
-        // Refresh metadata where the sequence number of the last log entry applied does not match the incoming
+        // Construct metadata where the sequence number of the last log entry applied does not match the incoming
         // message
         ReplicationMetadata mismatchMetadata = getDefaultMetadata().toBuilder()
                 .setLastLogEntryBatchProcessed(0)
@@ -283,8 +283,7 @@ public class LogEntryWriterTest extends AbstractViewTest {
         ReplicationMetadata invalidMetadata = getDefaultMetadata().toBuilder()
                 .setLastSnapshotApplied(0)
                 .build();
-        Mockito.reset(metadataManager);
-        Mockito.doReturn(txnContext).when(metadataManager).getTxnContext();
+        resetMock();
         Mockito.doReturn(invalidMetadata).when(metadataManager).queryReplicationMetadata(txnContext,
             getDefaultSession());
 
@@ -313,12 +312,8 @@ public class LogEntryWriterTest extends AbstractViewTest {
         LogReplicationEntryMsg lrEntryMsg = utils.generateLogEntryMsg(startTs, startTs + numOpaqueEntries, snapshotTsOnSource,
             topologyConfigId, snapshotTsOnSource);
 
-        // Construct metadata on the Sink with default values(Address.NON_Address)
-        ReplicationMetadata metadata = buildMetadata(topologyConfigId,
-            Address.NON_ADDRESS, Address.NON_ADDRESS, Address.NON_ADDRESS);
-        updateMetadataManagerMap(metadata, getDefaultSession(), false);
-
-        // Verify that the log entry message was not applied as the incoming snapshot ts is higher
+        // Metadata on the Sink is already initialized with default(init) values, i.e., Address.NON_ADDRESS.  Verify
+        // that the log entry message was not applied as the incoming snapshot ts is higher
         Assert.assertFalse(logEntryWriter.apply(lrEntryMsg));
 
         // The number of times commit() was invoked should be 0 as validation failed
@@ -386,36 +381,6 @@ public class LogEntryWriterTest extends AbstractViewTest {
             Assert.assertEquals(expectedSessions.get(i), sessions.get(i));
             Assert.assertEquals(expectedReplicationMetadata.get(i), metadata.get(i));
         }
-    }
-
-    private void updateMetadataManagerMap(ReplicationMetadata metadata, LogReplicationSession session, boolean reset) {
-        if (reset) {
-            Mockito.reset(metadataManager);
-            initMocksForMetadataManager();
-        }
-
-        //Mockito.doReturn(metadata).when(metadataManager).queryReplicationMetadata(txnContext, session);
-    }
-
-    private void initMocksForMetadataManager() {
-        txnContext = Mockito.mock(TxnContext.class);
-        Mockito.doReturn(txnContext).when(metadataManager).getTxnContext();
-
-        Mockito.doReturn(getDefaultMetadata()).when(metadataManager).queryReplicationMetadata(txnContext,
-            getDefaultSession());
-        Mockito.doReturn(getDefaultMetadata()).when(metadataManager).getReplicationMetadata(getDefaultSession(), false);
-    }
-
-    private ReplicationMetadata buildMetadata(long topologyConfigId, long lastTsInBatch,
-                                              long lastOpaqueEntryTs, long lastSnapshotAppliedTs) {
-
-        return ReplicationMetadata.newBuilder()
-                .setTopologyConfigId(topologyConfigId)
-                .setLastLogEntryBatchProcessed(lastTsInBatch)
-                .setLastLogEntryApplied(lastOpaqueEntryTs)
-                .setLastSnapshotApplied(lastSnapshotAppliedTs)
-                .setLastSnapshotStarted(Address.NON_ADDRESS)
-                .build();
     }
 
     private LogReplicationSession getDefaultSession() {

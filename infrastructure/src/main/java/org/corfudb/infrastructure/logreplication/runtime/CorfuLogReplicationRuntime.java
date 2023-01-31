@@ -211,7 +211,7 @@ public class CorfuLogReplicationRuntime {
     /**
      * Initialize all states for the Log Replication Runtime FSM.
      */
-    private void initializeStates(LogReplicationMetadataManager metadataManager, LogReplicationUpgradeManager upgradeManager) {
+    private void initializeStates() {
         /*
          * Log Replication Runtime State instances are kept in a map to be reused in transitions, avoid creating one
          * per every transition (reduce GC cycles).

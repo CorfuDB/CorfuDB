@@ -177,6 +177,11 @@ public class LogReplicationFSM {
     private final SnapshotReader snapshotReader;
 
     /**
+     * Used for checking if LR is in upgrading path
+     */
+    private final LogReplicationUpgradeManager upgradeManager;
+
+    /**
      * Version on which snapshot sync is based on.
      */
     @Getter
@@ -265,6 +270,7 @@ public class LogReplicationFSM {
         this.logEntryReader = logEntryReader;
         this.context = context;
         this.ackReader = ackReader;
+        this.upgradeManager = upgradeManager;
         this.snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor,
             context.getConfig().getMaxNumMsgPerBatch(), this);
         this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
@@ -273,7 +279,7 @@ public class LogReplicationFSM {
                 ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer-" + session.hashCode())
                 .build());
 
-        init(dataSender, session, upgradeManager);
+        init(dataSender, session);
     }
 
     private SnapshotReader createSnapshotReader(CorfuRuntime runtime, LogReplicationSession session,
