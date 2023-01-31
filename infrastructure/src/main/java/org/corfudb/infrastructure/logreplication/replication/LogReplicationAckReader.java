@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.replication;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
@@ -11,7 +12,6 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader.StreamIteratorMetadata;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -37,7 +37,9 @@ import java.util.concurrent.locks.ReentrantLock;
 @Slf4j
 public class LogReplicationAckReader {
     private final LogReplicationMetadataManager metadataManager;
-    private final LogReplicationConfigManager configManager;
+
+    private final LogReplicationContext replicationContext;
+
     private final CorfuRuntime runtime;
     private final String remoteClusterId;
     private final ReplicationSession replicationSession;
@@ -66,10 +68,10 @@ public class LogReplicationAckReader {
 
     private final Lock lock = new ReentrantLock();
 
-    public LogReplicationAckReader(LogReplicationMetadataManager metadataManager, LogReplicationConfigManager configManager,
+    public LogReplicationAckReader(LogReplicationMetadataManager metadataManager, LogReplicationContext replicationContext,
                                    CorfuRuntime runtime, ReplicationSession replicationSession) {
         this.metadataManager = metadataManager;
-        this.configManager = configManager;
+        this.replicationContext = replicationContext;
         this.runtime = runtime;
         this.remoteClusterId = replicationSession.getRemoteClusterId();
         this.replicationSession = replicationSession;
@@ -177,7 +179,7 @@ public class LogReplicationAckReader {
      */
     private long getMaxReplicatedStreamsTail(Map<UUID, Long> tailMap) {
         long maxTail = Address.NON_ADDRESS;
-        Set<String> streamsToReplicate = configManager.getUpdatedConfig().getReplicationSubscriberToStreamsMap()
+        Set<String> streamsToReplicate = replicationContext.refresh().getReplicationSubscriberToStreamsMap()
             .getOrDefault(replicationSession.getSubscriber(), new HashSet<>());
         for (String streamName : streamsToReplicate) {
             UUID streamUuid = CorfuRuntime.getStreamID(streamName);
