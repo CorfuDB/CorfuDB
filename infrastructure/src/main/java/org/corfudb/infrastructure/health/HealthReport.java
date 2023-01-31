@@ -76,6 +76,11 @@ public class HealthReport {
     @Getter
     private final Set<ComponentReportedHealthStatus> runtime;
 
+    @NonNull
+    @Getter
+    private final ReportedLivenessStatus liveness;
+
+
     /**
      * Create a HealthReport from the HealthMonitor's componentHealthStatus. Overall status is healthy if all the
      * components are init and runtime healthy. If init report is empty - the overall status is unknown. If at least
@@ -83,14 +88,17 @@ public class HealthReport {
      * Otherwise, the status is healthy.
      *
      * @param componentHealthStatus HealthMonitor's componentHealthStatus
+     * @param livenessStatus HealthMonitor's livenessStatus
      * @return A health report
      */
-    public static HealthReport fromComponentHealthStatus(Map<Component, HealthStatus> componentHealthStatus) {
+    public static HealthReport fromComponentHealthStatus(Map<Component, HealthStatus> componentHealthStatus,
+                                                         LivenessStatus livenessStatus) {
         Map<Component, HealthStatus> componentHealthStatusSnapshot = ImmutableMap.copyOf(componentHealthStatus);
         Set<ComponentReportedHealthStatus> initReportedHealthStatus =
                 createInitReportedHealthStatus(componentHealthStatusSnapshot);
         Set<ComponentReportedHealthStatus> runtimeReportedHealthStatus =
                 createRuntimeReportedHealthStatus(componentHealthStatusSnapshot);
+        ReportedLivenessStatus reportedLivenessStatus = createReportedLivenessStatus(livenessStatus);
         String overallReason;
         ComponentStatus overallStatus;
         if (initReportedHealthStatus.isEmpty()) {
@@ -99,7 +107,7 @@ public class HealthReport {
         } else if (!isHealthy(initReportedHealthStatus)) {
             overallStatus = DOWN;
             overallReason = OVERALL_STATUS_DOWN;
-        } else if (!isHealthy(runtimeReportedHealthStatus)) {
+        } else if (!isHealthy(runtimeReportedHealthStatus) || reportedLivenessStatus.getStatus() != UP) {
             overallStatus = FAILURE;
             overallReason = OVERALL_STATUS_FAILURE;
         } else {
@@ -111,6 +119,7 @@ public class HealthReport {
                 .reason(overallReason)
                 .init(initReportedHealthStatus)
                 .runtime(runtimeReportedHealthStatus)
+                .liveness(reportedLivenessStatus)
                 .build();
     }
 
@@ -165,6 +174,15 @@ public class HealthReport {
         }).collect(ImmutableSet.toImmutableSet());
     }
 
+    private static ReportedLivenessStatus createReportedLivenessStatus(LivenessStatus livenessStatus) {
+        if (livenessStatus.isHealthy()) {
+            return new ReportedLivenessStatus(UP, OVERALL_STATUS_UP);
+        }
+        else {
+            return new ReportedLivenessStatus(DOWN, livenessStatus.getReason());
+        }
+    }
+
     @AllArgsConstructor
     public static enum ComponentStatus {
 
@@ -200,6 +218,16 @@ public class HealthReport {
         @Getter
         private final ComponentStatus status;
 
+        @Getter
+        private final String reason;
+    }
+
+    @AllArgsConstructor
+    @ToString
+    @EqualsAndHashCode
+    public static class ReportedLivenessStatus {
+        @Getter
+        private final ComponentStatus status;
         @Getter
         private final String reason;
     }
