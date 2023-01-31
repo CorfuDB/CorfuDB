@@ -37,9 +37,9 @@ import static org.mockito.Mockito.atMost;
 @Slf4j
 public class LogReplicationServerTest {
 
-    private final static String SAMPLE_HOSTNAME = "localhost";
-    private final static String SINK_CLUSTER_ID = getUUID(UuidMsg.newBuilder().setLsb(1).setMsb(1).build()).toString();
-    private final static String SINK_NODE_ID = getUUID(UuidMsg.newBuilder().setLsb(2).setMsb(2).build()).toString();
+    private static final String SAMPLE_HOSTNAME = "localhost";
+    private static final String SINK_CLUSTER_ID = getUUID(UuidMsg.newBuilder().setLsb(1).setMsb(1).build()).toString();
+    private static final String SINK_NODE_ID = getUUID(UuidMsg.newBuilder().setLsb(2).setMsb(2).build()).toString();
 
     ServerContext context;
     LogReplicationMetadataManager metadataManager;

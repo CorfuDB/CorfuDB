@@ -180,28 +180,6 @@ public class LogReplicationMetadataManager {
     // =========================== Replication Metadata Table Methods ===============================
 
     /**
-     * Query the replication metadata for a given LR session
-     *
-     * @param session   unique identifier for LR session
-     * @return          replication metadata info
-     */
- /*   public ReplicationMetadata queryReplicationMetadata(LogReplicationSession session) {
-        ReplicationMetadata metadata;
-
-        try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-            metadata = queryReplicationMetadata(txn, session);
-            txn.commit();
-        }
-
-        if(metadata == null) {
-            log.error("Metadata not found for session={}", session);
-            return getDefaultMetadata(Address.NON_ADDRESS);
-        }
-
-        return metadata;
-    }*/
-
-    /**
      * Get the replication metadata for a given LR session and set it to default values if no metadata is found
      *
      * @param session   unique identifier for LR session
@@ -250,13 +228,13 @@ public class LogReplicationMetadataManager {
             log.error("Failed to find metadata field number {} in ReplicationMetadata object. Metadata is not UPDATED!", fieldNumber);
             return;
         }
-        CorfuStoreEntry<LogReplicationSession, ReplicationMetadata, Message> record = txn.getRecord(metadataTable, session);
+        CorfuStoreEntry<LogReplicationSession, ReplicationMetadata, Message> entry = txn.getRecord(metadataTable, session);
 
-        if(record.getPayload() == null) {
+        if(entry.getPayload() == null) {
             log.warn("Entry not found for session={} - skipping update", session);
             return;
         }
-        ReplicationMetadata updatedMetadata = record.getPayload().toBuilder().setField(fd, value).build();
+        ReplicationMetadata updatedMetadata = entry.getPayload().toBuilder().setField(fd, value).build();
         txn.putRecord(metadataTable, session, updatedMetadata, null);
 
         log.debug("Update metadata field {}, value={}, session={}", fd.getFullName(), value);
@@ -654,20 +632,21 @@ public class LogReplicationMetadataManager {
 
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
 
-            CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message> record = txn.getRecord(statusTable,
+            CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message> entry = txn.getRecord(statusTable,
                 session);
 
             // When a remote cluster has been removed from topology, the corresponding entry in the status table is
             // removed and FSM is shutdown. Since FSM shutdown is async, we ensure that we don't update a record which
             // has already been deleted.
             // (STOPPED status is used for other FSM states as well, so cannot rely only on the incoming status)
-            if (record.getPayload() == null && status == SyncStatus.STOPPED) {
+            if (entry.getPayload() == null && status == SyncStatus.STOPPED) {
                 log.debug("syncStatus :: ignoring update for session {} to syncType {} and status {} as no record " +
                     "exists for the same", session, lastSyncType, status);
                 return;
             }
 
-            SourceReplicationStatus previous = record.getPayload() != null ? record.getPayload().getSourceStatus() : SourceReplicationStatus.newBuilder().build();
+            SourceReplicationStatus previous = entry.getPayload() != null ? entry.getPayload().getSourceStatus() :
+                SourceReplicationStatus.newBuilder().build();
             SourceReplicationStatus current;
 
             if (lastSyncType.equals(SyncType.LOG_ENTRY)) {
@@ -712,10 +691,10 @@ public class LogReplicationMetadataManager {
         ReplicationStatus previous = null;
 
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-            CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message> record = txn.getRecord(statusTable,
+            CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message> entry = txn.getRecord(statusTable,
                 session);
-            if (record.getPayload() != null) {
-                previous = record.getPayload();
+            if (entry.getPayload() != null) {
+                previous = entry.getPayload();
                 snapshotStatus = previous.getSourceStatus().getReplicationInfo().getSnapshotSyncInfo();
             }
             txn.commit();
@@ -955,10 +934,6 @@ public class LogReplicationMetadataManager {
             log.error("Unrecoverable exception while removing session", e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
-    }
-
-    public void refresh(TopologyDescriptor newTopology) {
-
     }
 
     public enum LogReplicationMetadataType {

@@ -725,7 +725,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
                 mapNameToMapSinkTypeA.put(mapName, mapSink);
 
             } else {
-                Table<StringKey, ValueFieldTagOneAndTwo , Metadata> mapSource = corfuStoreSource.openTable(
+                Table<StringKey, ValueFieldTagOneAndTwo, Metadata> mapSource = corfuStoreSource.openTable(
                         NAMESPACE, mapName, StringKey.class, ValueFieldTagOneAndTwo.class, Metadata.class,
                         TableOptions.fromProtoSchema(ValueFieldTagOneAndTwo.class));
                 mapNameToMapSourceTypeB.put(mapName, mapSource);
