@@ -52,8 +52,6 @@ public class LogEntryWriter extends SinkWriter {
         this.lastMsgTs = metadata.getLastLogEntryBatchProcessed();
         this.metadataManager = metadataManager;
         this.session = session;
-
-        // TODO[Anny]: review this method upstream
     }
 
     /**

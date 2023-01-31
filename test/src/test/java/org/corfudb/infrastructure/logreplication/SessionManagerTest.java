@@ -2,11 +2,9 @@ package org.corfudb.infrastructure.logreplication;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.After;
 import org.junit.Assert;
@@ -14,24 +12,16 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
 
-import java.util.List;
 
 public class SessionManagerTest extends AbstractViewTest {
     private CorfuRuntime corfuRuntime;
-    private LogReplicationConfigManager configManager;
-    private TestUtils utils;
-    private List<LogReplicationSession> sessions = DefaultClusterConfig.getSessions();
-    private LogReplicationSession defaultSession = sessions.get(0);
     private TopologyDescriptor topology;
 
     @Before
     public void setUp() {
         corfuRuntime = getDefaultRuntime();
-
-        configManager = Mockito.mock(LogReplicationConfigManager.class);
-
+        LogReplicationConfigManager configManager = Mockito.mock(LogReplicationConfigManager.class);
         Mockito.doReturn(corfuRuntime).when(configManager).getRuntime();
-        utils = new TestUtils();
     }
 
     @After
@@ -62,8 +52,8 @@ public class SessionManagerTest extends AbstractViewTest {
      */
     @Test
     public void testSessionMgrWithIncomingSession() {
-        boolean SinkClusterAsLocalEndpoint = true;
-        topology = new DefaultClusterManager(SinkClusterAsLocalEndpoint).generateDefaultValidConfig();
+        boolean sinkClusterAsLocalEndpoint = true;
+        topology = new DefaultClusterManager(sinkClusterAsLocalEndpoint).generateDefaultValidConfig();
         SessionManager sessionManager = new SessionManager(topology, corfuRuntime);
         String sinkClusterId = "456e4567-e89b-12d3-a456-556642440002";
         int numSinkCluster = topology.getSinkClusters().size();

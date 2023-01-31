@@ -11,7 +11,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -115,7 +114,7 @@ public class TopologyDescriptor {
      *
      * @return topology protoBuf
      */
-    public TopologyConfigurationMsg  convertToMessage() {
+    public TopologyConfigurationMsg convertToMessage() {
         List<ClusterConfigurationMsg> clusterConfigurationMsgs = Stream.of(sourceClusters.values(),
                 sinkClusters.values(), invalidClusters.values())
                 .flatMap(Collection::stream)

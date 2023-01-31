@@ -48,9 +48,6 @@ public class LogReplicationConfigManager {
     @Getter
     private ServerContext serverContext;
 
-    private List<Entry<TableName, CorfuRecord<TableDescriptors, TableMetadata>>> registryTableEntries =
-            new ArrayList<>();
-
     private long lastRegistryTableLogTail = Address.NON_ADDRESS;
 
     /**
@@ -72,7 +69,8 @@ public class LogReplicationConfigManager {
     public LogReplicationConfig generateConfig() {
         PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable =
             runtime.getTableRegistry().getRegistryTable();
-        registryTableEntries = registryTable.entryStream().collect(Collectors.toList());
+        List<Entry<TableName, CorfuRecord<TableDescriptors, TableMetadata>>> registryTableEntries =
+            registryTable.entryStream().collect(Collectors.toList());
 
         Set<String> streamsToReplicate = new HashSet<>();
         Set<UUID> streamsToDrop = new HashSet<>();

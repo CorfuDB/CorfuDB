@@ -231,8 +231,9 @@ public class LogReplicationMetadataManager {
      * @return replication metadata info for given session
      */
     public ReplicationMetadata queryReplicationMetadata(TxnContext txn, LogReplicationSession session) {
-        CorfuStoreEntry<LogReplicationSession, ReplicationMetadata, Message> record = txn.getRecord(METADATA_TABLE_NAME, session);
-        return record.getPayload();
+        CorfuStoreEntry<LogReplicationSession, ReplicationMetadata, Message> entry = txn.getRecord(METADATA_TABLE_NAME,
+            session);
+        return entry.getPayload();
     }
 
     /**
@@ -803,7 +804,7 @@ public class LogReplicationMetadataManager {
         Map<LogReplicationSession, ReplicationStatus> replicationStatusMap = new HashMap<>();
         List<CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message>> entries;
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-            entries = txn.executeQuery(statusTable, record -> true);
+            entries = txn.executeQuery(statusTable, p -> true);
             txn.commit();
         }
 

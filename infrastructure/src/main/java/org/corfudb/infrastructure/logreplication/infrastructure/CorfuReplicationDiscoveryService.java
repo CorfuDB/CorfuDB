@@ -625,6 +625,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             // Update the topology config id on the Sink components
             if (interClusterServerNode != null) {
                 interClusterServerNode.updateTopologyConfigId(newTopology.getTopologyConfigId());
+                sessionManager.refresh(newTopology, isLeader.get());
             }
         }
 

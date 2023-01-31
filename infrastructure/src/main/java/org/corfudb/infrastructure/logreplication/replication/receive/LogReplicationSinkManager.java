@@ -247,7 +247,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      * If the configFile doesn't exist, use the default values.
      */
     private void readConfig() {
-        //TODO(AGMM): I believe this should come from the LogReplicationServerContext
+        // TODO V2: This file path can be added to the ReplicationContext and be fetched from there
         File configFile = new File(CONFIG_FILE);
         try {
             FileReader reader = new FileReader(configFile);
@@ -415,12 +415,12 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         // Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
         snapshotWriter.reset(entry.getMetadata().getTopologyConfigID(), baseSnapshotTimestamp);
-        // TODO(AGMM): I believe this is always a fresh start so we don't need to pass the metadata last transferred, test
-        // it and if not pass instead logReplicationMetadataManager.getLastSnapshotTransferredSequenceNumber()
-        //TODO(AGMM): I belive there is a bug, if the sink crashes and it was in the middle of a snapshot cycle,
-        // a SNAPSHOT_START message won't come ad sso the Buffer won't be ever created and we'll get a NPE
+
+        // TODO V2: If the sink crashes in the middle of a snapshot transfer cycle, a SNAPSHOT_START message
+        //  won't come and the buffer will not get created, resulting in an NPE
         snapshotSinkBufferManager = new SnapshotSinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                Address.NON_ADDRESS, this);
+            metadataManager.getReplicationMetadata(session, false).getLastSnapshotTransferredSeqNumber(),
+            this);
         rxState = RxState.SNAPSHOT_SYNC;
 
         log.info("Sink manager entry {} state, snapshot start with {}", rxState,
@@ -451,7 +451,9 @@ public class LogReplicationSinkManager implements DataReceiver {
         processSnapshotSyncApplied(entry);
 
         rxState = RxState.LOG_ENTRY_SYNC;
-        //TODO(AGMM): It seems this is creatig the LogEntrySink on completion of full sync, so last processed log entry should be nothing
+
+        // Create the Sink Buffer Manager with the last processed timestamp as the snapshot timestamp (log entry
+        // batch processed timestamp is already updated to the snapshot timestamp
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
                 metadataManager.getReplicationMetadata(session, false)
                     .getLastLogEntryBatchProcessed(), this);

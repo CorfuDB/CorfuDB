@@ -17,7 +17,6 @@ import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
-import org.corfudb.utils.CommonTypes;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;

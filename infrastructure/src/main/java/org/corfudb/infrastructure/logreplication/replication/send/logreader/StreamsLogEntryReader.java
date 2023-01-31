@@ -37,7 +37,6 @@ import static com.google.protobuf.UnsafeByteOperations.unsafeWrap;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.generatePayload;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryMsg;
-import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 
 @Slf4j
 @NotThreadSafe

@@ -10,12 +10,4 @@ package org.corfudb.infrastructure.logreplication.replication;
  */
 public class MetadataManagerAdapter {
 
-    /**
-     * Constructor
-     */
-    public MetadataManagerAdapter() {
-
-    }
-
-
 }

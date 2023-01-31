@@ -8,7 +8,6 @@ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultC
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValueTag;
@@ -47,7 +46,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -1313,29 +1311,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         assertThat(mapSink.count()).isEqualTo(thirdBatch);
     }
 
-    private Table<LogReplicationSession, ReplicationMetadata, Message> getMetadataTable(CorfuRuntime runtime)
-            throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
-        CorfuStore corfuStore = new CorfuStore(runtime);
-        CorfuStoreMetadata.TableName metadataTableName = null;
-        Table<LogReplicationSession, ReplicationMetadata, Message> metadataTable;
-
-        for (CorfuStoreMetadata.TableName name : corfuStore.listTables(LogReplicationMetadataManager.NAMESPACE)){
-            if(name.getTableName().contains(LogReplicationMetadataManager.METADATA_TABLE_NAME)) {
-                metadataTableName = name;
-            }
-        }
-
-        metadataTable = corfuStore.openTable(
-                    LogReplicationMetadataManager.NAMESPACE,
-                    metadataTableName.getTableName(),
-                    LogReplicationSession.class,
-                    ReplicationMetadata.class,
-                    null,
-                    TableOptions.fromProtoSchema(ReplicationMetadata.class));
-
-        return metadataTable;
-    }
-
     /**
      * This test verifies enforceSnapshotSync API
      * <p>
@@ -1348,7 +1323,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      * 7. Verify a full snapshot sync is triggered
      * 8. Verify a full snapshot sync is completed and data is correctly replicated.
      */
-    //@Test
+    @Test
     public void testEnforceSnapshotSync() throws Exception {
         // Write 10 entries to source map
         for (int i = 0; i < firstBatch; i++) {
@@ -1617,7 +1592,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      * 8. Verify the force snapshot sync is completed
      * 9. Write 5 entries to backup map, to verify Log Entry Sync
      */
-    //@Test
+    @Test
     public void testBackupRestoreWorkflow() throws Exception {
         Process backupCorfu = runServer(backupClusterCorfuPort, true);
         Process backupReplicationServer = runReplicationServer(backupReplicationServerPort, nettyPluginPath);

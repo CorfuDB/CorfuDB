@@ -44,9 +44,9 @@ public class SessionManager {
 
     // Represents default client for LR V1, i.e., use case where tables are tagged with
     // 'is_federated' flag, yet no client is specified in proto
-    public static final String DEFAULT_CLIENT = "00000000-0000-0000-0000-000000000000";
+    private static final String DEFAULT_CLIENT = "00000000-0000-0000-0000-000000000000";
 
-    public static UUID DEFAULT_CLIENT_ID = UUID.fromString(DEFAULT_CLIENT);
+    private static final UUID DEFAULT_CLIENT_ID = UUID.fromString(DEFAULT_CLIENT);
 
     private final CorfuStore corfuStore;
 
