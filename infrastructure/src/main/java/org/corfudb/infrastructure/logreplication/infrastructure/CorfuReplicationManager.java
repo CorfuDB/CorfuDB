@@ -62,24 +62,22 @@ public class CorfuReplicationManager {
      * Stop log replication for all sessions
      */
     public void stop() {
-        sessionRuntimeMap.values().forEach(runtime -> {
-            try {
-                log.info("Stop log replication runtime to remote cluster id={}", runtime.getRemoteClusterId());
-                runtime.stop();
-            } catch (Exception e) {
-                log.warn("Failed to stop log replication runtime to remote cluster id={}", runtime.getRemoteClusterId());
-            }
+        sessionRuntimeMap.keySet().forEach(session -> {
+            log.info("Stop log replication runtime to remote cluster id={}", session.getSinkClusterId());
+            stopLogReplicationRuntime(session);
         });
         sessionRuntimeMap.clear();
     }
 
+    /**
+     * Stop log replication for specific sessions
+     *
+     * @param sessions
+     */
     public void stop(Set<LogReplicationSession> sessions) {
         sessions.forEach(session -> stopLogReplicationRuntime(session));
     }
 
-    /**
-     * Start Log Replication Runtime to a specific Sink Session
-     */
     private void startLogReplicationRuntime(ClusterDescriptor remoteClusterDescriptor,
                                             LogReplicationSession session, LogReplicationContext context) {
         try {
@@ -95,6 +93,22 @@ public class CorfuReplicationManager {
             stopLogReplicationRuntime(session);
         }
     }
+
+    private void stopLogReplicationRuntime(LogReplicationSession session) {
+        CorfuLogReplicationRuntime logReplicationRuntime = sessionRuntimeMap.get(session);
+        if (logReplicationRuntime != null) {
+            try {
+                log.info("Stop log replication runtime for session {}", session);
+                logReplicationRuntime.stop();
+                sessionRuntimeMap.remove(session);
+            } catch(Exception e) {
+                log.warn("Failed to stop log replication runtime to remote cluster id={}", session.getSinkClusterId());
+            }
+        } else {
+            log.warn("Runtime not found for session {}", session);
+        }
+    }
+
 
     /**
      * Connect to a remote Log Replicator, through a Log Replication Runtime.
@@ -133,20 +147,6 @@ public class CorfuReplicationManager {
         } catch (InterruptedException e) {
             log.error("Unrecoverable exception when attempting to connect to remote session.", e);
             throw e;
-        }
-    }
-
-    /**
-     * Stop Log Replication for a specific session
-     */
-    public void stopLogReplicationRuntime(LogReplicationSession session) {
-        CorfuLogReplicationRuntime logReplicationRuntime = sessionRuntimeMap.get(session);
-        if (logReplicationRuntime != null) {
-            log.info("Stop log replication runtime for session {}", session);
-            logReplicationRuntime.stop();
-            sessionRuntimeMap.remove(session);
-        } else {
-            log.warn("Runtime not found for session {}", session);
         }
     }
 

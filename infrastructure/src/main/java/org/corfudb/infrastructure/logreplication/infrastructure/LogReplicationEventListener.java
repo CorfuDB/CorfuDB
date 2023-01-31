@@ -70,8 +70,8 @@ public final class LogReplicationEventListener implements StreamListener {
                         discoveryService.input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC,
                                 event.getSession(), event.getEventId()));
                     } else {
-                        log.warn("Received invalid event :: id={}, type={}, cluster_id={}", event.getEventId(), event.getType(),
-                                event.getClusterId());
+                        log.warn("Received invalid event :: id={}, type={}, cluster_id={} ts={}", event.getEventId(), event.getType(),
+                                event.getClusterId(), event.getEventTimestamp());
                     }
                 }
             }

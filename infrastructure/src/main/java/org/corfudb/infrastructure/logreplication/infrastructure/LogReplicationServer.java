@@ -100,7 +100,7 @@ public class LogReplicationServer extends AbstractServer {
             LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(localEndpoint,
                     sessionManager.getMetadataManager(), serverContext, session, sessionManager.getContext(session));
             sessionToSinkManagerMap.put(session, sinkManager);
-            log.info("Create Sink Manager for session {}", session);
+            log.info("Sink Manager created for session={}", session);
         }
     }
 
@@ -147,8 +147,8 @@ public class LogReplicationServer extends AbstractServer {
 
             // If no sink Manager is found, drop the message and log an error
             if (sinkManager == null) {
-                log.error("Sink Manager not found for remote cluster {}.  This could be due to a topology mismatch.",
-                    getUUID(request.getHeader().getClusterId()).toString());
+                log.error("Sink Manager not found for session {}, total={}, sessions={}", session,
+                        sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
                 return;
             }
 
@@ -240,7 +240,7 @@ public class LogReplicationServer extends AbstractServer {
         return session;
     }
 
-    public ResponseMsg getMetadataResponse(RequestMsg request, ReplicationMetadata metadata) {
+    private ResponseMsg getMetadataResponse(RequestMsg request, ReplicationMetadata metadata) {
 
         LogReplicationMetadataResponseMsg metadataMsg = LogReplicationMetadataResponseMsg.newBuilder()
                 .setTopologyConfigID(metadata.getTopologyConfigId())

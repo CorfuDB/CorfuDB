@@ -23,7 +23,7 @@ import java.util.UUID;
 @Data
 public class LogReplicationRuntimeParameters extends RuntimeParameters {
 
-    // Runtime unique log replication session identifier
+    // Replication session associated to a runtime
     private LogReplicationSession session;
 
     // Remote Cluster Descriptor

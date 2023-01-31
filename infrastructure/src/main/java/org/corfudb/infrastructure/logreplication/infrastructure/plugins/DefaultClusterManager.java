@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -90,7 +91,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
         localEndpoint = topology.getSourceNodeUuids().get(0);
     }
 
-    // Test constructor: Sink cluster as local endpoint.
+    @VisibleForTesting
     public DefaultClusterManager(boolean sinkAsLocalEndpoint) {
         topology = new DefaultClusterConfig();
         if (sinkAsLocalEndpoint) {

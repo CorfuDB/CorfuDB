@@ -30,7 +30,6 @@ public class TopologyDescriptor {
     @Getter
     private final long topologyConfigId;
 
-    // TODO: this should change, no longer notion of sink/source. A sink/source is relative to a replication model
     @Getter
     private final Map<String, ClusterDescriptor> sourceClusters;
 
@@ -127,10 +126,9 @@ public class TopologyDescriptor {
     }
 
     /**
-     * Get the Cluster Descriptor to which a given endpoint belongs to.
+     * Set the local cluster & node descriptors, give the endpoint of this node
      *
      * @param nodeId
-     * @return cluster descriptor to which endpoint belongs to.
      */
     public void setLocalDescriptor(String nodeId) {
         List<ClusterDescriptor> clusters = Stream.of(sourceClusters.values(), sinkClusters.values(),
@@ -138,9 +136,9 @@ public class TopologyDescriptor {
                 .flatMap(Collection::stream)
                 .collect(Collectors.toList());
 
-        for (ClusterDescriptor cluster : clusters) {
-            for (NodeDescriptor node : cluster.getNodesDescriptors()) {
-                if (node.getNodeId().equals(nodeId)) {
+        for(ClusterDescriptor cluster : clusters) {
+            for(NodeDescriptor node : cluster.getNodesDescriptors()) {
+                if(node.getNodeId().equals(nodeId)) {
                     localNodeDescriptor = node;
                     localClusterDescriptor = cluster;
                     break;
