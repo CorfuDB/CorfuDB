@@ -44,7 +44,7 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
         Sample.Metadata>> mapNameToMapStandby = new HashMap<>();
 
     private static final int NUM_ENTRIES_PER_TABLE = 20;
-    private static final int MAX_WRITE_SIZE = 7000;
+    private static final int MAX_WRITE_SIZE = 8000;
 
     /**
      * With the max write size of MAX_WRITE_SIZE, it was empirically
@@ -59,8 +59,8 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
     }
 
     /**
-     * With the max write size of SEVEN_THOUSAND, it was empirically
-     * determined that 20 entries in a table had a serialized size of 5.5K
+     * With the max write size of EIGHT_THOUSAND, it was empirically
+     * determined that 20 entries in a table had a serialized size of 7.5K
      * approx.  Hence, a snapshot sync with twice the data(40 entries) will be
      * applied in 2 transactions.
      * @throws Exception
