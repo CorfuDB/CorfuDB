@@ -4,9 +4,9 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -82,19 +82,16 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
     private final ReplicationSession replicationSession;
 
-    private final LogReplicationConfigManager configManager;
-
     private final LogReplicationMetadataManager metadataManager;
 
     @Getter
     private Phase phase;
 
-    public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationConfigManager configManager,
+    public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationContext replicationContext,
                                  LogReplicationMetadataManager logReplicationMetadataManager,
                                  ReplicationSession replicationSession) {
-        super(configManager, replicationSession);
+        super(replicationContext, replicationSession);
         this.rt = rt;
-        this.configManager = configManager;
         this.metadataManager = logReplicationMetadataManager;
         this.phase = Phase.TRANSFER_PHASE;
         this.snapshotSyncStartMarker = Optional.empty();
@@ -147,7 +144,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         snapshotSyncStartMarker = Optional.empty();
         replicatedStreamIds.clear();
         // Sync with registry table to capture local updates on Sink side
-        configManager.getUpdatedConfig();
+        replicationContext.refresh();
     }
 
     /**
@@ -204,7 +201,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         metadataManager.appendUpdate(txnContext, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, srcGlobalSnapshot);
 
         for (SMREntry smrEntry : smrEntries) {
-            txnContext.logUpdate(streamId, smrEntry, configManager.getConfig().getDataStreamToTagsMap().get(streamId));
+            txnContext.logUpdate(streamId, smrEntry, replicationContext.getConfig().getDataStreamToTagsMap().get(streamId));
         }
     }
 
@@ -264,7 +261,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
     private void clearStream(UUID streamId, TxnContext txnContext) {
         SMREntry entry = new SMREntry(CLEAR_SMR_METHOD, new Array[0], Serializers.PRIMITIVE);
-        txnContext.logUpdate(streamId, entry, configManager.getConfig().getDataStreamToTagsMap().get(streamId));
+        txnContext.logUpdate(streamId, entry, replicationContext.getConfig().getDataStreamToTagsMap().get(streamId));
     }
 
     @Override
@@ -401,10 +398,10 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         applyShadowStream(REGISTRY_TABLE_ID, snapshot);
 
         // Sync the config with registry table after applying its entries
-        configManager.getUpdatedConfig();
+        replicationContext.refresh();
 
         for (String stream :
-            configManager.getConfig().getReplicationSubscriberToStreamsMap()
+            replicationContext.getConfig().getReplicationSubscriberToStreamsMap()
                 .getOrDefault(replicationSession.getSubscriber(), new HashSet<>())) {
             UUID regularStreamId = CorfuRuntime.getStreamID(stream);
             if (regularStreamId.equals(REGISTRY_TABLE_ID)) {
@@ -455,7 +452,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         // checkpoint won't run on these streams
         Set<UUID> streamsToQuery = new HashSet<>();
         for (String replicatedStream :
-            configManager.getConfig().getReplicationSubscriberToStreamsMap().getOrDefault(
+            replicationContext.getConfig().getReplicationSubscriberToStreamsMap().getOrDefault(
                 replicationSession.getSubscriber(), new HashSet<>())) {
             UUID id = CorfuRuntime.getStreamID(replicatedStream);
             if (replicatedStreamIds.contains(id) || MERGE_ONLY_STREAMS.contains(id)) {

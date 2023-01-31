@@ -1,15 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
-import com.google.protobuf.Message;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.config.LogReplicationLogicalGroupConfig;
-import org.corfudb.infrastructure.logreplication.exceptions.GroupDestinationChangeException;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
-import org.corfudb.protocols.logprotocol.OpaqueEntry;
-import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.ClientDestinationInfoKey;
 import org.corfudb.runtime.LogReplication.DestinationInfoVal;
@@ -39,8 +31,9 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @Slf4j
 public class LogicalGroupLogEntryReader extends BaseLogEntryReader {
 
-    public static final UUID CLIENT_CONFIG_TABLE_ID = CorfuRuntime.getStreamID(
-            TableRegistry.getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, LR_MODEL_METADATA_TABLE_NAME));
+    public LogicalGroupLogEntryReader(CorfuRuntime runtime, LogReplicationContext replicationContext,
+                                      ReplicationSession session) {
+    }
 
     private final ISerializer protobufSerializer;
 

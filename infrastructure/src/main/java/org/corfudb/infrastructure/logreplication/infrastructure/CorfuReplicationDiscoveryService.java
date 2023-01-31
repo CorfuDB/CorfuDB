@@ -100,12 +100,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     private static final int SYSTEM_EXIT_ERROR_CODE = -3;
 
     /**
-     * Used for managing the set of streams to replicate, and also used for upgrading path
-     * in Log Replication
-     */
-    private LogReplicationConfigManager replicationConfigManager;
-
-    /**
      * Responsible for version management
      */
     private LogReplicationUpgradeManager upgradeManager;
@@ -177,7 +171,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
     private LockClient lockClient;
 
-    private LogReplicationConfig logReplicationConfig;
 
     /**
      * Indicates that bootstrap has been completed. Bootstrap is done once it
@@ -371,16 +364,16 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         // Through the config manager, retrieve system-specific configurations such as streams to replicate
         // for supported replication models and version
-        replicationConfigManager = new LogReplicationConfigManager(getCorfuRuntime(), serverContext);
+        LogReplicationConfigManager replicationConfigManager =
+                new LogReplicationConfigManager(getCorfuRuntime(), serverContext);
+        replicationContext = new LogReplicationContext(replicationConfigManager,
+                topologyDescriptor.getTopologyConfigId(), localCorfuEndpoint);
         upgradeManager = new LogReplicationUpgradeManager(getCorfuRuntime(), serverContext.getPluginConfigFilePath());
-        logReplicationConfig = replicationConfigManager.getConfig();
-
         Set<String> remoteClusterIds = new HashSet<>();
 
         if (role == ClusterRole.SOURCE) {
             remoteClusterIds.addAll(topologyDescriptor.getSinkClusters().keySet());
             createMetadataManagers(remoteClusterIds);
-            replicationContext = new LogReplicationContext(logReplicationConfig, topologyDescriptor, localCorfuEndpoint);
             logReplicationEventListener = new LogReplicationEventListener(this, getCorfuRuntime());
             logReplicationEventListener.start();
         } else {
@@ -388,7 +381,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             remoteClusterIds.addAll(topologyDescriptor.getSourceClusters().keySet());
             createMetadataManagers(remoteClusterIds);
 
-            LogReplicationServer server = new LogReplicationServer(serverContext, localNodeId, replicationConfigManager,
+            LogReplicationServer server = new LogReplicationServer(serverContext, localNodeId, replicationContext,
                 localCorfuEndpoint, topologyDescriptor.getTopologyConfigId(), remoteSessionToMetadataManagerMap);
             interClusterServerNode = new CorfuInterClusterReplicationServerNode(serverContext, server);
         }
@@ -397,7 +390,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     private void createMetadataManagers(Set<String> remoteClusterIds) {
         for (String remoteClusterId : remoteClusterIds) {
             for (ReplicationSubscriber subscriber :
-                logReplicationConfig.getReplicationSubscriberToStreamsMap().keySet()) {
+                    replicationContext.getConfig().getReplicationSubscriberToStreamsMap().keySet()) {
                 LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(getCorfuRuntime(),
                     topologyDescriptor.getTopologyConfigId(), remoteClusterId);
                 ReplicationSession replicationSession = new ReplicationSession(remoteClusterId, subscriber);
@@ -521,14 +514,18 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 log.info("Start as Source (sender/replicator)");
                 if (replicationManager == null) {
                     replicationManager = new CorfuReplicationManager(replicationContext, localNodeDescriptor,
-                        remoteSessionToMetadataManagerMap, serverContext.getPluginConfigFilePath(), getCorfuRuntime(),
-                        replicationConfigManager, upgradeManager);
+                        remoteSessionToMetadataManagerMap, serverContext.getPluginConfigFilePath(),
+                            getCorfuRuntime(), upgradeManager);
                 } else {
                     // Replication Context contains the topology which
                     // must be updated if it has changed
-                    replicationManager.setContext(replicationContext);
+                    replicationManager.setReplicationContext(replicationContext);
                 }
-                replicationManager.start();
+
+                // Start log replication manager for each Sink
+                for (ClusterDescriptor remoteCluster : topologyDescriptor.getSinkClusters().values()) {
+                    replicationManager.start(remoteCluster, replicationContext);
+                }
 
                 // Set initial/default replication status for newly added Sink clusters
                 initReplicationStatusForRemoteClusters(true);
@@ -761,7 +758,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
             for (String remoteClusterId : sinksToRemove) {
                 for (ReplicationSubscriber subscriber :
-                    logReplicationConfig.getReplicationSubscriberToStreamsMap().keySet()) {
+                    replicationContext.getConfig().getReplicationSubscriberToStreamsMap().keySet()) {
                     ReplicationSession sessionToRemove = new ReplicationSession(remoteClusterId, subscriber);
                     removeClusterInfoFromStatusTable(sessionToRemove);
                     remoteSessionToMetadataManagerMap.remove(sessionToRemove);
@@ -769,7 +766,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             }
             createMetadataManagers(sinksToAdd);
             initReplicationStatusForRemoteClusters(true);
-            replicationContext.setTopology(discoveredTopology);
+            replicationContext.setTopologyConfigId(discoveredTopology.getTopologyConfigId());
             replicationManager.processSinkChange(discoveredTopology, sinksToAdd, sinksToRemove, intersection);
         } else {
             // Update the topology config id on the Sink components

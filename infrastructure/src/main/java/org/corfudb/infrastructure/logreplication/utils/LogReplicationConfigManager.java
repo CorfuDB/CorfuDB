@@ -40,7 +40,7 @@ import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.REG
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
- * Handle constuction and maintenance of the streams to replicate for all replication models supported in LR.
+ * Handle construction and maintenance of the streams to replicate for all replication models supported in LR.
  * @author pankti-m
  */
 @Slf4j
@@ -153,9 +153,18 @@ public class LogReplicationConfigManager {
     }
 
     private boolean registryTableHasNewEntries() {
+        // TODO (V2 / Chris): the operation of check current tail + generate updated config + update last log tail
+        //  should be atomic operation in multi replication session env.
         StreamAddressSpace currentAddressSpace = runtime.getSequencerView().getStreamAddressSpace(
             new StreamAddressRange(REGISTRY_TABLE_ID, Long.MAX_VALUE, Address.NON_ADDRESS));
         long currentLogTail = currentAddressSpace.getTail();
-        return (currentLogTail != lastRegistryTableLogTail);
+
+        // Check if the log tail of registry table moved ahead
+        if (currentLogTail != lastRegistryTableLogTail) {
+            lastRegistryTableLogTail = currentLogTail;
+            return true;
+        }
+
+        return false;
     }
 }

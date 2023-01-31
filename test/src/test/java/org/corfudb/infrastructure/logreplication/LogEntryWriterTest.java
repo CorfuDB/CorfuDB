@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication;
 
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationSession;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
@@ -58,7 +59,9 @@ public class LogEntryWriterTest extends AbstractViewTest {
         Mockito.doReturn(corfuRuntime).when(mockConfigManager).getRuntime();*/
 
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(corfuRuntime);
-        logEntryWriter = new LogEntryWriter(configManager, metadataManager, replicationSession);
+        LogReplicationContext replicationContext = new LogReplicationContext(configManager, topologyConfigId,
+                getEndpoint(SERVERS.PORT_0));
+        logEntryWriter = new LogEntryWriter(replicationContext, metadataManager, replicationSession);
         numOpaqueEntries = 3;
         topologyConfigId = 5;
         utils = new TestUtils();
