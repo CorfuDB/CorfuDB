@@ -88,7 +88,7 @@ public class LogReplicationConfig {
 
 
     public LogReplicationConfig(Set<String> streamsToReplicate, Set<UUID> streamsToDrop,
-                                Map<UUID, List<UUID>> streamToTagsMap, ServerContext serverContext, CorfuRuntime runtime) {
+                                Map<UUID, List<UUID>> streamToTagsMap, ServerContext serverContext) {
         this.streamsToReplicate = streamsToReplicate;
         this.streamsToDrop = streamsToDrop;
         this.dataStreamToTagsMap = streamToTagsMap;

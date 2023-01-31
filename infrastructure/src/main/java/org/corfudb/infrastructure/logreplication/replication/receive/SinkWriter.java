@@ -99,7 +99,7 @@ public abstract class SinkWriter {
      * @return True if the entry should be ignored.
      */
     boolean ignoreEntryForRegistryTable(UUID streamId, CorfuRecord<TableDescriptors, TableMetadata> record) {
-        return  context.getConfig().getStreamsToDrop().contains(streamId) ||
+        return context.getConfig().getStreamsToDrop().contains(streamId) ||
             !record.getMetadata().getTableOptions().getIsFederated();
     }
 }

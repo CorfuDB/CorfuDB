@@ -74,8 +74,8 @@ public class LogReplicationConfigManager {
 
         Set<String> streamsToReplicate = new HashSet<>();
         Set<UUID> streamsToDrop = new HashSet<>();
-        streamsToReplicate.add(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME));
-        streamsToReplicate.add(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME));
+        streamsToReplicate.add(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, REGISTRY_TABLE_NAME));
+        streamsToReplicate.add(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, PROTOBUF_DESCRIPTOR_TABLE_NAME));
         Map<UUID, List<UUID>> streamToTagsMap = new HashMap<>();
 
         registryTableEntries.forEach(entry -> {
@@ -107,7 +107,7 @@ public class LogReplicationConfigManager {
             // TODO: Add other cases once the protobuf options for other subscribers are available
         });
 
-        return new LogReplicationConfig(streamsToReplicate, streamsToDrop, streamToTagsMap, serverContext, runtime);
+        return new LogReplicationConfig(streamsToReplicate, streamsToDrop, streamToTagsMap, serverContext);
     }
 
     public LogReplicationConfig getUpdatedConfig() {

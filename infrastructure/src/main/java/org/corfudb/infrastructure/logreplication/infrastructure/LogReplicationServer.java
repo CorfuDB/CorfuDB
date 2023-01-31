@@ -254,7 +254,7 @@ public class LogReplicationServer extends AbstractServer {
                 .setLrMetadataResponse(metadataMsg)
                 .build();
 
-        return  getResponseMsg(getHeaderMsg(request.getHeader()), payload);
+        return getResponseMsg(getHeaderMsg(request.getHeader()), payload);
     }
 
     /**
@@ -274,11 +274,6 @@ public class LogReplicationServer extends AbstractServer {
         HeaderMsg responseHeader = getHeaderMsg(request.getHeader());
         ResponseMsg response = getLeadershipResponse(responseHeader, isLeader.get(), localNodeId);
         router.sendResponse(response, ctx);
-    }
-
-    private boolean isSnapshotApplyPending(ReplicationMetadata metadata) {
-        return (metadata.getLastSnapshotStarted() == metadata.getLastSnapshotTransferred()) &&
-                metadata.getLastSnapshotTransferred() > metadata.getLastSnapshotApplied();
     }
 
     /**

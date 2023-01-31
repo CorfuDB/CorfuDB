@@ -177,11 +177,6 @@ public class LogReplicationFSM {
     private final SnapshotReader snapshotReader;
 
     /**
-     * Used for checking if LR is in upgrading path
-     */
-    private final LogReplicationUpgradeManager upgradeManager;
-
-    /**
      * Version on which snapshot sync is based on.
      */
     @Getter
@@ -212,8 +207,6 @@ public class LogReplicationFSM {
     @Getter
     private final LogReplicationAckReader ackReader;
 
-    private final LogReplicationContext context;
-
     /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
      *
@@ -233,9 +226,7 @@ public class LogReplicationFSM {
         this.snapshotReader = createSnapshotReader(runtime, session, context);
         this.logEntryReader = createLogEntryReader(runtime, session, context);
 
-        this.context = context;
         this.ackReader = ackReader;
-        this.upgradeManager = upgradeManager;
         this.snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor,
             context.getConfig().getMaxNumMsgPerBatch(), this);
         this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
@@ -244,7 +235,7 @@ public class LogReplicationFSM {
             ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer-" + session.hashCode())
             .build());
 
-        init(dataSender, session);
+        init(dataSender, session, upgradeManager);
 
     }
 
@@ -268,9 +259,7 @@ public class LogReplicationFSM {
 
         this.snapshotReader = snapshotReader;
         this.logEntryReader = logEntryReader;
-        this.context = context;
         this.ackReader = ackReader;
-        this.upgradeManager = upgradeManager;
         this.snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor,
             context.getConfig().getMaxNumMsgPerBatch(), this);
         this.logEntrySender = new LogEntrySender(logEntryReader, dataSender, this);
@@ -279,7 +268,7 @@ public class LogReplicationFSM {
                 ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer-" + session.hashCode())
                 .build());
 
-        init(dataSender, session);
+        init(dataSender, session, upgradeManager);
     }
 
     private SnapshotReader createSnapshotReader(CorfuRuntime runtime, LogReplicationSession session,
@@ -334,7 +323,7 @@ public class LogReplicationFSM {
         return logEntryReader;
     }
 
-    private void init(DataSender dataSender, LogReplicationSession session) {
+    private void init(DataSender dataSender, LogReplicationSession session, LogReplicationUpgradeManager upgradeManager) {
         // Initialize Log Replication 5 FSM states - single instance per state
         initializeStates(snapshotSender, logEntrySender, dataSender, upgradeManager);
         this.state = states.get(LogReplicationStateType.INITIALIZED);

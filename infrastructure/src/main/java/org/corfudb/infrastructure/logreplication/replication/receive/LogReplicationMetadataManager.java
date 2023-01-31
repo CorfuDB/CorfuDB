@@ -603,11 +603,11 @@ public class LogReplicationMetadataManager {
 
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
 
-            CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message> record = txn.getRecord(statusTable,
+            CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message> entry = txn.getRecord(statusTable,
                 session);
 
-            if (record.getPayload() != null) {
-                SourceReplicationStatus previous = record.getPayload().getSourceStatus();
+            if (entry.getPayload() != null) {
+                SourceReplicationStatus previous = entry.getPayload().getSourceStatus();
                 SnapshotSyncInfo previousSyncInfo = previous.getReplicationInfo().getSnapshotSyncInfo();
 
                 SnapshotSyncInfo currentSyncInfo = previousSyncInfo.toBuilder()
@@ -844,20 +844,20 @@ public class LogReplicationMetadataManager {
     }
 
     public Map<LogReplicationSession, SinkReplicationStatus> getDataConsistentOnSink(LogReplicationSession session) {
-        CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message> record;
+        CorfuStoreEntry<LogReplicationSession, ReplicationStatus, Message> entry;
         SinkReplicationStatus status;
 
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-            record = txn.getRecord(statusTable, session);
+            entry = txn.getRecord(statusTable, session);
             txn.commit();
         }
 
         // Initially, snapshot sync is pending so the data is not consistent.
-        if (record.getPayload() == null) {
+        if (entry.getPayload() == null) {
             log.warn("DataConsistent status is not set for session {}", session);
             status = SinkReplicationStatus.newBuilder().setDataConsistent(false).build();
         } else {
-            status = record.getPayload().getSinkStatus();
+            status = entry.getPayload().getSinkStatus();
         }
         Map<LogReplicationSession, SinkReplicationStatus> dataConsistentMap = new HashMap<>();
         dataConsistentMap.put(session, status);

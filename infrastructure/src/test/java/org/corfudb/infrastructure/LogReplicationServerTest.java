@@ -23,7 +23,8 @@ import org.mockito.ArgumentCaptor;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -37,8 +38,8 @@ import static org.mockito.Mockito.atMost;
 public class LogReplicationServerTest {
 
     private final static String SAMPLE_HOSTNAME = "localhost";
-    private final String SINK_CLUSTER_ID = getUUID(UuidMsg.newBuilder().setLsb(1).setMsb(1).build()).toString();
-    private final String SINK_NODE_ID = getUUID(UuidMsg.newBuilder().setLsb(2).setMsb(2).build()).toString();
+    private final static String SINK_CLUSTER_ID = getUUID(UuidMsg.newBuilder().setLsb(1).setMsb(1).build()).toString();
+    private final static String SINK_NODE_ID = getUUID(UuidMsg.newBuilder().setLsb(2).setMsb(2).build()).toString();
 
     ServerContext context;
     LogReplicationMetadataManager metadataManager;

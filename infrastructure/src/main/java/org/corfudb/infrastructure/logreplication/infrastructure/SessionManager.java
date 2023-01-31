@@ -92,7 +92,7 @@ public class SessionManager {
         this.configManager = new LogReplicationConfigManager(runtime, serverContext);
         this.upgradeManager = upgradeManager;
 
-        createSessions(false);
+        createSessions();
     }
 
     /**
@@ -108,11 +108,11 @@ public class SessionManager {
         this.corfuStore = new CorfuStore(corfuRuntime);
         this.localCorfuEndpoint = "localhost:" +
                 topology.getLocalClusterDescriptor().getCorfuPort();
-        this.metadataManager =  new LogReplicationMetadataManager(corfuRuntime, topology.getTopologyConfigId());
+        this.metadataManager = new LogReplicationMetadataManager(corfuRuntime, topology.getTopologyConfigId());
         this.configManager = new LogReplicationConfigManager(runtime);
         this.upgradeManager = null;
 
-        createSessions(false);
+        createSessions();
     }
 
     /**
@@ -120,7 +120,7 @@ public class SessionManager {
      *
      * @param newTopology   the new discovered topology
      */
-    public synchronized void refresh(@Nonnull TopologyDescriptor newTopology, boolean isLeader) {
+    public synchronized void refresh(@Nonnull TopologyDescriptor newTopology) {
 
         // TODO pankti: Make this method a no-op if the new topology has not changed.  Need to override equals and
         //  hashcode in all TopologyDescriptor and all its members.
@@ -164,7 +164,7 @@ public class SessionManager {
 
                 stopReplication(sessionsToRemove, true);
                 updateReplicationParameters(sessionsUnchanged);
-                createSessions(isLeader);
+                createSessions();
                 return null;
             }).run();
         } catch (InterruptedException e) {
@@ -186,10 +186,8 @@ public class SessionManager {
     /**
      * Create sessions (outgoing and incoming) along with metadata
      *
-     * @param isLeader  true, if current node is the leader; false, otherwise
-     *                  this flag indicates if replication should start for created sessions or not
      */
-    private void createSessions(boolean isLeader) {
+    private void createSessions() {
         LogReplicationSession session;
 
         try(TxnContext txn = corfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
@@ -213,11 +211,6 @@ public class SessionManager {
                             sessions.add(session);
                             outgoingSessions.add(session);
                             metadataManager.addSession(txn, session, topology.getTopologyConfigId(), false);
-
-                            /*if(isLeader) {
-                                replicationManager.start(topology.getSinkClusters().get(session.getSinkClusterId()),
-                                        session, context);
-                            }*/
                         } else if(session.getSinkClusterId() == topology.getLocalClusterDescriptor().getClusterId()) {
                             sessions.add(session);
                             incomingSessions.add(session);
@@ -342,7 +335,7 @@ public class SessionManager {
                     metadataManager, configManager.getServerContext().getPluginConfigFilePath(), runtime, upgradeManager);
         }
 
-        createSessions(true);
+        createSessions();
         outgoingSessions.forEach(session -> {
             ClusterDescriptor remoteClusterDescriptor = topology.getSinkClusters().get(session.getSinkClusterId());
             replicationManager.start(remoteClusterDescriptor, session, sessionToContextMap.get(session));

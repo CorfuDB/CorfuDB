@@ -308,7 +308,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             return;
         }
 
-        sessionManager.refresh(topologyDescriptor, true);
+        sessionManager.refresh(topologyDescriptor);
 
         if (role == ClusterRole.SOURCE) {
             logReplicationEventListener = new LogReplicationEventListener(this, getCorfuRuntime());
@@ -412,7 +412,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * Depending on the role of the cluster to which this leader node belongs, it will start
      * as source (sender/producer) or sink (receiver).
      */
-    private void onLeadershipAcquire(boolean topologyChange) {
+    private void onLeadershipAcquire() {
         switch (topologyDescriptor.getLocalClusterDescriptor().getRole()) {
             case SOURCE:
                 log.info("Start as Source (sender/replicator)");
@@ -432,9 +432,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 interClusterServerNode.setLeadership(true);
                 lockAcquireSample = recordLockAcquire(topologyDescriptor.getLocalClusterDescriptor().getRole());
 
-                // Set initial/default replication status for newly added Source clusters
-                // TODO[Anny]: I don't think this is needed / confirm
-                // initReplicationStatusForRemoteClusters(false);
                 processCountOnLockAcquire();
                 break;
             default:
@@ -487,7 +484,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     public void processLockAcquire() {
         log.debug("Lock acquired");
         isLeader.set(true);
-        onLeadershipAcquire(false);
+        onLeadershipAcquire();
     }
 
     /**
@@ -553,7 +550,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         // On Topology Config Change, only if this node is the leader take action
         if (isLeader.get()) {
-            onLeadershipAcquire(true);
+            onLeadershipAcquire();
         }
     }
 
@@ -619,13 +616,13 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         // Only process new sinks if the local cluster role is SOURCE
         if (topologyDescriptor.getLocalClusterDescriptor().getRole() == ClusterRole.SOURCE) {
-            sessionManager.refresh(newTopology, isLeader.get());
+            sessionManager.refresh(newTopology);
             sessionManager.startReplication();
         } else {
             // Update the topology config id on the Sink components
             if (interClusterServerNode != null) {
                 interClusterServerNode.updateTopologyConfigId(newTopology.getTopologyConfigId());
-                sessionManager.refresh(newTopology, isLeader.get());
+                sessionManager.refresh(newTopology);
             }
         }
 
