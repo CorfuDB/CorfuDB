@@ -18,19 +18,20 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class CorfuStoreCompactorMainUnitTest {
+    public class CorfuCompactorUnitTest {
     private final CorfuRuntime corfuRuntime = mock(CorfuRuntime.class);
-    private final CorfuRuntime cpRuntime = mock(CorfuRuntime.class);
     private final CorfuStore corfuStore = mock(CorfuStore.class);
-    private final CorfuStoreCompactorConfig config = mock(CorfuStoreCompactorConfig.class);
+    private final CorfuCompactorControlsConfig config = mock(CorfuCompactorControlsConfig.class);
     private final DistributedCheckpointerHelper distributedCheckpointerHelper = mock(DistributedCheckpointerHelper.class);
     private final DistributedCheckpointer distributedCheckpointer = mock(DistributedCheckpointer.class);
-    private CorfuStoreCompactorMain corfuStoreCompactorMain;
+    private CorfuCompactorControls corfuCompactorControls;
+    private CorfuCompactorCheckpointer corfuCompactorCheckpointer;
 
     @Before
     public void setup() {
         when(corfuRuntime.getParameters()).thenReturn(CorfuRuntime.CorfuRuntimeParameters.builder().clientName("TestClient").build());
-        corfuStoreCompactorMain = spy(new CorfuStoreCompactorMain(config, corfuRuntime, cpRuntime, corfuStore, distributedCheckpointerHelper));
+        corfuCompactorControls = spy(new CorfuCompactorControls(config, corfuRuntime, corfuStore, distributedCheckpointerHelper));
+        corfuCompactorCheckpointer = spy(new CorfuCompactorCheckpointer(distributedCheckpointerHelper, distributedCheckpointer));
         doReturn(true).when(distributedCheckpointerHelper).disableCompaction();
         doNothing().when(distributedCheckpointerHelper).enableCompaction();
         doNothing().when(distributedCheckpointerHelper).freezeCompaction();
@@ -43,24 +44,21 @@ public class CorfuStoreCompactorMainUnitTest {
     public void doCompactorActionHappyPath() {
         doReturn(true).when(config).isFreezeCompaction();
         doReturn(true).when(config).isDisableCompaction();
-        corfuStoreCompactorMain.doCompactorAction();
+        corfuCompactorControls.doCompactorAction();
 
         doReturn(false).when(config).isFreezeCompaction();
         doReturn(false).when(config).isDisableCompaction();
         doReturn(true).when(config).isUnfreezeCompaction();
         doReturn(true).when(config).isEnableCompaction();
         doReturn(true).when(config).isInstantTriggerCompaction();
-        doReturn(true).when(config).isStartCheckpointing();
-        doNothing().when(corfuStoreCompactorMain).checkpoint(any());
         when(config.isTrim()).thenReturn(true).thenReturn(false);
-        corfuStoreCompactorMain.doCompactorAction();
-        corfuStoreCompactorMain.doCompactorAction();
+        corfuCompactorControls.doCompactorAction();
+        corfuCompactorControls.doCompactorAction();
 
         verify(distributedCheckpointerHelper).disableCompaction();
         verify(distributedCheckpointerHelper).freezeCompaction();
         verify(distributedCheckpointerHelper, times(2)).enableCompaction();
         verify(distributedCheckpointerHelper, times(2)).unfreezeCompaction();
-        verify(corfuStoreCompactorMain, times(2)).checkpoint(any());
         verify(distributedCheckpointerHelper).instantTrigger(true);
         verify(distributedCheckpointerHelper).instantTrigger(false);
     }
@@ -69,13 +67,13 @@ public class CorfuStoreCompactorMainUnitTest {
     public void doCompactorActionIncorrectConfigCombinations() {
         doReturn(true).when(config).isFreezeCompaction();
         doReturn(true).when(config).isUnfreezeCompaction();
-        corfuStoreCompactorMain.doCompactorAction();
+        corfuCompactorControls.doCompactorAction();
 
         doReturn(true).when(config).isDisableCompaction();
         doReturn(true).when(config).isEnableCompaction();
         doReturn(false).when(config).isFreezeCompaction();
         doReturn(false).when(config).isUnfreezeCompaction();
-        corfuStoreCompactorMain.doCompactorAction();
+        corfuCompactorControls.doCompactorAction();
 
         verify(distributedCheckpointerHelper).freezeCompaction();
         verify(distributedCheckpointerHelper).disableCompaction();
@@ -84,18 +82,18 @@ public class CorfuStoreCompactorMainUnitTest {
     }
 
     @Test
-    public void checkpointFailureTest() {
+    public void unableToCheckpointTest() {
         doReturn(false).when(distributedCheckpointerHelper).hasCompactionStarted();
-        corfuStoreCompactorMain.checkpoint(distributedCheckpointer);
+        corfuCompactorCheckpointer.startCheckpointing();
 
-        verify(distributedCheckpointerHelper, times(CorfuStoreCompactorMain.RETRY_CHECKPOINTING)).hasCompactionStarted();
+        verify(distributedCheckpointerHelper, times(CorfuCompactorCheckpointer.RETRY_CHECKPOINTING)).hasCompactionStarted();
         verify(distributedCheckpointer).shutdown();
     }
 
     @Test
     public void checkpointSuccessTest() {
         when(distributedCheckpointerHelper.hasCompactionStarted()).thenReturn(false).thenReturn(true);
-        corfuStoreCompactorMain.checkpoint(distributedCheckpointer);
+        corfuCompactorCheckpointer.startCheckpointing();
 
         verify(distributedCheckpointerHelper, times(2)).hasCompactionStarted();
         verify(distributedCheckpointer).shutdown();
