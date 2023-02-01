@@ -50,7 +50,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -99,6 +98,10 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      */
     private LogReplicationUpgradeManager upgradeManager;
 
+    /**
+     * Responsible for creating and maintaining the replication sessions associated with each remote cluster and
+     * replication model
+     */
     private SessionManager sessionManager;
 
     /**
@@ -417,10 +420,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             case SOURCE:
                 log.info("Start as Source (sender/replicator)");
                 sessionManager.startReplication();
-
-                // Set initial/default replication status for newly added Sink clusters
-                // TODO[Anny]: I don't think this is needed / confirm
-                // initReplicationStatusForRemoteClusters(true);
                 lockAcquireSample = recordLockAcquire(topologyDescriptor.getLocalClusterDescriptor().getRole());
                 processCountOnLockAcquire();
                 break;

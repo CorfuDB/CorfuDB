@@ -126,7 +126,7 @@ public class TopologyDescriptor {
     }
 
     /**
-     * Set the local cluster & node descriptors, give the endpoint of this node
+     * Set the local cluster & node descriptors, given the endpoint of this node
      *
      * @param nodeId
      */
@@ -136,12 +136,12 @@ public class TopologyDescriptor {
                 .flatMap(Collection::stream)
                 .collect(Collectors.toList());
 
-        for(ClusterDescriptor cluster : clusters) {
-            for(NodeDescriptor node : cluster.getNodesDescriptors()) {
-                if(node.getNodeId().equals(nodeId)) {
+        for (ClusterDescriptor cluster : clusters) {
+            for (NodeDescriptor node : cluster.getNodesDescriptors()) {
+                if (node.getNodeId().equals(nodeId)) {
                     localNodeDescriptor = node;
                     localClusterDescriptor = cluster;
-                    break;
+                    return;
                 }
             }
         }

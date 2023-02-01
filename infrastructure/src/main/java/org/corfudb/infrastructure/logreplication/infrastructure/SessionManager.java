@@ -80,6 +80,7 @@ public class SessionManager {
      * @param topology            the current topology
      * @param corfuRuntime        runtime for database access
      * @param serverContext       the server context
+     * @param upgradeManager      upgrade management module
      */
     public SessionManager(@Nonnull TopologyDescriptor topology, CorfuRuntime corfuRuntime,
                           ServerContext serverContext, LogReplicationUpgradeManager upgradeManager) {
@@ -122,8 +123,9 @@ public class SessionManager {
      */
     public synchronized void refresh(@Nonnull TopologyDescriptor newTopology) {
 
-        // TODO pankti: Make this method a no-op if the new topology has not changed.  Need to override equals and
-        //  hashcode in all TopologyDescriptor and all its members.
+        // TODO V2: Make this method a no-op if the new topology has not changed.  Need to override equals and
+        //  hashcode in all TopologyDescriptor and all its members.  It is being taken care of in a subsequent PR
+        //  which contains changes to the Connection Model.
 
         Set<String> newSources = newTopology.getSourceClusters().keySet();
         Set<String> currentSources = topology.getSourceClusters().keySet();
@@ -162,7 +164,7 @@ public class SessionManager {
                     throw new RetryNeededException();
                 }
 
-                stopReplication(sessionsToRemove, true);
+                stopReplication(sessionsToRemove);
                 updateReplicationParameters(sessionsUnchanged);
                 createSessions();
                 return null;
@@ -303,19 +305,17 @@ public class SessionManager {
         replicationManager.stop();
     }
 
-    public void stopReplication(Set<LogReplicationSession> sessions, boolean remove) {
-
+    private void stopReplication(Set<LogReplicationSession> sessions) {
         if (replicationManager != null) {
             replicationManager.stop(sessions);
         }
 
-        if(remove) {
-            sessions.forEach(session -> {
-                this.sessions.remove(session);
-                this.outgoingSessions.remove(session);
-                this.sessionToContextMap.remove(session);
-            });
-        }
+        sessions.forEach(session -> {
+            this.sessions.remove(session);
+            this.outgoingSessions.remove(session);
+            this.sessionToContextMap.remove(session);
+        });
+
     }
 
     public LogReplicationContext getContext(LogReplicationSession session) {
