@@ -66,6 +66,10 @@ public class LogReplicationServer extends AbstractServer {
     @Getter
     private SessionManager sessionManager;
 
+    private ServerContext serverContext;
+
+    private String localEndpoint;
+
     /**
      * RequestHandlerMethods for the LogReplication server
      */
@@ -78,16 +82,20 @@ public class LogReplicationServer extends AbstractServer {
 
     public LogReplicationServer(@Nonnull ServerContext context, @Nonnull SessionManager sessionManager,
                                 String localEndpoint) {
+        this.serverContext = context;
+        this.localEndpoint = localEndpoint;
         this.localNodeId = sessionManager.getTopology().getLocalNodeDescriptor().getNodeId();
         this.localClusterId = sessionManager.getTopology().getLocalClusterDescriptor().getClusterId();
         this.sessionManager = sessionManager;
-        createSinkManagers(localEndpoint, context);
+        createSinkManagers();
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
 
     @VisibleForTesting
     public LogReplicationServer(@Nonnull ServerContext context, LogReplicationSinkManager sinkManager,
         String localNodeId, String localClusterId, SessionManager sessionManager) {
+        this.serverContext = context;
+        this.localEndpoint = null;
         sessionToSinkManagerMap.put(sinkManager.getSession(), sinkManager);
         this.localNodeId = localNodeId;
         this.localClusterId = localClusterId;
@@ -95,13 +103,21 @@ public class LogReplicationServer extends AbstractServer {
         this.executor = context.getExecutorService(1, EXECUTOR_NAME_PREFIX);
     }
 
-     private void createSinkManagers(String localEndpoint, ServerContext serverContext) {
+     private void createSinkManagers() {
         for (LogReplicationSession session : sessionManager.getIncomingSessions()) {
             LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(localEndpoint,
                     sessionManager.getMetadataManager(), serverContext, session, sessionManager.getReplicationContext());
             sessionToSinkManagerMap.put(session, sinkManager);
             log.info("Sink Manager created for session={}", session);
         }
+    }
+
+    private LogReplicationSinkManager createSinkManager(LogReplicationSession session) {
+        LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(localEndpoint,
+                sessionManager.getMetadataManager(), serverContext, session, sessionManager.getContext(session));
+        sessionToSinkManagerMap.put(session, sinkManager);
+        log.info("Sink Manager created for session={}", session);
+        return sinkManager;
     }
 
     public void updateTopologyConfigId(long topologyConfigId) {
@@ -145,11 +161,17 @@ public class LogReplicationServer extends AbstractServer {
 
             LogReplicationSinkManager sinkManager = sessionToSinkManagerMap.get(session);
 
-            // If no sink Manager is found, drop the message and log an error
+            // SinkManager not found can indicate a new session discovered or yet to be discovered.
+            // Drop the message if the incoming session is not known to sessionManger, otherwise create a corresponding
+            // sinkManager
             if (sinkManager == null) {
-                log.error("Sink Manager not found for session {}, total={}, sessions={}", session,
-                        sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
-                return;
+                if(!sessionManager.getSessions().contains(session)) {
+                    log.error("Sink Manager not found for session {}, total={}, sessions={}", session,
+                            sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
+                    return;
+                } else {
+                    sinkManager = createSinkManager(session);
+                }
             }
 
             // Forward the received message to the Sink Manager for apply
@@ -196,10 +218,17 @@ public class LogReplicationServer extends AbstractServer {
 
             LogReplicationSinkManager sinkManager = sessionToSinkManagerMap.get(session);
 
+            // SinkManager not found can indicate a new session discovered or yet to be discovered.
+            // Drop the message if the incoming session is not known to sessionManger, otherwise create a corresponding
+            // sinkManager
             if (sinkManager == null) {
-                log.error("Sink Manager not found for session {}, total={}, sessions={}", session,
-                        sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
-                return;
+                if(!sessionManager.getSessions().contains(session)) {
+                    log.error("Sink Manager not found for session {}, total={}, sessions={}", session,
+                            sessionToSinkManagerMap.size(), sessionToSinkManagerMap.keySet());
+                    return;
+                } else {
+                    sinkManager = createSinkManager(session);
+                }
             }
 
             ReplicationMetadata metadata = sessionManager.getMetadataManager().getReplicationMetadata(session);

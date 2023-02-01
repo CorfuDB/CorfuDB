@@ -176,6 +176,7 @@ public class LogReplicationClientRouter implements IClientRouter {
             @Nonnull String nodeId) {
 
         HeaderMsg.Builder header = HeaderMsg.newBuilder()
+                .setSession(parameters.getSession())
                 .setVersion(getDefaultProtocolVersionMsg())
                 .setIgnoreClusterId(true)
                 .setIgnoreEpoch(true);
