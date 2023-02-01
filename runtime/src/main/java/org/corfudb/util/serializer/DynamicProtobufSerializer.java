@@ -24,17 +24,17 @@ import org.corfudb.runtime.CorfuStoreMetadata.Record;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
-import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.collections.CorfuDynamicKey;
+import org.corfudb.runtime.collections.CorfuDynamicRecord;
+import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.SerializerException;
-import org.corfudb.runtime.object.MVOCache;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.util.serializer.ProtobufSerializer.MessageType;
 
 import java.io.IOException;
 import java.util.ArrayList;
 
-import java.util.Iterator;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
