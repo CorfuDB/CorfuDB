@@ -606,18 +606,19 @@ public class LogReplicationMetadataManager {
                         .build();
 
                 txn.putRecord(statusTable, session, current, null);
-                txn.commit();
-
-                snapshotSyncTimerSample
-                        .flatMap(sample -> MeterRegistryProvider.getInstance()
-                                .map(registry -> {
-                                    Timer timer = registry.timer("logreplication.snapshot.duration");
-                                    return sample.stop(timer);
-                                }));
 
                 log.debug("syncStatus :: set snapshot sync to COMPLETED and log entry ONGOING, session: {}," +
-                    " syncInfo: [{}]", session, currentSyncInfo);
+                        " syncInfo: [{}]", session, currentSyncInfo);
             }
+
+            txn.commit();
+
+            snapshotSyncTimerSample
+                    .flatMap(sample -> MeterRegistryProvider.getInstance()
+                            .map(registry -> {
+                                Timer timer = registry.timer("logreplication.snapshot.duration");
+                                return sample.stop(timer);
+                            }));
         }
     }
 

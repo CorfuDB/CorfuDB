@@ -71,7 +71,7 @@ public class LogReplicationAckReader {
         this.context = context;
     }
 
-    public void setAckedTsAndSyncType(long ackedTs, LogReplicationMetadata.SyncType syncType) {
+    public void setAckedTsAndSyncType(long ackedTs, SyncType syncType) {
         lock.lock();
         try {
             lastAckedTimestamp = ackedTs;
