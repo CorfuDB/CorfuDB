@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.runtime.LogReplication;
 
 import java.util.Map;
 import java.util.UUID;
@@ -21,7 +22,7 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
      *
      * @return
      */
-    Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus();
+    Map<LogReplication.LogReplicationSession, LogReplicationMetadata.ReplicationStatus> queryReplicationStatus();
 
     /**
      * Enforce snapshotFullSync
