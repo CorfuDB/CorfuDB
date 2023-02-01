@@ -155,7 +155,7 @@ enum SyncStatus {
 /*------- Log Replication Event Table Schema ----------*/
 
 message ReplicationEventKey {
-  string key = 1;
+  org.corfudb.runtime.LogReplicationSession session = 1;
 }
 
 message ReplicationEvent {
@@ -167,6 +167,5 @@ message ReplicationEvent {
   string clusterId = 1;
   string eventId = 2;
   ReplicationEventType type = 3;
-  org.corfudb.runtime.LogReplicationSession session = 4;
-  google.protobuf.Timestamp eventTimestamp = 5;
+  google.protobuf.Timestamp eventTimestamp = 4;
 }

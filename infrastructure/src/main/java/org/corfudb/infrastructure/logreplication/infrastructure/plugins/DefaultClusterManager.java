@@ -8,6 +8,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescripto
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryService;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationDiscoveryServiceException;
 import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.SessionManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
@@ -171,8 +172,8 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
     }
 
     @Override
-    public UUID forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException {
-        return corfuReplicationDiscoveryService.forceSnapshotSync(clusterId);
+    public UUID forceSnapshotSync(LogReplicationSession session) throws LogReplicationDiscoveryServiceException {
+        return corfuReplicationDiscoveryService.forceSnapshotSync(session);
     }
 
     public TopologyDescriptor readConfig() {
@@ -449,8 +450,17 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
                         Optional<ClusterConfigurationMsg> sinkCluster =
                             clusters.stream().filter(cluster -> cluster.getRole() == ClusterRole.SINK
                             && cluster.getId().equals(clusterManager.topology.getSinkClusterIds().get(0))).findFirst();
-                        clusterManager.forceSnapshotSync(
-                            sinkCluster.get().getId());
+
+                        Optional<ClusterConfigurationMsg> sourceCluster =
+                            clusters.stream().filter(cluster -> cluster.getRole() == ClusterRole.SOURCE
+                                && cluster.getId().equals(clusterManager.topology.getSourceClusterIds().get(0))).findFirst();
+
+                        LogReplicationSession session = LogReplicationSession.newBuilder()
+                            .setSinkClusterId(sinkCluster.get().getId())
+                            .setSourceClusterId(sourceCluster.get().getId())
+                            .setSubscriber(SessionManager.getDefaultSubscriber())
+                            .build();
+                        clusterManager.forceSnapshotSync(session);
                     } catch (LogReplicationDiscoveryServiceException e) {
                         log.warn("Caught a RuntimeException ", e);
                         /*ClusterRole role = clusterManager.getCorfuReplicationDiscoveryService().getLocalClusterRoleType();

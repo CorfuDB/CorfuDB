@@ -47,14 +47,12 @@ import java.net.URLClassLoader;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
 /**
  * This class represents the Log Replication Discovery Service.
@@ -717,7 +715,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         return sessionManager.getReplicationStatus();
     }
 
-    public UUID forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException {
+    public UUID forceSnapshotSync(LogReplicationSession session) throws LogReplicationDiscoveryServiceException {
         if(topologyDescriptor.getLocalClusterDescriptor().getRole() == ClusterRole.SINK) {
             String errorStr = "Force snapshot sync not supported on sink cluster.";
             log.error(errorStr);
@@ -725,30 +723,16 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         }
 
         UUID forceSyncId = UUID.randomUUID();
-        log.info("Received forced snapshot sync request for sink cluster {}, sync_id={}",
-                clusterId, forceSyncId);
+        log.info("Received forced snapshot sync request for session {}, sync_id={}", session, forceSyncId);
 
         // Write a force sync event to the logReplicationEventTable
         ReplicationEventKey key = ReplicationEventKey.newBuilder()
-                .setKey(System.currentTimeMillis() + " " + clusterId)
-                .build();
-
-        // TODO(V2): currently not modifying API signature to session, so picking a session that matches the session
-        // to the 'default' subscriber, session will come from API once change is complete
-        List<LogReplicationSession> sessions = sessionManager.getOutgoingSessions(clusterId).stream()
-                .filter(session -> session.hasSubscriber()
-                        && session.getSubscriber().equals(SessionManager.getDefaultSubscriber())).collect(Collectors.toList());
-
-        if(sessions.isEmpty()) {
-            String message = "Request force snapshot sync rejected, session does not exist for cluster=" + clusterId;
-            log.error(message);
-            throw new LogReplicationDiscoveryServiceException(message);
-        }
+            .setSession(session)
+            .build();
 
         ReplicationEvent event = ReplicationEvent.newBuilder()
                 .setEventId(forceSyncId.toString())
                 .setType(ReplicationEventType.FORCE_SNAPSHOT_SYNC)
-                .setSession(sessions.get(0))
                 .setEventTimestamp(Timestamp.newBuilder().setSeconds(Instant.now().getEpochSecond()).build())
                 .build();
 

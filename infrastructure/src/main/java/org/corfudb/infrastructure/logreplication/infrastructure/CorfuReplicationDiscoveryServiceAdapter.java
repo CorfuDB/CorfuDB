@@ -27,7 +27,7 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
     /**
      * Enforce snapshotFullSync
      */
-    UUID forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException;
+    UUID forceSnapshotSync(LogReplication.LogReplicationSession session) throws LogReplicationDiscoveryServiceException;
 
 
     LogReplicationClusterInfo.ClusterRole getLocalClusterRoleType();

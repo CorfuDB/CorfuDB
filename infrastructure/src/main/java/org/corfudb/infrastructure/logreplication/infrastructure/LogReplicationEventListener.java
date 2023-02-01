@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent.ReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
@@ -60,15 +61,17 @@ public final class LogReplicationEventListener implements StreamListener {
             log.info("onNext[{}] :: processing updates for tables {}", results.getTimestamp(),
                     results.getEntries().keySet().stream().map(TableSchema::getTableName).collect(Collectors.toList()));
 
-            // If the current node is the leader, it generates a discovery event and put it into the discovery service event queue.
+            // If the current node is the leader, it generates a discovery event and puts it into the discovery
+            // service event queue.
             for (List<CorfuStreamEntry> entryList : results.getEntries().values()) {
                 for (CorfuStreamEntry entry : entryList) {
+                    ReplicationEventKey key = (ReplicationEventKey) entry.getKey();
                     ReplicationEvent event = (ReplicationEvent) entry.getPayload();
                     log.info("Received event :: id={}, type={}, session={}, ts={}", event.getEventId(), event.getType(),
-                            event.getSession(), event.getEventTimestamp());
+                            key.getSession(), event.getEventTimestamp());
                     if (event.getType().equals(ReplicationEventType.FORCE_SNAPSHOT_SYNC)) {
                         discoveryService.input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC,
-                                event.getSession(), event.getEventId()));
+                            key.getSession(), event.getEventId()));
                     } else {
                         log.warn("Received invalid event :: id={}, type={}, cluster_id={} ts={}", event.getEventId(), event.getType(),
                                 event.getClusterId(), event.getEventTimestamp());

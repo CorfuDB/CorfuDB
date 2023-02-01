@@ -67,11 +67,11 @@ public interface CorfuReplicationClusterManagerAdapter {
     Map<LogReplicationSession, SinkReplicationStatus> queryStatusOnSink();
 
     /**
-     * This API enforce a full snapshot sync on the sink cluster with the clusterId at best effort.
-     * The command can only be executed on the source cluster's node.
+     * This API enforces a full snapshot sync on a session at best effort.
+     * The command will be executed on a node in the source cluster.
      *
-     * @param clusterId
+     * @param session
      */
     // TODO(V2): this API needs to be modified to specify a LogReplicationSession (changes on client required)
-    UUID forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException;
+    UUID forceSnapshotSync(LogReplicationSession session) throws LogReplicationDiscoveryServiceException;
 }
