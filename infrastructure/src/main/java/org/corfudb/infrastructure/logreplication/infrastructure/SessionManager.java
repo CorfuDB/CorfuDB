@@ -225,6 +225,13 @@ public class SessionManager {
                     txn.commit();
 
                     sessions.addAll(sessionsToAdd);
+                    // TODO(V2): The below method logs a mapping of a session's hashcode to the session itself.  This
+                    //  is because LR names worker threads corresponding to a session using its hashcode.
+                    //  To identify the remote cluster and replication information while debugging, we need a view of
+                    //  the whole session object.  However, this method of logging the mapping has limitations
+                    //  because the mapping is only printed when the session is created for the first time.  If the
+                    //  logs have rolled over, the information is lost.  We need a permanent store/log of this mapping.
+                    logNewlyAddedSessionInfo(sessionsToAdd);
                     incomingSessions.addAll(incomingSessionsToAdd);
                     outgoingSessions.addAll(outgoingSessionsToAdd);
                     return null;
@@ -240,6 +247,13 @@ public class SessionManager {
 
         log.info("Total sessions={}, outgoing={}, incoming={}, sessions={}", sessions.size(), outgoingSessions.size(),
                 incomingSessions.size(), sessions);
+    }
+
+    private void logNewlyAddedSessionInfo(Set<LogReplicationSession> newlyAddedSessions) {
+        log.info("========= HashCode -> Session mapping for newly added session: =========");
+        for (LogReplicationSession session : newlyAddedSessions) {
+            log.info("HashCode: {}, Session: {}", session.hashCode(), session);
+        }
     }
 
     /**
