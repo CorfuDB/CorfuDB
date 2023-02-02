@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryService;
@@ -105,6 +106,7 @@ public class DefaultClusterManager implements CorfuReplicationClusterManagerAdap
 
     public String localEndpoint;
 
+    @Setter
     private String localNodeId;
 
     public DefaultClusterManager() {
