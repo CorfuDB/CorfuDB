@@ -75,7 +75,10 @@ public class CorfuReplicationManager {
      * @param sessions
      */
     public void stop(Set<LogReplicationSession> sessions) {
-        sessions.forEach(session -> stopLogReplicationRuntime(session));
+        sessions.forEach(session -> {
+            stopLogReplicationRuntime(session);
+            sessionRuntimeMap.remove(session);
+        });
     }
 
     private void startLogReplicationRuntime(ClusterDescriptor remoteClusterDescriptor,
@@ -91,6 +94,7 @@ public class CorfuReplicationManager {
         } catch (Exception e) {
             log.error("Caught exception, stop log replication runtime to {}", session, e);
             stopLogReplicationRuntime(session);
+            sessionRuntimeMap.remove(session);
         }
     }
 
@@ -100,7 +104,6 @@ public class CorfuReplicationManager {
             try {
                 log.info("Stop log replication runtime for session {}", session);
                 logReplicationRuntime.stop();
-                sessionRuntimeMap.remove(session);
             } catch(Exception e) {
                 log.warn("Failed to stop log replication runtime to remote cluster id={}", session.getSinkClusterId());
             }
