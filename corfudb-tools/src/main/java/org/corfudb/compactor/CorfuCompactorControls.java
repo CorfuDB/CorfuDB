@@ -7,7 +7,8 @@ import org.corfudb.runtime.DistributedCheckpointerHelper;
 import org.corfudb.runtime.collections.CorfuStore;
 
 /**
- *
+ * Helps with inserting the required compactor controls key into the CompactionControlsTable
+ * These keys are used by the manager to make decisions regarding triggering the next cycle
  */
 @Slf4j
 public class CorfuCompactorControls {
@@ -18,7 +19,7 @@ public class CorfuCompactorControls {
     public CorfuCompactorControls(String[] args) throws Exception {
         this.config = new CorfuCompactorControlsConfig(args);
 
-        Thread.currentThread().setName("CorfuStore-" + config.getNodeLocator().getPort() + "-chkpter");
+        Thread.currentThread().setName("Cmpt-ctrls-" + config.getNodeLocator().getPort());
         this.corfuRuntime = (CorfuRuntime.fromParameters(
                 config.getParams())).parseConfigurationString(config.getNodeLocator().toEndpointUrl()).connect();
         this.corfuStore = new CorfuStore(corfuRuntime);
@@ -35,7 +36,7 @@ public class CorfuCompactorControls {
     }
 
     /**
-     * Entry point to invoke checkpointing
+     * Entry point to invoke compactor controls operations
      *
      * @param args command line argument strings
      */

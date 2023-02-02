@@ -2,17 +2,10 @@ package org.corfudb.compactor;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
-import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
-import org.corfudb.runtime.exceptions.UnreachableClusterException;
-import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
-import org.corfudb.util.GitRepositoryState;
-import org.corfudb.util.NodeLocator;
-import org.docopt.Docopt;
 
-import java.util.Map;
-import java.util.Optional;
-
+/**
+ * CorfuCompactorControlsConfig class parses the compactor controls specific parameters passed if any
+ */
 @Getter
 @Slf4j
 public class CorfuCompactorControlsConfig extends CorfuCompactorConfig {

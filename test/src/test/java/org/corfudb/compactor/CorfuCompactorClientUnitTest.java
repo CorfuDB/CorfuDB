@@ -18,7 +18,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-    public class CorfuCompactorUnitTest {
+    public class CorfuCompactorClientUnitTest {
     private final CorfuRuntime corfuRuntime = mock(CorfuRuntime.class);
     private final CorfuStore corfuStore = mock(CorfuStore.class);
     private final CorfuCompactorControlsConfig config = mock(CorfuCompactorControlsConfig.class);

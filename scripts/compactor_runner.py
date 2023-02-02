@@ -29,7 +29,8 @@ from subprocess import check_call, check_output, STDOUT
 import time
 import yaml
 
-CORFU_COMPACTOR_CLASS_NAME = "org.corfudb.compactor.CorfuStoreCompactorMain"
+COMPACTOR_CONTROLS_CLASS_NAME = "org.corfudb.compactor.CorfuCompactorControls"
+COMPACTOR_CHECKPOINTER_CLASS_NAME = "org.corfudb.compactor.CorfuCompactorCheckpointer"
 COMPACTOR_BULK_READ_SIZE = 50
 COMPACTOR_JVM_XMX = 1024
 FORCE_DISABLE_CHECKPOINTING = "FORCE_DISABLE_CHECKPOINTING"
@@ -119,7 +120,7 @@ class CommandBuilder(object):
         return socket.inet_ntoa(
             fcntl.ioctl(sock.fileno(), 0x8915, struct.pack("256s", bytes(ifname[:15], 'utf-8')))[20:24])
 
-    def get_corfu_compactor_cmd(self, compactor_config):
+    def get_corfu_compactor_cmd(self, compactor_config, class_to_invoke):
         diskBacked = False
         if "DiskBacked" in compactor_config["ConfigFiles"] and compactor_config["ConfigFiles"]['DiskBacked'] is True:
             diskBacked = True
@@ -138,11 +139,10 @@ class CommandBuilder(object):
         cmd.append("-Djdk.nio.maxCachedBufferSize=1048576")
         cmd.append("-Dio.netty.recycler.maxCapacityPerThread=0")
         cmd.append(self.append_compactor_config(compactor_config))
-        cmd.append(CORFU_COMPACTOR_CLASS_NAME)
+        cmd.append(class_to_invoke)
 
         cmd.append("--hostname=" + self._resolve_ip_address(self._config.network_interface))
         cmd.append("--port=" + self._config.corfu_port)
-
         cmd.append("--tlsEnabled=true")
         cmd.append("--bulkReadSize=" + str(COMPACTOR_BULK_READ_SIZE))
 
@@ -155,24 +155,19 @@ class CommandBuilder(object):
         if diskBacked is True:
             cmd.append("--persistedCacheRoot=" + compactor_config["ConfigFiles"]["DiskPath"])
 
-        # If the env var FORCE_DISABLE_CHECKPOINTING is set to True, do not run checkpointing.
-        # This is used by Upgrade dry-run tool to disable compaction on one node.
-        force_disable_checkpointing = (os.environ.get(FORCE_DISABLE_CHECKPOINTING, "False") == "True")
-
-        if not force_disable_checkpointing and self._config.startCheckpointing:
-            cmd.append("--startCheckpointing=true")
-        if self._config.instantTriggerCompaction:
-            cmd.append("--instantTriggerCompaction=true")
-        if self._config.trim:
-            cmd.append("--trim=true")
-        if self._config.freezeCompaction:
-            cmd.append("--freezeCompaction=true")
-        if self._config.unfreezeCompaction:
-            cmd.append("--unfreezeCompaction=true")
-        if self._config.disableCompaction:
-            cmd.append("--disableCompaction=true")
-        if self._config.enableCompaction:
-            cmd.append("--enableCompaction=true")
+        if not self._config.startCheckpointing:
+            if self._config.instantTriggerCompaction:
+                cmd.append("--instantTriggerCompaction=true")
+            if self._config.trim:
+                cmd.append("--trim=true")
+            if self._config.freezeCompaction:
+                cmd.append("--freezeCompaction=true")
+            if self._config.unfreezeCompaction:
+                cmd.append("--unfreezeCompaction=true")
+            if self._config.disableCompaction:
+                cmd.append("--disableCompaction=true")
+            if self._config.enableCompaction:
+                cmd.append("--enableCompaction=true")
 
         return " ".join(cmd)
 
@@ -272,7 +267,17 @@ class CompactorRunner(object):
         try:
             # call compactor
             self._print_and_log("============= COMPACTOR ==============")
-            cmd = self._command_builder.get_corfu_compactor_cmd(compactor_config)
+            class_to_invoke = COMPACTOR_CONTROLS_CLASS_NAME
+            if self._config.startCheckpointing:
+                # If the env var FORCE_DISABLE_CHECKPOINTING is set to True, do not run checkpointing.
+                # This is used by Upgrade dry-run tool to disable compaction on one node.
+                force_disable_checkpointing = (os.environ.get(FORCE_DISABLE_CHECKPOINTING, "False") == "True")
+                if not force_disable_checkpointing:
+                    class_to_invoke = COMPACTOR_CHECKPOINTER_CLASS_NAME
+                else:
+                    self._print_and_log("Force disabled checkpointing, hence exiting")
+                    return
+            cmd = self._command_builder.get_corfu_compactor_cmd(compactor_config, class_to_invoke)
             self._print_and_log("Start compacting. Command %s" % cmd)
             check_call(cmd, shell=True)
             self._print_and_log("Finished running corfu compactor.")

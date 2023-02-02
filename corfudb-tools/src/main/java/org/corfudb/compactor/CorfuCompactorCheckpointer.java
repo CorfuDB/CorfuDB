@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Invokes the startCheckpointing() method of DistributedCompactor to checkpoint tables that weren't
- * checkpointed by any of the clients
+ * checkpointed by other clients
  */
 @Slf4j
 public class CorfuCompactorCheckpointer {
@@ -26,7 +26,7 @@ public class CorfuCompactorCheckpointer {
     public CorfuCompactorCheckpointer(String[] args) throws Exception {
         CorfuCompactorConfig config = new CorfuCompactorConfig(args, "", "");
 
-        Thread.currentThread().setName("CorfuStore-" + config.getNodeLocator().getPort() + "-chkpter");
+        Thread.currentThread().setName("Cmpt-chkpter-" + config.getNodeLocator().getPort());
         CorfuRuntime cpRuntime = (CorfuRuntime.fromParameters(
                 config.getParams())).parseConfigurationString(config.getNodeLocator().toEndpointUrl()).connect();
         CorfuRuntime corfuRuntime = (CorfuRuntime.fromParameters(
@@ -49,7 +49,7 @@ public class CorfuCompactorCheckpointer {
     }
 
     /**
-     * Entry point to invoke checkpointing
+     * Entry point to invoke checkpointing by the client jvm
      *
      * @param args command line argument strings
      */

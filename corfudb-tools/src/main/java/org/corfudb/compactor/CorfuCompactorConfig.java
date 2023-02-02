@@ -10,10 +10,12 @@ import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.NodeLocator;
 import org.docopt.Docopt;
 
-import javax.annotation.Nullable;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * CorfuCompactorConfig class parses the parameters passed and builds the required CorfuRuntime
+ */
 @Getter
 @Slf4j
 public class CorfuCompactorConfig {
@@ -35,7 +37,7 @@ public class CorfuCompactorConfig {
     private NodeLocator nodeLocator;
     private Optional<String> persistedCacheRoot;
 
-    public CorfuCompactorConfig(String args[], String additionalUsageParams, String additionalOptionsParams) {
+    public CorfuCompactorConfig(String[] args, String additionalUsageParams, String additionalOptionsParams) {
         parse(args, additionalUsageParams, additionalOptionsParams);
         buildRuntime();
     }
