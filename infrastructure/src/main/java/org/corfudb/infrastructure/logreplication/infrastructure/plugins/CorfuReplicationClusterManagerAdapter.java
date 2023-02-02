@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryService;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationDiscoveryServiceException;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SinkReplicationStatus;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 

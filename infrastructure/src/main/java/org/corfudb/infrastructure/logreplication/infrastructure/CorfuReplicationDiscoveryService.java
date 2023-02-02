@@ -16,11 +16,11 @@ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogRepli
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventInfoKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent.ReplicationEventType;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationUpgradeManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
@@ -729,7 +729,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         log.info("Received forced snapshot sync request for session {}, sync_id={}", session, forceSyncId);
 
         // Write a force sync event to the logReplicationEventTable
-        ReplicationEventKey key = ReplicationEventKey.newBuilder()
+        ReplicationEventInfoKey key = ReplicationEventInfoKey.newBuilder()
             .setSession(session)
             .build();
 

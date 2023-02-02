@@ -116,13 +116,15 @@ public class LogReplicationSinkManager implements DataReceiver {
      *
      * @param localCorfuEndpoint endpoint for local corfu server
      * @param metadataManager manages log replication session's metadata
-     * @param context server level context
+     * @param serverContext server level context
      * @param session log replication session unique identifier
+     * @param replicationContext log replication context
      */
     public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationMetadataManager metadataManager,
                                      ServerContext serverContext, LogReplicationSession session,
-                                     LogReplicationContext context) {
+                                     LogReplicationContext replicationContext) {
 
+        this.context = replicationContext;
         this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
                 .trustStore((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE))
                 .tsPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.TRUST_STORE_PASS_FILE))
@@ -133,7 +135,6 @@ public class LogReplicationSinkManager implements DataReceiver {
                 .maxWriteSize(serverContext.getMaxWriteSize())
                 .build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
-        this.context = context;
         this.pluginConfigFilePath = serverContext.getPluginConfigFilePath();
         this.topologyConfigId = context.getTopologyConfigId();
         this.session = session;

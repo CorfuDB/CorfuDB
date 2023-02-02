@@ -2,7 +2,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventInfoKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent.ReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
@@ -65,7 +65,7 @@ public final class LogReplicationEventListener implements StreamListener {
             // service event queue.
             for (List<CorfuStreamEntry> entryList : results.getEntries().values()) {
                 for (CorfuStreamEntry entry : entryList) {
-                    ReplicationEventKey key = (ReplicationEventKey) entry.getKey();
+                    ReplicationEventInfoKey key = (ReplicationEventInfoKey) entry.getKey();
                     ReplicationEvent event = (ReplicationEvent) entry.getPayload();
                     log.info("Received event :: id={}, type={}, session={}, ts={}", event.getEventId(), event.getType(),
                             key.getSession(), event.getEventTimestamp());
@@ -73,8 +73,8 @@ public final class LogReplicationEventListener implements StreamListener {
                         discoveryService.input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC,
                             key.getSession(), event.getEventId()));
                     } else {
-                        log.warn("Received invalid event :: id={}, type={}, cluster_id={} ts={}", event.getEventId(), event.getType(),
-                                event.getClusterId(), event.getEventTimestamp());
+                        log.warn("Received invalid event :: id={}, type={}, cluster_id={} ts={}", event.getEventId(),
+                            event.getType(), event.getClusterId(), event.getEventTimestamp());
                     }
                 }
             }

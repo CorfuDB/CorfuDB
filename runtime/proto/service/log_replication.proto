@@ -55,15 +55,15 @@ enum LogReplicationEntryType {
 }
 
 message LogReplicationSession {
-  string sinkClusterId = 1;
-  string sourceClusterId = 2;
+  string sink_cluster_id = 1;
+  string source_cluster_id = 2;
   ReplicationSubscriber subscriber = 3;
 }
 
 message ReplicationSubscriber {
   ReplicationModel model = 1;
-  org.corfudb.runtime.UuidMsg clientId = 2;
-  string clientName = 3;
+  org.corfudb.runtime.UuidMsg client_id = 2;
+  string client_name = 3;
 }
 
 enum ReplicationModel {

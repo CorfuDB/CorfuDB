@@ -91,8 +91,8 @@ message ReplicationStatusVal {
 message ReplicationStatus {
   option (org.corfudb.runtime.table_schema).stream_tag = "lr_status";
   oneof status {
-    SourceReplicationStatus sourceStatus = 1;
-    SinkReplicationStatus sinkStatus = 2;
+    SourceReplicationStatus source_status = 1;
+    SinkReplicationStatus sink_status = 2;
   }
 }
 
@@ -154,7 +154,13 @@ enum SyncStatus {
 
 /*------- Log Replication Event Table Schema ----------*/
 
+/*----------  Key Schema V1 ------------*/
 message ReplicationEventKey {
+  string key = 1;
+}
+
+/*------- Key Schema V2 ----------*/
+message ReplicationEventInfoKey {
   org.corfudb.runtime.LogReplicationSession session = 1;
 }
 

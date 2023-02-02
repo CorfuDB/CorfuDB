@@ -14,7 +14,6 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SinkReplicationStatus;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.ExampleSchemas.ClusterUuidMsg;
@@ -29,7 +28,6 @@ import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.runtime.view.Address;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;

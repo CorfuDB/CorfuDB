@@ -9,6 +9,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventInfoKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatus;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncType;
@@ -16,7 +17,6 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Si
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SourceReplicationStatus;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
 import org.corfudb.runtime.LogReplication.LogReplicationSession;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType;
@@ -81,7 +81,7 @@ public class LogReplicationMetadataManager {
 
     private final Table<LogReplicationSession, ReplicationStatus, Message> statusTable;
     private final Table<LogReplicationSession, ReplicationMetadata, Message> metadataTable;
-    private final Table<ReplicationEventKey, ReplicationEvent, Message> replicationEventTable;
+    private final Table<ReplicationEventInfoKey, ReplicationEvent, Message> replicationEventTable;
 
     private Optional<Timer.Sample> snapshotSyncTimerSample = Optional.empty();
 
@@ -109,7 +109,7 @@ public class LogReplicationMetadataManager {
                     TableOptions.fromProtoSchema(ReplicationStatus.class));
 
             this.replicationEventTable = this.corfuStore.openTable(NAMESPACE, REPLICATION_EVENT_TABLE_NAME,
-                    ReplicationEventKey.class,
+                    ReplicationEventInfoKey.class,
                     ReplicationEvent.class,
                     null,
                     TableOptions.fromProtoSchema(ReplicationEvent.class));
@@ -505,7 +505,7 @@ public class LogReplicationMetadataManager {
      * @param key
      * @param event
      */
-    public void addEvent(ReplicationEventKey key, ReplicationEvent event) {
+    public void addEvent(ReplicationEventInfoKey key, ReplicationEvent event) {
         log.info("Add event :: {}", event);
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
             txn.putRecord(replicationEventTable, key, event, null);
